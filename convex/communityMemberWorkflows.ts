@@ -1,6 +1,8 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { enrollWorkflowMilestoneTimers, resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE,
   COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES,
@@ -11,6 +13,7 @@ import {
   normalizeCommunityMemberWorkflowMilestoneName,
   normalizeCommunityMemberWorkflowPrompt,
   normalizeCommunityMemberWorkflowSourceRef,
+  normalizeWorkflowDelayMinutes,
   type CommunityMemberWorkflowAction,
   type CommunityMemberWorkflowAutomation,
   type CommunityMemberWorkflowMilestone,
@@ -53,7 +56,10 @@ type ChannelContributionRow =
 
 const automationInputValidator = v.object({
   key: v.optional(v.string()),
-  trigger: v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
+  trigger: v.union(
+    v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
+    v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
+  ),
   action: v.union(
     v.object({
       key: v.optional(v.string()),
@@ -178,9 +184,18 @@ function normalizeAutomations(
             type: "move_member",
             destination: "next_or_complete",
           };
+    if (input.trigger.type === "milestone_elapsed" && action.type !== "move_member") {
+      throw new Error("community_member_workflow_timer_action_invalid");
+    }
     return {
       key: automationKey,
-      trigger: { type: "member_contributed", ...(input.trigger.channelId !== undefined ? { channelId: input.trigger.channelId } : {}) },
+      ...(input.trigger.type === "milestone_elapsed" ? {
+        timerGeneration: existing?.trigger.type === "milestone_elapsed"
+          ? existing.timerGeneration ?? crypto.randomUUID() : crypto.randomUUID(),
+      } : {}),
+      trigger: input.trigger.type === "milestone_elapsed"
+        ? { type: "milestone_elapsed", delayMinutes: normalizeWorkflowDelayMinutes(input.trigger.delayMinutes) }
+        : { type: "member_contributed", ...(input.trigger.channelId !== undefined ? { channelId: input.trigger.channelId } : {}) },
       action,
     };
   });
@@ -292,7 +307,7 @@ export const updateBuilderWorkflowMilestone = mutation({
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
     for (const rawChannelId of new Set(milestone.automations.flatMap((automation) =>
-      automation.trigger.channelId !== undefined ? [automation.trigger.channelId] : []))) {
+      automation.trigger.type === "member_contributed" && automation.trigger.channelId !== undefined ? [automation.trigger.channelId] : []))) {
       const channelId = ctx.db.normalizeId("communityChannels", rawChannelId);
       const channel = channelId ? await ctx.db.get(channelId) : null;
       if (!channel || channel.communityId !== args.communityId || channel.status !== "active") {
@@ -315,6 +330,11 @@ export const updateBuilderWorkflowMilestone = mutation({
       updatedByUserId: userId,
       updatedAt: Date.now(),
     });
+    if (JSON.stringify(current.automations) !== JSON.stringify(milestone.automations)
+      && current.automations.some((a) => a.trigger.type === "milestone_elapsed")) {
+      await ctx.scheduler.runAfter(0, internal.communityMemberWorkflows.refreshMilestoneTimersInternal,
+        { workflowId: workflow._id, milestoneKey, cursor: null });
+    }
     return { workflow_id: String(workflow._id), revision, milestone };
   },
 });
@@ -675,22 +695,24 @@ async function transitionMemberForWorkflowAction(args: {
     occurredAt: args.nowMs,
     createdAt: args.nowMs,
   });
+  if (nextMilestone) await enrollWorkflowMilestoneTimers({ ctx: args.ctx, membership: membership!, nowMs: args.nowMs });
   return { transitionId, completedWorkflow, replayed: false };
 }
 
-async function executeMemberContributedAutomation(args: {
+async function executeWorkflowAutomation(args: {
   ctx: any;
-  objectType: "root" | "reply";
-  row: ChannelContributionRow;
+  objectType?: "root" | "reply";
+  row?: ChannelContributionRow;
+  timerReceiptRef?: string;
   workflow: WorkflowRow;
   membership: CommunityMembershipLike;
   current: ReturnType<typeof resolveCurrentMilestone>;
   automation: CommunityMemberWorkflowAutomation;
 }) {
   const triggerReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
-    buildCommunityInteractionEvidenceRef({
-      objectType: args.objectType,
-      objectId: String(args.row._id),
+    args.timerReceiptRef ?? buildCommunityInteractionEvidenceRef({
+      objectType: args.objectType!,
+      objectId: String(args.row!._id),
     }),
   );
   const existingRun = await getWorkflowRunByTrigger({
@@ -717,7 +739,7 @@ async function executeMemberContributedAutomation(args: {
     milestoneEnteredAt: args.current.milestoneEnteredAt,
     workflowRevision: args.workflow.revision,
     automationKey: args.automation.key,
-    triggerType: "member_contributed",
+    triggerType: args.automation.trigger.type,
     triggerSnapshot: args.automation.trigger,
     triggerReceiptRef,
     actionSnapshot: args.automation.action,
@@ -727,6 +749,9 @@ async function executeMemberContributedAutomation(args: {
   });
   try {
     if (args.automation.action.type === "prompt_agent") {
+      if (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed") {
+        throw new Error("community_member_workflow_timer_action_invalid");
+      }
       const intake = await intakeCommunityAgentWorkflowAction({
         ctx: args.ctx,
         communityId: args.workflow.communityId,
@@ -790,6 +815,9 @@ async function executeMemberContributedAutomation(args: {
       replayed: false,
     };
   } catch (error) {
+    // Timer admission, transition and consumption are one transaction. Never
+    // commit a partial timer action as a terminal failure.
+    if (args.automation.action.type === "move_member") throw error;
     const errorCode = String(
       error instanceof Error ? error.message : error ?? "workflow_action_failed",
     ).slice(0, 120);
@@ -875,7 +903,7 @@ async function handleChannelContributionCore(args: {
   );
   const results = [];
   for (const automation of promptAutomations) {
-    results.push(await executeMemberContributedAutomation({
+    results.push(await executeWorkflowAutomation({
       ctx: args.ctx,
       objectType: args.objectType,
       row,
@@ -886,7 +914,7 @@ async function handleChannelContributionCore(args: {
     }));
   }
   if (moveAutomation) {
-    results.push(await executeMemberContributedAutomation({
+    results.push(await executeWorkflowAutomation({
       ctx: args.ctx,
       objectType: args.objectType,
       row,
@@ -917,4 +945,47 @@ export const handleChannelContributionReplyInternal = internalMutation({
       objectType: "reply",
       row: await ctx.db.get(args.replyId),
     }),
+});
+
+export const refreshMilestoneTimersInternal = internalMutation({
+  args: { workflowId: v.id("communityMemberWorkflows"), milestoneKey: v.string(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communityMemberWorkflowTimers")
+      .withIndex("by_workflow_milestone_status", q => q.eq("workflowId", args.workflowId)
+        .eq("milestoneKey", args.milestoneKey).eq("status", "pending"))
+      .paginate({ cursor: args.cursor, numItems: 50 });
+    for (const timer of page.page) {
+      const resolved = await resolveWorkflowTimer(ctx, timer);
+      await ctx.db.patch(timer._id, resolved ? { dueAt: resolved.dueAt }
+        : { status: "obsolete", finishedAt: Date.now() });
+    }
+    if (!page.isDone) await ctx.scheduler.runAfter(0,
+      internal.communityMemberWorkflows.refreshMilestoneTimersInternal,
+      { ...args, cursor: page.continueCursor });
+  },
+});
+
+export const processDueMilestoneTimersInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const nowMs = Date.now();
+    const timers = await ctx.db.query("communityMemberWorkflowTimers")
+      .withIndex("by_status_dueAt", q => q.eq("status", "pending").lte("dueAt", nowMs)).take(25);
+    for (const timer of timers) {
+      const resolved = await resolveWorkflowTimer(ctx, timer);
+      if (!resolved) {
+        await ctx.db.patch(timer._id, { status: "obsolete", finishedAt: nowMs });
+        continue;
+      }
+      if (resolved.dueAt > nowMs) {
+        await ctx.db.patch(timer._id, { dueAt: resolved.dueAt });
+        continue;
+      }
+      await executeWorkflowAutomation({ ctx, ...resolved, timerReceiptRef: `workflow-timer:${timer._id}` });
+      await ctx.db.patch(timer._id, { status: "consumed", finishedAt: nowMs });
+    }
+    if (timers.length === 25) await ctx.scheduler.runAfter(0,
+      internal.communityMemberWorkflows.processDueMilestoneTimersInternal, {});
+    return { processed: timers.length };
+  },
 });

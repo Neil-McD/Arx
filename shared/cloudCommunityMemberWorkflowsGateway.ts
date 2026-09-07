@@ -199,7 +199,7 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
       expectedRevision: params.expectedRevision,
       milestoneKey: params.milestoneKey,
       name: params.name,
-      automations: params.automations,
+      automations: params.automations.map(({ timerGeneration: _serverOwned, ...automation }) => automation),
     },
   )) as WorkflowMilestoneMutationResult;
 }

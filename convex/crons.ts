@@ -60,4 +60,7 @@ crons.interval(
   {},
 );
 
+crons.interval("advance due workflow milestones", { minutes: 1 },
+  internal.communityMemberWorkflows.processDueMilestoneTimersInternal, {});
+
 export default crons;

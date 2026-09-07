@@ -8,6 +8,7 @@ import {
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
+import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -95,6 +96,7 @@ export async function activateCommunityMembershipCore(args: {
   }
   const membership = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
   if (!membership) throw new Error("community_membership_activation_failed");
+  await enrollWorkflowMilestoneTimers({ ctx: args.ctx, membership, nowMs: args.nowMs });
   await ensureCommunityPresenceBaseline({
     ctx: args.ctx,
     communityId: args.communityId,

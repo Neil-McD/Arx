@@ -4,6 +4,7 @@ import type {
   CommunityMemberWorkflowMilestone,
 } from "../../../../shared/communityMemberWorkflow";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
+import { normalizeWorkflowDelayMinutes } from "../../../../shared/communityMemberWorkflow";
 
 export function workflowChannelLabel(channelId: string | undefined, channels: CloudCommunityChannel[], unavailable: boolean): string {
   if (channelId === undefined) return "Any channel";
@@ -17,9 +18,15 @@ export function workflowMoveLabel(nextMilestoneName: string | null): string {
 }
 
 export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
-  if (automation.trigger.channelId !== undefined) {
+  if (automation.trigger.type === "milestone_elapsed") {
+    if (automation.action.type !== "move_member") return "Time triggers can only move members";
+    try { normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes); }
+    catch { return "Choose a duration from 1 minute to 365 days"; }
+  }
+  const channelId = automation.trigger.type === "member_contributed" ? automation.trigger.channelId : undefined;
+  if (channelId !== undefined) {
     if (unavailable) return "Waiting for channels";
-    if (!channels.some((channel) => channel.id === automation.trigger.channelId)) return "Choose an available channel";
+    if (!channels.some((channel) => channel.id === channelId)) return "Choose an available channel";
   }
   return automation.action.type === "prompt_agent" && !automation.action.prompt.trim() ? "Add agent instructions" : null;
 }

@@ -15,7 +15,15 @@ export type CommunityMemberWorkflowMemberContributedTrigger = {
 };
 
 export type CommunityMemberWorkflowTrigger =
-  CommunityMemberWorkflowMemberContributedTrigger;
+  | CommunityMemberWorkflowMemberContributedTrigger
+  | { type: "milestone_elapsed"; delayMinutes: number };
+
+export function normalizeWorkflowDelayMinutes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 525600) {
+    throw new Error("community_member_workflow_delay_invalid");
+  }
+  return value;
+}
 
 export type CommunityMemberWorkflowPromptAgentAction = {
   key: string;
@@ -35,6 +43,8 @@ export type CommunityMemberWorkflowAction =
 
 export type CommunityMemberWorkflowAutomation = {
   key: string;
+  /** Server-owned identity: preserved for duration edits, renewed on trigger conversion. */
+  timerGeneration?: string;
   trigger: CommunityMemberWorkflowTrigger;
   action: CommunityMemberWorkflowAction;
 };

@@ -1180,7 +1180,11 @@ export default defineSchema({
         name: v.string(),
         automations: v.array(v.object({
           key: v.string(),
-          trigger: v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
+          timerGeneration: v.optional(v.string()),
+          trigger: v.union(
+            v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
+            v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
+          ),
           action: v.union(
             v.object({
               key: v.string(),
@@ -1218,6 +1222,25 @@ export default defineSchema({
     .index("by_workflow_milestone", ["workflowId", "currentMilestoneKey"])
     .index("by_membership", ["membershipId"]),
 
+  communityMemberWorkflowTimers: defineTable({
+    workflowId: v.id("communityMemberWorkflows"),
+    communityLifecycleGeneration: v.number(),
+    membershipId: v.id("communityMemberships"),
+    milestoneKey: v.string(),
+    milestoneEnteredAt: v.number(),
+    transitionSeq: v.number(),
+    activationSequence: v.number(),
+    automationKey: v.string(),
+    timerGeneration: v.string(),
+    dueAt: v.number(),
+    status: v.union(v.literal("pending"), v.literal("consumed"), v.literal("obsolete")),
+    createdAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_status_dueAt", ["status", "dueAt"])
+    .index("by_workflow_milestone_status", ["workflowId", "milestoneKey", "status"])
+    .index("by_member_entry", ["workflowId", "membershipId", "activationSequence", "transitionSeq"]),
+
   communityMemberWorkflowRuns: defineTable({
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
@@ -1227,9 +1250,12 @@ export default defineSchema({
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
-    triggerType: v.literal("member_contributed"),
+    triggerType: v.union(v.literal("member_contributed"), v.literal("milestone_elapsed")),
     // Optional for historical runs. New runs capture the condition that matched.
-    triggerSnapshot: v.optional(v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) })),
+    triggerSnapshot: v.optional(v.union(
+      v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
+      v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
+    )),
     triggerReceiptRef: v.string(),
     actionSnapshot: v.union(
       v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),

@@ -578,6 +578,7 @@
 
 .workflow-milestone-modal button:focus-visible,
 .workflow-milestone-modal input:focus-visible,
+.workflow-milestone-modal select:focus-visible,
 .workflow-milestone-modal textarea:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
@@ -597,6 +598,7 @@
 }
 
 .workflow-milestone-modal input,
+.workflow-milestone-modal select,
 .workflow-milestone-modal textarea {
   box-sizing: border-box;
   width: 100%;
@@ -612,6 +614,7 @@
 }
 
 .workflow-milestone-modal input:focus,
+.workflow-milestone-modal select:focus,
 .workflow-milestone-modal textarea:focus {
   border-color: var(--border-strong);
 }

@@ -7,6 +7,7 @@ import {
   isWorkflowMilestoneDraftDirty,
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
+  workflowAutomationIssue,
   type WorkflowAutomationDraft,
 } from "./workflowMilestoneDraft";
 
@@ -108,8 +109,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const canSave = name.trim().length > 0
     && isDirty
     && !hasConflict
-    && automations.every((automation) => automation.trigger.channelId === undefined
-      || (!props.channelsUnavailable && props.channels.some((channel) => channel.id === automation.trigger.channelId)))
+    && automations.every((automation) => !workflowAutomationIssue(automation, props.channels, props.channelsUnavailable))
     && moveAutomationCount <= 1
     && automations.every(
       (automation) => automation.action.type !== "prompt_agent" || automation.action.prompt.trim().length > 0,
@@ -162,7 +162,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     }
     if (event.key !== "Tab") return;
     const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ) ?? []);
     if (focusable.length === 0) return;
     const first = focusable[0];
@@ -197,7 +197,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             {props.milestone.key ? (
               <section className="workflow-milestone-automations" aria-labelledby="milestone-automations-title">
                 <div className="workflow-milestone-automations-header">
-                  <div><span id="milestone-automations-title">Automations</span><small>Each rule responds independently to member activity.</small></div>
+                  <div><span id="milestone-automations-title">Automations</span><small>Each rule acts when its trigger is met.</small></div>
                   <div className="resource-modal-actions">
                     <button ref={addAutomationRef} type="button" className="secondary" onClick={() => {
                       const automation = newAutomation();

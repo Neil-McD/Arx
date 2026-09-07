@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -455,6 +456,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       before: membership,
       after: updatedMembership,
     });
+    if (!wasActive && willBeActive) {
+      await enrollWorkflowMilestoneTimers({ ctx, membership: updatedMembership, nowMs });
+    }
     if (status === "past_due" && previousStatus !== "past_due") {
       const issueMarker = [
         String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),

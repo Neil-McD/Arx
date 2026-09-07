@@ -11,12 +11,43 @@ The V1 grammar is intentionally small:
 Workflow = ordered Milestones[]
 Milestone = name + Automations[]
 Automation = one Trigger + one Action
-Trigger = member_contributed(channelId?)
+Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes)
 Action = prompt_agent(prompt) | move_member(next_or_complete)
 ```
 
 A new milestone has no hidden behavior. Merely occupying a milestone never
-causes work. A member contribution is the only V1 trigger.
+causes work without a configured trigger. Elapsed-time rules only support
+`move_member`; agent prompts still require an authorized contribution source.
+
+### One-shot milestone timers
+
+- Builder duration: 1 minute through 365 days, once per milestone entry.
+- New rules apply only to future entries. Saving a rule never backfills existing
+  members. Activation writers (manual/free and commerce) and actual transitions
+  enroll timers; board/dossier reads remain side-effect free.
+- `communityMemberWorkflowTimers` is indexed due-work, not a second member-state
+  or history authority. One move rule means at most one timer per member entry.
+  Entry identity includes membership activation sequence and transition sequence.
+- A minute cron drains 25 due occurrences per transaction with continuation.
+  No agent is woken. The existing executor records the timer reference and trigger
+  snapshot in a run and produces the existing transition receipt. Consumption and
+  movement commit together; unexpected failures roll back the transaction.
+- Rule duration edits retain the server-owned timer generation and recompute
+  pending due times from original entry time, in batches of 50. Switching away
+  from time invalidates that generation. Switching back is a new rule generation
+  for future entries; it cannot revive the old timer. Unrelated edits do not reset
+  clocks. Worker revalidation is authoritative even before refresh finishes.
+- Revocation/reactivation, community lifecycle changes, deleted rules, completed
+  workflows and changed entries invalidate stale work. Reactivation does not
+  restart a persisted milestone. There is no catch-up enrollment on reactivation
+  of a persisted position; future actual milestone entries can enroll again.
+- Late execution starts the next milestone at actual transition time, preventing
+  outage catch-up from cascading through the pipeline. Due time is not an exact
+  delivery SLA; normal dispatch is at or after due time.
+- Deferred: recurrence, inactivity, external events, goals, timed agent prompts,
+  automatic private-channel selection and existing-member backfill.
+
+Tests: `convex/communityMemberWorkflowTimers.test.ts` and existing workflow tests.
 
 Each rule listens to any authorized channel by default, or one selected channel
 ID. The existing milestone popup exposes this as "When a member posts or replies

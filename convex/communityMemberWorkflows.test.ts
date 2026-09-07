@@ -490,7 +490,7 @@ test.each(["root", "reply"] as const)("channel filter selects only its source, s
   const configured = await configureAutomations(t, f.communityId, [
     { key: "", type: "prompt_agent", prompt: "Help in this thread." },
   ], selectedId);
-  expect(configured.firstMilestone.automations[0].trigger.channelId).toBe(selectedId);
+  expect(configured.firstMilestone.automations[0].trigger).toMatchObject({ channelId: selectedId });
   const contribute = async (channelId: typeof selectedId, suffix: string) => {
     const rootId = await addRoot(t, { ...f, channelId }, suffix);
     if (kind === "root") return () => t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
@@ -520,7 +520,7 @@ test.each(["root", "reply"] as const)("channel filter selects only its source, s
     automations: configured.firstMilestone.automations.map(a => ({ ...a, trigger: { type: "member_contributed" as const } })),
   });
   expect((await run()).results[0].status).toBe("already_executed");
-  expect((await t.run(ctx => ctx.db.get(runs[0]._id)))?.triggerSnapshot?.channelId).toBe(selectedId);
+  expect((await t.run(ctx => ctx.db.get(runs[0]._id)))?.triggerSnapshot).toMatchObject({ channelId: selectedId });
 });
 
 test.each(["archived", "deleted", "foreign", "malformed", "empty"] as const)("channel selection rejects %s targets without a partial save", async (kind) => {

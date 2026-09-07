@@ -88,6 +88,7 @@ import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityMaintenance from "../communityMaintenance.js";
 import type * as communityMemberWorkflowReadCore from "../communityMemberWorkflowReadCore.js";
+import type * as communityMemberWorkflowTimerCore from "../communityMemberWorkflowTimerCore.js";
 import type * as communityMemberWorkflows from "../communityMemberWorkflows.js";
 import type * as communityMembershipContextCore from "../communityMembershipContextCore.js";
 import type * as communityMembershipLifecycle from "../communityMembershipLifecycle.js";
@@ -312,6 +313,7 @@ declare const fullApi: ApiFromModules<{
   communityLifecycle: typeof communityLifecycle;
   communityMaintenance: typeof communityMaintenance;
   communityMemberWorkflowReadCore: typeof communityMemberWorkflowReadCore;
+  communityMemberWorkflowTimerCore: typeof communityMemberWorkflowTimerCore;
   communityMemberWorkflows: typeof communityMemberWorkflows;
   communityMembershipContextCore: typeof communityMembershipContextCore;
   communityMembershipLifecycle: typeof communityMembershipLifecycle;

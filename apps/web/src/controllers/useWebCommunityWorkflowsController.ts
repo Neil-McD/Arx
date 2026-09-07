@@ -33,6 +33,8 @@ function workflowErrorMessage(error: unknown): string {
   if (message.includes("workflow_channel_unavailable")) {
     return "A selected channel is unavailable. Choose another channel or remove that automation.";
   }
+  if (message.includes("workflow_delay_invalid")) return "Choose a duration from 1 minute to 365 days.";
+  if (message.includes("workflow_timer_action_invalid")) return "Time triggers can only move members for now.";
   if (message.includes("milestone_has_members")) {
     return "Move members out of this milestone before deleting it.";
   }
