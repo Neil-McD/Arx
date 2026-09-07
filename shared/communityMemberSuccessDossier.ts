@@ -38,6 +38,10 @@ export function renderCommunityMemberSuccessDossierMarkdown(
   ];
 
   const service = source.service_channel;
+  if (source.workflow?.requirements?.length && !source.workflow.completed_at) {
+    lines.push("", "## Move on when all requirements are met");
+    for (const requirement of source.workflow.requirements) lines.push(`- [${requirement.satisfied ? "x" : " "}] ${markdownInline(requirement.label)}`);
+  }
   lines.push("", `Service channel: ${service.status === "available" ? `${markdownInline(service.name)} (${service.channel_id})` : service.status}. A destination reference does not grant access or authorize posting.`);
   lines.push("", "## Approved community context");
   if (source.approved_community_context.length === 0) {

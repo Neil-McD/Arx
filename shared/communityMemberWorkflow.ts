@@ -47,6 +47,8 @@ export type CommunityMemberWorkflowAutomation = {
   key: string;
   /** Server-owned identity: preserved for duration edits, renewed on trigger conversion. */
   timerGeneration?: string;
+  /** Invalidates completion evidence when this requirement changes meaning. */
+  completionGeneration?: string;
   trigger: CommunityMemberWorkflowTrigger;
   action: CommunityMemberWorkflowAction;
 };
@@ -56,6 +58,36 @@ export type CommunityMemberWorkflowMilestone = {
   name: string;
   automations: CommunityMemberWorkflowAutomation[];
 };
+
+export type WorkflowRequirementEvidence = {
+  automationKey: string;
+  generation: string;
+  activationSequence: number;
+  sourceRef: string;
+  satisfiedAt: number;
+};
+
+export function workflowRequirementGeneration(rule: CommunityMemberWorkflowAutomation): string {
+  return rule.completionGeneration ?? `legacy:${rule.action.key}`;
+}
+
+export function workflowTriggerIdentity(trigger: CommunityMemberWorkflowTrigger): string {
+  return JSON.stringify(trigger.type === "member_contributed" ? [trigger.type, trigger.channelId ?? null]
+    : trigger.type === "form_submitted" ? [trigger.type, trigger.formKey] : [trigger.type, trigger.delayMinutes]);
+}
+
+export function currentWorkflowRequirementEvidence(
+  rules: CommunityMemberWorkflowAutomation[],
+  evidence: WorkflowRequirementEvidence[],
+  activationSequence: number,
+): WorkflowRequirementEvidence[] {
+  return rules.filter(rule => rule.action.type === "move_member").flatMap(rule => {
+    const match = evidence.find(item => item.automationKey === rule.key
+      && item.generation === workflowRequirementGeneration(rule)
+      && item.activationSequence === activationSequence);
+    return match ? [match] : [];
+  });
+}
 
 function normalizeInlineText(value: unknown, maxLength: number): string {
   return String(value ?? "")

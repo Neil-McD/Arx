@@ -45,6 +45,7 @@ export type CommunityMemberSuccessWorkflowActivity = {
   status:
     | "queued"
     | "requested"
+    | "requirement_satisfied"
     | "running"
     | "responded"
     | "moved"
@@ -87,6 +88,7 @@ export type CommunityMembershipContext = {
     current_milestone_name: string;
     current_milestone_entered_at: string;
     completed_at: string | null;
+    requirements?: { key: string; label: string; satisfied: boolean; satisfied_at: string | null }[];
   } | null;
   approved_community_context: CommunityMemberSuccessFact[];
   submitted_form_evidence: CommunitySubmittedFormEvidence;

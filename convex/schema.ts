@@ -5,6 +5,11 @@ import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
 import { channelAccessModeValidator, channelPostingPolicyValidator, channelReplyPolicyValidator } from "./communityChannelValidators";
 
+const workflowRequirementEvidenceValidator = v.array(v.object({
+  automationKey: v.string(), generation: v.string(), activationSequence: v.number(),
+  sourceRef: v.string(), satisfiedAt: v.number(),
+}));
+
 export default defineSchema({
   communityFormRequests: defineTable({
     communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
@@ -1205,6 +1210,7 @@ export default defineSchema({
         automations: v.array(v.object({
           key: v.string(),
           timerGeneration: v.optional(v.string()),
+          completionGeneration: v.optional(v.string()),
           trigger: v.union(
             v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
             v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
@@ -1234,6 +1240,7 @@ export default defineSchema({
   }).index("by_community", ["communityId"]),
 
   communityMemberWorkflowMemberMilestones: defineTable({
+    requirementEvidence: v.optional(workflowRequirementEvidenceValidator),
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
     currentMilestoneKey: v.string(),
@@ -1326,6 +1333,7 @@ export default defineSchema({
     .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 
   communityMemberWorkflowTransitions: defineTable({
+    requirementEvidence: v.optional(workflowRequirementEvidenceValidator),
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),

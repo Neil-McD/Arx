@@ -15,6 +15,37 @@ Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes) | for
 Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(formKey)
 ```
 
+### Accumulated completion requirements
+
+The editor separates **Actions** from **Move on when — all requirements**.
+Movement conditions remain the existing `move_member` rule records; together
+they form one conjunction, not independent movement commands. Old one-condition
+milestones keep their behavior without migration. An empty list never advances.
+
+Authorized contribution, submitted-form, and timer events record bounded evidence
+on the existing member-milestone row. Evidence contains rule generation, membership
+activation, source reference and time; the owning row identifies the milestone
+visit. Duplicates retain the original evidence. All requirements must be satisfied
+in one transaction before the existing transition writer can advance once.
+The transition snapshots that evidence, then clears it for the next milestone.
+No new table, queue, LLM, history scan, goal engine or second state writer is introduced.
+
+Unchanged rules retain evidence through renaming/reordering. A changed trigger or
+conversion away from completion invalidates its generation; changing back cannot
+restore old credit. Saving alone never moves anyone. New events, not historical
+backfills, satisfy outstanding requirements. Completion is historical occurrence
+evidence: deleting a post later does not undo previously accepted credit.
+
+Time conditions retain existing one-shot scheduling: new rules apply to future
+entries, duration edits update pending timers, consumed timers never restart.
+Changing an already-satisfied time condition invalidates its credit but does not
+rearm its consumed timer. Configure time requirements before enrollment; they
+are not a retroactive clock or catch-up mechanism for current members.
+
+Builder/member context reports current satisfied and outstanding requirements.
+Earlier satisfied-run history is not proof of the current edited requirement.
+Private condition details remain subject to the existing context/access boundary.
+
 A new milestone has no hidden behavior. Merely occupying a milestone never
 causes work without a configured trigger. Contribution prompts reply to their
 authorized source thread. Elapsed-time prompts publish one check-in to the
@@ -22,8 +53,9 @@ member's authorized service channel; either trigger can also move the member.
 
 ### Form submission actions
 
-- One submission rule per form per milestone: **Ask agent** or **Move member**.
-  Submission cannot request another form or both respond and move in the same rule.
+- One agent action and one completion requirement per form per milestone.
+  Submission cannot request another form. Agent admission runs before completion;
+  completion does not wait for delivery, which can become stale after movement.
 - The saved submitted request is the event authority. Answers are pinned to the
   assigned published version; exact submission retries do not create another run.
 - Ask agent binds the existing serve queue to `workflowFormRequestId`, never a
@@ -49,7 +81,7 @@ member's authorized service channel; either trigger can also move the member.
   enroll timers; board/dossier reads remain side-effect free.
 - `communityMemberWorkflowTimers` is indexed due-work, not a second member-state
   or history authority. One timer per automation per member entry, bounded by the
-  existing twelve-automation limit. There is still at most one move rule.
+  existing twelve-automation limit, shared by actions and completion requirements.
   Entry identity includes membership activation sequence and transition sequence.
 - A minute cron drains 25 due occurrences per transaction with continuation.
   The existing executor records the timer reference and trigger snapshot in a run.
@@ -86,7 +118,7 @@ require the community agent's access. Deterministic moves need no agent grant.
 New runs capture `triggerSnapshot` as well as the source receipt and action.
 Historical runs without a snapshot remain valid and are not backfilled from
 today's configuration. Filtering happens before run admission and retains the
-existing replay key and one-terminal-move rule.
+existing replay key and one-terminal-transition writer.
 
 The editor keeps its opening milestone snapshot across live board refreshes.
 Unchanged refreshes preserve the draft; a changed milestone blocks saving and
@@ -187,7 +219,7 @@ activity/history projections and their distinct outcome statuses are unchanged.
   top-anchored; only the body scrolls while the header/footer remain reachable.
 - Save requires a valid changed draft. Empty names/prompts have associated
   inline guidance; failed saves retain the draft. Existing conflict, channel
-  authorization, and single-move validation continue to apply.
+  authorization, and completion-requirement validation continue to apply.
 - Cancel, close, backdrop dismissal, and editor Escape ask before discarding
   changed drafts. Keep editing retains the draft and restores focus. The channel
   picker owns Escape while open: it closes only the list and restores trigger
@@ -203,10 +235,10 @@ activity/history projections and their distinct outcome statuses are unchanged.
 - Channel selection reuses platform menu styling with private-channel icons,
   keyboard arrows, Home/End, typeahead, Enter, Escape, and Tab. Missing selected
   channels remain explicit; selection never silently broadens to Any channel.
-- Ask agent and Move member are direct radio choices. Agent help identifies the
+- Actions and completion requirements are separate lists. Agent help identifies the
   triggering thread and private-channel invitation requirement. Move help names
   the next milestone (or final completion) and explicitly states that it does
-  not wait for other agent actions. The existing single-move limit remains.
+  not wait for other agent actions. All configured movement conditions must now be met.
 - Delete semantics, permissions, saved grammar, and execution are unchanged.
 
 Focused regression tests: `npx vitest run scripts/workflow_milestone_draft.test.ts`.
@@ -243,13 +275,13 @@ Focused regression tests: `npx vitest run scripts/workflow_milestone_draft.test.
 - `prompt_agent` admits one durable community-agent serve request using the
   builder prompt captured on the workflow run. It replies in the contribution's
   thread. It never advances the member.
-- `move_member` deterministically advances to the next ordered milestone, or
-  marks the workflow complete at the final milestone. It never invokes a model.
+- `move_member` records a satisfied requirement. When all requirements are met,
+  the existing writer advances or completes the workflow. It never invokes a model.
 - Each automation produces one idempotent run keyed by workflow, membership,
   contribution receipt, and automation key.
-- A milestone may have any number of prompt actions and at most one move action.
-- Prompt actions are admitted first. The single move action is terminal and runs
-  after prompt admission regardless of its visual order in the editor. Prompt
+- A milestone may have actions and completion requirements within the twelve-rule limit.
+- Prompt actions are admitted first. Completion requirements are recorded
+  after prompt admission regardless of their visual order in the editor. Prompt
   success is not a condition for movement; V1 has no action chaining or goals.
 - Rules are revalidated against the member's current milestone and workflow
   revision before authoritative writes.

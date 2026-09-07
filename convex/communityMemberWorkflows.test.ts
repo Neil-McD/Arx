@@ -423,6 +423,113 @@ async function fixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
+async function completionFixture() {
+  const t = convexTest(schema, modules), f = await fixture(t);
+  const secondChannel = await t.run(async ctx => {
+    const { _id, _creationTime, ...channel } = (await ctx.db.get(f.channelId))!;
+    return ctx.db.insert("communityChannels", { ...channel, systemRole: undefined, slug: "planning", name: "Planning", position: 1 });
+  });
+  const configured = await configureAutomations(t, f.communityId, [{ key: "", type: "move_member", destination: "next_or_complete" }], f.channelId);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, milestoneKey: configured.firstKey, expectedRevision: 3, name: "New",
+    automations: [...configured.firstMilestone.automations, { trigger: { type: "member_contributed", channelId: secondChannel }, action: { type: "move_member", destination: "next_or_complete" } }],
+  });
+  const fire = async (channelId: typeof f.channelId, suffix: string) => {
+    const rootId = await addRoot(t, { ...f, channelId }, suffix);
+    await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+    return rootId;
+  };
+  const snapshot = () => t.run(async ctx => ({ state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(), agents: await ctx.db.query("communityAgentServeRequests").collect() }));
+  return { t, f, owner, secondChannel, configured, fire, snapshot };
+}
+
+test.each([false, true])("completion accumulates in either order, ignores replay and moves once: reverse=%s", async reverse => {
+  const s = await completionFixture();
+  const channels = reverse ? [s.secondChannel, s.f.channelId] : [s.f.channelId, s.secondChannel];
+  const first = await s.fire(channels[0], "first");
+  await s.t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: first });
+  await s.fire(channels[0], "first-again");
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+  expect((await s.snapshot()).state?.requirementEvidence).toHaveLength(1);
+  const context = await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
+  expect(context.workflow?.requirements?.map(r => r.satisfied).filter(Boolean)).toHaveLength(1);
+  expect(context.recent_workflow_activity[0].status).toBe("requirement_satisfied");
+  const last = await s.fire(channels[1], "last");
+  await s.t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: last });
+  const result = await s.snapshot();
+  expect(result.transitions).toHaveLength(1);
+  expect(result.transitions[0].requirementEvidence).toHaveLength(2);
+  expect(result.state?.currentMilestoneKey).toBe(s.configured.secondKey);
+  expect(result.state?.requirementEvidence).toEqual([]);
+  expect(result.agents).toHaveLength(0);
+});
+
+test("concurrent completion events produce one transition", async () => {
+  const s = await completionFixture();
+  const first = await addRoot(s.t, s.f, "race-a");
+  const second = await addRoot(s.t, { ...s.f, channelId: s.secondChannel }, "race-b");
+  await Promise.all([first, second].map(rootId => s.t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId })));
+  expect((await s.snapshot()).transitions).toHaveLength(1);
+});
+
+test("edits preserve unchanged evidence, invalidate changed conditions, and never move on save", async () => {
+  const s = await completionFixture(); await s.fire(s.f.channelId, "credit");
+  const read = () => s.t.run(ctx => ctx.db.query("communityMemberWorkflows").first());
+  const update = async (channelId: string, name = "New") => {
+    const workflow = (await read())!;
+    const rules = workflow.milestones[0].automations;
+    return s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+      communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: workflow.revision, name,
+      automations: rules.map((rule, i) => i === 0 ? { ...rule, trigger: { type: "member_contributed" as const, channelId }, completionGeneration: "spoof" } : rule),
+    });
+  };
+  await update(s.f.channelId, "Renamed");
+  const dossier = () => s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
+  expect((await dossier()).workflow?.requirements?.[0].satisfied).toBe(true);
+  // Any channel is a material change, even when the previous event would match.
+  const workflow = (await read())!;
+  const rules = workflow.milestones[0].automations;
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: workflow.revision, name: "Renamed",
+    automations: rules.map((rule, i) => i === 0 ? { ...rule, trigger: { type: "member_contributed" as const } } : rule),
+  });
+  await update(s.f.channelId);
+  expect((await dossier()).workflow?.requirements?.[0].satisfied).toBe(false);
+  await s.fire(s.secondChannel, "second");
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+  await s.fire(s.f.channelId, "fresh-first");
+  expect((await s.snapshot()).transitions).toHaveLength(1);
+});
+
+test("previous activation and revoked-channel evidence cannot complete a visit", async () => {
+  const s = await completionFixture(); await s.fire(s.f.channelId, "old-credit");
+  await s.t.run(ctx => ctx.db.patch(s.f.membershipId, { activationSequence: 2 }));
+  await s.fire(s.secondChannel, "new-credit");
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+  await s.t.run(ctx => ctx.db.patch(s.f.channelId, { accessMode: "restricted" }));
+  await s.fire(s.f.channelId, "not-authorized");
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+});
+
+test.each([false, true])("form and channel requirements accumulate independently: form first=%s", async formFirst => {
+  const s = await formFlowFixture();
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: 4, name: "New",
+    automations: [{ trigger: { type: "form_submitted", formKey: "intake" }, action: { type: "move_member", destination: "next_or_complete" } },
+      { trigger: { type: "member_contributed" }, action: { type: "move_member", destination: "next_or_complete" } }],
+  });
+  const form = () => s.member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: s.f.communityId,
+    requestId: s.request._id, expectedRevision: 0, answers: { q: "Goal" }, submit: true });
+  const post = async () => { const rootId = await addRoot(s.t, s.f, "completion-post");
+    await s.t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId }); };
+  await (formFirst ? form() : post());
+  expect(await s.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  await (formFirst ? post() : form());
+  expect(await s.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(1);
+});
+
 async function addRoot(t: ReturnType<typeof convexTest>, f: Awaited<ReturnType<typeof fixture>>, suffix: string) {
   return await t.run(async (ctx) => await ctx.db.insert("communityInteractionRoots", {
     communityId: f.communityId,
@@ -1194,7 +1301,7 @@ test("prompt_agent admits one linked serve request and never moves the member", 
   );
 });
 
-test("a milestone rejects more than one terminal move without changing revision", async () => {
+test("a milestone rejects duplicate completion requirements without changing revision", async () => {
   const t = convexTest(schema, modules);
   const f = await fixture(t);
   const owner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -1218,7 +1325,7 @@ test("a milestone rejects more than one terminal move without changing revision"
       { key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "move_member", destination: "next_or_complete" } },
       { key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "move_member", destination: "next_or_complete" } },
     ],
-  })).rejects.toThrow("community_member_workflow_move_action_count_invalid");
+  })).rejects.toThrow("community_member_workflow_requirement_duplicate");
 
   const page = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowBoardPage, {
     communityId: f.communityId,

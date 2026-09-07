@@ -13,7 +13,6 @@ type Props = {
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
   nextMilestoneName: string | null;
-  hasOtherMove: boolean;
   disabled: boolean;
   onToggle: () => void;
   onChange: (automation: WorkflowAutomationDraft) => void;
@@ -30,23 +29,24 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const channelId = automation.trigger.type === "member_contributed" ? automation.trigger.channelId : undefined;
   const durationLabel = `${delayMinutes / timeUnit} ${timeUnit === 1440 ? "day" : timeUnit === 60 ? "hour" : "minute"}${delayMinutes === timeUnit ? "" : "s"}`;
   const isPrompt = automation.action.type === "prompt_agent";
+  const isRequirement = automation.action.type === "move_member";
   const issue = workflowAutomationIssue(automation, props.channels, props.channelsUnavailable);
   const isPrivate = props.channels.some((channel) => channel.id === channelId && channel.access_mode === "restricted");
-  const actionLabel = isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : workflowMoveLabel(props.nextMilestoneName);
+  const actionLabel = isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : "Required for completion";
 
   return (
     <div className="workflow-milestone-automation-row" data-automation-key={automation.key}>
       <div className="workflow-automation-heading">
-        <button type="button" className="workflow-automation-summary" aria-expanded={props.expanded}
+        <button type="button" className="workflow-automation-summary" data-workflow-rule-start aria-expanded={props.expanded}
           aria-controls={props.expanded ? `${id}-fields` : undefined} disabled={props.disabled} onClick={props.onToggle}>
           <span>
             <strong>{actionLabel}</strong>
-            <small>{isForm ? "Form submitted" : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`}</small>
+            <small>{automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`}</small>
             {issue ? <small className="workflow-automation-issue">{issue}</small> : null}
           </span>
           <ChevronDown size={16} aria-hidden="true" />
         </button>
-        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove automation ${props.index + 1}`}
+        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove ${isRequirement ? "requirement" : "action"} ${props.index + 1}`}
           disabled={props.disabled} onClick={props.onRemove}><X size={16} aria-hidden="true" /></button>
       </div>
 
@@ -61,7 +61,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 onChange={() => { setTimeUnit(1440); props.onChange({ ...automation, trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
             </div>
             <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isForm}
-              onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, isPrompt ? "prompt_agent" : props.hasOtherMove ? "prompt_agent" : "move_member"), trigger: { type: "form_submitted", formKey: "" } })} /><span>Form submitted</span></label>
+              onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, isRequirement ? "move_member" : "prompt_agent"), trigger: { type: "form_submitted", formKey: "" } })} /><span>Form submitted</span></label>
           </fieldset>
           {automation.trigger.type === "form_submitted" ? <label>Form<select value={automation.trigger.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, trigger: { type: "form_submitted", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select></label> : isTimed ? <div className="workflow-automation-field">
             <label htmlFor={`${id}-duration`}>After</label>
@@ -75,7 +75,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 props.onChange({ ...automation, trigger: { type: "milestone_elapsed", delayMinutes: delayMinutes / timeUnit * unit } });
               }}><option value={1}>minutes</option><option value={60}>hours</option><option value={1440}>days</option></select>
             </div>
-            <small className="workflow-field-hint">Applies to future milestone entries. Runs once, at or after the due time. Activity does not reset the timer. Duration edits update pending timers.</small>
+            <small className="workflow-field-hint">Applies to future milestone entries. Runs once, at or after the due time. Activity does not reset the timer. Duration edits update pending timers.{isRequirement ? " Changing a satisfied time requirement clears its credit; consumed timers do not restart. Configure these before members enter." : ""}</small>
           </div> : (
           <div className="workflow-automation-field">
             <span>When a member posts or replies in</span>
@@ -86,7 +86,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
           </div>
           )}
 
-          <fieldset className="workflow-action-choices" disabled={props.disabled} aria-describedby={props.hasOtherMove ? `${id}-move-limit` : undefined}>
+          {!isRequirement ? <fieldset className="workflow-action-choices" disabled={props.disabled}>
             <legend>Then</legend>
             <div className="workflow-action-choice-row">
               <label className="workflow-action-choice">
@@ -94,15 +94,9 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                   onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "prompt_agent"))} />
                 <span>Ask agent</span>
               </label>
-              <label className="workflow-action-choice">
-                <input type="radio" name={`${id}-action`} value="move_member" checked={automation.action.type === "move_member"} disabled={props.hasOtherMove}
-                  onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "move_member"))} />
-                <span>Move member</span>
-              </label>
               <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "request_form"} disabled={isForm} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "request_form"))} /><span>Request form</span></label>
             </div>
-            {props.hasOtherMove ? <small className="workflow-field-hint" id={`${id}-move-limit`}>This milestone already has a move rule.</small> : null}
-          </fieldset>
+          </fieldset> : null}
 
           {automation.action.type === "request_form" ? <label>Form<select value={automation.action.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, action: { key: automation.action.key, type: "request_form", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select><small>Shown privately in the member’s community sidebar. One request per rule and milestone visit.</small></label> : automation.action.type === "prompt_agent" ? (
             <>
@@ -123,10 +117,8 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
             </>
           ) : (
             <p className="workflow-action-consequence">
-              {props.nextMilestoneName === null
-                ? `${isForm ? "Submitting this form" : isTimed ? "The timer" : "A matching post or reply"} completes this member’s workflow.`
-                : <>{isForm ? "Submitting this form" : isTimed ? "The timer" : "A matching post or reply"} moves this member to <strong>{props.nextMilestoneName}</strong>.</>}
-              <small>No agent run or approval is required. It does not wait for other agent actions.</small>
+              {workflowMoveLabel(props.nextMilestoneName)} only when every requirement is satisfied.
+              <small>Requirements can happen in any order. No agent run is needed; this does not wait for agent actions to finish.</small>
             </p>
           )}
         </div>

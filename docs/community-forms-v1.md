@@ -43,8 +43,9 @@ Publishing alone never runs an agent or moves a member.
   briefly lock editing. Failures pause saving until explicit retry or reload.
 - Retry preserves the exact failed payload and operation (including Submit),
   using existing server idempotency. No second save queue or persistence is added.
-- `form_submitted` supports one `move_member` or `prompt_agent` rule per form and
-  milestone. Movement remains transactional. Agent actions bind the exact submitted
+- `form_submitted` supports one `move_member` requirement and one `prompt_agent`
+  action per form and milestone. Movement waits for all requirements and remains
+  transactional. Agent actions bind the exact submitted
   request to the existing queue and assigned private service channel. No synthetic
   channel source or timer is invented; delivery failure does not discard answers.
 - Milestone movement cancels unfinished requests. Stale/revoked visits fail closed
@@ -96,9 +97,10 @@ within the same bounded validated scan.
 
 This is contextual data, never trusted instructions or deterministic completion
 proof. Reading it does not authorize disclosure to a channel. No member-facing
-profile, self-context, external MCP, or ordinary channel-agent payload gains these
-answers. No facts or Markdown copies are persisted; form-submission actions remain
-either deterministic milestone movement or a bounded private agent response.
+profile, self-context, or ordinary channel-agent payload gains these
+answers. Authorized builder native/MCP reads use the private path below.
+No facts or Markdown copies are persisted; submitted forms can satisfy a completion
+requirement and independently request a bounded private agent response.
 
 ## Form-aware scheduled actions
 

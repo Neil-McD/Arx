@@ -1,4 +1,5 @@
 import type { Doc, Id } from "./_generated/dataModel";
+import { currentWorkflowRequirementEvidence } from "../shared/communityMemberWorkflow";
 import type { QueryCtx } from "./_generated/server";
 import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
 import {
@@ -326,6 +327,8 @@ async function readMembershipContextRecords(args: {
             ? ("workflow_completed" as const)
             : transition
               ? ("moved" as const)
+              : validActionResult && run.actionResult?.resultCode === "requirement_satisfied"
+                ? ("requirement_satisfied" as const)
               : ("unavailable" as const);
       return {
         id: String(run._id),
@@ -366,6 +369,19 @@ async function readMembershipContextRecords(args: {
             completed_at: current.completedAt
               ? toIsoString(current.completedAt)
               : null,
+            requirements: await Promise.all(current.milestone.automations.filter(rule => rule.action.type === "move_member").map(async rule => {
+              const evidence = currentWorkflowRequirementEvidence(current.milestone.automations, state?.requirementEvidence ?? [], Number(membership?.activationSequence ?? 0)).find(item => item.automationKey === rule.key);
+              const form = rule.trigger.type === "form_submitted" ? await args.ctx.db.query("communityForms")
+                .withIndex("by_community_key", q => q.eq("communityId", args.communityId).eq("key", rule.trigger.type === "form_submitted" ? rule.trigger.formKey : "")).unique() : null;
+              const channelId = args.view === "builder" && rule.trigger.type === "member_contributed" && rule.trigger.channelId
+                ? args.ctx.db.normalizeId("communityChannels", rule.trigger.channelId) : null;
+              const channel = channelId ? await args.ctx.db.get(channelId) : null;
+              return { key: rule.key,
+                label: rule.trigger.type === "form_submitted" ? `Submit ${form?.name ?? "the selected form"}`
+                  : rule.trigger.type === "milestone_elapsed" ? `${rule.trigger.delayMinutes} minutes in milestone`
+                  : rule.trigger.channelId ? channel?.communityId === args.communityId ? `Post or reply in #${channel.name}` : "Post or reply in the selected channel" : "Post or reply in any channel",
+                satisfied: Boolean(evidence), satisfied_at: evidence ? toIsoString(evidence.satisfiedAt) : null };
+            })),
           }
         : null,
     facts_truncated: factPage.truncated,

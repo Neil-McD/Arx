@@ -25,6 +25,7 @@ function workflowActivityLabel(
   activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
 ): string {
   if (activity.action_type === "request_form") return `Form · ${readableLabel(activity.status)}`;
+  if (activity.status === "requirement_satisfied") return `Requirement satisfied in ${activity.milestone_name}`;
   if (activity.status === "unavailable") {
     return `${activity.action_type === "prompt_agent" ? "Community agent" : "Milestone move"} · Status unavailable`;
   }
@@ -173,6 +174,10 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
         </div>
 
         <div className="modal-body workflow-member-dossier-body">
+          {dossier?.workflow?.requirements?.length && !dossier.workflow.completed_at ? <section>
+            <h3>Move on when all requirements are met</h3>
+            <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
+          </section> : null}
           {props.isLoading ? (
             <div
               className="workflow-member-dossier-loading"

@@ -61,6 +61,25 @@ test("real activation enrolls once; never early; duplicate dispatch moves once w
   expect(await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
 });
 
+test("multiple time requirements accumulate without a second scheduler", async () => {
+  const s = await setup(10);
+  const workflow = (await s.t.run(ctx => ctx.db.query("communityMemberWorkflows").first()))!;
+  const rule = workflow.milestones[0].automations[0];
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, expectedRevision: workflow.revision, milestoneKey: s.first.milestone.key, name: "New",
+    automations: [{ key: rule.key, trigger: rule.trigger, action: rule.action },
+      { trigger: { type: "milestone_elapsed", delayMinutes: 20 }, action: { type: "move_member", destination: "next_or_complete" } }],
+  });
+  await s.activate();
+  expect((await s.rows()).timers).toHaveLength(2);
+  vi.setSystemTime(epoch + 600000); await s.process(); await s.process();
+  expect((await s.rows()).transitions).toHaveLength(0);
+  expect((await s.rows()).states[0].requirementEvidence).toHaveLength(1);
+  vi.setSystemTime(epoch + 1200000); await s.process(); await s.process();
+  expect((await s.rows()).transitions).toHaveLength(1);
+  expect((await s.rows()).transitions[0].requirementEvidence).toHaveLength(2);
+});
+
 test.each(["revoked", "archived", "restored", "moved", "completed", "reactivated"])("%s members cannot execute stale work", async kind => {
   const s = await setup();
   const { membership } = await s.activate();
