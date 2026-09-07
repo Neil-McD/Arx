@@ -162,6 +162,9 @@ existing replay key and one-terminal-transition writer.
 The editor keeps its opening milestone snapshot across live board refreshes.
 Unchanged refreshes preserve the draft; a changed milestone blocks saving and
 requires closing/reopening, rather than silently erasing or overwriting edits.
+While a save is pending, its realtime echo does not display the stale-edit
+warning. The conflict guard stays active; after a failed save, genuine conflicts
+and the save error remain visible without resetting the draft.
 
 ### Editor foundation
 

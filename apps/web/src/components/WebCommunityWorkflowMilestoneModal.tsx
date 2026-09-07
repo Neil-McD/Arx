@@ -242,7 +242,9 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
               </section>
             )) : null}
 
-            {hasConflict ? <p className="workflow-error" role="alert">This milestone changed while you were editing. Your draft has not been saved. Close and reopen it to load the latest version.</p> : null}
+            {/* Our own write can arrive through realtime before the save promise settles.
+                Keep the conflict guard, but wait for the save outcome before warning. */}
+            {hasConflict && !props.isSaving ? <p className="workflow-error" role="alert">This milestone changed while you were editing. Your draft has not been saved. Close and reopen it to load the latest version.</p> : null}
             {duplicateRequirement ? <p className="workflow-error" role="alert">Each requirement must be different.</p> : null}
             {duplicateJoinAction ? <p className="workflow-error" role="alert">Use one channel action and one request per selected form when a member joins.</p> : null}
             {duplicateFormAction ? <p className="workflow-error" role="alert">Use one agent action per submitted form. The same form can also be a completion requirement.</p> : null}

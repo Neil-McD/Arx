@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import type { CommunityMemberWorkflowAutomation, CommunityMemberWorkflowMilestone } from "../shared/communityMemberWorkflow";
 import {
   isWorkflowMilestoneDraftDirty,
@@ -18,6 +19,13 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("defers the conflict warning during saves without removing conflict or failure protection", () => {
+    const source = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx", import.meta.url), "utf8");
+    expect(source).toContain('{hasConflict && !props.isSaving ? <p className="workflow-error"');
+    expect(source).toContain("&& !hasConflict");
+    expect(source).toContain('{props.error ? <p className="workflow-error"');
+    expect(source).toContain("if (editingSnapshot.current?.key === props.milestone.key) return;");
+  });
   it("join form requests reuse form validation without requiring a channel", () => {
     const rule: CommunityMemberWorkflowAutomation = { key: "join-form", trigger: { type: "member_joined" }, action: { key: "form", type: "request_form", formKey: "intake" } };
     expect(workflowAutomationIssue(rule, [], true)).toBeNull();
