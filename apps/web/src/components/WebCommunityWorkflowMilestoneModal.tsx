@@ -18,6 +18,8 @@ import {
 } from "../../../../shared/communityMemberWorkflow";
 
 type Props = {
+  formsStatus?: "loading" | "ready" | "error";
+  onRetryForms?: () => void;
   forms?: Array<{ key: string; name: string }>;
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
@@ -211,6 +213,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                   </div>
                 </div>
 
+                {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}
                 {automations.length === 0 ? (
                   <p className="workflow-milestone-automations-empty">Nothing happens automatically in this milestone.</p>
                 ) : (

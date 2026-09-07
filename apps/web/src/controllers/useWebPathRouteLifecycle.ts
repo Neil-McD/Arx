@@ -1,4 +1,5 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { workflowSectionFromSearch, workflowSectionUrl } from "../../../../shared/workflowSection";
 import {
   clearStripeConnectQueryParams,
   parseStripeConnectReturn,
@@ -86,7 +87,7 @@ export function useWebPathRouteLifecycle(params: {
     if (hasPendingRouteIntentParams()) return;
     if (isLegacyWorkspaceRoutePath(window.location.pathname)) return;
 
-    const nextPath = params.buildAppRoutePath({
+    let nextPath = params.buildAppRoutePath({
       page: params.activePage,
       view: params.activeView,
       settingsPage: params.settingsPage,
@@ -109,6 +110,9 @@ export function useWebPathRouteLifecycle(params: {
       operatorTab: params.activePage === "operator" ? params.operatorTab : null,
     });
     if (!nextPath) return;
+    if (params.activePage === "community" && params.communityTab === "workflows" && window.location.pathname === nextPath) {
+      nextPath = workflowSectionUrl(new URL(nextPath, window.location.origin).href, workflowSectionFromSearch(window.location.search));
+    }
 
     const currentPath = `${window.location.pathname}${window.location.search}`;
     if (currentPath === nextPath) return;

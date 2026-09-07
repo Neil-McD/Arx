@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ArrowLeft, ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { blankCommunityFormQuestion, communityFormIssue, COMMUNITY_FORM_MAX_FORMS, COMMUNITY_FORM_MAX_QUESTIONS, type CommunityFormDraft, type CommunityFormQuestion } from "../../../../shared/communityForms";
 import type { CommunityFormsGateway } from "../controllers/useWebCommunityFormsGateway";
@@ -9,7 +9,8 @@ const errorText = (error: unknown) => String(error).includes("form_revision_conf
   ? "This form changed in another session. Your edits are still here. Reload the saved form to continue."
   : "Could not save. Your edits are still here. Try again.";
 
-export function WebCommunityForms({ gateway, onBack }: { gateway: CommunityFormsGateway; onBack: () => void }) {
+type LeaveGuard = MutableRefObject<(() => Promise<boolean>) | null>;
+export function WebCommunityForms({ gateway, leaveGuard }: { gateway: CommunityFormsGateway; leaveGuard?: LeaveGuard }) {
   const [forms, setForms] = useState<CommunityFormDraft[]>([]);
   const [selected, setSelected] = useState<CommunityFormDraft | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,10 +22,9 @@ export function WebCommunityForms({ gateway, onBack }: { gateway: CommunityForms
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [gateway, refresh]);
-  if (selected) return <CommunityFormEditor key={selected.key} initial={selected} gateway={gateway}
+  if (selected) return <CommunityFormEditor key={selected.key} initial={selected} gateway={gateway} leaveGuard={leaveGuard}
     onBack={() => { setSelected(null); setRefresh(n => n + 1); }} />;
   return <div className="workflow-page community-forms-page">
-    <header className="community-forms-header"><button className="workflow-secondary-button" onClick={onBack}><ArrowLeft size={16} /> Workflows</button><h1 className="resources-header">Forms</h1></header>
     {loading ? <p role="status">Loading forms…</p> : error ? <p role="alert">Could not load forms. <button className="workflow-secondary-button" onClick={() => setRefresh(n => n + 1)}>Try again</button></p> : <>
       <div className="community-form-list">{forms.map(form => <button key={form.key} onClick={() => setSelected(form)}>
         <span>{form.name || "Untitled form"}</span><small>{form.questions.length} questions · {form.publishedRevision === form.revision ? "Published" : form.publishedRevision ? "Unpublished edits" : "Draft"}</small>
@@ -35,7 +35,7 @@ export function WebCommunityForms({ gateway, onBack }: { gateway: CommunityForms
   </div>;
 }
 
-export function CommunityFormEditor({ initial, gateway, onBack }: { initial: CommunityFormDraft; gateway: CommunityFormsGateway; onBack: () => void }) {
+export function CommunityFormEditor({ initial, gateway, onBack, leaveGuard }: { initial: CommunityFormDraft; gateway: CommunityFormsGateway; onBack: () => void; leaveGuard?: LeaveGuard }) {
   const [draft, setDraft] = useState(initial);
   const [index, setIndex] = useState(0);
   const [preview, setPreview] = useState(false);
@@ -68,6 +68,18 @@ export function CommunityFormEditor({ initial, gateway, onBack }: { initial: Com
     inFlight.current = pending;
     try { await pending; } finally { inFlight.current = null; if (alive.current) setSaving(false); }
   };
+  const prepareLeave = async () => {
+    if (publishing) return false;
+    try {
+      do { await flush(); } while (alive.current && saved.current !== contentKey(desired.current));
+      return alive.current;
+    } catch { return false; }
+  };
+  useEffect(() => {
+    if (!leaveGuard) return;
+    leaveGuard.current = prepareLeave;
+    return () => { leaveGuard.current = null; };
+  });
   useEffect(() => {
     if (!dirty || saving || error || publishing) return;
     const timer = window.setTimeout(() => { void flush().catch(() => {}); }, 700);
@@ -84,7 +96,7 @@ export function CommunityFormEditor({ initial, gateway, onBack }: { initial: Com
     const items = [...draft.questions]; const [item] = items.splice(from, 1); items.splice(to, 0, item);
     setDraft({ ...draft, questions: items }); setIndex(to);
   };
-  const close = async () => { try { await flush(); if (alive.current) onBack(); } catch {} };
+  const close = async () => { if (await prepareLeave()) onBack(); };
   const publish = async () => {
     const issue = communityFormIssue(draft, true); if (issue) { setValidation(issue); return; }
     setPublishing(true); setValidation(null);

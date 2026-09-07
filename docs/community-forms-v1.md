@@ -3,6 +3,12 @@
 Forms live inside Workflows. Owners and entitled admins author an ordered question
 list on one canvas and preview one question at a time. There is no new global tab.
 
+Workflows uses one persistent Workflows / Integrations / Forms selector built on
+the canonical platform tab primitive. The `section` query parameter selects Forms
+or Integrations; absence selects the board. Integrations is explicitly unavailable,
+not a connection catalog. Form-editor tab changes flush pending edits and remain
+in Forms on failure. Published-form loading failures are visible and retryable.
+
 ## Contract
 
 - Drafts autosave; incomplete questions are allowed. Failed saves retain local edits.

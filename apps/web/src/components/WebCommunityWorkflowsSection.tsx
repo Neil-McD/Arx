@@ -1,5 +1,8 @@
 import { Pencil, Plus, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import { WORKFLOW_SECTIONS, workflowSectionFromSearch, workflowSectionUrl, type WorkflowSection } from "../../../../shared/workflowSection";
 
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES,
@@ -67,13 +70,67 @@ const BLANK_MILESTONE: CommunityMemberWorkflowMilestone = {
 export function WebCommunityWorkflowsSection(
   props: WebCommunityWorkflowsSectionProps,
 ) {
-  const [showForms, setShowForms] = useState(false);
-  const [publishedForms, setPublishedForms] = useState<Array<{ key: string; name: string }>>([]);
+  const [section, setSection] = useState<WorkflowSection>(() => workflowSectionFromSearch(window.location.search));
+  const beforeLeave = useRef<(() => Promise<boolean>) | null>(null);
+  const pending = useRef(false);
+  const scopeEpoch = useRef(0);
+  const [switching, setSwitching] = useState(false);
   useEffect(() => {
-    let alive = true; setPublishedForms([]);
-    props.forms?.load().then(rows => { if (alive) setPublishedForms(rows.filter(r => r.publishedRevision !== null)); }).catch(() => {});
+    scopeEpoch.current++;
+    pending.current = false; setSwitching(false);
+    setSection(workflowSectionFromSearch(window.location.search));
+    return () => { scopeEpoch.current++; };
+  }, [props.forms?.scopeKey]);
+  const select = async (next: WorkflowSection, replace = false, fromHistory = false) => {
+    if (pending.current) {
+      if (fromHistory) window.history.replaceState(window.history.state, "", workflowSectionUrl(window.location.href, section));
+      return;
+    }
+    if (next === section) return;
+    const epoch = scopeEpoch.current;
+    pending.current = true; setSwitching(true);
+    try {
+      const allowed = !beforeLeave.current || await beforeLeave.current();
+      if (epoch !== scopeEpoch.current) return;
+      if (!allowed) {
+        if (fromHistory) window.history.replaceState(window.history.state, "", workflowSectionUrl(window.location.href, section));
+        return;
+      }
+      window.history[replace || fromHistory ? "replaceState" : "pushState"](window.history.state, "", workflowSectionUrl(window.location.href, next));
+      setSection(next);
+    } finally { if (epoch === scopeEpoch.current) { pending.current = false; setSwitching(false); } }
+  };
+  const selectRef = useRef(select); selectRef.current = select;
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    const onPop = () => { if (window.location.pathname === pathname) void selectRef.current(workflowSectionFromSearch(window.location.search), false, true); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const tabs = WORKFLOW_SECTIONS.map(id => ({ id, label: id[0].toUpperCase() + id.slice(1), disabled: switching }));
+  return <div className="workflow-page workflow-sections">
+    <WebPlatformTabList tabs={tabs} activeTab={section} onSelectTab={(next, meta) => void select(next, meta.source === "keyboard")}
+      ariaLabel="Workflow sections" idPrefix="workflow-sections" className="platform-switcher platform-switcher-compact workflow-section-tabs"
+      style={buildPlatformSwitcherStyle(3, WORKFLOW_SECTIONS.indexOf(section))} />
+    <div className="workflow-section-content" role="tabpanel" id={platformTabPanelId("workflow-sections", section)} aria-labelledby={platformTabId("workflow-sections", section)}>
+      {section === "workflows" ? <WorkflowBoard {...props} /> : section === "forms" ? props.forms
+        ? <WebCommunityForms key={props.forms.scopeKey} gateway={props.forms} leaveGuard={beforeLeave} />
+        : <p role="status">Forms are unavailable.</p>
+        : <div className="workflow-integrations-empty"><h2>Integrations are not available yet</h2><p>App and MCP connections are not enabled for workflows.</p></div>}
+    </div>
+  </div>;
+}
+
+function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
+  const [publishedForms, setPublishedForms] = useState<Array<{ key: string; name: string }>>([]);
+  const [formsState, setFormsState] = useState<"loading" | "ready" | "error">("loading");
+  const [formsRetry, setFormsRetry] = useState(0);
+  useEffect(() => {
+    let alive = true; setPublishedForms([]); setFormsState("loading");
+    if (!props.forms) { setFormsState("error"); return; }
+    props.forms.load().then(rows => { if (alive) { setPublishedForms(rows.filter(r => r.publishedRevision !== null)); setFormsState("ready"); } }).catch(() => { if (alive) setFormsState("error"); });
     return () => { alive = false; };
-  }, [props.forms, showForms]);
+  }, [props.forms, formsRetry]);
   const [editingMilestoneKey, setEditingMilestoneKey] = useState<string | null>(null);
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false);
   const milestones = props.board?.milestones ?? [BLANK_MILESTONE];
@@ -159,19 +216,12 @@ export function WebCommunityWorkflowsSection(
     );
   }
 
-  if (showForms && props.forms) return <WebCommunityForms key={props.forms.scopeKey} gateway={props.forms} onBack={() => setShowForms(false)} />;
-
   return (
     <div className="workflow-page workflow-pipeline-page">
       <section
         className="community-panel community-utility-panel workflow-pipeline-shell"
-        aria-labelledby="workflow-title"
+        aria-label="Workflow board"
       >
-        <header className="feed-header-row workflow-pipeline-header">
-          <h1 className="resources-header" id="workflow-title">Workflows</h1>
-          {props.forms ? <button type="button" className="workflow-secondary-button" onClick={() => setShowForms(true)}>Forms</button> : null}
-        </header>
-
         <div className="workflow-milestone-canvas" aria-label="Member success milestones">
           {milestones.map((milestone, index) => {
             const members = membersByMilestone.get(milestone.key) ?? [];
@@ -256,6 +306,8 @@ export function WebCommunityWorkflowsSection(
       </section>
 
       <WebCommunityWorkflowMilestoneModal
+        formsStatus={formsState}
+        onRetryForms={() => setFormsRetry(n => n + 1)}
         forms={publishedForms}
         channels={props.channels}
         channelsUnavailable={props.channelsUnavailable}
