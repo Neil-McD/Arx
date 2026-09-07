@@ -117,8 +117,9 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const joinLanes = automations.filter(a => a.trigger.type === "member_joined").map(a => a.action.type === "request_form" ? `form:${a.action.formKey}` : a.action.type);
   const duplicateJoinAction = new Set(joinLanes).size !== joinLanes.length;
   const formActions = automations.filter(a => a.trigger.type === "form_submitted" && a.action.type !== "move_member");
-  const duplicateFormAction = new Set(formActions.map(a => a.trigger.type === "form_submitted" ? a.trigger.formKey : "")).size !== formActions.length;
+  const duplicateFormAction = new Set(formActions.map(a => a.trigger.type === "form_submitted" ? `${a.action.type}:${a.trigger.formKey}` : "")).size !== formActions.length;
   const canSave = name.trim().length > 0
+    && (!automations.some(a => a.action.type === "evaluate_goal") || !!goal.trim())
     && isDirty
     && !hasConflict
     && automations.every((automation) => !workflowAutomationIssue(automation, props.channels, props.channelsUnavailable))

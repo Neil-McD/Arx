@@ -163,6 +163,7 @@ async function scheduleImmediateServeWorker(args: {
 }
 
 async function insertServeRequest(args: {
+  workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
   invocationKey: string;
@@ -195,6 +196,7 @@ async function insertServeRequest(args: {
     }
   }
   return await args.ctx.db.insert("communityAgentServeRequests" as any, {
+    ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
     communityId: args.communityId,
     agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
     ...(args.mention ? { sourceMentionId: args.mention._id } : {}),
@@ -672,6 +674,7 @@ export async function intakeCommunityAgentTurn(args: {
 }
 
 export async function intakeCommunityAgentWorkflowAction(args: {
+  workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
   rootId?: any;
@@ -696,9 +699,9 @@ export async function intakeCommunityAgentWorkflowAction(args: {
     !workflowRun ||
     workflowRun.status !== "running" ||
     normalizeIdValue(workflowRun.communityId) !== normalizeIdValue(args.communityId) ||
-    workflowRun.actionSnapshot?.type !== "prompt_agent" ||
+    workflowRun.actionSnapshot?.type !== (args.workflowAssessment ? "evaluate_goal" : "prompt_agent") ||
     workflowRun.actionSnapshot?.key !== workflowActionKey ||
-    workflowRun.actionSnapshot?.prompt !== workflowPromptSnapshot
+    (!args.workflowAssessment && workflowRun.actionSnapshot?.prompt !== workflowPromptSnapshot)
   ) {
     throw new Error("community_agent_workflow_run_authority_invalid");
   }
@@ -721,9 +724,10 @@ export async function intakeCommunityAgentWorkflowAction(args: {
   }
   const timedMembership = (args.workflowTimerId || args.workflowFormRequestId) ? await args.ctx.db.get(workflowRun.membershipId) : null;
   const timedDestination = (args.workflowTimerId || args.workflowFormRequestId) ? {
+    ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
     workflowTimerId: args.workflowTimerId,
     workflowFormRequestId: args.workflowFormRequestId,
-    serviceChannelId: timedMembership?.serviceChannelId,
+    serviceChannelId: args.workflowAssessment ? undefined : timedMembership?.serviceChannelId,
     serviceChannelRevision: timedMembership?.serviceChannelRevision ?? 0,
   } : {};
   const source = await resolveInvocationSource({
@@ -830,8 +834,8 @@ export async function intakeCommunityAgentWorkflowAction(args: {
     workflowActionKey,
     workflowPromptSnapshot,
     ...timedDestination,
-    sourceVisibilityScope: (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
-    responseVisibilityScope: (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    sourceVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    responseVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
     nowMs: args.nowMs,
   });
   await scheduleImmediateServeWorker({ ctx: args.ctx, requestId });

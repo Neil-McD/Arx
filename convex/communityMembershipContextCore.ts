@@ -108,7 +108,11 @@ export async function resolveSelfCommunityMembershipContext(args: {
     approved_community_context: context.approved_community_context,
     facts_truncated: context.facts_truncated,
     recent_workflow_activity: context.recent_workflow_activity.map(
-      ({ prompt: _prompt, ...activity }) => activity,
+      (entry) => {
+        const { prompt: _prompt, ...activity } = entry;
+        if ("assessment" in activity) delete activity.assessment;
+        return activity;
+      },
     ),
     milestone_history: context.milestone_history,
   };
@@ -242,6 +246,15 @@ async function readMembershipContextRecords(args: {
         const valid = validActionResult && request?.communityId === run.communityId && request?.membershipId === run.membershipId
           && request?.workflowId === run.workflowId && request?.automationKey === run.automationKey && request?.milestoneEnteredAt === run.milestoneEnteredAt;
         return { id: String(run._id), action_type: "request_form" as const, status: valid ? "requested" as const : "unavailable" as const,
+          milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
+      }
+      if (run.actionSnapshot.type === "evaluate_goal") {
+        const request = run.actionResult?.serveRequestId ? await args.ctx.db.get(run.actionResult.serveRequestId) : null;
+        const valid = validActionResult && request?.workflowRunId === run._id && request?.workflowAssessment === true
+          && request.communityId === run.communityId && request.requesterUserId === membership?.userId;
+        return { id: String(run._id), action_type: "evaluate_goal" as const,
+          status: run.status === "failed" || (valid && request.status === "error") ? "failed" as const : valid ? request.status as "queued" | "running" | "responded" : "unavailable" as const,
+          ...(valid && request.status === "responded" && run.goalAssessment ? { assessment: run.goalAssessment } : {}),
           milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
       }
       if (run.actionSnapshot.type === "create_service_channel") {

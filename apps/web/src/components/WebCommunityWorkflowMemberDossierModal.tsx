@@ -25,6 +25,7 @@ function workflowActivityLabel(
   activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
 ): string {
   if (activity.action_type === "request_form") return `Form · ${readableLabel(activity.status)}`;
+  if (activity.action_type === "evaluate_goal") return `Goal evaluation · ${activity.status === "responded" ? "Assessed" : readableLabel(activity.status)}`;
   if (activity.action_type === "create_service_channel") return `Private channel setup · ${readableLabel(activity.status)}`;
   if (activity.status === "requirement_satisfied") return `Requirement satisfied in ${activity.milestone_name}`;
   if (activity.status === "unavailable") {
@@ -236,6 +237,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                         <ActivityTime value={activity.occurred_at} />
                         <div>
                           <strong>{workflowActivityLabel(activity)}</strong>
+                          {activity.assessment ? <p>{readableLabel(activity.assessment.verdict)} — {activity.assessment.reason}</p> : null}
                           {activity.failure_reason ? <p>{activity.failure_reason}</p> : null}
                           {activity.delivery_channel_url ? <a href={activity.delivery_channel_url}>Open delivery channel</a> : null}
                           {activity.prompt ? (

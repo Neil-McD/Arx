@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { WORKFLOW_ASSESSMENT_PROMPT } from "../shared/communityWorkflowAssessment";
 import { internal } from "./_generated/api";
 import { workflowJoinArgs, resolveFirstMemberWorkflowJoin, provisionJoinedMemberServiceChannel } from "./communityMemberWorkflowJoinCore";
 import { assignWorkflowForm, cancelMilestoneFormRequests, requestIsCurrent } from "./communityFormRequestCore";
@@ -94,6 +95,7 @@ const automationInputValidator = v.object({
     v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
   ),
   action: v.union(
+    v.object({ key: v.optional(v.string()), type: v.literal("evaluate_goal") }),
     v.object({ key: v.optional(v.string()), type: v.literal("create_service_channel") }),
     v.object({ key: v.optional(v.string()), type: v.literal("request_form"), formKey: v.string() }),
     v.object({
@@ -209,7 +211,7 @@ function normalizeAutomations(
     }
     usedActionKeys.add(actionKey);
     const action: CommunityMemberWorkflowAction =
-      input.action.type === "prompt_agent"
+      input.action.type === "evaluate_goal" ? { key: actionKey, type: "evaluate_goal" } : input.action.type === "prompt_agent"
         ? {
             key: actionKey,
             type: "prompt_agent",
@@ -364,6 +366,7 @@ export const updateBuilderWorkflowMilestone = mutation({
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
     const joinRules = milestone.automations.filter(a => a.trigger.type === "member_joined");
+    if (milestone.automations.some(a => a.action.type === "evaluate_goal" && (a.trigger.type !== "form_submitted" || !milestone.goal?.trim()))) throw new Error("workflow_assessment_requires_form_and_goal");
     if (joinRules.length > 0 && milestoneIndex !== 0) throw new Error("workflow_join_requires_first_milestone");
     const joinLanes = joinRules.map(a => a.action.type === "request_form" ? `form:${a.action.formKey}` : a.action.type);
     if (new Set(joinLanes).size !== joinLanes.length) throw new Error("workflow_join_action_duplicate");
@@ -872,7 +875,7 @@ async function executeWorkflowAutomation(args: {
       }, finishedAt: nowMs, updatedAt: nowMs });
       return { status: "form_requested" as const, workflow_run_id: String(workflowRunId), replayed: false };
     }
-    if (args.automation.action.type === "prompt_agent") {
+    if (args.automation.action.type === "prompt_agent" || args.automation.action.type === "evaluate_goal") {
       if (!args.workflowTimerId && !args.workflowFormRequestId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
         throw new Error("community_member_workflow_timer_action_invalid");
       }
@@ -886,7 +889,8 @@ async function executeWorkflowAutomation(args: {
         requesterUserId: args.membership.userId,
         workflowRunId,
         workflowActionKey: args.automation.action.key,
-        workflowPromptSnapshot: args.automation.action.prompt,
+        workflowPromptSnapshot: args.automation.action.type === "prompt_agent" ? args.automation.action.prompt : WORKFLOW_ASSESSMENT_PROMPT,
+        workflowAssessment: args.automation.action.type === "evaluate_goal",
         nowMs,
       });
       const succeeded = intake.status === "queued" || intake.status === "duplicate";

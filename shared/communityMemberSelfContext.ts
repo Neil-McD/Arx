@@ -21,7 +21,7 @@ export type CommunityMemberSelfContext = Pick<
   recent_workflow_activity: Array<
     Omit<
       CommunityMembershipContext["recent_workflow_activity"][number],
-      "prompt"
+      "prompt" | "assessment"
     >
   >;
 };

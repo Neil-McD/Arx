@@ -1,4 +1,5 @@
 import type { NativeToolAwareMessage } from "./nativeToolProtocol";
+import { WORKFLOW_ASSESSMENT_POLICY } from "./communityWorkflowAssessment";
 import { buildCommunityAgentIdentityPrompt } from "./communityAgentRuntimeBoundary";
 import {
   compileRuntimePromptSections,
@@ -21,6 +22,7 @@ export type CommunityAgentServePromptContext = {
   };
   workflowPrompt?: string | null;
   delivery?: "service_channel";
+  privateAssessment?: boolean;
 };
 
 export type CommunityAgentServePromptBundle = {
@@ -45,7 +47,7 @@ export function buildCommunityAgentServePromptBundle(
   ).trim()}/`;
   const workflowInstructions = String(context.workflowPrompt ?? "").trim();
   const timed = context.delivery === "service_channel";
-  const operatingPolicy = (timed ? [
+  const operatingPolicy = (context.privateAssessment ? [WORKFLOW_ASSESSMENT_POLICY] : timed ? [
     "Write one proactive check-in in the member's assigned service channel. This is not a reply to a member message.",
     "Use only the supplied community and workflow instructions and member-facing context. Tools are unavailable for this check-in.",
     "Personalize help using relevant approved facts, without reciting a profile. Stated goals and preferences are not evidence of completed work. Missing or truncated context is not evidence of inactivity.",
@@ -132,7 +134,7 @@ export function buildCommunityAgentServePromptBundle(
       },
       {
         role: "user",
-        content: `${communityDetails}\n\n${context.threadContext.rendered}\n\n${timed ? "Write the scheduled check-in now." : workflowInstructions ? "Carry out the workflow instruction for the identified member and reply in this same thread now." : "Reply to the identified requester's addressed turn in this same thread now."}`,
+        content: `${communityDetails}\n\n${context.threadContext.rendered}\n\n${context.privateAssessment ? "Return the private assessment JSON only." : timed ? "Write the scheduled check-in now." : workflowInstructions ? "Carry out the workflow instruction for the identified member and reply in this same thread now." : "Reply to the identified requester's addressed turn in this same thread now."}`,
       },
     ],
   };

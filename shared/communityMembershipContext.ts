@@ -41,7 +41,8 @@ export type CommunityMemberSuccessMilestoneHistoryEntry = {
 
 export type CommunityMemberSuccessWorkflowActivity = {
   id: string;
-  action_type: "prompt_agent" | "move_member" | "request_form" | "create_service_channel";
+  action_type: "prompt_agent" | "move_member" | "request_form" | "create_service_channel" | "evaluate_goal";
+  assessment?: { verdict: "achieved" | "not_yet" | "insufficient_evidence"; reason: string; evidenceRefs: string[]; assessedAt: number };
   status:
     | "queued"
     | "requested"

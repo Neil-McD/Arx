@@ -631,6 +631,77 @@ async function formAgentFixture(assigned = true) {
   return { ...s, submit };
 }
 
+async function goalAssessmentFixture() {
+  vi.useFakeTimers();
+  const s = await formAgentFixture(false);
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: 5, name: "New",
+    instructions: "Assess the clarity of the written offer.", goal: "The member has written an offer.",
+    automations: [{ trigger: { type: "form_submitted", formKey: "intake" }, action: { type: "evaluate_goal" } }],
+  });
+  await Promise.all([s.submit(), s.submit()]);
+  const requests = await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  expect(requests[0].status).toBe("queued");
+  expect(requests[0].serviceChannelId).toBeUndefined();
+  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: requests[0]._id });
+  const args = { requestId: requests[0]._id, expectedAttempt: claim.attempt! };
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
+  expect(context.privateAssessment).toBe(true);
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  expect(bundle.messages[bundle.messages.length - 1]?.content).toContain("assessment JSON only");
+  expect(bundle.messages[bundle.messages.length - 1]?.content).not.toContain("Write the scheduled check-in");
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages, prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
+  const refs = JSON.parse(context.timedMemberContext!).evidenceRefs;
+  const finish = (content = JSON.stringify({ verdict: "achieved", reason: "The submitted answer describes the offer.", evidenceRefs: refs })) => s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, { ...args, content });
+  return { ...s, args, finish, refs };
+}
+
+test("goal assessment is private, requires no room, and records once without movement", async () => {
+  const s = await goalAssessmentFixture();
+  expect((await s.finish()).ok).toBe(true);
+  expect((await s.finish()).ok).toBe(false);
+  const runs = await s.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect());
+  expect(runs.filter(r => r.goalAssessment)).toHaveLength(1);
+  expect(runs.find(r => r.goalAssessment)?.goalAssessment?.verdict).toBe("achieved");
+  expect(await s.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(0);
+  const builder = await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
+  expect(builder.recent_workflow_activity.find(a => a.action_type === "evaluate_goal")?.assessment?.verdict).toBe("achieved");
+  const self = await s.member.query(internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal, { authSubject: MEMBER_SUBJECT, userId: s.f.memberId, communityId: s.f.communityId });
+  expect(JSON.stringify(self)).not.toContain("The submitted answer describes the offer.");
+});
+
+test.each(["goal", "membership", "visit", "answers", "snapshot", "lease", "manager", "invented", "malformed"])("goal assessment rejects %s changes without publishing or passing", async change => {
+  const s = await goalAssessmentFixture();
+  await s.t.run(async ctx => {
+    if (change === "goal") { const workflow = (await ctx.db.get(s.request.workflowId))!; await ctx.db.patch(workflow._id, { revision: workflow.revision + 1, milestones: workflow.milestones.map(m => ({ ...m, goal: "Changed goal" })) }); }
+    if (change === "membership") await ctx.db.patch(s.f.membershipId, { active: false });
+    if (change === "manager") await ctx.db.patch(s.request.workflowId, { updatedByUserId: s.f.memberId });
+    if (change === "visit") await ctx.db.insert("communityMemberWorkflowMemberMilestones", { workflowId: s.request.workflowId, membershipId: s.f.membershipId, currentMilestoneKey: s.configured.firstKey, milestoneEnteredAt: Date.now() + 1, transitionSeq: 1, createdAt: Date.now(), updatedAt: Date.now() });
+    if (change === "answers") await ctx.db.patch(s.request._id, { answers: { q: "Changed" }, revision: 3 });
+    if (change === "snapshot") for (const event of await ctx.db.query("communityAgentRunEvents").collect()) await ctx.db.delete(event._id);
+  });
+  if (change === "lease") vi.setSystemTime(Date.now() + 86400000);
+  const result = await s.finish(change === "invented" ? JSON.stringify({ verdict: "achieved", reason: "Done", evidenceRefs: ["invented"] }) : change === "malformed" ? "not JSON" : undefined);
+  expect(result.ok).toBe(false);
+  expect((await s.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).some(r => r.goalAssessment)).toBe(false);
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(0);
+});
+
+test("goal evaluation authoring requires a goal and exact form trigger", async () => {
+  const s = await formAgentFixture(false);
+  for (const trigger of [{ type: "form_submitted" as const, formKey: "intake" }, { type: "member_contributed" as const }]) {
+    await expect(s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+      communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: 5, name: "New",
+      goal: trigger.type === "form_submitted" ? "" : "A written offer",
+      automations: [{ trigger, action: { type: "evaluate_goal" } }],
+    })).rejects.toThrow("workflow_assessment_requires_form_and_goal");
+  }
+});
+
 test("form submission queues one exact-source agent action and publishes once without moving", async () => {
   const s = await formAgentFixture();
   await s.submit(); await s.submit();

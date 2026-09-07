@@ -34,7 +34,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const isRequirement = automation.action.type === "move_member";
   const issue = workflowAutomationIssue(automation, props.channels, props.channelsUnavailable);
   const isPrivate = props.channels.some((channel) => channel.id === channelId && channel.access_mode === "restricted");
-  const actionLabel = automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : "Required for completion";
+  const actionLabel = automation.action.type === "evaluate_goal" ? "Evaluate goal" : automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : "Required for completion";
 
   return (
     <div className="workflow-milestone-automation-row" data-automation-key={automation.key}>
@@ -99,6 +99,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 <span>Ask agent</span>
               </label>}
               <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "request_form"} disabled={isForm} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "request_form"))} /><span>Request form</span></label>
+              {isForm ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "evaluate_goal"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "evaluate_goal"))} /><span>Evaluate goal</span></label> : null}
             </div>
           </fieldset> : null}
 
@@ -120,7 +121,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 {!isTimed && !isForm && (isPrivate || channelId === undefined) ? " In private channels, the agent must be invited." : ""}
               </p>
             </>
-          ) : (
+          ) : automation.action.type === "evaluate_goal" ? <p className="workflow-field-hint">Privately evaluates the milestone goal using this submitted form. Add a goal above to save. Records a judgment only; no message or milestone movement.</p> : (
             <p className="workflow-action-consequence">
               {workflowMoveLabel(props.nextMilestoneName)} only when every requirement is satisfied.
               <small>Requirements can happen in any order. No agent run is needed; this does not wait for agent actions to finish.</small>

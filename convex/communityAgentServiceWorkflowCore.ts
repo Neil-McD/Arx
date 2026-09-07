@@ -10,11 +10,13 @@ import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeCont
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requestIsCurrent } from "./communityFormRequestCore";
+import { requireWorkflowAssessment, readWorkflowAssessmentEvidence } from "./communityWorkflowAssessmentCore";
 
 /** Member-facing projection only. Caller establishes live source/run authority.
  * Never workflow-only facts, account spine or the builder dossier.
  */
 export async function readServiceMemberContext(ctx: QueryCtx, request: any) {
+  if (request.workflowAssessment) return readWorkflowAssessmentEvidence(ctx, request);
   const member = await getUniqueCommunityMembershipByPair({ ctx, communityId: request.communityId, userId: request.requesterUserId });
   const membership = member ? await ctx.db.get(member._id as Id<"communityMemberships">) : null;
   if (!membership) throw new Error("workflow_member_context_unavailable");
@@ -39,6 +41,7 @@ export async function readServiceMemberContext(ctx: QueryCtx, request: any) {
  * Reads and publication share this authority check. No synthetic interaction.
  */
 export async function requireServiceWorkflowDestination(ctx: any, request: any) {
+  if (request.workflowAssessment) return requireWorkflowAssessment(ctx, request);
   if (request.triggerKind !== "workflow" || Boolean(request.workflowTimerId) === Boolean(request.workflowFormRequestId) || request.sourceRootId || request.sourceReplyId) {
     throw new Error("workflow_timer_source_invalid");
   }
@@ -122,6 +125,7 @@ export async function requireServiceWorkflowDestination(ctx: any, request: any) 
 }
 
 export async function publishServiceWorkflowPost(ctx: any, request: any, content: string, nowMs: number) {
+  if (request.workflowAssessment) throw new Error("workflow_assessment_cannot_publish");
   const { channelId } = await requireServiceWorkflowDestination(ctx, request);
   // Even a missing/deleted snapshot must not bypass the form disclosure fence.
   const currentContext = await readServiceMemberContext(ctx, request);

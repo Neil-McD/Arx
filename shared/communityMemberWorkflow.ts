@@ -40,6 +40,7 @@ export type CommunityMemberWorkflowMoveMemberAction = {
 };
 
 export type CommunityMemberWorkflowAction =
+  | { key: string; type: "evaluate_goal" }
   | { key: string; type: "create_service_channel" }
   | { key: string; type: "request_form"; formKey: string }
   | CommunityMemberWorkflowPromptAgentAction

@@ -9,10 +9,10 @@ The V1 grammar is intentionally small:
 
 ```text
 Workflow = ordered Milestones[]
-Milestone = name + Automations[]
+Milestone = name + instructions? + goal? + Automations[]
 Automation = one Trigger + one Action
 Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes) | form_submitted(formKey) | member_joined
-Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(formKey) | create_service_channel
+Action = prompt_agent(prompt) | evaluate_goal | move_member(next_or_complete) | request_form(formKey) | create_service_channel
 ```
 
 ### First join → private service channel and/or form requests
@@ -90,11 +90,13 @@ member's authorized service channel; either trigger can also move the member.
 
 ### Form submission actions
 
-- One agent action and one completion requirement per form per milestone.
+- One response action, one private assessment, and one completion requirement per form per milestone.
   Submission cannot request another form. Agent admission runs before completion;
   completion does not wait for delivery. An admitted form response can finish
   after movement under its original action/source authority and current private
   audience checks; timer delivery retains its current-visit fence.
+  Private goal assessment also requires the current visit; a completion rule
+  that advances immediately on the same submission makes that assessment stale.
 - The saved submitted request is the event authority. Answers are pinned to the
   assigned published version; exact submission retries do not create another run.
 - Ask agent binds the existing serve queue to `workflowFormRequestId`, never a
@@ -503,7 +505,31 @@ remains unchanged. Goal evaluation and replacement of requirements are later wor
 
 ## Explicitly deferred
 
-Recurring time and external triggers, arbitrary event filters, goals, LLM judges,
+### Private goal assessment (staging)
+
+`form_submitted -> evaluate_goal` runs a bounded private assessment through the
+existing community-agent worker, leases, context snapshots, and inference funding
+receipts. A nonempty milestone goal is required. No service channel is required.
+The evidence pack contains the exact triggering form and pinned version, not
+unrelated forms, profile facts, or conversation history. Answers are untrusted
+evidence; claims of external success are not independently verified facts.
+
+The model returns structured JSON: achieved, not_yet, or insufficient_evidence,
+with a reason and exact supplied evidence references. Invalid JSON, fabricated
+references, a pass with no references, or a pass on truncated evidence fail as
+execution errors. They are not failed goals. Result storage rechecks membership,
+milestone visit, workflow revision, current manager authority, live lease, agent
+enablement, and exact captured evidence. Editing the workflow invalidates pending
+assessments. No automatic retry after a stale result or automatic re-evaluation.
+
+The result is retained on the existing workflow run, visible in authorized builder
+member context and dossier activity, stripped from member-self context. The action
+cannot publish a channel message or advance a milestone. Existing requirements
+remain the sole transition authority. No goal engine, new queue, or new table.
+
+### Still deferred
+
+Recurring time and external triggers, arbitrary event filters, goal-driven advancement,
 multi-step loops, action graphs, action chaining, agent selection, and manual
 member movement are not V1 primitives. Add one only after a real use case cannot
 be expressed by the grammar above.

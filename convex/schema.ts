@@ -1222,6 +1222,7 @@ export default defineSchema({
             v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
           ),
           action: v.union(
+            v.object({ key: v.string(), type: v.literal("evaluate_goal") }),
             v.object({ key: v.string(), type: v.literal("create_service_channel") }),
             v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
             v.object({
@@ -1281,6 +1282,7 @@ export default defineSchema({
     .index("by_member_entry", ["workflowId", "membershipId", "activationSequence", "transitionSeq"]),
 
   communityMemberWorkflowRuns: defineTable({
+    goalAssessment: v.optional(v.object({ verdict: v.union(v.literal("achieved"), v.literal("not_yet"), v.literal("insufficient_evidence")), reason: v.string(), evidenceRefs: v.array(v.string()), assessedAt: v.number() })),
     milestoneContextSnapshot: v.optional(v.object({ instructions: v.string(), goal: v.string() })),
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
@@ -1300,6 +1302,7 @@ export default defineSchema({
     )),
     triggerReceiptRef: v.string(),
     actionSnapshot: v.union(
+      v.object({ key: v.string(), type: v.literal("evaluate_goal") }),
       v.object({ key: v.string(), type: v.literal("create_service_channel") }),
       v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
       v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),
@@ -2043,6 +2046,7 @@ export default defineSchema({
     workflowPromptSnapshot: v.optional(v.string()),
     workflowTimerId: v.optional(v.id("communityMemberWorkflowTimers")),
     workflowFormRequestId: v.optional(v.id("communityFormRequests")),
+    workflowAssessment: v.optional(v.boolean()),
     serviceChannelId: v.optional(v.id("communityChannels")),
     serviceChannelRevision: v.optional(v.number()),
     status: v.union(
