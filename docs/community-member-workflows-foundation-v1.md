@@ -15,11 +15,12 @@ Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes) | for
 Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(formKey) | create_service_channel
 ```
 
-### First join → private service channel
+### First join → private service channel and/or form requests
 
-- Builders may configure one `member_joined → create_service_channel` action in
-  the first milestone. This pair is intentionally bounded: no join prompts,
-  forms, movement, backfill or automatic welcome in this slice.
+- In the first milestone, builders may configure one channel-creation action
+  and/or form-request actions (one per selected published form). Each is the
+  existing one-trigger/one-action rule. No join prompts, movement, backfill or
+  automatic welcome is introduced.
 - First membership creation schedules one durable job in the activation
   transaction, independent of the best-effort activity feed. Signing in, renewed
   access, rejoining and manager memberships do not enroll it.
@@ -30,6 +31,15 @@ Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(for
   mutation so channel creation, activation-bound member/agent grants and binding
   roll back together on failure; the enclosing transaction retains a failed run.
   Membership activation remains committed even at the private-channel limit.
+- The job dispatches every matching join rule with its own receipt and isolated
+  write boundary. A failed form action cannot roll back or prevent room creation;
+  failed room creation cannot prevent forms, regardless of configured order.
+  Existing timer/submission transaction semantics are unchanged.
+- Form actions reuse canonical assignment, member access and published-version
+  pinning. The published version at assignment is pinned for that request, not
+  changed by later publishing. Forms appear in the member-private sidebar without
+  a service channel; assignment revision checks apply only to room creation.
+  Every action rechecks builder authority and the captured join context.
 - A valid existing single-client service room is reused, never repaired. Cleared,
   changed, archived, revoked, foreign or multi-client assignments are not replaced
   or reopened. Owners/admins retain implicit access; unrelated members cannot

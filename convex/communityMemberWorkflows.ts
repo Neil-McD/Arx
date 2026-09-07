@@ -222,7 +222,8 @@ function normalizeAutomations(
             destination: "next_or_complete",
           };
     if ((action.type === "request_form" && !action.formKey.trim()) || (input.trigger.type === "form_submitted" && !input.trigger.formKey.trim())) throw new Error("form_required");
-    if ((input.trigger.type === "member_joined") !== (action.type === "create_service_channel")) throw new Error("workflow_join_action_invalid");
+    if ((action.type === "create_service_channel" && input.trigger.type !== "member_joined")
+      || (input.trigger.type === "member_joined" && action.type !== "create_service_channel" && action.type !== "request_form")) throw new Error("workflow_join_action_invalid");
     if (input.trigger.type === "form_submitted") {
       if (action.type === "request_form") throw new Error("form_submission_action_invalid");
       const submissionLane = `${action.type}:${input.trigger.formKey}`;
@@ -353,7 +354,9 @@ export const updateBuilderWorkflowMilestone = mutation({
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
     const joinRules = milestone.automations.filter(a => a.trigger.type === "member_joined");
-    if (joinRules.length > 1 || (joinRules.length > 0 && milestoneIndex !== 0)) throw new Error("workflow_join_requires_first_milestone");
+    if (joinRules.length > 0 && milestoneIndex !== 0) throw new Error("workflow_join_requires_first_milestone");
+    const joinLanes = joinRules.map(a => a.action.type === "request_form" ? `form:${a.action.formKey}` : a.action.type);
+    if (new Set(joinLanes).size !== joinLanes.length) throw new Error("workflow_join_action_duplicate");
     for (const rawChannelId of new Set(milestone.automations.flatMap((automation) =>
       automation.trigger.type === "member_contributed" && automation.trigger.channelId !== undefined ? [automation.trigger.channelId] : []))) {
       const channelId = ctx.db.normalizeId("communityChannels", rawChannelId);
@@ -831,12 +834,13 @@ async function executeWorkflowAutomation(args: {
     updatedAt: nowMs,
   });
   try {
-    if (args.automation.action.type === "create_service_channel") {
-      if (!args.workflowJoin || args.automation.trigger.type !== "member_joined") throw new Error("workflow_join_action_invalid");
+    if (args.workflowJoin) {
+      if (args.automation.trigger.type !== "member_joined") throw new Error("workflow_join_action_invalid");
       // Isolate provisioning writes so a failure can retain a receipt without a partial room.
       let result;
       try {
-        result = await args.ctx.runMutation((internal as any).communityMemberWorkflows.provisionJoinedMemberServiceChannelInternal, args.workflowJoin);
+        result = await args.ctx.runMutation((internal as any).communityMemberWorkflows.executeJoinedMemberActionInternal,
+          { ...args.workflowJoin, automationKey: args.automation.key, workflowRunId });
       } catch (error) {
         const errorCode = String(error instanceof Error ? error.message : error).slice(0, 120);
         await args.ctx.db.patch(workflowRunId, { status: "failed", actionResult: {
@@ -845,9 +849,10 @@ async function executeWorkflowAutomation(args: {
         return { status: "action_failed" as const, workflow_run_id: String(workflowRunId), replayed: false };
       }
       await args.ctx.db.patch(workflowRunId, { status: "finished", actionResult: {
-        actionKey: args.automation.action.key, status: "complete", resultCode: result.resultCode, serviceChannelId: result.channelId,
+        actionKey: args.automation.action.key, status: "complete", ...result,
       }, finishedAt: nowMs, updatedAt: nowMs });
-      return { status: "service_channel_ready" as const, workflow_run_id: String(workflowRunId), replayed: false };
+      return { status: args.automation.action.type === "request_form" ? "form_requested" as const : "service_channel_ready" as const,
+        workflow_run_id: String(workflowRunId), replayed: false };
     }
     if (args.automation.action.type === "request_form") {
       const formRequestId = await assignWorkflowForm({ ...args, workflowRunId });
@@ -1091,14 +1096,37 @@ export const handleFirstMemberJoinInternal = internalMutation({
   handler: async (ctx, args) => {
     const resolved = await resolveFirstMemberWorkflowJoin(ctx, args);
     if (!resolved) return { status: "stale" };
-    return executeWorkflowAutomation({ ctx, ...resolved, workflowJoin: args,
-      timerReceiptRef: `member_joined:${args.membershipId}:1` });
+    const results = [];
+    for (const automation of resolved.current.milestone.automations.filter(a => a.trigger.type === "member_joined")) {
+      results.push(await executeWorkflowAutomation({ ctx, ...resolved, automation, workflowJoin: args,
+        timerReceiptRef: `member_joined:${args.membershipId}:1` }));
+    }
+    return results.length === 1 ? results[0] : { status: "handled", results };
   },
 });
 
-export const provisionJoinedMemberServiceChannelInternal = internalMutation({
-  args: workflowJoinArgs,
-  handler: provisionJoinedMemberServiceChannel,
+export const executeJoinedMemberActionInternal = internalMutation({
+  args: { ...workflowJoinArgs, automationKey: v.string(), workflowRunId: v.id("communityMemberWorkflowRuns") },
+  handler: async (ctx, args) => {
+    const resolved = await resolveFirstMemberWorkflowJoin(ctx, args);
+    if (!resolved) throw new Error("workflow_join_authority_changed");
+    const { workflow, membership, current } = resolved;
+    await requireCommunityManager({ ctx, communityId: workflow.communityId, userId: workflow.updatedByUserId });
+    const automation = current.milestone.automations.find(a => a.key === args.automationKey && a.trigger.type === "member_joined");
+    const run = await ctx.db.get(args.workflowRunId);
+    if (!automation || !run || run.status !== "running" || run.workflowId !== workflow._id
+      || run.communityId !== workflow.communityId || run.milestoneKey !== current.milestone.key
+      || run.milestoneEnteredAt !== current.milestoneEnteredAt || run.triggerType !== "member_joined"
+      || run.membershipId !== membership._id || run.automationKey !== automation.key
+      || run.workflowRevision !== workflow.revision || run.triggerReceiptRef !== `member_joined:${membership._id}:1`
+      || JSON.stringify(run.actionSnapshot) !== JSON.stringify(automation.action)) throw new Error("workflow_join_action_invalid");
+    if (automation.action.type === "request_form") {
+      return { resultCode: "form_requested", formRequestId: await assignWorkflowForm({ ctx, ...resolved, automation, workflowRunId: run._id }) };
+    }
+    if (automation.action.type !== "create_service_channel") throw new Error("workflow_join_action_invalid");
+    const result = await provisionJoinedMemberServiceChannel(ctx, args, resolved);
+    return { resultCode: result.resultCode, serviceChannelId: result.channelId };
+  },
 });
 
 export const handleChannelContributionRootInternal = internalMutation({

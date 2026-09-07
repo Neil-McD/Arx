@@ -34,7 +34,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const isRequirement = automation.action.type === "move_member";
   const issue = workflowAutomationIssue(automation, props.channels, props.channelsUnavailable);
   const isPrivate = props.channels.some((channel) => channel.id === channelId && channel.access_mode === "restricted");
-  const actionLabel = isJoin ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : "Required for completion";
+  const actionLabel = automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : "Required for completion";
 
   return (
     <div className="workflow-milestone-automation-row" data-automation-key={automation.key}>
@@ -58,12 +58,12 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
             <legend>When</legend>
             <div className="workflow-action-choice-row">
               <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={!isTimed && !isForm && !isJoin}
-                onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, isJoin ? "prompt_agent" : automation.action.type), trigger: { type: "member_contributed" } })} /><span>Member activity</span></label>
+                onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "create_service_channel" ? "prompt_agent" : automation.action.type), trigger: { type: "member_contributed" } })} /><span>Member activity</span></label>
               <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isTimed}
-                onChange={() => { setTimeUnit(1440); props.onChange({ ...replaceWorkflowDraftAction(automation, isJoin ? "prompt_agent" : automation.action.type), trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
+                onChange={() => { setTimeUnit(1440); props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "create_service_channel" ? "prompt_agent" : automation.action.type), trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
             </div>
             {!isRequirement && (props.canAddJoin || isJoin) ? <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isJoin}
-              onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, "create_service_channel"), trigger: { type: "member_joined" } })} /><span>Member joins</span></label> : null}
+              onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "request_form" ? "request_form" : "create_service_channel"), trigger: { type: "member_joined" } })} /><span>Member joins</span></label> : null}
             <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isForm}
               onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, isRequirement ? "move_member" : "prompt_agent"), trigger: { type: "form_submitted", formKey: "" } })} /><span>Form submitted</span></label>
           </fieldset>
@@ -90,19 +90,20 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
           </div>
           )}
 
-          {!isRequirement && !isJoin ? <fieldset className="workflow-action-choices" disabled={props.disabled}>
+          {!isRequirement ? <fieldset className="workflow-action-choices" disabled={props.disabled}>
             <legend>Then</legend>
             <div className="workflow-action-choice-row">
-              <label className="workflow-action-choice">
+              {isJoin ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "create_service_channel"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "create_service_channel"))} /><span>Create private channel</span></label> : <label className="workflow-action-choice">
                 <input type="radio" name={`${id}-action`} value="prompt_agent" checked={isPrompt}
                   onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "prompt_agent"))} />
                 <span>Ask agent</span>
-              </label>
+              </label>}
               <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "request_form"} disabled={isForm} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "request_form"))} /><span>Request form</span></label>
             </div>
           </fieldset> : null}
 
-          {isJoin ? <p className="workflow-field-hint">Creates a private service channel for the member, community managers, and community agent. Configure once in the first milestone before members join. Existing members and rejoining members are not processed. No message is sent.</p> : automation.action.type === "request_form" ? <label>Form<select value={automation.action.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, action: { key: automation.action.key, type: "request_form", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select><small>Shown privately in the member’s community sidebar. One request per rule and milestone visit.</small></label> : automation.action.type === "prompt_agent" ? (
+          {isJoin ? <p className="workflow-field-hint">Applies only to future first-time members. Each join action runs independently; no automatic message or milestone movement.</p> : null}
+          {automation.action.type === "create_service_channel" ? <p className="workflow-field-hint">Creates a private service channel for the member, community managers, and community agent.</p> : automation.action.type === "request_form" ? <label>Form<select value={automation.action.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, action: { key: automation.action.key, type: "request_form", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select><small>Shown privately in the member’s community sidebar. No channel is required. One request per rule and milestone visit.</small></label> : automation.action.type === "prompt_agent" ? (
             <>
               <label>
                 <span id={`${id}-prompt-label`}>Agent instructions</span>

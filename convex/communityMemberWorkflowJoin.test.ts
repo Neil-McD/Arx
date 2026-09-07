@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { CommunityMemberWorkflowAutomation } from "../shared/communityMemberWorkflow";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
@@ -13,7 +14,7 @@ import { bindMemberServiceChannel } from "./communityMemberServiceChannelCore";
 const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
 
-async function fixture() {
+async function fixture(mode: "room" | "form" | "both" = "room", reverse = false) {
   const t = convexTest(schema, modules);
   const f = await t.run(async ctx => {
     const now = Date.now();
@@ -22,10 +23,16 @@ async function fixture() {
     await ctx.db.insert("operatorRoles", { userId: ownerId, role: "owner", active: true, createdAt: now, updatedAt: now });
     const communityId = await ctx.db.insert("communities", { ownerId, slug: "join-workflow", name: "Join workflow", lifecycleStatus: "active",
       visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "approval", createdAt: now, updatedAt: now });
+    const formId = await ctx.db.insert("communityForms", { communityId, key: "intake", name: "Intake", questions: [], revision: 1, publishedRevision: 1, createdAt: now, updatedAt: now });
+    const versionId = await ctx.db.insert("communityFormVersions", { communityId, formId, revision: 1, name: "Intake", questions: [], publishedBy: ownerId, publishedAt: now });
+    const automations: CommunityMemberWorkflowAutomation[] = [];
+    if (mode !== "form") automations.push({ key: "join", trigger: { type: "member_joined" }, action: { key: "room", type: "create_service_channel" } });
+    if (mode !== "room") automations.push({ key: "intake", trigger: { type: "member_joined" }, action: { key: "intake", type: "request_form", formKey: "intake" } });
+    if (reverse) automations.reverse();
     const workflowId = await ctx.db.insert("communityMemberWorkflows", { communityId, revision: 1,
-      milestones: [{ key: "new", name: "New", automations: [{ key: "join", trigger: { type: "member_joined" }, action: { key: "room", type: "create_service_channel" } }] }],
+      milestones: [{ key: "new", name: "New", automations }],
       createdByUserId: ownerId, updatedByUserId: ownerId, createdAt: now, updatedAt: now });
-    return { now, ownerId, memberId, communityId, workflowId };
+    return { now, ownerId, memberId, communityId, workflowId, formId, versionId };
   });
   const activation = await t.run(ctx => activateCommunityMembershipCore({ ctx, communityId: f.communityId, userId: f.memberId,
     accessSource: "manual_grant", activationReason: "test", nowMs: f.now }));
@@ -119,7 +126,7 @@ test("builder config only accepts one join/private-room rule in the first milest
   await expect(builder.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { ...base,
     automations: [{ trigger: { type: "member_joined" }, action: { type: "prompt_agent", prompt: "hello" } }] })).rejects.toThrow("workflow_join_action_invalid");
   await expect(builder.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { ...base,
-    automations: [1, 2].map(() => ({ trigger: { type: "member_joined" as const }, action: { type: "create_service_channel" as const } })) })).rejects.toThrow("workflow_join_requires_first_milestone");
+    automations: [1, 2].map(() => ({ trigger: { type: "member_joined" as const }, action: { type: "create_service_channel" as const } })) })).rejects.toThrow("workflow_join_action_duplicate");
 });
 
 test("a late member-access failure rolls back room and grants, retaining only failed receipt", async () => {
@@ -165,4 +172,91 @@ test("concurrent duplicate join dispatch creates one room and run", async () => 
     expect((await ctx.db.query("communityChannels").collect()).filter(c => c.accessMode === "restricted")).toHaveLength(1);
     expect(await ctx.db.query("communityMemberWorkflowRuns").collect()).toHaveLength(1);
   });
+});
+
+test("form-only join needs no channel, pins version, and replays without another request", async () => {
+  const f = await fixture("form");
+  expect((await f.t.mutation(joinHandler, f.job)).status).toBe("form_requested");
+  await f.t.run(ctx => ctx.db.patch(f.formId, { publishedRevision: 2 }));
+  expect((await f.t.mutation(joinHandler, f.job)).status).toBe("already_executed");
+  await f.t.run(async ctx => {
+    const requests = await ctx.db.query("communityFormRequests").collect();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].versionId).toBe(f.versionId);
+    expect(requests[0].membershipId).toBe(f.membershipId);
+    expect(await ctx.db.query("communityChannels").collect()).toHaveLength(0);
+    expect(await ctx.db.query("communityMemberWorkflowTransitions").collect()).toHaveLength(0);
+    expect(await ctx.db.query("communityAgentServeRequests").collect()).toHaveLength(0);
+  });
+});
+
+test.each([false, true])("both join actions are replay-safe in either order (reverse=%s)", async reverse => {
+  const f = await fixture("both", reverse);
+  await Promise.all([f.t.mutation(joinHandler, f.job), f.t.mutation(joinHandler, f.job)]);
+  await f.t.run(async ctx => {
+    expect(await ctx.db.query("communityFormRequests").collect()).toHaveLength(1);
+    expect((await ctx.db.query("communityChannels").collect()).filter(c => c.accessMode === "restricted")).toHaveLength(1);
+    expect((await ctx.db.query("communityMemberWorkflowRuns").collect()).map(r => r.status)).toEqual(["finished", "finished"]);
+  });
+});
+
+test.each([false, true])("missing form does not roll back room (reverse=%s)", async reverse => {
+  const f = await fixture("both", reverse);
+  await f.t.run(ctx => ctx.db.delete(f.versionId));
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    expect((await ctx.db.query("communityChannels").collect()).filter(c => c.accessMode === "restricted")).toHaveLength(1);
+    expect(await ctx.db.query("communityFormRequests").collect()).toHaveLength(0);
+    const runs = await ctx.db.query("communityMemberWorkflowRuns").collect();
+    expect(runs.find(r => r.actionSnapshot.type === "request_form")!.status).toBe("failed");
+    expect(runs.find(r => r.actionSnapshot.type === "create_service_channel")!.status).toBe("finished");
+  });
+});
+
+test.each([false, true])("room assignment conflict does not prevent form (reverse=%s)", async reverse => {
+  const f = await fixture("both", reverse);
+  await f.t.run(ctx => ctx.db.patch(f.membershipId, { serviceChannelRevision: 1 }));
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    expect(await ctx.db.query("communityFormRequests").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityChannels").collect()).toHaveLength(0);
+    const runs = await ctx.db.query("communityMemberWorkflowRuns").collect();
+    expect(runs.find(r => r.actionSnapshot.type === "request_form")!.status).toBe("finished");
+    expect(runs.find(r => r.actionSnapshot.type === "create_service_channel")!.status).toBe("failed");
+  });
+});
+
+test("duplicate join form configuration is rejected; different forms remain possible", async () => {
+  const f = await fixture();
+  await expect(f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone,
+    { communityId: f.communityId, milestoneKey: "new", name: "New", expectedRevision: 1,
+      automations: [1, 2].map(() => ({ trigger: { type: "member_joined" as const }, action: { type: "request_form" as const, formKey: "intake" } })) })).rejects.toThrow("workflow_join_action_duplicate");
+});
+
+test.each([false, true])("private capacity failure still assigns the form (reverse=%s)", async reverse => {
+  const f = await fixture("both", reverse);
+  await f.t.run(async ctx => {
+    for (let i = 0; i < 100; i++) await ctx.db.insert("communityChannels", { communityId: f.communityId,
+      name: `Private ${i}`, normalizedName: `private ${i}`, slug: `private-${i}`, accessMode: "restricted", postingPolicy: "members", status: "active", position: i + 1, createdAt: f.now, updatedAt: f.now });
+  });
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    expect(await ctx.db.query("communityFormRequests").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityChannels").collect()).toHaveLength(100);
+    expect(await ctx.db.query("communityChannelParticipants").collect()).toHaveLength(0);
+    expect((await ctx.db.get(f.membershipId))!.active).toBe(true);
+  });
+});
+
+test.each(["revision", "reactivation", "blocked", "manager_removed"])("form join checks current authority: %s", async change => {
+  const f = await fixture("form");
+  await f.t.run(async ctx => {
+    if (change === "revision") await ctx.db.patch(f.workflowId, { revision: 2 });
+    if (change === "reactivation") await ctx.db.patch(f.membershipId, { activationSequence: 2 });
+    if (change === "blocked") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.memberId, createdByUserId: f.ownerId, createdAt: f.now, updatedAt: f.now });
+    if (change === "manager_removed") await ctx.db.patch(f.workflowId, { updatedByUserId: f.memberId });
+  });
+  const result = await f.t.mutation(joinHandler, f.job);
+  expect(result.status).toBe(change === "revision" || change === "reactivation" ? "stale" : "action_failed");
+  expect(await f.t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(0);
 });

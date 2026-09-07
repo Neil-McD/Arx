@@ -110,13 +110,15 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const isDirty = isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations);
   const requirements = automations.filter(automation => automation.action.type === "move_member");
   const duplicateRequirement = new Set(requirements.map(a => workflowTriggerIdentity(a.trigger))).size !== requirements.length;
+  const joinLanes = automations.filter(a => a.trigger.type === "member_joined").map(a => a.action.type === "request_form" ? `form:${a.action.formKey}` : a.action.type);
+  const duplicateJoinAction = new Set(joinLanes).size !== joinLanes.length;
   const formActions = automations.filter(a => a.trigger.type === "form_submitted" && a.action.type !== "move_member");
   const duplicateFormAction = new Set(formActions.map(a => a.trigger.type === "form_submitted" ? a.trigger.formKey : "")).size !== formActions.length;
   const canSave = name.trim().length > 0
     && isDirty
     && !hasConflict
     && automations.every((automation) => !workflowAutomationIssue(automation, props.channels, props.channelsUnavailable))
-    && !duplicateRequirement && !duplicateFormAction
+    && !duplicateRequirement && !duplicateFormAction && !duplicateJoinAction
     && automations.every(
       (automation) => automation.action.type !== "prompt_agent" || automation.action.prompt.trim().length > 0,
     );
@@ -223,7 +225,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                   <div className="workflow-milestone-automation-list">
                     {automations.filter(a => (a.action.type === "move_member") === requirement).map((automation, index) => (
                       <WebCommunityWorkflowAutomationEditor key={automation.key} automation={automation} index={index}
-                        canAddJoin={props.milestoneNumber === 1 && !automations.some(a => a.key !== automation.key && a.trigger.type === "member_joined")}
+                        canAddJoin={props.milestoneNumber === 1}
                         forms={props.forms}
                         expanded={expandedAutomationKey === automation.key} channels={props.channels} channelsUnavailable={props.channelsUnavailable}
                         nextMilestoneName={props.nextMilestoneName} disabled={props.isSaving}
@@ -242,6 +244,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
 
             {hasConflict ? <p className="workflow-error" role="alert">This milestone changed while you were editing. Your draft has not been saved. Close and reopen it to load the latest version.</p> : null}
             {duplicateRequirement ? <p className="workflow-error" role="alert">Each requirement must be different.</p> : null}
+            {duplicateJoinAction ? <p className="workflow-error" role="alert">Use one channel action and one request per selected form when a member joins.</p> : null}
             {duplicateFormAction ? <p className="workflow-error" role="alert">Use one agent action per submitted form. The same form can also be a completion requirement.</p> : null}
             {props.channelsUnavailable ? <p role="status">Channel choices are unavailable while loading or reconnecting.</p> : null}
             {props.error ? <p className="workflow-error" role="alert">{props.error}</p> : null}

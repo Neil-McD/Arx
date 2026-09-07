@@ -18,6 +18,12 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("join form requests reuse form validation without requiring a channel", () => {
+    const rule: CommunityMemberWorkflowAutomation = { key: "join-form", trigger: { type: "member_joined" }, action: { key: "form", type: "request_form", formKey: "intake" } };
+    expect(workflowAutomationIssue(rule, [], true)).toBeNull();
+    expect(workflowAutomationIssue({ ...rule, action: { ...rule.action, type: "request_form", formKey: "" } }, [], false)).toBe("Choose a published form");
+    expect(workflowAutomationIssue({ ...rule, action: { key: "p", type: "prompt_agent", prompt: "Help" } }, [], false)).toContain("Member joins");
+  });
   it("join provisions a room without requiring prompt, form or channel inputs", () => {
     const draft = { ...replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "create_service_channel"), trigger: { type: "member_joined" as const } };
     expect(workflowAutomationIssue(draft, [], true)).toBeNull();

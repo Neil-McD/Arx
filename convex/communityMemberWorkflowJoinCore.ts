@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { communityMembershipRowIsActive, requireCommunityManager } from "./communityCore";
+import { communityMembershipRowIsActive } from "./communityCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { getCommunityMemberWorkflowByCommunity, getMemberMilestone, resolveCurrentMilestone } from "./communityMemberWorkflowReadCore";
 import { createActiveCommunityChannel, MAX_COMMUNITY_CHANNEL_NAME_CHARS } from "./communityChannelCore";
@@ -41,16 +41,13 @@ export async function resolveFirstMemberWorkflowJoin(ctx: any, args: any) {
   if (state?.completedAt || (state?.transitionSeq ?? 0) !== 0) return null;
   const current = resolveCurrentMilestone({ workflow, membership, state });
   if (current.milestoneIndex !== 0 || current.milestoneEnteredAt !== args.activatedAt) return null;
-  const automation = current.milestone.automations.find(a => a.trigger.type === "member_joined" && a.action.type === "create_service_channel");
-  return automation ? { workflow, membership, current, automation } : null;
+  return { workflow, membership, current };
 }
 
-/** Executed in a subtransaction: room, grants, binding all commit or all roll back. */
-export async function provisionJoinedMemberServiceChannel(ctx: any, args: any) {
-  const resolved = await resolveFirstMemberWorkflowJoin(ctx, args);
-  if (!resolved) throw new Error("workflow_join_authority_changed");
+/** Called by the authorized join action subtransaction; all room writes are atomic. */
+export async function provisionJoinedMemberServiceChannel(ctx: any, args: any,
+  resolved: NonNullable<Awaited<ReturnType<typeof resolveFirstMemberWorkflowJoin>>>) {
   const { workflow, membership } = resolved;
-  await requireCommunityManager({ ctx, communityId: workflow.communityId, userId: workflow.updatedByUserId });
   if ((membership.serviceChannelRevision ?? 0) !== args.serviceChannelRevision) throw new Error("community_member_service_channel_revision_conflict");
   if (membership.serviceChannelId) {
     await requireMemberFormServiceAudience({ ctx, membership });
