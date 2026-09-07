@@ -1,5 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
+import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
 import {
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
@@ -368,6 +369,9 @@ async function readMembershipContextRecords(args: {
           }
         : null,
     facts_truncated: factPage.truncated,
+    submitted_form_evidence: args.view !== "self" && membership
+      ? projectSubmittedFormEvidence(await readSubmittedFormRecords(args.ctx, membership))
+      : { submissions: [], truncated: false, unavailable_records: 0 },
     approved_community_context: factPage.facts
       .map((fact) => ({
         id: String(fact._id),

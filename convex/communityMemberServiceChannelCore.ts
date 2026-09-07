@@ -34,3 +34,47 @@ export async function resolveMemberServiceChannel(args: {
   }
   return { ...empty, status: "available", channel_id: String(channel._id), name: channel.name };
 }
+
+/** Additional disclosure boundary for member-supplied form evidence, not a new
+ * channel access policy. Call again in the publication transaction. Managers
+ * already have canonical private-room access; other client grants are forbidden.
+ */
+export async function requireMemberFormServiceAudience(args: {
+  ctx: QueryCtx; membership: Doc<"communityMemberships">;
+}) {
+  const { ctx, membership } = args;
+  const destination = await resolveMemberServiceChannel(args);
+  if (destination.status !== "available" || !membership.serviceChannelId) {
+    throw new Error("workflow_form_audience_unavailable");
+  }
+  const channel = (await ctx.db.get(membership.serviceChannelId))!;
+  const grants = await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", q => q.eq("channelId", channel._id)).take(201);
+  // Fail closed rather than silently skipping uninspected audience rows.
+  if (grants.length > 200) throw new Error("workflow_form_audience_unavailable");
+  for (const grant of grants) {
+    if (grant.status !== "active") continue;
+    if (grant.communityId !== membership.communityId) throw new Error("workflow_form_audience_unavailable");
+    if (grant.principalKey === "community_agent") continue;
+    const participant = grant.membershipId ? await ctx.db.get(grant.membershipId) : null;
+    if (!participant || participant.communityId !== membership.communityId ||
+      grant.principalKey !== `user:${participant.userId}`) throw new Error("workflow_form_audience_unavailable");
+    // Old activation grants do not authorize reading under canonical channel policy.
+    if (!communityMembershipRowIsActive(participant) ||
+      grant.membershipActivationSequence !== (participant.activationSequence ?? 0)) continue;
+    try {
+      const actor = await resolveCommunityChannelActor({ ctx, communityId: membership.communityId, userId: participant.userId });
+      const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
+      if (capabilities.canRead && participant._id !== membership._id && !actor.isManager) {
+        throw new Error("workflow_form_audience_unavailable");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("community_")) {
+        throw new Error("workflow_form_audience_unavailable");
+      }
+      throw error;
+    }
+  }
+  return { policy: "member_and_managers" as const, channel_id: destination.channel_id,
+    service_channel_revision: destination.revision };
+}

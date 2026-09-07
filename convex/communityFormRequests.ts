@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { resolveUserIdForAuthenticatedRequest, requireCommunityChatAccess, requireCommunityManager, getUniqueCommunityMembershipByPair } from "./communityCore";
 import { requestIsCurrent } from "./communityFormRequestCore";
+import { readSubmittedFormRecords } from "./communityFormEvidenceCore";
 import { processSubmittedWorkflowForm } from "./communityMemberWorkflows";
 import { formAnswersIssue, formQuestionAnswered } from "../shared/communityFormAnswers";
 const scope = { communityId: v.id("communities"), authSubject: v.optional(v.string()) };
@@ -63,6 +64,6 @@ export const listBuilderResponses = query({ args: { ...scope, membershipId: v.id
   await requireCommunityManager({ ctx, communityId: args.communityId, userId });
   const membership = await ctx.db.get(args.membershipId);
   if (!membership || membership.communityId !== args.communityId) throw new Error("form_request_not_found");
-  const rows = await ctx.db.query("communityFormRequests").withIndex("by_member_status", q => q.eq("membershipId", membership._id).eq("status", "submitted")).order("desc").take(50);
-  return Promise.all(rows.map(async row => ({ id: row._id, answers: row.answers, submittedAt: row.submittedAt, form: await ctx.db.get(row.versionId) })));
+  const { records } = await readSubmittedFormRecords(ctx, membership);
+  return records.map(({ request, version }) => ({ id: request._id, answers: request.answers, submittedAt: request.submittedAt, form: version }));
 } });

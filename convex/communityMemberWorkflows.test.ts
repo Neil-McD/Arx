@@ -499,6 +499,61 @@ async function formFlowFixture() {
   return { t, f, owner, member, question, request, rootId, configured };
 }
 
+test("form evidence: submitted historical answers keep pinned labels, remain private, and exclude prior activations", async () => {
+  const { t, f, owner, member, question, request } = await formFlowFixture();
+  const scope = { communityId: f.communityId, membershipId: f.membershipId };
+  expect((await owner.query(dossierQuery, scope)).submitted_form_evidence.submissions).toEqual([]);
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: request._id,
+    expectedRevision: 0, answers: { q: "PRIVATE_INTAKE" }, submit: true });
+  await owner.mutation(api.communityForms.saveBuilderForm, { communityId: f.communityId, key: "intake", expectedRevision: 1,
+    name: "Changed", questions: [{ ...question, title: "Changed" }] });
+  const dossier = await owner.query(dossierQuery, scope);
+  expect(dossier.submitted_form_evidence.submissions[0]).toMatchObject({ form_name: "Intake", form_revision: 1,
+    milestone_key: request.milestoneKey, questions: [{ title: "Goal?", answer: "PRIVATE_INTAKE" }] });
+  expect(dossier.workflow?.current_milestone_key).not.toBe(request.milestoneKey);
+  expect(dossier.markdown).toContain("PRIVATE_INTAKE");
+  const { self } = await readActivityViews(t, f);
+  expect(JSON.stringify(self)).not.toContain("PRIVATE_INTAKE");
+  expect(self).not.toHaveProperty("submitted_form_evidence");
+  expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toHaveLength(1);
+  await t.run(ctx => ctx.db.patch(f.membershipId, { activationSequence: request.activationSequence + 1 }));
+  expect((await owner.query(dossierQuery, scope)).submitted_form_evidence.submissions).toEqual([]);
+  expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toEqual([]);
+});
+
+test("form evidence: invalid ownership fails closed and answer truncation is explicit", async () => {
+  const { t, f, owner, member, request } = await formFlowFixture();
+  const scope = { communityId: f.communityId, membershipId: f.membershipId };
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: request._id,
+    expectedRevision: 0, answers: { q: "x".repeat(2000) }, submit: true });
+  const evidence = (await owner.query(dossierQuery, scope)).submitted_form_evidence;
+  expect(evidence.truncated).toBe(true);
+  expect(evidence.submissions[0].questions[0]).toMatchObject({ answer: "x".repeat(1000), truncated: true });
+  await t.run(async ctx => {
+    const other = await ctx.db.insert("communities", { ownerId: f.ownerId, name: "Other", slug: "other-evidence", visibility: "unlisted", entryPolicy: "approval", inferenceFundingPolicy: "managed_required", createdAt: Date.now(), updatedAt: Date.now() });
+    await ctx.db.patch(request.versionId, { communityId: other });
+  });
+  expect((await owner.query(dossierQuery, scope)).submitted_form_evidence).toMatchObject({ submissions: [], unavailable_records: 1 });
+  expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toEqual([]);
+});
+
+test("form evidence: choices use pinned labels, scans and context are bounded, cancelled answers stay out", async () => {
+  const { t, f, owner, request, question } = await formFlowFixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(request.versionId, { questions: [{ ...question, type: "multiple_choice", options: ["First", "Second"] }] });
+    await ctx.db.patch(request._id, { status: "cancelled", answers: { q: "CANCELLED_SECRET" } });
+    const { _id, _creationTime, ...base } = request;
+    for (let i = 0; i < 52; i++) await ctx.db.insert("communityFormRequests", {
+      ...base, status: "submitted", answers: { q: ["1", "0"] }, submittedAt: f.nowMs + i,
+    });
+  });
+  const evidence = (await owner.query(dossierQuery, { communityId: f.communityId, membershipId: f.membershipId })).submitted_form_evidence;
+  expect(evidence.submissions).toHaveLength(5);
+  expect(evidence.truncated).toBe(true);
+  expect(evidence.submissions[0].questions[0].answer).toEqual(["Second", "First"]);
+  expect(JSON.stringify(evidence)).not.toContain("CANCELLED_SECRET");
+});
+
 test("forms: repeated contributions reuse a request; submission moves exactly once without an agent", async () => {
   const { t, f, member, request, rootId } = await formFlowFixture();
   await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
@@ -644,9 +699,23 @@ test("contribution execution context is bound to the live requester and source",
   const f = await workflowServeFixture(t, false);
   vi.setSystemTime(f.nowMs + 100);
   const args = { requestId: f.request._id, expectedAttempt: f.claim.attempt };
+  await t.run(async ctx => {
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").collect()).find(row => row._id === f.request.workflowRunId)!;
+    const membership = (await ctx.db.get(f.membershipId))!;
+    const questions = [{ key: "q", title: "Goal", description: "", type: "short_text" as const, required: true, options: [] }];
+    const formId = await ctx.db.insert("communityForms", { communityId: f.communityId, key: "intake", name: "Intake", questions, revision: 1, createdAt: f.nowMs, updatedAt: f.nowMs });
+    const versionId = await ctx.db.insert("communityFormVersions", { communityId: f.communityId, formId, revision: 1, name: "Intake", questions, publishedBy: f.ownerId, publishedAt: f.nowMs });
+    await ctx.db.insert("communityFormRequests", { communityId: f.communityId, membershipId: f.membershipId,
+      workflowId: run.workflowId, workflowRunId: run._id, automationKey: "historical-form", milestoneKey: "historical",
+      milestoneEnteredAt: f.nowMs - 100, activationSequence: membership.activationSequence ?? 0, formKey: "intake", versionId,
+      status: "submitted", answers: { q: "PRIVATE_EXECUTION_FORM" }, revision: 1, createdAt: f.nowMs, updatedAt: f.nowMs, submittedAt: f.nowMs });
+  });
   const context = await t.query(internalApi.communityMemberWorkflows.getWorkflowExecutionContextInternal, args);
   expect(context.user_id).toBe(String(f.memberId));
   expect(context.community_id).toBe(String(f.communityId));
+  expect(context.submitted_form_evidence.submissions[0].questions[0].answer).toBe("PRIVATE_EXECUTION_FORM");
+  expect(JSON.stringify(await f.read())).not.toContain("PRIVATE_EXECUTION_FORM");
+  await expect(t.query(internalApi.communityMemberWorkflows.getWorkflowExecutionContextInternal, { ...args, expectedAttempt: args.expectedAttempt + 1 })).rejects.toThrow();
   vi.setSystemTime(f.nowMs + 24 * 60 * 60 * 1000);
   await expect(t.query(internalApi.communityMemberWorkflows.getWorkflowExecutionContextInternal, args)).rejects.toThrow("workflow_context_forbidden");
   vi.setSystemTime(f.nowMs + 100);

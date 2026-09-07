@@ -1,13 +1,25 @@
 import { resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
-import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
+import { resolveMemberServiceChannel, requireMemberFormServiceAudience } from "./communityMemberServiceChannelCore";
+import { getUniqueCommunityMembershipByPair } from "./communityCore";
+import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { readBoundedMemberOrientationFacts } from "./memberOntologyCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
-/** Approved profile orientation only; never workflow-only facts, account spine or dossier. */
-export async function readTimedMemberContext(ctx: any, request: any) {
+/** Member-facing projection only. Caller establishes live timer/run authority.
+ * Never workflow-only facts, account spine or the builder dossier.
+ */
+export async function readTimedMemberContext(ctx: QueryCtx, request: any) {
+  const member = await getUniqueCommunityMembershipByPair({ ctx, communityId: request.communityId, userId: request.requesterUserId });
+  const membership = member ? await ctx.db.get(member._id as Id<"communityMemberships">) : null;
+  if (!membership) throw new Error("workflow_member_context_unavailable");
+  const evidence = projectSubmittedFormEvidence(await readSubmittedFormRecords(ctx, membership));
+  const audience = evidence.submissions.length
+    ? await requireMemberFormServiceAudience({ ctx, membership }) : null;
   const { facts, truncated } = await readBoundedMemberOrientationFacts(ctx, {
     subjectUserId: request.requesterUserId, communityId: request.communityId,
   });
@@ -18,6 +30,7 @@ export async function readTimedMemberContext(ctx: any, request: any) {
       id: String(fact._id), version: fact.version, kind: fact.kind, body: fact.body.slice(0, 600),
     })),
     truncated: truncated || facts.some(fact => fact.body.length > 600),
+    ...(audience ? { form_audience: audience, submitted_form_evidence: evidence } : {}),
   });
 }
 
@@ -27,6 +40,9 @@ export async function readTimedMemberContext(ctx: any, request: any) {
 export async function requireTimedWorkflowDestination(ctx: any, request: any) {
   if (request.triggerKind !== "workflow" || !request.workflowTimerId || request.sourceRootId || request.sourceReplyId) {
     throw new Error("workflow_timer_source_invalid");
+  }
+  if (request._id && (request.status !== "running" || (request.leaseExpiresAt ?? 0) <= Date.now())) {
+    throw new Error("workflow_execution_lease_expired");
   }
   const timer = await ctx.db.get(request.workflowTimerId);
   const run = request.workflowRunId ? await ctx.db.get(request.workflowRunId) : null;
@@ -75,6 +91,15 @@ export async function requireTimedWorkflowDestination(ctx: any, request: any) {
 
 export async function publishTimedWorkflowPost(ctx: any, request: any, content: string, nowMs: number) {
   const { channelId } = await requireTimedWorkflowDestination(ctx, request);
+  // Even a missing/deleted snapshot must not bypass the form disclosure fence.
+  const currentContext = await readTimedMemberContext(ctx, request);
+  if (JSON.parse(currentContext).submitted_form_evidence) {
+    const snapshot = await ctx.db.query("communityAgentRunEvents")
+      .withIndex("by_run_seq", (q: any) => q.eq("runId", buildCommunityAgentServeRunId(request._id, request.attempt)).eq("seq", 0)).first();
+    if (snapshot?.kind !== "context_snapshot" || JSON.parse(snapshot.content).timed_member_context !== currentContext) {
+      throw new Error("workflow_form_context_snapshot_missing");
+    }
+  }
   if (!content) throw new Error("workflow_agent_empty_response");
   const idempotencyKey = `community_agent_serve:${request._id}`;
   const existing = await ctx.db.query("communityInteractionRoots")

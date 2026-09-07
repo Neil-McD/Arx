@@ -1,4 +1,19 @@
 import type { MemberFactKind, MemberFactProvenance } from "./memberOntology";
+import type { CommunityFormQuestion } from "./communityForms";
+
+export type CommunitySubmittedFormEvidence = {
+  submissions: {
+    request_id: string; version_id: string; form_name: string;
+    form_revision: number; answer_revision: number; workflow_id: string;
+    milestone_key: string; milestone_entered_at: string; activation_sequence: number;
+    submitted_at: string;
+    questions: { key: string; title: string; type: CommunityFormQuestion["type"];
+      answer: string | string[] | null; truncated: boolean }[];
+    omitted_questions: number;
+  }[];
+  truncated: boolean;
+  unavailable_records: number;
+};
 
 export const COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT = 12;
 export const COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT = 12;
@@ -74,6 +89,7 @@ export type CommunityMembershipContext = {
     completed_at: string | null;
   } | null;
   approved_community_context: CommunityMemberSuccessFact[];
+  submitted_form_evidence: CommunitySubmittedFormEvidence;
   recent_workflow_activity: CommunityMemberSuccessWorkflowActivity[];
   milestone_history: CommunityMemberSuccessMilestoneHistoryEntry[];
 };

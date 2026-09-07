@@ -23,6 +23,7 @@ import {
 } from "../shared/communityMemberSuccessDossier";
 
 const source: CommunityMemberSuccessDossier = {
+  submitted_form_evidence: { submissions: [], truncated: false, unavailable_records: 0 },
   service_channel: { status: "unassigned", revision: 0, channel_id: null, name: null },
   community_id: "community-1",
   user_id: "user-1",

@@ -48,6 +48,114 @@ async function setup(count = 1, assigned = true) {
   return { t, f: { ...f, ...grants, membershipId }, owner, process, requests, claim };
 }
 
+async function formAwareRun() {
+  const s = await setup();
+  vi.setSystemTime(epoch + 60000); await s.process();
+  const claim = await s.claim();
+  const args = { requestId: claim.requestId! as Id<"communityAgentServeRequests">, expectedAttempt: claim.attempt! };
+  const formRequestId = await s.t.run(async ctx => {
+    const request = (await ctx.db.get(args.requestId))!;
+    const run = (await ctx.db.get(request.workflowRunId!))!;
+    const questions = [{ key: "q", title: "What needs help?", description: "", type: "short_text" as const, required: true, options: [] }];
+    const formId = await ctx.db.insert("communityForms", { communityId: s.f.communityId, key: "intake", name: "Intake", questions, revision: 1, createdAt: epoch, updatedAt: epoch });
+    const versionId = await ctx.db.insert("communityFormVersions", { communityId: s.f.communityId, formId, revision: 1, name: "Intake", questions, publishedBy: s.f.ownerId, publishedAt: epoch });
+    await ctx.db.insert("memberFacts", { userId: s.f.userId, communityId: s.f.communityId, contextKind: "workflow", kind: "situation",
+      body: "BUILDER_PRIVATE_NOTE", provenance: "form_answer", confidence: 1, evidenceRefs: [], stalenessScore: 0,
+      consentState: "approved", createdByActorType: "admin", version: 1, createdAt: epoch, updatedAt: epoch });
+    return ctx.db.insert("communityFormRequests", { communityId: s.f.communityId, membershipId: s.f.membershipId,
+      workflowId: run.workflowId, workflowRunId: run._id, automationKey: "historical-form", milestoneKey: "earlier",
+      milestoneEnteredAt: epoch - 100, activationSequence: 1, formKey: "intake", versionId,
+      status: "submitted", answers: { q: "I need help pricing my first course" }, revision: 1,
+      createdAt: epoch, updatedAt: epoch, submittedAt: epoch });
+  });
+  const read = () => s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  const capture = async () => {
+    const context = await read();
+    if (!context.ok) throw new Error(context.errorCode);
+    const bundle = buildCommunityAgentServePromptBundle(context);
+    const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+      prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+    expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+      { ...args, snapshotJson })).ok).toBe(true);
+    return { context, bundle, snapshotJson };
+  };
+  return { ...s, args, formRequestId, read, capture };
+}
+
+async function inviteOther(s: Awaited<ReturnType<typeof formAwareRun>>, role: "member" | "admin" = "member") {
+  return s.t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "another-client", createdAt: epoch, updatedAt: epoch });
+    const { membership } = await activateCommunityMembershipCore({ ctx, communityId: s.f.communityId, userId,
+      accessSource: "manual_grant", activationReason: "test", nowMs: epoch });
+    const membershipId = membership._id as Id<"communityMemberships">;
+    await ctx.db.patch(membershipId, { role });
+    await ctx.db.insert("communityChannelParticipants", { communityId: s.f.communityId, channelId: s.f.channelId,
+      principalKey: `user:${userId}`, membershipId, membershipActivationSequence: 1, status: "active",
+      createdByUserId: s.f.ownerId, createdAt: epoch, updatedAt: epoch });
+    return membershipId;
+  });
+}
+
+test("submitted forms reach the prompt and receipt, not builder-private notes; delivery is idempotent", async () => {
+  const s = await formAwareRun();
+  await inviteOther(s, "admin");
+  const { context, bundle } = await s.capture();
+  expect(JSON.stringify(bundle.messages)).toContain("I need help pricing my first course");
+  expect(JSON.stringify(bundle.messages)).not.toContain("BUILDER_PRIVATE_NOTE");
+  const packet = JSON.parse(context.timedMemberContext!);
+  expect(packet.form_audience.policy).toBe("member_and_managers");
+  expect(packet.submitted_form_evidence.submissions[0].request_id).toBe(s.formRequestId);
+  expect(JSON.stringify(await s.t.run(ctx => ctx.db.query("communityAgentRunEvents").collect()))).toContain(s.formRequestId);
+  // Stub final provider text: this proves delivery, not live-model quality.
+  const send = () => s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...s.args, content: "For your course pricing, start with one offer and a small pilot." });
+  expect((await send()).ok).toBe(true);
+  await send();
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(1);
+});
+
+test("another invited client blocks form context before generation", async () => {
+  const s = await formAwareRun(); await inviteOther(s);
+  const result = await s.read();
+  expect(result.ok).toBe(false);
+  expect(JSON.stringify(result)).not.toContain("pricing my first course");
+});
+
+test("large forms fit the existing context receipt envelope with explicit omissions", async () => {
+  const s = await formAwareRun();
+  await s.t.run(async ctx => {
+    const request = (await ctx.db.get(s.formRequestId))!;
+    const questions = Array.from({ length: 30 }, (_, i) => ({ key: `q${i}`, title: "Question ".repeat(50),
+      description: "", type: "long_text" as const, required: true, options: [] }));
+    await ctx.db.patch(request.versionId, { questions });
+    await ctx.db.patch(request._id, { answers: Object.fromEntries(questions.map(q => [q.key, "\"\\\n".repeat(1000)])) });
+  });
+  const { context } = await s.capture();
+  const evidence = JSON.parse(context.timedMemberContext!).submitted_form_evidence;
+  expect(evidence.truncated).toBe(true);
+  expect(evidence.submissions[0].omitted_questions).toBeGreaterThan(0);
+  expect(JSON.stringify(evidence).length).toBeLessThanOrEqual(8000);
+});
+
+test.each(["invite", "demote", "shared", "revoke", "reassign", "answers", "snapshot", "lease"])("%s change fences form-aware publication", async change => {
+  const s = await formAwareRun();
+  const admin = change === "demote" ? await inviteOther(s, "admin") : null;
+  await s.capture();
+  if (change === "invite") await inviteOther(s);
+  else if (change === "lease") vi.setSystemTime(epoch + 86400000);
+  else await s.t.run(async ctx => {
+    if (change === "demote") await ctx.db.patch(admin!, { role: "member" });
+    if (change === "shared") await ctx.db.patch(s.f.channelId, { accessMode: "all_members" });
+    if (change === "revoke") await ctx.db.patch(s.f.membershipId, { active: false });
+    if (change === "reassign") await ctx.db.patch(s.f.membershipId, { serviceChannelRevision: 2 });
+    if (change === "answers") await ctx.db.patch(s.formRequestId, { answers: { q: "Changed" }, revision: 2 });
+    if (change === "snapshot") for (const row of await ctx.db.query("communityAgentRunEvents").collect()) await ctx.db.delete(row._id);
+  });
+  expect((await s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...s.args, content: "Must not publish" })).ok).toBe(false);
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(0);
+});
+
 test("confidential workflow facts require manager or live execution, never self/profile/channel authority", async () => {
   const s = await setup();
   const member = s.t.withIdentity({ subject: "timed-member" });

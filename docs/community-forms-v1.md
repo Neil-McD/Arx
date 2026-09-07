@@ -44,10 +44,12 @@ Publishing alone never runs an agent or moves a member.
 - Milestone movement cancels unfinished requests. Stale/revoked visits fail closed
   on reads and writes. Historical submitted answers remain available to managers.
 - Owners/admins read submitted responses in the member dossier. Answers are not
-  exported to shared memory, global profile, or agent prompts.
+  exported to shared memory, global profile, or ordinary channel-agent prompts.
+  Scheduled workflow actions may use the bounded form evidence under the
+  member-and-managers disclosure boundary below.
 - Dark/light use existing semantic tokens; mobile reuses the same navigation slot.
 
-Agent consumption, private-channel cards, branching, uploads, reminders and embeds
+Private-channel cards, branching, uploads, reminders and embeds
 remain separate slices. Optional questions may be skipped; progress counts actual
 answered questions, not achievement of the member's outcome.
 
@@ -63,3 +65,56 @@ and `node scripts/member_form_browser_qa.mjs`. The browser proof renders the
 actual component at 390px with canonical themes and synthetic transport to test
 slow saves, newer edits, resume, validation, exact submit retry, and focus.
 It is not a live-cloud canary or a physical-phone keyboard test.
+## Private workflow evidence
+
+Submitted requests are also a read-only projection in the builder dossier and
+lease-authorized internal workflow context. `communityFormEvidenceCore.ts` is
+the common validated reader for this projection and builder responses.
+It checks active membership, exact community/workflow/form-version ownership,
+answer validity, and current membership activation. Earlier milestones remain
+historical evidence; pending/cancelled requests and previous activations do not.
+
+The reader scans at most 50 submitted assignments plus one lookahead, ordered
+by request creation (not submission time). Context includes at most five verified
+submissions, 1,000 characters per answer value, and 12,000 characters across
+form names, question labels and answers, with an 8,000-character serialized
+evidence cap (including references and JSON escaping). Choice indices resolve against the
+pinned version. Source/version/visit references accompany answers. Truncation
+and unverifiable records are explicit; an empty projection is not proof that no
+older evidence exists. Builder responses retain the existing full-answer shape
+within the same bounded validated scan.
+
+This is contextual data, never trusted instructions or deterministic completion
+proof. Reading it does not authorize disclosure to a channel. No member-facing
+profile, self-context, external MCP, or ordinary channel-agent payload gains these
+answers. No facts or Markdown copies are persisted; form-submission actions remain
+deterministic milestone movement.
+
+## Form-aware scheduled actions
+
+Existing `milestone_elapsed` -> `prompt_agent` execution composes approved member
+orientation and submitted-form evidence. It does not read builder-private facts,
+the full dossier, internal prompts, or conversation history. No new wake or tool
+is introduced. Captured context includes exact request/version/answer references.
+
+When forms are present, generation requires an assigned restricted service room
+whose current readable audience is the member and community managers, plus the
+community agent. Canonical channel capabilities remain authoritative. The bounded
+audience inspection fails closed beyond 200 grant rows. Ordinary multi-member
+rooms without form evidence retain the existing scheduled-message behavior.
+
+Snapshot recording and final publication recheck the audience and context;
+expired leases, changed evidence, reassignment, or an extra client block delivery.
+A form-informed publication requires its matching durable context snapshot.
+Retries retain the existing serve-request identity and duplicate protection.
+Answers are untrusted historical statements, not instructions or completion proof.
+
+This fence governs generation and publication time. Later channel invitations
+still grant access to existing room history under normal channel policy; builders
+must not repurpose client rooms as shared rooms containing confidential history.
+Published messages may be read by agents acting with those users' canonical
+channel access. This slice does not create separate per-message secrecy.
+
+Tests in `communityAgentTimedWorkflow.test.ts` use synthetic forms and stub final
+provider text. They prove prompt composition, receipts and publication fencing,
+not live model quality. A controlled staging canary remains a separate release gate.
