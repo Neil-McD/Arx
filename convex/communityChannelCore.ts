@@ -77,7 +77,7 @@ function channelHasCanonicalCustomContract(
     channel.slug !== GENERAL_CHANNEL_SLUG &&
     /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(channel.slug) &&
     normalizedName === channel.name &&
-    Number.isInteger(channel.position) &&
+    Number.isFinite(channel.position) &&
     channel.position > 0
   );
 }
@@ -183,6 +183,7 @@ export async function ensureGeneralChannel(args: {
     systemRole: GENERAL_CHANNEL_SYSTEM_ROLE,
     slug: GENERAL_CHANNEL_SLUG,
     name: GENERAL_CHANNEL_NAME,
+    normalizedName: GENERAL_CHANNEL_NAME.toLocaleLowerCase("en-US"),
     accessMode: "all_members",
     postingPolicy: "members",
     status: "active",
@@ -463,6 +464,26 @@ async function resolveAvailableChannelSlug(args: {
   throw new Error("community_channel_slug_unavailable");
 }
 
+async function requireAvailableChannelName(args: {
+  ctx: { db: any }; communityId: any; name: string; excludeId?: any;
+}): Promise<string> {
+  // Old rows must be backfilled before writes; never silently miss a collision.
+  const missing = await args.ctx.db.query("communityChannels").withIndex(
+    "by_community_status_normalizedName",
+    (q: any) => q.eq("communityId", args.communityId).eq("status", "active").eq("normalizedName", undefined),
+  ).first();
+  if (missing) throw new Error("community_channel_name_migration_required");
+  const normalizedName = args.name.toLocaleLowerCase("en-US");
+  const matches = await args.ctx.db.query("communityChannels").withIndex(
+    "by_community_status_normalizedName",
+    (q: any) => q.eq("communityId", args.communityId).eq("status", "active").eq("normalizedName", normalizedName),
+  ).take(2);
+  if (matches.some((row: any) => normalizeIdValue(row._id) !== normalizeIdValue(args.excludeId))) {
+    throw new Error("community_channel_name_taken");
+  }
+  return normalizedName;
+}
+
 export async function createActiveCommunityChannel(args: {
   ctx: { db: any };
   communityId: any;
@@ -477,23 +498,15 @@ export async function createActiveCommunityChannel(args: {
     communityId: args.communityId,
     nowMs: args.nowMs,
   });
-  const activeChannels = await listActiveCommunityChannels({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
+  // Capacity is still deliberately capped until all directory consumers are paged.
+  const activeChannels = await args.ctx.db.query("communityChannels").withIndex(
+    "by_community_status_position",
+    (q: any) => q.eq("communityId", args.communityId).eq("status", "active"),
+  ).take(MAX_ACTIVE_COMMUNITY_CHANNELS);
   if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
     throw new Error("community_channel_limit_reached");
   }
-  const normalizedName = name.toLocaleLowerCase("en-US");
-  if (
-    activeChannels.some(
-      (channel) =>
-        normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US") ===
-        normalizedName,
-    )
-  ) {
-    throw new Error("community_channel_name_taken");
-  }
+  const normalizedName = await requireAvailableChannelName({ ...args, name });
   const nowMs = args.nowMs ?? Date.now();
   const slug = await resolveAvailableChannelSlug({
     ctx: args.ctx,
@@ -501,14 +514,19 @@ export async function createActiveCommunityChannel(args: {
     name,
     nowMs,
   });
-  const position = activeChannels.reduce(
-    (maximum, channel) => Math.max(maximum, channel.position),
-    -1,
-  ) + 1;
+  const last = await args.ctx.db.query("communityChannels").withIndex(
+    "by_community_status_position",
+    (q: any) => q.eq("communityId", args.communityId).eq("status", "active"),
+  ).order("desc").first();
+  const position = (last?.position ?? 0) + 1;
+  if (!Number.isFinite(position) || position <= (last?.position ?? 0)) {
+    throw new Error("community_channel_order_space_exhausted");
+  }
   const channelId = await args.ctx.db.insert("communityChannels" as any, {
     communityId: args.communityId,
     slug,
     name,
+    normalizedName,
     accessMode: args.accessMode ?? "all_members",
     postingPolicy: "members",
     status: "active",
@@ -562,24 +580,11 @@ export async function renameActiveCommunityChannel(args: {
 }): Promise<CommunityChannelLike> {
   const channel = await requireMutableCommunityChannel(args);
   const name = normalizeCommunityChannelName(args.name);
-  const normalizedName = name.toLocaleLowerCase("en-US");
-  const activeChannels = await listActiveCommunityChannels({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
-  if (
-    activeChannels.some(
-      (candidate) =>
-        normalizeIdValue(candidate._id) !== normalizeIdValue(channel._id) &&
-        normalizeCommunityChannelName(candidate.name).toLocaleLowerCase("en-US") ===
-          normalizedName,
-    )
-  ) {
-    throw new Error("community_channel_name_taken");
-  }
+  const normalizedName = await requireAvailableChannelName({ ...args, name, excludeId: channel._id });
   if (channel.name === name) return channel;
   await args.ctx.db.patch(channel._id, {
     name,
+    normalizedName,
     updatedAt: args.nowMs ?? Date.now(),
   });
   return await requireActiveCommunityChannel({
@@ -589,65 +594,38 @@ export async function renameActiveCommunityChannel(args: {
   });
 }
 
-export async function reorderActiveCommunityChannels(args: {
+export async function moveActiveCommunityChannel(args: {
   ctx: { db: any };
   communityId: any;
-  orderedChannelIds: any[];
+  channelId: any;
+  afterChannelId: any | null;
+  beforeChannelId: any | null;
+  expectedPosition: number;
   nowMs?: number;
-}): Promise<CommunityChannelLike[]> {
-  await ensureGeneralChannel({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    nowMs: args.nowMs,
-  });
-  const activeChannels = await listActiveCommunityChannels({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
-  const general = activeChannels.find(
-    (channel) => channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE,
-  );
-  if (!general) throw new Error("community_general_channel_missing");
-
-  const customChannels = activeChannels.filter(
-    (channel) => channel.systemRole !== GENERAL_CHANNEL_SYSTEM_ROLE,
-  );
-  const requestedIds = args.orderedChannelIds.map(normalizeIdValue);
-  const requestedIdSet = new Set(requestedIds);
-  const existingIds = new Set(customChannels.map((channel) => normalizeIdValue(channel._id)));
-
-  if (requestedIds.includes(normalizeIdValue(general._id))) {
-    throw new Error("community_general_channel_immutable");
-  }
-  if (requestedIds.length !== requestedIdSet.size) {
-    throw new Error("community_channel_order_duplicate_id");
-  }
-  if (requestedIds.length !== existingIds.size) {
+}): Promise<CommunityChannelLike> {
+  const channel = await requireMutableCommunityChannel(args);
+  if (channel.position !== args.expectedPosition) throw new Error("community_channel_order_stale");
+  const ids = [args.channelId, args.afterChannelId, args.beforeChannelId].filter(Boolean).map(normalizeIdValue);
+  if (new Set(ids).size !== ids.length) throw new Error("community_channel_order_duplicate_id");
+  const after = args.afterChannelId ? await requireMutableCommunityChannel({ ...args, channelId: args.afterChannelId }) : null;
+  const before = args.beforeChannelId ? await requireMutableCommunityChannel({ ...args, channelId: args.beforeChannelId }) : null;
+  const lower = after?.position ?? 0;
+  // Validate adjacency against current storage, excluding the moving row. This
+  // indexed range also participates in Convex's serializable conflict checks.
+  const next = await args.ctx.db.query("communityChannels").withIndex(
+    "by_community_status_position",
+    (q: any) => q.eq("communityId", args.communityId).eq("status", "active").gt("position", lower),
+  ).take(2);
+  const neighbor = next.find((row: any) => normalizeIdValue(row._id) !== normalizeIdValue(channel._id));
+  if (normalizeIdValue(neighbor?._id) !== normalizeIdValue(before?._id) || (before && before.position <= lower)) {
     throw new Error("community_channel_order_stale");
   }
-  for (const channelId of requestedIds) {
-    if (!existingIds.has(channelId)) {
-      throw new Error("community_channel_unavailable");
-    }
+  const position = before ? lower + (before.position - lower) / 2 : lower + 1;
+  if (!Number.isFinite(position) || position <= lower || (before && position >= before.position)) {
+    throw new Error("community_channel_order_space_exhausted");
   }
-
-  const nowMs = args.nowMs ?? Date.now();
-  await Promise.all(
-    requestedIds.map((channelId, index) => {
-      const channel = customChannels.find(
-        (candidate) => normalizeIdValue(candidate._id) === channelId,
-      );
-      if (!channel) throw new Error("community_channel_unavailable");
-      const position = index + 1;
-      return channel.position === position
-        ? Promise.resolve()
-        : args.ctx.db.patch(channel._id, { position, updatedAt: nowMs });
-    }),
-  );
-  return await listActiveCommunityChannels({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
+  await args.ctx.db.patch(channel._id, { position, updatedAt: args.nowMs ?? Date.now() });
+  return { ...channel, position, updatedAt: args.nowMs ?? Date.now() };
 }
 
 type PinnableCommunityInteractionRoot = ChannelAddressableInteractionLike & {

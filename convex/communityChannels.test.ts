@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -150,7 +150,7 @@ test("owners and admins create ordered all-member channels while members can lis
   });
 });
 
-test("managers reorder the exact custom-channel set while General remains fixed", async () => {
+test("managers move one channel between current neighbors while General remains fixed", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -164,35 +164,31 @@ test("managers reorder the exact custom-channel set while General remains fixed"
   );
 
   await expect(
-    asOwner.mutation(api.communityChannels.reorderCommunityChannels, {
+    asOwner.mutation(api.communityChannels.moveCommunityChannel, {
       communityId: fixture.communityId,
-      orderedChannelIds: [created[2]!.id, created[0]!.id, created[1]!.id] as any,
+      channelId: created[2]!.id as any, afterChannelId: null, beforeChannelId: created[0]!.id as any,
+      expectedPosition: created[2]!.position,
     }),
   ).resolves.toMatchObject({
-    channels: [
-      expect.objectContaining({ name: "General", position: 0 }),
-      expect.objectContaining({ name: "Gamma", position: 1 }),
-      expect.objectContaining({ name: "Alpha", position: 2 }),
-      expect.objectContaining({ name: "Beta", position: 3 }),
-    ],
+    name: "Gamma", position: 0.5,
   });
 
   await expect(
-    asMember.mutation(api.communityChannels.reorderCommunityChannels, {
+    asMember.mutation(api.communityChannels.moveCommunityChannel, {
       communityId: fixture.communityId,
-      orderedChannelIds: [created[0]!.id, created[1]!.id, created[2]!.id] as any,
+      channelId: created[0]!.id as any, afterChannelId: null, beforeChannelId: null, expectedPosition: 1,
     }),
   ).rejects.toThrow("community_forbidden");
   await expect(
-    asOwner.mutation(api.communityChannels.reorderCommunityChannels, {
+    asOwner.mutation(api.communityChannels.moveCommunityChannel, {
       communityId: fixture.communityId,
-      orderedChannelIds: [created[0]!.id, created[0]!.id, created[2]!.id] as any,
+      channelId: created[0]!.id as any, afterChannelId: created[0]!.id as any, beforeChannelId: null, expectedPosition: 1,
     }),
   ).rejects.toThrow("community_channel_order_duplicate_id");
   await expect(
-    asOwner.mutation(api.communityChannels.reorderCommunityChannels, {
+    asOwner.mutation(api.communityChannels.moveCommunityChannel, {
       communityId: fixture.communityId,
-      orderedChannelIds: [created[0]!.id, created[1]!.id] as any,
+      channelId: created[0]!.id as any, afterChannelId: null, beforeChannelId: created[1]!.id as any, expectedPosition: 1,
     }),
   ).rejects.toThrow("community_channel_order_stale");
 
@@ -200,16 +196,95 @@ test("managers reorder the exact custom-channel set while General remains fixed"
     communityId: fixture.communityId,
   });
   await expect(
-    asOwner.mutation(api.communityChannels.reorderCommunityChannels, {
+    asOwner.mutation(api.communityChannels.moveCommunityChannel, {
       communityId: fixture.communityId,
-      orderedChannelIds: [
-        listed.channels[0]!.id,
-        created[0]!.id,
-        created[1]!.id,
-        created[2]!.id,
-      ] as any,
+      channelId: listed.channels[0]!.id as any, afterChannelId: null, beforeChannelId: null, expectedPosition: 0,
     }),
   ).rejects.toThrow("community_general_channel_immutable");
+  expect(listed.channels.map(c => [c.name, c.position])).toEqual([["General", 0], ["Gamma", 0.5], ["Alpha", 1], ["Beta", 2]]);
+  await expect(asOwner.mutation(api.communityChannels.reorderCommunityChannels, {
+    communityId: fixture.communityId, orderedChannelIds: [],
+  })).rejects.toThrow("community_channel_refresh_required");
+});
+
+test("indexed names and neighbor moves work beyond the retained creation cap", async () => {
+  const t = convexTest(schema, modules), f = await createFixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "Shared" });
+  const ids = await t.run(async ctx => {
+    const ids = [];
+    for (let i = 0; i < 120; i++) ids.push(await ctx.db.insert("communityChannels", {
+      communityId: f.communityId, name: `Client ${i}`, slug: `client-${i}`, accessMode: "restricted",
+      postingPolicy: "members", status: "active", position: i + 2, createdAt: i, updatedAt: i,
+    }));
+    return ids;
+  });
+  await expect(owner.mutation(api.communityChannels.renameCommunityChannel, {
+    communityId: f.communityId, channelId: ids[119]!, name: "Renamed",
+  })).rejects.toThrow("community_channel_name_migration_required");
+  let cursor: string | null = null;
+  let updated = 0;
+  do {
+    const result = await t.mutation(internal.communityChannels.backfillChannelNamesInternal, {
+      paginationOpts: { cursor, numItems: 40 },
+    });
+    updated += result.updated;
+    cursor = result.isDone ? null : result.continueCursor;
+  } while (cursor);
+  expect(updated).toBe(120);
+  await expect(owner.mutation(api.communityChannels.renameCommunityChannel, {
+    communityId: f.communityId, channelId: ids[119]!, name: "  CLIENT   118 ",
+  })).rejects.toThrow("community_channel_name_taken");
+  await owner.mutation(api.communityChannels.renameCommunityChannel, {
+    communityId: f.communityId, channelId: ids[119]!, name: "Renamed",
+  });
+  const before = await t.run(ctx => ctx.db.query("communityChannels").collect());
+  await owner.mutation(api.communityChannels.moveCommunityChannel, {
+    communityId: f.communityId, channelId: ids[119]!, afterChannelId: ids[49]!, beforeChannelId: ids[50]!, expectedPosition: 121,
+  });
+  const after = await t.run(ctx => ctx.db.query("communityChannels").collect());
+  expect(after.filter((row, i) => row.position !== before[i]!.position).map(row => row._id)).toEqual([ids[119]]);
+  expect(after.find(row => row._id === ids[119])!.position).toBe(51.5);
+  await expect(owner.mutation(api.communityChannels.moveCommunityChannel, {
+    communityId: f.communityId, channelId: ids[119]!, afterChannelId: ids[49]!, beforeChannelId: ids[50]!, expectedPosition: 121,
+  })).rejects.toThrow("community_channel_order_stale");
+  await expect(owner.mutation(api.communityChannels.createCommunityChannel, {
+    communityId: f.communityId, name: "Still capped",
+  })).rejects.toThrow("community_channel_limit_reached");
+});
+
+test("move rejects exhausted gaps and cross-community neighbors without rewriting rows", async () => {
+  const t = convexTest(schema, modules), f = await createFixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const a = await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "A" });
+  const b = await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "B" });
+  const c = await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "C" });
+  await t.run(ctx => ctx.db.patch(b.id as any, { position: 1 + Number.EPSILON }));
+  const args = { communityId: f.communityId, channelId: c.id as any, afterChannelId: a.id as any, beforeChannelId: b.id as any, expectedPosition: 3 };
+  await expect(owner.mutation(api.communityChannels.moveCommunityChannel, args)).rejects.toThrow("community_channel_order_space_exhausted");
+  const foreign = await t.run(async ctx => {
+    const community = await ctx.db.get(f.communityId);
+    const { _id, _creationTime, ...fields } = community!;
+    const other = await ctx.db.insert("communities", { ...fields, slug: "other" });
+    return await ctx.db.insert("communityChannels", { communityId: other, name: "Foreign", normalizedName: "foreign", slug: "foreign", status: "active", accessMode: "restricted", postingPolicy: "members", position: 1, createdAt: 1, updatedAt: 1 });
+  });
+  await expect(owner.mutation(api.communityChannels.moveCommunityChannel, { ...args, afterChannelId: foreign })).rejects.toThrow("community_channel_unavailable");
+  expect((await t.run(ctx => ctx.db.get(c.id as any)))!.position).toBe(3);
+});
+
+test("concurrent names and appends remain unique; competing moves cannot overwrite a changed target", async () => {
+  const t = convexTest(schema, modules), f = await createFixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const results = await Promise.allSettled(["Alpha", " ALPHA "].map(name => owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name })));
+  expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+  const [b, c] = await Promise.all(["Beta", "Gamma"].map(name => owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name })));
+  expect(b!.position).not.toBe(c!.position);
+  const rows = await t.run(ctx => ctx.db.query("communityChannels").collect());
+  const first = rows.find(row => row.position === 1)!;
+  const moves = await Promise.allSettled([0, 1].map(() => owner.mutation(api.communityChannels.moveCommunityChannel, {
+    communityId: f.communityId, channelId: c!.id as any, afterChannelId: null, beforeChannelId: first._id, expectedPosition: c!.position,
+  })));
+  expect(moves.filter(r => r.status === "fulfilled")).toHaveLength(1);
 });
 
 test("each channel owns one manager-controlled live pinned root", async () => {

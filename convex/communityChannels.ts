@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import {
@@ -16,7 +16,8 @@ import {
   getGeneralChannel,
   listAuthorizedCommunityChannels,
   listSharedCommunityChannels,
-  reorderActiveCommunityChannels,
+  moveActiveCommunityChannel,
+  normalizeCommunityChannelName,
   renameActiveCommunityChannel,
   resolveAuthorizedCommunityChannel,
   setActiveCommunityChannelPinnedRoot,
@@ -185,12 +186,29 @@ export const renameCommunityChannel = mutation({
   },
 });
 
+// Cached clients may still call this name. Never accept a stale full-directory
+// rewrite: preserve the transport boundary only, with an explicit refresh error.
 export const reorderCommunityChannels = mutation({
+  args: {
+    userId: v.optional(v.id("users")), authSubject: v.optional(v.string()),
+    communityId: v.id("communities"), orderedChannelIds: v.array(v.id("communityChannels")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    throw new Error("community_channel_refresh_required");
+  },
+});
+
+export const moveCommunityChannel = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    orderedChannelIds: v.array(v.id("communityChannels")),
+    channelId: v.id("communityChannels"),
+    afterChannelId: v.union(v.id("communityChannels"), v.null()),
+    beforeChannelId: v.union(v.id("communityChannels"), v.null()),
+    expectedPosition: v.number(),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -199,12 +217,36 @@ export const reorderCommunityChannels = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const channels = await reorderActiveCommunityChannels({
+    const channel = await moveActiveCommunityChannel({
       ctx,
-      communityId: args.communityId,
-      orderedChannelIds: args.orderedChannelIds,
+      ...args,
     });
-    return { channels: channels.map(mapCommunityChannel) };
+    return mapCommunityChannel(channel);
+  },
+});
+
+// Bounded, resumable deployment migration. No public identity can invoke it.
+export const backfillChannelNamesInternal = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const result = await ctx.db.query("communityChannels").paginate({
+      ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems),
+    });
+    let updated = 0;
+    for (const channel of result.page) {
+      const normalizedName = normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US");
+      if (channel.normalizedName === normalizedName) continue;
+      if (channel.status === "active") {
+        const collision = await ctx.db.query("communityChannels").withIndex(
+          "by_community_status_normalizedName",
+          (q) => q.eq("communityId", channel.communityId).eq("status", "active").eq("normalizedName", normalizedName),
+        ).first();
+        if (collision && collision._id !== channel._id) throw new Error("community_channel_name_taken");
+      }
+      await ctx.db.patch(channel._id, { normalizedName });
+      updated += 1;
+    }
+    return { updated, isDone: result.isDone, continueCursor: result.continueCursor };
   },
 });
 

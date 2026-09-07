@@ -27,7 +27,7 @@ test("exact private-room lookup and scoped search do not enumerate a large direc
     const original = (await ctx.db.get(f.channelId))!;
     const { _id, _creationTime, ...fields } = original;
     for (let i = 0; i < 120; i++) await ctx.db.insert("communityChannels", {
-      ...fields, name: `Other ${i}`, slug: `other-${i}`, position: i + 2,
+      ...fields, name: `Other ${i}`, normalizedName: `other ${i}`, slug: `other-${i}`, position: i + 2,
     });
     return ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: f.channelId,
       principalKey: `user:${f.users.member}`, membershipId: f.memberships.member, membershipActivationSequence: 0,
@@ -108,7 +108,7 @@ async function fixture(t: ReturnType<typeof convexTest>) {
       });
     }
     const channelId = await ctx.db.insert("communityChannels", {
-      communityId, name: "Client", slug: "client", position: 1, status: "active",
+      communityId, name: "Client", normalizedName: "client", slug: "client", position: 1, status: "active",
       accessMode: "restricted", postingPolicy: "members", createdAt: 1, updatedAt: 1,
     });
     return { communityId, channelId, users, memberships };
@@ -250,7 +250,7 @@ test("access changes require explicit history acknowledgement, reject stale edit
   await owner.mutation(api.communityChannels.setChannelAccess, { ...args, acknowledgeHistoryExposure: true });
   await expect(owner.mutation(api.communityChannels.setChannelAccess, { ...args, acknowledgeHistoryExposure: true })).rejects.toThrow("access_changed");
   const generalId = await t.run(ctx => ctx.db.insert("communityChannels", { communityId: f.communityId,
-    systemRole: "general", slug: "general", name: "General", position: 0, accessMode: "all_members",
+    systemRole: "general", slug: "general", name: "General", normalizedName: "general", position: 0, accessMode: "all_members",
     postingPolicy: "members", status: "active", createdAt: 1, updatedAt: 1 }));
   await expect(owner.mutation(api.communityChannels.setChannelAccess, { ...args, channelId: generalId,
     expectedAccessMode: "all_members", accessMode: "restricted", acknowledgeHistoryExposure: true })).rejects.toThrow("general_channel_immutable");

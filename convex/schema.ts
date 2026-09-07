@@ -1106,6 +1106,7 @@ export default defineSchema({
     systemRole: v.optional(v.literal("general")),
     slug: v.string(),
     name: v.string(),
+    normalizedName: v.optional(v.string()),
     accessMode: channelAccessModeValidator,
     postingPolicy: channelPostingPolicyValidator,
     replyPolicy: v.optional(channelReplyPolicyValidator),
@@ -1117,6 +1118,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community_slug", ["communityId", "slug"])
+    .index("by_community_status_normalizedName", ["communityId", "status", "normalizedName"])
     .index("by_community_systemRole", ["communityId", "systemRole"])
     .index("by_community_status_position", ["communityId", "status", "position"])
     .index("by_community_access_status_position", ["communityId", "accessMode", "status", "position"]),

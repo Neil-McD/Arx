@@ -4,7 +4,7 @@ import type { AuthSession } from "../auth";
 import {
   createCloudCommunityChannel,
   deleteCloudCommunityChannel,
-  reorderCloudCommunityChannels,
+  moveCloudCommunityChannel,
   renameCloudCommunityChannel,
   subscribeCloudCommunityChannels,
   type CloudCommunityChannel,
@@ -83,6 +83,12 @@ function formatChannelError(error: unknown): string {
   }
   if (message.includes("community_channel_order_stale")) {
     return "The channel list changed. Try moving it again.";
+  }
+  if (message.includes("community_channel_order_space_exhausted")) {
+    return "These channels cannot be placed any closer together. Try another position.";
+  }
+  if (message.includes("community_channel_name_migration_required")) {
+    return "Channel names are being updated. Please try again shortly.";
   }
   if (message.includes("auth_session_required")) {
     return "Sign in again to load channels.";
@@ -495,6 +501,19 @@ export function useWebCommunityChannelsController(params: {
       return false;
     }
 
+    const previousIds = channels.filter((channel) => !channel.is_general).map((channel) => channel.id);
+    if (previousIds.every((id, index) => id === orderedChannelIds[index])) return true;
+    const movedId = orderedChannelIds.find((id) =>
+      previousIds.filter((candidate) => candidate !== id).join("|") ===
+      orderedChannelIds.filter((candidate) => candidate !== id).join("|"),
+    );
+    const moved = channels.find((channel) => channel.id === movedId);
+    if (!moved) {
+      setReorderChannelsError("Move one channel at a time.");
+      return false;
+    }
+    const movedIndex = orderedChannelIds.indexOf(moved.id);
+
     reorderInFlightCommunityIdRef.current = communityId;
     setIsReorderingChannels(true);
     setReorderChannelsError(null);
@@ -502,13 +521,18 @@ export function useWebCommunityChannelsController(params: {
     try {
       const usableSession = await current.ensureSession(current.session ?? undefined);
       if (!usableSession) throw new Error("auth_session_required");
-      const reordered = await reorderCloudCommunityChannels({
+      const reordered = await moveCloudCommunityChannel({
         session: usableSession,
         communityId,
-        orderedChannelIds,
+        channelId: moved.id,
+        afterChannelId: orderedChannelIds[movedIndex - 1] ?? null,
+        beforeChannelId: orderedChannelIds[movedIndex + 1] ?? null,
+        expectedPosition: moved.position,
       });
       if (paramsRef.current.activeCommunityId !== communityId) return false;
-      setChannels(normalizeChannels(communityId, reordered));
+      setChannels(normalizeChannels(communityId, lastSubscribedChannelsRef.current.map(
+        (channel) => channel.id === reordered.id ? reordered : channel,
+      )));
       return true;
     } catch (error) {
       if (paramsRef.current.activeCommunityId === communityId) {

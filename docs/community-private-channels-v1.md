@@ -23,8 +23,8 @@ Selection and reorder wait for a complete directory, avoiding false not-found
 decisions while later pages are loading. This is bounded per query, not a claim
 that rendering every authorized room is constant-cost.
 
-The creation limit intentionally remains until creation/name checks, full-list
-reorder, attention/evidence consumers and the internal agent directory are migrated.
+The creation limit intentionally remains until attention aggregation and the
+internal agent directory are migrated.
 This read foundation is not automatic service-channel provisioning and does not
 yet authorize increasing the number of live channels.
 
@@ -33,8 +33,27 @@ enumerate the community directory. Both use canonical room lineage and current
 capabilities; supplying conflicting ID and slug fails closed. The broad community
 agent repository remains shared-only even for an explicitly granted private room.
 Automated fixtures verify these exact paths with 120 unrelated private rooms.
-The remaining capacity work is creation/name/order allocation, full-list reorder,
-attention aggregation and the internal directory listing (not exact lookup).
+Creation and rename use an indexed normalized name; creation appends after the
+indexed last position. The retained cap uses a bounded ten-row capacity check.
+Mutations remain transactional, so concurrent names and append positions conflict
+and retry rather than creating duplicates.
+
+The existing drag UI sends one moved channel, its expected position, and its two
+destination neighbors. The server validates current adjacency and changes only
+that row. General stays at zero. Fractional positions avoid directory rewrites;
+an exhausted numeric gap fails explicitly, without a hidden rebalance. Stale,
+foreign, archived, or duplicate neighbors are rejected. The old full-array write
+implementation is deleted; its cached-client endpoint only asks for a refresh.
+
+Deployment prerequisite: run `communityChannels:backfillChannelNamesInternal`
+with `paginationOpts` (cursor starts null, at most 100 rows), following returned
+cursors until `isDone`. It is internal-only, idempotent, preserves names/content,
+and rejects existing duplicate active names. Communities with missing normalized
+names fail closed for creation/rename until backfilled. This slice targets only
+`dev:quick-porcupine-949`; production migration is not authorized.
+
+Remaining capacity work: attention aggregation and the internal directory listing
+(not exact lookup). Automatic member-join service rooms remain a later slice.
 
 Invite-only rooms are visible to invited active members and community
 owners/admins. Personal agents and external MCP inherit the authenticated
