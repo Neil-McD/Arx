@@ -21,6 +21,7 @@ export type CloudCommunityChannel = {
 export type CloudCommunityChannelsResult = {
   channels: CloudCommunityChannel[];
   max_active_channels: number;
+  isComplete?: boolean;
 };
 
 function coerceCommunityChannelsResult(payload: unknown): CloudCommunityChannelsResult {
@@ -121,22 +122,63 @@ export function subscribeCloudCommunityChannels(params: {
   onUpdate: (result: CloudCommunityChannelsResult) => void;
   onError?: (error: unknown) => void;
 }): () => void {
-  const watch = params.liveClient.client.watchQuery(
-    (api as any).communityChannels.listCommunityChannels,
-    {
-      authSubject: params.liveClient.authSubject,
-      communityId: params.communityId as any,
-    } as any,
-  );
-  const publish = () => {
-    try {
-      const result = watch.localQueryResult();
-      if (typeof result === "undefined") return;
-      params.onUpdate(coerceCommunityChannelsResult(result));
-    } catch (error) {
-      params.onError?.(error);
-    }
+  return subscribeChannelDirectoryPages({
+    watch: (section, cursor) => params.liveClient.client.watchQuery(
+      (api as any).communityChannels.listCommunityChannelPage,
+      { authSubject: params.liveClient.authSubject, communityId: params.communityId as any,
+        section, paginationOpts: { cursor, numItems: 50 } } as any,
+    ),
+    onUpdate: params.onUpdate, onError: params.onError,
+  });
+}
+
+// Each page stays reactive. An earlier page change invalidates its descendants
+// before publishing, so stale grants cannot linger in an assembled directory.
+export function subscribeChannelDirectoryPages(params: {
+  watch: (section: "shared" | "private", cursor: string | null) => {
+    localQueryResult: () => any; onUpdate: (callback: () => void) => () => void;
   };
-  publish();
-  return watch.onUpdate(publish);
+  onUpdate: (result: CloudCommunityChannelsResult) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  type Slot = { active: boolean; stop?: () => void; fingerprint?: string; channels: CloudCommunityChannel[] };
+  const pages: Slot[] = [];
+  let closed = false;
+  const trim = (index: number) => {
+    for (const slot of pages.splice(index)) { slot.active = false; slot.stop?.(); }
+  };
+  const load = (section: "shared" | "private", cursor: string | null) => {
+    if (closed) return;
+    const index = pages.length;
+    const slot: Slot = { active: true, channels: [] }; pages.push(slot);
+    const watch = params.watch(section, cursor);
+    const publish = () => {
+      if (closed || !slot.active) return;
+      try {
+        const result = watch.localQueryResult();
+        if (result === undefined) return;
+        const fingerprint = JSON.stringify(result);
+        if (slot.fingerprint === fingerprint) return;
+        slot.fingerprint = fingerprint;
+        trim(index + 1);
+        slot.channels = Array.isArray(result.page) ? result.page : [];
+        const isComplete = result.isDone === true && section === "private";
+        const unique = new Map(pages.flatMap(page => page.channels).map(channel => [channel.id || channel.slug, channel]));
+        params.onUpdate({ ...coerceCommunityChannelsResult({ channels: [...unique.values()].sort((a, b) =>
+          a.position - b.position || a.id.localeCompare(b.id)), max_active_channels: result.max_active_channels }), isComplete });
+        if (!result.isDone) {
+          if (!result.continueCursor || result.continueCursor === cursor) throw new Error("community_channel_cursor_invalid");
+          load(section, result.continueCursor);
+        } else if (section === "shared") load("private", null);
+      } catch (error) {
+        trim(index + 1); slot.channels = []; slot.fingerprint = undefined;
+        params.onUpdate({ channels: [], max_active_channels: 10, isComplete: false });
+        params.onError?.(error);
+      }
+    };
+    slot.stop = watch.onUpdate(publish);
+    publish();
+  };
+  load("shared", null);
+  return () => { closed = true; trim(0); };
 }

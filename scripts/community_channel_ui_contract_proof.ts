@@ -102,7 +102,7 @@ const header = read(headerPath);
 const gatewayPath = "shared/cloudCommunityChannelsGateway.ts";
 const gateway = read(gatewayPath);
 [
-  ".communityChannels.listCommunityChannels",
+  ".communityChannels.listCommunityChannelPage",
   '"communityChannels:createCommunityChannel"',
   '"communityChannels:renameCommunityChannel"',
   '"communityChannels:deleteCommunityChannel"',

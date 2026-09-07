@@ -1,5 +1,6 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import {
   getCommunityChannelCapabilities,
   requireCommunityChannelCapability,
@@ -19,6 +20,7 @@ import {
   renameActiveCommunityChannel,
   resolveAuthorizedCommunityChannel,
   setActiveCommunityChannelPinnedRoot,
+  legacyGeneralChannelSelection,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -68,6 +70,40 @@ export const listCommunityChannels = query({
       }))),
       max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS,
     };
+  },
+});
+
+// Directory pagination is separate from the current creation cap. Members scan
+// only shared rooms and their own indexed grants, never every client's room.
+export const listCommunityChannelPage = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"),
+    section: v.union(v.literal("shared"), v.literal("private")), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const opts = { ...args.paginationOpts, numItems: Math.min(50, Math.max(1, args.paginationOpts.numItems)) };
+    const byGrant = args.section === "private" && !actor.isManager;
+    const result = byGrant
+      ? await ctx.db.query("communityChannelParticipants").withIndex("by_community_principal_status", q =>
+        q.eq("communityId", args.communityId).eq("principalKey", actor.principalKey).eq("status", "active")).paginate(opts)
+      : await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", q =>
+        q.eq("communityId", args.communityId).eq("accessMode", args.section === "shared" ? "all_members" : "restricted")
+          .eq("status", "active")).paginate(opts);
+    const candidates = byGrant
+      ? await Promise.all(result.page.map(row => ctx.db.get((row as any).channelId))) : result.page;
+    const channels = [];
+    for (const row of candidates) {
+      const channel = row as CommunityChannelLike | null;
+      if (!channel || channel.communityId !== args.communityId || channel.status !== "active"
+        || channel.accessMode !== (args.section === "shared" ? "all_members" : "restricted")) continue;
+      const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
+      if (capabilities.canRead) channels.push({ ...mapCommunityChannel(channel), capabilities });
+    }
+    if (args.section === "shared" && args.paginationOpts.cursor === null && !await getGeneralChannel(ctx, args.communityId)) {
+      const channel = legacyGeneralChannelSelection(args.communityId);
+      channels.unshift({ ...mapCommunityChannel(channel), capabilities: await getCommunityChannelCapabilities({ ctx, channel, actor }) });
+    }
+    return { ...result, page: channels, max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS };
   },
 });
 

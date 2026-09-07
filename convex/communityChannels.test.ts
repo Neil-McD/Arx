@@ -19,6 +19,41 @@ const MODERATOR_SUBJECT = "channel-catalog-moderator";
 const MEMBER_SUBJECT = "channel-catalog-member";
 const OUTSIDER_SUBJECT = "channel-catalog-outsider";
 
+test("paged directory isolates member grants from 120 private rooms and bounds manager pages", async () => {
+  const t = convexTest(schema, modules), f = await createFixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT }), member = t.withIdentity({ subject: MEMBER_SUBJECT });
+  await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "Shared" });
+  const seeded = await t.run(async ctx => {
+    const membership = (await ctx.db.query("communityMemberships").collect()).find(m => m.role === "member")!;
+    let last: any;
+    for (let i = 0; i < 120; i++) last = await ctx.db.insert("communityChannels", {
+      communityId: f.communityId, name: `Client ${i}`, slug: `client-${i}`, accessMode: "restricted",
+      postingPolicy: "members", status: "active", position: i + 2, createdByUserId: f.ownerId, createdAt: i, updatedAt: i,
+    });
+    const grant = await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: last,
+      principalKey: `user:${membership.userId}`, membershipId: membership._id, membershipActivationSequence: 0,
+      status: "active", createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
+    return { last, grant, membership };
+  });
+  const args = { communityId: f.communityId, section: "private" as const, paginationOpts: { cursor: null, numItems: 1000 } };
+  const first = await owner.query(api.communityChannels.listCommunityChannelPage, args);
+  expect(first.page).toHaveLength(50); expect(first.isDone).toBe(false);
+  const second = await owner.query(api.communityChannels.listCommunityChannelPage, { ...args, paginationOpts: { cursor: first.continueCursor, numItems: 50 } });
+  const third = await owner.query(api.communityChannels.listCommunityChannelPage, { ...args, paginationOpts: { cursor: second.continueCursor, numItems: 50 } });
+  expect(new Set([...first.page, ...second.page, ...third.page].map(c => c.id)).size).toBe(120);
+  expect(third.isDone).toBe(true);
+  const own = await member.query(api.communityChannels.listCommunityChannelPage, args);
+  expect(own.page.map(c => c.id)).toEqual([seeded.last]); expect(own.isDone).toBe(true);
+  expect((await member.query(api.communityChannels.listCommunityChannelPage, { ...args, section: "shared" })).page.map(c => c.name)).toEqual(["General", "Shared"]);
+  await t.run(ctx => ctx.db.patch(seeded.membership._id, { activationSequence: 1 }));
+  expect((await member.query(api.communityChannels.listCommunityChannelPage, args)).page).toEqual([]);
+  await t.run(ctx => ctx.db.patch(seeded.grant, { membershipActivationSequence: 1 }));
+  expect((await member.query(api.communityChannels.listCommunityChannelPage, args)).page).toHaveLength(1);
+  await t.run(ctx => ctx.db.patch(seeded.grant, { status: "revoked" }));
+  expect((await member.query(api.communityChannels.listCommunityChannelPage, args)).page).toEqual([]);
+  await expect(t.withIdentity({ subject: OUTSIDER_SUBJECT }).query(api.communityChannels.listCommunityChannelPage, args)).rejects.toThrow();
+});
+
 async function createFixture(t: ReturnType<typeof convexTest>) {
   return await t.run(async (ctx) => {
     const nowMs = 1_750_000_000_000;

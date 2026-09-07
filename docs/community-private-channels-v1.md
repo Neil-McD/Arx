@@ -7,6 +7,27 @@ One channel model, one chat surface. Owners/admins create a channel with
 Channel settings to rename it, change access, and add/remove existing members.
 General is always shared. The existing ten-active-channel limit is unchanged.
 
+## Directory capacity foundation
+
+The web directory now subscribes to `listCommunityChannelPage`, with at most 50
+stored rows per query. Shared rooms use the audience index; member private rooms
+use that member's active-grant index, followed by canonical capability checks.
+Managers page through restricted rooms directly. Other clients' private-room
+volume does not consume a member's grant page. Empty filtered pages still carry
+their continuation cursor; no private names or room totals are returned to an
+unauthorized member.
+
+The existing sidebar assembles reactive pages without a new UI. A changed page
+invalidates all following pages before publication; errors clear the directory.
+Selection and reorder wait for a complete directory, avoiding false not-found
+decisions while later pages are loading. This is bounded per query, not a claim
+that rendering every authorized room is constant-cost.
+
+The creation limit intentionally remains until creation/name checks, full-list
+reorder, attention/evidence consumers and the internal agent directory are migrated.
+This read foundation is not automatic service-channel provisioning and does not
+yet authorize increasing the number of live channels.
+
 Invite-only rooms are visible to invited active members and community
 owners/admins. Personal agents and external MCP inherit the authenticated
 member's current access; the community agent requires its own explicit grant.

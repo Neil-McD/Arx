@@ -292,8 +292,8 @@ export function useWebCommunityChannelsController(params: {
             lastSubscribedChannelsRef.current = normalizedChannels;
             setChannels(normalizedChannels);
             setMaxActiveChannels(result.max_active_channels);
-            setHasResolvedChannels(true);
-            setIsLoadingChannels(false);
+            setHasResolvedChannels(result.isComplete !== false);
+            setIsLoadingChannels(result.isComplete === false);
             setChannelsError(null);
           },
           onError: (error) => {
@@ -478,6 +478,7 @@ export function useWebCommunityChannelsController(params: {
       .filter(Boolean);
     if (
       !communityId ||
+      !hasResolvedChannels || isLoadingChannels ||
       reorderInFlightCommunityIdRef.current ||
       manageInFlightChannelIdRef.current ||
       createInFlightCommunityIdRef.current
@@ -524,7 +525,7 @@ export function useWebCommunityChannelsController(params: {
         setIsReorderingChannels(false);
       }
     }
-  }, [channels]);
+  }, [channels, hasResolvedChannels, isLoadingChannels]);
 
   const activeChannelId = selection.selectedChannel?.is_general
     ? null

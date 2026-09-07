@@ -224,7 +224,7 @@ export async function requireActiveCommunityChannel(args: {
   return channel;
 }
 
-function legacyGeneralChannelSelection(
+export function legacyGeneralChannelSelection(
   communityId: any,
 ): CommunityChannelLike {
   return {
