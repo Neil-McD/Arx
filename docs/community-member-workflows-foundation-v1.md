@@ -16,8 +16,9 @@ Action = prompt_agent(prompt) | move_member(next_or_complete)
 ```
 
 A new milestone has no hidden behavior. Merely occupying a milestone never
-causes work without a configured trigger. Elapsed-time rules only support
-`move_member`; agent prompts still require an authorized contribution source.
+causes work without a configured trigger. Contribution prompts reply to their
+authorized source thread. Elapsed-time prompts publish one check-in to the
+member's authorized service channel; either trigger can also move the member.
 
 ### One-shot milestone timers
 
