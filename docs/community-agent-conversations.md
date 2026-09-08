@@ -98,8 +98,9 @@ Desktop framing experiment: above 900px, the navigation, primary workspace and
 optional secondary pane use separate frames with the existing shell radius,
 stroke and 8px inset tokens. Compact layouts, controls, surfaces and state owners
 remain unchanged. This is a CSS-only visual experiment, not a new shell mode.
-The right rail uses an unboxed DM icon at the top and centers the panel picker
-vertically. On framed desktop panels, the shared minimize control straddles the
+The right rail uses unboxed controls: a 26px DM icon aligned with the desktop
+channel header and a panel picker at 46% rail height, with hover/focus feedback.
+On framed desktop panels, the shared minimize control straddles the
 top-right edge; compact panels retain an inset control to avoid toolbar overlap.
 
 - Community desktop shells place the existing DM toggle/unread badge and an add

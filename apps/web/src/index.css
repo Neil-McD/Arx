@@ -3111,21 +3111,22 @@
 .workspace-right-rail {
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 16px 4px; background: var(--surface-rail); min-width: 0;
+  padding: 10px 4px; background: var(--surface-rail); min-width: 0;
 }
 .workspace-right-rail > .icon-button,
 .workspace-panel-picker > .icon-button {
   position: relative; width: 40px; height: 40px; border-radius: 12px;
-  color: var(--text-muted); background: var(--surface-nav);
+  color: var(--text-muted); background: transparent; border: 0; box-shadow: none;
 }
+.workspace-right-rail > .icon-button:is(:hover, :focus-visible),
+.workspace-panel-picker > .icon-button:is(:hover, :focus-visible) { background: var(--surface-hover); }
 .workspace-panel-picker { position: relative; }
 .workspace-right-rail > .direct-messages-topbar-button {
   width: 44px; height: 44px; padding: 6px;
-  background: transparent; border: 0; box-shadow: none;
 }
-.workspace-right-rail > .direct-messages-topbar-button svg { width: 30px; height: 30px; }
+.workspace-right-rail > .direct-messages-topbar-button svg { width: 26px; height: 26px; }
 .workspace-right-rail > .workspace-panel-picker {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
 }
 .workspace-panel-options {
   position: absolute; top: 0; right: calc(100% + 12px); z-index: 60;
