@@ -1111,7 +1111,7 @@ function WebMemberAgentDock(props, ref) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${visibleMessages.length === 0 && !composerIsBusy && !isPreparing && !isStartingNewChat && !dockError ? " is-empty-conversation" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
+      className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
       {!props.pageMode && !props.mobileShellActive ? (

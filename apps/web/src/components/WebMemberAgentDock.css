@@ -102,16 +102,8 @@
   margin: 0 auto 24px;
 }
 
-.community-agent-page.is-empty-conversation:not(:has(.resource-changeset-card)) .member-agent-dock-panel {
-  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr);
-}
-
-.community-agent-page.is-empty-conversation:not(:has(.resource-changeset-card)) .member-agent-dock-panel::after {
-  content: "";
-}
-
-.community-agent-page.is-empty-conversation .member-agent-dock-empty {
-  place-content: end center;
+.community-agent-page .member-agent-dock-composer {
+  padding: 12px 7px;
 }
 
 @media (max-width: 600px) {
