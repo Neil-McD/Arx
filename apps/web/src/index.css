@@ -3177,17 +3177,22 @@
 .community-switcher-popover {
   position: fixed; margin: 0; width: min(320px, calc(100vw - 16px));
   max-height: calc(100dvh - 80px); overflow: auto; padding: 8px;
-  color: var(--text-primary); background: color-mix(in srgb, var(--surface-panel) 97%, transparent);
+  color: var(--text-primary); background: var(--surface-panel);
   border: 1px solid var(--stroke-panel-edge); border-radius: 12px;
   box-shadow: var(--web-popover-shadow);
-  backdrop-filter: blur(16px) saturate(130%);
 }
-.community-switcher-popover input { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
-.community-switcher-popover .community-dm-recipient-search input { height: 32px; border-radius: 8px; }
+.community-switcher-popover input { width: 100%; box-sizing: border-box; margin-bottom: 4px; }
+.community-switcher-popover .community-dm-recipient-search input {
+  height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; font-size: 12px;
+}
+.community-switcher-popover .community-dm-recipient-search input:focus { box-shadow: none; }
+.community-switcher-popover .community-dm-recipient-search input:focus-visible { outline: 1px solid var(--focus-ring, var(--accent)); outline-offset: -1px; }
 .community-switcher-list { max-height: 40dvh; overflow: auto; }
-.community-switcher-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.community-switcher-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.community-switcher-list .community-switcher-avatar { width: 24px; height: 24px; flex-basis: 24px; }
+.community-switcher-actions .community-switcher-row { min-height: 30px; color: var(--text-muted); font-size: 12px; }
 .community-switcher-row:is(:hover, :focus-visible) { background: var(--hover-overlay); }
-.community-switcher-actions { border-bottom: 1px solid var(--stroke-divider-accent); padding-bottom: 8px; margin-bottom: 8px; }
+.community-switcher-actions { border-bottom: 1px solid var(--stroke-divider-accent); padding-bottom: 6px; margin-bottom: 4px; }
 .community-switcher-shell .community-nav-footer { display: flex; flex-direction: column; gap: 4px; }
 .workspace-secondary-minimize {
   position: absolute; top: 12px; right: 12px; z-index: 3;
