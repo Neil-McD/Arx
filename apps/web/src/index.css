@@ -3179,13 +3179,11 @@
   max-height: calc(100dvh - 80px); overflow: auto; padding: 8px;
   color: var(--text-primary); background: var(--web-floating-chrome-surface);
   border: 1px solid var(--stroke-panel-edge); border-radius: 12px;
-  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  box-shadow: var(--web-popover-shadow);
   backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 .community-switcher-popover input { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
 .community-switcher-popover .community-dm-recipient-search input { height: 32px; border-radius: 8px; }
-.community-switcher-popover .community-dm-recipient-search input:focus { box-shadow: none; border-color: var(--stroke-panel-edge); }
 .community-switcher-list { max-height: 40dvh; overflow: auto; }
 .community-switcher-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .community-switcher-row:is(:hover, :focus-visible) { background: var(--hover-overlay); }
