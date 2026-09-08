@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type UIEvent } from "react";
 import { Check, ChevronDown, Lock, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import type {
   CommunityDirectoryMember,
   CommunityPresenceFace,
@@ -78,14 +77,6 @@ function isAdminRole(member: CommunityRailMember, ownerId?: string | null): bool
   );
 }
 
-
-function formatMemberActivityLabel(lastActiveAt: string | null | undefined, isOnline: boolean): string | null {
-  if (isOnline) return "Active now";
-  const normalized = String(lastActiveAt ?? "").trim();
-  if (!normalized) return null;
-  const relative = formatRelativeTimeFromIso(normalized);
-  return relative ? `Active ${relative}` : null;
-}
 
 // Canonical community member directory and manager controls.
 export function CommunityContextPanel(props: CommunityContextPanelProps) {
@@ -249,10 +240,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
     const isOnline = Boolean(props.onlineUserIds?.has(member.user_id));
-    const activityLabel = formatMemberActivityLabel(
-      member.last_active_at,
-      isOnline,
-    );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
     const canOpenSettings = Boolean(
       props.canManageMembers &&
@@ -293,7 +280,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
             <span className="community-context-member-role">{isOwnerMember ? "Owner" : member.role || "Member"}</span>
           </span>
-          <span className="community-context-member-activity">{activityLabel || (member.created_at ? `Joined ${formatRelativeTimeFromIso(member.created_at)}` : "")}</span>
         </button>
         {canOpenSettings ? (
           <button
@@ -462,7 +448,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span>See who&apos;s here when you&apos;re in.</span>
           </button>
         ) : null}
-        {!lockedMembers ? <div className="community-members-grid">{members.map(member => renderMember(member, isAdminRole(member, props.ownerId)))}</div> : null}
+        {!lockedMembers ? <div className="community-members-list">{members.map(member => renderMember(member, isAdminRole(member, props.ownerId)))}</div> : null}
         {!lockedMembers && (
           props.isLoadingPresence || (loadedMemberCount === 0 && props.isLoadingMembers)
         ) ? (

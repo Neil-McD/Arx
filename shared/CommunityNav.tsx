@@ -148,7 +148,7 @@ function NavLockGlyph() {
   );
 }
 
-export function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
+function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
   const slug = String(slugRaw ?? "").trim();
   if (!slug) return null;
   const joinPath = `/c/${encodeURIComponent(slug)}`;

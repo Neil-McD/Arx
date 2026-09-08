@@ -757,25 +757,20 @@ assert.doesNotMatch(
   /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
   "public community funnel payloads must not expose per-member last active timestamps",
 );
-assert.match(
+assert.doesNotMatch(
   contextPanel,
-  /formatMemberActivityLabel[\s\S]*Active now[\s\S]*Active \$\{relative\}/,
-  "context panel should format online and relative member activity labels",
-);
-assert.match(
-  `${communityTypes}\n${contextPanel}`,
-  /last_active_at: string;[\s\S]*formatMemberActivityLabel\([\s\S]*member\.last_active_at,[\s\S]*community-context-member-activity/,
-  "context panel should render activity directly from directory rows",
+  /formatMemberActivityLabel|community-context-member-activity/,
+  "member directory should not render activity timestamps",
 );
 assert.doesNotMatch(
   projection,
   /online_last_active_at_by_user_id|onlineLastActiveAtByUserId|activityScopeKey/,
   "interaction projection should not carry the retired live-only activity map",
 );
-assert.match(
+assert.doesNotMatch(
   baseCss,
-  /\.community-context-member-activity\s*\{[\s\S]*max-width: 100%/,
-  "member activity labels should reveal on hover and keyboard focus",
+  /\.community-context-member-activity/,
+  "deleted activity labels should not retain styles",
 );
 
 assert.match(

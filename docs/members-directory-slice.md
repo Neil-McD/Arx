@@ -3,7 +3,7 @@
 Member cards and workflow cards/details reuse the channel feed's standard
 40px `UserAvatar` holder and presence styling, without surface-local avatar sizing.
 
-Members is a responsive profile-stub directory, not a presence sidebar. It retains
+Members is a full-width divided list, not a presence sidebar. It retains
 the canonical avatar, authorized paginated directory, profile reader, membership
 management dialog, and admission controls. Presence annotates a member; it does
 not group, hide, or dim the roster. Opening a profile keeps the directory mounted
@@ -29,11 +29,10 @@ canonical platform selector and existing immediate-save action. It is available
 only to authorized managers of currently free communities; enabling it also
 approves pending requests through the existing backend flow. Pending state and
 errors remain visible. Settings has no duplicate. Pending request review appears
-only when relevant. A header Invite action copies the canonical community link.
+only when relevant. Invitations use the existing left-navigation action only.
 
-The grid uses one column on narrow panes, two normally, and three on spacious
-panes. Each stub has the canonical avatar, name, role, and an activity or joined
-label only when backed by data. The full stub opens the existing profile; its
+The list uses one column at every width. Each row has the canonical avatar,
+name and role, with no activity or joined timestamp. The full row opens the existing profile; its
 separate manager-only ellipsis opens the existing management dialog. Message
 lives in the profile. Search and scroll survive profile Back. Subtle surfaces
 and focus/hover states use theme tokens and respect reduced motion.

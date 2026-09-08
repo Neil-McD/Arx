@@ -35,11 +35,12 @@ function render(canManageMembers: boolean) {
 }
 test("member stubs expose profiles, role and activity without management or message clutter", () => {
   const html = render(false);
-  expect(html).toContain("community-members-grid");
+  expect(html).toContain("community-members-list");
   expect(html).toContain("community-interaction-avatar");
   expect(html).not.toContain("community-context-member-avatar-media");
   expect(html).toContain("Open Member Name&#x27;s profile");
-  expect(html).toContain("Active now");
+  expect(html).not.toContain("Active now");
+  expect(html).not.toContain("community-context-member-activity");
   expect(html).not.toContain('aria-label="Manage');
   expect(html).not.toContain('aria-label="Message');
   expect(html).not.toContain("is-offline");
