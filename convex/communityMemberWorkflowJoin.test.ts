@@ -99,7 +99,7 @@ test("same-name members get distinct readable rooms; replay preserves builder re
     const userId = await ctx.db.insert("users", { authSubject: "second-member", displayName: "member", createdAt: f.now, updatedAt: f.now });
     const { membership } = await activateCommunityMembershipCore({ ctx, communityId: f.communityId, userId,
       accessSource: "manual_grant", activationReason: "test", nowMs: f.now });
-    return membership._id;
+    return membership._id as Id<"communityMemberships">;
   });
   expect((await f.t.mutation(joinHandler, { ...f.job, membershipId: second })).status).toBe("service_channel_ready");
   await f.t.run(async ctx => {
