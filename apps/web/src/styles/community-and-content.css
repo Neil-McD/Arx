@@ -2982,7 +2982,8 @@
   opacity: 1;
 }
 
-.channel-roster-panel .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; }
+.channel-roster-panel .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
+.channel-roster-panel .community-context-members-total .community-context-section { margin: 0; }
 .community-members-admission { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px; }
 .community-members-admission .platform-switcher { width: 120px; }
 .community-members-notice { padding: 0 24px 12px; font-size: 12px; color: var(--text-muted); }
