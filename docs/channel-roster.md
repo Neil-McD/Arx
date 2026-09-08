@@ -32,4 +32,11 @@ The shared reactive pagination lifecycle invalidates descendant pages before
 publishing changes, deduplicates displayed users, and clears on errors. A keyed
 mount clears all rows on community/channel changes. No new tables or writes.
 
+The sidebar header reuses the production community name and online facepile.
+The facepile is community-wide presence, not a second channel roster. Memory
+uses the authenticated canonical community overview (24-node preview budget)
+and the production graph miniature. It is community memory, not private-channel
+or member workflow context. The subscription closes when the sidebar unmounts;
+errors clear the preview and expose Retry. No new polling, tables, or writes.
+
 Staging deployment and live acceptance are separate from local test evidence.

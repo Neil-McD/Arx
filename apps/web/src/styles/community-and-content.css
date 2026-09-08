@@ -2227,6 +2227,73 @@
   border-radius: var(--composer-radius);
 }
 
+.community-context-memory {
+  padding: 12px 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--stroke-divider-accent);
+}
+
+.community-context-memory-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.community-context-memory-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+/* Live mini-render of the memory graph — same layout + node/edge encoding as the
+   full Polynet page, fit into the rail slot. */
+.community-context-memory-preview {
+  display: block;
+  width: 100%;
+  height: 132px;
+  padding: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+  overflow: hidden;
+}
+
+/* When memory can be expanded, the whole preview is the click target. */
+.community-context-memory-preview.is-interactive {
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.community-context-memory-preview.is-interactive:hover,
+.community-context-memory-preview.is-interactive:focus-visible {
+  border-color: color-mix(in srgb, var(--border-strong) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
+  outline: none;
+}
+
+.community-context-memory-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.community-context-memory-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.community-context-memory-loading-status {
+  width: 38%;
+  height: 9px;
+  border-radius: 999px;
+}
+
 .community-context-rail-name {
   display: block;
   min-width: 0;

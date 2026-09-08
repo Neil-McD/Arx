@@ -8,10 +8,17 @@ import { subscribeCommunityPages } from "../../../../shared/subscribeCommunityPa
 import { communityPresenceLeaseIsActive, COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
+import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
+import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
+import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
+import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOverview, type CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
 export function ChannelRosterPanel(props: {
+  communityName: string;
+  presenceSummary?: CommunityPresenceSummary | null;
+  isLoadingPresence?: boolean;
   channelId?: string;
   onOpenProfile?: (id: string) => void;
   getAvatarColor: (id: string) => string;
@@ -24,6 +31,26 @@ export function ChannelRosterPanel(props: {
   const [budget, setBudget] = useState(1);
   const [retry, setRetry] = useState(0);
   const [now, setNow] = useState(Date.now);
+  const [memory, setMemory] = useState<CloudCommunityPolynetOverview | null>(null);
+  const [memoryError, setMemoryError] = useState(false);
+  const [memoryRetry, setMemoryRetry] = useState(0);
+  useEffect(() => {
+    setMemory(null); setMemoryError(false);
+    if (!scope) return;
+    let disposed = false;
+    let close: (() => void) | undefined;
+    let stop: (() => void) | undefined;
+    try {
+      const liveClient = createCloudCommunityPolynetLiveClient({ session: scope.session });
+      close = liveClient.close;
+      stop = subscribeCloudCommunityPolynetOverview({
+        liveClient, communityId: scope.communityId, nodeLimit: 24,
+        onUpdate: value => { if (!disposed) { setMemory(value); setMemoryError(false); } },
+        onError: () => { if (!disposed) { setMemory(null); setMemoryError(true); } },
+      });
+    } catch { setMemoryError(true); }
+    return () => { disposed = true; stop?.(); close?.(); };
+  }, [scope?.session, scope?.communityId, memoryRetry]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS);
     return () => window.clearInterval(timer);
@@ -54,6 +81,17 @@ export function ChannelRosterPanel(props: {
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
   return <aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents">
+    <div className="community-context-rail-head"><span className="community-context-rail-name">{props.communityName}</span></div>
+    <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
+      onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />
+    <div className="community-context-memory">
+      <div className="community-context-memory-head"><div className="community-context-section">Memory{memory ? ` — ${memory.memory.total_visible_nodes}${memory.memory.node_counts_are_lower_bound ? "+" : ""}` : ""}</div></div>
+      {memoryError ? <div role="status">Could not load memory. <button type="button" onClick={() => setMemoryRetry(value => value + 1)}>Retry</button></div>
+        : memory ? <div className="community-context-memory-summary">
+          <div className="community-context-memory-preview"><CommunityMemoryGraphPreview overview={memory} /></div>
+          <div className="community-context-memory-status"><span>{(memory.agent.activity_state || memory.agent.status).replace(/_/g, " ").replace(/\b\w/g, value => value.toUpperCase())}</span></div>
+        </div> : <div className="community-context-memory-summary" aria-label="Loading memory"><div className="community-context-memory-preview web-skeleton-block" /><div className="community-context-memory-loading-status web-skeleton-row" /></div>}
+    </div>
     <div className="community-context-members">
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>

@@ -1151,6 +1151,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       ) : null}
       {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
         key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
+        communityName={props.activeCommunityName} presenceSummary={props.presenceSummary} isLoadingPresence={props.isLoadingCommunityPresence}
         channelId={props.activeChannel?.is_general ? undefined : props.activeChannel?.id}
         onOpenProfile={props.onOpenProfile} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
       /> : null}
