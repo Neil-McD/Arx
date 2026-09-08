@@ -420,6 +420,7 @@ export function communityInteractionRootHasRichContent(
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const mainRef = useRef<HTMLDivElement | null>(null);
+  const [compactContextOpen, setCompactContextOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const drawerScrollRef = useRef<HTMLDivElement | null>(null);
@@ -767,7 +768,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${compactContextOpen ? " compact-context-open" : ""}`}>
+      {!hasDetailPanel ? <div className="compact-context-toolbar">
+        <button type="button" className="workflow-secondary-button" aria-expanded={compactContextOpen}
+          onClick={() => setCompactContextOpen(open => !open)}>
+          {compactContextOpen ? "Back to chat" : "Community details"}
+        </button>
+      </div> : null}
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
