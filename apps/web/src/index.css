@@ -3131,7 +3131,7 @@
   transform: translateX(calc(var(--community-shell-inset) / -2));
 }
 .workspace-right-rail > .workspace-panel-picker {
-  position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
 }
 .workspace-panel-options {
   position: absolute; top: 0; right: calc(100% + 12px); z-index: 60;
