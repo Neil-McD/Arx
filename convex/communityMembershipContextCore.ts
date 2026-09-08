@@ -247,7 +247,10 @@ async function readMembershipContextRecords(args: {
         const request = run.actionResult?.formRequestId ? await args.ctx.db.get(run.actionResult.formRequestId) : null;
         const valid = validActionResult && request?.communityId === run.communityId && request?.membershipId === run.membershipId
           && request?.workflowId === run.workflowId && request?.automationKey === run.automationKey && request?.milestoneEnteredAt === run.milestoneEnteredAt;
-        return { id: String(run._id), action_type: "request_form" as const, status: valid ? "requested" as const : "unavailable" as const,
+        const capacityFailed = run.status === "failed" && run.actionResult?.status === "failed"
+          && run.actionResult.actionKey === run.actionSnapshot.key && run.errorCode === "form_pending_limit_reached";
+        return { id: String(run._id), action_type: "request_form" as const, status: capacityFailed ? "failed" as const : valid ? "requested" as const : "unavailable" as const,
+          ...(capacityFailed ? { failure_reason: "The member already has 12 pending forms in this milestone. No new form was requested." } : {}),
           milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
       }
       if (run.actionSnapshot.type === "evaluate_goal") {

@@ -988,6 +988,83 @@ test("form evidence: choices use pinned labels, scans and context are bounded, c
   expect(JSON.stringify(evidence)).not.toContain("CANCELLED_SECRET");
 });
 
+test("pending form admission stays capped across rule recreation and preserves existing requests", async () => {
+  const { t, f, owner, request, configured, rootId } = await formFlowFixture();
+  let revision = 4;
+  for (let i = 0; i < 13; i++) {
+    const saved = await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+      communityId: f.communityId, milestoneKey: configured.firstKey, expectedRevision: revision, name: "New",
+      automations: [{ trigger: { type: "member_contributed" }, action: { type: "request_form", formKey: "intake" } }],
+    });
+    revision = saved.revision;
+    await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: await addRoot(t, f, `cap-${i}`) });
+  }
+  const rows = await t.run(ctx => ctx.db.query("communityFormRequests").collect());
+  expect(rows).toHaveLength(12);
+  expect(rows.every(row => row.status === "pending")).toBe(true);
+  expect(rows.some(row => row._id === request._id)).toBe(true);
+  expect((await t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).filter(r => r.errorCode === "form_pending_limit_reached")).toHaveLength(2);
+  const dossier = await owner.query(dossierQuery, { communityId: f.communityId, membershipId: f.membershipId });
+  expect(dossier.recent_workflow_activity.some(r => r.status === "failed" && r.failure_reason?.includes("12 pending forms"))).toBe(true);
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  expect(await t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(12);
+});
+
+test("concurrent contribution assignments cannot overfill the last slot; old activations do not consume it", async () => {
+  const { t, f, owner, configured, request } = await formFlowFixture();
+  await t.run(async ctx => {
+    const { _id, _creationTime, ...base } = request;
+    for (let i = 0; i < 10; i++) await ctx.db.insert("communityFormRequests", { ...base, automationKey: `prior-${i}` });
+  });
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, milestoneKey: configured.firstKey, expectedRevision: 4, name: "New",
+    automations: [0, 1].map(() => ({ trigger: { type: "member_contributed" as const }, action: { type: "request_form" as const, formKey: "intake" } })),
+  });
+  const roots = [await addRoot(t, f, "concurrent-a"), await addRoot(t, f, "concurrent-b")];
+  await Promise.all(roots.map(rootId => t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId })));
+  expect(await t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(12);
+  await t.run(ctx => ctx.db.patch(f.membershipId, { activationSequence: request.activationSequence + 1 }));
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: await addRoot(t, f, "new-activation") });
+  expect((await t.run(ctx => ctx.db.query("communityFormRequests").collect())).filter(r => r.activationSequence !== request.activationSequence)).toHaveLength(2);
+});
+
+test("legacy overflow pages and cleans only the departed visit without blocking movement", async () => {
+  vi.useFakeTimers();
+  try {
+    const { t, f, member, request } = await formFlowFixture();
+    await t.run(async ctx => {
+      const { _id, _creationTime, ...base } = request;
+      for (let i = 0; i < 62; i++) await ctx.db.insert("communityFormRequests", { ...base, automationKey: `legacy-${i}`, answers: { q: "KEEP_DRAFT" } });
+    });
+    let cursor: string | null = null;
+    const ids = new Set<string>();
+    do {
+      const page: { rows: Array<{ id: string }>; nextCursor: string | null } | unknown[] = await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId, paged: true, cursor });
+      if (Array.isArray(page)) throw new Error("Expected page");
+      expect(page.rows.length).toBeLessThanOrEqual(12);
+      page.rows.forEach(r => ids.add(r.id)); cursor = page.nextCursor;
+    } while (cursor);
+    expect(ids.size).toBe(63);
+    const visit = { membershipId: f.membershipId, workflowId: request.workflowId, activationSequence: request.activationSequence,
+      milestoneKey: request.milestoneKey, milestoneEnteredAt: request.milestoneEnteredAt };
+    await t.mutation(internalApi.communityFormRequests.cancelVisitPendingInternal, visit);
+    expect((await t.run(ctx => ctx.db.query("communityFormRequests").collect())).filter(r => r.status === "pending")).toHaveLength(63);
+    await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: request._id, expectedRevision: 0, answers: { q: "SUBMITTED" }, submit: true });
+    expect((await t.run(ctx => ctx.db.query("communityFormRequests").collect())).filter(r => r.status === "cancelled")).toHaveLength(25);
+    const nextId = await t.run(async ctx => {
+      const state = (await ctx.db.query("communityMemberWorkflowMemberMilestones").first())!;
+      const { _id, _creationTime, ...base } = request;
+      return ctx.db.insert("communityFormRequests", { ...base, milestoneKey: state.currentMilestoneKey, milestoneEnteredAt: state.milestoneEnteredAt, automationKey: "next", answers: {} });
+    });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const final = await t.run(ctx => ctx.db.query("communityFormRequests").collect());
+    expect(final.filter(r => r.status === "cancelled")).toHaveLength(62);
+    expect(final.find(r => r._id === nextId)?.status).toBe("pending");
+    expect(final.find(r => r._id === request._id)?.answers).toEqual({ q: "SUBMITTED" });
+    expect(final.filter(r => r.status === "cancelled").every(r => r.answers.q === "KEEP_DRAFT")).toBe(true);
+  } finally { vi.useRealTimers(); }
+});
+
 test("forms: repeated contributions reuse a request; submission moves exactly once without an agent", async () => {
   const { t, f, member, request, rootId } = await formFlowFixture();
   await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
@@ -995,7 +1072,9 @@ test("forms: repeated contributions reuse a request; submission moves exactly on
   expect(await t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(1);
   const args = { communityId: f.communityId, requestId: request._id, expectedRevision: 0, answers: { q: "Improve onboarding" }, submit: false };
   await member.mutation(api.communityFormRequests.saveMyAnswers, args);
-  expect((await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId }))[0].answered).toBe(1);
+  const listedForms = await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId });
+  if (!Array.isArray(listedForms)) throw new Error("Expected legacy array");
+  expect(listedForms[0].answered).toBe(1);
   expect((await member.query(api.communityFormRequests.getMyRequest, { communityId: f.communityId, requestId: request._id })).answers).toEqual(args.answers);
   await expect(member.mutation(api.communityFormRequests.saveMyAnswers, { ...args, answers: { q: "conflicting edit" } })).rejects.toThrow("conflict");
   await member.mutation(api.communityFormRequests.saveMyAnswers, { ...args, expectedRevision: 1, submit: true });

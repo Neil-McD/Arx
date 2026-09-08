@@ -20,6 +20,7 @@ export default defineSchema({
     answers: v.record(v.string(), v.union(v.string(), v.array(v.string()))),
     revision: v.number(), createdAt: v.number(), updatedAt: v.number(), submittedAt: v.optional(v.number()),
   }).index("by_member_status", ["membershipId", "status"])
+    .index("by_member_visit_status", ["membershipId", "workflowId", "activationSequence", "milestoneKey", "milestoneEnteredAt", "status"])
     .index("by_assignment", ["workflowId", "membershipId", "activationSequence", "milestoneKey", "milestoneEnteredAt", "automationKey"]),
   communityForms: defineTable({
     communityId: v.id("communities"), key: v.string(), name: v.string(),

@@ -14,11 +14,14 @@ export function WebCommunityNextStep(props: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const loadMore = useRef<(() => void) | undefined>(undefined);
   const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     let alive = true; setError(false);
-    const stop = subscribeMemberForms(props.session, props.communityId, props.ensureSession, r => { if (alive) { setRows(r); setError(false); } }, () => { if (alive) { setRows([]); setError(true); } });
-    return () => { alive = false; stop(); };
+    const stop = subscribeMemberForms(props.session, props.communityId, props.ensureSession, (r, more) => { if (alive) { setRows(r); setHasMore(Boolean(more)); setError(false); } }, () => { if (alive) { setRows([]); setHasMore(false); setError(true); } });
+    loadMore.current = stop.loadMore;
+    return () => { alive = false; loadMore.current = undefined; stop(); };
   }, [props.session, props.communityId, props.ensureSession, retry]);
   const close = () => { setOpen(false); setSelected(null); };
   const first = rows[0];
@@ -28,11 +31,11 @@ export function WebCommunityNextStep(props: Props) {
       <span>{first.answered} of {first.total} questions answered</span>
       <span className="community-next-step-action">{first.answered ? "Continue" : "Start"}<ArrowRight size={14} /></span>
     </button> : error ? <button className="community-next-step" onClick={() => setRetry(n => n + 1)}>Could not load your next step · Retry</button> : null}
-    {rows.length > 1 ? <button className="community-next-step-count" onClick={() => { setSelected(null); setOpen(true); }}>{rows.length} pending</button> : null}
-    {open ? <MemberFormDialog {...props} rows={rows} selected={selected} onSelect={setSelected} onClose={close} /> : null}
+    {rows.length > 1 || hasMore ? <button className="community-next-step-count" onClick={() => { setSelected(null); setOpen(true); }}>{rows.length}{hasMore ? "+" : ""} pending</button> : null}
+    {open ? <MemberFormDialog {...props} rows={rows} hasMore={hasMore} onLoadMore={() => loadMore.current?.()} selected={selected} onSelect={setSelected} onClose={close} /> : null}
   </>;
 }
-function MemberFormDialog(props: Props & { rows: MemberFormSummary[]; selected: string | null; onSelect: (id: string) => void; onClose: () => void }) {
+function MemberFormDialog(props: Props & { rows: MemberFormSummary[]; hasMore: boolean; onLoadMore: () => void; selected: string | null; onSelect: (id: string) => void; onClose: () => void }) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -50,7 +53,8 @@ function MemberFormDialog(props: Props & { rows: MemberFormSummary[]; selected: 
     onKeyDown={e => { if (e.key !== "Tab") return; const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled)') ?? []);
       const first = controls[0], last = controls.at(-1); if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); } }}>
     {props.selected ? <MemberFormRunner key={props.selected} {...props} requestId={props.selected} /> : <><header><h2>Your next steps</h2><button onClick={props.onClose} aria-label="Close"><X size={20} /></button></header>
-      {props.rows.map(row => <button className="member-form-list-row" key={row.id} onClick={() => props.onSelect(row.id)}>{row.name}<span>{row.answered} of {row.total} answered</span></button>)}</>}
+      {props.rows.map(row => <button className="member-form-list-row" key={row.id} onClick={() => props.onSelect(row.id)}>{row.name}<span>{row.answered} of {row.total} answered</span></button>)}
+      {props.hasMore ? <button className="member-form-list-row" onClick={props.onLoadMore}>Load more</button> : null}</>}
   </div></div>, document.body);
 }
 function MemberFormRunner(props: Props & { requestId: string; onClose: () => void }) {

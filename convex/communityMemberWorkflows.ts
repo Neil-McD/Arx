@@ -810,7 +810,9 @@ async function transitionMemberForWorkflowAction(args: {
     occurredAt: args.nowMs,
     createdAt: args.nowMs,
   });
-  await cancelMilestoneFormRequests(args.ctx, membership!._id);
+  await cancelMilestoneFormRequests(args.ctx, { membershipId: membership!._id, workflowId: workflow._id,
+    activationSequence: Number(membership!.activationSequence ?? 0), milestoneKey: current.milestone.key,
+    milestoneEnteredAt: current.milestoneEnteredAt });
   if (nextMilestone) await enrollWorkflowMilestoneTimers({ ctx: args.ctx, membership: membership!, nowMs: args.nowMs });
   return { transitionId, completedWorkflow, replayed: false };
 }
@@ -1008,12 +1010,13 @@ async function executeWorkflowAutomation(args: {
       replayed: false,
     };
   } catch (error) {
-    // Timer admission, transition and consumption are one transaction. Never
-    // commit a partial timer action as a terminal failure.
-    if (args.workflowTimerId || args.automation.action.type !== "prompt_agent") throw error;
     const errorCode = String(
       error instanceof Error ? error.message : error ?? "workflow_action_failed",
     ).slice(0, 120);
+    // Capacity rejects before any assignment write. It may be recorded without
+    // rolling back the source event or blocking independent completion rules.
+    const capacityRejected = args.automation.action.type === "request_form" && errorCode === "form_pending_limit_reached";
+    if (!capacityRejected && (args.workflowTimerId || args.automation.action.type !== "prompt_agent")) throw error;
     await args.ctx.db.patch(workflowRunId, {
       status: "failed",
       actionResult: {

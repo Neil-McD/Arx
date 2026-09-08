@@ -31,6 +31,20 @@ Publishing alone never runs an agent or moves a member.
 
 ## Member delivery
 
+- Admission is capped at 12 pending requests in the member's current activation
+  and milestone visit, including requests issued by subsequently removed rules.
+  Exact assignment retries are resolved before the capacity check. A full queue
+  records `form_pending_limit_reached` without writing a new request or blocking
+  independent completion. Previous visits/activations do not consume capacity.
+- Pending reads use an exact visit/status index and 12-row pages. Current clients
+  offer Load more for pre-existing overflow; legacy clients receive the first page.
+  Realtime changes invalidate later loaded pages instead of mixing visits.
+- Advancement invalidates the old visit atomically and cancels its first 25
+  pending requests in the same transaction. Existing scheduler continuations
+  drain only that exact visit in 25-row batches. Submitted answers and next-visit
+  requests are untouched; cancelled drafts retain their saved answers.
+  This is not a global historical-row purge or a new worker system.
+
 - `request_form` assigns the current published version to a member. Existing
   contribution/time triggers can invoke it; it is not an automatic entry action.
 - Identity is workflow + membership activation + milestone visit + automation.

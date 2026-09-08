@@ -15,7 +15,11 @@ const row = { id:'qa', name:'Your onboarding', revision:0, answers:{}, questions
 ]};
 window.qa = { calls:[], failSubmit:true };
 function publish() { update([{id:'qa',name:row.name,answered:Object.keys(row.answers).length,total:2,createdAt:0}]); }
-export function subscribeMemberForms(s,c,e,cb) { update=cb; publish(); return () => {}; }
+export function subscribeMemberForms(s,c,e,cb) { update=cb; publish();
+ window.qa.overflow=()=>update(Array.from({length:12},(_,i)=>({id:'page-'+i,name:'Pending '+i,answered:0,total:2,createdAt:i})),true);
+ window.qa.reset=publish;
+ return Object.assign(()=>{}, {loadMore:()=>update(Array.from({length:13},(_,i)=>({id:'page-'+i,name:'Pending '+i,answered:0,total:2,createdAt:i})),false)});
+}
 export async function getMemberForm() { return structuredClone(row); }
 export async function saveMemberForm(s,c,r,answers,submit) {
  window.qa.calls.push({answers:structuredClone(answers),submit,revision:r.revision});
@@ -52,6 +56,19 @@ try {
   const page=await browser.newPage({viewport:{width:390,height:700}});
   page.on('pageerror',e=>console.error(e.message));
   await page.goto('http://127.0.0.1:5198/qa');
+  await page.waitForFunction(()=>Boolean(window.qa?.overflow));
+  await page.evaluate(()=>window.qa.overflow());
+  await page.getByRole('button',{name:'12+ pending',exact:true}).click();
+  const paginationOutput=resolve(root,'artifacts/workflow-editor-qa'); await mkdir(paginationOutput,{recursive:true});
+  for (const theme of ['dark','light']) {
+    await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+    await page.screenshot({path:resolve(paginationOutput,'pending-forms-390-'+theme+'.png'), animations:'disabled'});
+  }
+  await page.getByRole('button',{name:'Load more',exact:true}).click();
+  await page.getByRole('button',{name:'Pending 12',exact:false}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Load more',exact:true}).count(),0);
+  await page.getByRole('button',{name:'Close',exact:true}).click();
+  await page.evaluate(()=>window.qa.reset());
   await page.getByRole('button',{name:/Your next step/}).click();
   const input=page.getByRole('textbox',{name:'What would you like help with?'});
   await input.fill('First answer');
