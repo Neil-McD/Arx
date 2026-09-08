@@ -15,7 +15,7 @@ test("implicit General works without a stored channel and returns canonical pres
   await t.run(ctx => ctx.db.insert("communityPresence", { communityId: f.communityId, userId: f.memberId,
     lastSeenAt: now, activeUntil: now + 90000, createdAt: now, updatedAt: now }));
   const result: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 50, cursor: null } });
-  expect(result.page.map((row: any) => row.user_id)).toEqual([f.ownerId, f.memberId]);
+  expect(result.page.map((row: any) => row.user_id)).toEqual(["owner", "member"]);
   expect(result.page[1]).toMatchObject({ last_seen_at: now, active_until: now + 90000 });
   expect(result.agents).toHaveLength(1);
 });
@@ -28,7 +28,7 @@ test("channel roster is viewer-authorized without weakening the grant editor", a
   await expect(t.withIdentity({ subject: "outsider" }).query(roster, request)).rejects.toThrow();
   await owner.mutation(set, args);
   const page: any = await member.query(roster, request);
-  expect(page.page.map((p: any) => p.user_id)).toEqual([f.ownerId, f.memberId]);
+  expect(page.page.map((p: any) => p.user_id)).toEqual(["owner", "member"]);
   expect(page.page[1]).toMatchObject({ role: "member", last_seen_at: null, profile: { display_name: "member" } });
   expect(page.page[1]).not.toHaveProperty("membershipActivationSequence");
   expect(page.agents).toEqual([]);
@@ -37,7 +37,7 @@ test("channel roster is viewer-authorized without weakening the grant editor", a
   expect((await member.query(roster, request) as any).agents[0]).toMatchObject({ key: "community_agent", capabilities: { canRead: true, canManage: false } });
   await owner.mutation(set, { ...args, active: false });
   await expect(member.query(roster, request)).rejects.toThrow();
-  expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual([f.ownerId]);
+  expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual(["owner"]);
 });
 
 test("roster follows demotion, activation lineage, archive, and channel scope", async () => {
@@ -63,7 +63,7 @@ test("General roster is paginated, includes owner once, and filters inactive mem
   });
   const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 2, cursor: null } };
   const first: any = await owner.query(roster, request);
-  expect(first.page.map((p: any) => p.user_id)).toEqual([f.ownerId, f.memberId]);
+  expect(first.page.map((p: any) => p.user_id)).toEqual(["owner", "member"]);
   expect(first.isDone).toBe(false);
   const second: any = await owner.query(roster, { ...request, paginationOpts: { numItems: 2, cursor: first.continueCursor } });
   expect(second.page).toEqual([]);
@@ -78,7 +78,7 @@ test("roster rejects foreign channel IDs and excludes revoked membership even wi
   const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 10, cursor: null } };
   await expect(owner.query(roster, { ...request, communityId: otherCommunityId })).rejects.toThrow();
   await t.run(ctx => ctx.db.patch(f.membershipId, { active: false, revokedAt: Date.now() }));
-  expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual([f.ownerId]);
+  expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual(["owner"]);
   await expect(t.withIdentity({ subject: "member" }).query(roster, request)).rejects.toThrow();
 });
 

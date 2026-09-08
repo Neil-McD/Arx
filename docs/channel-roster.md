@@ -5,7 +5,8 @@ change the shell, existing presence leases, manager access editor, or runtime.
 
 `communityChannelParticipants:listChannelRoster` requires current viewer read
 access and returns only eligible people with channel read access. It derives
-profiles from the canonical projection and eligibility from the existing
+profiles from the canonical projection and public user IDs from the existing
+chat/Members identity mapper. It derives eligibility from the existing
 presence authorization and channel capability evaluators. Owners appear once,
 on the first page. Admin access is implicit; private member grants retain their
 membership activation lineage. Agent capabilities are separate from people.

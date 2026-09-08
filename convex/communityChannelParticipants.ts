@@ -2,7 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, normalizeIdValue,
-  requireCommunityManager, resolveUserIdForAuthenticatedRequest } from "./communityCore";
+  requireCommunityManager, resolvePublicUserId, resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import { requireCommunityChannelLineage, resolveAuthorizedCommunityChannel } from "./communityChannelCore";
 import { resolveCommunityPresenceAuthorization } from "./communityPresenceCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -30,7 +30,7 @@ export const listChannelRoster = query({
     const result = await ctx.db.query("communityMemberships")
       .withIndex("by_community_createdAt", q => q.eq("communityId", args.communityId))
       .order("asc").paginate({ cursor, numItems: cursor === null ? size - 1 : size, maximumRowsRead: size * 3 });
-    const page: Array<{ user_id: typeof userId; role: string;
+    const page: Array<{ user_id: string; role: string;
       profile: Awaited<ReturnType<typeof resolveUserProfileDisplayProjection>>; last_seen_at: number | null; active_until: number | null }> = [];
     const seen = new Set<string>();
     const append = async (candidateId: typeof userId, expectedMembershipId?: string) => {
@@ -42,7 +42,7 @@ export const listChannelRoster = query({
       seen.add(String(candidateId));
       const presence = await ctx.db.query("communityPresence")
         .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", candidateId)).first();
-      page.push({ user_id: candidateId, role: candidateId === community.ownerId ? "owner" : authorization.membership!.role,
+      page.push({ user_id: (await resolvePublicUserId(ctx, candidateId)) ?? String(candidateId), role: candidateId === community.ownerId ? "owner" : authorization.membership!.role,
         profile: await resolveUserProfileDisplayProjection(ctx, candidateId), last_seen_at: presence?.lastSeenAt ?? null, active_until: presence?.activeUntil ?? null });
     };
     if (cursor === null) await append(community.ownerId);
