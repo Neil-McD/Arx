@@ -3177,7 +3177,7 @@
 .community-switcher-popover {
   position: fixed; margin: 0; width: min(320px, calc(100vw - 16px));
   max-height: calc(100dvh - 80px); overflow: auto; padding: 8px;
-  color: var(--text-primary); background: var(--web-floating-chrome-surface);
+  color: var(--text-primary); background: color-mix(in srgb, var(--surface-panel) 97%, transparent);
   border: 1px solid var(--stroke-panel-edge); border-radius: 12px;
   box-shadow: var(--web-popover-shadow);
   backdrop-filter: blur(16px) saturate(130%);
