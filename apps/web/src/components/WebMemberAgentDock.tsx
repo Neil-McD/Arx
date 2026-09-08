@@ -1111,7 +1111,7 @@ function WebMemberAgentDock(props, ref) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
+      className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${visibleMessages.length === 0 && !composerIsBusy && !isPreparing && !isStartingNewChat && !dockError ? " is-empty-conversation" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
       {!props.pageMode && !props.mobileShellActive ? (
@@ -1130,9 +1130,9 @@ function WebMemberAgentDock(props, ref) {
       <section className="member-agent-dock-panel" aria-label={presentation.title}>
         <header className="member-agent-dock-header">
           <div className="member-agent-dock-identity">
-            <span className="member-agent-dock-avatar" aria-hidden="true">
+            {!props.pageMode && <span className="member-agent-dock-avatar" aria-hidden="true">
               <Sparkles />
-            </span>
+            </span>}
             <span>
               <strong>{presentation.title}</strong>
               <small>
@@ -1140,7 +1140,7 @@ function WebMemberAgentDock(props, ref) {
                   ? "Uploading images"
                   : turnIsActive
                     ? "Working"
-                    : `${presentation.surfaceLabel} · Private conversation`}
+                    : props.pageMode ? "Private conversation" : `${presentation.surfaceLabel} · Private conversation`}
               </small>
             </span>
           </div>
@@ -1158,6 +1158,7 @@ function WebMemberAgentDock(props, ref) {
               title="Start fresh conversation"
             >
               <MessageSquarePlus aria-hidden="true" />
+              {props.pageMode && <span>New conversation</span>}
             </button>
             {!props.pageMode && !props.mobileShellActive ? (
               <button

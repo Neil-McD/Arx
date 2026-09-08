@@ -92,6 +92,11 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Acceptance
 
+Agent page layout uses a compact header and a shared 800px maximum conversation/
+composer column. Empty conversations bring the prompt and input together; ongoing
+conversations retain the bottom composer. Pending proposals keep their normal
+scrollable layout. Existing theme tokens and legacy mobile/dock presentation remain.
+
 Recovered resource proposals use pending-only presentation: a server-confirmed
 applied or rejected proposal disappears from the active recovery area. Historical
 runtime cards retain their result; database receipts are unchanged. Pending,
