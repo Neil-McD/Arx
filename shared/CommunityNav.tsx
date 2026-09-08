@@ -594,6 +594,10 @@ export const CommunityNav = memo(function CommunityNav({
       ) : null}
       {!isLoadingAccess ? (
         <>
+          <button className={showActiveSelection && communityTab === "agent" ? "nav-item active" : "nav-item"} type="button" onClick={() => onSelectTab("agent")} title="Agent">
+            <span className="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" /></svg></span>
+            <span className="nav-item-label">Agent</span>
+          </button>
           <button
             className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
             type="button"

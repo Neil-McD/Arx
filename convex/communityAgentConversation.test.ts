@@ -30,6 +30,8 @@ test("community conversations are idempotent and isolated by member and communit
   const args = { communityId: f.communities[0] };
   const first = await f.a.mutation(api.threads.ensureCommunityAgentConversation, args);
   expect(await f.a.mutation(api.threads.ensureCommunityAgentConversation, args)).toEqual(first);
+  expect((await f.a.mutation(api.threads.ensureCloudThread, { threadKey: first.thread_key }))._id).toBe(first.thread_id);
+  await expect(f.a.mutation(api.threads.ensureCloudThread, { threadKey: first.thread_key, communityId: f.communities[1] })).rejects.toThrow("community_conversation_scope_immutable");
   const otherCommunity = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId: f.communities[1] });
   const otherMember = await f.b.mutation(api.threads.ensureCommunityAgentConversation, args);
   expect(new Set([first.thread_id, otherCommunity.thread_id, otherMember.thread_id]).size).toBe(3);

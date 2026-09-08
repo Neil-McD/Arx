@@ -1497,7 +1497,10 @@ export const ensureCloudThread = mutation({
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
     if (threadKey.startsWith(COMMUNITY_CONVERSATION_PREFIX)) {
-      throw new Error("community_conversation_use_scoped_endpoint");
+      const scoped = await getCloudThreadByThreadKeyInternal({ ctx, ownerId, threadKey });
+      if (!scoped) throw new Error("community_conversation_use_scoped_endpoint");
+      if (args.communityId && args.communityId !== scoped.communityId) throw new Error("community_conversation_scope_immutable");
+      return scoped;
     }
     const existing = await getCloudThreadByThreadKeyInternal({
       ctx,

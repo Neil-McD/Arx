@@ -1,5 +1,6 @@
 export const MEMBER_AGENT_COMMUNITY_SECTIONS = [
   "chat",
+  "agent",
   "resources",
   "events",
   "settings",

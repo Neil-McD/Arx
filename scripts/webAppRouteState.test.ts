@@ -126,7 +126,6 @@ describe("community channel routes", () => {
   });
 
   it.each([
-    ["/c/polynet/agent", "agent"],
     ["/c/polynet/ai_agent", "agent"],
   ] as const)("maps legacy Agent route %s into Settings", (path, pane) => {
     expect(parseAppRouteFromPathname(path)).toMatchObject({

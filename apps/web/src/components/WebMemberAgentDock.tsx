@@ -36,16 +36,11 @@ import {
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import {
-  ensureCloudMemberAgentGlobalChannel,
-  startNewCloudMemberAgentGlobalEpisode,
+  ensureCloudCommunityAgentConversation,
+  startNewCloudCommunityAgentConversation,
   type CloudMemberAgentChannel,
 } from "../../../../shared/cloudMemberAgentGateway";
 import { listCloudPendingCommunityResourceBuilderChangesets } from "../../../../shared/cloudCommunityAdminGateway";
-import {
-  fetchCloudThreadContextById,
-  setCloudThreadContext,
-} from "../../../../shared/cloudThreadContextGateway";
-import { syncThreadCommunityLensCloud } from "../../../../shared/threadContextCloudSync";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
@@ -110,6 +105,8 @@ type MemberAgentRetryState = {
 };
 
 export type WebMemberAgentDockProps = {
+  pageMode?: boolean;
+  pageActive?: boolean;
   isVisible: boolean;
   isSuppressed?: boolean;
   canManageResources?: boolean;
@@ -188,7 +185,7 @@ function WebMemberAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
   const communityName = String(props.community?.name ?? "").trim();
   const [isOpen, setIsOpen] = useState(false);
-  const isOpenSurface = props.mobileShellActive
+  const isOpenSurface = props.pageMode ? Boolean(props.pageActive) : props.mobileShellActive
     ? Boolean(props.mobileRoot)
     : isOpen;
   const [threadKey, setThreadKey] = useState<string | null>(null);
@@ -230,7 +227,7 @@ function WebMemberAgentDock(props, ref) {
   const activeThreadKeyRef = useRef<string | null>(null);
   const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
   const surfaceKey = JSON.stringify([
-    props.surfaceContext,
+    props.pageMode ? "community-conversation" : props.surfaceContext,
     communityId,
   ]);
   const agentScopeRef = useRef<AgentScope>({
@@ -300,7 +297,7 @@ function WebMemberAgentDock(props, ref) {
       }
       resourceBuildStartInFlightRef.current = true;
       const launchScope = agentScopeRef.current;
-      if (props.mobileShellActive) props.onRequestOpen?.();
+      if (props.pageMode || props.mobileShellActive) props.onRequestOpen?.();
       else setIsOpen(true);
       setLocalError(null);
       try {
@@ -559,7 +556,7 @@ function WebMemberAgentDock(props, ref) {
           "member_agent_dock_open",
         );
         if (!usableSession || cancelled || !isCurrentScope(scope)) return;
-        const thread = await ensureCloudMemberAgentGlobalChannel({
+        const thread = await ensureCloudCommunityAgentConversation({
           session: usableSession,
           initialCommunityId: communityId,
         });
@@ -727,32 +724,7 @@ function WebMemberAgentDock(props, ref) {
         observeThreadContext(channel.community_id, channel.context_version);
         return channel;
       }
-      const context = await syncThreadCommunityLensCloud({
-        threadId: channel.thread_key,
-        desiredCommunityId,
-        initialExpectedContextVersion: channel.context_version,
-        fetchLatestContext: () =>
-          fetchCloudThreadContextById({
-            session,
-            threadId: channel.thread_key,
-          }),
-        setThreadContext: (expectedContextVersion) =>
-          setCloudThreadContext({
-            session,
-            threadId: channel.thread_key,
-            expectedContextVersion,
-            communityId: desiredCommunityId,
-          }),
-      });
-      if (!context || context.community_id !== desiredCommunityId) {
-        throw new Error("Community context was not confirmed.");
-      }
-      observeThreadContext(desiredCommunityId, context.context_version);
-      return {
-        ...channel,
-        community_id: desiredCommunityId,
-        context_version: context.context_version,
-      };
+      throw new Error("Community conversation scope does not match.");
     },
     [observeThreadContext],
   );
@@ -806,7 +778,7 @@ function WebMemberAgentDock(props, ref) {
         "member_agent_dock_new_chat",
       );
       if (!usableSession || !isCurrentScope(scope)) return;
-      const thread = await startNewCloudMemberAgentGlobalEpisode({
+      const thread = await startNewCloudCommunityAgentConversation({
         session: usableSession,
         initialCommunityId: communityId,
         expectedActiveEpisodeId: expectedEpisodeId,
@@ -818,7 +790,7 @@ function WebMemberAgentDock(props, ref) {
       console.warn("member_agent_dock_new_chat_failed", error);
       if (usableSession) {
         try {
-          const current = await ensureCloudMemberAgentGlobalChannel({
+          const current = await ensureCloudCommunityAgentConversation({
             session: usableSession,
             initialCommunityId: communityId,
           });
@@ -957,7 +929,7 @@ function WebMemberAgentDock(props, ref) {
       );
       if (!usableSession) throw new Error("auth_session_required");
       if (!isCurrentScope(scope)) return;
-      let thread = await ensureCloudMemberAgentGlobalChannel({
+      let thread = await ensureCloudCommunityAgentConversation({
         session: usableSession,
         initialCommunityId: desiredCommunityId,
       });
@@ -1110,10 +1082,11 @@ function WebMemberAgentDock(props, ref) {
 
   if (!props.isVisible || !props.surfaceContext) return null;
 
-  const presentation = buildMemberAgentSurfacePresentation(
+  const legacyPresentation = buildMemberAgentSurfacePresentation(
     props.surfaceContext,
     communityName,
   );
+  const presentation = { ...legacyPresentation, title: "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Message the community agent", loadingLabel: "Loading conversation" };
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
@@ -1131,10 +1104,10 @@ function WebMemberAgentDock(props, ref) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
+      className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
-      {!props.mobileShellActive ? (
+      {!props.pageMode && !props.mobileShellActive ? (
         <button
           type="button"
           className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}`}
@@ -1160,7 +1133,7 @@ function WebMemberAgentDock(props, ref) {
                   ? "Uploading images"
                   : turnIsActive
                     ? "Working"
-                    : `${presentation.surfaceLabel} context`}
+                    : `${presentation.surfaceLabel} · Private conversation`}
               </small>
             </span>
           </div>
@@ -1179,7 +1152,7 @@ function WebMemberAgentDock(props, ref) {
             >
               <MessageSquarePlus aria-hidden="true" />
             </button>
-            {!props.mobileShellActive ? (
+            {!props.pageMode && !props.mobileShellActive ? (
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}

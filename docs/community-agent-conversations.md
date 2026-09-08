@@ -71,6 +71,25 @@ Prove a staged end-to-end turn, funding receipt and attachment path before relea
 Replace the dock with the center-panel Agent interface. Retain the existing
 execution substrate and approval UI. Migrate Resources' agent entry point too.
 
+## Slice 4: Agent page candidate (not visually accepted or deployed)
+
+- `/c/:slug/agent` is a member-accessible conversation destination above Resources.
+  `/c/:slug/settings/agent` remains builder configuration; `/ai_agent` retains its
+  historical settings redirect.
+- The existing conversation component renders in the desktop center workspace,
+  without its floating launcher. The mobile root uses the existing mobile agent
+  presentation with the same community-scoped storage gateway.
+- Resources opens the Agent destination using the existing composer handle.
+  The conversation stays mounted across desktop tab changes so that a resource
+  launch and an unsent draft are not discarded by navigation.
+- Global channel selection and mutable lens switching are removed from this
+  component. Shared runtime thread lookup accepts only already-created scoped
+  threads; generic creation of reserved thread keys remains forbidden.
+- Dock-specific CSS/component naming is retained until rendered acceptance,
+  particularly for mobile and both themes. No new chat engine is introduced.
+- Mac lock prevented rendered verification. This candidate needs layout,
+  navigation, voice, attachment, Resources approval and live staging checks.
+
 ## Acceptance
 
 Test member/community isolation, repeated resolution, immutable scope, revocation,

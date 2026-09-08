@@ -47,21 +47,30 @@ export function WebAppCompositionRoot(props: {
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...props.globalOverlayHostProps} />
-      <Suspense fallback={null}>
+      {!props.memberAgentDockProps.pageMode && <Suspense fallback={null}>
         <WebMemberAgentDock
           ref={props.memberAgentDockRef}
           {...props.memberAgentDockProps}
         />
-      </Suspense>
+      </Suspense>}
       <WebDirectMessagesHost {...props.directMessagesHostProps} />
     </>
   );
   const mainSurface = (
+    <>
+    <div style={{ display: props.memberAgentDockProps.pageMode && props.memberAgentDockProps.pageActive ? "none" : "contents" }}>
     <Suspense
       fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
     >
       <WebAppMainSurfaceHost {...props.mainSurfaceHostProps} />
     </Suspense>
+    </div>
+    {props.memberAgentDockProps.pageMode && <main className="workspace community-mode community-agent-workspace" style={{ display: props.memberAgentDockProps.pageActive && props.memberAgentDockProps.isVisible ? undefined : "none" }}>
+      <Suspense fallback={<div role="status">Loading agent…</div>}>
+        <WebMemberAgentDock ref={props.memberAgentDockRef} {...props.memberAgentDockProps} />
+      </Suspense>
+    </main>}
+    </>
   );
 
   return (

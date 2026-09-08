@@ -45,6 +45,7 @@ export function parseOperatorTab(
 
 export const COMMUNITY_TABS = [
   "chat",
+  "agent",
   "resources",
   "events",
   "settings",
@@ -93,6 +94,7 @@ export function isCommunityTabAllowedForAccess(
     case "analytics":
       return access.canViewAnalytics;
     case "chat":
+    case "agent":
     case "resources":
     case "events":
       return true;
@@ -130,9 +132,8 @@ export function parseCommunityTab(
     case "workflow":
     case "success":
       return "workflows";
-    // The retired top-level Agent route normalizes to Settings. Funnel is a
-    // canonical acquisition surface beside Analytics.
     case "agent":
+      return "agent";
     case "ai_agent":
       return "settings";
     case "funnel":

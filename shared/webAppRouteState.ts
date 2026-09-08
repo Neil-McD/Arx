@@ -74,6 +74,7 @@ export type WebDestination =
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
+  | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_workflows"; slug: string }
   | { kind: "community_funnel_editor"; slug: string }
@@ -513,7 +514,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     if (!slug) return null;
     const tabSegment = String(segments[2] ?? "").trim();
     const legacyAgentSettingsPane =
-      tabSegment === "agent" || tabSegment === "ai_agent"
+      tabSegment === "ai_agent"
         ? "agent"
         : null;
     const isLegacyFunnelSettingsRoute =
@@ -591,6 +592,8 @@ export function deriveWebDestinationFromAppRoute(
           };
         case "events":
           return { kind: "community_events", slug };
+        case "agent":
+          return { kind: "community_agent", slug };
         case "settings":
           return {
             kind: "community_settings",
@@ -651,6 +654,7 @@ export function isWebCommunityDetailDestination(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_agent":
     case "community_settings":
     case "community_workflows":
     case "community_funnel_editor":
@@ -680,6 +684,7 @@ export function webDestinationHasCommunityNavSelection(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_agent":
     case "community_settings":
     case "community_workflows":
     case "community_funnel_editor":

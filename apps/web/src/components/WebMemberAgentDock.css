@@ -53,6 +53,37 @@
   pointer-events: none;
 }
 
+.community-agent-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.member-agent-dock.community-agent-page {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  z-index: auto;
+  pointer-events: auto;
+}
+
+.member-agent-dock.community-agent-page .member-agent-dock-panel {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--surface-base, var(--web-context-panel-surface));
+  transform: none;
+}
+
+.member-agent-dock.community-agent-page .member-agent-dock-header {
+  padding: 20px 28px;
+}
+
 .member-agent-dock.is-suppressed {
   display: none;
 }
