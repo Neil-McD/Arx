@@ -3075,7 +3075,7 @@
 @container community-shell (max-width: 900px) {
   .compact-community-toolbar {
     display: flex; flex: 0 0 auto; padding: 8px 12px;
-    padding-right: var(--web-topbar-right-action-safe-inset, 62px);
+    padding-right: 104px;
     border-bottom: 1px solid var(--border-default);
   }
   .app-shell.framed-shell.with-community-rail.sessions-compact.no-right {
@@ -3103,4 +3103,9 @@
   .community-interaction-projection.has-drawer { grid-template-columns: minmax(0, 1fr); }
   .community-interaction-projection.has-drawer > .community-interaction-main { display: none; }
   .community-interaction-drawer { min-width: 0; width: 100%; }
+  .member-agent-dock-launcher {
+    position: fixed; top: 8px; right: 54px; bottom: auto;
+    width: 36px; height: 36px; border-radius: 8px;
+  }
+  .member-agent-dock-launcher svg { width: 22px; height: 22px; }
 }
