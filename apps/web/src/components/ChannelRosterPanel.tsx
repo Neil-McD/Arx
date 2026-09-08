@@ -145,7 +145,7 @@ export function ChannelRosterPanel(props: {
     </div>
   </aside>
     <CommunityMemberSettingsDialog {...props.memberSettings}
-      member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role } : null}
+      member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role, created_at: selectedMember.membership_created_at } : null}
       onClose={() => setSelectedMembershipId(null)} />
   </>;
 }

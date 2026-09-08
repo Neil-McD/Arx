@@ -18,6 +18,7 @@ test("implicit General works without a stored channel and returns canonical pres
   expect(result.page.map((row: any) => row.user_id)).toEqual(["owner", "member"]);
   expect(result.page[1]).toMatchObject({ last_seen_at: now, active_until: now + 90000 });
   expect(result.page[1].membership_id).toBe(String(f.membershipId));
+  expect(result.page[1].membership_created_at).toBe(new Date(1).toISOString());
   expect(result.page[0]).not.toHaveProperty("membership_id");
   expect(result.agents).toHaveLength(1);
 });
@@ -34,6 +35,7 @@ test("channel roster is viewer-authorized without weakening the grant editor", a
   expect(page.page[1]).toMatchObject({ role: "member", last_seen_at: null, profile: { display_name: "member" } });
   expect(page.page[1]).not.toHaveProperty("membershipActivationSequence");
   expect(page.page[1]).not.toHaveProperty("membership_id");
+  expect(page.page[1]).not.toHaveProperty("membership_created_at");
   expect(page.agents).toEqual([]);
   await expect(member.query(list, request)).rejects.toThrow();
   await owner.mutation(set, { ...args, target: { kind: "community_agent" } });
