@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type UIEvent } from "react";
-import { Check, ChevronDown, Lock, MessageCircle, X } from "lucide-react";
+import { Check, ChevronDown, Lock, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import type {
@@ -260,7 +260,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         !isOwnerMember &&
         !String(member.id ?? "").startsWith("owner:"),
     );
-    const canMessage = Boolean(props.onMessageMember) && member.user_id !== props.currentUserId;
     return (
       <div key={member.id} className="community-context-member">
         <button
@@ -291,23 +290,10 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           </span>
           <span className="community-context-member-copy">
             <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
-            <span className="community-context-member-activity">{isOwnerMember ? "Owner" : member.role || "Member"}{activityLabel ? ` · ${activityLabel}` : ""}</span>
+            <span className="community-context-member-role">{isOwnerMember ? "Owner" : member.role || "Member"}</span>
           </span>
+          <span className="community-context-member-activity">{activityLabel || (member.created_at ? `Joined ${formatRelativeTimeFromIso(member.created_at)}` : "")}</span>
         </button>
-        {canMessage ? (
-          <button
-            className="community-context-member-action"
-            type="button"
-            aria-label={`Message ${name}`}
-            title="Direct message"
-            onClick={(event) => {
-              event.stopPropagation();
-              props.onMessageMember?.(member.user_id);
-            }}
-          >
-            <MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" />
-          </button>
-        ) : null}
         {canOpenSettings ? (
           <button
             className="community-context-member-action community-context-member-manage"
@@ -319,7 +305,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               props.onOpenMemberSettings?.(member);
             }}
           >
-            Manage
+            <MoreHorizontal size={18} aria-hidden="true" />
           </button>
         ) : null}
       </div>
@@ -475,7 +461,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span>See who&apos;s here when you&apos;re in.</span>
           </button>
         ) : null}
-        {!lockedMembers ? members.map(member => renderMember(member, isAdminRole(member, props.ownerId))) : null}
+        {!lockedMembers ? <div className="community-members-grid">{members.map(member => renderMember(member, isAdminRole(member, props.ownerId)))}</div> : null}
         {!lockedMembers && (
           props.isLoadingPresence || (loadedMemberCount === 0 && props.isLoadingMembers)
         ) ? (

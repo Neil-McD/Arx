@@ -2075,13 +2075,6 @@ export default function App() {
 
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
-      admission: {
-        mode: activeCommunity?.entry_policy === "open" || activeCommunity?.entry_policy === "approval" ? activeCommunity.entry_policy : null,
-        canManage: canManageMembersActiveCommunity,
-        pending: isSettingCommunityFreeAccessMode,
-        error: communityFreeAccessModeError,
-        onChange: handleSetCommunityContextFreeAccessMode,
-      },
       canViewCommunityKnowledgeGraph: canViewActiveCommunityPolynet,
       activePage,
       communityTab,
@@ -2808,6 +2801,13 @@ export default function App() {
         ...communityChatPanelProps,
       },
       secondaryPanelsProps: communitySecondarySurfaceProps,
+      admission: {
+        mode: activeCommunity?.entry_policy === "open" || activeCommunity?.entry_policy === "approval" ? activeCommunity.entry_policy : null,
+        canManage: canManageMembersActiveCommunity,
+        pending: isSettingCommunityFreeAccessMode,
+        error: communityFreeAccessModeError,
+        onChange: handleSetCommunityContextFreeAccessMode,
+      },
     },
     discoverPanelProps: {
       isLoadingDiscover,

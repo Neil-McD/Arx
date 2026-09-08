@@ -1,6 +1,6 @@
 # Members directory
 
-Members is a full-width community directory, not a presence sidebar. It retains
+Members is a responsive profile-stub directory, not a presence sidebar. It retains
 the canonical avatar, authorized paginated directory, profile reader, membership
 management dialog, and admission controls. Presence annotates a member; it does
 not group, hide, or dim the roster. Opening a profile keeps the directory mounted
@@ -21,11 +21,19 @@ optional activity annotation, never a prerequisite for inclusion; missing
 activity remains blank. Versioned cursors restart cached presence pagination
 safely. No schema change, backfill, or synthetic presence write is needed.
 
-Auto-join now lives in Settings → Community → Access & Pricing, using the
+Auto-join lives beside search on Members for owners/admins, using the
 canonical platform selector and existing immediate-save action. It is available
 only to authorized managers of currently free communities; enabling it also
 approves pending requests through the existing backend flow. Pending state and
-errors remain visible. The roster retains request review, not policy editing.
+errors remain visible. Settings has no duplicate. Pending request review appears
+only when relevant. A header Invite action copies the canonical community link.
+
+The grid uses one column on narrow panes, two normally, and three on spacious
+panes. Each stub has the canonical avatar, name, role, and an activity or joined
+label only when backed by data. The full stub opens the existing profile; its
+separate manager-only ellipsis opens the existing management dialog. Message
+lives in the profile. Search and scroll survive profile Back. Subtle surfaces
+and focus/hover states use theme tokens and respect reduced motion.
 
 No private workflow, form, or agent context appears in the directory. Role,
 remove, ban, and billing permissions/confirmations remain unchanged.
