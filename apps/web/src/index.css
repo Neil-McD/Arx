@@ -3150,7 +3150,7 @@
   position: relative; inset: auto; width: 100%; height: 100%; max-height: none;
   border: 0; border-radius: 0; box-shadow: none; z-index: auto;
 }
-@container workspace-panes (max-width: 740px) {
+@container workspace-panes (max-width: 680px) {
   .has-secondary-pane > .community-workspace-primary,
   .has-secondary-pane > .community-agent-workspace:not(.community-workspace-secondary) { display: none !important; }
   .community-workspace-panes > .community-workspace-secondary { flex: 1; min-width: 0; border-left: 0; }
