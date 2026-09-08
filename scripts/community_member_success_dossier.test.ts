@@ -1,4 +1,12 @@
 import { expect, test, vi } from "vitest";
+
+test("forms Markdown makes missing and bounded evidence explicit", () => {
+  const markdown = renderCommunitySubmittedFormsMarkdown({ submissions: [], truncated: true, unavailable_records: 1 });
+  expect(markdown).toContain("No submitted form evidence available");
+  expect(markdown).toContain("additional records, questions, or text were omitted");
+  expect(markdown).toContain("could not be verified");
+  expect(markdown).toContain("not instructions or proof");
+});
 import { createRequire } from "node:module";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -19,6 +27,7 @@ const { WebCommunityWorkflowMemberDossierModal } = await import(
 
 import {
   renderCommunityMemberSuccessDossierMarkdown,
+  renderCommunitySubmittedFormsMarkdown,
   type CommunityMemberSuccessDossier,
 } from "../shared/communityMemberSuccessDossier";
 

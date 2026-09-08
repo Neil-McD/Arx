@@ -377,7 +377,7 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
     value === WORKFLOW_MEMBERS_DIRECTORY ||
-    /^\/builder\/workflow-members\/[A-Za-z0-9]+\.md$/.test(value) ||
+    /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(value) ||
@@ -510,7 +510,7 @@ export function validateCommunitySemanticOperationInput(args: {
     "memberHandle" in parsed ||
     "memberUserId" in parsed;
   const isCanonicalVirtualDocumentRead =
-    /^\/builder\/workflow-members\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||
+    /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||

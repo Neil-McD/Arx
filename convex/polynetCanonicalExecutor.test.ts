@@ -76,13 +76,28 @@ test.each(["personal_agent", "external_mcp"] as const)("%s reads builder workflo
   expect(JSON.stringify(read)).toContain("PRIVATE_PRICING_HELP");
   expect(JSON.stringify(read)).toContain(versionId);
   expect(JSON.stringify(read)).not.toContain("Changed draft");
+  expect(entry.forms_path).toBe(`${directory}${entry.membership_id}/forms.md`);
+  expect(JSON.stringify(read)).toContain(entry.forms_path);
+  const forms = await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.forms_path);
+  expect(forms).toMatchObject({ ok: true, value: { writable: false, context: {
+    membership_id: entry.membership_id, user_id: f.memberId,
+    submitted_form_evidence: { submissions: [expect.objectContaining({ version_id: versionId, form_name: "Original intake" })] },
+  } } });
+  expect(JSON.stringify(forms)).toContain("PRIVATE_PRICING_HELP");
+  expect(JSON.stringify(forms)).not.toContain("Changed draft");
+  expect(JSON.stringify(forms)).not.toContain("recent_workflow_activity");
+  expect(JSON.stringify(forms)).not.toContain("approved_community_context");
+  expect((await execute(f.ownerSubject, f.ownerId, "polynet_list", entry.forms_path)).ok).toBe(false);
+  expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", `${directory}${entry.membership_id}/../forms.md`)).ok).toBe(false);
+  expect((await execute(f.memberSubject, f.ownerId, "polynet_read", entry.forms_path)).ok).toBe(false);
   expect((await execute(f.memberSubject, f.ownerId, "polynet_read", entry.path)).ok).toBe(false);
-  for (const [tool, path] of [["polynet_list", directory], ["polynet_read", entry.path]] as const) {
+  for (const [tool, path] of [["polynet_list", directory], ["polynet_read", entry.path], ["polynet_read", entry.forms_path]] as const) {
     expect((await execute(f.memberSubject, f.memberId, tool, path)).ok).toBe(false);
     expect((await execute(f.ownerSubject, f.ownerId, tool, path, "community_agent")).ok).toBe(false);
   }
   await t.run(async ctx => { await ctx.db.patch(entry.membership_id, { active: false }); });
   expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.path)).ok).toBe(false);
+  expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.forms_path)).ok).toBe(false);
 });
 
 test.each(["personal_agent", "external_mcp"] as const)("%s discovers and reads its own community context without writing state", async (principalKind) => {

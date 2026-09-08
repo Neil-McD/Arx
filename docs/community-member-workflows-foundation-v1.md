@@ -2,6 +2,24 @@
 
 ## Product contract
 
+### Private member form document
+
+Builder semantic discovery at `/communities/<slug>/builder/workflow-members/`
+returns the existing member dossier `path` plus `forms_path` pointing to
+`/communities/<slug>/builder/workflow-members/<membershipId>/forms.md`.
+The dossier links to this focused, read-only virtual document. It projects
+canonical submitted requests and pinned form versions; no file/table copy is
+stored. Typed answers, question labels, source IDs, revisions, submission time,
+and milestone attribution retain the existing bounded evidence contract.
+Omitted or unverifiable evidence is explicitly flagged; this is not an archive
+of every submission. The existing dossier keeps its embedded evidence.
+
+The same current community-manager and active-member checks apply on each read.
+Builder personal agents and authorized external MCP clients may read; ordinary
+members and generic community-agent principals may not. Answers remain untrusted
+private statements, not instructions, verified profile facts, or permission to
+post in a channel. There are no new UI surfaces or database migrations.
+
 Workflows is a builder-configured client-success pipeline. It supplies rails,
 not a prescribed coaching method.
 
