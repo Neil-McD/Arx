@@ -68,41 +68,17 @@ type CommunityContextPanelProps = {
 
 const LOAD_MORE_SCROLL_THRESHOLD_PX = 96;
 
-function isAdminRole(member: CommunityRailMember, ownerId?: string | null): boolean {
-  return (
-    member.user_id === ownerId
-    || member.role === "owner"
-    || member.role === "admin"
-    || member.role === "moderator"
-  );
-}
+type CommunityJoinRequestReviewProps = Pick<CommunityContextPanelProps,
+  "canReviewJoinRequests" | "joinReviewMode" | "pendingJoinRequests" | "isLoadingJoinRequests" |
+  "joinRequestsError" | "decidingJoinRequestId" | "onApproveJoinRequest" | "onDenyJoinRequest" | "displayName">;
 
-
-// Canonical community member directory and manager controls.
-export function CommunityContextPanel(props: CommunityContextPanelProps) {
-  const members = props.members ?? [];
+export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProps) {
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
     pendingJoinRequests.length > PENDING_JOIN_REQUEST_DISPLAY_LIMIT;
   const visiblePendingJoinRequests = hasPendingJoinRequestOverflow
     ? pendingJoinRequests.slice(0, PENDING_JOIN_REQUEST_DISPLAY_LIMIT)
     : pendingJoinRequests;
-  const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
-  const loadedMemberCount = members.length;
-  const lockedMembers = Boolean(props.lockedSections?.members);
-
-  const loadedSummary = knownMemberCount !== null
-    ? `Showing ${Math.min(loadedMemberCount, knownMemberCount)} of ${knownMemberCount}`
-    : props.membersHasMore
-      ? `Showing ${loadedMemberCount}+`
-      : `Showing ${loadedMemberCount}`;
-  const hasUnloadedKnownMembers =
-    knownMemberCount !== null && loadedMemberCount < knownMemberCount;
-  const shouldShowMembersFooter =
-    loadedMemberCount > 0 || props.membersHasMore || hasUnloadedKnownMembers;
-  const loadMoreRequestedRef = useRef(false);
-  const membersViewportRef = useRef<HTMLDivElement | null>(null);
-  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const [joinRequestsExpanded, setJoinRequestsExpanded] = useState(false);
   const joinRequestPanelId = useId();
   const pendingJoinRequestCount = visiblePendingJoinRequests.length;
@@ -127,6 +103,126 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       !props.isLoadingJoinRequests &&
       props.joinRequestsError,
   );
+  useEffect(() => {
+    if (!canShowJoinRequests) setJoinRequestsExpanded(false);
+  }, [canShowJoinRequests]);
+  const renderJoinRequest = (request: CommunityAdmissionJoinRequest) => {
+    const name = (request.displayName ?? "").trim() || props.displayName(request.userId);
+    const isDeciding = props.decidingJoinRequestId === request.id;
+    return (
+      <div key={request.id} className="community-context-request-row">
+        <UserAvatar
+          className="community-context-request-avatar"
+          readyClassName="has-image"
+          name={name}
+          imageUrl={request.avatarUrl}
+          focusX={request.avatarFocusX ?? 0.5}
+          focusY={request.avatarFocusY ?? 0.5}
+          zoom={request.avatarZoom ?? 1}
+          alt=""
+          aria-hidden={true}
+          fallback={null}
+        />
+        <div className="community-context-request-copy">
+          <div className="community-context-request-title">
+            <strong>{name}</strong>
+            <span>{request.createdAtLabel}</span>
+          </div>
+          {request.message ? (
+            <div className="community-context-request-message">{request.message}</div>
+          ) : null}
+        </div>
+        <div className="community-context-request-actions">
+          <button
+            className="community-context-request-action"
+            type="button"
+            disabled={isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onApproveJoinRequest}
+            aria-busy={isDeciding || undefined}
+            aria-label={`Approve ${name}`}
+            title="Approve"
+            onClick={() => void props.onApproveJoinRequest?.(request.id)}
+          >
+            <Check size={15} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+          <button
+            className="community-context-request-action"
+            type="button"
+            disabled={isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onDenyJoinRequest}
+            aria-busy={isDeciding || undefined}
+            aria-label={`Deny ${name}`}
+            title="Deny"
+            onClick={() => void props.onDenyJoinRequest?.(request.id)}
+          >
+            <X size={15} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+  if (!props.canReviewJoinRequests || props.joinReviewMode !== "free_approval") return null;
+  return <>
+    {props.isLoadingJoinRequests && !pendingJoinRequests.length ? <div className="community-context-admission-status" role="status">Loading join requests…</div> : null}
+        {canShowJoinRequests ? (
+          <button
+            className={`community-context-request-divider${joinRequestsExpanded ? " is-open" : ""}`}
+            type="button"
+            aria-busy={props.isLoadingJoinRequests || undefined}
+            aria-controls={joinRequestPanelId}
+            aria-expanded={joinRequestsExpanded}
+            aria-label={requestDividerAriaLabel}
+            onClick={() => setJoinRequestsExpanded((expanded) => !expanded)}
+          >
+            <span>
+              {requestDividerLabel}
+              <ChevronDown size={13} strokeWidth={2.1} aria-hidden="true" />
+            </span>
+          </button>
+        ) : null}
+        {canShowJoinRequestLoadError ? (
+          <div className="community-context-admission-status" role="status">
+            {props.joinRequestsError}
+          </div>
+        ) : null}
+        {canShowJoinRequests && joinRequestsExpanded ? (
+          <div className="community-context-request-panel" id={joinRequestPanelId}>
+            {visiblePendingJoinRequests.map(renderJoinRequest)}
+            {props.joinRequestsError ? (
+              <div className="community-context-admission-status">{props.joinRequestsError}</div>
+            ) : null}
+          </div>
+        ) : null}
+  </>;
+}
+
+function isAdminRole(member: CommunityRailMember, ownerId?: string | null): boolean {
+  return (
+    member.user_id === ownerId
+    || member.role === "owner"
+    || member.role === "admin"
+    || member.role === "moderator"
+  );
+}
+
+
+// Canonical community member directory and manager controls.
+export function CommunityContextPanel(props: CommunityContextPanelProps) {
+  const members = props.members ?? [];
+  const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
+  const loadedMemberCount = members.length;
+  const lockedMembers = Boolean(props.lockedSections?.members);
+
+  const loadedSummary = knownMemberCount !== null
+    ? `Showing ${Math.min(loadedMemberCount, knownMemberCount)} of ${knownMemberCount}`
+    : props.membersHasMore
+      ? `Showing ${loadedMemberCount}+`
+      : `Showing ${loadedMemberCount}`;
+  const hasUnloadedKnownMembers =
+    knownMemberCount !== null && loadedMemberCount < knownMemberCount;
+  const shouldShowMembersFooter =
+    loadedMemberCount > 0 || props.membersHasMore || hasUnloadedKnownMembers;
+  const loadMoreRequestedRef = useRef(false);
+  const membersViewportRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const membersFooterLabel = props.membersHasMore
     ? props.isLoadingMoreMembers
       ? "Loading more..."
@@ -146,9 +242,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     props.membersLoadError,
   ]);
 
-  useEffect(() => {
-    if (!canShowJoinRequests) setJoinRequestsExpanded(false);
-  }, [canShowJoinRequests]);
 
   const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
     if (!props.membersHasMore) return;
@@ -193,7 +286,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     const frame = requestAnimationFrame(requestVisibleMemberPage);
     return () => cancelAnimationFrame(frame);
   }, [
-    joinRequestsExpanded,
     loadedMemberCount,
     props.isLoadingMembers,
     props.isLoadingMoreMembers,
@@ -299,59 +391,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     );
   };
 
-  const renderJoinRequest = (request: CommunityAdmissionJoinRequest) => {
-    const name = (request.displayName ?? "").trim() || props.displayName(request.userId);
-    const isDeciding = props.decidingJoinRequestId === request.id;
-    return (
-      <div key={request.id} className="community-context-request-row">
-        <UserAvatar
-          className="community-context-request-avatar"
-          readyClassName="has-image"
-          name={name}
-          imageUrl={request.avatarUrl}
-          focusX={request.avatarFocusX ?? 0.5}
-          focusY={request.avatarFocusY ?? 0.5}
-          zoom={request.avatarZoom ?? 1}
-          alt=""
-          aria-hidden={true}
-          fallback={null}
-        />
-        <div className="community-context-request-copy">
-          <div className="community-context-request-title">
-            <strong>{name}</strong>
-            <span>{request.createdAtLabel}</span>
-          </div>
-          {request.message ? (
-            <div className="community-context-request-message">{request.message}</div>
-          ) : null}
-        </div>
-        <div className="community-context-request-actions">
-          <button
-            className="community-context-request-action"
-            type="button"
-            disabled={isJoinRequestDecisionPending}
-            aria-busy={isDeciding || undefined}
-            aria-label={`Approve ${name}`}
-            title="Approve"
-            onClick={() => void props.onApproveJoinRequest?.(request.id)}
-          >
-            <Check size={15} strokeWidth={1.9} aria-hidden="true" />
-          </button>
-          <button
-            className="community-context-request-action"
-            type="button"
-            disabled={isJoinRequestDecisionPending}
-            aria-busy={isDeciding || undefined}
-            aria-label={`Deny ${name}`}
-            title="Deny"
-            onClick={() => void props.onDenyJoinRequest?.(request.id)}
-          >
-            <X size={15} strokeWidth={1.9} aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="community-context-rail">
@@ -361,35 +400,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         className="community-context-members"
         onScroll={handleMembersScroll}
       >
-        {canShowJoinRequests ? (
-          <button
-            className={`community-context-request-divider${joinRequestsExpanded ? " is-open" : ""}`}
-            type="button"
-            aria-busy={props.isLoadingJoinRequests || undefined}
-            aria-controls={joinRequestPanelId}
-            aria-expanded={joinRequestsExpanded}
-            aria-label={requestDividerAriaLabel}
-            onClick={() => setJoinRequestsExpanded((expanded) => !expanded)}
-          >
-            <span>
-              {requestDividerLabel}
-              <ChevronDown size={13} strokeWidth={2.1} aria-hidden="true" />
-            </span>
-          </button>
-        ) : null}
-        {canShowJoinRequestLoadError ? (
-          <div className="community-context-admission-status" role="status">
-            {props.joinRequestsError}
-          </div>
-        ) : null}
-        {canShowJoinRequests && joinRequestsExpanded ? (
-          <div className="community-context-request-panel" id={joinRequestPanelId}>
-            {visiblePendingJoinRequests.map(renderJoinRequest)}
-            {props.joinRequestsError ? (
-              <div className="community-context-admission-status">{props.joinRequestsError}</div>
-            ) : null}
-          </div>
-        ) : null}
+        <CommunityJoinRequestReview {...props} />
         {lockedMembers && (props.membersPreview?.length ?? 0) > 0 ? (
           <button
             type="button"

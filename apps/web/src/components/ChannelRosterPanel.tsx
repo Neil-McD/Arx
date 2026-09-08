@@ -1,6 +1,7 @@
 import { Fragment, useContext, useEffect, useState, type ComponentProps } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import { CommunityJoinRequestReview } from "./CommunityContextPanel";
 import { CommunityAutoJoinControl, type CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { ActorAvatar } from "./communityInteractionFeed";
 import type { FunctionReturnType } from "convex/server";
@@ -19,6 +20,7 @@ import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOv
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
 export function ChannelRosterPanel(props: {
+  joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
   admission?: CommunityAdmissionControl;
   communityName: string;
   presenceSummary?: CommunityPresenceSummary | null;
@@ -121,6 +123,7 @@ export function ChannelRosterPanel(props: {
             <CommunityAutoJoinControl admission={props.admission} />
           </div>
           {props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
+          {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;

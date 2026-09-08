@@ -1152,6 +1152,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         </ThreadSurface>
       ) : null}
       {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
+        joinReview={{
+          canReviewJoinRequests: props.canReviewCommunityJoinRequests,
+          joinReviewMode: props.communityJoinReviewMode,
+          pendingJoinRequests: props.communityJoinRequests,
+          isLoadingJoinRequests: props.isLoadingCommunityJoinRequests,
+          joinRequestsError: props.communityJoinRequestsError,
+          decidingJoinRequestId: props.decidingCommunityJoinRequestId,
+          onApproveJoinRequest: props.onApproveCommunityJoinRequest,
+          onDenyJoinRequest: props.onDenyCommunityJoinRequest,
+          displayName: props.displayName,
+        }}
         admission={props.admission}
         key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
         communityName={props.activeCommunityName} presenceSummary={props.presenceSummary} isLoadingPresence={props.isLoadingCommunityPresence}

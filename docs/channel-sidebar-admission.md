@@ -10,8 +10,15 @@ query, mutation, optimistic state, or channel access policy.
 - On selects community `open`; Off selects `approval`.
 - Enabling retains existing behavior, including approval of pending requests.
 - Private-channel visibility and membership remain unchanged.
-- The Members page remains available; removing it and moving approval review are
-  separate slices.
+- The Members page remains available; removing it is a separate slice.
+
+Pending join review uses one shared `CommunityJoinRequestReview` renderer on the
+Members page and channel sidebar. The existing lifecycle, community-scoped request
+list, reviewer permission, and approve/deny callbacks remain authoritative. Only
+free approval communities expose it; private-channel grants are unrelated. The
+list starts collapsed, retains the 200-row display cap, exposes loading/errors,
+and disables decisions while loading or deciding. No new polling or subscription
+is added; newly arriving requests retain the existing lifecycle refresh behavior.
 
 The compact switch markup and theme styles match the production sidebar control.
 Live verification must not toggle a real community simply to test presentation:
