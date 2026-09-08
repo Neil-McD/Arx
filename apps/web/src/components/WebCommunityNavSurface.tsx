@@ -1,6 +1,4 @@
 import { CommunityNav } from "../../../../shared/CommunityNav";
-import { Settings } from "lucide-react";
-import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAppRouteState";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
@@ -20,10 +18,6 @@ export function WebCommunityNavSurface({
 
   return (
     <CommunityNav
-      identityControl={!isMobileHome ? <WebCommunitySwitcher shell={communityShell} /> : undefined}
-      footerControl={!isMobileHome ? <button type="button" className="nav-item" onClick={communityShell.onOpenGlobalSettings}>
-        <span className="nav-icon"><Settings size={16} aria-hidden="true" /></span><span className="nav-item-label">Account settings</span>
-      </button> : undefined}
       memberNextStep={communityShell.memberNextStep}
       activeCommunity={communityShell.activeCommunity}
       hideIdentitySettings={isMobileHome}

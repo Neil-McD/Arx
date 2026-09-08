@@ -38,8 +38,6 @@ type CommunityNavChannel = {
 };
 
 type CommunityNavProps = {
-  identityControl?: ReactNode;
-  footerControl?: ReactNode;
   memberNextStep?: ReactNode;
   activeCommunity: CommunityNavCommunityLike;
   hideIdentity?: boolean;
@@ -164,8 +162,6 @@ function formatMemberCount(value: number | null | undefined): string | null {
 }
 
 export const CommunityNav = memo(function CommunityNav({
-  identityControl,
-  footerControl,
   activeCommunity,
   hideIdentity = false,
   hideIdentitySettings = false,
@@ -410,9 +406,9 @@ export const CommunityNav = memo(function CommunityNav({
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >
-          {identityControl ?? <span className="community-nav-identity-name" title={activeCommunityName}>
+          <span className="community-nav-identity-name" title={activeCommunityName}>
             {activeCommunityName}
-          </span>}
+          </span>
           {showSettingsButton ? (
             <button
               className={`community-nav-settings${showActiveSelection && communityTab === "settings" ? " active" : ""}`}
@@ -724,9 +720,8 @@ export const CommunityNav = memo(function CommunityNav({
             </span>
             <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite people"}</span>
           </button>
-          {footerControl}
         </div>
-      ) : footerControl ? <div className="community-nav-footer">{footerControl}</div> : null}
+      ) : null}
       {isAddChannelOpen ? (
         <div
           className="community-channel-modal-backdrop"

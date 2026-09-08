@@ -32,39 +32,8 @@ test("suppressed or unavailable Agent page keeps the primary content host visibl
 test("both conversation mounts and workspace containers use the scope/visibility boundary", () => {
   const source = readFileSync(new URL("../apps/web/src/components/WebAppCompositionRoot.tsx", import.meta.url), "utf8");
   expect(source.match(/key=\{agentSessionKey\}/g)).toHaveLength(2);
-  expect(source).toContain('display: showAgentWorkspace ? "none" : railEnabled ? undefined : "contents"');
-  expect(source).toContain('display: showAgentWorkspace || showSideAgent ? undefined : "none"');
-  expect(source).toContain('pageActive={showAgentWorkspace || showSideAgent}');
-});
-
-test("optional panes reuse the existing Agent and DM owners and retain permission gates", () => {
-  const read = (path: string) => readFileSync(new URL(`../apps/web/src/${path}`, import.meta.url), "utf8");
-  const composition = read("components/WebAppCompositionRoot.tsx");
-  expect(composition).toContain('!props.memberAgentDockProps.isSuppressed && Boolean(props.memberAgentDockProps.surfaceContext)');
-  expect(composition).toContain('sideAgent && !showAgentWorkspace && !props.directMessagesHostProps.isOpen');
-  expect(composition).toContain('embedded={railEnabled}');
-  expect(composition).toContain('directMessagesButton: null');
-  expect(composition).toContain('props.shellChromeHostProps.desktopHeader.directMessagesButton');
-  expect(composition).toContain('[agentSessionKey, railEnabled]');
-  const dm = read("components/WebDirectMessagesHost.tsx");
-  expect(dm).toContain('if (props.embedded) return;');
-  expect(dm).toContain('dialog[open]');
-  const css = read("index.css");
-  expect(css).toContain('@container workspace-panes (max-width: 680px)');
-  expect(css).toContain('@container primary-workspace (max-width: 740px)');
-  expect(css).toContain('.web-direct-messages-host.embedded .community-dm-panel');
-});
-
-test("all secondary panes share one minimize control and the canonical panel edge", () => {
-  const source = readFileSync(new URL("../apps/web/src/components/WebAppCompositionRoot.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../apps/web/src/index.css", import.meta.url), "utf8");
-  expect(source.match(/aria-label="Minimize side panel"/g)).toHaveLength(1);
-  expect(source).toContain('(showSideAgent || showSideMessages) && <button');
-  expect(source).toContain('onClick={minimizePanel}');
-  expect(source).not.toContain('workspace-secondary-close');
-  const paneRule = css.match(/\.community-workspace-panes > \.community-workspace-secondary \{([^}]+)\}/)?.[1];
-  expect(paneRule).toContain('border-left: 1px solid var(--stroke-panel-edge)');
-  expect(paneRule).not.toContain('--border-default');
+  expect(source).toContain('display: showAgentWorkspace ? "none" : "contents"');
+  expect(source).toContain('display: showAgentWorkspace ? undefined : "none"');
 });
 
 test("mobile Agent routing stays in the existing shell controller", () => {

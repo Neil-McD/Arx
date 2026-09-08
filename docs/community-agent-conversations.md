@@ -92,31 +92,6 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Acceptance
 
-### Optional desktop pane
-
-Desktop framing experiment: above 900px, the navigation, primary workspace and
-optional secondary pane use separate frames with the existing shell radius,
-stroke and 8px inset tokens. Compact layouts, controls, surfaces and state owners
-remain unchanged. This is a CSS-only visual experiment, not a new shell mode.
-The 44px right rail uses unboxed controls: a 26px DM icon aligned with the desktop
-channel header and a panel picker centered in the rail, with hover/focus feedback.
-On framed desktop panels, the shared minimize control straddles the
-top-right edge; compact panels retain an inset control to avoid toolbar overlap.
-
-- Community desktop shells place the existing DM toggle/unread badge and an add
-  panel button on an outer right rail. Mobile root navigation remains unchanged.
-- Add panel opens the existing community Agent beside the primary page. Agent
-  and DMs are mutually exclusive secondary panes; the Agent main route never
-  creates a second Agent instance. Community/member keys and access checks remain.
-- Closing a pane restores the main surface. A narrow content container displays
-  only the selected secondary pane until closed; no squeezed two-column layout.
-- Agent, DM inbox and DM conversations share one top-right minimize control.
-  Minimizing preserves their existing state and returns focus to the rail.
-  The secondary edge uses the canonical `--stroke-panel-edge` theme token.
-- Agent drafts and conversation state stay in the existing mounted component.
-  Embedded DMs no longer close when clicking in the primary page; Escape and the
-  existing close control remain available. No new messaging or runtime owner.
-
 Agent page layout uses a compact header and a shared 800px maximum conversation/
 composer column. Empty and ongoing conversations both retain the bottom composer,
 with slightly increased vertical padding. Pending proposals keep their normal
