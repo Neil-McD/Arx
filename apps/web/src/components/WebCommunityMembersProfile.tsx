@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
-import type { ProfileCommunityContext } from "../../../../shared/communityTypes";
+import { fetchCloudProfileCommunityContext, fetchCloudProfileDetailByUserId } from "../../../../shared/cloudProfilesGateway";
+import type { ProfileCommunityContext, UserProfile } from "../../../../shared/communityTypes";
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 
@@ -11,18 +11,19 @@ export function WebCommunityMembersProfile({ userId, chat, onBack }: {
 }) {
   const [context, setContext] = useState<ProfileCommunityContext | null>(null);
   const [error, setError] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   useEffect(() => {
     let cancelled = false;
     if (!chat.session) { setError(true); return; }
-    void fetchCloudProfileCommunityContext({
+    void Promise.all([fetchCloudProfileCommunityContext({
       session: chat.session,
       targetUserId: userId,
       preferredCommunityId: chat.activeCommunity?.id ?? null,
-    }).then(result => { if (!cancelled) setContext(result); })
+    }), fetchCloudProfileDetailByUserId({ session: chat.session, userId })])
+      .then(([result, detail]) => { if (!cancelled) { setContext(result); setProfile(detail); } })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [chat.session, chat.activeCommunity?.id, userId]);
-  const profile = chat.profilesByUserId[userId] ?? null;
   return <div className="community-members-profile">
     <button type="button" className="resources-back-btn" onClick={onBack}>← Members</button>
     {error ? <p role="alert">Unable to load this profile. Return to Members and try again.</p>

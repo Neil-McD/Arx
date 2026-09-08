@@ -2714,9 +2714,6 @@
   width: 43%;
 }
 
-.community-context-member.is-offline {
-  opacity: 0.5;
-}
 
 .community-context-member-avatar {
   position: relative;
@@ -2771,29 +2768,22 @@
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .community-context-member-activity {
   flex: 0 0 auto;
-  max-width: 0;
-  opacity: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--text-faint);
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
-  transition:
-    max-width 0.14s ease,
-    opacity 0.12s ease;
+  text-transform: capitalize;
 }
 
-.community-context-member:hover .community-context-member-activity,
-.community-context-member:focus-within .community-context-member-activity {
-  max-width: 128px;
-  opacity: 1;
-}
 
 .community-context-member-name.is-admin {
   color: var(--accent-gold);
@@ -2816,11 +2806,6 @@
   cursor: pointer;
 }
 
-/* Hover lights the person up: the dimmed (offline) row returns to full, the name
-   brightens, and the name underlines — so the one you're pointing at stands out. */
-.community-context-member.is-offline:hover {
-  opacity: 1;
-}
 
 .community-context-member-name:hover {
   color: var(--text-primary);
@@ -2833,8 +2818,8 @@
 }
 
 .community-context-member-action {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border: none;
   border-radius: 50%;
@@ -2843,7 +2828,7 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  opacity: 0;
+  opacity: 1;
   transition:
     background 0.12s ease,
     color 0.12s ease,
@@ -2914,6 +2899,19 @@
 
 .community-members-profile { width: min(100%, 640px); min-width: 0; padding: 24px; overflow-y: auto; }
 .community-members-profile .community-profile-panel { width: 100%; }
+
+.community-members-directory { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.community-members-directory[hidden] { display: none; }
+.community-members-directory-header { padding: 24px 24px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+.community-members-directory-header h1 { margin: 0; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); }
+.community-members-directory-header h1 span { margin-left: 8px; font-weight: 400; }
+.community-members-directory-header input { margin-left: auto; width: min(100%, 280px); min-height: 40px; }
+.community-members-directory .community-members-page-panel { display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; border-left: 0; background: transparent; }
+.community-members-directory .community-context-members { padding: 8px 24px 24px; }
+.community-members-directory .community-context-member { min-height: 64px; }
+.community-context-member-manage { width: auto; padding: 0 10px; font: inherit; font-size: 12px; border-radius: 8px; }
+.community-members-search-status { padding: 12px 24px; display: flex; align-items: center; gap: 12px; color: var(--text-muted); font-size: 13px; }
+.community-members-directory button:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 2px; }
 
 .app-root.mobile-shell .community-members-page .community-members-page-panel {
   display: flex;

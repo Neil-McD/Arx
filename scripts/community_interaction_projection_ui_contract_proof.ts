@@ -398,8 +398,8 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /Members — \{memberCountLabel\}/,
-  "context panel should label the member population from a total-count label",
+  /const knownMemberCount = typeof props.memberCount/,
+  "directory pagination should retain the authoritative member count",
 );
 assert.match(
   projection,
@@ -411,11 +411,7 @@ assert.match(
   /export const CommunityNav = memo\(function CommunityNav/,
   "left navigation should not rerender for unrelated shell content updates",
 );
-assert.match(
-  contextPanel,
-  /Offline — \{offlineCountLabel\}/,
-  "context panel should label offline members from the total-count model",
-);
+assert.match(contextPanel, /members.map\(member => renderMember/, "directory should render a single list independent of presence");
 assert.doesNotMatch(
   contextPanel,
   /Offline — \{offlineMembers\.length\}/,
@@ -473,13 +469,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /className="community-context-member-action"[\s\S]*aria-label=\{`Open settings for \$\{name\}`\}[\s\S]*props\.onOpenMemberSettings\?\.\(member\)/,
+  /className="community-context-member-action community-context-member-manage"[\s\S]*aria-label=\{`Manage \$\{name\}`\}[\s\S]*props\.onOpenMemberSettings\?\.\(member\)/,
   "context panel should open the supplied settings callback from the stable row action button",
 );
 assert.match(
   baseCss,
-  /\.community-context-member-action\s*\{[\s\S]*width:\s*26px;[\s\S]*height:\s*26px;[\s\S]*opacity:\s*0;/,
-  "member rail settings action should reserve a stable icon footprint without always showing management chrome",
+  /\.community-context-member-action\s*\{[\s\S]*width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*opacity:\s*1;/,
+  "directory actions should be visible without hover",
 );
 assert.match(
   baseCss,
@@ -814,7 +810,7 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /\.community-context-member:hover \.community-context-member-activity,[\s\S]*\.community-context-member:focus-within \.community-context-member-activity/,
+  /\.community-context-member-activity\s*\{[\s\S]*max-width: 100%/,
   "member activity labels should reveal on hover and keyboard focus",
 );
 
