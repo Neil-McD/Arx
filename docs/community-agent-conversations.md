@@ -92,6 +92,11 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Acceptance
 
+Recovered resource proposals use pending-only presentation: a server-confirmed
+applied or rejected proposal disappears from the active recovery area. Historical
+runtime cards retain their result; database receipts are unchanged. Pending,
+unverified and failed proposals are not silently dismissed.
+
 ### Slice 4 follow-up: isolation and visibility fixes
 
 - Conversation components are keyed by member and community, not navigation tab.

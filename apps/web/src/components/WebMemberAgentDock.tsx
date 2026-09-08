@@ -1207,6 +1207,7 @@ function WebMemberAgentDock(props, ref) {
             <RuntimeResourceChangesetApprovalCards
               cards={persistentResourceChangesetCards}
               session={props.session}
+              pendingOnly
             />
           ) : null}
 
