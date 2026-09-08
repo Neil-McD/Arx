@@ -83,6 +83,7 @@ export function renderCommunityMemberSuccessDossierMarkdown(
     lines.push("", "_No workflow actions yet._");
   } else {
     for (const activity of source.recent_workflow_activity) {
+      if (activity.failure_reason) lines.push(`- ${activity.occurred_at}: ${markdownInline(activity.failure_reason)}`);
       if (activity.action_type === "request_form") { lines.push(`- ${activity.occurred_at}: Form request ${activity.status}.`); continue; }
       if (activity.action_type === "evaluate_goal") {
         lines.push(`- Evaluated milestone: ${markdownInline(activity.milestone_name)}; captured goal: ${markdownInline(activity.assessment?.goal ?? "unavailable")}. Historical assessment, not current-goal proof.`);

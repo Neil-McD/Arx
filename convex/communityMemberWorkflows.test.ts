@@ -57,6 +57,24 @@ test.each(["queued", "running", "responded", "error", "skipped"] as const)("acti
   expect(JSON.stringify(views.self)).not.toContain("PRIVATE_BUILDER_PROMPT");
 });
 
+test.each(["channel_access_missing", "workflow_member_context_changed", "PRIVATE_UNKNOWN_ERROR"])("activity explains recorded failure: %s", async errorCode => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "prompt_agent", prompt: "Help" });
+  const rootId = await addRoot(t, f, "explanation");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.run(async ctx => {
+    const request = (await ctx.db.query("communityAgentServeRequests").first())!;
+    await ctx.db.patch(request._id, { status: "error", errorCode });
+  });
+  const { builder } = await readActivityViews(t, f);
+  const activity = builder.recent_workflow_activity[0];
+  expect(activity.failure_reason).toBeTruthy();
+  expect(builder.markdown).toContain(activity.failure_reason);
+  expect(activity.status).toBe(errorCode === "workflow_member_context_changed" ? "not_applicable" : "failed");
+  expect(JSON.stringify(builder)).not.toContain("PRIVATE_UNKNOWN_ERROR");
+});
+
 test.each(["missing", "wrong_community", "wrong_requester", "wrong_run", "wrong_action", "wrong_prompt", "wrong_source", "wrong_kind", "wrong_result", "failed_run"] as const)("unverifiable agent activity does not masquerade as queued: %s", async (failure) => {
   const t = convexTest(schema, modules);
   const f = await fixture(t);

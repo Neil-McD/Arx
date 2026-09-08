@@ -1,6 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
+import { workflowActivityExplanation } from "../shared/workflowActivityExplanation";
 import { currentWorkflowRequirementEvidence } from "../shared/communityMemberWorkflow";
 import type { QueryCtx } from "./_generated/server";
 import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
@@ -247,10 +248,8 @@ async function readMembershipContextRecords(args: {
         const request = run.actionResult?.formRequestId ? await args.ctx.db.get(run.actionResult.formRequestId) : null;
         const valid = validActionResult && request?.communityId === run.communityId && request?.membershipId === run.membershipId
           && request?.workflowId === run.workflowId && request?.automationKey === run.automationKey && request?.milestoneEnteredAt === run.milestoneEnteredAt;
-        const capacityFailed = run.status === "failed" && run.actionResult?.status === "failed"
-          && run.actionResult.actionKey === run.actionSnapshot.key && run.errorCode === "form_pending_limit_reached";
-        return { id: String(run._id), action_type: "request_form" as const, status: capacityFailed ? "failed" as const : valid ? "requested" as const : "unavailable" as const,
-          ...(capacityFailed ? { failure_reason: "The member already has 12 pending forms in this milestone. No new form was requested." } : {}),
+        return { id: String(run._id), action_type: "request_form" as const, status: run.status === "failed" ? "failed" as const : valid ? "requested" as const : "unavailable" as const,
+          ...workflowActivityExplanation(run.status === "failed" ? "failed" : valid ? "requested" : "unavailable", run.errorCode),
           milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
       }
       if (run.actionSnapshot.type === "evaluate_goal") {
@@ -261,6 +260,7 @@ async function readMembershipContextRecords(args: {
           ? await args.ctx.db.query("communityAgentRunEvents").withIndex("by_run_seq", q => q.eq("runId", buildCommunityAgentServeRunId(request._id, request.attempt)).eq("seq", 0)).first() : null;
         return { id: String(run._id), action_type: "evaluate_goal" as const,
           status: run.status === "failed" || (valid && ["error", "skipped"].includes(request.status)) ? "failed" as const : valid ? request.status as "queued" | "running" | "responded" : "unavailable" as const,
+          ...workflowActivityExplanation(run.status === "failed" || (valid && ["error", "skipped"].includes(request.status)) ? "failed" : valid ? request.status : "unavailable", valid ? request.errorCode ?? request.intakeReason : run.errorCode),
           ...(args.view !== "self" && valid && request.status === "responded" && run.goalAssessment ? { assessment: { ...run.goalAssessment,
             goal: run.milestoneContextSnapshot?.goal,
             citations: readAssessmentCitations(snapshot?.kind === "context_snapshot" ? snapshot.content : undefined, run.goalAssessment.evidenceRefs),
@@ -274,6 +274,7 @@ async function readMembershipContextRecords(args: {
           && (await resolveMemberServiceChannel({ ctx: args.ctx, membership })).status === "available";
         return { id: String(run._id), action_type: "create_service_channel" as const,
           status: run.status === "failed" ? "failed" as const : valid ? "channel_ready" as const : "unavailable" as const,
+          ...workflowActivityExplanation(run.status === "failed" ? "failed" : valid ? "channel_ready" : "unavailable", run.errorCode),
           milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null,
           next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
       }
@@ -325,9 +326,9 @@ async function readMembershipContextRecords(args: {
           id: String(run._id),
           action_type: "prompt_agent" as const,
           status,
+          ...workflowActivityExplanation(status, validRequest ? serveRequest.errorCode ?? serveRequest.intakeReason : run.errorCode),
           ...(run.triggerType === "milestone_elapsed" ? {
             delivery_channel_url: deliveryChannelUrl,
-            failure_reason: status === "failed" ? "Not delivered. The destination, workflow, access, or agent execution was unavailable. Check the service channel and rule before a future entry." : null,
           } : {}),
           milestone_key: run.milestoneKey,
           milestone_name: run.milestoneName,

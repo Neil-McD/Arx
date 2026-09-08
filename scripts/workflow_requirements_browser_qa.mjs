@@ -10,10 +10,16 @@ const {createServer}=await import(webRequire.resolve('vite'));
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
 import {WebCommunityWorkflowMilestoneModal} from '/src/components/WebCommunityWorkflowMilestoneModal.tsx';
 import {WebCommunityFormResponses} from '/src/components/WebCommunityFormResponses.tsx';
+import {WebCommunityWorkflowMemberDossierModal} from '/src/components/WebCommunityWorkflowMemberDossierModal.tsx';
+import {workflowActivityExplanation} from '/@fs/${root}/shared/workflowActivityExplanation.ts';
 import '/src/index.css';import '/src/components/WebCommunityWorkflowsSection.css';window.React=React;
 window.qa={saved:null};
 const root=createRoot(document.getElementById('root'));
 window.qa.responses=page=>root.render(<WebCommunityFormResponses gateway={{responses:async()=>page}} membershipId='qa'/>);
+window.qa.activity=()=>root.render(<WebCommunityWorkflowMemberDossierModal isOpen={true} isLoading={false} error={null}
+ dossier={{membership_id:'qa',display_name:'Example member',avatar_url:null,workflow:null,service_channel:{status:'unassigned',revision:0,channel_id:null,name:null},approved_community_context:[],milestone_history:[],recent_workflow_activity:
+ ['channel_access_missing','workflow_member_context_changed','unknown'].map((code,i)=>({id:String(i),action_type:'prompt_agent',status:'failed',...workflowActivityExplanation('failed',code),milestone_name:'New',occurred_at:new Date().toISOString()})).concat([{id:'running',action_type:'prompt_agent',status:'running',milestone_name:'New',occurred_at:new Date().toISOString()}])}}
+ channels={[]} channelsUnavailable={false} isServiceChannelSaving={false} serviceChannelError={null} onClose={()=>{}} onRetry={()=>{}} onSetServiceChannel={async()=>true} onForceMove={async()=>{}} onOpenServiceChannel={()=>{}}/>);
 root.render(<WebCommunityWorkflowMilestoneModal isOpen={true}
  milestone={{key:'milestone',name:'Getting started',automations:[]}} milestoneNumber={1} nextMilestoneName='Ready'
  forms={[{key:'intake',name:'Intake'}]} formsStatus='ready' channels={[]} channelsUnavailable={false}
@@ -66,5 +72,16 @@ try{
    await page.screenshot({path:resolve(output,`responses-${state.rows.length}-${state.truncated}-${state.unavailable_records}-${theme}.png`)});
   }
  }
- assert.deepEqual(errors,[]);console.log('PASS: requirements, assessment overlap warning, complete/empty/truncated/unavailable form history, desktop/mobile themes.');
+ await page.evaluate(()=>window.qa.activity());
+ await page.getByText('Community agent · No longer applicable',{exact:true}).waitFor();
+ await page.getByText('Community agent · Running',{exact:true}).waitFor();
+ await page.getByText('Channel access was unavailable during execution.',{exact:false}).waitFor();
+ assert.equal(await page.getByRole('button',{name:/retry|replay/i}).count(),0);
+ for(const width of [1100,390]){await page.setViewportSize({width,height:850});for(const theme of ['dark','light']){
+  await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+  await page.getByText('Community agent · No longer applicable',{exact:true}).scrollIntoViewIfNeeded();
+  const dialog=await page.getByRole('dialog').boundingBox();assert.ok(dialog.x>=0&&dialog.x+dialog.width<=width+1);
+  await page.screenshot({path:resolve(output,'activity-'+width+'-'+theme+'.png'),animations:'disabled'});
+ }}
+ assert.deepEqual(errors,[]);console.log('PASS: requirements, assessment overlap, form history, activity explanations without retries, desktop/mobile themes.');
 }finally{await browser?.close();await server.close();}

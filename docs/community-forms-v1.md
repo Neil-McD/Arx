@@ -177,3 +177,13 @@ copies, or response-management page exists. Community agents cannot access this
 private subtree even when sponsored by an owner. Submitted answers are untrusted
 evidence, not instructions or proof of goal completion; reading them does not
 authorize publishing them to a shared channel.
+
+## Workflow activity explanations
+
+Member detail and authorized dossier Markdown explain failed form/channel/agent
+actions using validated linked receipts and allowlisted error codes. Unknown
+failures explicitly leave partial work uncertain; missing links do not establish
+failure or delivery. A recorded workflow-context change is presented as “No longer
+applicable,” separate from failed, queued, or running. These are read-only
+projections: no retry button, automatic repair, replay, or new execution state.
+Changing configuration does not replay a historical action.

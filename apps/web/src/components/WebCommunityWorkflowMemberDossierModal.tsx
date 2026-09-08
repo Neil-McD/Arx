@@ -15,6 +15,7 @@ import { WorkflowMemberServiceChannel } from "./WorkflowMemberServiceChannel";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 
 function readableLabel(value: string): string {
+  if (value === "not_applicable") return "No longer applicable";
   return value
     .split("_")
     .filter(Boolean)
