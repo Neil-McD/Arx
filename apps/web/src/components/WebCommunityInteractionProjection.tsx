@@ -43,6 +43,7 @@ import type {
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { ChannelRosterPanel } from "./ChannelRosterPanel";
+import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import {
   MOBILE_READING_MODE_POLICY,
   advanceMobileReadingMode,
@@ -54,6 +55,7 @@ import {
 } from "./mobileReadingModePolicy";
 
 export type WebCommunityInteractionProjectionProps = {
+  admission?: CommunityAdmissionControl;
   activeCommunityName: string;
   activeChannel?: WebCommunityChannelHeaderChannel | null;
   canManageActiveChannel?: boolean;
@@ -1150,6 +1152,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         </ThreadSurface>
       ) : null}
       {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
+        admission={props.admission}
         key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
         communityName={props.activeCommunityName} presenceSummary={props.presenceSummary} isLoadingPresence={props.isLoadingCommunityPresence}
         currentUserId={props.currentUserId} onMessageUser={props.onMessageUser}

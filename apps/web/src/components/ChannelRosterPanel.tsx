@@ -1,6 +1,7 @@
 import { Fragment, useContext, useEffect, useState, type ComponentProps } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import { CommunityAutoJoinControl, type CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { ActorAvatar } from "./communityInteractionFeed";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -18,6 +19,7 @@ import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOv
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
 export function ChannelRosterPanel(props: {
+  admission?: CommunityAdmissionControl;
   communityName: string;
   presenceSummary?: CommunityPresenceSummary | null;
   isLoadingPresence?: boolean;
@@ -114,7 +116,11 @@ export function ChannelRosterPanel(props: {
               <span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span>
             </div>)}
           </div> : <p className="community-context-members-status">No agents in this channel.</p>}
-          <h3 className="community-context-section">People{complete ? ` — ${members.length}` : ""}</h3>
+          <div className="community-context-members-total">
+            <h3 className="community-context-section">People{complete ? ` — ${members.length}` : ""}</h3>
+            <CommunityAutoJoinControl admission={props.admission} />
+          </div>
+          {props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;

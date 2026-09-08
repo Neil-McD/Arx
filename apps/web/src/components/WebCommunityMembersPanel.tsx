@@ -6,16 +6,11 @@ import { WebPlatformRadioGroup } from "./WebPlatformChoiceControls";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { WebCommunityMembersProfile } from "./WebCommunityMembersProfile";
 import { CommunityInteractionContextPanelSurface } from "./WebCommunityInteractionProjection";
+import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 
 type WebCommunityMembersPanelProps = {
   chatPanelProps: WebCommunityChatPanelProps;
-  admission?: {
-    mode: "open" | "approval" | null;
-    canManage: boolean;
-    pending: boolean;
-    error: string | null;
-    onChange: (mode: "open" | "approval") => Promise<void> | void;
-  };
+  admission?: CommunityAdmissionControl;
 };
 
 export function WebCommunityMembersPanel({

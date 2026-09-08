@@ -19,7 +19,8 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
       {activeView === "community_members" ? (
         <WebCommunityMembersPanel key={`${chatPanelProps.sessionUserId}:${chatPanelProps.activeCommunity?.id}`} chatPanelProps={chatPanelProps} admission={props.admission} />
       ) : communityTab === "chat" ? (
-        <WebCommunityChatPanel {...chatPanelProps} />
+        <WebCommunityChatPanel {...chatPanelProps} interactionProjection={chatPanelProps.interactionProjection
+          ? { ...chatPanelProps.interactionProjection, admission: props.admission } : undefined} />
       ) : (
         <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
       )}
