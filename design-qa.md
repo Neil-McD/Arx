@@ -1,3 +1,13 @@
+# Members list refinement — 2026-09-08
+
+- Source: supplied Screenshot 2026-09-08 at 12.32.59 PM (Skool member list), with explicit user exclusions: activity timestamps, duplicate Invite, unsupported profile/billing fields. This is a directional adaptation, not a pixel clone.
+- Implementation: staging build `038765fe916e9a94d7246bf99b3a65dd6ad8f84d`, `/c/concierge-welcome-canary-2026-08-20-b/members`; browser screenshots captured inline in this task at desktop 1079x706 and mobile 390x844 CSS pixels.
+- Comparison: reference uses full-width stacked people rows with dividers; implementation now follows that structure using Polynet typography, theme tokens and canonical 40px avatars. Source desktop screenshot includes browser/OS chrome and different member content; no pixel-fidelity claim.
+- Removed oversized card grid, activity labels/helper/styles, header Invite and its state/prop/helper export. No invented bio, billing, renewal or acquisition information.
+- Verified desktop and narrow member layouts, profile open/Back, and absence of manager controls for ordinary members. No clipping or actionable visual defects observed. Full release gate: 1,229 tests passed.
+- Remaining coverage: light-theme visual pass not repeated in this slice; shared theme tokens retained. Member handles/bios require authorized directory data and remain in profiles for now.
+- final result: passed
+
 # Workflows compact utility header design QA
 
 ## Evidence
