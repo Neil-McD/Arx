@@ -16,3 +16,18 @@ query, mutation, optimistic state, or channel access policy.
 The compact switch markup and theme styles match the production sidebar control.
 Live verification must not toggle a real community simply to test presentation:
 that could admit pending members. Test transition delegation locally instead.
+
+## Roster ordering
+
+`listChannelRoster` reads the canonical community-presence recency index newest
+first, then pages memberships that have no presence row. The owner follows the
+same recency rule and is included once in the unknown-presence pass if needed.
+Native index pagination breaks timestamp ties; no copied activity state or new
+index is introduced. Each request performs one bounded pagination query.
+
+The versioned cursor binds phase and position to the community and channel.
+Every candidate still passes current community and channel authorization.
+Filtered/empty pages may require Load more; no request scans until it fills a page.
+The existing reactive page subscriber invalidates descendant pages when an
+ancestor changes, while the UI deduplicates public user IDs. Presence leases still
+determine Online/Offline; ordering within those groups follows last-seen recency.

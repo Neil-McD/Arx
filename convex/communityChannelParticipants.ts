@@ -22,37 +22,64 @@ export const listChannelRoster = query({
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     const channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canRead" });
     const community = (await ctx.db.get(args.communityId))!;
-    const prefix = `channel-roster-v1:${args.communityId}:${args.channelId ?? "general"}:`;
+    const prefix = `channel-roster-v2:${args.communityId}:${args.channelId ?? "general"}:`;
     const supplied = args.paginationOpts.cursor;
     if (supplied !== null && !supplied.startsWith(prefix)) throw new Error("community_channel_roster_cursor_invalid");
-    const cursor = supplied === null ? null : supplied.slice(prefix.length);
+    let phase: "presence" | "members" = "presence";
+    let cursor: string | null = null;
+    if (supplied !== null) {
+      try {
+        const state = JSON.parse(supplied.slice(prefix.length));
+        if ((state.phase !== "presence" && state.phase !== "members") || (state.cursor !== null && typeof state.cursor !== "string")) throw new Error();
+        phase = state.phase; cursor = state.cursor;
+      } catch { throw new Error("community_channel_roster_cursor_invalid"); }
+    } else if (!(await ctx.db.query("communityPresence")
+      .withIndex("by_community_lastSeenAt", q => q.eq("communityId", args.communityId)).first())) {
+      // Empty communities need no empty presence page before their membership list.
+      phase = "members";
+    }
     const size = Math.min(50, Math.max(2, Math.floor(args.paginationOpts.numItems)));
-    const result = await ctx.db.query("communityMemberships")
-      .withIndex("by_community_createdAt", q => q.eq("communityId", args.communityId))
-      .order("asc").paginate({ cursor, numItems: cursor === null ? size - 1 : size, maximumRowsRead: size * 3 });
     const page: Array<{ user_id: string; role: string; membership_id?: string; membership_created_at?: string;
       profile: Awaited<ReturnType<typeof resolveUserProfileDisplayProjection>>; last_seen_at: number | null; active_until: number | null }> = [];
     const seen = new Set<string>();
-    const append = async (candidateId: typeof userId, expectedMembershipId?: string) => {
+    const append = async (candidateId: typeof userId, expectedMembershipId?: string, expectedPresenceId?: string) => {
       if (seen.has(String(candidateId))) return;
       const authorization = await resolveCommunityPresenceAuthorization({ ctx, community, userId: candidateId });
       if (!authorization.authorized || (expectedMembershipId && String(authorization.membership?._id) !== expectedMembershipId)) return;
       const candidate = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: candidateId });
       if (!(await getCommunityChannelCapabilities({ ctx, channel, actor: candidate })).canRead) return;
-      seen.add(String(candidateId));
       const presence = await ctx.db.query("communityPresence")
         .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", candidateId)).first();
+      if (phase === "members" ? Boolean(presence) : String(presence?._id) !== expectedPresenceId) return;
+      seen.add(String(candidateId));
       page.push({ user_id: (await resolvePublicUserId(ctx, candidateId)) ?? String(candidateId), role: candidateId === community.ownerId ? "owner" : authorization.membership!.role,
         ...(actor.isManager && candidateId !== community.ownerId && authorization.membership ? { membership_id: String(authorization.membership._id), membership_created_at: new Date(authorization.membership.createdAt).toISOString() } : {}),
         profile: await resolveUserProfileDisplayProjection(ctx, candidateId), last_seen_at: presence?.lastSeenAt ?? null, active_until: presence?.activeUntil ?? null });
     };
-    if (cursor === null) await append(community.ownerId);
-    for (const member of result.page) {
-      if (member.userId !== community.ownerId && communityMembershipRowIsActive(member)) await append(member.userId, String(member._id));
+    let isDone: boolean;
+    let continueCursor: string | null;
+    if (phase === "presence") {
+      const result = await ctx.db.query("communityPresence")
+        .withIndex("by_community_lastSeenAt", q => q.eq("communityId", args.communityId))
+        .order("desc").paginate({ cursor, numItems: size, maximumRowsRead: size * 3 });
+      for (const presence of result.page) await append(presence.userId, undefined, String(presence._id));
+      isDone = false;
+      continueCursor = prefix + JSON.stringify(result.isDone
+        ? { phase: "members", cursor: null } : { phase, cursor: result.continueCursor });
+    } else {
+      const result = await ctx.db.query("communityMemberships")
+        .withIndex("by_community_createdAt", q => q.eq("communityId", args.communityId))
+        .order("asc").paginate({ cursor, numItems: cursor === null ? size - 1 : size, maximumRowsRead: size * 3 });
+      if (cursor === null) await append(community.ownerId);
+      for (const member of result.page) {
+        if (member.userId !== community.ownerId && communityMembershipRowIsActive(member)) await append(member.userId, String(member._id));
+      }
+      isDone = result.isDone;
+      continueCursor = result.isDone ? null : prefix + JSON.stringify({ phase, cursor: result.continueCursor });
     }
     const agent = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId, kind: "community_agent" });
     const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor: agent });
-    return { page, isDone: result.isDone, continueCursor: result.isDone ? null : prefix + result.continueCursor,
+    return { page, isDone, continueCursor,
       agents: capabilities.canRead ? [{ key: "community_agent" as const, capabilities }] : [] };
   },
 });

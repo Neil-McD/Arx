@@ -15,12 +15,83 @@ test("implicit General works without a stored channel and returns canonical pres
   await t.run(ctx => ctx.db.insert("communityPresence", { communityId: f.communityId, userId: f.memberId,
     lastSeenAt: now, activeUntil: now + 90000, createdAt: now, updatedAt: now }));
   const result: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 50, cursor: null } });
-  expect(result.page.map((row: any) => row.user_id)).toEqual(["owner", "member"]);
-  expect(result.page[1]).toMatchObject({ last_seen_at: now, active_until: now + 90000 });
-  expect(result.page[1].membership_id).toBe(String(f.membershipId));
-  expect(result.page[1].membership_created_at).toBe(new Date(1).toISOString());
-  expect(result.page[0]).not.toHaveProperty("membership_id");
+  expect(result.page.map((row: any) => row.user_id)).toEqual(["member"]);
+  expect(result.page[0]).toMatchObject({ last_seen_at: now, active_until: now + 90000 });
+  expect(result.page[0].membership_id).toBe(String(f.membershipId));
+  expect(result.page[0].membership_created_at).toBe(new Date(1).toISOString());
+  const rest: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 50, cursor: result.continueCursor } });
+  expect(rest.page.map((row: any) => row.user_id)).toEqual(["owner"]);
+  expect(rest.page[0]).not.toHaveProperty("membership_id");
   expect(result.agents).toHaveLength(1);
+});
+
+test("roster pages newest activity first, includes unknowns last, and reorders after activity changes", async () => {
+  const { t, f, owner } = await fixture();
+  const ids = await t.run(async ctx => {
+    const ids = [];
+    for (const [userId, lastSeenAt] of [[f.ownerId, 10], [f.memberId, 30]] as const) {
+      ids.push(await ctx.db.insert("communityPresence", { communityId: f.communityId, userId, lastSeenAt, createdAt: 1, updatedAt: 1 }));
+    }
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.outsiderId, role: "member", active: true, createdAt: 2, updatedAt: 2 });
+    return ids;
+  });
+  const readAll = async () => {
+    const rows: any[] = [];
+    let cursor = null;
+    for (let i = 0; i < 10; i++) {
+      const result: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 2, cursor } });
+      rows.push(...result.page);
+      if (result.isDone) return rows;
+      expect(result.continueCursor).not.toBe(cursor);
+      cursor = result.continueCursor;
+    }
+    throw new Error("roster failed to terminate");
+  };
+  expect((await readAll()).map(r => r.user_id)).toEqual(["member", "owner", "outsider"]);
+  await t.run(ctx => ctx.db.patch(ids[0], { lastSeenAt: 40 }));
+  expect((await readAll()).map(r => r.user_id)).toEqual(["owner", "member", "outsider"]);
+  await t.run(ctx => ctx.db.patch(ids[1], { lastSeenAt: 40 }));
+  const tied = await readAll();
+  expect(tied.map(r => r.user_id)).toEqual((await readAll()).map(r => r.user_id));
+  expect(new Set(tied.map(r => r.user_id)).size).toBe(3);
+  await t.run(ctx => ctx.db.patch(f.membershipId, { active: false }));
+  expect((await readAll()).map(r => r.user_id)).toEqual(["owner", "outsider"]);
+});
+
+test("equal timestamps cross page boundaries without lost people", async () => {
+  const { t, f, owner } = await fixture();
+  await t.run(async ctx => {
+    for (let i = 0; i < 6; i++) {
+      const userId = await ctx.db.insert("users", { authSubject: `recent-${i}`, displayName: `recent-${i}`, createdAt: 1, updatedAt: 1 });
+      await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", active: true, createdAt: i + 2, updatedAt: 1 });
+      await ctx.db.insert("communityPresence", { communityId: f.communityId, userId, lastSeenAt: 100, createdAt: 1, updatedAt: 1 });
+    }
+  });
+  const rows: any[] = [];
+  let cursor = null;
+  let done = false;
+  for (let i = 0; i < 15 && !done; i++) {
+    const result: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 2, cursor } });
+    expect(result.page.length).toBeLessThanOrEqual(2);
+    rows.push(...result.page); cursor = result.continueCursor; done = result.isDone;
+  }
+  expect(done).toBe(true);
+  expect(rows).toHaveLength(8);
+  expect(new Set(rows.map(r => r.user_id)).size).toBe(8);
+  expect(rows.slice(0, 6).every(r => r.last_seen_at === 100)).toBe(true);
+  expect(rows.slice(6).map(r => r.user_id)).toEqual(["owner", "member"]);
+});
+
+test("recent presence cannot bypass private-channel grants or duplicate canonical people", async () => {
+  const { t, f, owner } = await fixture();
+  await t.run(async ctx => {
+    for (const userId of [f.memberId, f.outsiderId, f.ownerId, f.ownerId]) {
+      await ctx.db.insert("communityPresence", { communityId: f.communityId, userId, lastSeenAt: 100, createdAt: 1, updatedAt: 1 });
+    }
+  });
+  const result: any = await owner.query(roster, { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 50, cursor: null } });
+  expect(result.page.map((r: any) => r.user_id)).toEqual(["owner"]);
+  await expect(owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 50, cursor: result.continueCursor } })).rejects.toThrow("community_channel_roster_cursor_invalid");
 });
 
 test("channel roster is viewer-authorized without weakening the grant editor", async () => {
