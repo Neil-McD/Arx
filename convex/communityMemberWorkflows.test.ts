@@ -1083,6 +1083,25 @@ test("legacy overflow pages and cleans only the departed visit without blocking 
   } finally { vi.useRealTimers(); }
 });
 
+test("form pages rebind to the current visit before interpreting any old cursor", async () => {
+  const { f, member, request } = await formFlowFixture();
+  const read = (visit: string | null, cursor: string | null = null) => member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId, paged: true, visit, cursor });
+  const first = await read(null);
+  if (Array.isArray(first)) throw new Error("Expected page");
+  expect(first.rows).toEqual([]);
+  expect(first.visit).toBeTruthy();
+  const bound = await read(first.visit);
+  if (Array.isArray(bound)) throw new Error("Expected page");
+  expect(bound.rows.map(r => r.id)).toEqual([request._id]);
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: request._id, expectedRevision: 0, answers: { q: "Done" }, submit: true });
+  const changed = await read(first.visit, "not-a-current-cursor");
+  if (Array.isArray(changed)) throw new Error("Expected page");
+  expect(changed.visit).not.toBe(first.visit);
+  expect(changed.rows).toEqual([]);
+  expect(changed.nextCursor).toBeNull();
+  await expect(read(changed.visit)).resolves.toMatchObject({ rows: [] });
+});
+
 test("forms: repeated contributions reuse a request; submission moves exactly once without an agent", async () => {
   const { t, f, member, request, rootId } = await formFlowFixture();
   await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });

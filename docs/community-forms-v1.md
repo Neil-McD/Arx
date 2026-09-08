@@ -187,3 +187,12 @@ failure or delivery. A recorded workflow-context change is presented as “No lo
 applicable,” separate from failed, queued, or running. These are read-only
 projections: no retry button, automatic repair, replay, or new execution state.
 Changing configuration does not replay a historical action.
+
+### Live form pagination across milestones
+
+New clients discover the current visit, then bind each paginated subscription to
+that visit token. When the visit changes, the server returns the new token without
+executing the old paginated query; the client clears old pages and subscribes with
+a fresh cursor. This also fences Convex's reactive pagination journal when the
+first-page cursor is null. A token is not authority: membership and current visit
+are still derived server-side. Historical clients retain the existing ABI.

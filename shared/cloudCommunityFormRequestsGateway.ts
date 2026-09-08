@@ -12,16 +12,24 @@ export function subscribeMemberForms<S>(session: S, communityId: string, ensureS
   const pages: Array<{ value?: Page; stop: () => void }> = [];
   let closed = false;
   const emit = () => update([...new Map(pages.flatMap(p => p.value?.rows ?? []).map(row => [row.id, row])).values()], Boolean([...pages].reverse().find(p => p.value)?.value?.nextCursor));
-  const subscribe = (cursor: string | null) => {
+  const subscribe = (cursor: string | null, visit: string | null) => {
     const index = pages.length;
     const entry: { value?: Page; stop: () => void } = { stop: () => {} };
     pages.push(entry);
-    const watch = lease.client.watchQuery(api.communityFormRequests.listMyRequests, { communityId: communityId as Id<"communities">, authSubject: lease.authSubject, paged: true, cursor });
+    const watch = lease.client.watchQuery(api.communityFormRequests.listMyRequests, { communityId: communityId as Id<"communities">, authSubject: lease.authSubject, paged: true, cursor, visit });
     const publish = () => { if (closed || pages[index] !== entry) return;
       try {
         const value = watch.localQueryResult();
         if (value === undefined) return;
         if (Array.isArray(value)) throw new Error("form_request_page_unavailable");
+        if (value.visit !== visit) {
+          if (index === 0) {
+            pages.splice(0).forEach(p => p.stop());
+            emit();
+            subscribe(null, value.visit);
+          } else { pages.splice(index).forEach(p => p.stop()); emit(); }
+          return;
+        }
         if (JSON.stringify(entry.value) === JSON.stringify(value)) return;
         for (const removed of pages.splice(index + 1)) removed.stop();
         entry.value = value;
@@ -31,9 +39,9 @@ export function subscribeMemberForms<S>(session: S, communityId: string, ensureS
     };
     entry.stop = watch.onUpdate(publish); publish();
   };
-  subscribe(null);
+  subscribe(null, null);
   return Object.assign(() => { closed = true; pages.forEach(p => p.stop()); lease.close(); }, {
-    loadMore: () => { const cursor = pages.at(-1)?.value?.nextCursor; if (!closed && cursor) { subscribe(cursor); emit(); } },
+    loadMore: () => { const page = pages.at(-1)?.value; if (!closed && page?.nextCursor) { subscribe(page.nextCursor, page.visit); emit(); } },
   });
 }
 export async function getMemberForm(session: unknown, communityId: string, requestId: string): Promise<MemberFormRequest> {

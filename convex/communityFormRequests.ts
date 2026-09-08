@@ -20,7 +20,7 @@ async function ownRequest(ctx: any, args: any): Promise<Doc<"communityFormReques
   if (!request || request.communityId !== args.communityId || membership?.userId !== userId) throw new Error("form_request_not_found");
   return request;
 }
-export const listMyRequests = query({ args: { ...scope, paged: v.optional(v.boolean()), cursor: v.optional(v.union(v.string(), v.null())) }, handler: async (ctx, args) => {
+export const listMyRequests = query({ args: { ...scope, paged: v.optional(v.boolean()), cursor: v.optional(v.union(v.string(), v.null())), visit: v.optional(v.union(v.string(), v.null())) }, handler: async (ctx, args) => {
   const userId = await actor(ctx, args);
   const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId });
   const empty = args.paged ? { rows: [], nextCursor: null, visit: null } : [];
@@ -32,6 +32,12 @@ export const listMyRequests = query({ args: { ...scope, paged: v.optional(v.bool
   if (current.completedAt) return empty;
   const visit = { membershipId: membership._id, workflowId: workflow._id, activationSequence: membership.activationSequence ?? 0,
     milestoneKey: current.milestone.key, milestoneEnteredAt: current.milestoneEnteredAt };
+  const visitKey = JSON.stringify(visit);
+  // A live paginated query's journal belongs to one immutable index range.
+  // Tell new clients to rebind before paging a different visit, even at cursor=null.
+  // Undefined preserves the already-deployed client ABI; null requests discovery.
+  if (args.paged && args.visit !== undefined && args.visit !== visitKey)
+    return { rows: [], nextCursor: null, visit: visitKey };
   const page = await pendingFormsForVisit(ctx, visit).paginate({ cursor: args.paged ? args.cursor ?? null : null, numItems: 12 });
   const rows = page.page;
   const result = [];
@@ -41,7 +47,7 @@ export const listMyRequests = query({ args: { ...scope, paged: v.optional(v.bool
     if (version) result.push({ id: row._id, name: version.name, answered: version.questions.filter(q => formQuestionAnswered(q, row.answers)).length, total: version.questions.length, createdAt: row.createdAt });
   }
   result.sort((a, b) => a.createdAt - b.createdAt);
-  return args.paged ? { rows: result, nextCursor: page.isDone ? null : page.continueCursor, visit: JSON.stringify(visit) } : result;
+  return args.paged ? { rows: result, nextCursor: page.isDone ? null : page.continueCursor, visit: visitKey } : result;
 } });
 export const cancelVisitPendingInternal = internalMutation({ args: {
   membershipId: v.id("communityMemberships"), workflowId: v.id("communityMemberWorkflows"), activationSequence: v.number(), milestoneKey: v.string(), milestoneEnteredAt: v.number(),
