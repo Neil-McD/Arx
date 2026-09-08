@@ -22,6 +22,9 @@ presence. An omitted channel ID resolves canonical General, including implicit
 General before a stored channel exists. No grant metadata is exposed.
 
 The channel-only sidebar separates Agents and People (Online, Offline, unknown).
+Agent rows share the chat ActorAvatar (purple community-agent tile) at the
+canonical sidebar size, in one subtly bordered group. They represent identities
+with channel access, not workflows or execution status; no online dots are inferred.
 It reuses canonical UserAvatar and the existing lease predicate; its timer only
 updates rendering, never issues heartbeats. Thread/profile drawers replace it.
 Narrow channel panes hide it; the Members page remains unchanged.

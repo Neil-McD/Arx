@@ -1,5 +1,5 @@
 import { Fragment, useContext, useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { ActorAvatar } from "./communityInteractionFeed";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
@@ -96,7 +96,13 @@ export function ChannelRosterPanel(props: {
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>
           <h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
-          {pages[0].agents.length ? <div className="community-context-member"><span className="community-context-member-avatar"><Sparkles size={18} aria-hidden="true" /></span><span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span></div> : <p className="community-context-members-status">No agents in this channel.</p>}
+          {pages[0].agents.length ? <div className="community-context-agent-list">
+            {pages[0].agents.map(agent => <div className="community-context-member" key={agent.key}>
+              <ActorAvatar seed={agent.key} label="Community agent" className="community-context-member-avatar"
+                getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+              <span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span>
+            </div>)}
+          </div> : <p className="community-context-members-status">No agents in this channel.</p>}
           <h3 className="community-context-section">People{complete ? ` — ${members.length}` : ""}</h3>
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);

@@ -2490,6 +2490,17 @@
   padding: 10px 8px 14px;
 }
 
+.community-context-agent-list {
+  margin: 0 8px;
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.community-context-agent-list .community-context-member + .community-context-member {
+  border-top: 1px solid var(--stroke-divider-accent);
+}
+
 .community-context-members .community-context-section {
   padding: 0 8px;
   margin: 0 0 6px;
