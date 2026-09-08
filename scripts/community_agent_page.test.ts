@@ -51,6 +51,7 @@ test("optional panes reuse the existing Agent and DM owners and retain permissio
   expect(dm).toContain('dialog[open]');
   const css = read("index.css");
   expect(css).toContain('@container workspace-panes (max-width: 680px)');
+  expect(css).toContain('@container primary-workspace (max-width: 740px)');
   expect(css).toContain('.web-direct-messages-host.embedded .community-dm-panel');
 });
 

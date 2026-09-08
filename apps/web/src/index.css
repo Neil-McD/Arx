@@ -3134,7 +3134,7 @@
   display: flex; min-width: 0; min-height: 0; overflow: hidden;
   container: workspace-panes / inline-size;
 }
-.community-workspace-primary { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.community-workspace-primary { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; container: primary-workspace / inline-size; }
 .community-workspace-primary > * { flex: 1; min-width: 0; min-height: 0; }
 .community-workspace-panes > .community-agent-workspace { flex: 1; min-width: 0; min-height: 0; }
 .community-workspace-panes > .community-workspace-secondary {
@@ -3154,6 +3154,11 @@
   .has-secondary-pane > .community-workspace-primary,
   .has-secondary-pane > .community-agent-workspace:not(.community-workspace-secondary) { display: none !important; }
   .community-workspace-panes > .community-workspace-secondary { flex: 1; min-width: 0; border-left: 0; }
+}
+@container primary-workspace (max-width: 740px) {
+  .community-interaction-projection.has-drawer { grid-template-columns: minmax(0, 1fr); }
+  .community-interaction-projection.has-drawer > .community-interaction-main { display: none; }
+  .community-interaction-drawer { min-width: 0; width: 100%; }
 }
 @container community-shell (max-width: 900px) {
   .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 48px; }
