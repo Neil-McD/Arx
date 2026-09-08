@@ -237,13 +237,13 @@ assert.doesNotMatch(
 
 assert.match(
   contextPanel,
-  /onlineCountCapped\?: boolean[\s\S]*onlineCountIsLowerBound[\s\S]*onlineCountLabel = `\$\{onlineTotal\}\$\{onlineCountIsLowerBound \? "\+" : ""\}`/,
-  "the member rail must label bounded online counts as lower bounds",
+  /const isOnline = Boolean\(props.onlineUserIds\?\.has\(member.user_id\)\)/,
+  "directory online indicators must use resolved live presence",
 );
 assert.match(
   contextPanel,
-  /hasResolvedPresence = props\.onlineUserIds instanceof Set[\s\S]*props\.isLoadingPresence[\s\S]*Recently active/,
-  "the member rail must wait for live presence and degrade without falsely classifying members offline",
+  /members.map\(member => renderMember/,
+  "directory rows must not depend on presence classification",
 );
 assert.match(
   controller,
