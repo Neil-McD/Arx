@@ -11,7 +11,7 @@
   /* Fixed topbar actions float over the shell. Reserve their full footprint
      (right inset + 34px control + focus/badge breathing room) in surfaces
      that render underneath them. */
-  --web-topbar-right-action-safe-inset: 62px;
+  --web-topbar-right-action-safe-inset: 66px;
   /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
   --mobile-topbar-control-size: 34px;
@@ -176,6 +176,11 @@
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* Inset the desktop DM control equally from the rounded corner. */
+.app-root:not(.mobile-shell) .app-topbar .direct-messages-topbar-button {
+  transform: translate(-4px, 4px);
 }
 
 .app-topbar .icon-button,

@@ -29,6 +29,15 @@ test("suppressed or unavailable Agent page keeps the primary content host visibl
   }
 });
 
+test("DM overlays preserve the desktop Agent page while retaining dock and voice suppression", () => {
+  const controller = readFileSync(new URL("../apps/web/src/controllers/useWebMemberAgentSurfaceController.ts", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
+  expect(controller).toContain('(params.pageMode || !params.isDirectMessagesOpen)');
+  expect(controller).toContain('(!isVisible || params.isDirectMessagesOpen || scopeChanged)');
+  expect(app).toMatch(/useWebMemberAgentSurfaceController\(\{\s*pageMode: !showMobileShell/);
+  expect(controller).toContain('!params.isOnboardingModalOpen');
+});
+
 test("both conversation mounts and workspace containers use the scope/visibility boundary", () => {
   const source = readFileSync(new URL("../apps/web/src/components/WebAppCompositionRoot.tsx", import.meta.url), "utf8");
   expect(source.match(/key=\{agentSessionKey\}/g)).toHaveLength(2);

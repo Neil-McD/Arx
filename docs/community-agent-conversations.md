@@ -92,6 +92,11 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Acceptance
 
+Desktop Agent page visibility does not depend on the DM overlay being closed.
+Opening DMs leaves its scoped conversation, draft, and runtime view mounted.
+The legacy mobile/dock surface still hides for DMs; voice input is cancelled
+independently when DMs take focus. Auth, community, and onboarding gates remain.
+
 Agent page layout reuses the channel header height, identity typography, surface,
 and divider. A labeled icon button retains New conversation, with clearance for
 the shell DM control. The page has no secondary header subtitle. It uses a shared 800px maximum conversation/

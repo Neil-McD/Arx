@@ -2855,6 +2855,7 @@ export default function App() {
     surfaceContext: memberAgentSurfaceContext,
     isVisible: isMemberAgentDockVisible,
   } = useWebMemberAgentSurfaceController({
+    pageMode: !showMobileShell,
     activePage,
     communityTab,
     activeCommunity,
