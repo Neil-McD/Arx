@@ -1,6 +1,8 @@
 import { api, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
+import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity, COMMUNITY_CONVERSATION_PREFIX } from "../shared/communityConversationIdentity";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
   applyRuntimeHarnessTelemetryEvent,
@@ -998,15 +1000,18 @@ function normalizeRunLane(raw: unknown): string {
 }
 
 function communityConversationScope(thread: ThreadLike): string | null {
-  const match = /^community-conversation:([^:]+):episode:[1-9][0-9]*$/.exec(thread.threadKey ?? "");
-  if (!match) return null;
-  if (thread.communityId !== match[1]) throw new Error("community_conversation_scope_mismatch");
-  return match[1];
+  return parseCommunityConversationIdentity(thread)?.communityId ?? null;
 }
 
 async function requireCommunityConversationAccess(ctx: any, thread: ThreadLike) {
   const communityId = communityConversationScope(thread);
-  if (communityId) await requireCommunityChatAccess({ ctx, communityId, userId: thread.ownerId });
+  if (!communityId) return;
+  await requireCommunityChatAccess({ ctx, communityId, userId: thread.ownerId });
+  const episode = await ctx.db.query("memberAgentEpisodes").withIndex("by_thread", (q: any) => q.eq("threadId", thread._id)).unique();
+  const channel = episode ? await ctx.db.get(episode.channelId) : null;
+  if (!episode || !channel || channel.scopeKey !== "community" || channel.ownerId !== thread.ownerId || channel.communityId !== communityId || episode.ordinal !== parseCommunityConversationIdentity(thread)!.ordinal) {
+    throw new Error("community_conversation_relationship_invalid");
+  }
 }
 
 async function getCloudThreadByThreadKeyInternal(args: {
@@ -1490,7 +1495,7 @@ export const ensureCloudThread = mutation({
     });
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
-    if (threadKey.startsWith("community-conversation:")) {
+    if (threadKey.startsWith(COMMUNITY_CONVERSATION_PREFIX)) {
       throw new Error("community_conversation_use_scoped_endpoint");
     }
     const existing = await getCloudThreadByThreadKeyInternal({
@@ -1562,6 +1567,13 @@ async function requireWritableMemberAgentThread(args: {
   role: "user" | "assistant" | "system";
 }): Promise<void> {
   const threadKey = String(args.thread.threadKey ?? "").trim();
+  if (communityConversationScope(args.thread)) {
+    await requireCommunityConversationAccess(args.ctx, args.thread);
+    const episode = await args.ctx.db.query("memberAgentEpisodes").withIndex("by_thread", (q: any) => q.eq("threadId", args.thread._id)).unique();
+    const channel = await args.ctx.db.get(episode.channelId);
+    if (episode.status !== "active" || channel.activeEpisodeId !== episode._id || typeof args.thread.archivedAt === "number") throw new Error("member_agent_episode_not_active");
+    return;
+  }
   if (isReadOnlyLegacyMemberAgentThreadKey(threadKey)) {
     throw new Error("member_agent_legacy_episode_read_only");
   }
@@ -1799,7 +1811,7 @@ export const ensureCommunityAgentConversation = mutation({
       return buildMemberAgentChannelResponse({ channel: existing, episode, thread, communityId: args.communityId });
     }
     const now = Date.now();
-    const threadKey = `community-conversation:${args.communityId}:episode:1`;
+    const threadKey = buildCommunityConversationThreadKey(args.communityId, 1);
     const collision = await ctx.db.query("threads").withIndex("by_owner_threadKey", q => q.eq("ownerId", ownerId).eq("threadKey", threadKey)).first();
     if (collision) throw new Error("member_agent_episode_thread_collision");
     const threadId = await ctx.db.insert("threads", { ownerId, communityId: args.communityId, threadKey, titleSource: "auto", modelId: DEFAULT_ACTIVE_MODEL_ID, contextVersion: 0, lastSeq: 0, createdAt: now, updatedAt: now });
@@ -1809,6 +1821,55 @@ export const ensureCommunityAgentConversation = mutation({
     return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channelId))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
   },
 });
+
+export const startNewCommunityAgentConversation = mutation({
+  args: { communityId: v.id("communities"), expectedActiveEpisodeId: v.id("memberAgentEpisodes") },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({ ctx });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: ownerId });
+    const channel = await ctx.db.query("memberAgentChannels")
+      .withIndex("by_owner_scope_community", q => q.eq("ownerId", ownerId).eq("scopeKey", "community").eq("communityId", args.communityId)).unique();
+    if (!channel || channel.activeEpisodeId !== args.expectedActiveEpisodeId) throw new Error("member_agent_active_episode_changed");
+    const previous = await ctx.db.get(args.expectedActiveEpisodeId);
+    if (!previous || previous.channelId !== channel._id || previous.status !== "active") throw new Error("member_agent_active_episode_invalid");
+    await requireOwnedCloudThread({ ctx, ownerId, threadId: previous.threadId });
+    const ordinal = channel.nextOrdinal;
+    if (ordinal !== previous.ordinal + 1) throw new Error("community_conversation_identity_invalid");
+    const threadKey = buildCommunityConversationThreadKey(args.communityId, ordinal);
+    if (await ctx.db.query("threads").withIndex("by_owner_threadKey", q => q.eq("ownerId", ownerId).eq("threadKey", threadKey)).first()) throw new Error("member_agent_episode_thread_collision");
+    const now = Date.now();
+    const threadId = await ctx.db.insert("threads", { ownerId, communityId: args.communityId, threadKey, titleSource: "auto", modelId: DEFAULT_ACTIVE_MODEL_ID, contextVersion: 0, lastSeq: 0, createdAt: now, updatedAt: now });
+    const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId: channel._id, threadId, ordinal, status: "active", startedAt: now, createdAt: now, updatedAt: now });
+    await ctx.db.patch(previous._id, { status: "closed", closedAt: now, updatedAt: now });
+    await ctx.db.patch(channel._id, { activeEpisodeId: episodeId, nextOrdinal: ordinal + 1, updatedAt: now });
+    return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channel._id))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
+  },
+});
+
+export const listCommunityAgentConversations = query({
+  args: { communityId: v.id("communities"), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({ ctx });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: ownerId });
+    const channel = await ctx.db.query("memberAgentChannels")
+      .withIndex("by_owner_scope_community", q => q.eq("ownerId", ownerId).eq("scopeKey", "community").eq("communityId", args.communityId)).unique();
+    if (!channel) return { page: [], isDone: true, continueCursor: "" };
+    const result = await ctx.db.query("memberAgentEpisodes").withIndex("by_channel_ordinal", q => q.eq("channelId", channel._id)).order("desc")
+      .paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(50, args.paginationOpts.numItems)) });
+    const page = await Promise.all(result.page.map(async episode => {
+      const thread = await requireOwnedCloudThread({ ctx, ownerId, threadId: episode.threadId });
+      if (communityConversationScope(thread) !== args.communityId) throw new Error("community_conversation_scope_mismatch");
+      return { ...buildMemberAgentChannelResponse({ channel, episode, thread, communityId: args.communityId }), status: episode.status, title: thread.title ?? null, started_at: episode.startedAt };
+    }));
+    return { ...result, page };
+  },
+});
+
+async function preventActiveCommunityConversationArchive(ctx: any, thread: ThreadLike) {
+  if (!communityConversationScope(thread)) return;
+  const episode = await ctx.db.query("memberAgentEpisodes").withIndex("by_thread", (q: any) => q.eq("threadId", thread._id)).unique();
+  if (episode?.status === "active") throw new Error("community_conversation_start_new_instead");
+}
 
 export const ensureMemberAgentGlobalChannel = mutation({
   args: {
@@ -1973,6 +2034,7 @@ export const updateCloudThread = mutation({
     if (args.archivedAt === null) {
       patch.archivedAt = undefined;
     } else if (typeof args.archivedAt === "number" && Number.isFinite(args.archivedAt)) {
+      await preventActiveCommunityConversationArchive(ctx, existing);
       patch.archivedAt = Math.floor(args.archivedAt);
     }
     await ctx.db.patch(existing._id, patch);
@@ -2001,6 +2063,7 @@ export const archiveCloudThread = mutation({
       ownerId,
       threadId: args.threadId,
     });
+    await preventActiveCommunityConversationArchive(ctx, existing);
     await ctx.db.patch(existing._id, {
       archivedAt: nowMs,
       updatedAt: nowMs,

@@ -22,11 +22,31 @@ does not inherit builder permissions. Workflow execution remains separately auth
   funding integration is verified. Creating an empty conversation spends nothing.
 - Existing global dock remains unchanged during this foundational slice.
 
+## Slice 2: conversation lifecycle
+
+- `shared/communityConversationIdentity.ts` owns reserved-key construction and
+  parsing. Reads validate the thread, episode ordinal, and member/community
+  container relationship, not just the key text.
+- `startNewCommunityAgentConversation` requires the expected active episode ID.
+  Closing the old episode and creating its replacement is atomic. A stale or
+  duplicate rollover returns `member_agent_active_episode_changed`; the caller
+  should resolve the current conversation rather than blindly retrying.
+- New writes to closed sessions are rejected. An exact existing-message retry
+  can still return its existing receipt; it does not append another message.
+- Both generic archive entry points reject active scoped sessions. Use new
+  conversation to close them. Historical records remain intact.
+- `listCommunityAgentConversations` reads the selected member/community index,
+  newest first, with Convex pagination capped at 50 entries per page. It never
+  adopts global or other-community history. Access is rechecked on every call.
+- Local tests exercise concurrent creation/rollover, scoped paginated history,
+  closed-session writes, archive guards, revoked membership and corrupted links.
+  These are executable local tests, not a live concurrent staging proof.
+
 ## Next gate
 
 Wire community identity/instructions and scoped context into canonical runtime
 admission, verify community funding receipts and tool permissions, and support
-episode rollover and attachments before replacing the dock. Retain the existing
+attachments before replacing the dock. Retain the existing
 execution substrate and approval UI. Migrate Resources' agent entry point too.
 
 ## Acceptance
