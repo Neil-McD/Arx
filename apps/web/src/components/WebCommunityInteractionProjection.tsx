@@ -229,14 +229,12 @@ type CommunityContextProjectionProps = Pick<
 > & {
   containerClassName?: string;
   ariaLabel?: string;
-  sectionMode?: "all" | "members";
 };
 
 function pickCommunityContextProjection(
   props: WebCommunityInteractionProjectionProps & {
     containerClassName?: string;
     ariaLabel?: string;
-    sectionMode?: "all" | "members";
   },
 ): CommunityContextProjectionProps {
   return {
@@ -245,7 +243,6 @@ function pickCommunityContextProjection(
     ) as Pick<WebCommunityInteractionProjectionProps, (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]>,
     containerClassName: props.containerClassName,
     ariaLabel: props.ariaLabel,
-    sectionMode: props.sectionMode,
   };
 }
 
@@ -288,11 +285,6 @@ const StableCommunityInteractionContextPanelSurface = memo(function StableCommun
         aria-label={props.ariaLabel ?? "Community"}
       >
         <CommunityContextPanel
-          sectionMode={props.sectionMode}
-          communityName={props.activeCommunityName}
-          onlineFaces={props.presenceSummary?.online_faces ?? null}
-          onlineCount={props.presenceSummary?.online_count ?? null}
-          onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)}
           isLoadingPresence={props.isLoadingCommunityPresence}
           onlineUserIds={props.onlineUserIds ?? null}
           memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
@@ -355,7 +347,6 @@ export function CommunityInteractionContextPanelSurface(
   props: WebCommunityInteractionProjectionProps & {
     containerClassName?: string;
     ariaLabel?: string;
-    sectionMode?: "all" | "members";
   },
 ) {
   return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;

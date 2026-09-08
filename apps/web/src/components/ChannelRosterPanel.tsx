@@ -1,7 +1,7 @@
 import { Fragment, useContext, useEffect, useState, type ComponentProps } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
-import { CommunityJoinRequestReview } from "./CommunityContextPanel";
+import { CommunityJoinRequestReview } from "./CommunityJoinRequestReview";
 import { CommunityAutoJoinControl, type CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { ActorAvatar } from "./communityInteractionFeed";
 import type { FunctionReturnType } from "convex/server";
@@ -118,12 +118,14 @@ export function ChannelRosterPanel(props: {
               <span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span>
             </div>)}
           </div> : <p className="community-context-members-status">No agents in this channel.</p>}
+        </>}
           <div className="community-context-members-total">
-            <h3 className="community-context-section">People{complete ? ` — ${members.length}` : ""}</h3>
+            <h3 className="community-context-section">People{!error && ready && complete ? ` — ${members.length}` : ""}</h3>
             <CommunityAutoJoinControl admission={props.admission} />
           </div>
           {props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
+      {!error && ready ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;
@@ -150,7 +152,7 @@ export function ChannelRosterPanel(props: {
           })}
           {!members.length ? <p>{complete ? "No people in this channel." : "No people in this page."}</p> : null}
           {!complete ? <button type="button" onClick={() => setBudget(value => value + 1)}>Load more</button> : null}
-        </>}
+        </> : null}
     </div>
   </aside>
     <CommunityMemberSettingsDialog {...props.memberSettings}

@@ -21,6 +21,12 @@ and disables decisions while loading or deciding. No new polling or subscription
 is added; newly arriving requests retain the existing lifecycle refresh behavior.
 
 The compact switch markup and theme styles match the production sidebar control.
+Admission controls do not depend on the channel roster loading successfully.
+The request renderer lives in `CommunityJoinRequestReview.tsx`; both surfaces
+consume it without owning a second request lifecycle. A local interaction fixture
+is available through `node scripts/join_review_browser_qa.mjs` (synthetic callbacks,
+no cloud writes). Check expansion, approve/deny receipts, pending/loading disabled
+controls, and permission removal at `http://127.0.0.1:5197/qa`.
 Live verification must not toggle a real community simply to test presentation:
 that could admit pending members. Test transition delegation locally instead.
 

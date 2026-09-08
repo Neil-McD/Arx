@@ -1,0 +1,32 @@
+// Real component, local synthetic callbacks only; no cloud connection.
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
+const root = resolve(import.meta.dirname, '..');
+const requireWeb = createRequire(resolve(root, 'apps/web/package.json'));
+const { createServer } = await import(requireWeb.resolve('vite'));
+const entry = `import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {CommunityJoinRequestReview} from '/src/components/CommunityJoinRequestReview';
+import '/src/index.css';
+window.React = React;
+function Fixture() {
+ const [pending,setPending]=useState(false), [allowed,setAllowed]=useState(true), [loading,setLoading]=useState(false), [result,setResult]=useState('No decision');
+ return <main style={{width:340,padding:20}}>
+ <label><input type="checkbox" checked={allowed} onChange={e=>setAllowed(e.target.checked)}/>Reviewer permission</label>
+ <label><input type="checkbox" checked={loading} onChange={e=>setLoading(e.target.checked)}/>Loading requests</label>
+ <button onClick={()=>setPending(false)}>Finish simulated request</button>
+ <output aria-label="Decision receipt">{result}</output>
+ <CommunityJoinRequestReview canReviewJoinRequests={allowed} joinReviewMode="free_approval" displayName={()=>'Applicant'}
+ pendingJoinRequests={[{id:'synthetic-request',userId:'synthetic-user',displayName:'Applicant',avatarUrl:null,message:'Synthetic request',createdAtLabel:'Today'}]}
+ isLoadingJoinRequests={loading} decidingJoinRequestId={pending?'synthetic-request':null}
+ onApproveJoinRequest={id=>{setResult('Approved '+id);setPending(true)}}
+ onDenyJoinRequest={id=>{setResult('Denied '+id);setPending(true)}}/>
+ </main>;
+}
+createRoot(document.getElementById('root')).render(<Fixture/>);`;
+const server=await createServer({root:resolve(root,'apps/web'),configFile:false,server:{host:'127.0.0.1',port:5197,strictPort:true},plugins:[{
+ name:'join-review-qa',resolveId:id=>id==='/qa-entry.tsx'?id:null,load:id=>id==='/qa-entry.tsx'?entry:null,
+ configureServer(s){s.middlewares.use((req,res,next)=>{if(req.url!=='/qa')return next();res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><body><div id="root"></div><script type="module" src="/qa-entry.tsx"></script></body></html>');});}
+}]});
+await server.listen();
+console.log('Synthetic join review fixture: http://127.0.0.1:5197/qa');

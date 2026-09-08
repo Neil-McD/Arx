@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { CommunityJoinRequestReview } = await import("../apps/web/src/components/CommunityContextPanel");
+const { CommunityJoinRequestReview } = await import("../apps/web/src/components/CommunityJoinRequestReview");
 const request = { id: "request", userId: "user", displayName: "Applicant", avatarUrl: null, message: "Hello", createdAtLabel: "Today" };
 const base = { canReviewJoinRequests: true, joinReviewMode: "free_approval" as const, pendingJoinRequests: [request], displayName: () => "Applicant" };
 test("join review is manager-only and approval-community-only", () => {
@@ -32,11 +32,25 @@ test("empty, loading and failed review are distinct", () => {
 });
 test("both member surfaces reuse one request renderer and existing decision handlers", () => {
   const read = (file: string) => readFileSync(new URL(`../apps/web/src/components/${file}`, import.meta.url), "utf8");
-  const source = read("CommunityContextPanel.tsx");
+  const source = read("CommunityJoinRequestReview.tsx");
   expect(source.match(/const renderJoinRequest =/g)).toHaveLength(1);
-  expect(source).toContain("<CommunityJoinRequestReview {...props}");
+  expect(read("CommunityContextPanel.tsx")).toContain("<CommunityJoinRequestReview {...props}");
   expect(read("ChannelRosterPanel.tsx")).toContain("<CommunityJoinRequestReview {...props.joinReview}");
   expect(read("WebCommunityInteractionProjection.tsx")).toContain("onApproveJoinRequest: props.onApproveCommunityJoinRequest");
   expect(source).toContain("isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onApproveJoinRequest");
   expect(source).toContain("isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onDenyJoinRequest");
+});
+
+test("community admission remains available while the channel roster is loading", async () => {
+  const { ChannelRosterPanel } = await import("../apps/web/src/components/ChannelRosterPanel");
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
+    communityName: "Synthetic community",
+    admission: { mode: "approval", canManage: true, pending: false, error: null, onChange: vi.fn() },
+    joinReview: base,
+    memberSettings: {} as React.ComponentProps<typeof ChannelRosterPanel>["memberSettings"],
+    getInitials: () => "A", getAvatarColor: () => "gray",
+  }));
+  expect(html).toContain("Loading channel roster");
+  expect(html).toContain("Auto-join is off");
+  expect(html).toContain("1 request to join");
 });

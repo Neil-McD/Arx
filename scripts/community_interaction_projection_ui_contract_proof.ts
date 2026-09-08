@@ -45,6 +45,7 @@ const chatPresentationMode = read(
 const projection = read(
   "apps/web/src/components/WebCommunityInteractionProjection.tsx",
 );
+const joinReview = read("apps/web/src/components/CommunityJoinRequestReview.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read(
   "apps/web/src/components/CommunityMemberSettingsDialog.tsx",
@@ -528,17 +529,17 @@ assert.match(
   "App should wire manager-only right-panel controls from the existing active-community permission and action contract",
 );
 assert.match(
-  contextPanel,
+  joinReview,
   /canReviewJoinRequests\?: boolean;[\s\S]*joinReviewMode\?: "paid" \| "free_auto" \| "free_approval" \| null;[\s\S]*pendingJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;/,
   "context panel should receive the existing join-review queue projection explicitly",
 );
 assert.match(
-  contextPanel,
+  joinReview,
   /const canShowJoinRequests = Boolean\([\s\S]*props\.canReviewJoinRequests[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
   "context panel should only pop the request affordance for free approval queues the viewer can review",
 );
 assert.match(
-  contextPanel,
+  joinReview,
   /PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200[\s\S]*hasPendingJoinRequestOverflow[\s\S]*\? "200\+"[\s\S]*requestDividerLabel[\s\S]*requestDividerAriaLabel[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
   "context panel should render a bounded 200+ pending-request projection with an accessible divider label",
 );
@@ -548,22 +549,22 @@ assert.match(
   "admin gateway should fetch one extra pending request so the context rail can honestly show 200+ without an exact count query",
 );
 assert.match(
-  contextPanel,
+  joinReview,
   /className=\{`community-context-request-divider[\s\S]*aria-busy=\{props\.isLoadingJoinRequests \|\| undefined\}[\s\S]*aria-controls=\{joinRequestPanelId\}[\s\S]*aria-expanded=\{joinRequestsExpanded\}[\s\S]*id=\{joinRequestPanelId\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
   "context panel should expand confirmed pending requests from an accessible member-rail divider",
 );
 assert.doesNotMatch(
-  contextPanel,
+  joinReview,
   /community-context-request-chip|community-context-request-control-row|Loading requests\.\.\./,
   "context panel should not retain the legacy request pill or mount a transient loading affordance",
 );
 assert.match(
-  contextPanel,
+  joinReview,
   /const canShowJoinRequestLoadError = Boolean\([\s\S]*pendingJoinRequests\.length === 0[\s\S]*!props\.isLoadingJoinRequests[\s\S]*props\.joinRequestsError[\s\S]*role="status"/,
   "zero-count request load failures should remain readable without recreating the request control",
 );
 assert.match(
-  contextPanel,
+  joinReview,
   /props\.onApproveJoinRequest\?\.\(request\.id\)[\s\S]*props\.onDenyJoinRequest\?\.\(request\.id\)/,
   "context panel request rows should reuse the existing approve and deny callbacks",
 );

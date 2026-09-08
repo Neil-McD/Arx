@@ -94,7 +94,6 @@ export function WebCommunityMembersPanel({
             : undefined}
           containerClassName="community-interaction-drawer community-context-panel community-members-page-panel"
           ariaLabel={`${activeCommunity.name ?? "Community"} members`}
-          sectionMode="members"
         />
         {searching ? <div className="community-members-search-status" role="status">
           {searchResult.loading ? "Searching members…" : searchResult.error ?? `${searchResult.rows.length} ${searchResult.rows.length === 1 ? "match" : "matches"}${searchResult.hasMore ? " so far" : ""}`}
