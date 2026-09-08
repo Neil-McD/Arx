@@ -9,6 +9,17 @@ const set = "communityChannelParticipants:setParticipant" as any;
 const list = "communityChannelParticipants:listMemberAccess" as any;
 const roster = "communityChannelParticipants:listChannelRoster" as any;
 
+test("implicit General works without a stored channel and returns canonical presence leases", async () => {
+  const { t, f, owner } = await fixture();
+  const now = Date.now();
+  await t.run(ctx => ctx.db.insert("communityPresence", { communityId: f.communityId, userId: f.memberId,
+    lastSeenAt: now, activeUntil: now + 90000, createdAt: now, updatedAt: now }));
+  const result: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 50, cursor: null } });
+  expect(result.page.map((row: any) => row.user_id)).toEqual([f.ownerId, f.memberId]);
+  expect(result.page[1]).toMatchObject({ last_seen_at: now, active_until: now + 90000 });
+  expect(result.agents).toHaveLength(1);
+});
+
 test("channel roster is viewer-authorized without weakening the grant editor", async () => {
   const { t, f, args, owner } = await fixture();
   const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 10, cursor: null } };

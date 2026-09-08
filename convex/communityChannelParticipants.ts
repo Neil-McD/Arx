@@ -16,13 +16,13 @@ const target = v.union(v.object({ kind: v.literal("member"), userId: v.id("users
 // Read-only roster for an authorized channel viewer. This is deliberately
 // separate from the manager-only grant editor below; no grant metadata escapes.
 export const listChannelRoster = query({
-  args: { ...scope, paginationOpts: paginationOptsValidator },
+  args: { ...scope, channelId: v.optional(v.id("communityChannels")), paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     const channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canRead" });
     const community = (await ctx.db.get(args.communityId))!;
-    const prefix = `channel-roster-v1:${args.communityId}:${args.channelId}:`;
+    const prefix = `channel-roster-v1:${args.communityId}:${args.channelId ?? "general"}:`;
     const supplied = args.paginationOpts.cursor;
     if (supplied !== null && !supplied.startsWith(prefix)) throw new Error("community_channel_roster_cursor_invalid");
     const cursor = supplied === null ? null : supplied.slice(prefix.length);
@@ -31,7 +31,7 @@ export const listChannelRoster = query({
       .withIndex("by_community_createdAt", q => q.eq("communityId", args.communityId))
       .order("asc").paginate({ cursor, numItems: cursor === null ? size - 1 : size, maximumRowsRead: size * 3 });
     const page: Array<{ user_id: typeof userId; role: string;
-      profile: Awaited<ReturnType<typeof resolveUserProfileDisplayProjection>>; last_seen_at: number | null }> = [];
+      profile: Awaited<ReturnType<typeof resolveUserProfileDisplayProjection>>; last_seen_at: number | null; active_until: number | null }> = [];
     const seen = new Set<string>();
     const append = async (candidateId: typeof userId, expectedMembershipId?: string) => {
       if (seen.has(String(candidateId))) return;
@@ -43,7 +43,7 @@ export const listChannelRoster = query({
       const presence = await ctx.db.query("communityPresence")
         .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", candidateId)).first();
       page.push({ user_id: candidateId, role: candidateId === community.ownerId ? "owner" : authorization.membership!.role,
-        profile: await resolveUserProfileDisplayProjection(ctx, candidateId), last_seen_at: presence?.lastSeenAt ?? null });
+        profile: await resolveUserProfileDisplayProjection(ctx, candidateId), last_seen_at: presence?.lastSeenAt ?? null, active_until: presence?.activeUntil ?? null });
     };
     if (cursor === null) await append(community.ownerId);
     for (const member of result.page) {

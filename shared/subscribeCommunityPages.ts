@@ -1,5 +1,5 @@
 type Section = "shared" | "private";
-export type CommunityPage = { page: unknown[]; isDone: boolean; continueCursor: string };
+export type CommunityPage = { page: unknown[]; isDone: boolean; continueCursor: string | null };
 
 // Shared reactive pagination lifecycle. A changed ancestor invalidates later
 // pages before publication. Errors publish unknown, never stale private rows.
@@ -10,10 +10,13 @@ export function subscribeCommunityPages<Page extends CommunityPage>(params: {
   };
   onUpdate: (pages: Page[], isComplete: boolean) => void;
   onError?: (error: unknown) => void;
+  sections?: Section[];
+  maxPages?: number;
 }): () => void {
   type Slot = { active: boolean; stop?: () => void; fingerprint?: string; value?: Page };
   const slots: Slot[] = [];
   let closed = false;
+  const sections = params.sections ?? ["shared", "private"];
   const trim = (index: number) => {
     for (const slot of slots.splice(index)) { slot.active = false; slot.stop?.(); }
   };
@@ -32,9 +35,11 @@ export function subscribeCommunityPages<Page extends CommunityPage>(params: {
         if (slot.fingerprint === fingerprint) return;
         slot.fingerprint = fingerprint; slot.value = result;
         trim(index + 1);
-        params.onUpdate(slots.flatMap(s => s.value ? [s.value] : []), result.isDone && section === "private");
+        const nextSection = sections[sections.indexOf(section) + 1];
+        params.onUpdate(slots.flatMap(s => s.value ? [s.value] : []), result.isDone && !nextSection);
+        if (slots.length >= (params.maxPages ?? Infinity)) return;
         if (!result.isDone) load(section, result.continueCursor);
-        else if (section === "shared") load("private", null);
+        else if (nextSection) load(nextSection, null);
       } catch (error) {
         trim(index + 1); slot.value = undefined; slot.fingerprint = undefined;
         params.onUpdate([], false); params.onError?.(error);
@@ -46,6 +51,6 @@ export function subscribeCommunityPages<Page extends CommunityPage>(params: {
     slot.stop = watch.onUpdate(publish);
     publish();
   };
-  load("shared", null);
+  if (sections[0]) load(sections[0], null);
   return () => { closed = true; trim(0); };
 }

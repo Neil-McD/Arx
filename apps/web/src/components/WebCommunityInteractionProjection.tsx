@@ -42,6 +42,7 @@ import type {
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { ChannelRosterPanel } from "./ChannelRosterPanel";
 import {
   MOBILE_READING_MODE_POLICY,
   advanceMobileReadingMode,
@@ -709,7 +710,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : props.communityId ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
@@ -1148,6 +1149,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           ) : null}
         </ThreadSurface>
       ) : null}
+      {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
+        key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
+        channelId={props.activeChannel?.is_general ? undefined : props.activeChannel?.id}
+        onOpenProfile={props.onOpenProfile} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+      /> : null}
     </div>
     </>
   );
