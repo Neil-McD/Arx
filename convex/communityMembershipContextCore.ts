@@ -384,6 +384,10 @@ async function readMembershipContextRecords(args: {
         ? {
             id: String(workflow._id),
             revision: workflow.revision,
+            ...(args.view === "builder" ? { goal: current.milestone.goal ?? "", override_state: {
+              activation_sequence: Number(membership?.activationSequence ?? 0), transition_seq: Number(state?.transitionSeq ?? 0),
+              next_milestone_name: workflow.milestones[current.milestoneIndex + 1]?.name ?? null,
+            } } : {}),
             current_milestone_key: current.milestone.key,
             current_milestone_name: current.milestone.name,
             current_milestone_entered_at: toIsoString(
@@ -438,6 +442,7 @@ async function readMembershipContextRecords(args: {
       .reverse()
       .map((transition) => ({
         id: String(transition._id),
+        ...(args.view !== "self" && transition.forcedByUserId ? { forced_by_user_id: String(transition.forcedByUserId) } : {}),
         sequence: transition.seq,
         milestone_key: transition.fromMilestoneKey,
         milestone_name: transition.fromMilestoneName,

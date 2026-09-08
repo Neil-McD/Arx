@@ -12,6 +12,7 @@ import {
   subscribeCloudCommunityMemberWorkflowBoardProjection,
   updateCloudCommunityMemberWorkflowMilestone,
   setCloudCommunityMemberServiceChannel,
+  forceCloudCommunityMemberMilestone,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
@@ -447,6 +448,21 @@ export function useWebCommunityWorkflowsController(params: {
     memberDossier,
     isMemberDossierLoading,
     memberDossierError,
+    forceMove: async (snapshot: CloudCommunityMemberSuccessDossier) => {
+      const scope = serviceChannelScopeRef.current;
+      if (!params.canManageMembers || snapshot.community_id !== params.activeCommunityId || snapshot.membership_id !== selectedMembershipId) throw new Error("Member changed. Reopen the member panel.");
+      const session = await params.ensureSession(params.session, "community_workflow_force_move");
+      if (!session || scope !== serviceChannelScopeRef.current) throw new Error("Session changed. Reopen the member panel.");
+      try {
+        await forceCloudCommunityMemberMilestone({ session, dossier: snapshot });
+      } catch {
+        throw new Error("Could not force this move. Refresh the member panel and review their current position before trying again.");
+      }
+      if (scope === serviceChannelScopeRef.current) {
+        setIsMemberDossierLoading(true);
+        setDossierRefreshNonce(value => value + 1);
+      }
+    },
     isServiceChannelSaving,
     serviceChannelError,
     setServiceChannel: async (channelId: string | null, expectedRevision: number) => {

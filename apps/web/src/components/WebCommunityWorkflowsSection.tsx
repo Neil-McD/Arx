@@ -60,6 +60,7 @@ export type WebCommunityWorkflowsSectionProps = {
   isServiceChannelSaving: boolean;
   serviceChannelError: string | null;
   onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
+  onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onOpenServiceChannel: (channelId: string) => void;
 };
 
@@ -347,6 +348,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
         isServiceChannelSaving={props.isServiceChannelSaving}
         serviceChannelError={props.serviceChannelError}
         onSetServiceChannel={props.onSetServiceChannel}
+        onForceMove={props.onForceMove}
         onOpenServiceChannel={props.onOpenServiceChannel}
       />
     </div>

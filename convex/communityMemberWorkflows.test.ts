@@ -445,6 +445,56 @@ async function completionFixture() {
   return { t, f, owner, secondChannel, configured, fire, snapshot };
 }
 
+async function overrideFixture() {
+  const s = await completionFixture();
+  const dossier = await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
+  const w = dossier.workflow!;
+  const args = { communityId: s.f.communityId, membershipId: s.f.membershipId, expectedWorkflowRevision: w.revision,
+    expectedWorkflowId: w.id as import("./_generated/dataModel").Id<"communityMemberWorkflows">,
+    expectedMilestoneKey: w.current_milestone_key, expectedMilestoneEnteredAt: Date.parse(w.current_milestone_entered_at),
+    expectedActivationSequence: w.override_state!.activation_sequence, expectedTransitionSeq: w.override_state!.transition_seq };
+  return { ...s, args };
+}
+
+test("forced override bypasses requirements, audits builder, and rejects replay", async () => {
+  const s = await overrideFixture();
+  await s.owner.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, s.args);
+  const result = await s.snapshot();
+  expect(result.transitions).toHaveLength(1);
+  expect(result.transitions[0].forcedByUserId).toBe(s.f.ownerId);
+  expect(result.transitions[0].bypassedRequirementKeys).toHaveLength(2);
+  expect(result.transitions[0].requirementEvidence).toEqual([]);
+  expect(result.transitions[0].workflowRunId).toBeUndefined();
+  expect(result.state?.currentMilestoneKey).toBe(s.configured.secondKey);
+  await expect(s.owner.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, s.args)).rejects.toThrow("authority_changed");
+  expect((await s.snapshot()).transitions).toHaveLength(1);
+  const dossier = await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
+  expect(dossier.milestone_history[0].forced_by_user_id).toBe(s.f.ownerId);
+  const w = dossier.workflow!;
+  await s.owner.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, { ...s.args, expectedMilestoneKey: w.current_milestone_key,
+    expectedMilestoneEnteredAt: Date.parse(w.current_milestone_entered_at), expectedTransitionSeq: w.override_state!.transition_seq });
+  expect((await s.snapshot()).state?.completedAt).toBeTruthy();
+});
+
+test.each(["expectedWorkflowRevision", "expectedMilestoneKey", "expectedMilestoneEnteredAt", "expectedActivationSequence", "expectedTransitionSeq"] as const)("override rejects stale confirmation: %s", async field => {
+  const s = await overrideFixture();
+  await expect(s.owner.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, { ...s.args, [field]: field === "expectedMilestoneKey" ? "stale" : Number(s.args[field]) + 1 })).rejects.toThrow("authority_changed");
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+});
+
+test("ordinary member cannot force a move", async () => {
+  const s = await overrideFixture();
+  await expect(s.t.withIdentity({ subject: MEMBER_SUBJECT }).mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, s.args)).rejects.toThrow();
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+});
+
+test("override refuses inactive members", async () => {
+  const s = await overrideFixture();
+  await s.t.run(ctx => ctx.db.patch(s.f.membershipId, { active: false }));
+  await expect(s.owner.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, s.args)).rejects.toThrow("authority_changed");
+  expect((await s.snapshot()).transitions).toHaveLength(0);
+});
+
 test.each([false, true])("completion accumulates in either order, ignores replay and moves once: reverse=%s", async reverse => {
   const s = await completionFixture();
   const channels = reverse ? [s.secondChannel, s.f.channelId] : [s.f.channelId, s.secondChannel];

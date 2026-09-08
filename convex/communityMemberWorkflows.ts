@@ -695,18 +695,19 @@ async function getTransitionByRunAction(args: {
 
 async function transitionMemberForWorkflowAction(args: {
   ctx: any;
-  workflowRunId: any;
+  workflowRunId?: any;
+  override?: { workflowId: any; membershipId: any; actorUserId: any; activationSequence: number; transitionSeq: number };
   actionKey: string;
   expectedWorkflowRevision: number;
   expectedMilestoneKey: string;
   expectedMilestoneEnteredAt: number;
   nowMs: number;
 }) {
-  const replay = await getTransitionByRunAction({
+  const replay = args.workflowRunId ? await getTransitionByRunAction({
     ctx: args.ctx,
     workflowRunId: args.workflowRunId,
     actionKey: args.actionKey,
-  });
+  }) : null;
   if (replay) {
     return {
       transitionId: replay._id,
@@ -714,13 +715,13 @@ async function transitionMemberForWorkflowAction(args: {
       replayed: true,
     };
   }
-  const run = (await args.ctx.db.get(args.workflowRunId)) as WorkflowRunRow | null;
-  if (!run || run.status !== "running") {
+  const run = args.workflowRunId ? (await args.ctx.db.get(args.workflowRunId)) as WorkflowRunRow | null : null;
+  if (!args.override && (!run || run.status !== "running")) {
     throw new Error("community_member_workflow_run_authority_invalid");
   }
-  const workflow = (await args.ctx.db.get(run.workflowId)) as WorkflowRow | null;
+  const workflow = (await args.ctx.db.get(args.override?.workflowId ?? run!.workflowId)) as WorkflowRow | null;
   const membership = (await args.ctx.db.get(
-    run.membershipId,
+    args.override?.membershipId ?? run!.membershipId,
   )) as CommunityMembershipLike | null;
   if (
     !workflow ||
@@ -736,6 +737,9 @@ async function transitionMemberForWorkflowAction(args: {
     membershipId: membership!._id,
   });
   const current = resolveCurrentMilestone({ workflow, membership: membership!, state });
+  if (args.override && (Number(membership!.activationSequence ?? 0) !== args.override.activationSequence || Number(state?.transitionSeq ?? 0) !== args.override.transitionSeq)) {
+    throw new Error("community_member_workflow_transition_authority_changed");
+  }
   if (
     current.completedAt ||
     current.milestone.key !== args.expectedMilestoneKey ||
@@ -745,7 +749,7 @@ async function transitionMemberForWorkflowAction(args: {
   }
   const requirements = current.milestone.automations.filter(a => a.action.type === "move_member");
   const evidence = currentWorkflowRequirementEvidence(requirements, state?.requirementEvidence ?? [], Number(membership!.activationSequence ?? 0));
-  if (requirements.length === 0 || evidence.length !== requirements.length) {
+  if (!args.override && (requirements.length === 0 || evidence.length !== requirements.length)) {
     throw new Error("community_member_workflow_requirements_incomplete");
   }
   const nextMilestone = workflow.milestones[current.milestoneIndex + 1];
@@ -785,6 +789,7 @@ async function transitionMemberForWorkflowAction(args: {
     workflowRevision: workflow.revision,
     milestoneEnteredAt: current.milestoneEnteredAt,
     workflowRunId: args.workflowRunId,
+    ...(args.override ? { forcedByUserId: args.override.actorUserId, bypassedRequirementKeys: requirements.filter(rule => !evidence.some(item => item.automationKey === rule.key)).map(rule => rule.key) } : {}),
     actionKey: args.actionKey,
     requirementEvidence: evidence,
     occurredAt: args.nowMs,
@@ -794,6 +799,23 @@ async function transitionMemberForWorkflowAction(args: {
   if (nextMilestone) await enrollWorkflowMilestoneTimers({ ctx: args.ctx, membership: membership!, nowMs: args.nowMs });
   return { transitionId, completedWorkflow, replayed: false };
 }
+
+export const forceBuilderMemberMilestone = mutation({
+  args: { ...managerIdentityArgs, communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
+    expectedWorkflowId: v.id("communityMemberWorkflows"),
+    expectedWorkflowRevision: v.number(), expectedMilestoneKey: v.string(), expectedMilestoneEnteredAt: v.number(),
+    expectedActivationSequence: v.number(), expectedTransitionSeq: v.number() },
+  handler: async (ctx, args) => {
+    const actor = await requireWorkflowManager({ ctx, ...args });
+    const workflow = await getCommunityMemberWorkflowByCommunity({ ctx, communityId: args.communityId });
+    if (!workflow || workflow._id !== args.expectedWorkflowId) throw new Error("community_member_workflow_transition_authority_changed");
+    return transitionMemberForWorkflowAction({ ctx, actionKey: "builder_forced_override", nowMs: Date.now(),
+      expectedWorkflowRevision: args.expectedWorkflowRevision, expectedMilestoneKey: args.expectedMilestoneKey,
+      expectedMilestoneEnteredAt: args.expectedMilestoneEnteredAt,
+      override: { workflowId: workflow._id, membershipId: args.membershipId, actorUserId: actor.userId,
+        activationSequence: args.expectedActivationSequence, transitionSeq: args.expectedTransitionSeq } });
+  },
+});
 
 async function executeWorkflowAutomation(args: {
   ctx: any;

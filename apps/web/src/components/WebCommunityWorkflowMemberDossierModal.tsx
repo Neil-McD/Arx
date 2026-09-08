@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import {
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
@@ -63,9 +64,18 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   isServiceChannelSaving: boolean;
   serviceChannelError: string | null;
   onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
+  onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onOpenServiceChannel: (channelId: string) => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
+  const [confirmation, setConfirmation] = useState<CloudCommunityMemberSuccessDossier | null>(null);
+  const [forcing, setForcing] = useState(false);
+  const [forceError, setForceError] = useState<string | null>(null);
+  const forcePending = useRef(false);
+  useEffect(() => { setConfirmation(null); setForceError(null); }, [props.isOpen, props.dossier?.membership_id]);
+  useEffect(() => {
+    if (confirmation) dialogRef.current?.querySelector<HTMLElement>("[data-override-cancel]")?.focus();
+  }, [confirmation]);
 
   useEffect(() => {
     if (!props.isOpen) return;
@@ -176,6 +186,22 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
         </div>
 
         <div className="modal-body workflow-member-dossier-body">
+          {confirmation ? <section className="workflow-member-dossier-section" role="alertdialog" aria-labelledby="force-move-title" aria-describedby="force-move-warning">
+            <h3 id="force-move-title">Force {confirmation.workflow?.override_state?.next_milestone_name ? "move to next milestone" : "workflow completion"}?</h3>
+            <p><strong>{confirmation.display_name}</strong>: {confirmation.workflow?.current_milestone_name} → {confirmation.workflow?.override_state?.next_milestone_name ?? "Workflow complete"}</p>
+            <p id="force-move-warning">This bypasses unmet requirements and does not mean the goal was achieved. Pending forms for this milestone will close. Your override will be recorded.</p>
+            {forceError ? <p role="alert" className="workflow-error">{forceError}</p> : null}
+            <div className="resource-modal-actions">
+              <button type="button" className="secondary" data-override-cancel disabled={forcing} onClick={() => setConfirmation(null)}>Cancel</button>
+              <button type="button" className="danger" disabled={forcing || Boolean(forceError)} onClick={async () => {
+                if (forcePending.current) return;
+                forcePending.current = true; setForcing(true);
+                try { await props.onForceMove(confirmation); setConfirmation(null); }
+                catch (error) { setForceError(error instanceof Error ? error.message : "Move failed. Refresh before trying again."); }
+                finally { forcePending.current = false; setForcing(false); }
+              }}>{forcing ? "Moving…" : confirmation.workflow?.override_state?.next_milestone_name ? "Force move" : "Force complete"}</button>
+            </div>
+          </section> : <>
           {dossier?.workflow?.requirements?.length && !dossier.workflow.completed_at ? <section>
             <h3>Move on when all requirements are met</h3>
             <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
@@ -202,6 +228,11 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
             </div>
           ) : dossier ? (
             <>
+              {dossier.workflow ? <section className="workflow-member-dossier-section">
+                <h3>Milestone goal</h3>
+                <p>{dossier.workflow.goal || "No goal specified."}</p>
+                {!dossier.workflow.completed_at && dossier.workflow.override_state ? <button type="button" className="secondary" onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button> : null}
+              </section> : null}
               {props.formResponses}
               <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}
                 channels={props.channels} channelsUnavailable={props.channelsUnavailable}
@@ -266,6 +297,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                           {entry.completed_workflow
                             ? `${entry.milestone_name} → Workflow complete`
                             : `${entry.milestone_name} → ${entry.next_milestone_name}`}
+                          {entry.forced_by_user_id ? " · Builder override" : ""}
                         </strong>
                       </li>
                     ))}
@@ -276,6 +308,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               </details>
             </>
           ) : null}
+          </>}
         </div>
       </section>
     </div>,

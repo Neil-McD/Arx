@@ -535,6 +535,19 @@ member movement are not V1 primitives. Add one only after a real use case cannot
 be expressed by the grammar above.
 # Developer-only live assessment smoke
 
+## Builder forced advancement
+
+The member dossier exposes a separate **Force move** confirmation. It names the
+member, current milestone and next milestone (or workflow completion), and warns
+that unmet requirements are bypassed and pending milestone forms close. Only an
+authenticated community manager can confirm. The server compares workflow revision,
+milestone/entry time, activation sequence and transition sequence before changing
+anything. Duplicate or stale confirmations fail closed. Normal all-requirements
+movement is unchanged. Both paths reuse the same transition transaction, form
+cancellation and next-milestone timer enrollment. The existing transition ledger
+records `forcedByUserId` and unsatisfied `bypassedRequirementKeys`; manual overrides
+have no fabricated agent run and never create completion evidence or an AI verdict.
+
 `node scripts/workflow_assessment_smoke.mjs` runs the fixed three-case synthetic
 assessment campaign on `dev:quick-porcupine-949` only. It uses the canonical
 assessment prompt builder, runtime kernel, provider adapter, parser, and inference

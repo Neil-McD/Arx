@@ -29,6 +29,7 @@ export type CommunityMemberSuccessFact = {
 };
 
 export type CommunityMemberSuccessMilestoneHistoryEntry = {
+  forced_by_user_id?: string;
   id: string;
   sequence: number;
   milestone_key: string;
@@ -84,6 +85,8 @@ export type CommunityMembershipContext = {
   joined_at: string;
   service_channel: CommunityMemberServiceChannel;
   workflow: {
+    goal?: string;
+    override_state?: { activation_sequence: number; transition_seq: number; next_milestone_name: string | null };
     id: string;
     revision: number;
     current_milestone_key: string;

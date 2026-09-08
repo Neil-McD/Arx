@@ -110,6 +110,7 @@ export function renderCommunityMemberSuccessDossierMarkdown(
     lines.push("", "_No completed milestones yet._");
   } else {
     for (const entry of source.milestone_history) {
+      if (entry.forced_by_user_id) lines.push(`- Builder forced override by ${markdownInline(entry.forced_by_user_id)}; not evidence that the goal was achieved.`);
       lines.push(
         entry.completed_workflow
           ? `- ${entry.occurred_at}: ${markdownInline(entry.milestone_name)} → Workflow complete`

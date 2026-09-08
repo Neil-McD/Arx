@@ -2275,6 +2275,7 @@ export default function App() {
         isServiceChannelSaving: communityWorkflows.isServiceChannelSaving,
         serviceChannelError: communityWorkflows.serviceChannelError,
         onSetServiceChannel: communityWorkflows.setServiceChannel,
+        onForceMove: communityWorkflows.forceMove,
         onOpenServiceChannel: (expectedChannelId: string) => communityWorkflows.openServiceChannel(expectedChannelId, (channelId) => {
           const channel = activeCommunityChannels.find(item => item.id === channelId && item.community_id === activeCommunityId);
           if (!channel) return;

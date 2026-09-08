@@ -175,6 +175,7 @@ function renderDossier(overrides: Partial<React.ComponentProps<typeof WebCommuni
 }
 
 const serviceProps = {
+  onForceMove: async () => {},
   channels: [], channelsUnavailable: false, isServiceChannelSaving: false, serviceChannelError: null,
   onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
 };

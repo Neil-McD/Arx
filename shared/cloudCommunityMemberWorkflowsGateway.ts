@@ -223,6 +223,20 @@ export async function setCloudCommunityMemberServiceChannel<SessionT>(params: Wo
   });
 }
 
+export async function forceCloudCommunityMemberMilestone<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }) {
+  const { dossier } = params;
+  const workflow = dossier.workflow;
+  if (!workflow?.override_state || workflow.completed_at) throw new Error("workflow_override_unavailable");
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return client.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, {
+    authSubject, communityId: dossier.community_id as Id<"communities">, membershipId: dossier.membership_id as Id<"communityMemberships">,
+    expectedWorkflowRevision: workflow.revision, expectedMilestoneKey: workflow.current_milestone_key,
+    expectedWorkflowId: workflow.id as Id<"communityMemberWorkflows">,
+    expectedMilestoneEnteredAt: Date.parse(workflow.current_milestone_entered_at),
+    expectedActivationSequence: workflow.override_state.activation_sequence, expectedTransitionSeq: workflow.override_state.transition_seq,
+  });
+}
+
 export async function deleteCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;

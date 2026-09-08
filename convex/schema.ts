@@ -1346,6 +1346,8 @@ export default defineSchema({
     .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 
   communityMemberWorkflowTransitions: defineTable({
+    forcedByUserId: v.optional(v.id("users")),
+    bypassedRequirementKeys: v.optional(v.array(v.string())),
     requirementEvidence: v.optional(workflowRequirementEvidenceValidator),
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
@@ -1358,7 +1360,7 @@ export default defineSchema({
     completedWorkflow: v.boolean(),
     workflowRevision: v.number(),
     milestoneEnteredAt: v.number(),
-    workflowRunId: v.id("communityMemberWorkflowRuns"),
+    workflowRunId: v.optional(v.id("communityMemberWorkflowRuns")),
     actionKey: v.string(),
     occurredAt: v.number(),
     createdAt: v.number(),
