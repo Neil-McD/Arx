@@ -2175,7 +2175,7 @@
 .channel-roster-panel .community-context-member { gap: 10px; }
 @container community-chat-area (max-width: 680px) {
   .community-interaction-projection.has-channel-context { grid-template-columns: minmax(0, 1fr); }
-  .channel-roster-panel { display: none; }
+  .community-context-panel.channel-roster-panel { display: none; }
 }
 
 .community-context-panel {
