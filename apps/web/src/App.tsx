@@ -2855,6 +2855,7 @@ export default function App() {
     surfaceContext: memberAgentSurfaceContext,
     isVisible: isMemberAgentDockVisible,
   } = useWebMemberAgentSurfaceController({
+    allowAlongsideMessages: !showMobileShell,
     activePage,
     communityTab,
     activeCommunity,

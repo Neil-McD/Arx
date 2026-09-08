@@ -17,6 +17,7 @@ export function useWebMemberAgentSurfaceController(params: {
   publicRouteKind: string;
   hasResolvedCommunities: boolean;
   isDirectMessagesOpen: boolean;
+  allowAlongsideMessages?: boolean;
   isOnboardingModalOpen: boolean;
   memberAgentVoiceUiState: string;
   cancelVoiceInput: () => void;
@@ -40,7 +41,7 @@ export function useWebMemberAgentSurfaceController(params: {
     params.activePage === "community" &&
     params.hasResolvedCommunities &&
     Boolean(surfaceContext) &&
-    !params.isDirectMessagesOpen &&
+    (!params.isDirectMessagesOpen || params.allowAlongsideMessages === true) &&
     !params.isOnboardingModalOpen;
   const voiceScopeKey =
     `${params.activePage}:${params.communityTab}:${community?.id ?? "none"}`;
