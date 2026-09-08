@@ -2,10 +2,7 @@ import { buildCommunityAgentServePromptBundle } from "./communityAgentServePromp
 import { composeWorkflowAgentPrompt } from "./communityMemberWorkflow";
 import { WORKFLOW_ASSESSMENT_PROMPT } from "./communityWorkflowAssessment";
 
-// Fixed campaign identity: retries cannot mint new paid attempts.
-export const ASSESSMENT_SMOKE_CAMPAIGN = "workflow-assessment-smoke-20260907-v1";
-export const ASSESSMENT_SMOKE_MAX_OUTPUT = 1024;
-export const ASSESSMENT_SMOKE_INPUT_CEILING = 20_096;
+// Retained regression fixtures from the completed live campaign; no paid runner.
 export const ASSESSMENT_SMOKE_FIXTURES = [
   { key: "achieved", expected: "achieved", goal: "The submitted answer identifies one target customer and one concrete problem to solve.", answer: "My target customer is independent dental clinics. Their problem is missed appointments caused by patients forgetting their booking.", truncated: false },
   { key: "incomplete", expected: "not_yet", goal: "The submitted answer identifies one target customer and one concrete problem to solve.", answer: "I have not selected a target customer or a problem yet.", truncated: false },
@@ -25,8 +22,4 @@ export function buildAssessmentSmokeFixture(fixture: typeof ASSESSMENT_SMOKE_FIX
   // Conservative byte bound, plus 4096 tokens of protocol overhead. No tools/images.
   if (new TextEncoder().encode(JSON.stringify(bundle.messages)).length > 16_000) throw new Error("smoke_input_too_large");
   return { ...bundle, evidence, refs: [ref] };
-}
-
-export function requireAssessmentSmokeStage(url: string | undefined) {
-  if (url !== "https://quick-porcupine-949.convex.cloud") throw new Error("assessment_smoke_staging_only");
 }

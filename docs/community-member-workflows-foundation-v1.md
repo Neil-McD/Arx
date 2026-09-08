@@ -533,7 +533,13 @@ Recurring time and external triggers, arbitrary event filters, goal-driven advan
 multi-step loops, action graphs, action chaining, agent selection, and manual
 member movement are not V1 primitives. Add one only after a real use case cannot
 be expressed by the grammar above.
-# Developer-only live assessment smoke
+## Historical assessment evidence
+
+Assessment history names its original milestone and exposes a collapsed goal-and-
+evidence disclosure. The goal comes from the run's captured context; cited answers
+come only from that attempt's recorded context snapshot. Later edits do not rewrite
+history. Missing snapshots are explicitly unavailable, never reconstructed from
+today's forms. These fields remain builder/workflow-private, not member self context.
 
 ## Builder forced advancement
 
@@ -545,17 +551,17 @@ milestone/entry time, activation sequence and transition sequence before changin
 anything. Duplicate or stale confirmations fail closed. Normal all-requirements
 movement is unchanged. Both paths reuse the same transition transaction, form
 cancellation and next-milestone timer enrollment. The existing transition ledger
-records `forcedByUserId` and unsatisfied `bypassedRequirementKeys`; manual overrides
+records `forcedByUserId`, unsatisfied `bypassedRequirementKeys`, and immutable
+`bypassedRequirements` labels/trigger definitions; manual overrides
 have no fabricated agent run and never create completion evidence or an AI verdict.
 
-`node scripts/workflow_assessment_smoke.mjs` runs the fixed three-case synthetic
-assessment campaign on `dev:quick-porcupine-949` only. It uses the canonical
-assessment prompt builder, runtime kernel, provider adapter, parser, and inference
-receipts. It requires the fixed canary community's operator-owner funding grant.
-Only accounting receipts change; no members, forms, channels, or progress change.
-The campaign has fixed receipt identities, no provider retries, no tools, bounded
-text input, and 1024 maximum output tokens per case. Preflight rejects costs above
-$1 using configured canonical pricing and a conservative input token bound. The
-local JSON report preserves exact prompts, budget events, verdicts and usage.
-Unknown usage/failure stops the campaign without automatic reruns. This smoke
-tests three real model judgments, not auth, delivery, or statistical judge quality.
+Older override records without definitions are labeled unavailable, not backfilled
+from changed configuration.
+
+## Completed live assessment smoke
+
+The fixed staging campaign `workflow-assessment-smoke-20260907-v1` passed all three
+judgments. Its one-off server module and paid CLI runner are retired. Regression
+fixtures remain in `shared/workflowAssessmentSmoke.ts`; original local evidence is
+`artifacts/workflow-assessment-smoke-20260907-v1.json`. Accounting receipts remain
+untouched. This proof does not replace authenticated member-journey acceptance.

@@ -776,6 +776,21 @@ async function transitionMemberForWorkflowAction(args: {
       updatedAt: args.nowMs,
     });
   }
+  const bypassedRequirements = args.override ? await Promise.all(requirements.filter(rule => !evidence.some(item => item.automationKey === rule.key)).map(async rule => {
+    const trigger = rule.trigger;
+    let label = trigger.type === "member_joined" ? "Member joins"
+      : trigger.type === "milestone_elapsed" ? `${trigger.delayMinutes} minutes in milestone`
+      : trigger.type === "form_submitted" ? `Submit form ${trigger.formKey}` : "Post or reply in any channel";
+    if (trigger.type === "form_submitted") {
+      const form = await args.ctx.db.query("communityForms").withIndex("by_community_key", (q: any) => q.eq("communityId", workflow.communityId).eq("key", trigger.formKey)).unique();
+      if (form) label = `Submit ${form.name}`;
+    } else if (trigger.type === "member_contributed" && trigger.channelId) {
+      const id = args.ctx.db.normalizeId("communityChannels", trigger.channelId);
+      const channel = id ? await args.ctx.db.get(id) : null;
+      label = `Post or reply in ${channel?.communityId === workflow.communityId ? `#${channel.name}` : `channel ${trigger.channelId}`}`;
+    }
+    return { key: rule.key, label, definition: JSON.stringify(trigger) };
+  })) : undefined;
   const transitionId = await args.ctx.db.insert("communityMemberWorkflowTransitions", {
     communityId: workflow.communityId,
     workflowId: workflow._id,
@@ -789,7 +804,7 @@ async function transitionMemberForWorkflowAction(args: {
     workflowRevision: workflow.revision,
     milestoneEnteredAt: current.milestoneEnteredAt,
     workflowRunId: args.workflowRunId,
-    ...(args.override ? { forcedByUserId: args.override.actorUserId, bypassedRequirementKeys: requirements.filter(rule => !evidence.some(item => item.automationKey === rule.key)).map(rule => rule.key) } : {}),
+    ...(args.override ? { forcedByUserId: args.override.actorUserId, bypassedRequirementKeys: bypassedRequirements!.map(rule => rule.key), bypassedRequirements } : {}),
     actionKey: args.actionKey,
     requirementEvidence: evidence,
     occurredAt: args.nowMs,

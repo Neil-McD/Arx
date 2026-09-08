@@ -81,6 +81,8 @@ export function renderCommunityMemberSuccessDossierMarkdown(
     for (const activity of source.recent_workflow_activity) {
       if (activity.action_type === "request_form") { lines.push(`- ${activity.occurred_at}: Form request ${activity.status}.`); continue; }
       if (activity.action_type === "evaluate_goal") {
+        lines.push(`- Evaluated milestone: ${markdownInline(activity.milestone_name)}; captured goal: ${markdownInline(activity.assessment?.goal ?? "unavailable")}. Historical assessment, not current-goal proof.`);
+        for (const citation of activity.assessment?.citations ?? []) lines.push(`  - ${markdownInline(citation.ref)}: ${markdownInline(citation.form)} / ${markdownInline(citation.question)} — ${markdownInline(citation.answer)}`);
         lines.push(`- ${activity.occurred_at}: Goal evaluation ${activity.status}${activity.assessment ? ` — ${activity.assessment.verdict}: ${markdownInline(activity.assessment.reason)}; evidence: ${activity.assessment.evidenceRefs.map(markdownInline).join(", ")}` : ""}.`);
         continue;
       }
@@ -111,6 +113,7 @@ export function renderCommunityMemberSuccessDossierMarkdown(
   } else {
     for (const entry of source.milestone_history) {
       if (entry.forced_by_user_id) lines.push(`- Builder forced override by ${markdownInline(entry.forced_by_user_id)}; not evidence that the goal was achieved.`);
+      if (entry.forced_by_user_id) lines.push(`  - Bypassed requirements: ${entry.bypassed_requirements ? entry.bypassed_requirements.map(item => `${markdownInline(item.label)} (${markdownInline(item.definition)})`).join("; ") || "none" : "historical definitions unavailable"}.`);
       lines.push(
         entry.completed_workflow
           ? `- ${entry.occurred_at}: ${markdownInline(entry.milestone_name)} → Workflow complete`

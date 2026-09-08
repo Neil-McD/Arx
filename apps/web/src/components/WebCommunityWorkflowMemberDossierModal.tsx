@@ -26,7 +26,7 @@ function workflowActivityLabel(
   activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
 ): string {
   if (activity.action_type === "request_form") return `Form · ${readableLabel(activity.status)}`;
-  if (activity.action_type === "evaluate_goal") return `Goal evaluation · ${activity.status === "responded" ? "Assessed" : readableLabel(activity.status)}`;
+  if (activity.action_type === "evaluate_goal") return `${activity.milestone_name} · Goal evaluation · ${activity.status === "responded" ? "Assessed" : readableLabel(activity.status)}`;
   if (activity.action_type === "create_service_channel") return `Private channel setup · ${readableLabel(activity.status)}`;
   if (activity.status === "requirement_satisfied") return `Requirement satisfied in ${activity.milestone_name}`;
   if (activity.status === "unavailable") {
@@ -272,6 +272,16 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                         <div>
                           <strong>{workflowActivityLabel(activity)}</strong>
                           {activity.assessment ? <p>{readableLabel(activity.assessment.verdict)} — {activity.assessment.reason}</p> : null}
+                          {activity.assessment ? <details className="workflow-member-instructions">
+                            <summary>Goal and evidence at evaluation</summary>
+                            <p><strong>Goal:</strong> {activity.assessment.goal || "Original goal unavailable."}</p>
+                            {(activity.assessment.citations ?? []).map(citation => <div key={citation.ref}>
+                              <p><strong>{citation.form} · {citation.question}</strong></p>
+                              <p>{citation.answer}</p>
+                            </div>)}
+                            {(activity.assessment.citations?.length ?? 0) < activity.assessment.evidenceRefs.length ? <p>Some cited evidence is unavailable in the recorded context.</p> : !activity.assessment.evidenceRefs.length ? <p>No evidence cited.</p> : null}
+                            <p>Historical assessment, not proof of the member’s current goal.</p>
+                          </details> : null}
                           {activity.failure_reason ? <p>{activity.failure_reason}</p> : null}
                           {activity.delivery_channel_url ? <a href={activity.delivery_channel_url}>Open delivery channel</a> : null}
                           {activity.prompt ? (
@@ -302,6 +312,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                             : `${entry.milestone_name} → ${entry.next_milestone_name}`}
                           {entry.forced_by_user_id ? " · Builder override" : ""}
                         </strong>
+                        {entry.forced_by_user_id ? <p>{entry.bypassed_requirements ? entry.bypassed_requirements.length ? `Bypassed: ${entry.bypassed_requirements.map(item => item.label).join("; ")}` : "No outstanding requirements." : "Original requirement details unavailable."}</p> : null}
                       </li>
                     ))}
                   </ol>

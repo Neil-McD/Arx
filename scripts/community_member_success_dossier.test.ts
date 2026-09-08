@@ -180,6 +180,29 @@ const serviceProps = {
   onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
 };
 
+test("assessment disclosure shows original milestone, goal and cited answer", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", recent_workflow_activity: [{
+    ...source.recent_workflow_activity[0], action_type: "evaluate_goal", status: "responded", milestone_name: "Original milestone",
+    assessment: { verdict: "achieved", reason: "Offer supplied", assessedAt: 1, evidenceRefs: ["r:v:q"], goal: "Original goal",
+      citations: [{ ref: "r:v:q", form: "Original form", question: "What is your offer?", answer: "A coaching program" }] },
+  }] } });
+  expect(html).toContain("Original milestone · Goal evaluation");
+  expect(html).toContain("Goal and evidence at evaluation");
+  expect(html).toContain("Original goal");
+  expect(html).toContain("A coaching program");
+  expect(html).toContain("Historical assessment");
+  expect(html).not.toContain("<details open");
+});
+
+test("legacy assessment never substitutes current answers for missing snapshots", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", recent_workflow_activity: [{
+    ...source.recent_workflow_activity[0], action_type: "evaluate_goal", status: "responded",
+    assessment: { verdict: "achieved", reason: "Historical result", assessedAt: 1, evidenceRefs: ["r:v:q"] },
+  }] } });
+  expect(html).toContain("Original goal unavailable.");
+  expect(html).toContain("Some cited evidence is unavailable");
+});
+
 test("service channel starts unassigned without an Open action", () => {
   const html = renderDossier();
   expect(html).toContain("Not assigned");

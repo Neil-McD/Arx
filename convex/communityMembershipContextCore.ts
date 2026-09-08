@@ -1,4 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
+import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
+import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
 import { currentWorkflowRequirementEvidence } from "../shared/communityMemberWorkflow";
 import type { QueryCtx } from "./_generated/server";
 import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
@@ -252,9 +254,14 @@ async function readMembershipContextRecords(args: {
         const request = run.actionResult?.serveRequestId ? await args.ctx.db.get(run.actionResult.serveRequestId) : null;
         const valid = validActionResult && request?.workflowRunId === run._id && request?.workflowAssessment === true
           && request.communityId === run.communityId && request.requesterUserId === membership?.userId;
+        const snapshot = args.view !== "self" && valid && request.status === "responded" && run.goalAssessment
+          ? await args.ctx.db.query("communityAgentRunEvents").withIndex("by_run_seq", q => q.eq("runId", buildCommunityAgentServeRunId(request._id, request.attempt)).eq("seq", 0)).first() : null;
         return { id: String(run._id), action_type: "evaluate_goal" as const,
-          status: run.status === "failed" || (valid && request.status === "error") ? "failed" as const : valid ? request.status as "queued" | "running" | "responded" : "unavailable" as const,
-          ...(valid && request.status === "responded" && run.goalAssessment ? { assessment: run.goalAssessment } : {}),
+          status: run.status === "failed" || (valid && ["error", "skipped"].includes(request.status)) ? "failed" as const : valid ? request.status as "queued" | "running" | "responded" : "unavailable" as const,
+          ...(args.view !== "self" && valid && request.status === "responded" && run.goalAssessment ? { assessment: { ...run.goalAssessment,
+            goal: run.milestoneContextSnapshot?.goal,
+            citations: readAssessmentCitations(snapshot?.kind === "context_snapshot" ? snapshot.content : undefined, run.goalAssessment.evidenceRefs),
+          } } : {}),
           milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
       }
       if (run.actionSnapshot.type === "create_service_channel") {
@@ -443,6 +450,7 @@ async function readMembershipContextRecords(args: {
       .map((transition) => ({
         id: String(transition._id),
         ...(args.view !== "self" && transition.forcedByUserId ? { forced_by_user_id: String(transition.forcedByUserId) } : {}),
+        ...(args.view !== "self" && transition.bypassedRequirements ? { bypassed_requirements: transition.bypassedRequirements } : {}),
         sequence: transition.seq,
         milestone_key: transition.fromMilestoneKey,
         milestone_name: transition.fromMilestoneName,

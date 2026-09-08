@@ -1,5 +1,15 @@
 import { expect, test } from "vitest";
-import { parseWorkflowGoalAssessment } from "../shared/communityWorkflowAssessment";
+import { parseWorkflowGoalAssessment, readAssessmentCitations } from "../shared/communityWorkflowAssessment";
+test("historical citations fail closed and exclude uncited or truncated answers", () => {
+  const snapshot = JSON.stringify({ timed_member_context: JSON.stringify({ evidence: { submissions: [{ request_id: "r", version_id: "v", form_name: "Intake", questions: [
+    { key: "a", title: "Offer?", answer: "Coaching", truncated: false },
+    { key: "b", title: "Private", answer: "Not cited", truncated: false },
+    { key: "c", title: "Cut off", answer: "Partial", truncated: true },
+  ] }] } }) });
+  expect(readAssessmentCitations(snapshot, ["r:v:a", "r:v:c"])).toEqual([{ ref: "r:v:a", form: "Intake", question: "Offer?", answer: "Coaching" }]);
+  expect(readAssessmentCitations(undefined, ["r:v:a"])).toEqual([]);
+  expect(readAssessmentCitations("{}", ["r:v:a"])).toEqual([]);
+});
 test.each(["not_yet", "insufficient_evidence"])("valid %s is a judgment, not an execution error", verdict => {
   expect(parseWorkflowGoalAssessment(JSON.stringify({ verdict, reason: "Need more evidence", evidenceRefs: [] }), [], false).verdict).toBe(verdict);
 });

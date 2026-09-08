@@ -488,6 +488,21 @@ test("ordinary member cannot force a move", async () => {
   expect((await s.snapshot()).transitions).toHaveLength(0);
 });
 
+test("override preserves bypassed definitions after channel and milestone edits", async () => {
+  const s = await overrideFixture();
+  await s.owner.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, s.args);
+  const before = (await s.snapshot()).transitions[0].bypassedRequirements!;
+  expect(before.map(item => item.label)).toEqual(["Post or reply in #General", "Post or reply in #Planning"]);
+  expect(before.map(item => JSON.parse(item.definition).channelId)).toEqual([s.f.channelId, s.secondChannel]);
+  await s.t.run(async ctx => {
+    await ctx.db.patch(s.f.channelId, { name: "Renamed" });
+    const workflow = await ctx.db.get(s.args.expectedWorkflowId);
+    await ctx.db.patch(workflow!._id, { milestones: workflow!.milestones.map(m => ({ ...m, automations: [] })) });
+  });
+  const dossier = await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
+  expect(dossier.milestone_history[0].bypassed_requirements).toEqual(before);
+});
+
 test("override refuses inactive members", async () => {
   const s = await overrideFixture();
   await s.t.run(ctx => ctx.db.patch(s.f.membershipId, { active: false }));
@@ -722,6 +737,23 @@ test("goal assessment is private, requires no room, and records once without mov
   expect(builder.recent_workflow_activity.find(a => a.action_type === "evaluate_goal")?.assessment?.verdict).toBe("achieved");
   const self = await s.member.query(internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal, { authSubject: MEMBER_SUBJECT, userId: s.f.memberId, communityId: s.f.communityId });
   expect(JSON.stringify(self)).not.toContain("The submitted answer describes the offer.");
+});
+
+test("assessment history uses captured goal and answers, not later edits", async () => {
+  const s = await goalAssessmentFixture();
+  expect((await s.finish()).ok).toBe(true);
+  const read = async () => (await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId })).recent_workflow_activity.find(a => a.action_type === "evaluate_goal")!.assessment!;
+  const before = await read();
+  expect(before.goal).toBe("The member has written an offer.");
+  expect(before.citations!.length).toBeGreaterThan(0);
+  expect(before.citations!.map(c => c.ref)).toEqual(s.refs);
+  await s.t.run(async ctx => {
+    const workflow = (await ctx.db.query("communityMemberWorkflows").first())!;
+    await ctx.db.patch(workflow._id, { milestones: workflow.milestones.map(m => ({ ...m, goal: "NEW GOAL" })) });
+    const request = (await ctx.db.query("communityFormRequests").filter(q => q.eq(q.field("status"), "submitted")).first())!;
+    await ctx.db.patch(request._id, { answers: {} });
+  });
+  expect(await read()).toEqual(before);
 });
 
 test.each(["goal", "membership", "visit", "answers", "snapshot", "lease", "manager", "invented", "malformed"])("goal assessment rejects %s changes without publishing or passing", async change => {

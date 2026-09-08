@@ -1348,6 +1348,7 @@ export default defineSchema({
   communityMemberWorkflowTransitions: defineTable({
     forcedByUserId: v.optional(v.id("users")),
     bypassedRequirementKeys: v.optional(v.array(v.string())),
+    bypassedRequirements: v.optional(v.array(v.object({ key: v.string(), label: v.string(), definition: v.string() }))),
     requirementEvidence: v.optional(workflowRequirementEvidenceValidator),
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
