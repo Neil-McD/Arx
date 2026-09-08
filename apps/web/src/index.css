@@ -3119,7 +3119,7 @@
   color: var(--text-muted); background: transparent; border: 0; box-shadow: none;
 }
 .workspace-right-rail > .icon-button:is(:hover, :focus-visible),
-.workspace-panel-picker > .icon-button:is(:hover, :focus-visible) { background: var(--surface-hover); }
+.workspace-panel-picker > .icon-button:is(:hover, :focus-visible) { background: var(--hover-overlay); }
 .workspace-panel-picker { position: relative; }
 .workspace-right-rail > .direct-messages-topbar-button {
   width: 44px; height: 44px; padding: 6px;
@@ -3138,7 +3138,7 @@
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px;
   border: 0; border-radius: 8px; background: transparent; color: var(--text-primary);
 }
-.workspace-panel-options button:hover { background: var(--surface-hover); }
+.workspace-panel-options button:hover { background: var(--hover-overlay); }
 .workspace-panel-options button:disabled { opacity: .45; }
 .community-workspace-panes {
   position: relative; display: flex; min-width: 0; min-height: 0; overflow: hidden;
