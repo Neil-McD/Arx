@@ -19,6 +19,7 @@ type CommunitySurfaceCommunityLike =
   | null;
 
 type BuildWebCommunitySurfaceProjectionParams = {
+  admission?: WebCommunitySecondaryPanelsProps["settings"]["admission"];
   activePage: AppPage;
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
@@ -144,6 +145,7 @@ export function buildWebCommunitySurfaceProjection(
   const communitySecondarySurfaceProps: WebCommunitySecondaryPanelsProps = {
     communityTab: params.communityTab,
     settings: {
+      admission: params.admission,
       activeCommunity: params.activeCommunity,
       session: params.session,
       ensureSession: params.ensureSession,

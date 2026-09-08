@@ -216,12 +216,12 @@ assert.doesNotMatch(
 
 assert.match(
   communityDirectory,
-  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
+  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
   "the member directory must page the durable activity ledger through one bounded canonical cursor",
 );
 assert.match(
   communityDirectory,
-  /resolveCommunityPresenceAuthorization[\s\S]*last_active_at: toIsoString\(args\.lastSeenAt\)/,
+  /resolveCommunityPresenceAuthorization[\s\S]*last_active_at: args.lastSeenAt === null \? "" : toIsoString\(args\.lastSeenAt\)/,
   "directory activity ordering must reauthorize rows and expose the canonical timestamp",
 );
 assert.match(

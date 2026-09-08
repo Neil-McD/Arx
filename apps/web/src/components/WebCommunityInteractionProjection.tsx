@@ -136,11 +136,6 @@ export type WebCommunityInteractionProjectionProps = {
   communityId?: string | null;
   communityOwnerId?: string | null;
   canManageCommunityMembers?: boolean;
-  communityEntryPolicy?: CommunityAdmissionEntryPolicy | null;
-  canSetCommunityFreeAccessMode?: boolean;
-  isSettingCommunityFreeAccessMode?: boolean;
-  communityFreeAccessModeError?: string | null;
-  onSetCommunityFreeAccessMode?: (mode: "open" | "approval") => Promise<void> | void;
   canReviewCommunityJoinRequests?: boolean;
   communityJoinReviewMode?: "paid" | "free_auto" | "free_approval" | null;
   communityJoinRequests?: CommunityAdmissionJoinRequest[] | null;
@@ -199,11 +194,6 @@ const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
   "communityId",
   "communityOwnerId",
   "canManageCommunityMembers",
-  "communityEntryPolicy",
-  "canSetCommunityFreeAccessMode",
-  "isSettingCommunityFreeAccessMode",
-  "communityFreeAccessModeError",
-  "onSetCommunityFreeAccessMode",
   "canReviewCommunityJoinRequests",
   "communityJoinReviewMode",
   "communityJoinRequests",
@@ -311,11 +301,6 @@ const StableCommunityInteractionContextPanelSurface = memo(function StableCommun
           onLoadMoreMembers={props.onLoadMoreCommunityMembers}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
-          entryPolicy={props.communityEntryPolicy ?? null}
-          canSetFreeAccessMode={props.canSetCommunityFreeAccessMode}
-          isSettingFreeAccessMode={props.isSettingCommunityFreeAccessMode}
-          freeAccessModeError={props.communityFreeAccessModeError}
-          onSetFreeAccessMode={props.onSetCommunityFreeAccessMode}
           canReviewJoinRequests={props.canReviewCommunityJoinRequests}
           joinReviewMode={props.communityJoinReviewMode}
           pendingJoinRequests={props.communityJoinRequests ?? null}

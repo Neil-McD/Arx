@@ -42,11 +42,6 @@ type CommunityContextPanelProps = {
   onlineUserIds?: Set<string> | null;
   ownerId?: string | null;
   canManageMembers?: boolean;
-  entryPolicy?: CommunityAdmissionEntryPolicy | null;
-  canSetFreeAccessMode?: boolean;
-  isSettingFreeAccessMode?: boolean;
-  freeAccessModeError?: string | null;
-  onSetFreeAccessMode?: (mode: "open" | "approval") => Promise<void> | void;
   canReviewJoinRequests?: boolean;
   joinReviewMode?: "paid" | "free_auto" | "free_approval" | null;
   pendingJoinRequests?: CommunityAdmissionJoinRequest[] | null;
@@ -119,14 +114,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const [joinRequestsExpanded, setJoinRequestsExpanded] = useState(false);
   const joinRequestPanelId = useId();
-  const entryPolicy = props.entryPolicy ?? null;
-  const isFreeAdmissionMode = entryPolicy === "open" || entryPolicy === "approval";
-  const autoJoinEnabled = entryPolicy === "open";
-  const canShowFreeAccessSwitch = Boolean(
-    isFreeAdmissionMode &&
-      props.canSetFreeAccessMode &&
-      props.onSetFreeAccessMode,
-  );
   const pendingJoinRequestCount = visiblePendingJoinRequests.length;
   const canShowJoinRequests = Boolean(
     props.canReviewJoinRequests &&
@@ -257,17 +244,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     props.membersHasMore,
     props.membersLoadError,
     requestLoadMoreMembers,
-  ]);
-
-  const handleToggleFreeAccessMode = useCallback(() => {
-    if (!canShowFreeAccessSwitch || props.isSettingFreeAccessMode) return;
-    const nextMode = autoJoinEnabled ? "approval" : "open";
-    void props.onSetFreeAccessMode?.(nextMode);
-  }, [
-    autoJoinEnabled,
-    canShowFreeAccessSwitch,
-    props.isSettingFreeAccessMode,
-    props.onSetFreeAccessMode,
   ]);
 
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
@@ -412,33 +388,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         className="community-context-members"
         onScroll={handleMembersScroll}
       >
-        <div className="community-context-section community-context-members-total">
-          {canShowFreeAccessSwitch ? (
-            <button
-              className={`community-context-autojoin${autoJoinEnabled ? " is-on" : ""}`}
-              type="button"
-              role="switch"
-              aria-checked={autoJoinEnabled}
-              aria-busy={props.isSettingFreeAccessMode || undefined}
-              aria-label={`Auto-join is ${autoJoinEnabled ? "on" : "off"}`}
-              disabled={props.isSettingFreeAccessMode}
-              onClick={handleToggleFreeAccessMode}
-              title={props.isSettingFreeAccessMode
-                ? "Updating Auto-join"
-                : autoJoinEnabled
-                  ? "Auto-join on"
-                  : "Auto-join off"}
-            >
-              <span className="community-context-autojoin-label">Auto-join</span>
-              <span className="community-context-autojoin-track" aria-hidden="true">
-                <span className="community-context-autojoin-thumb" />
-              </span>
-            </button>
-          ) : null}
-        </div>
-        {props.freeAccessModeError ? (
-          <div className="community-context-admission-status">{props.freeAccessModeError}</div>
-        ) : null}
         {canShowJoinRequests ? (
           <button
             className={`community-context-request-divider${joinRequestsExpanded ? " is-open" : ""}`}

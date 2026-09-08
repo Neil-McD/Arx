@@ -15,10 +15,17 @@ responses. It introduces no backend reader, index, or authorization policy.
 
 Limits: this is bounded sequential search, not indexed search. For large
 communities an indexed canonical directory is a separate performance slice.
-The existing directory is presence-backed; completeness for never-present
-members remains an existing reader concern, not solved by this UI change.
-Auto-join remains available because Settings does not yet expose that policy.
-Do not remove it until its canonical control has been relocated.
+The directory now pages memberships by join order, with the owner once on the
+first page. Existing entitlement/block checks filter each member. Presence is
+optional activity annotation, never a prerequisite for inclusion; missing
+activity remains blank. Versioned cursors restart cached presence pagination
+safely. No schema change, backfill, or synthetic presence write is needed.
+
+Auto-join now lives in Settings → Community → Access & Pricing, using the
+canonical platform selector and existing immediate-save action. It is available
+only to authorized managers of currently free communities; enabling it also
+approves pending requests through the existing backend flow. Pending state and
+errors remain visible. The roster retains request review, not policy editing.
 
 No private workflow, form, or agent context appears in the directory. Role,
 remove, ban, and billing permissions/confirmations remain unchanged.

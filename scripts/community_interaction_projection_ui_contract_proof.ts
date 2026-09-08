@@ -529,26 +529,6 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /entryPolicy\?: CommunityAdmissionEntryPolicy \| null;[\s\S]*canSetFreeAccessMode\?: boolean;[\s\S]*onSetFreeAccessMode\?: \(mode: "open" \| "approval"\) => Promise<void> \| void;/,
-  "context panel should model a manager-only free-access mode control instead of inventing an autojoin data model",
-);
-assert.match(
-  contextPanel,
-  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canSetFreeAccessMode[\s\S]*props\.onSetFreeAccessMode/,
-  "context panel should hide the Auto-join switch for paid communities and unauthorized viewers",
-);
-assert.match(
-  contextPanel,
-  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*aria-busy=\{props\.isSettingFreeAccessMode \|\| undefined\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
-  "context panel should render the free-access mode as an accessible, server-pending Auto-join switch",
-);
-assert.match(
-  contextPanel,
-  /community-context-members-total[\s\S]*community-context-autojoin[\s\S]*community-context-request-divider/,
-  "context panel should keep Auto-join in the stable members header and render confirmed join requests as a separate divider",
-);
-assert.match(
-  contextPanel,
   /canReviewJoinRequests\?: boolean;[\s\S]*joinReviewMode\?: "paid" \| "free_auto" \| "free_approval" \| null;[\s\S]*pendingJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;/,
   "context panel should receive the existing join-review queue projection explicitly",
 );
@@ -589,12 +569,12 @@ assert.match(
 );
 assert.match(
   projection,
-  /communityEntryPolicy\?: CommunityAdmissionEntryPolicy \| null;[\s\S]*canSetCommunityFreeAccessMode\?: boolean;[\s\S]*communityJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;[\s\S]*onApproveCommunityJoinRequest\?: \(requestId: string\) => Promise<void> \| void;/,
+  /communityJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;[\s\S]*onApproveCommunityJoinRequest\?: \(requestId: string\) => Promise<void> \| void;/,
   "interaction projection should carry admission controls and join-review callbacks into the context rail",
 );
 assert.match(
   projection,
-  /<CommunityContextPanel[\s\S]*entryPolicy=\{props\.communityEntryPolicy \?\? null\}[\s\S]*onSetFreeAccessMode=\{props\.onSetCommunityFreeAccessMode\}[\s\S]*pendingJoinRequests=\{props\.communityJoinRequests \?\? null\}[\s\S]*onApproveJoinRequest=\{props\.onApproveCommunityJoinRequest\}/,
+  /<CommunityContextPanel[\s\S]*pendingJoinRequests=\{props\.communityJoinRequests \?\? null\}[\s\S]*onApproveJoinRequest=\{props\.onApproveCommunityJoinRequest\}/,
   "interaction projection should pass admission controls through to CommunityContextPanel",
 );
 assert.match(
@@ -606,11 +586,6 @@ assert.match(
   memberManagementController,
   /const isStillActive = \(\) => getActiveCommunity\(\) === communityId;[\s\S]*approved_pending_request_count[\s\S]*params\.clearJoinRequests\(\)[\s\S]*params\.loadDirectoryMembers\(communityId, session\)[\s\S]*if \(!isStillActive\(\)\) return;/,
   "member-management controller should key Auto-join side effects to the initiating community and refresh after backend approvals",
-);
-assert.match(
-  app,
-  /canSetCommunityFreeAccessMode:[\s\S]*canManageMembersActiveCommunity &&[\s\S]*\(activeCommunity\?\.entry_policy === "open" \|\| activeCommunity\?\.entry_policy === "approval"\)/,
-  "App should expose the Auto-join switch only to managers of free communities",
 );
 assert.match(
   app,
@@ -665,7 +640,6 @@ assert.doesNotMatch(
   "base CSS should not keep stale workspace approval styles after the queue moves to the member rail",
 );
 [
-  ".community-context-autojoin",
   ".community-context-request-divider",
   ".community-context-request-panel",
   ".community-context-request-row",
@@ -686,16 +660,6 @@ assert.match(
   baseCss,
   /\.community-context-members \{[\s\S]*scrollbar-gutter: stable;/,
   "member rail should reserve stable scrollbar space so roster refreshes do not move admission controls",
-);
-assert.match(
-  baseCss,
-  /\.community-context-autojoin \{[\s\S]*padding: 0;[\s\S]*border: 0;[\s\S]*background: transparent;/,
-  "Auto-join should render as plain text and a switch without an outer capsule",
-);
-assert.match(
-  baseCss,
-  /\.community-context-autojoin:disabled \{[\s\S]*cursor: wait;[\s\S]*opacity: 1;/,
-  "Auto-join should remain visually stable while the canonical access mutation is pending",
 );
 assert.match(
   memberSettingsDialog,
@@ -755,22 +719,22 @@ assert.match(
 );
 assert.match(
   communityDirectoryPageQuery,
-  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor: args\.cursor \?\? null[\s\S]*maximumRowsRead:/,
+  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor,[\s\S]*maximumRowsRead:/,
   "directory pages should use the activity ledger and an opaque bounded cursor",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /resolveCommunityPresenceAuthorization[\s\S]*authorization\.authorized[\s\S]*communityMembershipRowIsActive[\s\S]*page: memberRows/,
+  /communityMembershipRowIsActive[\s\S]*resolveCommunityPresenceAuthorization[\s\S]*authorization\.authorized[\s\S]*page: memberRows/,
   "directory pages should reauthorize activity rows and filter inactive memberships",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*continueCursor: rawPage\.isDone \? null : rawPage\.continueCursor/,
+  /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*continueCursor: rawPage\.isDone \? null : prefix \+ rawPage\.continueCursor/,
   "directory pages should consume the durable member count and preserve Convex cursor semantics",
 );
 assert.match(
   communityDirectory,
-  /last_active_at: toIsoString\(args\.lastSeenAt\)/,
+  /last_active_at: args.lastSeenAt === null \? "" : toIsoString\(args\.lastSeenAt\)/,
   "directory rows should carry activity from the canonical ordering ledger",
 );
 assert.doesNotMatch(

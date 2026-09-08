@@ -39,6 +39,13 @@ type ActiveCommunity = {
 };
 
 type WebCommunitySettingsSectionProps = {
+  admission?: {
+    mode: "open" | "approval" | null;
+    canManage: boolean;
+    pending: boolean;
+    error: string | null;
+    onChange: (mode: "open" | "approval") => Promise<void> | void;
+  };
   activeCommunity: ActiveCommunity | null;
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
@@ -450,6 +457,7 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
 }
 
 function CommunityMonetizationConfigSection({
+  admission,
   activeCommunity,
   accountCommerceStatus,
   communityPlatformFeeBps,
@@ -461,6 +469,7 @@ function CommunityMonetizationConfigSection({
   state,
   actions,
 }: SharedSettingsProps & {
+  admission?: WebCommunitySettingsSectionProps["admission"];
   activeCommunity: ActiveCommunity;
   accountCommerceStatus: AccountCommerceStatus | null;
   communityPlatformFeeBps: number | null;
@@ -508,6 +517,20 @@ function CommunityMonetizationConfigSection({
   return (
     <div className="settings-section community-settings-access-section">
       <div className="settings-section-title">Access & Pricing</div>
+      {admission?.canManage && admission.mode ? (
+        <div className="create-community-field">
+          <span>Auto-join</span>
+          <WebPlatformRadioGroup
+            options={[{ id: "approval", label: "Off", disabled: admission.pending }, { id: "open", label: "On", disabled: admission.pending }]}
+            value={admission.mode}
+            onSelectValue={value => { if (!admission.pending && (value === "open" || value === "approval")) void admission.onChange(value); }}
+            ariaLabel="Auto-join"
+            style={buildPlatformSwitcherStyle(2, admission.mode === "open" ? 1 : 0)}
+          />
+          <span className="create-community-hint">{admission.pending ? "Updating…" : "Saves immediately. On lets free members join without approval and approves pending requests."}</span>
+          {admission.error ? <div className="auth-error" role="alert">{admission.error}</div> : null}
+        </div>
+      ) : null}
       <div className="community-settings-access-controls">
         {canManagePublishing ? (
           <label className="create-community-field">
@@ -868,6 +891,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   <div className="community-general-settings-secondary">
                     <CommunityProfileSettingsSection state={state} actions={actions} />
                     <CommunityMonetizationConfigSection
+                      admission={props.admission}
                       activeCommunity={resolvedActiveCommunity}
                       accountCommerceStatus={accountCommerceStatus}
                       communityPlatformFeeBps={communityPlatformFeeBps}
