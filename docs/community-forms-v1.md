@@ -85,6 +85,17 @@ slow saves, newer edits, resume, validation, exact submit retry, and focus.
 It is not a live-cloud canary or a physical-phone keyboard test.
 ## Private workflow evidence
 
+Builder response reads request completeness metadata from the same endpoint
+(`includeCompleteness: true`): rows, scan truncation, and unavailable-record count.
+The legacy array response remains only for already-open clients during rollout.
+The UI distinguishes no submissions in the current membership activation from
+an incomplete or unverifiable view. It never interprets an incomplete empty
+page as proof that no responses exist. Full answers retain their current shape.
+
+The milestone editor warns when evaluation and movement use the same form:
+if that submission satisfies all conditions, advancement may cancel the queued
+assessment. This is guidance only; saved rules and execution remain unchanged.
+
 Submitted requests are also a read-only projection in the builder dossier and
 lease-authorized internal workflow context. `communityFormEvidenceCore.ts` is
 the common validated reader for this projection and builder responses.

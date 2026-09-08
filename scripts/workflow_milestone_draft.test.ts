@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import type { CommunityMemberWorkflowAutomation, CommunityMemberWorkflowMilestone } from "../shared/communityMemberWorkflow";
 import {
   isWorkflowMilestoneDraftDirty,
+  hasAssessmentMovementOverlap,
   replaceWorkflowDraftAction,
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
@@ -19,6 +20,15 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("warns only when assessment and movement use the same form", () => {
+    const assessment: CommunityMemberWorkflowAutomation = { key: "assess", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "assess-action", type: "evaluate_goal" } };
+    const move: CommunityMemberWorkflowAutomation = { key: "move", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "move-action", type: "move_member", destination: "next_or_complete" } };
+    expect(hasAssessmentMovementOverlap([assessment, move])).toBe(true);
+    expect(hasAssessmentMovementOverlap([assessment])).toBe(false);
+    expect(hasAssessmentMovementOverlap([move])).toBe(false);
+    expect(hasAssessmentMovementOverlap([assessment, { ...move, trigger: { type: "form_submitted", formKey: "other" } }])).toBe(false);
+    expect(hasAssessmentMovementOverlap([assessment, { ...move, trigger: { type: "milestone_elapsed", delayMinutes: 5 } }])).toBe(false);
+  });
   it("defers the conflict warning during saves without removing conflict or failure protection", () => {
     const source = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx", import.meta.url), "utf8");
     expect(source).toContain('{hasConflict && !props.isSaving ? <p className="workflow-error"');

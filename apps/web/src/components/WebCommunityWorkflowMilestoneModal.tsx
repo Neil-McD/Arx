@@ -5,6 +5,7 @@ import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityCha
 import { WebCommunityWorkflowAutomationEditor } from "./WebCommunityWorkflowAutomationEditor";
 import {
   isWorkflowMilestoneDraftDirty,
+  hasAssessmentMovementOverlap,
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
   workflowAutomationIssue,
@@ -215,8 +216,9 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             </label>
             <label>Goal
               <textarea rows={3} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
-              <small className="workflow-field-hint">Guides the agent. Automatic movement still uses the conditions below.</small>
+              <small className="workflow-field-hint">Guides the agent. Evaluation records a judgment; automatic movement uses the conditions below.</small>
             </label>
+            {hasAssessmentMovementOverlap(automations) ? <p role="status" className="workflow-field-hint">The same form is used for goal evaluation and movement. If its submission completes all movement conditions, the member advances and the evaluation may be cancelled.</p> : null}
             {props.milestone.key ? [false, true].map(requirement => (
               <section key={String(requirement)} className="workflow-milestone-automations" aria-labelledby={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>
                 <div className="workflow-milestone-automations-header">

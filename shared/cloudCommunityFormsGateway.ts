@@ -4,7 +4,9 @@ import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient"
 import type { CommunityFormDraft } from "./communityForms";
 export async function listCloudCommunityFormResponses(session: unknown, communityId: string, membershipId: string) {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
-  return client.query(api.communityFormRequests.listBuilderResponses, { authSubject, communityId: communityId as Id<"communities">, membershipId: membershipId as Id<"communityMemberships"> });
+  const page = await client.query(api.communityFormRequests.listBuilderResponses, { authSubject, communityId: communityId as Id<"communities">, membershipId: membershipId as Id<"communityMemberships">, includeCompleteness: true });
+  if (Array.isArray(page)) throw new Error("form_response_completeness_unavailable");
+  return page;
 }
 
 export async function listCloudCommunityForms(session: unknown, communityId: string): Promise<CommunityFormDraft[]> {

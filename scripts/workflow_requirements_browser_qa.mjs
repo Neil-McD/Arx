@@ -9,9 +9,12 @@ const webRequire=createRequire(resolve(root,'apps/web/package.json'));
 const {createServer}=await import(webRequire.resolve('vite'));
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
 import {WebCommunityWorkflowMilestoneModal} from '/src/components/WebCommunityWorkflowMilestoneModal.tsx';
+import {WebCommunityFormResponses} from '/src/components/WebCommunityFormResponses.tsx';
 import '/src/index.css';import '/src/components/WebCommunityWorkflowsSection.css';window.React=React;
 window.qa={saved:null};
-createRoot(document.getElementById('root')).render(<WebCommunityWorkflowMilestoneModal isOpen={true}
+const root=createRoot(document.getElementById('root'));
+window.qa.responses=page=>root.render(<WebCommunityFormResponses gateway={{responses:async()=>page}} membershipId='qa'/>);
+root.render(<WebCommunityWorkflowMilestoneModal isOpen={true}
  milestone={{key:'milestone',name:'Getting started',automations:[]}} milestoneNumber={1} nextMilestoneName='Ready'
  forms={[{key:'intake',name:'Intake'}]} formsStatus='ready' channels={[]} channelsUnavailable={false}
  isSaving={false} canDelete={false} deleteDisabledReason={null} error={null} onClose={()=>{}} onDelete={()=>{}}
@@ -39,7 +42,9 @@ try{
  const saved=await page.evaluate(()=>window.qa.saved);
  assert.equal(saved.automations.filter(a=>a.action.type==='move_member').length,2);
  assert.equal(saved.automations.filter(a=>a.action.type==='prompt_agent').length,1);
- await page.getByRole('button',{name:/Ask community agent/}).click();
+ await page.getByRole('radio',{name:'Evaluate goal',exact:true}).check();
+ await page.getByText('The same form is used for goal evaluation and movement.',{exact:false}).waitFor();
+ await page.getByRole('textbox',{name:/^Goal/}).fill('Member has explained their situation.');
  await page.getByRole('textbox',{name:'Milestone name',exact:true}).scrollIntoViewIfNeeded();
  const output=resolve(root,'artifacts/workflow-editor-qa');await mkdir(output,{recursive:true});
  for(const width of [1100,390]){await page.setViewportSize({width,height:850});for(const theme of ['dark','light']){
@@ -47,5 +52,19 @@ try{
   const dialog=await page.getByRole('dialog').boundingBox();assert.ok(dialog.x>=0&&dialog.x+dialog.width<=width+1);
   await page.screenshot({path:resolve(output,'requirements-'+width+'-'+theme+'.png'),animations:'disabled'});
  }}
- assert.deepEqual(errors,[]);console.log('PASS: independent actions and all-required conditions, duplicate validation, form action plus requirement, desktop/mobile themes.');
+ for(const state of [
+  {rows:[],truncated:false,unavailable_records:0,expected:'No submitted forms in this membership activation.'},
+  {rows:[],truncated:true,unavailable_records:0,expected:'Some responses are omitted from this view.'},
+  {rows:[],truncated:false,unavailable_records:1,expected:'Some responses could not be verified and are unavailable.'},
+  {rows:[{id:'r',answers:{q:'A useful answer'},submittedAt:Date.now(),form:{name:'Intake',questions:[{key:'q',title:'What helps?',type:'short_text'}]}}],truncated:false,unavailable_records:0,expected:'Intake'},
+ ]) {
+  await page.evaluate(s=>window.qa.responses(s),state);
+  await page.getByText(state.expected,{exact:state.expected!=='Intake'}).waitFor();
+  if(state.truncated||state.unavailable_records) assert.equal(await page.getByText('No submitted forms in this membership activation.',{exact:true}).count(),0);
+  for(const theme of ['dark','light']) {
+   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+   await page.screenshot({path:resolve(output,`responses-${state.rows.length}-${state.truncated}-${state.unavailable_records}-${theme}.png`)});
+  }
+ }
+ assert.deepEqual(errors,[]);console.log('PASS: requirements, assessment overlap warning, complete/empty/truncated/unavailable form history, desktop/mobile themes.');
 }finally{await browser?.close();await server.close();}

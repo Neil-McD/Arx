@@ -59,11 +59,13 @@ export const saveMyAnswers = mutation({ args: { ...scope, requestId: v.id("commu
   if (args.submit) await processSubmittedWorkflowForm(ctx, await ctx.db.get(row._id));
   return { revision, submitted: args.submit };
 } });
-export const listBuilderResponses = query({ args: { ...scope, membershipId: v.id("communityMemberships") }, handler: async (ctx, args) => {
+export const listBuilderResponses = query({ args: { ...scope, membershipId: v.id("communityMemberships"), includeCompleteness: v.optional(v.boolean()) }, handler: async (ctx, args) => {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
   await requireCommunityManager({ ctx, communityId: args.communityId, userId });
   const membership = await ctx.db.get(args.membershipId);
   if (!membership || membership.communityId !== args.communityId) throw new Error("form_request_not_found");
-  const { records } = await readSubmittedFormRecords(ctx, membership);
-  return records.map(({ request, version }) => ({ id: request._id, answers: request.answers, submittedAt: request.submittedAt, form: version }));
+  const { records, scan_truncated, unavailable } = await readSubmittedFormRecords(ctx, membership);
+  const rows = records.map(({ request, version }) => ({ id: request._id, answers: request.answers, submittedAt: request.submittedAt, form: version }));
+  // Preserve the array ABI for already-open clients during deployment.
+  return args.includeCompleteness ? { rows, truncated: scan_truncated, unavailable_records: unavailable } : rows;
 } });

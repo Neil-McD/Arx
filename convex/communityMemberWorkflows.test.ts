@@ -943,9 +943,11 @@ test("form evidence: submitted historical answers keep pinned labels, remain pri
   expect(JSON.stringify(self)).not.toContain("PRIVATE_INTAKE");
   expect(self).not.toHaveProperty("submitted_form_evidence");
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toHaveLength(1);
+  expect(await owner.query(api.communityFormRequests.listBuilderResponses, { ...scope, includeCompleteness: true })).toMatchObject({ rows: [expect.objectContaining({ answers: { q: "PRIVATE_INTAKE" } })], truncated: false, unavailable_records: 0 });
   await t.run(ctx => ctx.db.patch(f.membershipId, { activationSequence: request.activationSequence + 1 }));
   expect((await owner.query(dossierQuery, scope)).submitted_form_evidence.submissions).toEqual([]);
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toEqual([]);
+  expect(await owner.query(api.communityFormRequests.listBuilderResponses, { ...scope, includeCompleteness: true })).toEqual({ rows: [], truncated: false, unavailable_records: 0 });
 });
 
 test("form evidence: invalid ownership fails closed and answer truncation is explicit", async () => {
@@ -961,6 +963,7 @@ test("form evidence: invalid ownership fails closed and answer truncation is exp
     await ctx.db.patch(request.versionId, { communityId: other });
   });
   expect((await owner.query(dossierQuery, scope)).submitted_form_evidence).toMatchObject({ submissions: [], unavailable_records: 1 });
+  expect(await owner.query(api.communityFormRequests.listBuilderResponses, { ...scope, includeCompleteness: true })).toEqual({ rows: [], truncated: false, unavailable_records: 1 });
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toEqual([]);
 });
 
@@ -976,6 +979,10 @@ test("form evidence: choices use pinned labels, scans and context are bounded, c
   });
   const evidence = (await owner.query(dossierQuery, { communityId: f.communityId, membershipId: f.membershipId })).submitted_form_evidence;
   expect(evidence.submissions).toHaveLength(5);
+  const page = await owner.query(api.communityFormRequests.listBuilderResponses, { communityId: f.communityId, membershipId: f.membershipId, includeCompleteness: true });
+  expect(page).toMatchObject({ truncated: true, unavailable_records: 0 });
+  if (Array.isArray(page)) throw new Error("Expected completeness metadata");
+  expect(page.rows).toHaveLength(50);
   expect(evidence.truncated).toBe(true);
   expect(evidence.submissions[0].questions[0].answer).toEqual(["Second", "First"]);
   expect(JSON.stringify(evidence)).not.toContain("CANCELLED_SECRET");

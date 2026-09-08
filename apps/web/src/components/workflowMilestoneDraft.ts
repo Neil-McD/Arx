@@ -81,3 +81,8 @@ export function isWorkflowMilestoneDraftDirty(
     || JSON.stringify(workflowDraftAutomations(automations)) !== JSON.stringify(snapshot.automations)
   );
 }
+export function hasAssessmentMovementOverlap(automations: CommunityMemberWorkflowAutomation[]): boolean {
+  return automations.some(rule => rule.action.type === "evaluate_goal" && rule.trigger.type === "form_submitted" && Boolean(rule.trigger.formKey.trim())
+    && automations.some(other => other.action.type === "move_member" && other.trigger.type === "form_submitted"
+      && rule.trigger.type === "form_submitted" && other.trigger.formKey === rule.trigger.formKey));
+}

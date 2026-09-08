@@ -159,7 +159,7 @@ member's authorized service channel; either trigger can also move the member.
 - Late execution starts the next milestone at actual transition time, preventing
   outage catch-up from cascading through the pipeline. Due time is not an exact
   delivery SLA; normal dispatch is at or after due time.
-- Deferred: recurrence, inactivity, external events, goals,
+- Deferred: recurrence, inactivity, external events, goal-driven advancement,
   generic automatic private-channel selection and existing-member backfill.
 
 Tests: `convex/communityMemberWorkflowTimers.test.ts` and existing workflow tests.
@@ -345,7 +345,7 @@ Focused regression tests: `npx vitest run scripts/workflow_milestone_draft.test.
 - A milestone may have actions and completion requirements within the twelve-rule limit.
 - Prompt actions are admitted first. Completion requirements are recorded
   after prompt admission regardless of their visual order in the editor. Prompt
-  success is not a condition for movement; V1 has no action chaining or goals.
+  success is not a condition for movement; V1 has no action chaining or goal-driven advancement.
 - Rules are revalidated against the member's current milestone and workflow
   revision before authoritative writes.
 
@@ -519,9 +519,9 @@ community policy. Later edits never rewrite admitted context. This adds no
 private-context access, tools, wakes, or completion authority. Goals are policy,
 not evidence. Existing deterministic requirements still govern advancement.
 The editor uses the existing modal and discard/conflict protection; the board
-remains unchanged. Goal evaluation and replacement of requirements are later work.
+remains unchanged. Private goal evaluation is implemented below; it does not replace completion requirements.
 
-## Explicitly deferred
+## Assessment and remaining scope
 
 ### Private goal assessment (staging)
 
@@ -548,8 +548,8 @@ remain the sole transition authority. No goal engine, new queue, or new table.
 ### Still deferred
 
 Recurring time and external triggers, arbitrary event filters, goal-driven advancement,
-multi-step loops, action graphs, action chaining, agent selection, and manual
-member movement are not V1 primitives. Add one only after a real use case cannot
+multi-step loops, action graphs, action chaining, agent selection, and arbitrary
+member repositioning are not V1 primitives. Confirmed force-advance is implemented below. Add one only after a real use case cannot
 be expressed by the grammar above.
 ## Historical assessment evidence
 
