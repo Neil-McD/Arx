@@ -1,6 +1,5 @@
 import {
   lazy,
-  useEffect,
   useMemo,
   useRef,
   Suspense,
@@ -2005,6 +2004,7 @@ export default function App() {
       openMobileCreateCommunity,
       prepareMobileGlobalNavigation,
     } = useWebMobileShellController({
+      isCommunityAgentPage: activePage === "community" && communityTab === "agent",
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
       mobileRootPage,
@@ -2892,9 +2892,6 @@ export default function App() {
   const activeIndicators = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, resources: false, events: false, mentions: false, channels: [] })
     : { chat: false, resources: false, events: false, mentions: false, channels: [] };
-  useEffect(() => {
-    if (showMobileShell && activePage === "community" && communityTab === "agent") setMobileRootPage("agent");
-  }, [showMobileShell, activePage, communityTab, setMobileRootPage]);
   const communityTabIndicators = {
     chat: Boolean(activeIndicators.chat),
     resources: Boolean(activeIndicators.resources),

@@ -102,6 +102,9 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 - The command-line contract proof recognizes community-scoped conversations and
   the server-selected runtime identity. Its native Node import is explicit.
 - These are local fixes, not evidence of a deployment or rendered acceptance.
+- Full release-gate review caught mobile Agent routing in composition-only
+  `App.tsx`; routing synchronization now belongs to the existing mobile-shell
+  controller and respects forced community navigation.
 
 Test member/community isolation, repeated resolution, immutable scope, revocation,
 unauthenticated access, reserved-key creation and preservation of global history.

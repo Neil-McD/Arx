@@ -35,3 +35,12 @@ test("both conversation mounts and workspace containers use the scope/visibility
   expect(source).toContain('display: showAgentWorkspace ? "none" : "contents"');
   expect(source).toContain('display: showAgentWorkspace ? undefined : "none"');
 });
+
+test("mobile Agent routing stays in the existing shell controller", () => {
+  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
+  const controller = readFileSync(new URL("../apps/web/src/controllers/useWebMobileShellController.ts", import.meta.url), "utf8");
+  expect(app).not.toMatch(/\buseEffect\b/);
+  expect(app).toContain('isCommunityAgentPage: activePage === "community" && communityTab === "agent"');
+  expect(controller).toContain('params.showMobileShell && params.isCommunityAgentPage && !params.forceCommunityRoot');
+  expect(controller).toContain('params.setMobileRootPage("agent")');
+});
