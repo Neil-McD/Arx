@@ -143,12 +143,12 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       </div> : null}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
-      <div className={`${shellClassName}${navigationOpen ? " compact-navigation-open" : ""}${props.rightRail ? " has-workspace-right-rail" : ""}`}
+      <div className={`${shellClassName}${desktopCommunityNav ? " community-switcher-shell" : ""}${navigationOpen ? " compact-navigation-open" : ""}${props.rightRail ? " has-workspace-right-rail" : ""}`}
         onKeyDown={event => { if (event.key === "Escape" && navigationOpen) { setNavigationOpen(false); navigationButton.current?.focus(); } }}>
-        <WebCommunityRail
+        {!desktopCommunityNav && <WebCommunityRail
           communityShell={props.communityShell}
           presentation="desktop"
-        />
+        />}
         {props.communityShell.showDesktopCommunityRail ? (
           <div
             className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}

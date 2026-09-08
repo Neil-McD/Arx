@@ -17,3 +17,17 @@ test("compact desktop shell is presentation-only and retains canonical surfaces"
   expect(css).toContain("compact-navigation-open .product-shell-surface--community > :not(.community-nav) { display: none; }");
   expect(css).not.toContain("compact-context-open");
 });
+
+test("community switcher replaces only the desktop workspace rail and reuses existing authority", () => {
+  const host = readFileSync("apps/web/src/components/WebShellChromeHost.tsx", "utf8");
+  expect(host).toContain("!desktopCommunityNav && <WebCommunityRail");
+  const switcher = readFileSync("apps/web/src/components/WebCommunitySwitcher.tsx", "utf8");
+  expect(switcher).toContain("CommunityAvatar");
+  expect(switcher).toContain("shell.onSelectActiveCommunity(c)");
+  expect(switcher).toContain("shell.communityRailAttentionById");
+  expect(switcher).toContain('popover="auto"');
+  expect(switcher).not.toContain("fetch(");
+  const nav = readFileSync("apps/web/src/components/WebCommunityNavSurface.tsx", "utf8");
+  expect(nav).toContain("identityControl={!isMobileHome");
+  expect(nav).toContain("communityShell.onOpenGlobalSettings");
+});
