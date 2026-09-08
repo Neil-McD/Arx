@@ -80,17 +80,8 @@
   transform: none;
 }
 
-.member-agent-dock.community-agent-page .member-agent-dock-header {
-  min-height: 60px;
-  padding: 10px 64px 10px 24px;
-}
-
-.community-agent-page .member-agent-dock-header-actions > button {
-  display: flex;
-  width: auto;
-  gap: 8px;
-  padding: 0 10px;
-  font-size: 12px;
+.community-channel-header.community-agent-page-header {
+  padding-right: var(--web-topbar-right-action-safe-inset, 62px);
 }
 
 .community-agent-page .member-agent-dock-transcript {
@@ -103,12 +94,6 @@
 }
 
 @media (max-width: 600px) {
-  .member-agent-dock.community-agent-page .member-agent-dock-header {
-    padding: 10px 16px;
-  }
-  .community-agent-page .member-agent-dock-header-actions > button span {
-    display: none;
-  }
   .community-agent-page .member-agent-dock-transcript {
     padding: 16px;
   }

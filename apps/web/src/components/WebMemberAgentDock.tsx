@@ -1128,8 +1128,8 @@ function WebMemberAgentDock(props, ref) {
       ) : null}
 
       <section className="member-agent-dock-panel" aria-label={presentation.title}>
-        <header className="member-agent-dock-header">
-          <div className="member-agent-dock-identity">
+        <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "member-agent-dock-header"}>
+          {props.pageMode ? <div className="community-channel-header-identity"><Sparkles size={18} aria-hidden="true" /><h1>{presentation.title}</h1></div> : <div className="member-agent-dock-identity">
             {!props.pageMode && <span className="member-agent-dock-avatar" aria-hidden="true">
               <Sparkles />
             </span>}
@@ -1143,10 +1143,11 @@ function WebMemberAgentDock(props, ref) {
                     : props.pageMode ? "Private conversation" : `${presentation.surfaceLabel} · Private conversation`}
               </small>
             </span>
-          </div>
-          <div className="member-agent-dock-header-actions">
+          </div>}
+          <div className={props.pageMode ? "community-channel-header-actions" : "member-agent-dock-header-actions"}>
             <button
               type="button"
+              className={props.pageMode ? "community-channel-header-menu-trigger" : undefined}
               onClick={() => void startNewChat()}
               disabled={
                 composerIsBusy ||
@@ -1157,8 +1158,7 @@ function WebMemberAgentDock(props, ref) {
               aria-label="Start fresh conversation"
               title="Start fresh conversation"
             >
-              <MessageSquarePlus aria-hidden="true" />
-              {props.pageMode && <span>New conversation</span>}
+              <MessageSquarePlus size={props.pageMode ? 18 : undefined} aria-hidden="true" />
             </button>
             {!props.pageMode && !props.mobileShellActive ? (
               <button

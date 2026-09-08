@@ -92,7 +92,9 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Acceptance
 
-Agent page layout uses a compact header and a shared 800px maximum conversation/
+Agent page layout reuses the channel header height, identity typography, surface,
+and divider. A labeled icon button retains New conversation, with clearance for
+the shell DM control. The page has no secondary header subtitle. It uses a shared 800px maximum conversation/
 composer column. Empty and ongoing conversations both retain the bottom composer,
 with slightly increased vertical padding. Pending proposals keep their normal
 scrollable layout. Existing theme tokens and legacy mobile/dock presentation remain.
