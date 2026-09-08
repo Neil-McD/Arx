@@ -5,6 +5,7 @@ import { expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
+import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import schema from "./schema";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
@@ -12,6 +13,18 @@ import { buildCommunityFunnelContentTestFixture } from "../scripts/community_fun
 import { renderCommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
 
 const selfContextPath = "/communities/canonical-community/members/me/context.md";
+
+test("scoped interactive harness reads member context without gaining builder or platform access", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const execute = (path: string) => executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "scoped-tools", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_read", args: { path }, evidenceSurface: "member_agent_dock" });
+  expect((await execute(selfContextPath)).status).toBe("ok");
+  const root = await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "scoped-root", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_list", args: { path: "/" }, evidenceSurface: "member_agent_dock" });
+  expect(root.status, root.outputText || root.errorMessage || undefined).toBe("ok");
+  expect((await execute("/communities/canonical-community/builder/workflow-members/")).status).toBe("error");
+  expect((await execute("/members/me/context.md")).status).toBe("error");
+  expect((await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "wrong-mount", communityId: "other-community", communityBoundConversation: true, toolName: "polynet_read", args: { path: selfContextPath }, evidenceSurface: "member_agent_dock" })).errorCode).toBe("community_context_mismatch");
+});
 
 test("builder context discovery paginates and rechecks administrator authority", async () => {
   const t = convexTest(schema, modules);
@@ -286,6 +299,7 @@ test("self-context query rechecks access after path resolution and refuses direc
 });
 
 const modules = import.meta.glob([
+  "./communityAgent.ts",
   "./communityMemberWorkflows.ts",
   "./authActor.ts",
   "./authIdentity.ts",

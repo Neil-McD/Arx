@@ -33,6 +33,8 @@ export type MemberAgentSurfaceContextV1 =
       version: 1;
       kind: "community";
       community_slug: string;
+      /** Server-derived from the persisted thread; never accepted by normalization. */
+      community_conversation?: true;
       section: MemberAgentCommunitySection;
     }
   | {

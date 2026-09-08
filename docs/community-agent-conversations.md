@@ -18,8 +18,8 @@ does not inherit builder permissions. Workflow execution remains separately auth
 - Owned thread/message readers recheck community access for the new conversations.
 - Generic historical thread listing excludes new conversations; their scoped
   resolver is the entry point. No mixed-community history is copied or deleted.
-- Runtime admission explicitly rejects these threads until identity/context and
-  funding integration is verified. Creating an empty conversation spends nothing.
+- Slice 1 initially blocked runtime admission; slice 3 below replaces that block.
+  Creating an empty conversation spends nothing.
 - Existing global dock remains unchanged during this foundational slice.
 
 ## Slice 2: conversation lifecycle
@@ -42,11 +42,33 @@ does not inherit builder permissions. Workflow execution remains separately auth
   closed-session writes, archive guards, revoked membership and corrupted links.
   These are executable local tests, not a live concurrent staging proof.
 
+## Slice 3: existing runtime integration (local, not deployed)
+
+- The persisted scoped thread is recognized by existing interactive runtime
+  routing. `member_agent_dock` remains the internal invocation/funding receipt
+  label during migration; no historical billing records or principal enums change.
+- Only the server derives `community_conversation` after resolving the stored
+  thread. Client context normalization discards that field. Scoped prompts describe
+  the community agent, skip global personal-identity context, and retain existing
+  community instructions and the requesting user's permission boundary.
+- Canonical tool execution is mounted to the bound community. Root listing
+  resolves to that community; platform paths and foreign community paths cannot
+  be used to escape the mount. The delegated user principal is intentionally
+  retained: switching to the autonomous community principal would change authority.
+- Existing community inference admission, claims, provider-start checks and
+  settlement remain the funding path. No model request was made for this slice.
+- Existing attachment claims and provider-context attestation recognize scoped
+  threads. Runtime history reads recheck active-session and membership authority.
+- Rollover rejects running turns. Stop/finish the existing turn before starting a
+  replacement session, preserving the destination for the final response.
+- Tests cover scoped tool reads/denials, server-only context selection, runtime
+  community binding and provider-context receipt compatibility. These checks do
+  not establish live provider, billing settlement, or UI acceptance.
+
 ## Next gate
 
-Wire community identity/instructions and scoped context into canonical runtime
-admission, verify community funding receipts and tool permissions, and support
-attachments before replacing the dock. Retain the existing
+Prove a staged end-to-end turn, funding receipt and attachment path before release.
+Replace the dock with the center-panel Agent interface. Retain the existing
 execution substrate and approval UI. Migrate Resources' agent entry point too.
 
 ## Acceptance

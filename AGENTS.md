@@ -116,7 +116,8 @@ If a cleanup touches any of the above, require explicit human confirmation.
 - Approved migration target: one community-provided agent experience with private
   member-and-community-bound conversations. Reuse the existing harness; do not
   merge member, builder, and autonomous execution permissions. The foundation
-  endpoint is not yet wired to the UI or enabled for inference. Existing global
+  endpoint is not yet wired to the UI. Scoped runtime wiring is implemented locally
+  and requires staged acceptance before release. Existing global
   conversations remain historical data and the current dock remains operational
   until its replacement is verified. See `docs/community-agent-conversations.md`.
 - The bottom-right dock is the member's personal agent under one explicit community context.

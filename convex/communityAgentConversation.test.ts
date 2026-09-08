@@ -2,7 +2,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import schema from "./schema";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
 const modules = import.meta.glob(["./threads.ts", "./_generated/**/*.*s"]);
 
@@ -41,7 +41,7 @@ test("community binding cannot change or clear and access is rechecked after rev
   const f = await fixture();
   const first = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId: f.communities[0] });
   await f.a.mutation(api.threads.addCloudThreadMessage, { threadId: first.thread_id as any, messageKey: "private-note", role: "user", contentJson: { text: "Private note" } });
-  await expect(f.a.mutation(api.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "not-enabled" })).rejects.toThrow("community_conversation_runtime_not_enabled");
+  await expect(f.a.mutation(api.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "wrong-community", communityId: f.communities[1] })).rejects.toThrow("runtime_run_community_lens_mismatch");
   for (const communityId of [f.communities[1], null]) {
     await expect(f.a.mutation(api.threads.setCloudThreadContext, { threadId: first.thread_id as any, expectedContextVersion: 0, communityId })).rejects.toThrow("community_conversation_scope_immutable");
   }
@@ -125,4 +125,16 @@ test("canonical identity fails closed and stored relationships must match", asyn
   const first = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId: f.communities[0] });
   await f.t.run(ctx => ctx.db.patch(first.episode_id as any, { ordinal: 99 }));
   await expect(f.a.query(api.threads.getCloudThreadById, { threadId: first.thread_id as any })).rejects.toThrow("community_conversation_relationship_invalid");
+});
+
+test("runtime records use the bound community and running turns prevent rollover", async () => {
+  const f = await fixture();
+  const communityId = f.communities[0];
+  const first = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId });
+  await f.a.mutation(api.threads.addCloudThreadMessage, { threadId: first.thread_id as any, messageKey: "runtime-user", role: "user", contentJson: { text: "Help me" } });
+  const run = await f.a.mutation(api.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "scoped-runtime" });
+  expect(run.communityId).toBe(communityId);
+  await expect(f.a.mutation(api.threads.startNewCommunityAgentConversation, { communityId, expectedActiveEpisodeId: first.episode_id as any })).rejects.toThrow("community_conversation_turn_running");
+  await f.t.run(ctx => ctx.db.patch(f.memberships[0], { active: false, revokedAt: Date.now() }));
+  await expect(f.t.query(internal.threads.listMemberAgentRuntimeMessagesInternal, { ownerId: run.ownerId, threadId: first.thread_id as any, expectedUserMessageKey: "runtime-user" })).rejects.toThrow();
 });

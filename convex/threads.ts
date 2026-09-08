@@ -563,8 +563,9 @@ async function resolveRuntimeRunCanonicalCommunityLens(args: {
   communityContextVersion?: number;
 }> {
   const threadCommunityId = normalizeIdValue(args.thread.communityId);
-  // Enable only after the community-agent identity/context migration is verified.
-  if (communityConversationScope(args.thread)) throw new Error("community_conversation_runtime_not_enabled");
+  if (communityConversationScope(args.thread)) {
+    await requireWritableMemberAgentThread({ ctx: args.ctx, ownerId: args.ownerId, thread: args.thread, role: "user" });
+  }
   const requestedCommunityId = normalizeIdValue(args.requestedCommunityId);
   const hasRequestedContextVersion =
     typeof args.requestedContextVersion === "number" &&
@@ -1599,7 +1600,7 @@ async function requireWritableMemberAgentThread(args: {
 
 function isClaimedImageAttachmentThread(thread: ThreadLike): boolean {
   const threadKey = String(thread.threadKey ?? "").trim();
-  if (isGlobalMemberAgentEpisodeThreadKey(threadKey)) return true;
+  if (isGlobalMemberAgentEpisodeThreadKey(threadKey) || communityConversationScope(thread)) return true;
   const communityId = String(thread.communityId ?? "").trim();
   return Boolean(
     communityId &&
@@ -1613,7 +1614,7 @@ async function requireWritableClaimedImageAttachmentThread(args: {
   thread: ThreadLike;
 }): Promise<void> {
   const threadKey = String(args.thread.threadKey ?? "").trim();
-  if (isGlobalMemberAgentEpisodeThreadKey(threadKey)) {
+  if (isGlobalMemberAgentEpisodeThreadKey(threadKey) || communityConversationScope(args.thread)) {
     await requireWritableMemberAgentThread({
       ctx: args.ctx,
       ownerId: args.ownerId,
@@ -1833,6 +1834,7 @@ export const startNewCommunityAgentConversation = mutation({
     const previous = await ctx.db.get(args.expectedActiveEpisodeId);
     if (!previous || previous.channelId !== channel._id || previous.status !== "active") throw new Error("member_agent_active_episode_invalid");
     await requireOwnedCloudThread({ ctx, ownerId, threadId: previous.threadId });
+    if (await getRunningRuntimeRunByThread({ ctx, threadId: previous.threadId })) throw new Error("community_conversation_turn_running");
     const ordinal = channel.nextOrdinal;
     if (ordinal !== previous.ordinal + 1) throw new Error("community_conversation_identity_invalid");
     const threadKey = buildCommunityConversationThreadKey(args.communityId, ordinal);
@@ -2156,6 +2158,7 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
     if (!thread || thread.ownerId !== args.ownerId || typeof thread.archivedAt === "number") {
       throw new Error("member_agent_thread_not_found");
     }
+    if (communityConversationScope(thread)) await requireWritableMemberAgentThread({ ctx, ownerId: args.ownerId, thread, role: "user" });
     const expectedUserMessageKey = String(args.expectedUserMessageKey ?? "").trim();
     if (!expectedUserMessageKey) throw new Error("member_agent_user_message_key_required");
     const expected = (await ctx.db
@@ -3661,6 +3664,7 @@ export const recordRuntimeProviderContextAttestationInternal = internalMutation(
     if (attestation.surface === "member_agent_dock") {
       if (
         !isGlobalMemberAgentEpisodeThreadKey(threadKey) &&
+        !communityConversationScope(thread) &&
         !isMemberAgentThreadKeyForCommunity(threadKey, communityId)
       ) {
         return fail("runtime_provider_context_attestation_surface_conflict");

@@ -1,0 +1,20 @@
+import { expect, test } from "vitest";
+import { normalizeMemberAgentSurfaceContext } from "../shared/memberAgentSurfaceContext";
+import { buildRuntimeInvocationSurfacePrompt, resolveRuntimeInvocationSurfaceForThread, resolveRuntimeInvocationFundingPolicy } from "../shared/runtimeInvocationSurface";
+import { buildCommunityConversationThreadKey } from "../shared/communityConversationIdentity";
+
+test("client input cannot assert the server-derived conversation identity", () => {
+  expect(normalizeMemberAgentSurfaceContext({ version: 1, kind: "community", community_slug: "test-community", section: "chat", community_conversation: true })).not.toHaveProperty("community_conversation");
+});
+
+test("scoped conversations reuse community funding without personal-agent identity", () => {
+  const surface = resolveRuntimeInvocationSurfaceForThread({ requestedSurface: "member_agent_dock", threadKey: buildCommunityConversationThreadKey("community-one", 1) });
+  expect(surface).toBe("member_agent_dock");
+  expect(resolveRuntimeInvocationFundingPolicy(surface!)).toBe("community_owner");
+  const prompt = buildRuntimeInvocationSurfacePrompt(surface!, { version: 1, kind: "community", community_slug: "community-one", section: "chat", community_conversation: true });
+  expect(prompt).toContain("this community's agent");
+  expect(prompt).toContain("requesting member's current permissions");
+  expect(prompt).not.toContain("You do not belong to any community");
+  expect(buildRuntimeInvocationSurfacePrompt("member_agent_dock")).toContain("You do not belong to any community");
+  expect(resolveRuntimeInvocationSurfaceForThread({ requestedSurface: "community_funnel_builder", threadKey: buildCommunityConversationThreadKey("community-one", 1) })).toBeNull();
+});
