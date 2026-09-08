@@ -1,4 +1,6 @@
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
+import { useState } from "react";
+import { WebCommunityMembersProfile } from "./WebCommunityMembersProfile";
 import { CommunityInteractionContextPanelSurface } from "./WebCommunityInteractionProjection";
 
 type WebCommunityMembersPanelProps = {
@@ -8,6 +10,7 @@ type WebCommunityMembersPanelProps = {
 export function WebCommunityMembersPanel({
   chatPanelProps,
 }: WebCommunityMembersPanelProps) {
+  const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const {
     activeCommunity,
     hasAuthenticatedPresentation,
@@ -34,8 +37,11 @@ export function WebCommunityMembersPanel({
       !isAuthRecoveringSignedIn &&
       activeCommunity &&
       interactionProjection ? (
-        <CommunityInteractionContextPanelSurface
+        selectedProfile ? (
+          <WebCommunityMembersProfile key={selectedProfile} userId={selectedProfile} chat={chatPanelProps} onBack={() => setSelectedProfile(null)} />
+        ) : <CommunityInteractionContextPanelSurface
           {...interactionProjection}
+          onOpenProfile={setSelectedProfile}
           activeCommunityName={activeCommunity.name ?? "Community"}
           profilesByUserId={profilesByUserId}
           displayName={displayName}

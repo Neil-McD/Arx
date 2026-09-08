@@ -53,6 +53,12 @@ assert.doesNotMatch(gateway, /mutation\(|action\(/, "the memory drawer must rema
 const knowledge = read("apps/web/src/components/WebCommunityKnowledgePanel.tsx");
 const nav = read("shared/CommunityNav.tsx");
 const navSurface = read("apps/web/src/components/WebCommunityNavSurface.tsx");
+const members = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
+const memberProfile = read("apps/web/src/components/WebCommunityMembersProfile.tsx");
+assert.match(members, /onOpenProfile=\{setSelectedProfile\}/, "member profile buttons must have an action");
+assert.match(memberProfile, /fetchCloudProfileCommunityContext/, "profiles reuse authorized context");
+assert.match(memberProfile, /<WebCommunityProfilePanel/, "profiles reuse the canonical renderer");
+assert.match(memberProfile, /cancelled = true/, "late profile responses cannot cross unmount boundaries");
 assert.match(controller, /communityTab === "resources" && isGraphOpen/, "graph only loads while Knowledge graph is visible");
 assert.doesNotMatch(controller, /RAIL_NODE_LIMIT|CommunityMemoryPresentation|isMemoryOpen/, "no obsolete rail projection remains");
 assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "graph retains canonical realtime updates");

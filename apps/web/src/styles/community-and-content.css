@@ -2912,6 +2912,9 @@
   background: var(--community-chat-surface, var(--bg-workspace));
 }
 
+.community-members-profile { width: min(100%, 640px); min-width: 0; padding: 24px; overflow-y: auto; }
+.community-members-profile .community-profile-panel { width: 100%; }
+
 .app-root.mobile-shell .community-members-page .community-members-page-panel {
   display: flex;
   flex: 1;

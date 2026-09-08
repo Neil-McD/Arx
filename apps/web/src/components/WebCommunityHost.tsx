@@ -15,7 +15,7 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
   return (
     <div className="community-body">
       {activeView === "community_members" ? (
-        <WebCommunityMembersPanel chatPanelProps={chatPanelProps} />
+        <WebCommunityMembersPanel key={`${chatPanelProps.sessionUserId}:${chatPanelProps.activeCommunity?.id}`} chatPanelProps={chatPanelProps} />
       ) : communityTab === "chat" ? (
         <WebCommunityChatPanel {...chatPanelProps} />
       ) : (

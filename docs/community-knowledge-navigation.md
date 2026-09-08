@@ -14,6 +14,8 @@ context changes are part of this UI move.
 
 Members uses the existing members destination on desktop and mobile, including
 existing member visibility, pagination, profiles, and manager-only controls.
+Profile selection uses the canonical profile renderer and authorized context
+gateway; profile state resets when the viewer or community changes.
 Channels no longer reserve a permanent members/memory sidebar, including during
 loading. Explicit thread replies and profile drawers remain.
 
