@@ -2173,7 +2173,7 @@
 .channel-roster-panel h3:first-child { margin-top: 0; }
 .channel-roster-panel p { color: var(--text-secondary); font-size: 12px; }
 .channel-roster-panel .community-context-member { gap: 10px; }
-@container community-chat-area (max-width: 820px) {
+@container community-chat-area (max-width: 680px) {
   .community-interaction-projection.has-channel-context { grid-template-columns: minmax(0, 1fr); }
   .channel-roster-panel { display: none; }
 }
