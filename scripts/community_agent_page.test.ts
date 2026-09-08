@@ -32,8 +32,26 @@ test("suppressed or unavailable Agent page keeps the primary content host visibl
 test("both conversation mounts and workspace containers use the scope/visibility boundary", () => {
   const source = readFileSync(new URL("../apps/web/src/components/WebAppCompositionRoot.tsx", import.meta.url), "utf8");
   expect(source.match(/key=\{agentSessionKey\}/g)).toHaveLength(2);
-  expect(source).toContain('display: showAgentWorkspace ? "none" : "contents"');
-  expect(source).toContain('display: showAgentWorkspace ? undefined : "none"');
+  expect(source).toContain('display: showAgentWorkspace ? "none" : railEnabled ? undefined : "contents"');
+  expect(source).toContain('display: showAgentWorkspace || showSideAgent ? undefined : "none"');
+  expect(source).toContain('pageActive={showAgentWorkspace || showSideAgent}');
+});
+
+test("optional panes reuse the existing Agent and DM owners and retain permission gates", () => {
+  const read = (path: string) => readFileSync(new URL(`../apps/web/src/${path}`, import.meta.url), "utf8");
+  const composition = read("components/WebAppCompositionRoot.tsx");
+  expect(composition).toContain('!props.memberAgentDockProps.isSuppressed && Boolean(props.memberAgentDockProps.surfaceContext)');
+  expect(composition).toContain('sideAgent && !showAgentWorkspace && !props.directMessagesHostProps.isOpen');
+  expect(composition).toContain('embedded={railEnabled}');
+  expect(composition).toContain('directMessagesButton: null');
+  expect(composition).toContain('props.shellChromeHostProps.desktopHeader.directMessagesButton');
+  expect(composition).toContain('[agentSessionKey, railEnabled]');
+  const dm = read("components/WebDirectMessagesHost.tsx");
+  expect(dm).toContain('if (props.embedded) return;');
+  expect(dm).toContain('dialog[open]');
+  const css = read("index.css");
+  expect(css).toContain('@container workspace-panes (max-width: 740px)');
+  expect(css).toContain('.web-direct-messages-host.embedded .community-dm-panel');
 });
 
 test("mobile Agent routing stays in the existing shell controller", () => {

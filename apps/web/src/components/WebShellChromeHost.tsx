@@ -34,6 +34,7 @@ export type WebShellChromeHostProps = {
   isGlobalSettings: boolean;
   mainSurface: ReactNode;
   globalOverlays: ReactNode;
+  rightRail?: ReactNode;
 };
 
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
@@ -142,7 +143,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       </div> : null}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
-      <div className={`${shellClassName}${navigationOpen ? " compact-navigation-open" : ""}`}
+      <div className={`${shellClassName}${navigationOpen ? " compact-navigation-open" : ""}${props.rightRail ? " has-workspace-right-rail" : ""}`}
         onKeyDown={event => { if (event.key === "Escape" && navigationOpen) { setNavigationOpen(false); navigationButton.current?.focus(); } }}>
         <WebCommunityRail
           communityShell={props.communityShell}
@@ -167,6 +168,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
             {mainSurface}
           </>
         )}
+        {props.rightRail}
       </div>
 
       {props.globalOverlays}

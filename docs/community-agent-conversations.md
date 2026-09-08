@@ -92,6 +92,19 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Acceptance
 
+### Optional desktop pane
+
+- Community desktop shells place the existing DM toggle/unread badge and an add
+  panel button on an outer right rail. Mobile root navigation remains unchanged.
+- Add panel opens the existing community Agent beside the primary page. Agent
+  and DMs are mutually exclusive secondary panes; the Agent main route never
+  creates a second Agent instance. Community/member keys and access checks remain.
+- Closing a pane restores the main surface. A narrow content container displays
+  only the selected secondary pane until closed; no squeezed two-column layout.
+- Agent drafts and conversation state stay in the existing mounted component.
+  Embedded DMs no longer close when clicking in the primary page; Escape and the
+  existing close control remain available. No new messaging or runtime owner.
+
 Agent page layout uses a compact header and a shared 800px maximum conversation/
 composer column. Empty and ongoing conversations both retain the bottom composer,
 with slightly increased vertical padding. Pending proposals keep their normal
