@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-test("Auto-join has one Members control using canonical permission, action and selector", () => {
+test("Auto-join page and sidebar share canonical permission and save authority", () => {
   const settings = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
   expect(settings).toContain("admission?.canManage && admission.mode");
   expect(settings).toMatch(/WebPlatformRadioGroup[\s\S]*ariaLabel="Auto-join"/);
@@ -12,6 +12,12 @@ test("Auto-join has one Members control using canonical permission, action and s
   expect(app).toMatch(/admission: \{[\s\S]*entry_policy === "open"[\s\S]*entry_policy === "approval"[\s\S]*canManage: canManageMembersActiveCommunity[\s\S]*onChange: handleSetCommunityContextFreeAccessMode/);
   expect(read("apps/web/src/components/CommunityContextPanel.tsx")).not.toMatch(/Auto-join|onSetFreeAccessMode/);
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).not.toContain("onSetCommunityFreeAccessMode");
-  expect(read("apps/web/src/styles/community-and-content.css")).not.toContain("community-context-autojoin");
+  expect(read("apps/web/src/components/WebCommunityHost.tsx")).toContain("admission: props.admission");
+  expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain("admission={props.admission}");
+  const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
+  expect(roster).toContain("<CommunityAutoJoinControl admission={props.admission}");
+  expect(roster).not.toContain("setCloudCommunityFreeAccessMode");
+  expect(roster).toContain('role="alert"');
+  expect(read("apps/web/src/styles/community-and-content.css")).toContain(".community-context-autojoin-track");
   expect(read("apps/web/src/components/WebCommunitySettingsSection.tsx")).not.toContain("Auto-join");
 });
