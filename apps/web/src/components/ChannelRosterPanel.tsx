@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { Fragment, useContext, useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -54,34 +54,33 @@ export function ChannelRosterPanel(props: {
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
   return <aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents">
-    <div className="community-context-rail">
+    <div className="community-context-members">
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>
-          <h3>Agents · {pages[0].agents.length}</h3>
-          {pages[0].agents.length ? <div className="community-context-member"><Sparkles size={20} aria-hidden="true" /><span>Community agent</span></div> : <p>No agents in this channel.</p>}
-          <h3>People{complete ? ` · ${members.length}` : ""}</h3>
-          <p className="channel-roster-hint">Channel access · online in this community</p>
+          <h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
+          {pages[0].agents.length ? <div className="community-context-member"><span className="community-context-member-avatar"><Sparkles size={18} aria-hidden="true" /></span><span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span></div> : <p className="community-context-members-status">No agents in this channel.</p>}
+          <h3 className="community-context-section">People{complete ? ` — ${members.length}` : ""}</h3>
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;
-            return <section key={group} aria-label={group === "unknown" ? "Presence unavailable" : group}>
-              <h4>{group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} · {rows.length}{!complete ? " loaded" : ""}</h4>
+            return <Fragment key={group}>
+              <h4 className="community-context-section" title="Online status reflects activity in this community">{group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!complete ? " loaded" : ""}</h4>
               {rows.map(member => {
                 const name = member.profile.display_name || "Member";
-                return <div key={member.user_id} className="community-context-member">
+                return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
                   <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} onClick={() => props.onOpenProfile?.(member.user_id)}>
-                    <span className="community-interaction-avatar-presence">
-                      <UserAvatar className="community-interaction-avatar" readyClassName="has-image" fallbackClassName="community-interaction-avatar-fallback"
-                        fallbackStyle={{ backgroundColor: props.getAvatarColor(member.user_id) }} name={name} imageUrl={member.profile.avatar_url}
+                    <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}>
+                      <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
+                        name={name} imageUrl={member.profile.avatar_url}
                         focusX={member.profile.avatar_focus_x} focusY={member.profile.avatar_focus_y} zoom={member.profile.avatar_zoom}
                         alt="" aria-hidden={true} fallback={<span>{props.getInitials(name)}</span>} />
-                      {group === "online" ? <span className="community-interaction-online-dot" aria-hidden="true" /> : null}
+                      {group === "online" ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
                     </span>
-                    <span className="community-context-member-copy"><span className="community-context-member-name">{name}</span></span>
+                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
                   </button>
                 </div>;
               })}
-            </section>;
+            </Fragment>;
           })}
           {!members.length ? <p>{complete ? "No people in this channel." : "No people in this page."}</p> : null}
           {!complete ? <button type="button" onClick={() => setBudget(value => value + 1)}>Load more</button> : null}

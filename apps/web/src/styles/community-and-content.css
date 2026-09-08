@@ -2164,15 +2164,8 @@
 }
 
 .community-interaction-projection.has-channel-context {
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
-.channel-roster-panel .community-context-rail { overflow-y: auto; padding: 20px; }
-.channel-roster-panel h3, .channel-roster-panel h4 {
-  color: var(--text-secondary); font-size: 12px; text-transform: uppercase; margin: 20px 0 12px;
-}
-.channel-roster-panel h3:first-child { margin-top: 0; }
-.channel-roster-panel p { color: var(--text-secondary); font-size: 12px; }
-.channel-roster-panel .community-context-member { gap: 10px; }
 @container community-chat-area (max-width: 680px) {
   .community-interaction-projection.has-channel-context { grid-template-columns: minmax(0, 1fr); }
   .community-context-panel.channel-roster-panel { display: none; }
@@ -2607,6 +2600,9 @@
 .community-context-member:hover {
   background: var(--hover-overlay);
 }
+
+.community-context-member.is-offline { opacity: 0.5; }
+.community-context-member.is-offline:hover { opacity: 1; }
 
 .community-context-members-loading {
   display: grid;
