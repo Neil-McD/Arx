@@ -3105,13 +3105,13 @@
 
 /* One optional workspace pane. The rail lives outside the community frame. */
 .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail {
-  grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr) 56px;
+  grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr) 44px;
   --web-topbar-right-action-safe-inset: 0px;
 }
 .workspace-right-rail {
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 10px 4px; background: var(--surface-rail); min-width: 0;
+  padding: 10px 0; background: var(--surface-rail); min-width: 0;
 }
 .workspace-right-rail > .icon-button,
 .workspace-panel-picker > .icon-button {
@@ -3194,8 +3194,8 @@
   .workspace-secondary-minimize { top: 0; right: 0; transform: translateY(-25%); }
 }
 @container community-shell (max-width: 900px) {
-  .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 48px; }
-  .app-shell.compact-navigation-open.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: 72px minmax(0, 1fr) 48px; }
-  .workspace-right-rail { padding: 8px 4px; }
+  .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 44px; }
+  .app-shell.compact-navigation-open.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: 72px minmax(0, 1fr) 44px; }
+  .workspace-right-rail { padding: 8px 0; }
   .compact-community-toolbar { padding-right: 12px; }
 }
