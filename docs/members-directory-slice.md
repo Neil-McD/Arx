@@ -1,5 +1,7 @@
 # Members directory
 
+Left navigation order: Agent, Knowledge, Events, Members; builder tools follow the divider.
+
 Member cards and workflow cards/details reuse the channel feed's standard
 40px `UserAvatar` holder and presence styling, without surface-local avatar sizing.
 The shared member profile panel uses that same holder, including when opened from chat.

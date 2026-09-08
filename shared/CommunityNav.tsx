@@ -578,23 +578,6 @@ export const CommunityNav = memo(function CommunityNav({
             <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
           ))}
         </div>
-      ) : showMembersItem ? (
-        <button
-          className={`nav-item community-nav-members${isMembersActive ? " active" : ""}`}
-          aria-current={isMembersActive ? "page" : undefined}
-          type="button"
-          onClick={onOpenMembers}
-          title="Members"
-          aria-label={memberCountLabel ? `Members, ${memberCountLabel}` : "Members"}
-        >
-          <span className="nav-icon" aria-hidden="true">
-            <Users size={18} strokeWidth={1.7} />
-          </span>
-          <span className="nav-item-label">Members</span>
-          {memberCountLabel ? (
-            <span className="community-nav-members-count">{memberCountLabel}</span>
-          ) : null}
-        </button>
       ) : null}
       {!isLoadingAccess ? (
         <>
@@ -634,6 +617,22 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
+          {showMembersItem ? (
+            <button
+              className={`nav-item community-nav-members${isMembersActive ? " active" : ""}`}
+              aria-current={isMembersActive ? "page" : undefined}
+              type="button"
+              onClick={onOpenMembers}
+              title="Members"
+              aria-label={memberCountLabel ? `Members, ${memberCountLabel}` : "Members"}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <Users size={18} strokeWidth={1.7} />
+              </span>
+              <span className="nav-item-label">Members</span>
+              {memberCountLabel ? <span className="community-nav-members-count">{memberCountLabel}</span> : null}
+            </button>
+          ) : null}
         </>
       ) : null}
       {isLoadingAccess ? (
