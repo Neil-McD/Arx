@@ -3,7 +3,8 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, normalizeIdValue,
   requireCommunityManager, resolveUserIdForAuthenticatedRequest } from "./communityCore";
-import { requireCommunityChannelLineage } from "./communityChannelCore";
+import { requireCommunityChannelLineage, resolveAuthorizedCommunityChannel } from "./communityChannelCore";
+import { resolveCommunityPresenceAuthorization } from "./communityPresenceCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 
@@ -11,6 +12,49 @@ const scope = { communityId: v.id("communities"), channelId: v.id("communityChan
   userId: v.optional(v.id("users")), authSubject: v.optional(v.string()) };
 const target = v.union(v.object({ kind: v.literal("member"), userId: v.id("users") }),
   v.object({ kind: v.literal("community_agent") }));
+
+// Read-only roster for an authorized channel viewer. This is deliberately
+// separate from the manager-only grant editor below; no grant metadata escapes.
+export const listChannelRoster = query({
+  args: { ...scope, paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canRead" });
+    const community = (await ctx.db.get(args.communityId))!;
+    const prefix = `channel-roster-v1:${args.communityId}:${args.channelId}:`;
+    const supplied = args.paginationOpts.cursor;
+    if (supplied !== null && !supplied.startsWith(prefix)) throw new Error("community_channel_roster_cursor_invalid");
+    const cursor = supplied === null ? null : supplied.slice(prefix.length);
+    const size = Math.min(50, Math.max(2, Math.floor(args.paginationOpts.numItems)));
+    const result = await ctx.db.query("communityMemberships")
+      .withIndex("by_community_createdAt", q => q.eq("communityId", args.communityId))
+      .order("asc").paginate({ cursor, numItems: cursor === null ? size - 1 : size, maximumRowsRead: size * 3 });
+    const page: Array<{ user_id: typeof userId; role: string;
+      profile: Awaited<ReturnType<typeof resolveUserProfileDisplayProjection>>; last_seen_at: number | null }> = [];
+    const seen = new Set<string>();
+    const append = async (candidateId: typeof userId, expectedMembershipId?: string) => {
+      if (seen.has(String(candidateId))) return;
+      const authorization = await resolveCommunityPresenceAuthorization({ ctx, community, userId: candidateId });
+      if (!authorization.authorized || (expectedMembershipId && String(authorization.membership?._id) !== expectedMembershipId)) return;
+      const candidate = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: candidateId });
+      if (!(await getCommunityChannelCapabilities({ ctx, channel, actor: candidate })).canRead) return;
+      seen.add(String(candidateId));
+      const presence = await ctx.db.query("communityPresence")
+        .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", candidateId)).first();
+      page.push({ user_id: candidateId, role: candidateId === community.ownerId ? "owner" : authorization.membership!.role,
+        profile: await resolveUserProfileDisplayProjection(ctx, candidateId), last_seen_at: presence?.lastSeenAt ?? null });
+    };
+    if (cursor === null) await append(community.ownerId);
+    for (const member of result.page) {
+      if (member.userId !== community.ownerId && communityMembershipRowIsActive(member)) await append(member.userId, String(member._id));
+    }
+    const agent = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId, kind: "community_agent" });
+    const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor: agent });
+    return { page, isDone: result.isDone, continueCursor: result.isDone ? null : prefix + result.continueCursor,
+      agents: capabilities.canRead ? [{ key: "community_agent" as const, capabilities }] : [] };
+  },
+});
 
 async function requireManager(ctx: any, args: any) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });

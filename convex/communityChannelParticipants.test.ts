@@ -7,6 +7,69 @@ import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from ".
 const modules = import.meta.glob(["./communityChannelParticipants.ts", "./_generated/**/*.*s"]);
 const set = "communityChannelParticipants:setParticipant" as any;
 const list = "communityChannelParticipants:listMemberAccess" as any;
+const roster = "communityChannelParticipants:listChannelRoster" as any;
+
+test("channel roster is viewer-authorized without weakening the grant editor", async () => {
+  const { t, f, args, owner } = await fixture();
+  const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 10, cursor: null } };
+  const member = t.withIdentity({ subject: "member" });
+  await expect(member.query(roster, request)).rejects.toThrow();
+  await expect(t.withIdentity({ subject: "outsider" }).query(roster, request)).rejects.toThrow();
+  await owner.mutation(set, args);
+  const page: any = await member.query(roster, request);
+  expect(page.page.map((p: any) => p.user_id)).toEqual([f.ownerId, f.memberId]);
+  expect(page.page[1]).toMatchObject({ role: "member", last_seen_at: null, profile: { display_name: "member" } });
+  expect(page.page[1]).not.toHaveProperty("membershipActivationSequence");
+  expect(page.agents).toEqual([]);
+  await expect(member.query(list, request)).rejects.toThrow();
+  await owner.mutation(set, { ...args, target: { kind: "community_agent" } });
+  expect((await member.query(roster, request) as any).agents[0]).toMatchObject({ key: "community_agent", capabilities: { canRead: true, canManage: false } });
+  await owner.mutation(set, { ...args, active: false });
+  await expect(member.query(roster, request)).rejects.toThrow();
+  expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual([f.ownerId]);
+});
+
+test("roster follows demotion, activation lineage, archive, and channel scope", async () => {
+  const { t, f, args, owner } = await fixture();
+  const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 10, cursor: null } };
+  await t.run(ctx => ctx.db.patch(f.membershipId, { role: "admin" }));
+  expect((await owner.query(roster, request) as any).page).toHaveLength(2);
+  await t.run(ctx => ctx.db.patch(f.membershipId, { role: "member" }));
+  expect((await owner.query(roster, request) as any).page).toHaveLength(1);
+  await owner.mutation(set, args);
+  await t.run(ctx => ctx.db.patch(f.membershipId, { activationSequence: 2 }));
+  expect((await owner.query(roster, request) as any).page).toHaveLength(1);
+  await expect(owner.query(roster, { ...request, paginationOpts: { numItems: 10, cursor: "another-channel:cursor" } })).rejects.toThrow("community_channel_roster_cursor_invalid");
+  await t.run(ctx => ctx.db.patch(f.channelId, { status: "archived" }));
+  await expect(owner.query(roster, request)).rejects.toThrow();
+});
+
+test("General roster is paginated, includes owner once, and filters inactive memberships", async () => {
+  const { t, f, owner } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(f.channelId, { accessMode: "all_members", systemRole: "general", slug: "general", name: "General", position: 0 });
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.outsiderId, role: "member", active: false, createdAt: 2, updatedAt: 2 });
+  });
+  const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 2, cursor: null } };
+  const first: any = await owner.query(roster, request);
+  expect(first.page.map((p: any) => p.user_id)).toEqual([f.ownerId, f.memberId]);
+  expect(first.isDone).toBe(false);
+  const second: any = await owner.query(roster, { ...request, paginationOpts: { numItems: 2, cursor: first.continueCursor } });
+  expect(second.page).toEqual([]);
+  expect(second.isDone).toBe(true);
+});
+
+test("roster rejects foreign channel IDs and excludes revoked membership even with a grant", async () => {
+  const { t, f, args, owner } = await fixture();
+  await owner.mutation(set, args);
+  const otherCommunityId = await t.run(ctx => ctx.db.insert("communities", { ownerId: f.ownerId, name: "Other", slug: "other",
+    visibility: "unlisted", entryPolicy: "open", inferenceFundingPolicy: "managed_required", createdAt: 1, updatedAt: 1 }));
+  const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 10, cursor: null } };
+  await expect(owner.query(roster, { ...request, communityId: otherCommunityId })).rejects.toThrow();
+  await t.run(ctx => ctx.db.patch(f.membershipId, { active: false, revokedAt: Date.now() }));
+  expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual([f.ownerId]);
+  await expect(t.withIdentity({ subject: "member" }).query(roster, request)).rejects.toThrow();
+});
 
 async function fixture() {
   const t = convexTest(schema, modules);
