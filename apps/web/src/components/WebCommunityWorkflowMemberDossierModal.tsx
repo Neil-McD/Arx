@@ -72,9 +72,12 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   const [forcing, setForcing] = useState(false);
   const [forceError, setForceError] = useState<string | null>(null);
   const forcePending = useRef(false);
+  const wasConfirming = useRef(false);
   useEffect(() => { setConfirmation(null); setForceError(null); }, [props.isOpen, props.dossier?.membership_id]);
   useEffect(() => {
     if (confirmation) dialogRef.current?.querySelector<HTMLElement>("[data-override-cancel]")?.focus();
+    else if (wasConfirming.current) dialogRef.current?.querySelector<HTMLElement>("[data-override-open]")?.focus();
+    wasConfirming.current = Boolean(confirmation);
   }, [confirmation]);
 
   useEffect(() => {
@@ -193,7 +196,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
             {forceError ? <p role="alert" className="workflow-error">{forceError}</p> : null}
             <div className="resource-modal-actions">
               <button type="button" className="secondary" data-override-cancel disabled={forcing} onClick={() => setConfirmation(null)}>Cancel</button>
-              <button type="button" className="danger" disabled={forcing || Boolean(forceError)} onClick={async () => {
+              <button type="button" className="secondary danger" disabled={forcing || Boolean(forceError)} onClick={async () => {
                 if (forcePending.current) return;
                 forcePending.current = true; setForcing(true);
                 try { await props.onForceMove(confirmation); setConfirmation(null); }
@@ -231,7 +234,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               {dossier.workflow ? <section className="workflow-member-dossier-section">
                 <h3>Milestone goal</h3>
                 <p>{dossier.workflow.goal || "No goal specified."}</p>
-                {!dossier.workflow.completed_at && dossier.workflow.override_state ? <button type="button" className="secondary" onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button> : null}
+                {!dossier.workflow.completed_at && dossier.workflow.override_state ? <button type="button" className="secondary" data-override-open onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button> : null}
               </section> : null}
               {props.formResponses}
               <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}
