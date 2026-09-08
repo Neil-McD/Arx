@@ -15,12 +15,12 @@ import {
 import {
   LoaderCircle,
   MessageSquarePlus,
-  Paperclip,
   Sparkles,
   Square,
   X,
 } from "lucide-react";
 import { getAuthUrl, type AuthSession } from "../auth";
+import { CommunityComposerControls } from "./CommunityComposerControls";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import {
   extractTextFromContentJson,
@@ -1280,7 +1280,7 @@ function WebMemberAgentDock(props, ref) {
           ) : null}
           <form
             ref={composerFormRef}
-            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}`}
+            className={`member-agent-dock-composer community-agent-composer chat-input-bar${isAttachmentDragOver ? " drag-over" : ""}`}
             onSubmit={submit}
             onDragEnter={(event) => {
               if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
@@ -1311,17 +1311,10 @@ function WebMemberAgentDock(props, ref) {
                 event.currentTarget.value = "";
               }}
             />
-            <button
-              className="member-agent-dock-attach"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={composerIsBusy || isPreparing || isStartingNewChat}
-              aria-label="Attach images"
-              title="Attach images"
-            >
-              <Paperclip aria-hidden="true" />
-            </button>
+            <div className="community-composer-editor-row">
+            <div className="mention-composer-field">
             <textarea
+              className="chat-input"
               ref={textareaRef}
               value={input}
               onChange={(event) => {
@@ -1342,7 +1335,16 @@ function WebMemberAgentDock(props, ref) {
               rows={1}
               disabled={composerIsBusy || isPreparing || isStartingNewChat}
             />
-            <VoiceInputButton
+            </div>
+            </div>
+            <CommunityComposerControls
+              contextKey={`agent:${threadKey ?? "new"}`}
+              groupLabel="Message tools"
+              attachLabel="Attach images"
+              toolsDisabled={composerIsBusy || isPreparing || isStartingNewChat}
+              attachDisabled={composerIsBusy || isPreparing || isStartingNewChat}
+              onAttach={() => fileInputRef.current?.click()}
+              voiceControl={<VoiceInputButton
               {...props.voiceButtonProps}
               disabled={
                 props.voiceButtonProps.disabled ||
@@ -1350,10 +1352,10 @@ function WebMemberAgentDock(props, ref) {
                 isPreparing ||
                 isStartingNewChat
               }
-            />
-            {runtimeEvents.length > 0 && threadKey ? (
+            />}
+              sendControl={runtimeEvents.length > 0 && threadKey ? (
               <button
-                className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
+                className="chat-send ask-send-btn ask-send-btn-v2"
                 type="button"
                 onClick={() => stopStreamingTurn(threadKey)}
                 aria-label="Stop"
@@ -1363,7 +1365,7 @@ function WebMemberAgentDock(props, ref) {
               </button>
             ) : (
               <button
-                className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
+                className="chat-send ask-send-btn ask-send-btn-v2"
                 type="submit"
                 disabled={
                   (!input.trim() && attachments.length === 0) ||
@@ -1379,6 +1381,7 @@ function WebMemberAgentDock(props, ref) {
                 </svg>
               </button>
             )}
+            />
           </form>
         </div>
       </section>

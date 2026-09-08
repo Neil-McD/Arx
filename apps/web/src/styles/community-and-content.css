@@ -3412,6 +3412,7 @@
   );
 }
 
+.community-agent-composer.chat-input-bar,
 .community-member-chat .community-interaction-main-composer .chat-input-bar,
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   --community-composer-control-size: 36px;
@@ -3428,6 +3429,7 @@
   min-height: var(--community-composer-input-size);
 }
 
+.community-agent-composer.chat-input-bar,
 .community-member-chat .community-interaction-main-composer .chat-input-bar {
   border-radius: 18px;
   padding: 10px 12px 8px;
@@ -3445,6 +3447,7 @@
 /* Desktop community composers sit between the quiet memory preview and a
    dedicated authoring surface: clearly contained, but never outlined like a
    form field. Mobile keeps its larger one-row touch shape in its overrides. */
+.app-root:not(.mobile-shell) .community-agent-composer.chat-input-bar,
 .app-root:not(.mobile-shell)
   .community-member-chat
   .community-interaction-main-composer
@@ -3464,6 +3467,7 @@
 
 /* Preserve the accent/dashed drop target instead of letting the stronger
    resting edge win the cascade while a file is dragged over the composer. */
+.app-root:not(.mobile-shell) .community-agent-composer.chat-input-bar:not(.drag-over),
 .app-root:not(.mobile-shell)
   .community-member-chat
   .community-interaction-main-composer
@@ -3477,6 +3481,7 @@
 
 /* Paper surfaces need a structural edge to separate authoring from reading.
    Reuse the canonical panel edge without changing Dark or drag-over feedback. */
+:root[data-theme="light"] .app-root:not(.mobile-shell) .community-agent-composer.chat-input-bar:not(.drag-over),
 :root[data-theme="light"]
   .app-root:not(.mobile-shell)
   .community-member-chat

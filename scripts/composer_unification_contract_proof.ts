@@ -190,8 +190,8 @@ assert.match(
 );
 assert.match(
   memberAgentCss,
-  /\.member-agent-dock-composer \{[\s\S]*background: var\(--composer-surface,[\s\S]*border-radius: var\(--composer-radius/,
-  "member-agent composer should share the canonical material and shape",
+  /\.community-agent-composer\.chat-input-bar \{ margin: 0; \}/,
+  "member-agent composer only owns placement; the channel composer owns its material and shape",
 );
 assert.doesNotMatch(
   memberAgentCss,

@@ -1100,7 +1100,7 @@ assert.match(
 );
 assert.match(
   component,
-  /Paperclip[\s\S]*type="file"[\s\S]*accept=\{MEMBER_AGENT_IMAGE_ACCEPT\}[\s\S]*VoiceInputButton[\s\S]*member-agent-dock-send/,
+  /type="file"[\s\S]*accept=\{MEMBER_AGENT_IMAGE_ACCEPT\}[\s\S]*CommunityComposerControls[\s\S]*VoiceInputButton[\s\S]*chat-send ask-send-btn/,
   "the dock composer must expose the canonical attachment, microphone, and send controls",
 );
 assert.doesNotMatch(

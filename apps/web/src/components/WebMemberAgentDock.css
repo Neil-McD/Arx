@@ -102,10 +102,6 @@
   margin: 0 auto 24px;
 }
 
-.community-agent-page .member-agent-dock-composer {
-  padding: 12px 7px;
-}
-
 @media (max-width: 600px) {
   .member-agent-dock.community-agent-page .member-agent-dock-header {
     padding: 10px 16px;
@@ -515,107 +511,8 @@
   height: 13px;
 }
 
-.member-agent-dock-composer {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px 34px;
-  align-items: end;
-  gap: 4px;
-  padding: 7px 7px;
-  background: var(--composer-surface, var(--bg-card-solid, #2a2a2a));
-  border: 1px solid var(--composer-border, var(--stroke-default));
-  border-radius: var(--composer-radius, 24px);
-  transition: border-color 120ms ease, background-color 120ms ease;
-}
-
-.member-agent-dock-composer.is-dragging {
-  border-color: var(--stroke-strong);
-  background: var(--surface-card-alt);
-}
-
-.member-agent-dock-file-input {
-  display: none;
-}
-
-.member-agent-dock-composer textarea {
-  min-width: 0;
-  max-height: 112px;
-  padding: 7px 0;
-  resize: none;
-  color: var(--text-ink-primary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-  background: transparent;
-  border: 0;
-  outline: 0;
-}
-
-.member-agent-dock-composer textarea::placeholder {
-  color: var(--text-ink-faint);
-}
-
-.member-agent-dock-composer > button {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  color: var(--icon-default);
-  background: transparent;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.member-agent-dock-composer > button:hover:not(:disabled) {
-  color: var(--icon-hover);
-  background: var(--hover-overlay);
-}
-
-.member-agent-dock-composer > button:focus-visible,
-.member-agent-dock-composer .ask-icon-btn:focus-visible {
-  outline: none;
-  color: var(--icon-hover);
-  background: var(--hover-overlay);
-}
-
-.member-agent-dock-composer .member-agent-dock-send:focus-visible {
-  color: var(--bg-button-text);
-  background: var(--bg-button-hover, var(--bg-button));
-}
-
-.member-agent-dock-composer > button:disabled {
-  color: var(--text-ink-faint);
-  background: transparent;
-  cursor: default;
-}
-
-.member-agent-dock-composer > button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.member-agent-dock-composer .ask-icon-btn {
-  width: 34px;
-  height: 34px;
-  color: var(--icon-default);
-  background: transparent;
-  border: 0;
-}
-
-.member-agent-dock-composer .member-agent-dock-send {
-  color: var(--bg-button-text);
-  background: var(--bg-button);
-}
-
-.member-agent-dock-composer .member-agent-dock-send:hover:not(:disabled) {
-  color: var(--bg-button-text);
-  background: var(--bg-button-hover, var(--bg-button));
-}
-
-.member-agent-dock-composer .member-agent-dock-send:disabled {
-  color: var(--text-ink-faint);
-  background: var(--surface-card-alt);
-}
+.member-agent-dock-file-input { display: none; }
+.community-agent-composer.chat-input-bar { margin: 0; }
 
 @keyframes member-agent-dock-spin {
   to { transform: rotate(360deg); }
