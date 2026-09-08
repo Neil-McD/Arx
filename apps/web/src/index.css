@@ -3109,6 +3109,7 @@
   --web-topbar-right-action-safe-inset: 0px;
 }
 .workspace-right-rail {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   padding: 16px 4px; background: var(--surface-rail); min-width: 0;
 }
@@ -3118,6 +3119,14 @@
   color: var(--text-muted); background: var(--surface-nav);
 }
 .workspace-panel-picker { position: relative; }
+.workspace-right-rail > .direct-messages-topbar-button {
+  width: 44px; height: 44px; padding: 6px;
+  background: transparent; border: 0; box-shadow: none;
+}
+.workspace-right-rail > .direct-messages-topbar-button svg { width: 30px; height: 30px; }
+.workspace-right-rail > .workspace-panel-picker {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
 .workspace-panel-options {
   position: absolute; top: 0; right: calc(100% + 12px); z-index: 60;
   padding: 6px; min-width: 160px; border-radius: 12px;
@@ -3141,7 +3150,11 @@
   position: relative; flex: 0 0 45%; min-width: 320px; min-height: 0;
   border-left: 1px solid var(--stroke-panel-edge); overflow: hidden;
 }
-.workspace-secondary-minimize { position: absolute; top: 12px; right: 12px; z-index: 3; }
+.workspace-secondary-minimize {
+  position: absolute; top: 12px; right: 12px; z-index: 3;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface-rail); border: 1px solid var(--stroke-panel-edge);
+}
 .web-direct-messages-host.embedded .community-dm-inbox-header,
 .web-direct-messages-host.embedded .community-dm-panel-header { padding-right: 38px; }
 .community-workspace-panes .member-agent-dock.community-agent-page .member-agent-dock-header { padding-right: 24px; }
@@ -3169,13 +3182,15 @@
     border: 0;
     border-radius: 0;
     background: transparent;
+    overflow: visible;
   }
   .product-shell-surface--community > .community-nav,
   .community-workspace-panes > :is(.community-workspace-primary, .community-agent-workspace, .web-direct-messages-host.embedded) {
     border: 1px solid var(--community-shell-stroke);
     border-radius: var(--community-shell-radius);
   }
-  .community-workspace-panes { gap: var(--community-shell-inset); }
+  .community-workspace-panes { gap: var(--community-shell-inset); overflow: visible; }
+  .workspace-secondary-minimize { top: 0; right: 0; transform: translateY(-25%); }
 }
 @container community-shell (max-width: 900px) {
   .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 48px; }
