@@ -71,6 +71,52 @@ test("join creates one private room, activation grants, binding and receipt; rep
   });
 });
 
+test.each([
+  { account: "Google name", profile: "Community name", expected: "Community name" },
+  { account: "Account name", profile: undefined, expected: "Account name" },
+  { account: undefined, profile: undefined, expected: "Member" },
+  { account: "General", profile: undefined, expected: "General (2)" },
+  { account: "A".repeat(80), profile: undefined, expected: "A".repeat(48) },
+])("generated room uses canonical name: $expected", async ({ account, profile, expected }) => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    await ctx.db.patch(f.memberId, { displayName: account });
+    if (profile) await ctx.db.insert("userProfileDetails", { userId: f.memberId, displayName: profile, createdAt: f.now, updatedAt: f.now });
+  });
+  expect((await f.t.mutation(joinHandler, f.job)).status).toBe("service_channel_ready");
+  await f.t.run(async ctx => {
+    const membership = (await ctx.db.get(f.membershipId))!;
+    const channel = (await ctx.db.get(membership.serviceChannelId!))!;
+    expect(channel.name).toBe(expected);
+    expect(channel.name).not.toContain(f.membershipId);
+  });
+});
+
+test("same-name members get distinct readable rooms; replay preserves builder renames", async () => {
+  const f = await fixture();
+  await f.t.mutation(joinHandler, f.job);
+  const second = await f.t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "second-member", displayName: "member", createdAt: f.now, updatedAt: f.now });
+    const { membership } = await activateCommunityMembershipCore({ ctx, communityId: f.communityId, userId,
+      accessSource: "manual_grant", activationReason: "test", nowMs: f.now });
+    return membership._id;
+  });
+  expect((await f.t.mutation(joinHandler, { ...f.job, membershipId: second })).status).toBe("service_channel_ready");
+  await f.t.run(async ctx => {
+    const first = (await ctx.db.get(f.membershipId))!;
+    const other = (await ctx.db.get(second))!;
+    expect(first.serviceChannelId).not.toBe(other.serviceChannelId);
+    expect((await ctx.db.get(other.serviceChannelId!))!.name).toBe("member (2)");
+    await ctx.db.patch(first.serviceChannelId!, { name: "Coaching room", normalizedName: "coaching room" });
+  });
+  expect((await f.t.mutation(joinHandler, f.job)).status).toBe("already_executed");
+  await f.t.run(async ctx => {
+    const first = (await ctx.db.get(f.membershipId))!;
+    expect((await ctx.db.get(first.serviceChannelId!))!.name).toBe("Coaching room");
+    expect((await ctx.db.query("communityChannels").collect()).filter(c => c.accessMode === "restricted")).toHaveLength(2);
+  });
+});
+
 test.each(["revision", "inactive", "reactivated", "archived", "moved"])("queued join fails closed after %s", async change => {
   const f = await fixture();
   await f.t.run(async ctx => {

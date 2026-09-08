@@ -583,3 +583,7 @@ judgments. Its one-off server module and paid CLI runner are retired. Regression
 fixtures remain in `shared/workflowAssessmentSmoke.ts`; original local evidence is
 `artifacts/workflow-assessment-smoke-20260907-v1.json`. Accounting receipts remain
 untouched. This proof does not replace authenticated member-journey acceptance.
+
+## Generated service-channel labels
+
+New join-created service channels use the canonical profile display projection, falling back to the account name and then `Member`. Active name collisions receive a bounded numeric suffix such as ` (2)` through the canonical channel-name validator. Allocation and creation share the existing transaction; IDs, slugs, access grants, binding, and replay authority remain unchanged. Existing channels, including builder-renamed channels, are never automatically renamed.

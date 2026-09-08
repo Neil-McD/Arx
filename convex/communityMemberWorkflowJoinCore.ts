@@ -3,7 +3,8 @@ import { internal } from "./_generated/api";
 import { communityMembershipRowIsActive } from "./communityCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { getCommunityMemberWorkflowByCommunity, getMemberMilestone, resolveCurrentMilestone } from "./communityMemberWorkflowReadCore";
-import { createActiveCommunityChannel, MAX_COMMUNITY_CHANNEL_NAME_CHARS } from "./communityChannelCore";
+import { createActiveCommunityChannel, resolveGeneratedCommunityChannelName } from "./communityChannelCore";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { bindMemberServiceChannel, requireMemberFormServiceAudience } from "./communityMemberServiceChannelCore";
 
@@ -55,11 +56,12 @@ export async function provisionJoinedMemberServiceChannel(ctx: any, args: any,
   }
   // An explicitly cleared assignment is a builder decision, not an invitation to recreate it.
   if (args.serviceChannelRevision !== 0) throw new Error("workflow_service_channel_assignment_cleared");
-  const member = await ctx.db.get(membership.userId);
-  const suffix = ` · ${membership._id}`;
+  const profile = await resolveUserProfileDisplayProjection(ctx, membership.userId);
+  const name = await resolveGeneratedCommunityChannelName({ ctx, communityId: workflow.communityId,
+    name: profile.display_name ?? "Member" });
   const channel = await createActiveCommunityChannel({ ctx, communityId: workflow.communityId,
     createdByUserId: workflow.updatedByUserId, accessMode: "restricted",
-    name: `${String(member?.displayName || "Member").slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS - suffix.length)}${suffix}` });
+    name });
   for (const target of [{ kind: "member" as const, userId: membership.userId }, { kind: "community_agent" as const }]) {
     await setChannelParticipantCore(ctx, { communityId: workflow.communityId, channelId: channel._id,
       createdByUserId: workflow.updatedByUserId, target, active: true });

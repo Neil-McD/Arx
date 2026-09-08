@@ -235,7 +235,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               {dossier.workflow ? <section className="workflow-member-dossier-section">
                 <h3>Milestone goal</h3>
                 <p>{dossier.workflow.goal || "No goal specified."}</p>
-                {!dossier.workflow.completed_at && dossier.workflow.override_state ? <button type="button" className="secondary" data-override-open onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button> : null}
+                {!dossier.workflow.completed_at && dossier.workflow.override_state ? <button type="button" className="workflow-secondary-button" data-override-open onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button> : null}
               </section> : null}
               {props.formResponses}
               <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}

@@ -189,6 +189,14 @@ const serviceProps = {
   onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
 };
 
+test("force-move entry reuses themed workflow control and stays hidden after completion", () => {
+  const workflow = { ...source.workflow!, override_state: { activation_sequence: 1, transition_seq: 0, next_milestone_name: "Review" } };
+  const html = renderDossier({ dossier: { ...source, markdown: "", workflow } });
+  expect(html).toContain('class="workflow-secondary-button" data-override-open');
+  expect(html).toContain("Force move…");
+  expect(renderDossier({ dossier: { ...source, markdown: "", workflow: { ...workflow, completed_at: "2026-09-07T00:00:00.000Z" } } })).not.toContain("data-override-open");
+});
+
 test("assessment disclosure shows original milestone, goal and cited answer", () => {
   const html = renderDossier({ dossier: { ...source, markdown: "", recent_workflow_activity: [{
     ...source.recent_workflow_activity[0], action_type: "evaluate_goal", status: "responded", milestone_name: "Original milestone",

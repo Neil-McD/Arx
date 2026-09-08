@@ -503,6 +503,26 @@ async function resolveAvailableChannelSlug(args: {
   throw new Error("community_channel_slug_unavailable");
 }
 
+/** Allocate a readable generated label in the same transaction as channel creation. */
+export async function resolveGeneratedCommunityChannelName(args: {
+  ctx: { db: any }; communityId: any; name: string;
+}): Promise<string> {
+  await ensureGeneralChannel(args);
+  const base = normalizeCommunityChannelName(args.name.slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS));
+  // There cannot be more occupied names than the combined active-channel capacity.
+  for (let index = 0; index <= MAX_SHARED_COMMUNITY_CHANNELS + MAX_PRIVATE_COMMUNITY_CHANNELS; index++) {
+    const suffix = index === 0 ? "" : ` (${index + 1})`;
+    const candidate = `${base.slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS - suffix.length).trimEnd()}${suffix}`;
+    try {
+      await requireAvailableChannelName({ ...args, name: candidate });
+      return candidate;
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "community_channel_name_taken") throw error;
+    }
+  }
+  throw new Error("community_channel_name_unavailable");
+}
+
 async function requireAvailableChannelName(args: {
   ctx: { db: any }; communityId: any; name: string; excludeId?: any;
 }): Promise<string> {
