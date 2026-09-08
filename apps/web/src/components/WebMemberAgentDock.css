@@ -76,7 +76,7 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  background: var(--surface-base, var(--web-context-panel-surface));
+  background: var(--community-chat-surface, var(--bg-workspace));
   transform: none;
 }
 
@@ -99,7 +99,7 @@
 
 .community-agent-page .member-agent-dock-composer-shell {
   width: min(800px, calc(100% - 48px));
-  margin: 0 auto 24px;
+  margin: 0 auto 12px;
 }
 
 @media (max-width: 600px) {
