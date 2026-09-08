@@ -3104,7 +3104,7 @@
 }
 
 /* One optional workspace pane. The rail lives outside the community frame. */
-.app-shell.framed-shell.has-workspace-right-rail {
+.app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail {
   grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr) 56px;
   --web-topbar-right-action-safe-inset: 0px;
 }
@@ -3156,8 +3156,8 @@
   .community-workspace-panes > .community-workspace-secondary { flex: 1; min-width: 0; border-left: 0; }
 }
 @container community-shell (max-width: 900px) {
-  .app-shell.framed-shell.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 48px; }
-  .app-shell.compact-navigation-open.framed-shell.has-workspace-right-rail { grid-template-columns: 72px minmax(0, 1fr) 48px; }
+  .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 48px; }
+  .app-shell.compact-navigation-open.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: 72px minmax(0, 1fr) 48px; }
   .workspace-right-rail { padding: 8px 4px; }
   .compact-community-toolbar { padding-right: 12px; }
 }
