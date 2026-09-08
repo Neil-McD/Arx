@@ -113,6 +113,12 @@ If a cleanup touches any of the above, require explicit human confirmation.
 - Community funnel is a single canonical entry surface for join/gate.
 
 ### Member Agent, Community Agent + External Harness Context
+- Approved migration target: one community-provided agent experience with private
+  member-and-community-bound conversations. Reuse the existing harness; do not
+  merge member, builder, and autonomous execution permissions. The foundation
+  endpoint is not yet wired to the UI or enabled for inference. Existing global
+  conversations remain historical data and the current dock remains operational
+  until its replacement is verified. See `docs/community-agent-conversations.md`.
 - The bottom-right dock is the member's personal agent under one explicit community context.
 - Direct community-agent mentions and autonomous cognition use the separate community-owned agent identity.
 - Native member-agent and community-agent interactions are bound to one explicit community context.

@@ -85,7 +85,7 @@ type CloudMessageLike = {
 type MemberAgentChannelLike = {
   _id: any;
   ownerId: any;
-  scopeKey?: "global";
+  scopeKey?: "global" | "community";
   communityId?: any;
   activeEpisodeId?: any;
   communityNameSnapshot?: string;
@@ -561,6 +561,8 @@ async function resolveRuntimeRunCanonicalCommunityLens(args: {
   communityContextVersion?: number;
 }> {
   const threadCommunityId = normalizeIdValue(args.thread.communityId);
+  // Enable only after the community-agent identity/context migration is verified.
+  if (communityConversationScope(args.thread)) throw new Error("community_conversation_runtime_not_enabled");
   const requestedCommunityId = normalizeIdValue(args.requestedCommunityId);
   const hasRequestedContextVersion =
     typeof args.requestedContextVersion === "number" &&
@@ -659,6 +661,10 @@ async function setCloudThreadContextForOwnedThread(args: {
   updated_at: string;
 } | null> {
   const existing = args.existing;
+  const boundCommunity = communityConversationScope(existing);
+  if (boundCommunity && (args.updateCommunityId ?? true) && args.communityId !== boundCommunity) {
+    throw new Error("community_conversation_scope_immutable");
+  }
   if (typeof existing.archivedAt === "number") return null;
 
   const currentContextVersion = normalizeContextVersion(existing.contextVersion);
@@ -991,6 +997,18 @@ function normalizeRunLane(raw: unknown): string {
   return value.slice(0, 64);
 }
 
+function communityConversationScope(thread: ThreadLike): string | null {
+  const match = /^community-conversation:([^:]+):episode:[1-9][0-9]*$/.exec(thread.threadKey ?? "");
+  if (!match) return null;
+  if (thread.communityId !== match[1]) throw new Error("community_conversation_scope_mismatch");
+  return match[1];
+}
+
+async function requireCommunityConversationAccess(ctx: any, thread: ThreadLike) {
+  const communityId = communityConversationScope(thread);
+  if (communityId) await requireCommunityChatAccess({ ctx, communityId, userId: thread.ownerId });
+}
+
 async function getCloudThreadByThreadKeyInternal(args: {
   ctx: any;
   ownerId: any;
@@ -1002,6 +1020,7 @@ async function getCloudThreadByThreadKeyInternal(args: {
     .first();
   if (!row) return null;
   if (typeof row.archivedAt === "number") return null;
+  await requireCommunityConversationAccess(args.ctx, row);
   return row as ThreadLike;
 }
 
@@ -1013,6 +1032,7 @@ async function requireOwnedCloudThread(args: {
   const row = (await args.ctx.db.get(args.threadId)) as ThreadLike | null;
   if (!row) throw new Error("thread_not_found");
   if (row.ownerId !== args.ownerId) throw new Error("thread_access_denied");
+  await requireCommunityConversationAccess(args.ctx, row);
   return row;
 }
 
@@ -1311,6 +1331,7 @@ export const listCloudThreadsByOwner = query({
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
     const filtered = rows.filter((row) => {
+      if (communityConversationScope(row)) return false;
       if (!includeArchived && typeof row.archivedAt === "number") return false;
       return true;
     });
@@ -1335,6 +1356,7 @@ export const getCloudThreadById = query({
     if (!row) return null;
     if (row.ownerId !== ownerId) return null;
     if (!args.includeArchived && typeof row.archivedAt === "number") return null;
+    await requireCommunityConversationAccess(ctx, row);
     return row;
   },
 });
@@ -1375,6 +1397,7 @@ export const getCloudThreadContext = query({
     if (!row) return null;
     if (row.ownerId !== ownerId) return null;
     if (typeof row.archivedAt === "number") return null;
+    await requireCommunityConversationAccess(ctx, row);
     return buildThreadContextResponse(row, 0);
   },
 });
@@ -1467,6 +1490,9 @@ export const ensureCloudThread = mutation({
     });
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
+    if (threadKey.startsWith("community-conversation:")) {
+      throw new Error("community_conversation_use_scoped_endpoint");
+    }
     const existing = await getCloudThreadByThreadKeyInternal({
       ctx,
       ownerId,
@@ -1755,6 +1781,34 @@ export async function ensureGlobalMemberAgentChannelWithCommunityLensCore(args: 
     context_version: context.context_version,
   };
 }
+
+// Foundation endpoint: not yet selected by the web UI. Never adopts global history.
+export const ensureCommunityAgentConversation = mutation({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({ ctx });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: ownerId });
+    const existing = await ctx.db.query("memberAgentChannels")
+      .withIndex("by_owner_scope_community", q => q.eq("ownerId", ownerId).eq("scopeKey", "community").eq("communityId", args.communityId))
+      .unique();
+    if (existing) {
+      const episode = existing.activeEpisodeId ? await ctx.db.get(existing.activeEpisodeId) : null;
+      if (!episode || episode.channelId !== existing._id || episode.status !== "active") throw new Error("member_agent_active_episode_invalid");
+      const thread = await requireOwnedCloudThread({ ctx, ownerId, threadId: episode.threadId });
+      if (communityConversationScope(thread) !== args.communityId || typeof thread.archivedAt === "number") throw new Error("community_conversation_scope_mismatch");
+      return buildMemberAgentChannelResponse({ channel: existing, episode, thread, communityId: args.communityId });
+    }
+    const now = Date.now();
+    const threadKey = `community-conversation:${args.communityId}:episode:1`;
+    const collision = await ctx.db.query("threads").withIndex("by_owner_threadKey", q => q.eq("ownerId", ownerId).eq("threadKey", threadKey)).first();
+    if (collision) throw new Error("member_agent_episode_thread_collision");
+    const threadId = await ctx.db.insert("threads", { ownerId, communityId: args.communityId, threadKey, titleSource: "auto", modelId: DEFAULT_ACTIVE_MODEL_ID, contextVersion: 0, lastSeq: 0, createdAt: now, updatedAt: now });
+    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId, communityId: args.communityId, scopeKey: "community", nextOrdinal: 2, createdAt: now, updatedAt: now });
+    const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId, ordinal: 1, status: "active", startedAt: now, createdAt: now, updatedAt: now });
+    await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
+    return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channelId))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
+  },
+});
 
 export const ensureMemberAgentGlobalChannel = mutation({
   args: {
@@ -2551,6 +2605,7 @@ export const getCloudThreadMessageByOwnerMessageKey = query({
       .first()) as CloudMessageLike | null;
     if (!row) return null;
     if (args.threadId && row.threadId !== args.threadId) return null;
+    await requireOwnedCloudThread({ ctx, ownerId, threadId: row.threadId });
     return row;
   },
 });
