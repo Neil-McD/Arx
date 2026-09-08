@@ -1,5 +1,6 @@
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import { useState } from "react";
+import { Search } from "lucide-react";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { WebCommunityMembersProfile } from "./WebCommunityMembersProfile";
 import { CommunityInteractionContextPanelSurface } from "./WebCommunityInteractionProjection";
@@ -47,8 +48,11 @@ export function WebCommunityMembersPanel({
         ) : null}
         <div className="community-members-directory" hidden={Boolean(selectedProfile)}>
         <header className="community-members-directory-header">
-          <h1 className="resources-title">Members <span>{interactionProjection.communityMemberCount ?? ""}</span></h1>
-          <input type="search" className="input-styled" aria-label="Search members by name" placeholder="Search members by name" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
+          <h1>Members <span>{interactionProjection.communityMemberCount ?? ""}</span></h1>
+          <label className="community-dm-recipient-search community-dm-inbox-search">
+            <Search aria-hidden="true" />
+            <input type="search" aria-label="Search members by name" placeholder="Search members by name" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
+          </label>
         </header>
         <CommunityInteractionContextPanelSurface
           {...interactionProjection}

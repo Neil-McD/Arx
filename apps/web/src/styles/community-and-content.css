@@ -2902,10 +2902,10 @@
 
 .community-members-directory { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .community-members-directory[hidden] { display: none; }
-.community-members-directory-header { padding: 24px 24px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+.community-members-directory-header { padding: 24px 24px 12px; padding-right: max(24px, var(--web-topbar-right-action-safe-inset, 64px)); display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
 .community-members-directory-header h1 { margin: 0; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); }
 .community-members-directory-header h1 span { margin-left: 8px; font-weight: 400; }
-.community-members-directory-header input { margin-left: auto; width: min(100%, 280px); min-height: 40px; }
+.community-members-directory-header .community-dm-recipient-search { margin: 0 0 0 auto; width: min(100%, 280px); }
 .community-members-directory .community-members-page-panel { display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; border-left: 0; background: transparent; }
 .community-members-directory .community-context-members { padding: 8px 24px 24px; }
 .community-members-directory .community-context-member { min-height: 64px; }

@@ -100,9 +100,10 @@ describe("web shell refresh continuity contract", () => {
 
     expect(types).toContain("online_user_ids?: string[] | null");
     expect(shell).toContain('status: "pending" | "resolved" | "failed"');
-    expect(context).toContain("hasResolvedPresence = props.onlineUserIds instanceof Set");
+    expect(context).toContain("const isOnline = Boolean(props.onlineUserIds?.has(member.user_id))");
     expect(context).toContain("props.isLoadingPresence");
-    expect(context).toContain("Recently active");
+    expect(context).not.toContain("Offline —");
+    expect(context).not.toContain("is-offline");
     expect(context).not.toMatch(/const online = props\.onlineUserIds \?\? new Set/);
   });
 
