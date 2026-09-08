@@ -55,6 +55,18 @@ test("optional panes reuse the existing Agent and DM owners and retain permissio
   expect(css).toContain('.web-direct-messages-host.embedded .community-dm-panel');
 });
 
+test("all secondary panes share one minimize control and the canonical panel edge", () => {
+  const source = readFileSync(new URL("../apps/web/src/components/WebAppCompositionRoot.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../apps/web/src/index.css", import.meta.url), "utf8");
+  expect(source.match(/aria-label="Minimize side panel"/g)).toHaveLength(1);
+  expect(source).toContain('(showSideAgent || showSideMessages) && <button');
+  expect(source).toContain('onClick={minimizePanel}');
+  expect(source).not.toContain('workspace-secondary-close');
+  const paneRule = css.match(/\.community-workspace-panes > \.community-workspace-secondary \{([^}]+)\}/)?.[1];
+  expect(paneRule).toContain('border-left: 1px solid var(--stroke-panel-edge)');
+  expect(paneRule).not.toContain('--border-default');
+});
+
 test("mobile Agent routing stays in the existing shell controller", () => {
   const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
   const controller = readFileSync(new URL("../apps/web/src/controllers/useWebMobileShellController.ts", import.meta.url), "utf8");

@@ -101,6 +101,9 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
   creates a second Agent instance. Community/member keys and access checks remain.
 - Closing a pane restores the main surface. A narrow content container displays
   only the selected secondary pane until closed; no squeezed two-column layout.
+- Agent, DM inbox and DM conversations share one top-right minimize control.
+  Minimizing preserves their existing state and returns focus to the rail.
+  The secondary edge uses the canonical `--stroke-panel-edge` theme token.
 - Agent drafts and conversation state stay in the existing mounted component.
   Embedded DMs no longer close when clicking in the primary page; Escape and the
   existing close control remain available. No new messaging or runtime owner.

@@ -3131,7 +3131,7 @@
 .workspace-panel-options button:hover { background: var(--surface-hover); }
 .workspace-panel-options button:disabled { opacity: .45; }
 .community-workspace-panes {
-  display: flex; min-width: 0; min-height: 0; overflow: hidden;
+  position: relative; display: flex; min-width: 0; min-height: 0; overflow: hidden;
   container: workspace-panes / inline-size;
 }
 .community-workspace-primary { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; container: primary-workspace / inline-size; }
@@ -3139,9 +3139,11 @@
 .community-workspace-panes > .community-agent-workspace { flex: 1; min-width: 0; min-height: 0; }
 .community-workspace-panes > .community-workspace-secondary {
   position: relative; flex: 0 0 45%; min-width: 320px; min-height: 0;
-  border-left: 1px solid var(--border-default); overflow: hidden;
+  border-left: 1px solid var(--stroke-panel-edge); overflow: hidden;
 }
-.workspace-secondary-close { position: absolute; top: 12px; right: 12px; z-index: 3; }
+.workspace-secondary-minimize { position: absolute; top: 12px; right: 12px; z-index: 3; }
+.web-direct-messages-host.embedded .community-dm-inbox-header,
+.web-direct-messages-host.embedded .community-dm-panel-header { padding-right: 38px; }
 .community-workspace-panes .member-agent-dock.community-agent-page .member-agent-dock-header { padding-right: 24px; }
 .community-workspace-secondary .member-agent-dock.community-agent-page .member-agent-dock-header { padding-right: 52px; }
 .community-workspace-secondary .member-agent-dock-header-actions > button span { display: none; }

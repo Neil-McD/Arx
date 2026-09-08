@@ -7,7 +7,7 @@ import {
   type ComponentProps,
   type Ref,
 } from "react";
-import { Plus, Sparkles, X } from "lucide-react";
+import { Minus, Plus, Sparkles } from "lucide-react";
 
 import type { AuthSession } from "../auth";
 import { communityAgentSessionKey, showCommunityAgentWorkspace } from "../../../../shared/communityAgentPageState";
@@ -54,6 +54,7 @@ export function WebAppCompositionRoot(props: {
   const [sideAgent, setSideAgent] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
+  const toolsRail = useRef<HTMLElement>(null);
   const railEnabled = !props.shellChromeHostProps.showMobileAppShell &&
     props.shellChromeHostProps.communityShell.showDesktopCommunityNav;
   const canOpenAgent = railEnabled && props.memberAgentDockProps.isVisible &&
@@ -76,7 +77,15 @@ export function WebAppCompositionRoot(props: {
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [pickerOpen]);
   const closeSideAgent = () => { setSideAgent(false); addButton.current?.focus(); };
-  const rightRail = railEnabled ? <aside className="workspace-right-rail" aria-label="Workspace tools">
+  const minimizePanel = () => {
+    if (showSideMessages) {
+      props.directMessagesHostProps.onClose();
+      toolsRail.current?.querySelector<HTMLButtonElement>(".direct-messages-topbar-button")?.focus();
+    } else {
+      closeSideAgent();
+    }
+  };
+  const rightRail = railEnabled ? <aside ref={toolsRail} className="workspace-right-rail" aria-label="Workspace tools">
     {props.shellChromeHostProps.desktopHeader.directMessagesButton}
     <div className="workspace-panel-picker">
       <button ref={addButton} type="button" className="icon-button" aria-label="Open side panel"
@@ -115,12 +124,13 @@ export function WebAppCompositionRoot(props: {
     </div>
     {props.memberAgentDockProps.pageMode && <main className={`workspace community-mode community-agent-workspace${showSideAgent ? " community-workspace-secondary" : ""}`} style={{ display: showAgentWorkspace || showSideAgent ? undefined : "none" }}
       onKeyDown={event => { if (event.key === "Escape" && showSideAgent && !document.querySelector("dialog[open]")) { event.stopPropagation(); closeSideAgent(); } }}>
-      {showSideAgent && <button className="icon-button workspace-secondary-close" type="button" aria-label="Close agent side panel" onClick={closeSideAgent}><X size={18} /></button>}
       <Suspense fallback={<div role="status">Loading agent…</div>}>
         <WebMemberAgentDock key={agentSessionKey} ref={props.memberAgentDockRef} {...props.memberAgentDockProps} pageActive={showAgentWorkspace || showSideAgent} />
       </Suspense>
     </main>}
     {props.memberAgentDockProps.pageMode && <WebDirectMessagesHost {...props.directMessagesHostProps} embedded={railEnabled} />}
+    {(showSideAgent || showSideMessages) && <button className="icon-button workspace-secondary-minimize" type="button"
+      aria-label="Minimize side panel" title="Minimize side panel" onClick={minimizePanel}><Minus size={18} aria-hidden="true" /></button>}
     </div>
   );
 
