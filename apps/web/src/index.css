@@ -3108,6 +3108,7 @@
   grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr) 44px;
   --web-topbar-right-action-safe-inset: 0px;
 }
+.has-workspace-right-rail > .product-shell-surface--community { margin-right: 0; }
 .workspace-right-rail {
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -3122,13 +3123,11 @@
 .workspace-panel-picker > .icon-button:is(:hover, :focus-visible) { background: var(--hover-overlay); }
 .workspace-panel-picker { position: relative; }
 .workspace-right-rail > .direct-messages-topbar-button {
-  width: 44px; height: 44px; padding: 6px;
+  padding: 6px;
   top: -4px;
 }
 .workspace-right-rail > .direct-messages-topbar-button svg {
   width: 26px; height: 26px;
-  /* Optically center across the rail and the adjacent shell gutter. */
-  transform: translateX(calc(var(--community-shell-inset) / -2));
 }
 .workspace-right-rail > .workspace-panel-picker {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
