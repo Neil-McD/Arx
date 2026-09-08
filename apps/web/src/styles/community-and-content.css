@@ -5385,34 +5385,6 @@
   gap: 12px;
 }
 
-.community-profile-panel-avatar {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  flex: 0 0 64px;
-  border: 1px solid var(--web-context-panel-border);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--bg-card-alt) 82%, var(--border-default));
-  box-shadow: none;
-}
-
-.community-profile-panel-avatar.has-image {
-  background: transparent;
-}
-
-.community-profile-panel-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .community-profile-panel-actions {
   display: flex;
   align-items: center;

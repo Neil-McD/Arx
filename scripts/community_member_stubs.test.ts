@@ -17,13 +17,15 @@ const members = [
   { id: "membership", community_id: "community", user_id: "member", display_name: "Member Name", role: "member", created_at: "", last_active_at: "" },
 ];
 test("workflow avatars reuse the feed holder without local sizing", () => {
-  for (const file of ["WebCommunityWorkflowMemberStub.tsx", "WebCommunityWorkflowMemberDossierModal.tsx"]) {
+  for (const file of ["WebCommunityWorkflowMemberStub.tsx", "WebCommunityWorkflowMemberDossierModal.tsx", "WebCommunityProfilePanel.tsx"]) {
     const source = readFileSync(new URL(`../apps/web/src/components/${file}`, import.meta.url), "utf8");
     expect(source).toContain('className="community-interaction-avatar"');
   }
   const css = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowsSection.css", import.meta.url), "utf8");
   expect(css).not.toContain(".workflow-member-stub-avatar");
   expect(css).not.toContain(".workflow-member-dossier-avatar");
+  const communityCss = readFileSync(new URL("../apps/web/src/styles/community-and-content.css", import.meta.url), "utf8");
+  expect(communityCss).not.toContain(".community-profile-panel-avatar");
 });
 function render(canManageMembers: boolean) {
   return renderToStaticMarkup(createElement(CommunityContextPanel, {

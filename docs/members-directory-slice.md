@@ -2,6 +2,7 @@
 
 Member cards and workflow cards/details reuse the channel feed's standard
 40px `UserAvatar` holder and presence styling, without surface-local avatar sizing.
+The shared member profile panel uses that same holder, including when opened from chat.
 
 Members is a full-width divided list, not a presence sidebar. It retains
 the canonical avatar, authorized paginated directory, profile reader, membership
