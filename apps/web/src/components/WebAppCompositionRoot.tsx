@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
+import { communityAgentSessionKey, showCommunityAgentWorkspace } from "../../../../shared/communityAgentPageState";
 import type { WebAppMainSurfaceHostProps } from "./WebAppMainSurfaceHost";
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 import type {
@@ -44,11 +45,14 @@ export function WebAppCompositionRoot(props: {
     "mainSurface" | "globalOverlays"
   >;
 }) {
+  const agentSessionKey = communityAgentSessionKey(props.memberAgentDockProps.session?.user.id, props.memberAgentDockProps.community?.id);
+  const showAgentWorkspace = showCommunityAgentWorkspace(props.memberAgentDockProps);
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...props.globalOverlayHostProps} />
       {!props.memberAgentDockProps.pageMode && <Suspense fallback={null}>
         <WebMemberAgentDock
+          key={agentSessionKey}
           ref={props.memberAgentDockRef}
           {...props.memberAgentDockProps}
         />
@@ -58,16 +62,16 @@ export function WebAppCompositionRoot(props: {
   );
   const mainSurface = (
     <>
-    <div style={{ display: props.memberAgentDockProps.pageMode && props.memberAgentDockProps.pageActive ? "none" : "contents" }}>
+    <div style={{ display: showAgentWorkspace ? "none" : "contents" }}>
     <Suspense
       fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
     >
       <WebAppMainSurfaceHost {...props.mainSurfaceHostProps} />
     </Suspense>
     </div>
-    {props.memberAgentDockProps.pageMode && <main className="workspace community-mode community-agent-workspace" style={{ display: props.memberAgentDockProps.pageActive && props.memberAgentDockProps.isVisible ? undefined : "none" }}>
+    {props.memberAgentDockProps.pageMode && <main className="workspace community-mode community-agent-workspace" style={{ display: showAgentWorkspace ? undefined : "none" }}>
       <Suspense fallback={<div role="status">Loading agent…</div>}>
-        <WebMemberAgentDock ref={props.memberAgentDockRef} {...props.memberAgentDockProps} />
+        <WebMemberAgentDock key={agentSessionKey} ref={props.memberAgentDockRef} {...props.memberAgentDockProps} />
       </Suspense>
     </main>}
     </>

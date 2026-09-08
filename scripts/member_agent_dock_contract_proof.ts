@@ -484,8 +484,8 @@ assert.doesNotMatch(JSON.stringify(identityManifest), /Neil McDevitt|neilmcd|you
 
 assert.match(
   schema,
-  /memberAgentChannels: defineTable\([\s\S]*scopeKey: v\.optional\(v\.literal\("global"\)\)[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)[\s\S]*activeEpisodeId: v\.optional\(v\.id\("memberAgentEpisodes"\)\)[\s\S]*\.index\("by_owner_scope", \["ownerId", "scopeKey"\]\)[\s\S]*\.index\("by_owner", \["ownerId"\]\)[\s\S]*\.index\("by_owner_community", \["ownerId", "communityId"\]\)/,
-  "the stable user-global channel must coexist additively with legacy community channels",
+  /memberAgentChannels: defineTable\([\s\S]*scopeKey: v\.optional\(v\.union\(v\.literal\("global"\), v\.literal\("community"\)\)\)[\s\S]*\.index\("by_owner_scope_community", \["ownerId", "scopeKey", "communityId"\]\)/,
+  "scoped conversations must use the canonical owner/scope/community index while retaining global history",
 );
 assert.match(
   schema,
@@ -544,8 +544,8 @@ assert.match(
 );
 assert.equal(
   (threads.match(/requireWritableMemberAgentThread\(\{/g) ?? []).length,
-  3,
-  "both message creation paths plus the shared claimed-image authority must reject retained legacy episodes",
+  5,
+  "message, image, runtime admission and runtime history paths must share active-session authority",
 );
 assert.equal(
   (threads.match(/requireWritableClaimedImageAttachmentThread\(\{/g) ?? [])
@@ -725,8 +725,8 @@ assert.doesNotMatch(
 );
 assert.match(
   runtimeLoop,
-  /if \(params\.invocationSurface === "member_agent_dock"\) \{[\s\S]*resolveMemberAgentIdentityContextInternal[\s\S]*renderMemberAgentIdentityContext[\s\S]*catch \{[\s\S]*memberIdentityContextMd = null;/,
-  "identity loading must be dock-only and fail soft",
+  /params\.invocationSurface === "member_agent_dock" && !\(params\.memberAgentSurfaceContext\?\.kind === "community" && params\.memberAgentSurfaceContext\.community_conversation\)[\s\S]*resolveMemberAgentIdentityContextInternal[\s\S]*renderMemberAgentIdentityContext[\s\S]*catch \{[\s\S]*memberIdentityContextMd = null;/,
+  "global personal identity loading must exclude community-bound conversations and fail soft",
 );
 assert.match(
   runtimePrompt,
@@ -768,8 +768,8 @@ assert.match(
 
 assert.match(
   gateway,
-  /threads:ensureMemberAgentGlobalChannel[\s\S]*threads:startNewMemberAgentGlobalEpisode/,
-  "the browser must use the dedicated user-global channel mutations",
+  /threads:ensureCommunityAgentConversation[\s\S]*threads:startNewCommunityAgentConversation/,
+  "the browser must expose dedicated community-bound conversation mutations",
 );
 assert.doesNotMatch(
   gateway,
@@ -782,17 +782,17 @@ assert.match(
 );
 assert.match(
   component,
-  /ensureCloudMemberAgentGlobalChannel[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
-  "the dock must use the retained personal runtime and streaming controller",
+  /ensureCloudCommunityAgentConversation[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
+  "the scoped conversation must reuse the canonical runtime and streaming controller",
 );
 assert.match(
   component,
-  /startNewCloudMemberAgentGlobalEpisode[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
+  /startNewCloudCommunityAgentConversation[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
   "New chat must switch the active thread only after the server returns the new episode",
 );
 assert.match(
   component,
-  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudMemberAgentGlobalChannel[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
+  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudCommunityAgentConversation[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
   "an ambiguous New chat result must reconcile to the active server episode",
 );
 const startNewChatBlock =
@@ -815,8 +815,8 @@ assert.match(component, /agentScopeRef[\s\S]*isCurrentScope/);
 assert.doesNotMatch(component, /\}, \[props\.communityId, props\.session\?\.user\.id, stopStreamingTurn\]\);/);
 assert.match(
   component,
-  /synchronizeDesiredLens[\s\S]*syncThreadCommunityLensCloud[\s\S]*setCloudThreadContext[\s\S]*createThreadMessage/,
-  "the dock must validate and synchronize the desired community lens before persisting the next user turn",
+  /synchronizeDesiredLens[\s\S]*channel\.community_id === desiredCommunityId[\s\S]*throw new Error\("Community conversation scope does not match\."\)/,
+  "scoped conversation identity must reject mismatches instead of switching lenses",
 );
 assert.match(
   component,

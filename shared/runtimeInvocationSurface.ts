@@ -1,7 +1,7 @@
 import type { CapabilityFamily } from "./canonicalGateEngine.ts";
 import type { RetrievalToolName } from "./retrievalTools.ts";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts";
-import { COMMUNITY_CONVERSATION_PREFIX } from "./communityConversationIdentity";
+import { COMMUNITY_CONVERSATION_PREFIX } from "./communityConversationIdentity.ts";
 
 export type RuntimeInvocationSurface =
   | "member_agent_dock"

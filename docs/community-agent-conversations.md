@@ -68,8 +68,8 @@ does not inherit builder permissions. Workflow execution remains separately auth
 ## Next gate
 
 Prove a staged end-to-end turn, funding receipt and attachment path before release.
-Replace the dock with the center-panel Agent interface. Retain the existing
-execution substrate and approval UI. Migrate Resources' agent entry point too.
+The center-panel Agent interface and Resources entry point are implemented locally
+in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ## Slice 4: Agent page candidate (not visually accepted or deployed)
 
@@ -91,6 +91,17 @@ execution substrate and approval UI. Migrate Resources' agent entry point too.
   navigation, voice, attachment, Resources approval and live staging checks.
 
 ## Acceptance
+
+### Slice 4 follow-up: isolation and visibility fixes
+
+- Conversation components are keyed by member and community, not navigation tab.
+  Switching scope resets the mounted session; navigating within a community keeps
+  drafts and Resources handoffs intact.
+- Primary content and the Agent workspace share one visibility decision. When
+  onboarding suppresses the Agent, its primary content host remains visible.
+- The command-line contract proof recognizes community-scoped conversations and
+  the server-selected runtime identity. Its native Node import is explicit.
+- These are local fixes, not evidence of a deployment or rendered acceptance.
 
 Test member/community isolation, repeated resolution, immutable scope, revocation,
 unauthenticated access, reserved-key creation and preservation of global history.

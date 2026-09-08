@@ -504,7 +504,14 @@ function WebMemberAgentDock(props, ref) {
     pendingResourceBuildRef.current = null;
     resourceBuildStartInFlightRef.current = false;
     setRecoveredResourceChangesetCards([]);
-  }, [clearAttachmentDrafts, props.session?.user.id, stopStreamingTurn]);
+  }, [clearAttachmentDrafts, props.session?.user.id, communityId, stopStreamingTurn]);
+
+  useEffect(() => () => {
+    agentScopeRef.current = { ...agentScopeRef.current, generation: agentScopeRef.current.generation + 1 };
+    const previousThreadKey = activeThreadKeyRef.current;
+    activeThreadKeyRef.current = null;
+    if (previousThreadKey) stopStreamingTurn(previousThreadKey);
+  }, [stopStreamingTurn]);
 
   const previousSurfaceKeyRef = useRef(surfaceKey);
   useEffect(() => {
