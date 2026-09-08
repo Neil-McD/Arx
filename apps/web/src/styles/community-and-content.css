@@ -2799,8 +2799,8 @@
 }
 
 .community-context-member-action {
-  width: 36px;
-  height: 36px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   border: none;
   border-radius: 50%;
@@ -2814,6 +2814,11 @@
     background 0.12s ease,
     color 0.12s ease,
     opacity 0.12s ease;
+}
+
+.community-members-list .community-context-member-action {
+  width: 36px;
+  height: 36px;
 }
 
 @media (hover: hover) and (pointer: fine) {
