@@ -1121,6 +1121,33 @@ test("forms: repeated contributions reuse a request; submission moves exactly on
   expect(await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId })).toEqual([]);
 });
 
+test("form privacy rejects another active member and rechecks administrator demotion", async () => {
+  const { t, f, member, request } = await formFlowFixture();
+  const otherMembership = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "form-privacy-other", displayName: "Other member", createdAt: f.nowMs, updatedAt: f.nowMs });
+    return await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId,
+      role: "member", active: true, activationSequence: 1, accessSource: "manual_grant", createdAt: f.nowMs, updatedAt: f.nowMs });
+  });
+  const other = t.withIdentity({ subject: "form-privacy-other" });
+  const requestArgs = { communityId: f.communityId, requestId: request._id };
+  const scope = { communityId: f.communityId, membershipId: f.membershipId };
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { ...requestArgs,
+    expectedRevision: 0, answers: { q: "PRIVATE_MEMBER_ANSWER" }, submit: false });
+  await expect(other.query(api.communityFormRequests.getMyRequest, requestArgs)).rejects.toThrow("form_request_not_found");
+  await expect(other.mutation(api.communityFormRequests.saveMyAnswers, { ...requestArgs,
+    expectedRevision: 1, answers: { q: "OVERWRITE" }, submit: true })).rejects.toThrow("form_request_not_found");
+  expect(await other.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId })).toEqual([]);
+  await expect(other.query(api.communityFormRequests.listBuilderResponses, scope)).rejects.toThrow("community_forbidden");
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { ...requestArgs,
+    expectedRevision: 1, answers: { q: "PRIVATE_MEMBER_ANSWER" }, submit: true });
+  await t.run(ctx => ctx.db.patch(otherMembership, { role: "admin" }));
+  expect(JSON.stringify(await other.query(api.communityFormRequests.listBuilderResponses, scope))).toContain("PRIVATE_MEMBER_ANSWER");
+  expect(JSON.stringify(await other.query(dossierQuery, scope))).toContain("PRIVATE_MEMBER_ANSWER");
+  await t.run(ctx => ctx.db.patch(otherMembership, { role: "member" }));
+  await expect(other.query(api.communityFormRequests.listBuilderResponses, scope)).rejects.toThrow("community_forbidden");
+  await expect(other.query(dossierQuery, scope)).rejects.toThrow("community_forbidden");
+});
+
 test("forms: pinned questions, required validation, privacy and expired visits", async () => {
   const { t, f, member, owner, question, request } = await formFlowFixture();
   await owner.mutation(api.communityForms.saveBuilderForm, { communityId: f.communityId, key: "intake", expectedRevision: 1, name: "New intake", questions: [{ ...question, title: "Changed" }] });
