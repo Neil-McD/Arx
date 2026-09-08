@@ -3162,6 +3162,21 @@
   .community-interaction-projection.has-drawer > .community-interaction-main { display: none; }
   .community-interaction-drawer { min-width: 0; width: 100%; }
 }
+/* Desktop shell experiment: existing surfaces, individually framed. */
+@container community-shell (min-width: 901px) {
+  .product-shell-surface--community {
+    gap: var(--community-shell-inset);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .product-shell-surface--community > .community-nav,
+  .community-workspace-panes > :is(.community-workspace-primary, .community-agent-workspace, .web-direct-messages-host.embedded) {
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+  }
+  .community-workspace-panes { gap: var(--community-shell-inset); }
+}
 @container community-shell (max-width: 900px) {
   .app-shell.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: minmax(0, 1fr) 48px; }
   .app-shell.compact-navigation-open.framed-shell.with-community-rail.no-right.has-workspace-right-rail { grid-template-columns: 72px minmax(0, 1fr) 48px; }

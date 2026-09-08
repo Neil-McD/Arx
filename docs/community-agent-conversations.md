@@ -94,6 +94,11 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 ### Optional desktop pane
 
+Desktop framing experiment: above 900px, the navigation, primary workspace and
+optional secondary pane use separate frames with the existing shell radius,
+stroke and 8px inset tokens. Compact layouts, controls, surfaces and state owners
+remain unchanged. This is a CSS-only visual experiment, not a new shell mode.
+
 - Community desktop shells place the existing DM toggle/unread badge and an add
   panel button on an outer right rail. Mobile root navigation remains unchanged.
 - Add panel opens the existing community Agent beside the primary page. Agent
