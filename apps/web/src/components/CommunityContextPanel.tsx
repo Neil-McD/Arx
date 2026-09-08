@@ -2,14 +2,9 @@ import { useCallback, useEffect, useId, useRef, useState, type UIEvent } from "r
 import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
-import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import {
   CommunityPresenceFacepile,
 } from "./CommunityPresenceFacepile";
-import type {
-  CloudCommunityPolynetOverview,
-  CloudCommunityPolynetOverviewNode,
-} from "../../../../shared/cloudCommunityPolynetGateway";
 import type {
   CommunityDirectoryMember,
   CommunityPresenceFace,
@@ -63,16 +58,10 @@ type CommunityContextPanelProps = {
   decidingJoinRequestId?: string | null;
   onApproveJoinRequest?: (requestId: string) => Promise<void> | void;
   onDenyJoinRequest?: (requestId: string) => Promise<void> | void;
-  memoryOverview?: CloudCommunityPolynetOverview | null;
-  isLoadingMemory?: boolean;
-  memoryLoadError?: string | null;
-  onRefreshMemory?: () => void;
-  onOpenMemory?: () => void;
   /* Visitor mode: sections render a visible lock body instead of live data.
      Headers keep their true counts — gate the content, show the metadata. */
   lockedSections?: { members?: boolean; memory?: boolean } | null;
   onLockedSectionActivate?: (section: "members" | "memory") => void;
-  memoryCountLabelOverride?: string | null;
   /* Visitor mode: up to 5 real faces render above the frost; everyone else
      is a glassed glimpse plus a true count. */
   membersPreview?: CommunityPresenceFace[] | null;
@@ -97,20 +86,6 @@ function isAdminRole(member: CommunityRailMember, ownerId?: string | null): bool
   );
 }
 
-function formatMemoryLabel(raw: string | null | undefined): string {
-  const value = String(raw ?? "").trim();
-  if (!value) return "Untitled";
-  return value
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-function formatMemoryCount(overview: CloudCommunityPolynetOverview | null): string | null {
-  if (!overview) return null;
-  const count = overview.memory.total_visible_nodes;
-  if (!Number.isFinite(count)) return null;
-  return `${count}${overview.memory.node_counts_are_lower_bound ? "+" : ""}`;
-}
 
 function formatMemberActivityLabel(lastActiveAt: string | null | undefined, isOnline: boolean): string | null {
   if (isOnline) return "Active now";
@@ -120,15 +95,8 @@ function formatMemberActivityLabel(lastActiveAt: string | null | undefined, isOn
   return relative ? `Active ${relative}` : null;
 }
 
-function isCommunityMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
-  return node.kind === "directory_node" || node.kind === "resource_node";
-}
-
-// The community context rail (chat right column, resting state): community name,
-// a face pile of who's online (Skool), a memory section that fills in as the room
-// accumulates knowledge (Polynet), and a grouped member roster (Discord).
+// Canonical community member directory and manager controls.
 export function CommunityContextPanel(props: CommunityContextPanelProps) {
-  const sectionMode = props.sectionMode ?? "all";
   const members = props.members ?? [];
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
@@ -157,20 +125,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const memberCountLabel = knownMemberCount !== null
     ? String(knownMemberCount)
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
-  const memoryOverview = props.memoryOverview ?? null;
-  const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isCommunityMemoryNode);
   const lockedMembers = Boolean(props.lockedSections?.members);
-  const lockedMemory = Boolean(props.lockedSections?.memory);
-  /* Visitor lens: an empty memory is young, not locked — plain header, the
-     member view's own "builds as the room shares knowledge" state. */
-  const showLockedEmptyMemory = lockedMemory && Boolean(memoryOverview) && !hasRetainedMemory;
-  const memoryCountLabel = showLockedEmptyMemory
-    ? null
-    : formatMemoryCount(memoryOverview) ?? props.memoryCountLabelOverride ?? null;
-  const memorySectionLabel = memoryCountLabel ? `Memory — ${memoryCountLabel}` : "Memory";
-  const memoryActivityLabel = memoryOverview
-    ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
-    : null;
 
   const hasExactOnlineTotal = typeof props.onlineCount === "number" && !props.onlineCountCapped;
   const offlineTotal = knownMemberCount !== null && hasExactOnlineTotal
@@ -495,96 +450,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         isLoading={props.isLoadingPresence}
       />
 
-      {sectionMode === "all" ? <div className="community-context-memory">
-        <div className="community-context-memory-head">
-          <div className="community-context-section">{memorySectionLabel}</div>
-        </div>
-        {lockedMemory && memoryOverview ? (
-          <div className="community-context-memory-summary">
-            <div
-              className="community-context-memory-preview community-context-memory-inert"
-              aria-label="Community memory graph preview"
-            >
-              <CommunityMemoryGraphPreview overview={memoryOverview} />
-            </div>
-            {showLockedEmptyMemory ? (
-              <div className="community-context-memory-status">
-                <span>Builds as the room shares knowledge</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="community-context-locked-hint"
-                onClick={() => props.onLockedSectionActivate?.("memory")}
-              >
-                <Lock size={12} strokeWidth={2} aria-hidden="true" />
-                <span>Everything this community has learned. Unlocks when you join.</span>
-              </button>
-            )}
-          </div>
-        ) : lockedMemory ? (
-          /* Overview still in flight: render nothing rather than a card that
-             the graph will replace a beat later — absent beats flicker. */
-          null
-        ) : props.isLoadingMemory && !memoryOverview ? (
-          <div className="community-context-memory-summary" aria-label="Loading memory">
-            <div className="community-context-memory-preview web-skeleton-block" />
-            <div className="community-context-memory-loading-status web-skeleton-row" />
-          </div>
-        ) : props.memoryLoadError ? (
-          <div className="community-context-memory-error">
-            <span>Could not load memory.</span>
-            {props.onRefreshMemory ? (
-              <button type="button" onClick={props.onRefreshMemory}>
-                Retry
-              </button>
-            ) : null}
-          </div>
-        ) : memoryOverview ? (
-          <div className="community-context-memory-summary">
-            {props.onOpenMemory ? (
-              <button
-                type="button"
-                className="community-context-memory-preview is-interactive"
-                onClick={props.onOpenMemory}
-                aria-label="Open community memory"
-                title="Open community memory"
-              >
-                <CommunityMemoryGraphPreview overview={memoryOverview} />
-              </button>
-            ) : (
-              <div className="community-context-memory-preview">
-                <CommunityMemoryGraphPreview overview={memoryOverview} />
-              </div>
-            )}
-            <div className="community-context-memory-status">
-              {hasRetainedMemory ? (
-                <>
-                  <span>{memoryActivityLabel ?? "Memory active"}</span>
-                  {memoryOverview.graph.has_more_nodes ? <span>More retained</span> : null}
-                </>
-              ) : (
-                <>
-                  <span>Builds as the room shares knowledge</span>
-                  {memoryActivityLabel ? <span>{memoryActivityLabel}</span> : null}
-                </>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="community-context-memory-empty">
-            <svg viewBox="0 0 32 32" width="22" height="22" fill="none" aria-hidden="true">
-              <line x1="8" y1="10" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
-              <line x1="24" y1="9" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
-              <line x1="8" y1="10" x2="24" y2="9" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="8" cy="10" r="2.2" fill="currentColor" />
-              <circle cx="24" cy="9" r="2.2" fill="currentColor" />
-              <circle cx="16" cy="20" r="3" fill="currentColor" />
-            </svg>
-            <span>Builds as the room shares knowledge</span>
-          </div>
-        )}
-      </div> : null}
 
       <div
         ref={membersViewportRef}

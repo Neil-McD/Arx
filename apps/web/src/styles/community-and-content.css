@@ -2163,10 +2163,6 @@
   grid-template-columns: minmax(0, 1fr) clamp(340px, 34vw, 760px);
 }
 
-.community-interaction-projection.has-context-panel {
-  grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 380px);
-}
-
 .community-context-panel {
   display: flex;
   flex-direction: column;
@@ -2273,18 +2269,7 @@
   font-size: 10px;
 }
 
-.community-context-memory {
-  padding: 12px 16px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--stroke-divider-accent);
-}
 
-.community-context-memory-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
 
 .community-context-section {
   font-size: 11px;
@@ -2294,26 +2279,7 @@
   color: var(--text-muted);
 }
 
-.community-context-memory-empty {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 9px;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.4;
-}
 
-.community-context-memory-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 9px;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.4;
-}
 
 /* Visitor mode: a locked section body. The header above it keeps its true
    count — the lock gates the content, never the metadata. */
@@ -2344,10 +2310,6 @@
 }
 
 /* Visitor glass layer: real content visible, verbs gated. */
-.community-context-memory-inert {
-  pointer-events: none;
-  user-select: none;
-}
 
 .community-context-locked-hint {
   display: flex;
@@ -2429,100 +2391,21 @@
   backdrop-filter: blur(1.5px);
 }
 
-.community-context-memory-error button {
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font-size: 12px;
-  cursor: pointer;
-}
 
-.community-context-memory-summary {
-  display: grid;
-  gap: 8px;
-  margin-top: 9px;
-}
 
 /* Live mini-render of the memory graph — same layout + node/edge encoding as the
    full Polynet page, fit into the rail slot. */
-.community-context-memory-preview {
-  display: block;
-  width: 100%;
-  height: 132px;
-  padding: 0;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
-  overflow: hidden;
-}
 
 /* When memory can be expanded, the whole preview is the click target. */
-.community-context-memory-preview.is-interactive {
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
 
-.community-context-memory-preview.is-interactive:hover,
-.community-context-memory-preview.is-interactive:focus-visible {
-  border-color: color-mix(in srgb, var(--border-strong) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
-  outline: none;
-}
 
-.community-context-memory-graph {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
 
-.community-context-memory-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-faint);
-  font-size: 11px;
-  line-height: 1.3;
-}
 
-.community-context-memory-loading-status {
-  width: 38%;
-  height: 9px;
-  border-radius: 999px;
-}
 
-.community-context-memory-list {
-  display: grid;
-  gap: 5px;
-}
 
-.community-context-memory-node {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: 7px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-card) 58%, transparent);
-}
 
-.community-context-memory-node strong,
-.community-context-memory-node span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.community-context-memory-node strong {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
 
-.community-context-memory-node span {
-  color: var(--text-faint);
-  font-size: 11px;
-}
 
 .community-context-members {
   flex: 1;
@@ -3015,9 +2898,6 @@
   opacity: 0.6;
 }
 
-.app-root.mobile-shell .community-interaction-projection.has-context-panel {
-  grid-template-columns: minmax(0, 1fr);
-}
 
 .app-root.mobile-shell .community-context-panel {
   display: none;
@@ -3419,28 +3299,7 @@
   -webkit-backdrop-filter: none;
 }
 
-.community-member-chat .community-memory-drawer .community-interaction-drawer-back {
-  position: relative;
-  top: 0;
-  right: 0;
-  left: 0;
-  flex: 0 0 var(--web-topbar-height, 48px);
-  height: var(--web-topbar-height, 48px);
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  border: 0;
-  border-bottom: 1px solid var(--stroke-divider-accent);
-  border-radius: 0;
-  background: var(--community-chat-surface);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
-.community-member-chat .community-memory-drawer .community-memory-drawer-header {
-  padding-right: 58px;
-}
 
 .community-memory-graph-surface {
   display: flex;
@@ -3460,12 +3319,6 @@
   padding-top: calc(var(--web-topbar-height, 48px) + 12px);
 }
 
-.community-memory-drawer > .community-memory-drawer-scroll {
-  display: flex;
-  flex: 1 1 auto;
-  padding-top: 0;
-  overflow: hidden;
-}
 
 .community-interaction-main-composer,
 .community-interaction-drawer-composer {

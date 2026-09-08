@@ -9,7 +9,6 @@ const controller = read("apps/web/src/controllers/useWebCommunityPolynetControll
 const interactionController = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
 const viewportController = read("apps/web/src/controllers/useWebPolynetGraphViewport.ts");
 const graph = read("apps/web/src/components/CommunityMemoryGraph.tsx");
-const preview = read("apps/web/src/components/CommunityMemoryGraphPreview.tsx");
 const gateway = read("shared/cloudCommunityPolynetGateway.ts");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
@@ -51,41 +50,23 @@ assert.match(gateway, /watchQuery\([\s\S]*api\.communityIntelligenceDirectory\.g
 assert.doesNotMatch(gateway, /setInterval|setTimeout/, "memory continuity should not poll");
 assert.doesNotMatch(gateway, /mutation\(|action\(/, "the memory drawer must remain read-only");
 
-assert.match(controller, /activePage === "community" && communityTab === "chat"/, "memory should load only inside community chat");
-assert.match(controller, /type CommunityMemoryPresentation = "rail" \| "drawer"/, "the controller should distinguish compact rail and full drawer projections");
-assert.match(controller, /COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12/, "the right rail should retain the compact projection");
-assert.match(controller, /presentation === "rail" \? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined/, "the drawer should request the full bounded overview");
-assert.match(controller, /resolveCommunityMemoryPresentation\(current\.isMemoryOpen\) !== presentation/, "stale compact and full responses should not cross presentation boundaries");
-assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "the active presentation should retain realtime updates");
-assert.match(controller, /unsubscribe\?\.\(\)/, "presentation changes should dispose the prior subscription");
-assert.match(controller, /closeLiveClient\?\.\(\)/, "presentation changes should close the prior realtime client");
-
-assert.match(
-  interactionController,
-  /export type CommunityInteractionSidecar =[\s\S]*kind: "context"[\s\S]*kind: "memory"[\s\S]*kind: "thread"; rootId: string/,
-  "thread and memory should share one canonical interaction sidecar state",
-);
-assert.match(interactionController, /const openMemory = useCallback\([\s\S]*setSidecar\(\{ kind: "memory" \}\)/, "the interaction owner should open memory without navigation");
-assert.match(interactionController, /setSidecar\(\{ kind: "thread", rootId \}\)/, "opening a thread should replace memory in the same sidecar");
-assert.match(interactionController, /setSidecar\(\{ kind: "context" \}\)/, "closing a detail should restore the context rail");
-assert.match(interactionController, /memoryTriggerRef[\s\S]*button\[aria-label="Open community memory"\][\s\S]*focusTarget\?\.focus\(\{ preventScroll: true \}\)/, "closing Memory should restore focus to the newly mounted rail trigger");
-
-assert.match(contextPanel, /CommunityMemoryGraphPreview/, "the default rail should keep the live compact preview");
-assert.match(contextPanel, /onOpenMemory/, "the compact preview should remain the Memory entry point");
-assert.match(interactionProjection, /community-memory-drawer/, "the interaction projection should render Memory in the existing drawer shell");
-assert.match(interactionProjection, /aria-label="Community memory"/, "the drawer should expose an accessible label");
-assert.match(interactionProjection, /event\.key !== "Escape"[\s\S]*onCloseCommunityMemory/, "Escape should close Memory through the canonical transition");
-assert.match(interactionProjection, /memoryBackButtonRef\.current\?\.focus\(\{ preventScroll: true \}\)/, "opening Memory should move keyboard focus into the drawer");
-assert.match(interactionProjection, /community-memory-drawer-header[\s\S]*ref=\{memoryBackButtonRef\}[\s\S]*aria-label="Back to community"/, "the Memory back control should own the drawer focus ref");
-assert.match(interactionProjection, /onCloseCommunityMemory \?\? props\.onCloseDrawer/, "Memory should use the canonical close transition");
-assert.match(interactionProjection, /<CommunityMemoryGraph/, "the drawer should reuse the canonical graph rather than a duplicate list");
-assert.match(interactionProjection, /<CommunityMemoryGraph[\s\S]*onRefresh=\{props\.onRefreshCommunityMemory\}/, "the drawer should route refresh into the graph controls");
-assert.doesNotMatch(interactionProjection, /community-memory-drawer-refresh/, "the drawer header should not retain a duplicate refresh action");
-assert.match(interactionProjection, /hasDetailPanel[\s\S]*has-drawer/, "Memory, thread, and profile details should share drawer geometry");
-assert.match(chatPanel, /handleSelectCommunityRoot[\s\S]*setProfilePanelUserId\(null\)/, "opening a thread should close the profile sidecar");
-assert.match(chatPanel, /handleOpenCommunityProfile[\s\S]*onCloseDrawer\(\)/, "opening a profile should close thread or Memory first");
-assert.match(app, /isMemoryOpen: communityInteractionSidecar\.kind === "memory"/, "the data projection should follow canonical sidecar state");
-assert.match(app, /isCommunityMemoryOpen: communityInteractionSidecar\.kind === "memory"/, "the visual drawer should follow the same canonical sidecar state");
+const knowledge = read("apps/web/src/components/WebCommunityKnowledgePanel.tsx");
+const nav = read("shared/CommunityNav.tsx");
+const navSurface = read("apps/web/src/components/WebCommunityNavSurface.tsx");
+assert.match(controller, /communityTab === "resources" && isGraphOpen/, "graph only loads while Knowledge graph is visible");
+assert.doesNotMatch(controller, /RAIL_NODE_LIMIT|CommunityMemoryPresentation|isMemoryOpen/, "no obsolete rail projection remains");
+assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "graph retains canonical realtime updates");
+assert.match(controller, /unsubscribe\?\.\(\)/, "graph changes dispose the subscription");
+assert.match(knowledge, /<CommunityMemoryGraph/, "Knowledge reuses the canonical graph");
+assert.match(knowledge, /hidden=\{graphOpen\}/, "resource draft state survives switching views");
+assert.match(knowledge, /canViewGraph/, "graph retains community access gating");
+assert.match(knowledge, /aria-pressed=/, "view selection is accessible");
+assert.match(nav, /<Brain[\s\S]*Knowledge/, "Knowledge has its brain icon");
+assert.match(navSurface, /onOpenMembers=\{communityShell.onOpenMembers\}/, "desktop exposes the canonical members page");
+assert.doesNotMatch(interactionController, /kind: "memory"|openMemory|memoryTriggerRef/, "chat no longer owns graph navigation");
+assert.doesNotMatch(interactionProjection, /community-memory-drawer|compact-context-open|has-context-panel/, "chat only opens explicit thread or profile details");
+assert.match(interactionProjection, /selectedRoot \|\| props.profilePanel/, "thread and profile detail remain");
+assert.doesNotMatch(app, /communityPolynetController|isCommunityMemoryOpen/, "Knowledge owns graph hydration");
 
 assert.match(graph, /export function CommunityMemoryGraph/, "the retired page should leave one reusable graph surface");
 assert.doesNotMatch(graph, /onBackToChat|Back to community chat|community-polynet-header/, "the graph should not retain page navigation chrome");
@@ -100,19 +81,15 @@ assert.match(graph, /aria-label=\{state\.isLoading \? "Refreshing memory" : "Ref
 assert.match(graph, /fitInsets:[\s\S]*bottom: 148/, "selected memory should reserve graph fit space for its inspector");
 assert.match(graph, /transform\.scale >= SHOW_ALL_LABELS_SCALE/, "a sparse graph at the fit cap should keep its memory labels visible");
 assert.match(graph, /case "resource": return "resource"/, "resource source nodes should keep a distinct visual type");
-assert.match(preview, /case "resource": return "resource"/, "the compact preview should preserve resource node type");
 assert.match(viewportController, /const MIN_SCALE = 0\.08/, "the drawer graph should zoom far enough out for the bounded full projection");
 assert.match(viewportController, /const MAX_SCALE = 3[\s\S]*const MAX_FIT_SCALE = 1\.4/, "automatic fit should stay restrained while manual zoom retains its full range");
 assert.doesNotMatch(graph, /textarea|contentEditable|onSubmit|mutation/, "the Memory drawer should not introduce editing");
 
-assert.match(css, /\.community-memory-drawer-scroll/, "Memory should have a full-height drawer viewport");
 assert.match(css, /\.community-memory-graph-surface/, "the graph should fill the drawer body");
-assert.match(css, /\.community-memory-drawer > \.community-memory-drawer-scroll[\s\S]*flex: 1 1 auto[\s\S]*padding-top: 0/, "Memory should use the drawer body rather than a floating-header padding hack");
 assert.match(css, /\.community-polynet-graph-controls[\s\S]*top: 12px/, "graph controls should own a collision-free top-right region");
 assert.doesNotMatch(css, /\.community-memory-drawer \.community-polynet-graph-controls,[\s\S]*bottom: 88px/, "graph controls and selected memory should not share one bottom overlay band");
-assert.match(css, /\.community-member-chat \.community-memory-drawer \.community-interaction-drawer-back/, "Memory should reuse the stable thread header band");
 assert.match(css, /@container community-chat-area \(max-width: 680px\)[\s\S]*\.community-interaction-projection\.has-drawer \.community-interaction-drawer[\s\S]*z-index: 16/, "narrow drawers should sit above the sticky channel header");
 assert.doesNotMatch(css, /\.community-polynet-(panel|header|back|heading|subtitle)/, "retired full-page Memory chrome should leave no dead CSS");
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "memory graph motion should respect reduced-motion preferences");
 
-console.log("Community memory drawer UI contract proof passed");
+console.log("Community Knowledge UI contract proof passed");

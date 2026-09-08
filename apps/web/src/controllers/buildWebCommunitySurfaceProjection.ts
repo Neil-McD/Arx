@@ -23,6 +23,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
   session: WebCommunityChatPanelProps["session"];
+  canViewCommunityKnowledgeGraph: boolean;
   ensureSession: WebCommunitySecondaryPanelsProps["settings"]["ensureSession"];
   selectedActiveCommunitySlug: string | null;
   isAuthBootstrapComplete: boolean;
@@ -224,6 +225,14 @@ export function buildWebCommunitySurfaceProjection(
       onRequireSignIn: params.requireSignIn,
       state: params.analyticsState,
       actions: params.analyticsActions,
+    },
+    knowledge: {
+      communityId: params.activeCommunity?.id ?? null,
+      communityName: params.activeCommunity?.name ?? null,
+      session: params.session,
+      ensureSession: params.ensureSession,
+      requireSignIn: params.requireSignIn,
+      canViewGraph: params.canViewCommunityKnowledgeGraph,
     },
     resources: {
       capabilities: {

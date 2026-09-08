@@ -744,10 +744,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     setProfilePanelUserId(null);
     interactionProjection?.onSelectRoot(rootId);
   }, [interactionProjection]);
-  const handleOpenCommunityMemory = useCallback(() => {
-    setProfilePanelUserId(null);
-    interactionProjection?.onOpenCommunityMemory?.();
-  }, [interactionProjection]);
   const communityComposerFocusTargetKey = (() => {
     if (
       !activeCommunity?.id ||
@@ -1469,7 +1465,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               <WebCommunityInteractionProjection
                 {...interactionProjection}
                 onSelectRoot={handleSelectCommunityRoot}
-                onOpenCommunityMemory={handleOpenCommunityMemory}
                 floatingComposers
                 onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
                 activeCommunityName={activeCommunity?.name ?? "Community"}

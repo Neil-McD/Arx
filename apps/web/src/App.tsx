@@ -164,7 +164,6 @@ import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPrel
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
 import { useWebBuilderOfferController } from "./controllers/useWebBuilderOfferController";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
-import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
@@ -611,7 +610,6 @@ export default function App() {
     selectedReplies: selectedCommunityInteractionReplies,
     selectedRootId: selectedCommunityInteractionRootId,
     selectedRoot: selectedCommunityInteractionRoot,
-    sidecar: communityInteractionSidecar,
     pinnedRoot: pinnedCommunityInteractionRoot,
     isUpdatingPinnedRoot: isUpdatingPinnedCommunityInteractionRoot,
     pinnedRootError: pinnedCommunityInteractionRootError,
@@ -628,8 +626,6 @@ export default function App() {
     loadOlderRoots: loadOlderCommunityInteractionRoots,
     selectRoot: handleSelectCommunityInteractionRoot,
     closeDrawer: handleCloseCommunityInteractionDrawer,
-    openMemory: handleOpenCommunityMemory,
-    closeMemory: handleCloseCommunityMemory,
     toggleReaction: handleToggleCommunityInteractionReaction,
     editMessage: handleEditCommunityInteractionMessage,
     deleteMessage: handleDeleteCommunityInteractionMessage,
@@ -1224,17 +1220,6 @@ export default function App() {
       setDiscoverCommunities,
     });
   };
-  const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
-    activePage,
-    communityTab,
-    isMemoryOpen: communityInteractionSidecar.kind === "memory",
-    activeCommunityId,
-    session: session,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn: () => requireSignIn(),
-    canViewPolynet: canViewActiveCommunityPolynet,
-  });
-
   useWebUiPersistenceLifecycle({
     communityAnalyticsRange,
     profileStorageUserId,
@@ -1876,9 +1861,7 @@ export default function App() {
     && activeView === "home"
     && selectedCommunityInteractionRootId,
   );
-  const mobileCommunityDetailOpen = Boolean(
-    mobileThreadPageOpen || communityInteractionSidecar.kind === "memory"
-  );
+  const mobileCommunityDetailOpen = mobileThreadPageOpen;
   const mobileChromeAutoHideEnabled = Boolean(
     showMobileAppShell
     && shellPublicRoute.kind === "app"
@@ -2092,6 +2075,7 @@ export default function App() {
 
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
+      canViewCommunityKnowledgeGraph: canViewActiveCommunityPolynet,
       activePage,
       communityTab,
       activeCommunity,
@@ -2522,13 +2506,6 @@ export default function App() {
         decidingCommunityJoinRequestId,
         onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
         onDenyCommunityJoinRequest: handleDenyCommunityJoinRequest,
-        communityMemoryOverview: communityPolynetController.state.overview,
-        isLoadingCommunityMemory: communityPolynetController.state.isLoading,
-        communityMemoryError: communityPolynetController.state.error,
-        onRefreshCommunityMemory: communityPolynetController.actions.refresh,
-        isCommunityMemoryOpen: communityInteractionSidecar.kind === "memory",
-        onOpenCommunityMemory: handleOpenCommunityMemory,
-        onCloseCommunityMemory: handleCloseCommunityMemory,
         canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
         communityInitials,

@@ -89,7 +89,6 @@ type UseWebCommunityInteractionProjectionParams = {
 
 export type CommunityInteractionSidecar =
   | { kind: "context" }
-  | { kind: "memory" }
   | { kind: "thread"; rootId: string };
 
 function formatProjectionError(error: unknown): string {
@@ -360,7 +359,6 @@ export function useWebCommunityInteractionProjection<
   const lastSubscribedPinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinMutationBoundaryRef = useRef<string | null>(null);
-  const memoryTriggerRef = useRef<HTMLElement | null>(null);
 
   sessionRef.current = session;
   rootsRef.current = roots;
@@ -402,7 +400,6 @@ export function useWebCommunityInteractionProjection<
     setError(null);
     setIsLoadingRoots(isNextBoundaryLoading);
     setSidecar({ kind: "context" });
-    memoryTriggerRef.current = null;
     setSelectedRoot(null);
     setRepliesByRootId({});
     setRepliesErrorByRootId({});
@@ -962,27 +959,7 @@ export function useWebCommunityInteractionProjection<
     setSelectedRoot(null);
   }, []);
 
-  const openMemory = useCallback(() => {
-    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
-      memoryTriggerRef.current = document.activeElement;
-    }
-    setSelectedRoot(null);
-    setSidecar({ kind: "memory" });
-  }, []);
 
-  const closeMemory = useCallback(() => {
-    setSidecar((current) => current.kind === "memory" ? { kind: "context" } : current);
-    const trigger = memoryTriggerRef.current;
-    memoryTriggerRef.current = null;
-    if (trigger && typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        const focusTarget = trigger.isConnected
-          ? trigger
-          : document.querySelector<HTMLElement>('button[aria-label="Open community memory"]');
-        focusTarget?.focus({ preventScroll: true });
-      });
-    }
-  }, []);
 
   const toggleReaction = useCallback(async (
     targetType: "root" | "reply",
@@ -1204,8 +1181,6 @@ export function useWebCommunityInteractionProjection<
     loadOlderRoots,
     selectRoot,
     closeDrawer,
-    openMemory,
-    closeMemory,
     toggleReaction,
     editMessage,
     deleteMessage,

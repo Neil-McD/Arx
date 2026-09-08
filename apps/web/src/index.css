@@ -3071,7 +3071,7 @@
 .responsive-community-shell { container: community-shell / inline-size; grid-template-rows: auto minmax(0, 1fr); }
 .responsive-community-shell > .app-shell { grid-row: 2; }
 .compact-community-toolbar { grid-row: 1; }
-.compact-community-toolbar, .compact-context-toolbar { display: none; }
+.compact-community-toolbar { display: none; }
 @container community-shell (max-width: 900px) {
   .compact-community-toolbar {
     display: flex; flex: 0 0 auto; padding: 8px 12px;
@@ -3093,13 +3093,6 @@
   .compact-navigation-open > .community-rail { display: flex; }
   .compact-navigation-open .product-shell-surface--community > .community-nav { display: flex; }
   .compact-navigation-open .product-shell-surface--community > :not(.community-nav) { display: none; }
-  .community-interaction-projection.has-context-panel {
-    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
-  }
-  .compact-context-toolbar { display: flex; justify-content: flex-end; padding: 6px 12px; }
-  .community-interaction-projection.has-context-panel > .community-context-panel { display: none; }
-  .community-interaction-projection.compact-context-open.has-context-panel > .community-context-panel { display: flex; }
-  .community-interaction-projection.compact-context-open.has-context-panel > .community-interaction-main { display: none; }
   .community-interaction-projection.has-drawer { grid-template-columns: minmax(0, 1fr); }
   .community-interaction-projection.has-drawer > .community-interaction-main { display: none; }
   .community-interaction-drawer { min-width: 0; width: 100%; }

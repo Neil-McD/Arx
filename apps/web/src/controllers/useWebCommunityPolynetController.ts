@@ -28,7 +28,7 @@ type EnsureSessionFn<SessionT> = (session?: SessionT | null) => Promise<SessionT
 type UseWebCommunityPolynetControllerArgs<SessionT> = {
   activePage: AppPage;
   communityTab: CommunityTab;
-  isMemoryOpen: boolean;
+  isGraphOpen: boolean;
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession: EnsureSessionFn<SessionT>;
@@ -36,19 +36,8 @@ type UseWebCommunityPolynetControllerArgs<SessionT> = {
   canViewPolynet: boolean;
 };
 
-const COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12;
-type CommunityMemoryPresentation = "rail" | "drawer";
-
-function shouldLoadCommunityPolynet(activePage: AppPage, communityTab: CommunityTab): boolean {
-  return activePage === "community" && communityTab === "chat";
-}
-
-function resolveCommunityMemoryPresentation(isMemoryOpen: boolean): CommunityMemoryPresentation {
-  return isMemoryOpen ? "drawer" : "rail";
-}
-
-function resolveCommunityPolynetNodeLimit(presentation: CommunityMemoryPresentation): number | undefined {
-  return presentation === "rail" ? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined;
+function shouldLoadCommunityPolynet(activePage: AppPage, communityTab: CommunityTab, isGraphOpen: boolean): boolean {
+  return activePage === "community" && communityTab === "resources" && isGraphOpen;
 }
 
 export function useWebCommunityPolynetController<SessionT>(
@@ -67,13 +56,12 @@ export function useWebCommunityPolynetController<SessionT>(
   const isStaleRequest = useCallback((
     requestSeq: number,
     communityId: string,
-    presentation: CommunityMemoryPresentation,
   ) => {
     const current = argsRef.current;
     return (
       requestSeq !== requestSeqRef.current
-      || !shouldLoadCommunityPolynet(current.activePage, current.communityTab)
-      || resolveCommunityMemoryPresentation(current.isMemoryOpen) !== presentation
+      || !shouldLoadCommunityPolynet(current.activePage, current.communityTab, current.isGraphOpen)
+
       || current.activeCommunityId !== communityId
       || !current.canViewPolynet
     );
@@ -92,31 +80,30 @@ export function useWebCommunityPolynetController<SessionT>(
     sessionInput?: SessionT | null,
   ) => {
     const requestSeq = ++requestSeqRef.current;
-    const presentation = resolveCommunityMemoryPresentation(argsRef.current.isMemoryOpen);
-    const nodeLimit = resolveCommunityPolynetNodeLimit(presentation);
+
     setAttemptedCommunityId(communityId);
     setIsLoading(true);
     setError(null);
     try {
       const usableSession = await argsRef.current.ensureSession(sessionInput ?? argsRef.current.session);
-      if (isStaleRequest(requestSeq, communityId, presentation)) return null;
+      if (isStaleRequest(requestSeq, communityId)) return null;
       if (!usableSession) {
         return null;
       }
       const nextOverview = await fetchCloudCommunityPolynetOverview<SessionT>({
         session: usableSession,
         communityId,
-        ...(typeof nodeLimit === "number" ? { nodeLimit } : {}),
+
       });
-      if (isStaleRequest(requestSeq, communityId, presentation)) return null;
+      if (isStaleRequest(requestSeq, communityId)) return null;
       setOverview(nextOverview ?? null);
       return nextOverview ?? null;
     } catch (err) {
-      if (isStaleRequest(requestSeq, communityId, presentation)) return null;
+      if (isStaleRequest(requestSeq, communityId)) return null;
       setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
       return null;
     } finally {
-      if (!isStaleRequest(requestSeq, communityId, presentation)) {
+      if (!isStaleRequest(requestSeq, communityId)) {
         setIsLoading(false);
       }
     }
@@ -135,7 +122,7 @@ export function useWebCommunityPolynetController<SessionT>(
   }, [loadOverview]);
 
   useEffect(() => {
-    if (!shouldLoadCommunityPolynet(args.activePage, args.communityTab) || !args.activeCommunityId) {
+    if (!shouldLoadCommunityPolynet(args.activePage, args.communityTab, args.isGraphOpen) || !args.activeCommunityId) {
       resetPolynetState();
       return;
     }
@@ -149,7 +136,7 @@ export function useWebCommunityPolynetController<SessionT>(
     args.activePage,
     args.canViewPolynet,
     args.communityTab,
-    args.isMemoryOpen,
+    args.isGraphOpen,
     sessionIdentity,
     loadOverview,
     resetPolynetState,
@@ -157,7 +144,7 @@ export function useWebCommunityPolynetController<SessionT>(
 
   useEffect(() => {
     if (
-      !shouldLoadCommunityPolynet(args.activePage, args.communityTab)
+      !shouldLoadCommunityPolynet(args.activePage, args.communityTab, args.isGraphOpen)
       || !args.activeCommunityId
       || !sessionIdentity
       || !args.canViewPolynet
@@ -166,8 +153,7 @@ export function useWebCommunityPolynetController<SessionT>(
     }
 
     const communityId = args.activeCommunityId;
-    const presentation = resolveCommunityMemoryPresentation(args.isMemoryOpen);
-    const nodeLimit = resolveCommunityPolynetNodeLimit(presentation);
+
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let closeLiveClient: (() => void) | null = null;
@@ -179,8 +165,8 @@ export function useWebCommunityPolynetController<SessionT>(
         if (cancelled || !usableSession) return;
         const current = argsRef.current;
         if (
-          !shouldLoadCommunityPolynet(current.activePage, current.communityTab)
-          || resolveCommunityMemoryPresentation(current.isMemoryOpen) !== presentation
+          !shouldLoadCommunityPolynet(current.activePage, current.communityTab, current.isGraphOpen)
+
           || current.activeCommunityId !== communityId
           || !current.canViewPolynet
         ) {
@@ -195,13 +181,13 @@ export function useWebCommunityPolynetController<SessionT>(
         unsubscribe = subscribeCloudCommunityPolynetOverview({
           liveClient,
           communityId,
-          ...(typeof nodeLimit === "number" ? { nodeLimit } : {}),
+
           onUpdate: (nextOverview) => {
             const latestArgs = argsRef.current;
             if (
               cancelled
-              || !shouldLoadCommunityPolynet(latestArgs.activePage, latestArgs.communityTab)
-              || resolveCommunityMemoryPresentation(latestArgs.isMemoryOpen) !== presentation
+              || !shouldLoadCommunityPolynet(latestArgs.activePage, latestArgs.communityTab, latestArgs.isGraphOpen)
+
               || latestArgs.activeCommunityId !== communityId
               || !latestArgs.canViewPolynet
             ) {
@@ -237,7 +223,7 @@ export function useWebCommunityPolynetController<SessionT>(
     args.activePage,
     args.canViewPolynet,
     args.communityTab,
-    args.isMemoryOpen,
+    args.isGraphOpen,
     sessionIdentity,
   ]);
 
@@ -246,7 +232,7 @@ export function useWebCommunityPolynetController<SessionT>(
     sessionIdentity &&
     activeCommunityId &&
     args.canViewPolynet &&
-    shouldLoadCommunityPolynet(args.activePage, args.communityTab),
+    shouldLoadCommunityPolynet(args.activePage, args.communityTab, args.isGraphOpen),
   );
   const presentedOverview = shouldPresent && overview?.community.id === activeCommunityId
     ? overview

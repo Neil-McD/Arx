@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
+  Brain,
   Check,
   ChevronDown,
   ChevronUp,
@@ -50,6 +51,7 @@ type CommunityNavProps = {
   canViewActiveCommunityAnalytics: boolean;
   memberCount?: number | null;
   onOpenMembers?: () => void;
+  isMembersActive?: boolean;
   isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
@@ -172,6 +174,7 @@ export const CommunityNav = memo(function CommunityNav({
   canViewActiveCommunityAnalytics,
   memberCount = null,
   onOpenMembers,
+  isMembersActive = false,
   isLoadingAccess = false,
   onSelectTab,
   memberNextStep,
@@ -577,7 +580,8 @@ export const CommunityNav = memo(function CommunityNav({
         </div>
       ) : showMembersItem ? (
         <button
-          className="nav-item community-nav-members"
+          className={`nav-item community-nav-members${isMembersActive ? " active" : ""}`}
+          aria-current={isMembersActive ? "page" : undefined}
           type="button"
           onClick={onOpenMembers}
           title="Members"
@@ -602,15 +606,12 @@ export const CommunityNav = memo(function CommunityNav({
             className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
             type="button"
             onClick={() => onSelectTab("resources")}
-            title="Resources"
+            title="Knowledge"
           >
             <span className="nav-icon">
-              <svg viewBox="0 0 24 24">
-                <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
-                <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
-              </svg>
+              <Brain size={18} strokeWidth={1.7} aria-hidden="true" />
             </span>
-            <span className="nav-item-label">Resources</span>
+            <span className="nav-item-label">Knowledge</span>
             {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
           <button

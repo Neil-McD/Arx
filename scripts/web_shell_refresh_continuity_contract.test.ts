@@ -76,7 +76,7 @@ describe("web shell refresh continuity contract", () => {
 
     expect(nav).toContain('className="community-channel-loading-row web-skeleton-row"');
     expect(nav).toContain('className="community-channel-loading-row is-short web-skeleton-row"');
-    expect(context).toContain("community-context-memory-preview web-skeleton-block");
+    expect(context).not.toContain("CommunityMemoryGraphPreview");
     expect(context).toContain("community-context-member-skeleton");
     expect(context).not.toContain("Loading members...");
     expect(context).not.toContain("Loading memory...");
@@ -167,7 +167,7 @@ describe("web shell refresh continuity contract", () => {
     expect(nav).toContain("!showChannelLoadingSkeleton && canManageMembersActiveCommunity");
     expect(nav).toContain("community-nav-access-loading community-nav-utility-loading");
     expect(nav).toMatch(
-      /isLoadingAccess \? \([\s\S]*Array\.from\(\{ length: 3 \}\)[\s\S]*title="Resources"[\s\S]*title="Events"/,
+      /isLoadingAccess \? \([\s\S]*Array\.from\(\{ length: 3 \}\)[\s\S]*title="Knowledge"[\s\S]*title="Events"/,
     );
     expect(nav).toContain('className="community-nav-access-loading-row web-skeleton-block"');
     expect(nav).toContain('className="community-nav-access-loading"');
@@ -205,7 +205,7 @@ describe("web shell refresh continuity contract", () => {
     expect(ownerGate).not.toContain("showLegacyInteractionSurface");
     expect(panel).not.toContain("legacy_bootstrap");
     expect(bootstrap).toContain(
-      "community-interaction-projection has-context-panel community-interaction-bootstrap",
+      "community-interaction-projection community-interaction-bootstrap",
     );
   });
 
