@@ -66,7 +66,9 @@ assert.match(controller, /unsubscribe\?\.\(\)/, "graph changes dispose the subsc
 assert.match(knowledge, /<CommunityMemoryGraph/, "Knowledge reuses the canonical graph");
 assert.match(knowledge, /hidden=\{graphOpen\}/, "resource draft state survives switching views");
 assert.match(knowledge, /canViewGraph/, "graph retains community access gating");
-assert.match(knowledge, /aria-pressed=/, "view selection is accessible");
+assert.match(knowledge, /<WebPlatformTabList/, "Knowledge reuses the canonical platform selector");
+assert.match(knowledge, /buildPlatformSwitcherStyle/, "Knowledge uses the canonical selection indicator");
+assert.doesNotMatch(knowledge, /community-knowledge-switcher|aria-pressed=/, "no bespoke selector remains");
 assert.match(nav, /<Brain[\s\S]*Knowledge/, "Knowledge has its brain icon");
 assert.match(navSurface, /onOpenMembers=\{communityShell.onOpenMembers\}/, "desktop exposes the canonical members page");
 assert.doesNotMatch(interactionController, /kind: "memory"|openMemory|memoryTriggerRef/, "chat no longer owns graph navigation");
