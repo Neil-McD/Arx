@@ -3124,7 +3124,11 @@
 .workspace-right-rail > .direct-messages-topbar-button {
   width: 44px; height: 44px; padding: 6px;
 }
-.workspace-right-rail > .direct-messages-topbar-button svg { width: 26px; height: 26px; }
+.workspace-right-rail > .direct-messages-topbar-button svg {
+  width: 26px; height: 26px;
+  /* Optically center across the rail and the adjacent shell gutter. */
+  transform: translateX(calc(var(--community-shell-inset) / -2));
+}
 .workspace-right-rail > .workspace-panel-picker {
   position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
 }
