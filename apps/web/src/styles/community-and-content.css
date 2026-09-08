@@ -5385,6 +5385,13 @@
   gap: 12px;
 }
 
+/* Profile presentation scales the canonical holder; framing stays shared. */
+.community-profile-panel-top .community-interaction-avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 18px;
+}
+
 .community-profile-panel-actions {
   display: flex;
   align-items: center;
