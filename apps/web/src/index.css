@@ -3123,6 +3123,7 @@
 .workspace-panel-picker { position: relative; }
 .workspace-right-rail > .direct-messages-topbar-button {
   width: 44px; height: 44px; padding: 6px;
+  top: -4px;
 }
 .workspace-right-rail > .direct-messages-topbar-button svg {
   width: 26px; height: 26px;
