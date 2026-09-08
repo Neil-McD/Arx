@@ -25,7 +25,7 @@ test("community switcher replaces only the desktop workspace rail and reuses exi
   expect(switcher).toContain("CommunityAvatar");
   expect(switcher).toContain("shell.onSelectActiveCommunity(c)");
   expect(switcher).toContain("shell.communityRailAttentionById");
-  expect(switcher).toContain('popover="auto"');
+  expect(switcher).toContain('setAttribute("popover", "auto")');
   expect(switcher).not.toContain("fetch(");
   const nav = readFileSync("apps/web/src/components/WebCommunityNavSurface.tsx", "utf8");
   expect(nav).toContain("identityControl={!isMobileHome");

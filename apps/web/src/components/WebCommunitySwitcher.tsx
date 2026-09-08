@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, Compass, Plus } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
@@ -11,6 +11,14 @@ export function WebCommunitySwitcher({ shell }: { shell: WebCommunityShellProps 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 8, top: 56 });
+  useEffect(() => {
+    const element = popover.current;
+    if (!element) return;
+    element.setAttribute("popover", "auto");
+    const onToggle = (event: Event) => setOpen((event as Event & { newState: string }).newState === "open");
+    element.addEventListener("toggle", onToggle);
+    return () => element.removeEventListener("toggle", onToggle);
+  }, []);
   const active = shell.activeCommunity;
   const close = () => { popover.current?.hidePopover(); trigger.current?.focus(); };
   const run = (action: () => void) => { close(); action(); };
@@ -33,11 +41,10 @@ export function WebCommunitySwitcher({ shell }: { shell: WebCommunityShellProps 
       {attention && <span className="community-switcher-attention" aria-label="Unread activity in other communities" />}
       <ChevronDown size={16} aria-hidden="true" />
     </button>
-    <div id={id} ref={popover} popover="auto" role="dialog" aria-label="Switch community"
-      className="community-switcher-popover" style={position}
-      onToggle={event => setOpen(event.newState === "open")}>
-      <input ref={search} className="community-dm-recipient-search" type="search" aria-label="Search communities" placeholder="Search communities"
-        value={query} onChange={event => setQuery(event.target.value)} />
+    <div id={id} ref={popover} role="dialog" aria-label="Switch community"
+      className="community-switcher-popover" style={position}>
+      <label className="community-dm-recipient-search"><input ref={search} type="search" aria-label="Search communities" placeholder="Search communities"
+        value={query} onChange={event => setQuery(event.target.value)} /></label>
       <div className="community-switcher-list">
         {shell.railCommunities.filter(c => c.name.toLowerCase().includes(query.trim().toLowerCase())).map(c =>
           <button type="button" className="community-switcher-row" key={c.id}
