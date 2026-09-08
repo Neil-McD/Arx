@@ -43,6 +43,10 @@ export function WebCommunitySwitcher({ shell }: { shell: WebCommunityShellProps 
     </button>
     <div id={id} ref={popover} role="dialog" aria-label="Switch community"
       className="community-switcher-popover" style={position}>
+      <div className="community-switcher-actions">
+        <button type="button" className="community-switcher-row" onClick={() => run(shell.onOpenDiscover)}><Compass size={18} />Discover</button>
+        <button type="button" className="community-switcher-row" onClick={() => run(shell.onOpenCommunityCreateCta)}><Plus size={18} />Create community</button>
+      </div>
       <label className="community-dm-recipient-search"><input ref={search} type="search" aria-label="Search communities" placeholder="Search communities"
         value={query} onChange={event => setQuery(event.target.value)} /></label>
       <div className="community-switcher-list">
@@ -56,10 +60,6 @@ export function WebCommunitySwitcher({ shell }: { shell: WebCommunityShellProps 
           </button>)}
         {!shell.railCommunities.some(c => c.name.toLowerCase().includes(query.trim().toLowerCase())) &&
           <p>{shell.isLoadingCommunities ? "Loading communities…" : "No communities found"}</p>}
-      </div>
-      <div className="community-switcher-actions">
-        <button type="button" className="community-switcher-row" onClick={() => run(shell.onOpenDiscover)}><Compass size={18} />Discover communities</button>
-        <button type="button" className="community-switcher-row" onClick={() => run(shell.onOpenCommunityCreateCta)}><Plus size={18} />Create community</button>
       </div>
     </div>
   </>;
