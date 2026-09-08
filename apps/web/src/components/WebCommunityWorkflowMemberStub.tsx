@@ -52,7 +52,9 @@ export function WebCommunityWorkflowMemberStub(props: {
         focusX={props.member.avatar_focus_x}
         focusY={props.member.avatar_focus_y}
         zoom={props.member.avatar_zoom}
-        className="workflow-member-stub-avatar"
+        className="community-interaction-avatar"
+        readyClassName="has-image"
+        fallbackClassName="community-interaction-avatar-fallback"
       />
       <div className="workflow-member-stub-copy">
         <strong>{props.member.display_name}</strong>

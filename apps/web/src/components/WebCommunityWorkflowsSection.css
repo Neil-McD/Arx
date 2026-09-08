@@ -350,12 +350,6 @@
   line-height: 1.3;
 }
 
-.workflow-member-stub-avatar {
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-}
-
 .workflow-milestone-empty {
   margin: 0;
   padding: 16px 10px;
@@ -452,12 +446,6 @@
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.workflow-member-dossier-avatar {
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
 }
 
 .workflow-member-dossier-modal.resource-modal .workflow-member-dossier-body {

@@ -152,7 +152,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 focusX={dossier.avatar_focus_x}
                 focusY={dossier.avatar_focus_y}
                 zoom={dossier.avatar_zoom}
-                className="workflow-member-dossier-avatar"
+                className="community-interaction-avatar"
+                readyClassName="has-image"
+                fallbackClassName="community-interaction-avatar-fallback"
               />
               <div>
                 <div className="modal-title" id="workflow-member-dossier-title">

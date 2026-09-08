@@ -269,12 +269,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           onClick={() => props.onOpenMemberProfile?.(member.user_id)}
         >
           <span
-            className="community-context-member-avatar"
-            style={!member.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}
+            className="community-interaction-avatar-presence"
           >
             <UserAvatar
-              className="community-context-member-avatar-media"
+              className="community-interaction-avatar"
               readyClassName="has-image"
+              fallbackClassName="community-interaction-avatar-fallback"
+              fallbackStyle={{ backgroundColor: props.getAvatarColor(member.user_id) }}
               name={name}
               imageUrl={member.avatar_url}
               focusX={member.avatar_focus_x}
@@ -286,7 +287,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               aria-hidden={true}
               fallback={<span>{props.getInitials(name)}</span>}
             />
-            {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
+            {isOnline ? <span className="community-interaction-online-dot" aria-hidden="true" /> : null}
           </span>
           <span className="community-context-member-copy">
             <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>

@@ -1,5 +1,8 @@
 # Members directory
 
+Member cards and workflow cards/details reuse the channel feed's standard
+40px `UserAvatar` holder and presence styling, without surface-local avatar sizing.
+
 Members is a responsive profile-stub directory, not a presence sidebar. It retains
 the canonical avatar, authorized paginated directory, profile reader, membership
 management dialog, and admission controls. Presence annotates a member; it does
