@@ -1,4 +1,6 @@
-import { Fragment, useContext, useEffect, useState } from "react";
+import { Fragment, useContext, useEffect, useState, type ComponentProps } from "react";
+import { MessageCircle, MoreHorizontal } from "lucide-react";
+import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import { ActorAvatar } from "./communityInteractionFeed";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -21,11 +23,15 @@ export function ChannelRosterPanel(props: {
   isLoadingPresence?: boolean;
   channelId?: string;
   onOpenProfile?: (id: string) => void;
+  onMessageUser?: (id: string) => void;
+  currentUserId?: string | null;
+  memberSettings: Omit<ComponentProps<typeof CommunityMemberSettingsDialog>, "member" | "onClose">;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
   const [pages, setPages] = useState<Page[]>([]);
+  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState(false);
   const [budget, setBudget] = useState(1);
@@ -77,10 +83,15 @@ export function ChannelRosterPanel(props: {
     return () => { stop?.(); close?.(); };
   }, [scope?.session, scope?.communityId, props.channelId, budget, retry]);
   const members = [...new Map(pages.flatMap(page => page.page).map(member => [member.user_id, member])).values()];
+  const selectedMember = props.memberSettings.canManageMembers
+    ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
+  useEffect(() => {
+    if (selectedMembershipId && !selectedMember) setSelectedMembershipId(null);
+  }, [selectedMembershipId, selectedMember]);
   const status = (member: typeof members[number]) => member.last_seen_at === null ? "unknown"
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
-  return <aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents">
+  return <><aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents">
     <div className="community-context-rail-head"><span className="community-context-rail-name">{props.communityName}</span></div>
     <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
       onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />
@@ -122,6 +133,8 @@ export function ChannelRosterPanel(props: {
                     </span>
                     <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
                   </button>
+                  {props.onMessageUser && member.user_id !== props.currentUserId ? <button type="button" className="community-context-member-action" aria-label={`Message ${name}`} title="Direct message" onClick={() => props.onMessageUser?.(member.user_id)}><MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}
+                  {props.memberSettings.canManageMembers && member.membership_id && member.role !== "owner" ? <button type="button" className="community-context-member-action" aria-label={`Open settings for ${name}`} title="Member settings" onClick={() => setSelectedMembershipId(member.membership_id!)}><MoreHorizontal size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}
                 </div>;
               })}
             </Fragment>;
@@ -130,5 +143,9 @@ export function ChannelRosterPanel(props: {
           {!complete ? <button type="button" onClick={() => setBudget(value => value + 1)}>Load more</button> : null}
         </>}
     </div>
-  </aside>;
+  </aside>
+    <CommunityMemberSettingsDialog {...props.memberSettings}
+      member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role } : null}
+      onClose={() => setSelectedMembershipId(null)} />
+  </>;
 }

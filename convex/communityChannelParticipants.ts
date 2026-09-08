@@ -30,7 +30,7 @@ export const listChannelRoster = query({
     const result = await ctx.db.query("communityMemberships")
       .withIndex("by_community_createdAt", q => q.eq("communityId", args.communityId))
       .order("asc").paginate({ cursor, numItems: cursor === null ? size - 1 : size, maximumRowsRead: size * 3 });
-    const page: Array<{ user_id: string; role: string;
+    const page: Array<{ user_id: string; role: string; membership_id?: string;
       profile: Awaited<ReturnType<typeof resolveUserProfileDisplayProjection>>; last_seen_at: number | null; active_until: number | null }> = [];
     const seen = new Set<string>();
     const append = async (candidateId: typeof userId, expectedMembershipId?: string) => {
@@ -43,6 +43,7 @@ export const listChannelRoster = query({
       const presence = await ctx.db.query("communityPresence")
         .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", candidateId)).first();
       page.push({ user_id: (await resolvePublicUserId(ctx, candidateId)) ?? String(candidateId), role: candidateId === community.ownerId ? "owner" : authorization.membership!.role,
+        ...(actor.isManager && candidateId !== community.ownerId && authorization.membership ? { membership_id: String(authorization.membership._id) } : {}),
         profile: await resolveUserProfileDisplayProjection(ctx, candidateId), last_seen_at: presence?.lastSeenAt ?? null, active_until: presence?.activeUntil ?? null });
     };
     if (cursor === null) await append(community.ownerId);

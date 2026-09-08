@@ -22,6 +22,11 @@ presence. An omitted channel ID resolves canonical General, including implicit
 General before a stored channel exists. No grant metadata is exposed.
 
 The channel-only sidebar separates Agents and People (Online, Offline, unknown).
+Member rows reuse the existing DM action and member settings dialog. Desktop
+actions appear on hover/focus; touch keeps them visible. The roster exposes a
+membership ID only to managers, never for the owner. Existing membership
+mutations remain authoritative; no grant editing or admission controls move in
+this slice. The standalone Members page remains available during migration.
 Agent rows share the chat ActorAvatar (purple community-agent tile) at the
 canonical sidebar size, in one subtly bordered group. They represent identities
 with channel access, not workflows or execution status; no online dots are inferred.

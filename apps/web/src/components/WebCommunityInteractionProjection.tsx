@@ -1152,6 +1152,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
         key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
         communityName={props.activeCommunityName} presenceSummary={props.presenceSummary} isLoadingPresence={props.isLoadingCommunityPresence}
+        currentUserId={props.currentUserId} onMessageUser={props.onMessageUser}
+        memberSettings={{
+          activeCommunity: { id: props.communityId, owner_id: props.communityOwnerId ?? null },
+          canManageMembers: Boolean(props.canManageCommunityMembers && props.onSetCommunityMemberRole && props.onRemoveCommunityMember && props.onBanCommunityMember),
+          canViewMemberPlanDetails: Boolean(props.canViewMemberPlanDetails), isActiveCommunityOwner: Boolean(props.isActiveCommunityOwner),
+          displayName: props.displayName, getInitials: props.getInitials, communityInitials: props.communityInitials ?? props.getInitials,
+          handleSetCommunityMemberRole: (id, role) => props.onSetCommunityMemberRole?.(id, role),
+          handleRemoveCommunityMember: id => props.onRemoveCommunityMember?.(id),
+          handleBanCommunityMember: id => props.onBanCommunityMember?.(id),
+          loadMemberBillingHistory: id => props.loadMemberBillingHistory?.(id) ?? Promise.resolve(null),
+        }}
         channelId={props.activeChannel?.is_general ? undefined : props.activeChannel?.id}
         onOpenProfile={props.onOpenProfile} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
       /> : null}

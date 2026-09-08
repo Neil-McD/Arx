@@ -2816,6 +2816,12 @@
     opacity 0.12s ease;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .channel-roster-panel .community-context-member-action { opacity: 0; }
+  .channel-roster-panel .community-context-member:hover .community-context-member-action,
+  .channel-roster-panel .community-context-member:focus-within .community-context-member-action { opacity: 1; }
+}
+
 .community-context-member:hover .community-context-member-action,
 .community-context-member-action:focus-visible {
   opacity: 1;
