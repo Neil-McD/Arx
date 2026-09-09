@@ -395,13 +395,11 @@
   max-height: calc(100dvh - 2 * var(--workflow-editor-inset));
   background: var(--surface-panel);
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .modal-overlay.workflow-milestone-modal-overlay {
   background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: none;
 }
 
 .workflow-milestone-modal.resource-modal .modal-header {
