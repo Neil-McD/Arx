@@ -53,12 +53,9 @@ assert.doesNotMatch(gateway, /mutation\(|action\(/, "the memory drawer must rema
 const knowledge = read("apps/web/src/components/WebCommunityKnowledgePanel.tsx");
 const nav = read("shared/CommunityNav.tsx");
 const navSurface = read("apps/web/src/components/WebCommunityNavSurface.tsx");
-const members = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
-const memberProfile = read("apps/web/src/components/WebCommunityMembersProfile.tsx");
-assert.match(members, /onOpenProfile=\{setSelectedProfile\}/, "member profile buttons must have an action");
-assert.match(memberProfile, /fetchCloudProfileCommunityContext/, "profiles reuse authorized context");
-assert.match(memberProfile, /<WebCommunityProfilePanel/, "profiles reuse the canonical renderer");
-assert.match(memberProfile, /cancelled = true/, "late profile responses cannot cross unmount boundaries");
+const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
+assert.match(roster, /props.onOpenProfile/, "roster retains profile access");
+assert.match(roster, /useWebMemberDirectorySearch/, "roster reuses community-wide search");
 assert.match(controller, /communityTab === "resources" && isGraphOpen/, "graph only loads while Knowledge graph is visible");
 assert.doesNotMatch(controller, /RAIL_NODE_LIMIT|CommunityMemoryPresentation|isMemoryOpen/, "no obsolete rail projection remains");
 assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "graph retains canonical realtime updates");
@@ -70,7 +67,7 @@ assert.match(knowledge, /<WebPlatformTabList/, "Knowledge reuses the canonical p
 assert.match(knowledge, /buildPlatformSwitcherStyle/, "Knowledge uses the canonical selection indicator");
 assert.doesNotMatch(knowledge, /community-knowledge-switcher|aria-pressed=/, "no bespoke selector remains");
 assert.match(nav, /<Brain[\s\S]*Knowledge/, "Knowledge has its brain icon");
-assert.match(navSurface, /onOpenMembers=\{communityShell.onOpenMembers\}/, "desktop exposes the canonical members page");
+assert.doesNotMatch(navSurface, /onOpenMembers=/, "duplicate Members navigation is removed");
 assert.doesNotMatch(interactionController, /kind: "memory"|openMemory|memoryTriggerRef/, "chat no longer owns graph navigation");
 assert.doesNotMatch(interactionProjection, /community-memory-drawer|compact-context-open|has-context-panel/, "chat only opens explicit thread or profile details");
 assert.match(interactionProjection, /selectedRoot \|\| props.profilePanel/, "thread and profile detail remain");

@@ -499,7 +499,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     if (!slug) return null;
     return {
       page: "community",
-      view: "community_members",
+      view: "home",
       settingsPage: "profile",
       communitySlug: slug,
       communityTab: "chat",

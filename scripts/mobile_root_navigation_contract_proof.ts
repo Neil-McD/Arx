@@ -49,7 +49,7 @@ const directMessagesHost = read(
 );
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
-const membersPanel = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
+const rosterPanel = read("apps/web/src/components/ChannelRosterPanel.tsx");
 const communityRouteController = read(
   "apps/web/src/controllers/useWebCommunityRouteController.ts",
 );
@@ -371,20 +371,12 @@ assert.match(
   /activeSelectionMode = "route"[\s\S]*const showActiveSelection = activeSelectionMode === "route"[\s\S]*const isSelected =[\s\S]*showActiveSelection &&[\s\S]*communityTab === "chat"/,
   "the shared navigation should distinguish an actual route selection from the mobile directory's no-selection state",
 );
-assert.match(
-  communityNavSurface,
-  /memberCount=\{isMobileHome \? communityShell\.activeCommunityMemberCount : null\}[\s\S]*onOpenMembers=\{isMobileHome \? communityShell\.onOpenMembers : undefined\}/,
-  "the mobile adapter should expose the canonical member total and overlay only on community home",
-);
-assert.match(
-  communityNav,
-  /showMembersItem[\s\S]*community-nav-members[\s\S]*<Users[\s\S]*Members[\s\S]*community-nav-members-count/,
-  "Members should appear once above Resources with the canonical total when the mobile adapter supplies its handler",
-);
+assert.doesNotMatch(communityNavSurface, /onOpenMembers=|memberCount=/, "Members page navigation is retired");
+assert.doesNotMatch(communityNav, /community-nav-members/, "no duplicate Members tab remains");
 assert.match(
   routeState,
-  /buildCommunityHomePath[\s\S]*\/home[\s\S]*buildCommunityMembersPath[\s\S]*\/members[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"[\s\S]*segments\[2\] === "members"[\s\S]*view: "community_members"/,
-  "the mobile community directory and Members destination should have durable route states",
+  /buildCommunityHomePath[\s\S]*\/home[\s\S]*buildCommunityMembersPath[\s\S]*\/members[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"[\s\S]*segments\[2\] === "members"[\s\S]*view: "home"/,
+  "old Members links resolve to the channel view",
 );
 assert.match(
   routeState,
@@ -401,11 +393,7 @@ assert.match(
   /const openCommunityMembers[\s\S]*buildCommunityMembersPath[\s\S]*navigateTo\(path\)/,
   "authenticated Members should navigate through the canonical community route controller",
 );
-assert.match(
-  communityHost + membersPanel,
-  /activeView === "community_members"[\s\S]*WebCommunityMembersPanel[\s\S]*CommunityInteractionContextPanelSurface/,
-  "the durable Members route should reuse the canonical member context projection",
-);
+assert.doesNotMatch(communityHost, /WebCommunityMembersPanel/, "member management belongs to the roster");
 assert.doesNotMatch(
   chatPanel,
   /mobileMembersOverlayOpen|mobile-members-drawer/,
@@ -452,11 +440,7 @@ assert.match(
   /mobileRoot\?: boolean;[\s\S]*if \(!isOpen \|\| props\.mobileRoot\) return;[\s\S]*web-direct-messages-host\$\{props\.mobileRoot \? " mobile-root" : ""\}/,
   "DM root presentation should preserve the desktop host while disabling popover dismissal",
 );
-assert.match(
-  membersPanel,
-  /<CommunityInteractionContextPanelSurface[\s\S]*containerClassName="community-interaction-drawer community-context-panel community-members-page-panel"[\s\S]*sectionMode="members"/,
-  "the durable Members page should reuse only the canonical member section of the community context surface",
-);
+assert.match(rosterPanel, /useWebMemberDirectorySearch/, "right panel preserves community-wide search");
 assert.match(
   interactionProjection,
   /const StableCommunityInteractionContextPanelSurface = memo\([\s\S]*<CommunityContextPanel[\s\S]*export function CommunityInteractionContextPanelSurface[\s\S]*<StableCommunityInteractionContextPanelSurface/,

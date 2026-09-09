@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-test("Auto-join page and sidebar share canonical permission and save authority", () => {
-  const settings = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
-  expect(settings).toContain("admission?.canManage && admission.mode");
-  expect(settings).toMatch(/WebPlatformRadioGroup[\s\S]*ariaLabel="Auto-join"/);
-  expect(settings).toContain("disabled:admission.pending");
-  expect(settings).toContain("admission.onChange(value)");
+test("Sidebar Auto-join retains canonical permission and save authority", () => {
+  const settings = read("apps/web/src/components/CommunityAutoJoinControl.tsx");
+  expect(settings).toContain("!admission?.canManage || !admission.mode");
+  expect(settings).toContain('role="switch"');
+  expect(settings).toContain("disabled={admission.pending}");
+  expect(settings).toContain("admission.onChange");
   expect(settings).toContain("approves pending requests");
   const app = read("apps/web/src/App.tsx");
   expect(app).toMatch(/admission: \{[\s\S]*entry_policy === "open"[\s\S]*entry_policy === "approval"[\s\S]*canManage: canManageMembersActiveCommunity[\s\S]*onChange: handleSetCommunityContextFreeAccessMode/);

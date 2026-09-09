@@ -2893,25 +2893,6 @@
   .people-panel-open .channel-people-back { display: flex; }
 }
 
-.community-members-page {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  overflow: hidden;
-  background: var(--community-chat-surface, var(--bg-workspace));
-}
-
-.community-members-profile { width: min(100%, 640px); min-width: 0; padding: 24px; overflow-y: auto; }
-.community-members-profile .community-profile-panel { width: 100%; }
-
-.community-members-directory { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
-.community-members-directory[hidden] { display: none; }
-.community-members-directory-header { padding: 24px 24px 20px; padding-right: max(24px, var(--web-topbar-right-action-safe-inset, 64px)); display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
-.community-members-directory-header h1 { margin: 0; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); }
-.community-members-directory-header h1 span { margin-left: 8px; font-weight: 400; }
-.community-members-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 0 24px 20px; }
-.community-members-toolbar .community-dm-recipient-search { flex: 1; min-width: 180px; margin: 0; }
 .community-context-autojoin {
   min-width: 0;
   color: var(--text-muted);
@@ -2997,11 +2978,6 @@
 
 .channel-roster-panel .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
 .channel-roster-panel .community-context-members-total .community-context-section { margin: 0; }
-.community-members-admission { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px; }
-.community-members-admission .platform-switcher { width: 120px; }
-.community-members-notice { padding: 0 24px 12px; font-size: 12px; color: var(--text-muted); }
-.community-members-directory .community-members-page-panel { display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; border-left: 0; background: transparent; }
-.community-members-directory .community-context-members { padding: 8px 24px 24px; }
 .community-members-list { display: flex; flex-direction: column; }
 .community-members-list .community-context-member { position: relative; padding: 0; min-width: 0; border-bottom: 1px solid var(--stroke-divider-accent); transition: background 140ms ease; }
 .community-members-list .community-context-member:last-child { border-bottom: 0; }
@@ -3010,28 +2986,11 @@
 .community-members-list .community-context-member-name { font-size: 16px; font-weight: 600; line-height: 1.35; color: var(--text-primary); white-space: normal; overflow-wrap: anywhere; text-decoration: none; }
 .community-context-member-role { color: var(--text-muted); font-size: 12px; text-transform: capitalize; }
 .community-members-list .community-context-member-manage { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 8px; }
-@container (max-width: 560px) { .community-members-toolbar .community-dm-recipient-search { flex-basis: 100%; } }
 @media (prefers-reduced-motion: reduce) { .community-members-list .community-context-member { transition: none; } }
-.community-members-search-status { padding: 12px 24px; display: flex; align-items: center; gap: 12px; color: var(--text-muted); font-size: 13px; }
-.community-members-directory button:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 2px; }
 
-.app-root.mobile-shell .community-members-page .community-members-page-panel {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  border-left: 0;
-  background: transparent;
-}
 
-.community-members-page-state {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  color: var(--text-muted);
-  text-align: center;
-}
+
+
 
 .community-interaction-main,
 .community-interaction-drawer {

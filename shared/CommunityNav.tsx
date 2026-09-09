@@ -11,7 +11,6 @@ import {
   Plus,
   Settings,
   UserPlus,
-  Users,
   X,
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
@@ -49,9 +48,6 @@ type CommunityNavProps = {
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
-  memberCount?: number | null;
-  onOpenMembers?: () => void;
-  isMembersActive?: boolean;
   isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
@@ -156,10 +152,6 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
   return new URL(joinPath, window.location.origin).toString();
 }
 
-function formatMemberCount(value: number | null | undefined): string | null {
-  if (value === null || value === undefined || !Number.isFinite(value)) return null;
-  return Math.max(0, Math.floor(value)).toLocaleString();
-}
 
 export const CommunityNav = memo(function CommunityNav({
   activeCommunity,
@@ -172,9 +164,6 @@ export const CommunityNav = memo(function CommunityNav({
   canViewActiveCommunitySettings,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
-  memberCount = null,
-  onOpenMembers,
-  isMembersActive = false,
   isLoadingAccess = false,
   onSelectTab,
   memberNextStep,
@@ -217,8 +206,6 @@ export const CommunityNav = memo(function CommunityNav({
   const showManagementSection =
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
-  const memberCountLabel = formatMemberCount(memberCount);
-  const showMembersItem = Boolean(canViewMembersActiveCommunity && onOpenMembers);
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -617,22 +604,6 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
-          {showMembersItem ? (
-            <button
-              className={`nav-item community-nav-members${isMembersActive ? " active" : ""}`}
-              aria-current={isMembersActive ? "page" : undefined}
-              type="button"
-              onClick={onOpenMembers}
-              title="Members"
-              aria-label={memberCountLabel ? `Members, ${memberCountLabel}` : "Members"}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Users size={18} strokeWidth={1.7} />
-              </span>
-              <span className="nav-item-label">Members</span>
-              {memberCountLabel ? <span className="community-nav-members-count">{memberCountLabel}</span> : null}
-            </button>
-          ) : null}
         </>
       ) : null}
       {isLoadingAccess ? (

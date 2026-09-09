@@ -4,7 +4,7 @@ import { searchCommunityDirectoryBatch } from "../../../../shared/communityDirec
 import type { CommunityDirectoryMember } from "../../../../shared/communityTypes";
 import type { WebCommunityChatPanelProps } from "../components/WebCommunityChatPanel";
 
-export function useWebMemberDirectorySearch(chat: WebCommunityChatPanelProps, query: string) {
+export function useWebMemberDirectorySearch(chat: Pick<WebCommunityChatPanelProps, "session" | "sessionUserId" | "activeCommunity">, query: string) {
   const [result, setResult] = useState<{ key: string; rows: CommunityDirectoryMember[]; cursor: string | null; error: string | null }>({ key: "", rows: [], cursor: null, error: null });
   const [loading, setLoading] = useState(false);
   const generation = useRef(0);
@@ -37,6 +37,7 @@ export function useWebMemberDirectorySearch(chat: WebCommunityChatPanelProps, qu
   }, [run, query]);
   const current = result.key === key;
   return { rows: current ? result.rows : [], loading, error: current ? result.error : null,
+    progress: current ? result.cursor ?? "done" : key,
     hasMore: current && Boolean(result.cursor),
     loadMore: () => void run(current ? result.cursor : null, current, generation.current) };
 }

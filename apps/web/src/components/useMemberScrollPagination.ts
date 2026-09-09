@@ -9,7 +9,7 @@ export function useMemberScrollPagination(props: {
   isLoadingMoreMembers?: boolean;
   membersLoadError?: unknown;
   onLoadMoreMembers?: () => void;
-}, progress: number) {
+}, progress: number | string) {
   const loadMoreRequestedRef = useRef(false);
   const membersViewportRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -110,4 +110,3 @@ export function useMemberScrollPagination(props: {
   ]);
   return { membersViewportRef, loadMoreSentinelRef, handleMembersScroll, requestLoadMoreMembers };
 }
-

@@ -1,11 +1,10 @@
 import type { AppView, CommunityTab } from "../../../../shared/appShellNavigation";
-import type { ComponentProps } from "react";
 import { WebCommunityChatPanel, type WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
-import { WebCommunityMembersPanel } from "./WebCommunityMembersPanel";
+import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { WebCommunitySecondaryPanels, type WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
 
 type WebCommunityHostProps = {
-  admission?: ComponentProps<typeof WebCommunityMembersPanel>["admission"];
+  admission?: CommunityAdmissionControl;
   activeView: AppView;
   communityTab: CommunityTab;
   chatPanelProps: WebCommunityChatPanelProps;
@@ -13,12 +12,10 @@ type WebCommunityHostProps = {
 };
 
 export function WebCommunityHost(props: WebCommunityHostProps) {
-  const { activeView, communityTab, chatPanelProps, secondaryPanelsProps } = props;
+  const { communityTab, chatPanelProps, secondaryPanelsProps } = props;
   return (
     <div className="community-body">
-      {activeView === "community_members" ? (
-        <WebCommunityMembersPanel key={`${chatPanelProps.sessionUserId}:${chatPanelProps.activeCommunity?.id}`} chatPanelProps={chatPanelProps} admission={props.admission} />
-      ) : communityTab === "chat" ? (
+      {communityTab === "chat" ? (
         <WebCommunityChatPanel {...chatPanelProps} interactionProjection={chatPanelProps.interactionProjection
           ? { ...chatPanelProps.interactionProjection, admission: props.admission } : undefined} />
       ) : (

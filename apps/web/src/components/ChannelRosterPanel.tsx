@@ -1,5 +1,6 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps } from "react";
-import { MessageCircle, MoreHorizontal } from "lucide-react";
+import { MessageCircle, MoreHorizontal, Search } from "lucide-react";
+import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import { useMemberScrollPagination } from "./useMemberScrollPagination";
 import { CommunityJoinRequestReview } from "./CommunityJoinRequestReview";
@@ -37,6 +38,14 @@ export function ChannelRosterPanel(props: {
   getInitials: (name: string) => string;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
+  const [search, setSearch] = useState("");
+  const searching = Boolean(search.trim());
+  const searchResult = useWebMemberDirectorySearch({
+    session: scope?.session,
+    sessionUserId: props.currentUserId ?? null,
+    activeCommunity: scope ? { id: scope.communityId, name: props.communityName } : null,
+  }, search);
+  useEffect(() => { setSearch(""); }, [scope?.communityId, props.channelId]);
   const backRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (props.narrowOpen && backRef.current?.getClientRects().length) backRef.current.focus();
@@ -97,13 +106,19 @@ export function ChannelRosterPanel(props: {
     return () => { paginationRef.current = null; stop?.(); close?.(); };
   }, [scope?.session, scope?.communityId, props.channelId, retry]);
   const { membersViewportRef, loadMoreSentinelRef, handleMembersScroll } = useMemberScrollPagination({
-    membersHasMore: !complete,
-    isLoadingMembers: !pages.length,
-    isLoadingMoreMembers: loadingMore,
-    membersLoadError: error,
-    onLoadMoreMembers: () => { setLoadingMore(true); paginationRef.current?.loadMore(); },
-  }, pages.length);
-  const members = [...new Map(pages.flatMap(page => page.page).map(member => [member.user_id, member])).values()];
+    membersHasMore: searching ? searchResult.hasMore : !complete,
+    isLoadingMembers: searching ? false : !pages.length,
+    isLoadingMoreMembers: searching ? searchResult.loading : loadingMore,
+    membersLoadError: searching ? searchResult.error : error,
+    onLoadMoreMembers: () => { if (searching) searchResult.loadMore(); else { setLoadingMore(true); paginationRef.current?.loadMore(); } },
+  }, searching ? searchResult.progress : pages.length);
+  const rosterMembers = [...new Map(pages.flatMap(page => page.page).map(member => [member.user_id, member])).values()];
+  const members = searching ? searchResult.rows.map(member => ({
+    user_id: member.user_id, role: member.role,
+    membership_id: member.id.startsWith("owner:") ? undefined : member.id,
+    membership_created_at: member.created_at,
+    profile: member, last_seen_at: null, active_until: null,
+  })) : rosterMembers;
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
   useEffect(() => {
@@ -148,17 +163,21 @@ export function ChannelRosterPanel(props: {
           </div> : <p className="community-context-members-status">No agents in this channel.</p>}
         </>}
           <div className="community-context-members-total">
-            <h3 className="community-context-section">People{!error && ready && complete ? ` — ${members.length}` : ""}</h3>
+            <h3 className="community-context-section">People{!error && ready && complete ? ` — ${rosterMembers.length}` : ""}</h3>
             <CommunityAutoJoinControl admission={props.admission} />
           </div>
           {props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
-      {!error && ready ? <>
+          <label className="community-dm-recipient-search community-dm-inbox-search">
+            <Search aria-hidden="true" />
+            <input type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
+          </label>
+      {(searching || (!error && ready)) ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;
             return <Fragment key={group}>
-              <h4 className="community-context-section" title="Online status reflects activity in this community">{group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!complete ? " loaded" : ""}</h4>
+              <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>
               {rows.map(member => {
                 const name = member.profile.display_name || "Member";
                 return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
@@ -178,10 +197,13 @@ export function ChannelRosterPanel(props: {
               })}
             </Fragment>;
           })}
-          {!members.length && complete ? <p>No people in this channel.</p> : null}
-          <div className="community-context-members-footer" ref={loadMoreSentinelRef}>
+          {!searching && !members.length && complete ? <p>No people in this channel.</p> : null}
+          {searching ? <div className="community-context-members-footer" role="status" ref={loadMoreSentinelRef}>
+            {searchResult.loading ? "Searching members…" : searchResult.error ?? `${members.length} matches${searchResult.hasMore ? " so far" : ""}`}
+            {!searchResult.loading && searchResult.error ? <button type="button" className="btn-secondary" onClick={searchResult.loadMore}>Retry search</button> : null}
+          </div> : <div className="community-context-members-footer" ref={loadMoreSentinelRef}>
             {complete ? `Showing ${members.length} of ${members.length}` : "Loading more..."}
-          </div>
+          </div>}
         </> : null}
     </div>
   </aside>

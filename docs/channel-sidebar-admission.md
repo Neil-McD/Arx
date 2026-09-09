@@ -40,6 +40,14 @@ that could admit pending members. Test transition delegation locally instead.
 
 ## Roster ordering
 
+The channel right panel is the member-management surface; the separate Members
+page and sidebar tab are retired. Old /members URLs resolve to channel chat.
+General lists community members; restricted channels keep their authorized roster.
+Search explicitly spans the community using the existing authorized, bounded
+directory search. Search results retain profile and manager controls, without
+claiming they belong to the current channel or inventing online presence.
+Search continuation uses the same scroll loader; only failures expose Retry.
+
 `listChannelRoster` reads the canonical community-presence recency index newest
 first, then pages memberships that have no presence row. The owner follows the
 same recency rule and is included once in the unknown-presence pass if needed.
