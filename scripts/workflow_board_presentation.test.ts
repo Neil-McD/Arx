@@ -6,6 +6,16 @@ const component = readFileSync(new URL("../apps/web/src/components/WebCommunityW
 const editor = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx", import.meta.url), "utf8");
 const automation = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowAutomationEditor.tsx", import.meta.url), "utf8");
 
+test("action choices show radio indicators in one consistent trigger grid", () => {
+  const triggerGrid = automation.split('<legend>When</legend>')[1].split('</fieldset>')[0];
+  expect(triggerGrid.match(/<div/g)).toHaveLength(1);
+  expect(triggerGrid.indexOf('Form submitted')).toBeLessThan(triggerGrid.indexOf('</div>'));
+  expect(css).toContain('.workflow-action-choice span::before');
+  expect(css).toContain('.workflow-action-choice input:checked + span::before');
+  expect(css).toContain('border-style: dashed');
+  expect(css).not.toContain('input:focus-visible + span { outline: 2px');
+});
+
 test("milestone editor reuses resource styles while retaining bounded scrolling", () => {
   expect(editor).toContain('className="resource-form workflow-milestone-form"');
   expect(editor).toContain('className="resource-field-label"');

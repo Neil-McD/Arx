@@ -4,6 +4,11 @@
 
 ### Board presentation
 
+Action editor trigger and action selections reuse their native radio groups in
+equal-width two-column grids, with visible radio indicators, compact left-aligned
+labels, subtle selected fills, and a dashed keyboard-focus border. Conditional
+fields, availability, and trigger/action replacement behavior are unchanged.
+
 The milestone popup uses the panel surface, compact sentence-case labels, and
 short expanding textareas. Input focus changes the themed border and surface,
 without an outer white outline; button keyboard outlines remain. Its lighter,

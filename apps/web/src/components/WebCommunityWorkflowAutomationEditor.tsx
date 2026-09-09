@@ -61,11 +61,11 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "create_service_channel" ? "prompt_agent" : automation.action.type), trigger: { type: "member_contributed" } })} /><span>Member activity</span></label>
               <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isTimed}
                 onChange={() => { setTimeUnit(1440); props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "create_service_channel" ? "prompt_agent" : automation.action.type), trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
-            </div>
             {!isRequirement && (props.canAddJoin || isJoin) ? <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isJoin}
               onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "request_form" ? "request_form" : "create_service_channel"), trigger: { type: "member_joined" } })} /><span>Member joins</span></label> : null}
             <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isForm}
               onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, isRequirement ? "move_member" : "prompt_agent"), trigger: { type: "form_submitted", formKey: "" } })} /><span>Form submitted</span></label>
+            </div>
           </fieldset>
           {isJoin ? null : automation.trigger.type === "form_submitted" ? <label>Form<select value={automation.trigger.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, trigger: { type: "form_submitted", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select></label> : isTimed ? <div className="workflow-automation-field">
             <label htmlFor={`${id}-duration`}>After</label>
