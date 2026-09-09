@@ -15,4 +15,7 @@ test("desktop shell retains production resize rules without a second navigation 
   const narrow = css.slice(css.indexOf("@media (max-width: 720px)"));
   expect(narrow).toContain("grid-template-columns: 56px minmax(0, 1fr)");
   expect(narrow).toContain(".community-nav .nav-item");
+  const rosterCss = readFileSync("apps/web/src/styles/community-and-content.css", "utf8");
+  expect(rosterCss).toContain("@media (max-width: 640px) {\n  .community-interaction-projection.has-channel-context");
+  expect(rosterCss).toContain("@media (max-width: 640px) {\n  .community-channel-header .channel-people-trigger");
 });

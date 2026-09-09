@@ -2166,7 +2166,7 @@
 .community-interaction-projection.has-channel-context {
   grid-template-columns: minmax(0, 1fr) 300px;
 }
-@container community-chat-area (max-width: 680px) {
+@media (max-width: 640px) {
   .community-interaction-projection.has-channel-context { grid-template-columns: minmax(0, 1fr); }
   .community-context-panel.channel-roster-panel { display: none; }
 }
@@ -2894,7 +2894,7 @@
 
 .community-channel-header .channel-people-trigger,
 .channel-people-back { display: none; }
-@container community-chat-area (max-width: 680px) {
+@media (max-width: 640px) {
   .community-channel-header .channel-people-trigger { display: inline-flex; margin-left: auto; }
   .people-panel-open > .community-interaction-main { display: none; }
   .community-interaction-projection.people-panel-open > .channel-roster-panel {
