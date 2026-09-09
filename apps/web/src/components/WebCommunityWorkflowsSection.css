@@ -153,6 +153,19 @@
   overflow: hidden;
 }
 
+.community-utility-panel.workflow-pipeline-shell {
+  padding-bottom: 12px;
+  gap: 6px;
+}
+
+.workflow-board-stage {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+
 .workflow-pipeline-header {
   flex: 0 0 auto;
   min-width: 0;
@@ -166,7 +179,7 @@
   min-height: 0;
   gap: 12px;
   margin-top: 8px;
-  padding: 0 2px 12px 0;
+  padding: 0 2px 4px 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -177,7 +190,7 @@
   flex: 0 0 272px;
   flex-direction: column;
   min-width: 0;
-  min-height: 280px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border-muted);
   border-radius: 11px;
@@ -192,7 +205,7 @@
   min-height: 56px;
   gap: 12px;
   padding: 10px 10px 10px 13px;
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--stroke-divider-accent);
 }
 
 .workflow-milestone-column-header > div:first-child {
@@ -246,7 +259,8 @@
 .workflow-milestone-edit-button {
   width: 36px;
   height: 36px;
-  border-color: transparent;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
   opacity: 1;
 }
@@ -277,15 +291,11 @@
 }
 
 .workflow-add-milestone-button {
-  align-self: flex-start;
-  width: auto;
-  gap: 7px;
-  padding: 0 10px;
-  margin: 10px 4px 0 0;
-  border-color: transparent;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
   color: var(--text-muted);
-  font-size: 13px;
-  white-space: nowrap;
 }
 
 .workflow-member-stub {

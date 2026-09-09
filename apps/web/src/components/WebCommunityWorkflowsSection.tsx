@@ -1,4 +1,4 @@
-import { Pencil, Plus, RefreshCw } from "lucide-react";
+import { MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
@@ -227,6 +227,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
         className="community-panel community-utility-panel workflow-pipeline-shell"
         aria-label="Workflow board"
       >
+        <div className="workflow-board-stage">
         <div className="workflow-milestone-canvas" aria-label="Member success milestones">
           {milestones.map((milestone, index) => {
             const members = membersByMilestone.get(milestone.key) ?? [];
@@ -247,7 +248,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
                         onClick={() => openMilestone(milestone.key)}
                         aria-label={`Edit ${milestone.name}`}
                       >
-                        <Pencil size={14} aria-hidden="true" />
+                        <MoreHorizontal size={18} aria-hidden="true" />
                       </button>
                     ) : null}
                   </div>
@@ -277,6 +278,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
               </section>
             );
           })}
+        </div>
           <button
             className="workflow-add-milestone-button"
             type="button"
@@ -290,7 +292,6 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
             title="Add milestone"
           >
             <Plus size={19} aria-hidden="true" />
-            Add milestone
           </button>
         </div>
 

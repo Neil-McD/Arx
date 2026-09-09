@@ -35,6 +35,11 @@ test("board keeps fixed lanes and uses defined canonical surfaces", () => {
 
 test("board actions remain discoverable without hover", () => {
   expect(css).not.toContain(".workflow-milestone-column:hover .workflow-milestone-edit-button");
-  expect(component).toMatch(/<Plus size=\{19\} aria-hidden="true" \/>\s+Add milestone/);
+  expect(component).toContain('<MoreHorizontal size={18} aria-hidden="true" />');
+  expect(component).not.toContain("<Pencil");
+  expect(component).toMatch(/\}\)\}\s*<\/div>\s*<button\s+className="workflow-add-milestone-button"/);
+  expect(css).toContain("border-bottom: 1px solid var(--stroke-divider-accent)");
+  expect(css).toContain(".workflow-board-stage");
+  expect(component).toContain('aria-label="Add milestone"');
   expect(component).toContain("aria-label={`Edit ${milestone.name}`}");
 });

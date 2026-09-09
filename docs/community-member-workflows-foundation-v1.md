@@ -187,6 +187,12 @@ Historical runs without a snapshot remain valid and are not backfilled from
 today's configuration. Filtering happens before run admission and retains the
 existing replay key and one-terminal-transition writer.
 
+The board keeps its add button in a reserved right-side slot outside horizontal
+scrolling, vertically centered on the lanes. Three-dot header buttons open the
+existing editor directly. Header separators use the sidebar divider token;
+lane bodies own vertical scrolling without a minimum height that clips short
+windows. These layout rules remain board-local, not global shell breakpoints.
+
 The editor uses the canonical Resources form fields, labels, and modal styling,
 with workflow-specific bounded scrolling and a pinned save/discard footer.
 New milestones save their name/instructions/goal before actions are configured;
