@@ -35,8 +35,21 @@ test("creation and advancement explain actual behavior without repeated conditio
   expect(editor).toContain("workflowMoveLabel(props.nextMilestoneName)");
   expect(editor).not.toContain("conditions below");
   expect(automation).not.toContain("Required for completion");
-  expect(automation).toContain("<strong>{actionLabel}</strong>");
-  expect(automation).toContain("!isRequirement ? <small>{triggerLabel}</small>");
+  expect(automation).toContain("<strong>{triggerLabel}</strong>");
+  expect(automation).toContain("!isRequirement ? <small>→ {actionLabel}</small>");
+});
+
+test("milestone views share the draft and progressive creation does not preselect choices", () => {
+  expect(editor).toContain('WebPlatformTabList');
+  expect(editor).toContain('label: "Overview"');
+  expect(editor).toContain('label: "Automations"');
+  expect(editor).toContain('&& !pendingAutomation');
+  expect(editor).toContain('setSelection({ triggerSelected: false, actionSelected: false })');
+  expect(editor).toContain('Add to milestone');
+  expect(automation).toContain('checked={triggerSelected &&');
+  expect(automation).toContain('checked={actionSelected &&');
+  expect(automation).toContain('triggerReady && !isRequirement');
+  expect(editor).toContain('Automatic advancement (existing system)');
 });
 
 test("board keeps fixed lanes and uses defined canonical surfaces", () => {

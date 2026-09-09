@@ -23,6 +23,13 @@ export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutom
     || (automation.trigger.type === "member_joined" && automation.action.type !== "create_service_channel" && automation.action.type !== "request_form")) return "Member joins requires Create private channel or Request form";
   if ((automation.action.type === "request_form" && !automation.action.formKey) || (automation.trigger.type === "form_submitted" && !automation.trigger.formKey)) return "Choose a published form";
   if (automation.trigger.type === "form_submitted" && automation.action.type === "request_form") return "Choose Ask agent or Move member";
+  const triggerIssue = workflowTriggerIssue(automation, channels, unavailable);
+  if (triggerIssue) return triggerIssue;
+  return automation.action.type === "prompt_agent" && !automation.action.prompt.trim() ? "Add agent instructions" : null;
+}
+
+export function workflowTriggerIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
+  if (automation.trigger.type === "form_submitted" && !automation.trigger.formKey) return "Choose a published form";
   if (automation.trigger.type === "milestone_elapsed") {
     try { normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes); }
     catch { return "Choose a duration from 1 minute to 365 days"; }
@@ -32,7 +39,7 @@ export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutom
     if (unavailable) return "Waiting for channels";
     if (!channels.some((channel) => channel.id === channelId)) return "Choose an available channel";
   }
-  return automation.action.type === "prompt_agent" && !automation.action.prompt.trim() ? "Add agent instructions" : null;
+  return null;
 }
 
 // Editor-only state. Hidden prompt drafts must never enter the saved contract.

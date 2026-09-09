@@ -4,6 +4,16 @@
 
 ### Board presentation
 
+The milestone editor opens on Overview (name, instructions, goal), with the
+canonical platform selector switching to Automations without resetting the
+shared draft. Add automation opens an in-modal trigger-first editor with no
+selected trigger or action. Trigger configuration gates compatible action
+selection; Add to milestone validates and adds only to the draft. Back/Cancel
+addition abandons that pending addition; Save milestone remains the persistence
+boundary. Existing rules open in a focused editor, and automatic advancement
+conditions remain explicitly visible as the existing system until their backend
+replacement is released. This presentation slice does not change execution.
+
 Action editor trigger and action selections reuse their native radio groups in
 equal-width two-column grids, with visible radio indicators, compact left-aligned
 labels, subtle selected fills, and a dashed keyboard-focus border. Conditional

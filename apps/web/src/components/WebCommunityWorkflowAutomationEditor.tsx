@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 import { COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH } from "../../../../shared/communityMemberWorkflow";
 import { WorkflowChannelPicker } from "./WorkflowChannelPicker";
-import { replaceWorkflowDraftAction, workflowAutomationIssue, workflowChannelLabel, type WorkflowAutomationDraft } from "./workflowMilestoneDraft";
+import { replaceWorkflowDraftAction, workflowAutomationIssue, workflowTriggerIssue, workflowChannelLabel, type WorkflowAutomationDraft } from "./workflowMilestoneDraft";
 
 type Props = {
   canAddJoin?: boolean;
@@ -17,6 +17,13 @@ type Props = {
   onToggle: () => void;
   onChange: (automation: WorkflowAutomationDraft) => void;
   onRemove: () => void;
+  hideHeading?: boolean;
+  creation?: {
+    triggerSelected: boolean;
+    actionSelected: boolean;
+    onTriggerSelected: () => void;
+    onActionSelected: () => void;
+  };
 };
 
 export function WebCommunityWorkflowAutomationEditor(props: Props) {
@@ -33,40 +40,45 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const isRequirement = automation.action.type === "move_member";
   const issue = workflowAutomationIssue(automation, props.channels, props.channelsUnavailable);
   const isPrivate = props.channels.some((channel) => channel.id === channelId && channel.access_mode === "restricted");
+  const triggerSelected = !props.creation || props.creation.triggerSelected;
+  const actionSelected = !props.creation || props.creation.actionSelected;
+  const triggerIssue = triggerSelected ? workflowTriggerIssue(automation, props.channels, props.channelsUnavailable) : null;
+  const triggerReady = triggerSelected && !triggerIssue;
   const triggerLabel = isJoin ? "Member joins for the first time" : automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`;
   const actionLabel = automation.action.type === "evaluate_goal" ? "Evaluate goal" : automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : triggerLabel;
 
   return (
     <div className="workflow-milestone-automation-row" data-automation-key={automation.key}>
-      <div className="workflow-automation-heading">
+      {!props.hideHeading ? <div className="workflow-automation-heading">
         <button type="button" className="workflow-automation-summary" data-workflow-rule-start aria-expanded={props.expanded}
           aria-controls={props.expanded ? `${id}-fields` : undefined} disabled={props.disabled} onClick={props.onToggle}>
           <span>
-            <strong>{actionLabel}</strong>
-            {!isRequirement ? <small>{triggerLabel}</small> : null}
+            <strong>{triggerLabel}</strong>
+            {!isRequirement ? <small>→ {actionLabel}</small> : null}
             {issue ? <small className="workflow-automation-issue">{issue}</small> : null}
           </span>
           <ChevronDown size={16} aria-hidden="true" />
         </button>
         <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove ${isRequirement ? "condition" : "action"} ${props.index + 1}`}
           disabled={props.disabled} onClick={props.onRemove}><X size={16} aria-hidden="true" /></button>
-      </div>
+      </div> : null}
 
       {props.expanded ? (
         <div className="workflow-milestone-automation-fields" id={`${id}-fields`}>
-          <fieldset className="workflow-action-choices" disabled={props.disabled}>
+          <fieldset className="workflow-action-choices" disabled={props.disabled} onChange={props.creation?.onTriggerSelected}>
             <legend>When</legend>
             <div className="workflow-action-choice-row">
-              <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={!isTimed && !isForm && !isJoin}
+              <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={triggerSelected && !isTimed && !isForm && !isJoin}
                 onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "create_service_channel" ? "prompt_agent" : automation.action.type), trigger: { type: "member_contributed" } })} /><span>Member activity</span></label>
-              <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isTimed}
+              <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={triggerSelected && isTimed}
                 onChange={() => { setTimeUnit(1440); props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "create_service_channel" ? "prompt_agent" : automation.action.type), trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
-            {!isRequirement && (props.canAddJoin || isJoin) ? <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isJoin}
+            {!isRequirement && (props.canAddJoin || isJoin) ? <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={triggerSelected && isJoin}
               onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "request_form" ? "request_form" : "create_service_channel"), trigger: { type: "member_joined" } })} /><span>Member joins</span></label> : null}
-            <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isForm}
+            <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={triggerSelected && isForm}
               onChange={() => props.onChange({ ...replaceWorkflowDraftAction(automation, isRequirement ? "move_member" : "prompt_agent"), trigger: { type: "form_submitted", formKey: "" } })} /><span>Form submitted</span></label>
             </div>
           </fieldset>
+          {triggerSelected ? <>
           {isJoin ? null : automation.trigger.type === "form_submitted" ? <label>Form<select value={automation.trigger.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, trigger: { type: "form_submitted", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select></label> : isTimed ? <div className="workflow-automation-field">
             <label htmlFor={`${id}-duration`}>After</label>
             <div className="workflow-action-choice-row">
@@ -90,19 +102,21 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
           </div>
           )}
 
-          {!isRequirement ? <fieldset className="workflow-action-choices" disabled={props.disabled}>
+          </> : null}
+          {triggerReady && !isRequirement ? <fieldset className="workflow-action-choices" disabled={props.disabled} onChange={props.creation?.onActionSelected}>
             <legend>Then</legend>
             <div className="workflow-action-choice-row">
-              {isJoin ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "create_service_channel"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "create_service_channel"))} /><span>Create private channel</span></label> : <label className="workflow-action-choice">
-                <input type="radio" name={`${id}-action`} value="prompt_agent" checked={isPrompt}
+              {isJoin ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={actionSelected && automation.action.type === "create_service_channel"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "create_service_channel"))} /><span>Create private channel</span></label> : <label className="workflow-action-choice">
+                <input type="radio" name={`${id}-action`} value="prompt_agent" checked={actionSelected && isPrompt}
                   onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "prompt_agent"))} />
                 <span>Ask agent</span>
               </label>}
-              <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "request_form"} disabled={isForm} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "request_form"))} /><span>Request form</span></label>
-              {isForm ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={automation.action.type === "evaluate_goal"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "evaluate_goal"))} /><span>Evaluate goal</span></label> : null}
+              {!isForm ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={actionSelected && automation.action.type === "request_form"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "request_form"))} /><span>Request form</span></label> : null}
+              {isForm ? <label className="workflow-action-choice"><input type="radio" name={`${id}-action`} checked={actionSelected && automation.action.type === "evaluate_goal"} onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "evaluate_goal"))} /><span>Evaluate goal</span></label> : null}
             </div>
           </fieldset> : null}
 
+          {triggerReady && actionSelected ? <>
           {isJoin ? <p className="workflow-field-hint">Applies only to future first-time members. Each join action runs independently; no automatic message or milestone movement.</p> : null}
           {automation.action.type === "create_service_channel" ? <p className="workflow-field-hint">Creates a private service channel for the member, community managers, and community agent.</p> : automation.action.type === "request_form" ? <label>Form<select value={automation.action.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, action: { key: automation.action.key, type: "request_form", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select><small>Shown privately in the member’s community sidebar. No channel is required. One request per rule and milestone visit.</small></label> : automation.action.type === "prompt_agent" ? (
             <>
@@ -122,6 +136,8 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
               </p>
             </>
           ) : automation.action.type === "evaluate_goal" ? <p className="workflow-field-hint">Privately evaluates the milestone goal using this submitted form. Add a goal above to save. Records a judgment only; no message or milestone movement.</p> : null}
+          </> : null}
+          {props.hideHeading && (triggerIssue || (actionSelected && issue)) ? <p role="status" className="workflow-automation-issue">{triggerIssue || issue}</p> : null}
         </div>
       ) : null}
     </div>

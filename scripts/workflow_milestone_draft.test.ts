@@ -10,6 +10,7 @@ import {
   workflowChannelLabel,
   workflowMoveLabel,
   workflowAutomationIssue,
+  workflowTriggerIssue,
 } from "../apps/web/src/components/workflowMilestoneDraft";
 
 const automation: CommunityMemberWorkflowAutomation = {
@@ -20,6 +21,17 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("validates trigger setup independently of an unchosen action", () => {
+    const draft = { ...automation, trigger: { type: "member_contributed" as const }, action: { key: "a", type: "prompt_agent" as const, prompt: "" } };
+    expect(workflowTriggerIssue(draft, [], false)).toBeNull();
+    expect(workflowAutomationIssue(draft, [], false)).toBe("Add agent instructions");
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "form_submitted", formKey: "" } }, [], false)).toBe("Choose a published form");
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "form_submitted", formKey: "intake" } }, [], false)).toBeNull();
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: 0 } }, [], false)).toContain("duration");
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }, [], false)).toBeNull();
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "member_joined" } }, [], false)).toBeNull();
+    expect(workflowTriggerIssue(automation, [], true)).toBe("Waiting for channels");
+  });
   it("warns only when assessment and movement use the same form", () => {
     const assessment: CommunityMemberWorkflowAutomation = { key: "assess", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "assess-action", type: "evaluate_goal" } };
     const move: CommunityMemberWorkflowAutomation = { key: "move", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "move-action", type: "move_member", destination: "next_or_complete" } };

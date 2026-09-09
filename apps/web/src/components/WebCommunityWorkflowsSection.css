@@ -640,11 +640,24 @@
   line-height: 1.5;
 }
 
-.workflow-milestone-form > label > textarea {
+.workflow-milestone-form > label > textarea,
+.workflow-editor-page > label > textarea {
   min-height: 64px;
   max-height: 200px;
   field-sizing: content;
   padding: 9px 12px;
+}
+
+.workflow-editor-page { display: flex; flex-direction: column; gap: 14px; }
+.workflow-milestone-modal .modal-body > .platform-switcher,
+.workflow-milestone-modal .modal-body > .workflow-editor-back { margin-bottom: 16px; }
+.workflow-editor-back {
+  align-self: flex-start;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
 .workflow-milestone-automations {
