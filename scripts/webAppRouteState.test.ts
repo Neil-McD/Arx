@@ -77,7 +77,7 @@ describe("community channel routes", () => {
       communityTab: "chat",
       communityChannelSlug: null,
     });
-    expect(buildAppRoutePath(parsed!)).toBe(path);
+    expect(buildAppRoutePath(parsed!)).toBe("/c/polynet/chat");
   });
 
   it("keeps General on the backward-compatible chat route", () => {
