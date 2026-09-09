@@ -34,7 +34,6 @@ test("both member surfaces reuse one request renderer and existing decision hand
   const read = (file: string) => readFileSync(new URL(`../apps/web/src/components/${file}`, import.meta.url), "utf8");
   const source = read("CommunityJoinRequestReview.tsx");
   expect(source.match(/const renderJoinRequest =/g)).toHaveLength(1);
-  expect(read("CommunityContextPanel.tsx")).toContain("<CommunityJoinRequestReview {...props}");
   expect(read("ChannelRosterPanel.tsx")).toContain("<CommunityJoinRequestReview {...props.joinReview}");
   expect(read("WebCommunityInteractionProjection.tsx")).toContain("onApproveJoinRequest: props.onApproveCommunityJoinRequest");
   expect(source).toContain("isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onApproveJoinRequest");

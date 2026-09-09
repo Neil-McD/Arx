@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
   Users,
@@ -20,16 +20,9 @@ import type {
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { firstYouTubeEmbedInText } from "../../../../shared/linkEmbedUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
-import {
-  CommunityContextPanel,
-  type CommunityAdmissionEntryPolicy,
-  type CommunityAdmissionJoinRequest,
-  type CommunityPresenceFace,
-  type CommunityRailMember,
-} from "./CommunityContextPanel";
+import type { CommunityAdmissionJoinRequest } from "./CommunityJoinRequestReview";
 import type { MentionCandidate } from "./communityMentionAutocomplete";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
-import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import {
   WebCommunityChannelHeader,
   type WebCommunityChannelHeaderChannel,
@@ -129,14 +122,6 @@ export type WebCommunityInteractionProjectionProps = {
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
   presenceSummary?: CommunityPresenceSummary | null;
   isLoadingCommunityPresence?: boolean;
-  onlineUserIds?: Set<string> | null;
-  communityMemberCount?: number | null;
-  communityMembers?: CommunityRailMember[] | null;
-  communityMembersHasMore?: boolean;
-  isLoadingCommunityMembers?: boolean;
-  isLoadingMoreCommunityMembers?: boolean;
-  communityMembersLoadError?: string | null;
-  onLoadMoreCommunityMembers?: () => void;
   communityId?: string | null;
   communityOwnerId?: string | null;
   canManageCommunityMembers?: boolean;
@@ -148,9 +133,6 @@ export type WebCommunityInteractionProjectionProps = {
   decidingCommunityJoinRequestId?: string | null;
   onApproveCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
   onDenyCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
-  contextPanelLockedSections?: { members?: boolean; memory?: boolean } | null;
-  onContextPanelLockedSectionActivate?: (section: "members" | "memory") => void;
-  contextPanelMembersPreview?: CommunityPresenceFace[] | null;
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;
@@ -182,176 +164,6 @@ import {
 } from "./communityInteractionFeed";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
-
-const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
-  "activeCommunityName",
-  "presenceSummary",
-  "isLoadingCommunityPresence",
-  "onlineUserIds",
-  "communityMemberCount",
-  "communityMembers",
-  "communityMembersHasMore",
-  "isLoadingCommunityMembers",
-  "isLoadingMoreCommunityMembers",
-  "communityMembersLoadError",
-  "onLoadMoreCommunityMembers",
-  "communityId",
-  "communityOwnerId",
-  "canManageCommunityMembers",
-  "canReviewCommunityJoinRequests",
-  "communityJoinReviewMode",
-  "communityJoinRequests",
-  "isLoadingCommunityJoinRequests",
-  "communityJoinRequestsError",
-  "decidingCommunityJoinRequestId",
-  "onApproveCommunityJoinRequest",
-  "onDenyCommunityJoinRequest",
-  "contextPanelLockedSections",
-  "onContextPanelLockedSectionActivate",
-  "contextPanelMembersPreview",
-  "onOpenProfile",
-  "onMessageUser",
-  "currentUserId",
-  "displayName",
-  "getInitials",
-  "getAvatarColor",
-  "canViewMemberPlanDetails",
-  "isActiveCommunityOwner",
-  "communityInitials",
-  "onSetCommunityMemberRole",
-  "onRemoveCommunityMember",
-  "onBanCommunityMember",
-  "loadMemberBillingHistory",
-] as const satisfies readonly (keyof WebCommunityInteractionProjectionProps)[];
-
-type CommunityContextProjectionProps = Pick<
-  WebCommunityInteractionProjectionProps,
-  (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]
-> & {
-  containerClassName?: string;
-  ariaLabel?: string;
-};
-
-function pickCommunityContextProjection(
-  props: WebCommunityInteractionProjectionProps & {
-    containerClassName?: string;
-    ariaLabel?: string;
-  },
-): CommunityContextProjectionProps {
-  return {
-    ...Object.fromEntries(
-      COMMUNITY_CONTEXT_PROJECTION_KEYS.map((key) => [key, props[key]]),
-    ) as Pick<WebCommunityInteractionProjectionProps, (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]>,
-    containerClassName: props.containerClassName,
-    ariaLabel: props.ariaLabel,
-  };
-}
-
-const StableCommunityInteractionContextPanelSurface = memo(function StableCommunityInteractionContextPanelSurface(
-  props: CommunityContextProjectionProps,
-) {
-  const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
-  const selectedCommunityMember = useMemo(() => {
-    if (!selectedCommunityMemberId) return null;
-    return (props.communityMembers ?? []).find((member) => member.id === selectedCommunityMemberId) ?? null;
-  }, [props.communityMembers, selectedCommunityMemberId]);
-  const canManageCommunityMembers = Boolean(
-    props.canManageCommunityMembers &&
-      props.communityId &&
-      props.onSetCommunityMemberRole &&
-      props.onRemoveCommunityMember &&
-      props.onBanCommunityMember,
-  );
-  const communityMemberSettingsCommunity = props.communityId
-    ? {
-        id: props.communityId,
-        owner_id: props.communityOwnerId ?? null,
-      }
-    : null;
-
-  useEffect(() => {
-    if (!selectedCommunityMemberId) return;
-    if (!canManageCommunityMembers) {
-      setSelectedCommunityMemberId(null);
-      return;
-    }
-    if (selectedCommunityMember) return;
-    setSelectedCommunityMemberId(null);
-  }, [canManageCommunityMembers, selectedCommunityMember, selectedCommunityMemberId]);
-
-  return (
-    <>
-      <aside
-        className={props.containerClassName ?? "community-interaction-drawer community-context-panel"}
-        aria-label={props.ariaLabel ?? "Community"}
-      >
-        <CommunityContextPanel
-          isLoadingPresence={props.isLoadingCommunityPresence}
-          onlineUserIds={props.onlineUserIds ?? null}
-          memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
-          members={props.communityMembers ?? null}
-          membersHasMore={props.communityMembersHasMore}
-          isLoadingMembers={props.isLoadingCommunityMembers}
-          isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
-          membersLoadError={props.communityMembersLoadError}
-          onLoadMoreMembers={props.onLoadMoreCommunityMembers}
-          ownerId={props.communityOwnerId ?? null}
-          canManageMembers={canManageCommunityMembers}
-          canReviewJoinRequests={props.canReviewCommunityJoinRequests}
-          joinReviewMode={props.communityJoinReviewMode}
-          pendingJoinRequests={props.communityJoinRequests ?? null}
-          isLoadingJoinRequests={props.isLoadingCommunityJoinRequests}
-          joinRequestsError={props.communityJoinRequestsError}
-          decidingJoinRequestId={props.decidingCommunityJoinRequestId}
-          onApproveJoinRequest={props.onApproveCommunityJoinRequest}
-          onDenyJoinRequest={props.onDenyCommunityJoinRequest}
-          lockedSections={props.contextPanelLockedSections ?? null}
-          onLockedSectionActivate={props.onContextPanelLockedSectionActivate}
-          membersPreview={props.contextPanelMembersPreview ?? null}
-          onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
-          onOpenMemberProfile={props.onOpenProfile}
-          onMessageMember={props.onMessageUser}
-          currentUserId={props.currentUserId}
-          displayName={props.displayName}
-          getInitials={props.getInitials}
-          getAvatarColor={props.getAvatarColor}
-        />
-      </aside>
-      <CommunityMemberSettingsDialog
-        member={selectedCommunityMember}
-        activeCommunity={communityMemberSettingsCommunity}
-        canManageMembers={canManageCommunityMembers}
-        canViewMemberPlanDetails={Boolean(props.canViewMemberPlanDetails)}
-        isActiveCommunityOwner={Boolean(props.isActiveCommunityOwner)}
-        onClose={() => setSelectedCommunityMemberId(null)}
-        displayName={props.displayName}
-        getInitials={props.getInitials}
-        communityInitials={props.communityInitials ?? props.getInitials}
-        handleSetCommunityMemberRole={(membershipId, role) =>
-          props.onSetCommunityMemberRole?.(membershipId, role)
-        }
-        handleRemoveCommunityMember={(membershipId) =>
-          props.onRemoveCommunityMember?.(membershipId)
-        }
-        handleBanCommunityMember={(membershipId) =>
-          props.onBanCommunityMember?.(membershipId)
-        }
-        loadMemberBillingHistory={(membershipId) =>
-          props.loadMemberBillingHistory?.(membershipId) ?? Promise.resolve(null)
-        }
-      />
-    </>
-  );
-});
-
-export function CommunityInteractionContextPanelSurface(
-  props: WebCommunityInteractionProjectionProps & {
-    containerClassName?: string;
-    ariaLabel?: string;
-  },
-) {
-  return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;
-}
 
 export function resolveSelectedCommunityInteractionRoot(
   roots: CommunityInteractionRootBundle[],

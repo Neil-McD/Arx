@@ -2816,10 +2816,6 @@
     opacity 0.12s ease;
 }
 
-.community-members-list .community-context-member-action {
-  width: 36px;
-  height: 36px;
-}
 
 @media (hover: hover) and (pointer: fine) {
   .channel-roster-panel .community-context-member-action { opacity: 0; }
@@ -2978,15 +2974,6 @@
 
 .channel-roster-panel .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
 .channel-roster-panel .community-context-members-total .community-context-section { margin: 0; }
-.community-members-list { display: flex; flex-direction: column; }
-.community-members-list .community-context-member { position: relative; padding: 0; min-width: 0; border-bottom: 1px solid var(--stroke-divider-accent); transition: background 140ms ease; }
-.community-members-list .community-context-member:last-child { border-bottom: 0; }
-.community-members-list .community-context-member:hover, .community-members-list .community-context-member:focus-within { background: var(--hover-overlay); }
-.community-members-list .community-context-member-trigger { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 20px 48px 20px 0; }
-.community-members-list .community-context-member-name { font-size: 16px; font-weight: 600; line-height: 1.35; color: var(--text-primary); white-space: normal; overflow-wrap: anywhere; text-decoration: none; }
-.community-context-member-role { color: var(--text-muted); font-size: 12px; text-transform: capitalize; }
-.community-members-list .community-context-member-manage { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 8px; }
-@media (prefers-reduced-motion: reduce) { .community-members-list .community-context-member { transition: none; } }
 
 
 

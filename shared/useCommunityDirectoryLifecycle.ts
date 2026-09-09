@@ -9,7 +9,7 @@ function needsCommunityDirectory(
   communityTab: CommunityTab,
 ): boolean {
   return activePage === "community" &&
-    (activeView === "community_members" || communityTab === "chat");
+    communityTab === "chat";
 }
 
 export function useCommunityDirectoryLifecycle<SessionT>(params: {

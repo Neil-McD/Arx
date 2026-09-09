@@ -10,7 +10,6 @@ const interactionController = read("apps/web/src/controllers/useWebCommunityInte
 const viewportController = read("apps/web/src/controllers/useWebPolynetGraphViewport.ts");
 const graph = read("apps/web/src/components/CommunityMemoryGraph.tsx");
 const gateway = read("shared/cloudCommunityPolynetGateway.ts");
-const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const secondaryPanels = read("apps/web/src/components/WebCommunitySecondaryPanels.tsx");

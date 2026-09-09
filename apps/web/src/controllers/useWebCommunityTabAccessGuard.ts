@@ -33,11 +33,6 @@ export function useWebCommunityTabAccessGuard(params: {
     ) {
       return;
     }
-    if (params.activeView === "community_members" && !params.canViewMembers) {
-      params.setCommunityResourceModuleId(null);
-      params.setActiveView("community_home");
-      return;
-    }
     const normalizedTab = normalizeCommunityTabForAccess(
       params.communityTab,
       {

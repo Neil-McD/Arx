@@ -47,7 +47,6 @@ const projection = read(
   "apps/web/src/components/WebCommunityInteractionProjection.tsx",
 );
 const joinReview = read("apps/web/src/components/CommunityJoinRequestReview.tsx");
-const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read(
   "apps/web/src/components/CommunityMemberSettingsDialog.tsx",
 );
@@ -398,37 +397,21 @@ assert.match(
   /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
   "interaction projection should pass roster state through to the context panel",
 );
-assert.match(
-  contextPanel,
-  /const knownMemberCount = typeof props.memberCount/,
-  "directory pagination should retain the authoritative member count",
-);
-assert.match(
-  projection,
-  /COMMUNITY_CONTEXT_PROJECTION_KEYS[\s\S]*StableCommunityInteractionContextPanelSurface = memo[\s\S]*pickCommunityContextProjection\(props\)/,
-  "right-panel rendering should be isolated from feed-only prop churn",
-);
+
+
 assert.match(
   communityNav,
   /export const CommunityNav = memo\(function CommunityNav/,
   "left navigation should not rerender for unrelated shell content updates",
 );
-assert.match(contextPanel, /members.map\(member => renderMember/, "directory should render a single list independent of presence");
-assert.doesNotMatch(
-  contextPanel,
-  /Offline — \{offlineMembers\.length\}/,
-  "context panel must not present the loaded offline row count as the full offline population",
-);
+
+
 assert.match(
   memberScroll,
   /LOAD_MORE_SCROLL_THRESHOLD_PX[\s\S]*props\.onLoadMoreMembers\(\)/,
   "context panel should load additional roster pages as the member rail scrolls near the bottom",
 );
-assert.match(
-  contextPanel,
-  /onScroll=\{handleMembersScroll\}/,
-  "context panel should attach the load-more scroll handler to the member rail",
-);
+
 assert.match(
   memberScroll,
   /membersViewportRef[\s\S]*loadMoreSentinelRef[\s\S]*IntersectionObserver[\s\S]*observer\.observe\(sentinel\)/,
@@ -439,41 +422,17 @@ assert.match(
   /requestAnimationFrame\(requestVisibleMemberPage\)/,
   "context panel should re-check after render when the member viewport is already near the bottom",
 );
-assert.match(
-  contextPanel,
-  /const membersFooterLabel = props\.membersHasMore[\s\S]*\? "Loading more\.\.\."[\s\S]*: loadedSummary;/,
-  "context panel must not show the terminal loaded-summary label while more member pages are available",
-);
-assert.match(
-  contextPanel,
-  /const hasUnloadedKnownMembers =[\s\S]*loadedMemberCount < knownMemberCount[\s\S]*Member list out of sync/,
-  "context panel should not present a partial loaded member page as terminal when known total is higher",
-);
-assert.match(
-  contextPanel,
-  /ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
-  "context panel footer should be the load-more sentinel while additional member pages exist",
-);
+
+
+
 assert.match(
   directoryController,
   /setCommunityDirectoryMembersHasMore\(Boolean\(page\.continueCursor && !page\.isDone\)\)/,
   "directory controller should only advertise more pages when a continue cursor exists",
 );
-assert.match(
-  contextPanel,
-  /canManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
-  "context panel should model an optional manager-only member settings affordance",
-);
-assert.match(
-  contextPanel,
-  /const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)/,
-  "context panel should hide member settings for normal viewers and owner rows",
-);
-assert.match(
-  contextPanel,
-  /className="community-context-member-action community-context-member-manage"[\s\S]*aria-label=\{`Manage \$\{name\}`\}[\s\S]*props\.onOpenMemberSettings\?\.\(member\)/,
-  "context panel should open the supplied settings callback from the stable row action button",
-);
+
+
+
 assert.match(
   baseCss,
   /\.community-context-member-action\s*\{[\s\S]*width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*opacity:\s*1;/,
@@ -574,11 +533,7 @@ assert.match(
   /communityJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;[\s\S]*onApproveCommunityJoinRequest\?: \(requestId: string\) => Promise<void> \| void;/,
   "interaction projection should carry admission controls and join-review callbacks into the context rail",
 );
-assert.match(
-  projection,
-  /<CommunityContextPanel[\s\S]*pendingJoinRequests=\{props\.communityJoinRequests \?\? null\}[\s\S]*onApproveJoinRequest=\{props\.onApproveCommunityJoinRequest\}/,
-  "interaction projection should pass admission controls through to CommunityContextPanel",
-);
+
 assert.match(
   memberManagementController,
   /const setFreeAccessMode = useCallback[\s\S]*setCloudCommunityFreeAccessMode\(\{[\s\S]*mode,[\s\S]*\}\);[\s\S]*entry_policy: result\?\.entry_policy \?\? mode/,
@@ -759,11 +714,7 @@ assert.doesNotMatch(
   /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
   "public community funnel payloads must not expose per-member last active timestamps",
 );
-assert.doesNotMatch(
-  contextPanel,
-  /formatMemberActivityLabel|community-context-member-activity/,
-  "member directory should not render activity timestamps",
-);
+
 assert.doesNotMatch(
   projection,
   /online_last_active_at_by_user_id|onlineLastActiveAtByUserId|activityScopeKey/,

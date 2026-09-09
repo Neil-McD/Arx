@@ -10,7 +10,6 @@ test("Sidebar Auto-join retains canonical permission and save authority", () => 
   expect(settings).toContain("approves pending requests");
   const app = read("apps/web/src/App.tsx");
   expect(app).toMatch(/admission: \{[\s\S]*entry_policy === "open"[\s\S]*entry_policy === "approval"[\s\S]*canManage: canManageMembersActiveCommunity[\s\S]*onChange: handleSetCommunityContextFreeAccessMode/);
-  expect(read("apps/web/src/components/CommunityContextPanel.tsx")).not.toMatch(/Auto-join|onSetFreeAccessMode/);
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).not.toContain("onSetCommunityFreeAccessMode");
   expect(read("apps/web/src/components/WebCommunityHost.tsx")).toContain("admission: props.admission");
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain("admission={props.admission}");

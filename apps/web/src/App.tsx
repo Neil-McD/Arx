@@ -949,7 +949,6 @@ export default function App() {
     openPublicCommunityFunnel,
     openCommunityTab,
     openCommunityHome,
-    openCommunityMembers,
     openCommunityChat,
     openCommunityBySlug,
   } = useWebCommunityRouteController<CommunityRecord>({
@@ -2477,17 +2476,6 @@ export default function App() {
           : undefined,
         presenceSummary: activeCommunityPresenceSummary,
         isLoadingCommunityPresence: isLoadingActiveCommunityPresence,
-        onlineUserIds: activeCommunityOnlineUserIds,
-        communityMemberCount: communityDirectoryMemberCount,
-        communityMembers: communityDirectoryMembers,
-        communityMembersHasMore: communityDirectoryMembersHasMore,
-        isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,
-        isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,
-        communityMembersLoadError: communityDirectoryMembersLoadError,
-        onLoadMoreCommunityMembers: () => {
-          if (!activeCommunityId || !session) return;
-          void loadMoreCommunityDirectoryMembers(activeCommunityId, session);
-        },
         communityId: activeCommunityId,
         communityOwnerId: activeCommunity?.owner_id ?? null,
         canManageCommunityMembers: canManageMembersActiveCommunity,
@@ -2981,7 +2969,6 @@ export default function App() {
     },
     openCommunityChat,
     openCommunityHome,
-    openCommunityMembers,
     communityInitials,
     showDesktopCommunityRail,
     showDesktopCommunityNav,

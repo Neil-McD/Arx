@@ -39,7 +39,6 @@ const routeState = read("shared/webAppRouteState.ts");
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const bottomRail = read("apps/web/src/components/WebMobileBottomRail.tsx");
 const presenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
-const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const memberAgentDockCss = read(
   "apps/web/src/components/WebMemberAgentDock.css",
@@ -209,11 +208,7 @@ assert.match(
   /isCommunityHome && canOpenCommunitySettings[\s\S]*mobile-topbar-settings[\s\S]*onClick=\{onOpenCommunitySettings\}/,
   "authorized community settings should occupy the top-right home action",
 );
-assert.match(
-  shellChromeProps,
-  /mobileChannelSlug = params\.destination\.kind === "community_chat"[\s\S]*params\.destination\.channelSlug[\s\S]*selectedMobileChannel[\s\S]*channel\.slug === mobileChannelSlug[\s\S]*communityDetailLabel: isMobileCommunityMembers \? "Members" : mobileChannelLabel/,
-  "mobile chat detail should derive its label from the selected canonical channel",
-);
+
 assert.match(
   topBar,
   /communityDetailLabel \? \([\s\S]*mobile-topbar-channel-label[\s\S]*<Hash aria-hidden="true" \/>[\s\S]*\{communityDetailLabel\}/,
@@ -244,11 +239,7 @@ assert.doesNotMatch(
   /<CommunityPresenceFacepile\s[\s\S]{0,240}onlineCount=/,
   "the compact header facepile should not duplicate the separate visible total with its own overflow count",
 );
-assert.match(
-  shellChromeProps,
-  /activeCommunityMemberCount: number \| null;[\s\S]*memberFaces: params\.activeCommunityMemberFaces,[\s\S]*memberCount: params\.activeCommunityMemberCount,[\s\S]*onOpenMembers: params\.isPublicCommunityFunnel[\s\S]*setMobileOverlay\("members"\)[\s\S]*openCommunityMembers/,
-  "the visitor header should keep its overlay while authenticated Members navigate durably",
-);
+
 assert.match(
   app,
   /activeCommunityMemberCount:[\s\S]*communityDirectoryMemberCount \?\?[\s\S]*activeCommunityPresenceSummary\?\.member_count \?\?[\s\S]*null/,
@@ -373,26 +364,14 @@ assert.match(
 );
 assert.doesNotMatch(communityNavSurface, /onOpenMembers=|memberCount=/, "Members page navigation is retired");
 assert.doesNotMatch(communityNav, /community-nav-members/, "no duplicate Members tab remains");
-assert.match(
-  routeState,
-  /buildCommunityHomePath[\s\S]*\/home[\s\S]*buildCommunityMembersPath[\s\S]*\/members[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"[\s\S]*segments\[2\] === "members"[\s\S]*view: "home"/,
-  "old Members links resolve to the channel view",
-);
-assert.match(
-  routeState,
-  /export type WebDestination =[\s\S]*kind: "platform_entry"[\s\S]*kind: "community_funnel"[\s\S]*kind: "community_home"[\s\S]*kind: "community_members"[\s\S]*kind: "community_chat"[\s\S]*deriveWebDestinationFromPath/,
-  "one discriminated destination contract should cover platform, funnel, and community routes",
-);
+
+
 assert.doesNotMatch(
   shellProjection + shellChromeProps + shellHost + communityNavSurface + communityRail,
   /activeView/,
   "mobile shell consumers should not reconstruct destination semantics from activeView",
 );
-assert.match(
-  communityRouteController,
-  /const openCommunityMembers[\s\S]*buildCommunityMembersPath[\s\S]*navigateTo\(path\)/,
-  "authenticated Members should navigate through the canonical community route controller",
-);
+
 assert.doesNotMatch(communityHost, /WebCommunityMembersPanel/, "member management belongs to the roster");
 assert.doesNotMatch(
   chatPanel,
@@ -441,11 +420,7 @@ assert.match(
   "DM root presentation should preserve the desktop host while disabling popover dismissal",
 );
 assert.match(rosterPanel, /useWebMemberDirectorySearch/, "right panel preserves community-wide search");
-assert.match(
-  interactionProjection,
-  /const StableCommunityInteractionContextPanelSurface = memo\([\s\S]*<CommunityContextPanel[\s\S]*export function CommunityInteractionContextPanelSurface[\s\S]*<StableCommunityInteractionContextPanelSurface/,
-  "member context should be reused without duplicating its state",
-);
+
 assert.match(
   interactionProjection,
   /const isMobileThreadPage = Boolean\(props\.mobileThreadPage && selectedRoot && !props\.profilePanel\);[\s\S]*const ThreadSurface = isMobileThreadPage \? "section" : "aside";[\s\S]*community-interaction-thread-page/,
@@ -582,11 +557,7 @@ assert.match(
   /import \{ ArrowLeft,[^}]*\} from "lucide-react";[\s\S]*<ArrowLeft aria-hidden="true" \/>/,
   "thread navigation should use the canonical shafted Back icon",
 );
-assert.match(
-  presenceFacepile + contextPanel + topBar,
-  /export function CommunityPresenceFacepile[\s\S]*<CommunityPresenceFacepile[\s\S]*<CommunityPresenceFacepile/,
-  "the context panel and compact mobile header should share one presence facepile",
-);
+
 assert.doesNotMatch(
   topBar,
   /mobile-topbar-member-faces|mobile-topbar-member-face/,

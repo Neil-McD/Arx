@@ -4,7 +4,6 @@ import {
   buildAppRoutePath,
   buildCommunityFunnelPreviewPath,
   buildCommunityHomePath,
-  buildCommunityMembersPath,
   buildCommunityTabPath,
   deriveWebDestinationFromAppRoute,
   deriveWebDestinationFromPath,
@@ -67,7 +66,7 @@ describe("community channel routes", () => {
   });
 
   it("redirects the retired mobile Members route to channel chat", () => {
-    const path = buildCommunityMembersPath("polynet");
+    const path = "/c/polynet/members";
     expect(path).toBe("/c/polynet/members");
     const parsed = parseAppRouteFromPathname(path ?? "");
     expect(parsed).toMatchObject({
@@ -252,23 +251,10 @@ describe("canonical web destinations", () => {
     },
   );
 
-  it("lets the durable view outrank compatibility tab state", () => {
-    expect(deriveWebDestinationFromAppRoute({
-      page: "community",
-      view: "community_members",
-      settingsPage: "profile",
-      communitySlug: "polynet",
-      communityTab: "chat",
-    })).toEqual({ kind: "community_members", slug: "polynet" });
-  });
 
   it("selects navigation only for an actual community destination", () => {
     expect(webDestinationHasCommunityNavSelection({
       kind: "community_home",
-      slug: "polynet",
-    })).toBe(false);
-    expect(webDestinationHasCommunityNavSelection({
-      kind: "community_members",
       slug: "polynet",
     })).toBe(false);
     expect(webDestinationHasCommunityNavSelection({

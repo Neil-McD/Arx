@@ -28,7 +28,6 @@ const communityTypes = read("shared/communityTypes.ts");
 const controller = read(
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
 );
-const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const webAppContracts = read("apps/web/src/webAppContracts.ts");
@@ -235,16 +234,8 @@ assert.doesNotMatch(
   "the directory gateway must not expose a recount surface",
 );
 
-assert.match(
-  contextPanel,
-  /const isOnline = Boolean\(props.onlineUserIds\?\.has\(member.user_id\)\)/,
-  "directory online indicators must use resolved live presence",
-);
-assert.match(
-  contextPanel,
-  /members.map\(member => renderMember/,
-  "directory rows must not depend on presence classification",
-);
+
+
 assert.match(
   controller,
   /activeCommunityPresenceSummary\.online_user_ids[\s\S]*new Set/,

@@ -46,7 +46,16 @@ General lists community members; restricted channels keep their authorized roste
 Search explicitly spans the community using the existing authorized, bounded
 directory search. Search results retain profile and manager controls, without
 claiming they belong to the current channel or inventing online presence.
-Search continuation uses the same scroll loader; only failures expose Retry.
+Search continuation uses the same scroll loader, but automatic scanning is capped
+at ten directory pages (at most 1,000 rows) per search/explicit continuation.
+At the cap, the footer says search is paused and offers Continue search; it never
+claims the partial results are exhaustive. Normal channel roster loading has no
+Load more button. Failures expose Retry.
+
+The old CommunityContextPanel renderer, its projection wrapper and exclusive
+large-row styles are removed. Internal community_members route variants are
+retired; only the incoming /members compatibility URL remains. Community
+directory hydration is retained for mentions and profile consumers.
 
 `listChannelRoster` reads the canonical community-presence recency index newest
 first, then pages memberships that have no presence row. The owner follows the

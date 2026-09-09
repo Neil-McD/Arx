@@ -28,7 +28,6 @@ const discoverCard = read("shared/DiscoverCommunityCard.tsx");
 const communitySettings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
-const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const communityFunnelMemberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
@@ -209,10 +208,7 @@ assert.match(
   /export type CommunityDirectoryMember = \{[\s\S]*avatar_focus_x\?: number \| null;[\s\S]*avatar_focus_y\?: number \| null;[\s\S]*avatar_zoom\?: number \| null;/,
 );
 assert.match(communityDirectoryGateway, /CloudCommunityDirectoryMemberRow = CommunityDirectoryMember/);
-assert.match(
-  communityContextPanel,
-  /imageUrl=\{member\.avatar_url\}[\s\S]*focusX=\{member\.avatar_focus_x\}[\s\S]*focusY=\{member\.avatar_focus_y\}[\s\S]*zoom=\{member\.avatar_zoom\}/,
-);
+
 assert.doesNotMatch(
   baseCss,
   /\.community-context-(?:face|member-avatar) img\s*\{/,

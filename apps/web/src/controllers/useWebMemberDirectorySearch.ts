@@ -9,6 +9,8 @@ export function useWebMemberDirectorySearch(chat: Pick<WebCommunityChatPanelProp
   const [loading, setLoading] = useState(false);
   const generation = useRef(0);
   const busy = useRef(false);
+  const [automaticPagesRead, setAutomaticPagesRead] = useState(0);
+  const automaticPagesRef = useRef(0);
   const key = JSON.stringify([chat.sessionUserId, chat.activeCommunity?.id, query.trim()]);
   const run = useCallback(async (cursor: string | null, append: boolean, sequence: number) => {
     if (!chat.session || !chat.activeCommunity?.id || busy.current) return;
@@ -16,10 +18,12 @@ export function useWebMemberDirectorySearch(chat: Pick<WebCommunityChatPanelProp
     setLoading(true);
     try {
       const batch = await searchCommunityDirectoryBatch({
-        query, cursor, isCurrent: () => generation.current === sequence,
+        query, cursor, maxPages: Math.max(1, 10 - automaticPagesRef.current), isCurrent: () => generation.current === sequence,
         loadPage: nextCursor => listCloudCommunityDirectoryPage({ session: chat.session!, communityId: chat.activeCommunity!.id!, cursor: nextCursor, pageSize: 100 }),
       });
       if (!batch || generation.current !== sequence) return;
+      automaticPagesRef.current += batch.pagesRead;
+      setAutomaticPagesRead(automaticPagesRef.current);
       setResult(previous => ({ key, rows: [...new Map([...(append ? previous.rows : []), ...batch.rows].map(row => [row.id, row])).values()], cursor: batch.cursor, error: null }));
     } catch {
       if (generation.current === sequence) setResult(previous => ({ key, rows: append ? previous.rows : [], cursor, error: "Could not search members. Try again." }));
@@ -30,6 +34,8 @@ export function useWebMemberDirectorySearch(chat: Pick<WebCommunityChatPanelProp
   useEffect(() => {
     const sequence = ++generation.current;
     busy.current = false;
+    setAutomaticPagesRead(0);
+    automaticPagesRef.current = 0;
     setLoading(Boolean(query.trim()));
     if (!query.trim()) return;
     const timer = setTimeout(() => void run(null, false, sequence), 250);
@@ -39,5 +45,7 @@ export function useWebMemberDirectorySearch(chat: Pick<WebCommunityChatPanelProp
   return { rows: current ? result.rows : [], loading, error: current ? result.error : null,
     progress: current ? result.cursor ?? "done" : key,
     hasMore: current && Boolean(result.cursor),
+    paused: current && Boolean(result.cursor) && automaticPagesRead >= 10,
+    continueSearch: () => { automaticPagesRef.current = 0; setAutomaticPagesRead(0); void run(current ? result.cursor : null, current, generation.current); },
     loadMore: () => void run(current ? result.cursor : null, current, generation.current) };
 }
