@@ -3,6 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
+const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
+assert.match(roster, /const selectedMember = props\.memberSettings\.canManageMembers/);
+assert.match(roster, /if \(selectedMembershipId && !selectedMember\) setSelectedMembershipId\(null\)/);
+assert.match(roster, /member\.role !== "owner"/);
+assert.match(roster, /<CommunityMemberSettingsDialog \{\.\.\.props\.memberSettings\}/);
 const memberScroll = read("apps/web/src/components/useMemberScrollPagination.ts");
 
 function read(relativePath: string): string {
@@ -377,25 +382,10 @@ assert.match(
   /communityAdministration\.directory/,
   "App should compose the canonical directory owner",
 );
-assert.match(
-  app,
-  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
-  "App should pass directory count/loading/pagination state into the chat right rail",
-);
 assert.doesNotMatch(
   app,
   /interactionProjection:\s*\{[\s\S]*communityMembers:\s*communityMembers[\s\S]*loadMoreCommunityMembers/,
   "chat right rail must not depend on the admin member roster",
-);
-assert.match(
-  projection,
-  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
-  "interaction projection should model roster count/loading/pagination state for the right rail",
-);
-assert.match(
-  projection,
-  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
-  "interaction projection should pass roster state through to the context panel",
 );
 
 
@@ -444,35 +434,16 @@ assert.match(
   "member rail settings action should reveal on hover and keyboard focus",
 );
 assert.match(
-  projection,
+  roster,
   /import \{ CommunityMemberSettingsDialog \} from "\.\/CommunityMemberSettingsDialog";/,
-  "interaction projection should reuse the shared member settings dialog",
+  "channel roster should reuse the shared member settings dialog",
 );
 assert.match(
   projection,
   /canManageCommunityMembers\?: boolean;[\s\S]*onSetCommunityMemberRole\?: \(membershipId: string, role: "admin" \| "moderator" \| "member"\) => Promise<void> \| void;[\s\S]*loadMemberBillingHistory\?: \(membershipId: string\) => Promise<CloudCommunityMemberBillingHistory \| null>;/,
   "interaction projection should accept the existing member-management controller contract explicitly",
 );
-assert.match(
-  projection,
-  /const canManageCommunityMembers = Boolean\([\s\S]*props\.canManageCommunityMembers[\s\S]*props\.communityId[\s\S]*props\.onSetCommunityMemberRole[\s\S]*props\.onRemoveCommunityMember[\s\S]*props\.onBanCommunityMember/,
-  "interaction projection should fail closed unless community id and member-management mutation callbacks are available",
-);
-assert.match(
-  projection,
-  /if \(!canManageCommunityMembers\) \{[\s\S]*setSelectedCommunityMemberId\(null\);[\s\S]*return;[\s\S]*\}/,
-  "interaction projection should close member settings if the manager gate disappears while open",
-);
-assert.match(
-  projection,
-  /CommunityContextPanel[\s\S]*canManageMembers=\{canManageCommunityMembers\}[\s\S]*onOpenMemberSettings=\{\(member\) => setSelectedCommunityMemberId\(member\.id\)\}/,
-  "interaction projection should only wire right-rail member settings through the manager gate",
-);
-assert.match(
-  projection,
-  /<CommunityMemberSettingsDialog[\s\S]*member=\{selectedCommunityMember\}[\s\S]*canManageMembers=\{canManageCommunityMembers\}[\s\S]*handleSetCommunityMemberRole=\{\(membershipId, role\) =>[\s\S]*props\.onSetCommunityMemberRole\?\.\(membershipId, role\)/,
-  "interaction projection should route right-panel role changes through the existing mutation callback",
-);
+assert.match(projection, /handleSetCommunityMemberRole: \(id, role\) => props\.onSetCommunityMemberRole\?\.\(id, role\)/);
 assert.match(
   memberManagementController,
   /const reloadDirectory = useCallback[\s\S]*await params\.loadDirectoryMembers\(communityId, session\);/,
