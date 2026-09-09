@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
+const memberScroll = read("apps/web/src/components/useMemberScrollPagination.ts");
 
 function read(relativePath: string): string {
   return readFileSync(join(root, relativePath), "utf8");
@@ -419,7 +420,7 @@ assert.doesNotMatch(
   "context panel must not present the loaded offline row count as the full offline population",
 );
 assert.match(
-  contextPanel,
+  memberScroll,
   /LOAD_MORE_SCROLL_THRESHOLD_PX[\s\S]*props\.onLoadMoreMembers\(\)/,
   "context panel should load additional roster pages as the member rail scrolls near the bottom",
 );
@@ -429,12 +430,12 @@ assert.match(
   "context panel should attach the load-more scroll handler to the member rail",
 );
 assert.match(
-  contextPanel,
+  memberScroll,
   /membersViewportRef[\s\S]*loadMoreSentinelRef[\s\S]*IntersectionObserver[\s\S]*observer\.observe\(sentinel\)/,
   "context panel should observe a footer sentinel so visible additional pages load without requiring another scroll event",
 );
 assert.match(
-  contextPanel,
+  memberScroll,
   /requestAnimationFrame\(requestVisibleMemberPage\)/,
   "context panel should re-check after render when the member viewport is already near the bottom",
 );
