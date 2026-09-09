@@ -184,10 +184,9 @@ export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMember
 function WebMemberAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
   const communityName = String(props.community?.name ?? "").trim();
-  const [isOpen, setIsOpen] = useState(false);
-  const isOpenSurface = props.pageMode ? Boolean(props.pageActive) : props.mobileShellActive
-    ? Boolean(props.mobileRoot)
-    : isOpen;
+  const isOpenSurface = props.pageMode
+    ? Boolean(props.pageActive)
+    : Boolean(props.mobileShellActive && props.mobileRoot);
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
@@ -297,8 +296,7 @@ function WebMemberAgentDock(props, ref) {
       }
       resourceBuildStartInFlightRef.current = true;
       const launchScope = agentScopeRef.current;
-      if (props.pageMode || props.mobileShellActive) props.onRequestOpen?.();
-      else setIsOpen(true);
+      props.onRequestOpen?.();
       setLocalError(null);
       try {
         const usableSession = await props.ensureSession(
@@ -539,7 +537,6 @@ function WebMemberAgentDock(props, ref) {
 
   useEffect(() => {
     if (!props.isVisible) {
-      setIsOpen(false);
       setIsPreparing(false);
     }
   }, [props.isVisible]);
@@ -1114,18 +1111,6 @@ function WebMemberAgentDock(props, ref) {
       className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
-      {!props.pageMode && !props.mobileShellActive ? (
-        <button
-          type="button"
-          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}`}
-          onClick={() => setIsOpen((open) => !open)}
-          aria-label={isOpen ? presentation.closeLabel : presentation.openLabel}
-          title={isOpen ? presentation.closeLabel : presentation.openLabel}
-          aria-expanded={isOpen}
-        >
-          {isOpen ? <X aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-        </button>
-      ) : null}
 
       <section className="member-agent-dock-panel" aria-label={presentation.title}>
         <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "member-agent-dock-header"}>
@@ -1160,16 +1145,6 @@ function WebMemberAgentDock(props, ref) {
             >
               <MessageSquarePlus size={props.pageMode ? 18 : undefined} aria-hidden="true" />
             </button>
-            {!props.pageMode && !props.mobileShellActive ? (
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                aria-label="Close"
-                title="Close"
-              >
-                <X aria-hidden="true" />
-              </button>
-            ) : null}
           </div>
         </header>
 

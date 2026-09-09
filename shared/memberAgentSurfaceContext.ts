@@ -126,8 +126,6 @@ export function describeMemberAgentSurface(
 export type MemberAgentSurfacePresentation = {
   surfaceLabel: string;
   title: string;
-  openLabel: string;
-  closeLabel: string;
   composerLabel: string;
   emptyLabel: string;
   loadingLabel: string;
@@ -141,8 +139,6 @@ export function buildMemberAgentSurfacePresentation(
   return {
     surfaceLabel,
     title: "Polynet Intelligence",
-    openLabel: "Open Polynet Intelligence",
-    closeLabel: "Close Polynet Intelligence",
     composerLabel: "Message Polynet Intelligence",
     emptyLabel: surface.kind === "discover"
       ? "Ask Polynet Intelligence to help you explore communities."

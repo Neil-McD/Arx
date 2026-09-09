@@ -3514,14 +3514,6 @@
   background: transparent;
 }
 
-/* A closed desktop agent launcher stacks below the thread composer instead of
-   narrowing it. The composer's existing 12px bottom inset becomes the gap. */
-.app-root:not(.mobile-shell):has(.member-agent-dock:not(.is-open) .member-agent-dock-launcher)
-  .community-member-chat
-  .community-interaction-thread-drawer {
-  --community-thread-composer-bottom-offset: var(--member-agent-desktop-launcher-clearance);
-}
-
 /* Desktop threads keep the reply box in the conversation flow. Sparse threads
    end naturally after the final reply; long threads shrink the scroll region
    and keep the composer visible without covering content. */

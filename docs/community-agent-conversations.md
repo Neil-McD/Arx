@@ -2,11 +2,23 @@
 
 ## Target
 
-One Agent entry above Resources opens a private conversation in the center panel.
+One Agent entry above Knowledge opens a private conversation in the center panel.
 The community supplies agent identity and instructions; the requesting member
 does not inherit builder permissions. Workflow execution remains separately authorized.
 
-## Slice 1: storage foundation (not UI or inference rollout)
+## Current UI contract
+
+Desktop uses the center-panel Agent page; mobile uses the existing Agent root.
+There is no floating launcher or independent open/close state. Shell navigation
+controls visibility. Desktop DMs overlay the mounted conversation without
+discarding its draft; mobile DM and voice suppression remain unchanged.
+There is no separate Resources navigation entry into Agent. Component names and
+the internal `member_agent_dock` receipt label remain for compatibility, not as
+an additional UI surface. Permissions, stored history, and funding are unchanged.
+The slice notes below describe historical implementation checkpoints, not current
+deployment status. Automated checks do not substitute for live visual acceptance.
+
+## Slice 1: storage foundation (historical)
 
 - `threads.ensureCommunityAgentConversation` derives the owner from verified auth
   and rechecks active community access before resolving anything.
@@ -42,7 +54,7 @@ does not inherit builder permissions. Workflow execution remains separately auth
   closed-session writes, archive guards, revoked membership and corrupted links.
   These are executable local tests, not a live concurrent staging proof.
 
-## Slice 3: existing runtime integration (local, not deployed)
+## Slice 3: existing runtime integration (historical)
 
 - The persisted scoped thread is recognized by existing interactive runtime
   routing. `member_agent_dock` remains the internal invocation/funding receipt
@@ -65,13 +77,13 @@ does not inherit builder permissions. Workflow execution remains separately auth
   community binding and provider-context receipt compatibility. These checks do
   not establish live provider, billing settlement, or UI acceptance.
 
-## Next gate
+## Original acceptance gate
 
 Prove a staged end-to-end turn, funding receipt and attachment path before release.
 The center-panel Agent interface and Resources entry point are implemented locally
 in slice 4; rendered acceptance and staging integration remain outstanding.
 
-## Slice 4: Agent page candidate (not visually accepted or deployed)
+## Slice 4: Agent page candidate (historical)
 
 - `/c/:slug/agent` is a member-accessible conversation destination above Resources.
   `/c/:slug/settings/agent` remains builder configuration; `/ai_agent` retains its
@@ -94,7 +106,7 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 
 Desktop Agent page visibility does not depend on the DM overlay being closed.
 Opening DMs leaves its scoped conversation, draft, and runtime view mounted.
-The legacy mobile/dock surface still hides for DMs; voice input is cancelled
+The mobile Agent surface still hides for DMs; voice input is cancelled
 independently when DMs take focus. Auth, community, and onboarding gates remain.
 
 Agent page layout reuses the channel header height, identity typography, surface,
