@@ -2,6 +2,14 @@
 
 ## Product contract
 
+### Board presentation
+
+Milestone lanes stay fixed at 272px and scroll horizontally as the pipeline grows;
+member lists retain their own vertical scrolling. The board uses canonical workspace,
+panel, and card theme surfaces, existing member avatars and the platform section
+selector. Milestone edit controls remain visible, and the add control is labeled
+“Add milestone.” These presentation rules do not change execution or membership state.
+
 ### Private member form document
 
 Builder semantic discovery at `/communities/<slug>/builder/workflow-members/`

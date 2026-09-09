@@ -290,6 +290,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
             title="Add milestone"
           >
             <Plus size={19} aria-hidden="true" />
+            Add milestone
           </button>
         </div>
 

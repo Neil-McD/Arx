@@ -8,7 +8,7 @@
 }
 
 .workflow-sections { flex-direction: column; overflow: hidden; container-type: inline-size; container-name: workflow-sections; }
-.workflow-section-tabs { flex-shrink: 0; margin: 16px 32px 20px; margin-right: var(--web-topbar-right-action-safe-inset, 62px); }
+.workflow-section-tabs { flex-shrink: 0; margin: 16px 24px 12px; margin-right: var(--web-topbar-right-action-safe-inset, 62px); }
 .workflow-section-content { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .workflow-section-content > .community-forms-page { padding-top: 0; }
 .workflow-integrations-empty { padding: 8px 32px; color: var(--text-secondary); }
@@ -174,14 +174,14 @@
 
 .workflow-milestone-column {
   display: flex;
-  flex: 0 0 288px;
+  flex: 0 0 272px;
   flex-direction: column;
   min-width: 0;
   min-height: 280px;
   overflow: hidden;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-muted);
   border-radius: 11px;
-  background: var(--surface-raised);
+  background: var(--surface-panel);
 }
 
 .workflow-milestone-column-header {
@@ -206,7 +206,7 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 680;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -248,11 +248,6 @@
   height: 36px;
   border-color: transparent;
   color: var(--text-muted);
-  opacity: 0;
-}
-
-.workflow-milestone-column:hover .workflow-milestone-edit-button,
-.workflow-milestone-edit-button:focus-visible {
   opacity: 1;
 }
 
@@ -283,9 +278,14 @@
 
 .workflow-add-milestone-button {
   align-self: flex-start;
+  width: auto;
+  gap: 7px;
+  padding: 0 10px;
   margin: 10px 4px 0 0;
-  border-style: dashed;
+  border-color: transparent;
   color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .workflow-member-stub {
@@ -298,14 +298,10 @@
   box-sizing: border-box;
   gap: 11px;
   padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
   color: var(--text-primary);
-  background: color-mix(
-    in srgb,
-    var(--surface-workspace) 82%,
-    var(--surface-raised)
-  );
+  background: var(--surface-card);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -344,8 +340,8 @@
 }
 
 .workflow-member-stub-copy span {
-  color: var(--text-faint);
-  font-size: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
   font-weight: 520;
   line-height: 1.3;
 }
