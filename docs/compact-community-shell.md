@@ -1,11 +1,18 @@
-# Compact desktop community shell
+# Community shell resizing
 
-Desktop community routes adapt to the actual shell container width at 900px, independently of the existing `/m` mobile app routes. Resizing changes CSS presentation only: the same navigation, main surface, editors, and chat composers remain mounted.
+Desktop uses the production shell's continuous sidebar width:
+`clamp(168px, 20vw, 420px)`. The community rail and navigation remain visible
+through the 900px range; no additional navigation toolbar or alternate state
+replaces the page. At 720px and below the existing desktop icon-navigation
+rules apply. Dedicated mobile routes retain their separate mobile shell.
 
-The compact navigation disclosure shows the existing community rail and community navigation in place of content. Closing it returns to that content; selecting a destination closes it automatically. Escape returns focus to its trigger. This is a navigation disclosure, not another router or a modal with a second navigation tree.
+The obsolete 900px container-query shell, navigation disclosure state, and
+main-content-hiding drawer override are removed. The current channel roster,
+member popup, Agent page, DM overlay and workflow board remain unchanged.
+Resizing must not remount pages or clear drafts. Workflow lane overflow remains
+owned by the board; member-list overflow remains owned by each lane.
 
-Chat shows one pane at a time in compact presentation. Community details are explicitly expanded; profile, memory, and thread drawers use the available content width and retain their existing back controls. Workflow board overflow stays owned by the existing board scroller.
-
-Desktop widths above 900px retain the existing multi-column layout. Backend authorization, member state, forms, and workflow behavior are unchanged. Retired: the 56px icon-only desktop navigation squeeze and its hidden-label rules.
-
-Acceptance: inspect Chat, Resources, and Workflows at 390/768/1280px in both themes; verify navigation, details, thread back, form reachability, draft continuity across resize, and no page-wide horizontal overflow. Staging only.
+Acceptance: compare staging and production at matching browser zoom and widths
+above/below 900px, 720px and 640px. Check channel navigation, thread/profile back,
+Agent plus DMs, and Workflows. Verify draft continuity through resize and keep
+both themes and dedicated mobile routes usable. No backend changes.

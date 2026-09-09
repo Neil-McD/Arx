@@ -1,19 +1,18 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
-test("compact desktop shell is presentation-only and retains canonical surfaces", () => {
+test("desktop shell retains production resize rules without a second navigation mode", () => {
   const host = readFileSync("apps/web/src/components/WebShellChromeHost.tsx", "utf8");
-  expect(host).toContain("responsive-community-shell");
-  expect(host).toContain("aria-expanded={navigationOpen}");
-  expect(host).toContain('event.key === "Escape"');
-  expect(host).toContain("navigationButton.current?.focus()");
-  expect(host).toContain("setNavigationOpen(false); }, [destinationKey]");
-  expect(host).not.toContain("window.location");
-  expect(host).not.toContain("matchMedia");
-  expect(host).not.toContain("key={navigationOpen}");
   const css = readFileSync("apps/web/src/index.css", "utf8");
-  expect(css).toContain("@container community-shell (max-width: 900px)");
-  expect(css).not.toContain("grid-template-columns: 56px minmax(0, 1fr)");
-  expect(css).toContain("compact-navigation-open .product-shell-surface--community > :not(.community-nav) { display: none; }");
-  expect(css).not.toContain("compact-context-open");
+  expect(host).not.toContain("navigationOpen");
+  expect(host).not.toContain("compact-community-toolbar");
+  expect(host).toContain("<div className={rootClassName}>");
+  expect(host).toContain("<div className={shellClassName}>");
+  expect(host).toContain("<WebMobileCommunityShell");
+  expect(css).not.toContain("@container community-shell");
+  expect(css).not.toContain("compact-navigation-open");
+  expect(css).toContain("grid-template-columns: clamp(168px, 20vw, 420px) minmax(0, 1fr)");
+  const narrow = css.slice(css.indexOf("@media (max-width: 720px)"));
+  expect(narrow).toContain("grid-template-columns: 56px minmax(0, 1fr)");
+  expect(narrow).toContain(".community-nav .nav-item");
 });

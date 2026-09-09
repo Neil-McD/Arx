@@ -2,8 +2,6 @@ import type {
   ComponentProps,
   ReactNode,
 } from "react";
-import { useEffect, useRef, useState } from "react";
-import { Menu, X } from "lucide-react";
 import { WebMobileTopBar } from "./WebMobileTopBar";
 import { buildWebShellChromeClassNames } from "../controllers/buildWebShellChromeClassNames";
 import { WebDesktopShellHeader } from "./WebDesktopShellHeader";
@@ -37,10 +35,6 @@ export type WebShellChromeHostProps = {
 };
 
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
-  const [navigationOpen, setNavigationOpen] = useState(false);
-  const navigationButton = useRef<HTMLButtonElement>(null);
-  const destinationKey = JSON.stringify(props.communityShell.destination);
-  useEffect(() => { setNavigationOpen(false); }, [destinationKey]);
   const isMobileDedicatedRoot =
     props.showMobileAppShell &&
     (props.communityShell.mobileRootPage === "agent" ||
@@ -130,20 +124,11 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   });
 
   return (
-    <div className={`${rootClassName}${props.communityShell.showDesktopCommunityNav ? " responsive-community-shell" : ""}`}>
+    <div className={rootClassName}>
       {shellHeader}
-      {props.communityShell.showDesktopCommunityNav ? <div className="compact-community-toolbar">
-        <button ref={navigationButton} type="button" className="workflow-secondary-button"
-          aria-expanded={navigationOpen} aria-label={navigationOpen ? "Close community navigation" : "Open community navigation"}
-          onClick={() => setNavigationOpen(open => !open)}>
-          {navigationOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
-          <span>{navigationOpen ? "Back to content" : "Community navigation"}</span>
-        </button>
-      </div> : null}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
-      <div className={`${shellClassName}${navigationOpen ? " compact-navigation-open" : ""}`}
-        onKeyDown={event => { if (event.key === "Escape" && navigationOpen) { setNavigationOpen(false); navigationButton.current?.focus(); } }}>
+      <div className={shellClassName}>
         <WebCommunityRail
           communityShell={props.communityShell}
           presentation="desktop"
