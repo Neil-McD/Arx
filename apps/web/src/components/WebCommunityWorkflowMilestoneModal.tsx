@@ -9,6 +9,7 @@ import {
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
   workflowAutomationIssue,
+  workflowMoveLabel,
   type WorkflowAutomationDraft,
 } from "./workflowMilestoneDraft";
 
@@ -203,26 +204,27 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
         </div>
 
         <div className="modal-body">
-          <div className="workflow-milestone-form">
+          <div className="resource-form workflow-milestone-form">
             <label>
-              <span id="workflow-name-label">Milestone name</span>
+              <span className="resource-field-label" id="workflow-name-label">Milestone name</span>
               <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Milestone name" disabled={props.isSaving} aria-labelledby="workflow-name-label" aria-describedby={!name.trim() ? "workflow-name-hint" : undefined} />
               {!name.trim() ? <small id="workflow-name-hint" className="workflow-field-hint">Give this milestone a name to save it.</small> : null}
             </label>
 
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}
-            <label>Instructions
+            <label><span className="resource-field-label">Instructions</span>
               <textarea rows={3} maxLength={4000} value={instructions} disabled={props.isSaving} onChange={event => setInstructions(event.target.value)} placeholder="How should the agent help members in this milestone?" />
             </label>
-            <label>Goal
+            <label><span className="resource-field-label">Goal</span>
               <textarea rows={3} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
-              <small className="workflow-field-hint">Guides the agent. Evaluation records a judgment; automatic movement uses the conditions below.</small>
+              <small className="workflow-field-hint">Guides the agent; evaluation alone does not move members.</small>
             </label>
+            {!props.milestone.key ? <p className="workflow-field-hint">Save this milestone to configure actions and movement.</p> : null}
             {hasAssessmentMovementOverlap(automations) ? <p role="status" className="workflow-field-hint">The same form is used for goal evaluation and movement. If its submission completes all movement conditions, the member advances and the evaluation may be cancelled.</p> : null}
             {props.milestone.key ? [false, true].map(requirement => (
               <section key={String(requirement)} className="workflow-milestone-automations" aria-labelledby={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>
                 <div className="workflow-milestone-automations-header">
-                  <div><span id={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>{requirement ? "Move on when" : "Actions"}</span><small>{requirement ? "All requirements must be met, in any order." : "Each action runs when its trigger is met."}</small></div>
+                  <div><span id={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>{requirement ? "Move on when" : "Actions"}</span><small>{requirement ? "All conditions must be met, in any order." : "Each action runs when its trigger is met."}</small></div>
                   <div className="resource-modal-actions">
                     <button ref={addAutomationRef} type="button" className="secondary" onClick={() => {
                       const automation = newAutomation(requirement);
@@ -230,13 +232,13 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                       setExpandedAutomationKey(automation.key);
                       setAutomations((current) => [...current, automation]);
                     }} disabled={props.isSaving || automations.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE}>
-                      <Plus size={16} aria-hidden="true" /> {requirement ? "Add requirement" : "Add action"}
+                      <Plus size={16} aria-hidden="true" /> {requirement ? "Add condition" : "Add action"}
                     </button>
                   </div>
                 </div>
 
                 {automations.filter(a => (a.action.type === "move_member") === requirement).length === 0 ? (
-                  <p className="workflow-milestone-automations-empty">{requirement ? "No automatic movement until you add a requirement." : "No automatic actions."}</p>
+                  <p className="workflow-milestone-automations-empty">{requirement ? "No automatic movement until you add a condition." : "No automatic actions."}</p>
                 ) : (
                   <div className="workflow-milestone-automation-list">
                     {automations.filter(a => (a.action.type === "move_member") === requirement).map((automation, index) => (
@@ -244,7 +246,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                         canAddJoin={props.milestoneNumber === 1}
                         forms={props.forms}
                         expanded={expandedAutomationKey === automation.key} channels={props.channels} channelsUnavailable={props.channelsUnavailable}
-                        nextMilestoneName={props.nextMilestoneName} disabled={props.isSaving}
+                        disabled={props.isSaving}
                         onToggle={() => setExpandedAutomationKey((key) => key === automation.key ? null : automation.key)}
                         onChange={(updated) => setAutomations((current) => current.map((item) => item.key === automation.key ? updated : item))}
                         onRemove={() => {
@@ -255,15 +257,16 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                     ))}
                   </div>
                 )}
+                {requirement && requirements.length > 0 ? <p className="workflow-field-hint">{workflowMoveLabel(props.nextMilestoneName)}. Does not wait for agent actions to finish.</p> : null}
               </section>
             )) : null}
 
             {/* Our own write can arrive through realtime before the save promise settles.
                 Keep the conflict guard, but wait for the save outcome before warning. */}
             {hasConflict && !props.isSaving ? <p className="workflow-error" role="alert">This milestone changed while you were editing. Your draft has not been saved. Close and reopen it to load the latest version.</p> : null}
-            {duplicateRequirement ? <p className="workflow-error" role="alert">Each requirement must be different.</p> : null}
+            {duplicateRequirement ? <p className="workflow-error" role="alert">Each condition must be different.</p> : null}
             {duplicateJoinAction ? <p className="workflow-error" role="alert">Use one channel action and one request per selected form when a member joins.</p> : null}
-            {duplicateFormAction ? <p className="workflow-error" role="alert">Use one agent action per submitted form. The same form can also be a completion requirement.</p> : null}
+            {duplicateFormAction ? <p className="workflow-error" role="alert">Use one agent action per submitted form. The same form can also be a completion condition.</p> : null}
             {props.channelsUnavailable ? <p role="status">Channel choices are unavailable while loading or reconnecting.</p> : null}
             {props.error ? <p className="workflow-error" role="alert">{props.error}</p> : null}
           </div>

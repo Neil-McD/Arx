@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 import { COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH } from "../../../../shared/communityMemberWorkflow";
 import { WorkflowChannelPicker } from "./WorkflowChannelPicker";
-import { replaceWorkflowDraftAction, workflowAutomationIssue, workflowChannelLabel, workflowMoveLabel, type WorkflowAutomationDraft } from "./workflowMilestoneDraft";
+import { replaceWorkflowDraftAction, workflowAutomationIssue, workflowChannelLabel, type WorkflowAutomationDraft } from "./workflowMilestoneDraft";
 
 type Props = {
   canAddJoin?: boolean;
@@ -13,7 +13,6 @@ type Props = {
   expanded: boolean;
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
-  nextMilestoneName: string | null;
   disabled: boolean;
   onToggle: () => void;
   onChange: (automation: WorkflowAutomationDraft) => void;
@@ -34,7 +33,8 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const isRequirement = automation.action.type === "move_member";
   const issue = workflowAutomationIssue(automation, props.channels, props.channelsUnavailable);
   const isPrivate = props.channels.some((channel) => channel.id === channelId && channel.access_mode === "restricted");
-  const actionLabel = automation.action.type === "evaluate_goal" ? "Evaluate goal" : automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : "Required for completion";
+  const triggerLabel = isJoin ? "Member joins for the first time" : automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`;
+  const actionLabel = automation.action.type === "evaluate_goal" ? "Evaluate goal" : automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : triggerLabel;
 
   return (
     <div className="workflow-milestone-automation-row" data-automation-key={automation.key}>
@@ -43,12 +43,12 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
           aria-controls={props.expanded ? `${id}-fields` : undefined} disabled={props.disabled} onClick={props.onToggle}>
           <span>
             <strong>{actionLabel}</strong>
-            <small>{isJoin ? "Member joins for the first time" : automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`}</small>
+            {!isRequirement ? <small>{triggerLabel}</small> : null}
             {issue ? <small className="workflow-automation-issue">{issue}</small> : null}
           </span>
           <ChevronDown size={16} aria-hidden="true" />
         </button>
-        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove ${isRequirement ? "requirement" : "action"} ${props.index + 1}`}
+        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove ${isRequirement ? "condition" : "action"} ${props.index + 1}`}
           disabled={props.disabled} onClick={props.onRemove}><X size={16} aria-hidden="true" /></button>
       </div>
 
@@ -121,12 +121,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 {!isTimed && !isForm && (isPrivate || channelId === undefined) ? " In private channels, the agent must be invited." : ""}
               </p>
             </>
-          ) : automation.action.type === "evaluate_goal" ? <p className="workflow-field-hint">Privately evaluates the milestone goal using this submitted form. Add a goal above to save. Records a judgment only; no message or milestone movement.</p> : (
-            <p className="workflow-action-consequence">
-              {workflowMoveLabel(props.nextMilestoneName)} only when every requirement is satisfied.
-              <small>Requirements can happen in any order. No agent run is needed; this does not wait for agent actions to finish.</small>
-            </p>
-          )}
+          ) : automation.action.type === "evaluate_goal" ? <p className="workflow-field-hint">Privately evaluates the milestone goal using this submitted form. Add a goal above to save. Records a judgment only; no message or milestone movement.</p> : null}
         </div>
       ) : null}
     </div>

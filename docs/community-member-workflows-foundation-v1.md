@@ -187,6 +187,14 @@ Historical runs without a snapshot remain valid and are not backfilled from
 today's configuration. Filtering happens before run admission and retains the
 existing replay key and one-terminal-transition writer.
 
+The editor uses the canonical Resources form fields, labels, and modal styling,
+with workflow-specific bounded scrolling and a pinned save/discard footer.
+New milestones save their name/instructions/goal before actions are configured;
+the creation view explicitly explains this. Movement conditions lead with their
+trigger, accumulate in any order, and display their destination once per section.
+They do not wait for agent actions or goal judgments. This is a presentation
+change only; persisted automation types and execution semantics are unchanged.
+
 The editor keeps its opening milestone snapshot across live board refreshes.
 Unchanged refreshes preserve the draft; a changed milestone blocks saving and
 requires closing/reopening, rather than silently erasing or overwriting edits.
