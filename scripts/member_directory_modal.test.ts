@@ -19,7 +19,7 @@ test("popup resets scope and restores focus without resetting the mounted conver
   expect(roster).toContain('JSON.stringify([props.currentUserId, scope?.communityId, props.channelId])');
   expect(roster).toContain('<ChannelRosterWorkspace key={scopeKey}');
   expect(roster).toContain('if (opener?.isConnected) opener.focus()');
-  expect(roster).toContain('if (props.memberDetailOpen) return null;');
+  expect(roster).toContain('style={props.memberDetailOpen ? { display: "none" } : undefined}');
   expect(roster).toContain('if (selectedMember) {');
   expect(roster).toContain('aria-labelledby="members-directory-title"');
   expect(roster).toContain('event.key !== "Tab"');

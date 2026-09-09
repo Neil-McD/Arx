@@ -265,8 +265,7 @@ function RosterSurface(props: RosterProps & {
   </>;
   if (!props.directory) return <>{content}{settings}</>;
   // Keep search and pagination mounted while the existing profile inspector is open.
-  if (props.memberDetailOpen) return null;
-  return createPortal(<><div className="modal-overlay" onMouseDown={props.onCloseMembers}>
+  return createPortal(<><div className="modal-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>
     <section ref={dialogRef} className="modal members-directory-modal" role="dialog" aria-modal="true"
       aria-labelledby="members-directory-title" onMouseDown={event => event.stopPropagation()}
       onKeyDown={event => {
