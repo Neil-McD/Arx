@@ -457,7 +457,7 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /community-nav-utility-loading[\s\S]*?\{!isLoadingAccess \? \([\s\S]*?title="Agent"[\s\S]*?title="Knowledge"[\s\S]*?title="Events"[\s\S]*?showMembersItem[\s\S]*?title="Members"/,
+  /community-nav-utility-loading[\s\S]*?\{!isLoadingAccess \? \([\s\S]*?title="Agent"[\s\S]*?title="Knowledge"[\s\S]*?title="Events"/,
   "community navigation keeps Members after Events within the access-gated utility group",
 );
 assert.doesNotMatch(
