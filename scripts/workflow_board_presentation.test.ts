@@ -12,6 +12,10 @@ test("milestone editor reuses resource styles while retaining bounded scrolling"
   expect(css).toContain("max-height: calc(100dvh - 2 * var(--workflow-editor-inset))");
   expect(css).toContain("overscroll-behavior: contain");
   expect(css).not.toContain(".workflow-action-consequence");
+  expect(css).toContain(".workflow-milestone-modal .resource-form textarea:focus");
+  expect(css).toContain("field-sizing: content");
+  expect(css).not.toContain(".workflow-milestone-modal input:focus-visible,");
+  expect(editor).toContain('"New milestone"');
 });
 
 test("creation and advancement explain actual behavior without repeated condition labels", () => {

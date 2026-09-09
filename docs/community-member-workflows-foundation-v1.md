@@ -4,6 +4,12 @@
 
 ### Board presentation
 
+The milestone popup uses the panel surface, compact sentence-case labels, and
+short expanding textareas. Input focus changes the themed border and surface,
+without an outer white outline; button keyboard outlines remain. Its lighter,
+unblurred backdrop and compact header/footer are scoped to this popup only.
+No execution or advancement semantics change in this presentation pass.
+
 Milestone lanes stay fixed at 272px and scroll horizontally as the pipeline grows;
 member lists retain their own vertical scrolling. The board uses canonical workspace,
 panel, and card theme surfaces, existing member avatars and the platform section

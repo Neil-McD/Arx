@@ -198,7 +198,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
       <form ref={dialogRef} className="modal resource-modal workflow-milestone-modal" role="dialog" aria-modal="true" aria-labelledby="workflow-milestone-modal-title" onSubmit={submit} onKeyDown={trapFocus} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title" id="workflow-milestone-modal-title">
-            {props.milestone.name.trim() ? props.milestone.name : `Set up milestone ${props.milestoneNumber}`}
+            {props.milestone.name.trim() ? props.milestone.name : "New milestone"}
           </div>
           <button className="modal-close" type="button" onClick={requestClose} disabled={props.isSaving} aria-label="Close milestone editor"><X size={18} aria-hidden="true" /></button>
         </div>
@@ -206,17 +206,16 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
         <div className="modal-body">
           <div className="resource-form workflow-milestone-form">
             <label>
-              <span className="resource-field-label" id="workflow-name-label">Milestone name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Milestone name" disabled={props.isSaving} aria-labelledby="workflow-name-label" aria-describedby={!name.trim() ? "workflow-name-hint" : undefined} />
-              {!name.trim() ? <small id="workflow-name-hint" className="workflow-field-hint">Give this milestone a name to save it.</small> : null}
+              <span className="resource-field-label" id="workflow-name-label">Name</span>
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Milestone name" disabled={props.isSaving} aria-labelledby="workflow-name-label" />
             </label>
 
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}
             <label><span className="resource-field-label">Instructions</span>
-              <textarea rows={3} maxLength={4000} value={instructions} disabled={props.isSaving} onChange={event => setInstructions(event.target.value)} placeholder="How should the agent help members in this milestone?" />
+              <textarea rows={2} maxLength={4000} value={instructions} disabled={props.isSaving} onChange={event => setInstructions(event.target.value)} placeholder="How should the agent help members in this milestone?" />
             </label>
             <label><span className="resource-field-label">Goal</span>
-              <textarea rows={3} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
+              <textarea rows={2} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
               <small className="workflow-field-hint">Guides the agent; evaluation alone does not move members.</small>
             </label>
             {!props.milestone.key ? <p className="workflow-field-hint">Save this milestone to configure actions and movement.</p> : null}
