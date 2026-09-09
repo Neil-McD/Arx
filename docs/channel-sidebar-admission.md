@@ -1,5 +1,13 @@
 # Channel sidebar admission control
 
+Below the existing 680px chat-container breakpoint, the channel header opens the
+same roster in place of the conversation. The conversation remains mounted.
+Back or Escape restores it and returns focus to the People trigger. Channel,
+community, thread, and profile navigation clear this local open state. Desktop
+keeps its existing sidebar; there is only one roster instance and subscription.
+The local browser fixture at `/qa?roster` provides a width toggle and draft input
+to verify narrow open/Back/Escape, retained drafts, and desktop sidebar behavior.
+
 The sidebar Auto-join switch is a projection of the existing community admission
 state in App, passed through WebCommunityHost and the interaction projection.
 It reuses the existing member-management save handler; it owns no additional

@@ -1,6 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
+  Users,
   MessageSquare,
   Pencil,
   Trash2,
@@ -373,6 +374,15 @@ export function communityInteractionRootHasRichContent(
 
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const peopleTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const closePeople = useCallback(() => {
+    setPeopleOpen(false);
+    requestAnimationFrame(() => peopleTriggerRef.current?.focus());
+  }, []);
+  useEffect(() => {
+    setPeopleOpen(false);
+  }, [props.communityId, props.activeChannel?.id, props.selectedRootId, props.profilePanel]);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
@@ -703,10 +713,16 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : props.communityId ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : props.communityId ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
+            trailingAction={!hasDetailPanel && props.communityId ? <button
+              ref={peopleTriggerRef} type="button"
+              className="community-channel-header-menu-trigger channel-people-trigger"
+              aria-label="Show channel people and agents" aria-expanded={peopleOpen}
+              onClick={() => setPeopleOpen(true)}
+            ><Users size={18} aria-hidden="true" /></button> : null}
             channel={props.activeChannel}
             canManage={Boolean(props.canManageActiveChannel)}
             managingChannelId={props.managingChannelId}
@@ -1143,6 +1159,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         </ThreadSurface>
       ) : null}
       {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
+        onCloseNarrow={closePeople}
+        narrowOpen={peopleOpen}
         joinReview={{
           canReviewJoinRequests: props.canReviewCommunityJoinRequests,
           joinReviewMode: props.communityJoinReviewMode,

@@ -5,6 +5,7 @@ import {
   useState,
   useContext,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
 import { ChannelAccessSettings } from "./ChannelAccessSettings";
@@ -19,6 +20,7 @@ export type WebCommunityChannelHeaderChannel = {
 };
 
 type WebCommunityChannelHeaderProps = {
+  trailingAction?: ReactNode;
   channel: WebCommunityChannelHeaderChannel;
   canManage: boolean;
   managingChannelId?: string | null;
@@ -61,6 +63,7 @@ function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
 }
 
 export function WebCommunityChannelHeader({
+  trailingAction,
   channel,
   canManage,
   managingChannelId = null,
@@ -203,6 +206,7 @@ export function WebCommunityChannelHeader({
           {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
           <h1>{channel.name}</h1>
         </div>
+        {trailingAction}
         {canOpenChannelMenu ? (
           <div className="community-channel-header-actions" ref={menuRef}>
             <button

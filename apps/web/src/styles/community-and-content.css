@@ -2880,6 +2880,19 @@
   display: none;
 }
 
+.community-channel-header .channel-people-trigger,
+.channel-people-back { display: none; }
+@container community-chat-area (max-width: 680px) {
+  .community-channel-header .channel-people-trigger { display: inline-flex; margin-left: auto; }
+  .people-panel-open > .community-interaction-main { display: none; }
+  .community-interaction-projection.people-panel-open > .channel-roster-panel {
+    display: flex;
+    min-height: 0;
+    border-left: 0;
+  }
+  .people-panel-open .channel-people-back { display: flex; }
+}
+
 .community-members-page {
   flex: 1;
   min-height: 0;

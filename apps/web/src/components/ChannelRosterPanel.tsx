@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useState, type ComponentProps } from "react";
+import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import { CommunityJoinRequestReview } from "./CommunityJoinRequestReview";
@@ -20,6 +20,8 @@ import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOv
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
 export function ChannelRosterPanel(props: {
+  narrowOpen?: boolean;
+  onCloseNarrow?: () => void;
   joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
   admission?: CommunityAdmissionControl;
   communityName: string;
@@ -34,6 +36,10 @@ export function ChannelRosterPanel(props: {
   getInitials: (name: string) => string;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
+  const backRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (props.narrowOpen && backRef.current?.getClientRects().length) backRef.current.focus();
+  }, [props.narrowOpen]);
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
@@ -95,7 +101,18 @@ export function ChannelRosterPanel(props: {
   const status = (member: typeof members[number]) => member.last_seen_at === null ? "unknown"
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
-  return <><aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents">
+  return <><aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents"
+    onKeyDown={event => {
+      if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
+        event.preventDefault(); props.onCloseNarrow?.();
+      }
+    }}>
+    {props.onCloseNarrow ? <div className="community-interaction-drawer-back channel-people-back">
+      <button ref={backRef} className="back-to-workspace" type="button" onClick={props.onCloseNarrow}>
+        <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+        <span className="back-path">Back to channel</span>
+      </button>
+    </div> : null}
     <div className="community-context-rail-head"><span className="community-context-rail-name">{props.communityName}</span></div>
     <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
       onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />

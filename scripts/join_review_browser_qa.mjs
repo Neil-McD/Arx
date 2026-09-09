@@ -7,6 +7,7 @@ const { createServer } = await import(requireWeb.resolve('vite'));
 const entry = `import React, {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {CommunityJoinRequestReview} from '/src/components/CommunityJoinRequestReview';
+import {WebCommunityInteractionProjection} from '/src/components/WebCommunityInteractionProjection';
 import '/src/index.css';
 window.React = React;
 function Fixture() {
@@ -23,10 +24,23 @@ function Fixture() {
  onDenyJoinRequest={id=>{setResult('Denied '+id);setPending(true)}}/>
  </main>;
 }
-createRoot(document.getElementById('root')).render(<Fixture/>);`;
+function RosterFixture() {
+ const [wide,setWide]=useState(false);
+ return <><label><input type="checkbox" checked={wide} onChange={e=>setWide(e.target.checked)}/>Desktop width</label>
+ <div style={{container:'community-chat-area / inline-size',width:wide?1000:500,height:600,display:'flex'}}>
+ <WebCommunityInteractionProjection roots={[]} replies={[]} activityEvents={[]} profilesByUserId={{}}
+ communityId="synthetic" activeCommunityName="Synthetic community"
+ activeChannel={{id:'general',name:'General',slug:'general',is_general:true}}
+ displayName={()=>'Applicant'} getInitials={()=>'A'} getAvatarColor={()=>'gray'}
+ formatChatTime={()=>''} renderTextWithLinks={text=>text} onSelectRoot={()=>{}}
+ mainComposer={<input aria-label="Draft message" />}
+ admission={{mode:'approval',canManage:true,pending:false,error:null,onChange:()=>{}}}/>
+ </div></>;
+}
+createRoot(document.getElementById('root')).render(location.search==='?roster'?<RosterFixture/>:<Fixture/>);`;
 const server=await createServer({root:resolve(root,'apps/web'),configFile:false,server:{host:'127.0.0.1',port:5197,strictPort:true},plugins:[{
  name:'join-review-qa',resolveId:id=>id==='/qa-entry.tsx'?id:null,load:id=>id==='/qa-entry.tsx'?entry:null,
- configureServer(s){s.middlewares.use((req,res,next)=>{if(req.url!=='/qa')return next();res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><body><div id="root"></div><script type="module" src="/qa-entry.tsx"></script></body></html>');});}
+ configureServer(s){s.middlewares.use((req,res,next)=>{if(req.url?.split('?')[0]!=='/qa')return next();res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><body><div id="root"></div><script type="module" src="/qa-entry.tsx"></script></body></html>');});}
 }]});
 await server.listen();
 console.log('Synthetic join review fixture: http://127.0.0.1:5197/qa');
