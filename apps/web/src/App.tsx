@@ -2032,7 +2032,10 @@ export default function App() {
       channelSlug: communityChannelSlug,
       inChat: activePage === "community" && communityTab === "chat",
       canViewMembers: canViewMembersActiveCommunity,
-      closeDetail: handleCloseCommunityInteractionDrawer,
+      closeDetail: () => {
+        if (showMobileShell) prepareMobileGlobalNavigation();
+        handleCloseCommunityInteractionDrawer();
+      },
       openGeneral: () => {
         const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
         if (!path) return false;

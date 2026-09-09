@@ -49,4 +49,6 @@ test("only the live roster owns pagination; directory hydration stays scoped", (
   const panel = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
   expect(panel).not.toContain("const [peopleOpen");
   expect(panel).toContain("props.onPeopleOpenChange?.(true)");
+  const app = read("apps/web/src/App.tsx");
+  expect(app).toMatch(/useWebChannelPeoplePanel\(\{[\s\S]*?if \(showMobileShell\) prepareMobileGlobalNavigation\(\)/);
 });
