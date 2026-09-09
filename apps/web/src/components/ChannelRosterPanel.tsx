@@ -201,7 +201,7 @@ export function ChannelRosterPanel(props: {
           {searching ? <div className="community-context-members-footer" role="status" ref={loadMoreSentinelRef}>
             {searchResult.loading ? "Searching members…" : searchResult.error ?? `${members.length} matches${searchResult.hasMore ? " so far" : ""}`}
             {!searchResult.loading && searchResult.error ? <button type="button" className="btn-secondary" onClick={searchResult.loadMore}>Retry search</button> : null}
-            {!searchResult.loading && !searchResult.error && searchResult.paused ? <><span> Search paused to limit scanning.</span> <button type="button" onClick={searchResult.continueSearch}>Continue search</button></> : null}
+            {!searchResult.loading && !searchResult.error && searchResult.paused ? <><span> Search paused to limit scanning.</span> <button type="button" className="btn-secondary" onClick={searchResult.continueSearch}>Continue search</button></> : null}
           </div> : <div className="community-context-members-footer" ref={loadMoreSentinelRef}>
             {complete ? `Showing ${members.length} of ${members.length}` : "Loading more..."}
           </div>}
