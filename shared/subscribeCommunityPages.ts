@@ -12,10 +12,12 @@ export function subscribeCommunityPages<Page extends CommunityPage>(params: {
   onError?: (error: unknown) => void;
   sections?: Section[];
   maxPages?: number;
-}): () => void {
+}): (() => void) & { loadMore: () => void } {
   type Slot = { active: boolean; stop?: () => void; fingerprint?: string; value?: Page };
   const slots: Slot[] = [];
   let closed = false;
+  let maxPages = params.maxPages ?? Infinity;
+  let pendingNext: (() => void) | undefined;
   const sections = params.sections ?? ["shared", "private"];
   const trim = (index: number) => {
     for (const slot of slots.splice(index)) { slot.active = false; slot.stop?.(); }
@@ -35,12 +37,18 @@ export function subscribeCommunityPages<Page extends CommunityPage>(params: {
         if (slot.fingerprint === fingerprint) return;
         slot.fingerprint = fingerprint; slot.value = result;
         trim(index + 1);
+        pendingNext = undefined;
         const nextSection = sections[sections.indexOf(section) + 1];
         params.onUpdate(slots.flatMap(s => s.value ? [s.value] : []), result.isDone && !nextSection);
-        if (slots.length >= (params.maxPages ?? Infinity)) return;
+        if (slots.length >= maxPages) {
+          if (!result.isDone) pendingNext = () => load(section, result.continueCursor);
+          else if (nextSection) pendingNext = () => load(nextSection, null);
+          return;
+        }
         if (!result.isDone) load(section, result.continueCursor);
         else if (nextSection) load(nextSection, null);
       } catch (error) {
+        pendingNext = undefined;
         trim(index + 1); slot.value = undefined; slot.fingerprint = undefined;
         params.onUpdate([], false); params.onError?.(error);
       }
@@ -52,5 +60,13 @@ export function subscribeCommunityPages<Page extends CommunityPage>(params: {
     publish();
   };
   if (sections[0]) load(sections[0], null);
-  return () => { closed = true; trim(0); };
+  return Object.assign(() => { closed = true; pendingNext = undefined; trim(0); }, {
+    loadMore: () => {
+      if (closed || !pendingNext) return;
+      const next = pendingNext;
+      pendingNext = undefined;
+      maxPages += 1;
+      next();
+    },
+  });
 }

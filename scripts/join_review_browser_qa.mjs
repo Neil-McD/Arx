@@ -7,6 +7,7 @@ const { createServer } = await import(requireWeb.resolve('vite'));
 const entry = `import React, {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {CommunityJoinRequestReview} from '/src/components/CommunityJoinRequestReview';
+import {useMemberScrollPagination} from '/src/components/useMemberScrollPagination';
 import {WebCommunityInteractionProjection} from '/src/components/WebCommunityInteractionProjection';
 import '/src/index.css';
 window.React = React;
@@ -37,7 +38,20 @@ function RosterFixture() {
  admission={{mode:'approval',canManage:true,pending:false,error:null,onChange:()=>{}}}/>
  </div></>;
 }
-createRoot(document.getElementById('root')).render(location.search==='?roster'?<RosterFixture/>:<Fixture/>);`;
+function ScrollFixture() {
+ const [page,setPage]=useState(1), [busy,setBusy]=useState(false);
+ const {membersViewportRef,loadMoreSentinelRef,handleMembersScroll}=useMemberScrollPagination({
+   membersHasMore:page<4,isLoadingMoreMembers:busy,
+   onLoadMoreMembers:()=>{setBusy(true);setTimeout(()=>{setPage(n=>n+1);setBusy(false)},150)}
+ },page);
+ const count=page<3?2:page===3?20:30;
+ return <><output>Page {page}; rows {count}</output>
+ <div ref={membersViewportRef} onScroll={handleMembersScroll} style={{height:240,width:300,overflowY:'auto'}}>
+ {Array.from({length:count},(_,i)=><div key={i} style={{height:40}}>Member {i+1}</div>)}
+ <div ref={loadMoreSentinelRef}>{page===4?'Showing 30 of 30':'Loading more...'}</div>
+ </div></>;
+}
+createRoot(document.getElementById('root')).render(location.search==='?scroll'?<ScrollFixture/>:location.search==='?roster'?<RosterFixture/>:<Fixture/>);`;
 const server=await createServer({root:resolve(root,'apps/web'),configFile:false,server:{host:'127.0.0.1',port:5197,strictPort:true},plugins:[{
  name:'join-review-qa',resolveId:id=>id==='/qa-entry.tsx'?id:null,load:id=>id==='/qa-entry.tsx'?entry:null,
  configureServer(s){s.middlewares.use((req,res,next)=>{if(req.url?.split('?')[0]!=='/qa')return next();res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><body><div id="root"></div><script type="module" src="/qa-entry.tsx"></script></body></html>');});}

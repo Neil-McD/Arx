@@ -1,6 +1,7 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import { useMemberScrollPagination } from "./useMemberScrollPagination";
 import { CommunityJoinRequestReview } from "./CommunityJoinRequestReview";
 import { CommunityAutoJoinControl, type CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { ActorAvatar } from "./communityInteractionFeed";
@@ -44,7 +45,8 @@ export function ChannelRosterPanel(props: {
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState(false);
-  const [budget, setBudget] = useState(1);
+  const paginationRef = useRef<ReturnType<typeof subscribeCommunityPages<Page>> | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [retry, setRetry] = useState(0);
   const [now, setNow] = useState(Date.now);
   const [memory, setMemory] = useState<CloudCommunityPolynetOverview | null>(null);
@@ -72,26 +74,35 @@ export function ChannelRosterPanel(props: {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    setPages([]); setComplete(false); setError(false);
+    setPages([]); setComplete(false); setError(false); setLoadingMore(false);
     if (!scope) return;
     let close: (() => void) | undefined;
     let stop: (() => void) | undefined;
     try {
       const live = createCloudCommunityChatLiveClient({ session: scope.session });
       close = live.close;
-      stop = subscribeCommunityPages<Page>({
-        sections: ["shared"], maxPages: budget,
+      const pagination = subscribeCommunityPages<Page>({
+        sections: ["shared"], maxPages: 1,
         watch: (_section, cursor) => live.client.watchQuery(api.communityChannelParticipants.listChannelRoster, {
           authSubject: live.authSubject, communityId: scope.communityId as Id<"communities">,
           channelId: props.channelId as Id<"communityChannels"> | undefined,
           paginationOpts: { numItems: 50, cursor },
         }),
-        onUpdate: (next, done) => { setPages(next); setComplete(done); setError(false); },
-        onError: () => { setPages([]); setError(true); },
+        onUpdate: (next, done) => { setPages(next); setComplete(done); setError(false); setLoadingMore(false); },
+        onError: () => { setPages([]); setError(true); setLoadingMore(false); },
       });
+      paginationRef.current = pagination;
+      stop = pagination;
     } catch { setError(true); }
-    return () => { stop?.(); close?.(); };
-  }, [scope?.session, scope?.communityId, props.channelId, budget, retry]);
+    return () => { paginationRef.current = null; stop?.(); close?.(); };
+  }, [scope?.session, scope?.communityId, props.channelId, retry]);
+  const { membersViewportRef, loadMoreSentinelRef, handleMembersScroll } = useMemberScrollPagination({
+    membersHasMore: !complete,
+    isLoadingMembers: !pages.length,
+    isLoadingMoreMembers: loadingMore,
+    membersLoadError: error,
+    onLoadMoreMembers: () => { setLoadingMore(true); paginationRef.current?.loadMore(); },
+  }, pages.length);
   const members = [...new Map(pages.flatMap(page => page.page).map(member => [member.user_id, member])).values()];
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
@@ -124,7 +135,7 @@ export function ChannelRosterPanel(props: {
           <div className="community-context-memory-status"><span>{(memory.agent.activity_state || memory.agent.status).replace(/_/g, " ").replace(/\b\w/g, value => value.toUpperCase())}</span></div>
         </div> : <div className="community-context-memory-summary" aria-label="Loading memory"><div className="community-context-memory-preview web-skeleton-block" /><div className="community-context-memory-loading-status web-skeleton-row" /></div>}
     </div>
-    <div className="community-context-members">
+    <div className="community-context-members" ref={membersViewportRef} onScroll={handleMembersScroll}>
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>
           <h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
@@ -167,8 +178,10 @@ export function ChannelRosterPanel(props: {
               })}
             </Fragment>;
           })}
-          {!members.length ? <p>{complete ? "No people in this channel." : "No people in this page."}</p> : null}
-          {!complete ? <button type="button" onClick={() => setBudget(value => value + 1)}>Load more</button> : null}
+          {!members.length && complete ? <p>No people in this channel.</p> : null}
+          <div className="community-context-members-footer" ref={loadMoreSentinelRef}>
+            {complete ? `Showing ${members.length} of ${members.length}` : "Loading more..."}
+          </div>
         </> : null}
     </div>
   </aside>

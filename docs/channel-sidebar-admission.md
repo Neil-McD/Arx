@@ -48,7 +48,11 @@ index is introduced. Each request performs one bounded pagination query.
 
 The versioned cursor binds phase and position to the community and channel.
 Every candidate still passes current community and channel authorization.
-Filtered/empty pages may require Load more; no request scans until it fills a page.
+Filtered/empty pages advance through the shared production scroll loader (96px
+threshold and underfilled viewport checks). No normal Load more button is shown.
+One page is requested at a time without restarting existing subscriptions;
+hidden rosters do not auto-drain pages. Failures retain an explicit Retry.
+No individual request scans until it fills a page.
 The existing reactive page subscriber invalidates descendant pages when an
 ancestor changes, while the UI deduplicates public user IDs. Presence leases still
 determine Online/Offline; ordering within those groups follows last-seen recency.

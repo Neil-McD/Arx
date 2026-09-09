@@ -1,6 +1,32 @@
 import { expect, test } from "vitest";
 import { subscribeCommunityPages, type CommunityPage } from "../shared/subscribeCommunityPages";
 
+test("scroll requests append one page without restarting and coalesce while pending", () => {
+  const watches: Array<{ value?: CommunityPage; update?: () => void; stopped: boolean }> = [];
+  let pages: CommunityPage[] = [];
+  let done = false;
+  const stop = subscribeCommunityPages({ sections: ["shared"], maxPages: 1,
+    watch: () => {
+      const row = { value: watches.length ? undefined : { page: ["first"], isDone: false, continueCursor: "second" }, stopped: false, update: undefined } as typeof watches[number];
+      watches.push(row);
+      return { localQueryResult: () => row.value, onUpdate: cb => { row.update = cb; return () => { row.stopped = true; }; } };
+    },
+    onUpdate: (next, complete) => { pages = next; done = complete; },
+  });
+  stop.loadMore(); stop.loadMore();
+  expect(watches).toHaveLength(2);
+  expect(watches[0].stopped).toBe(false);
+  expect(pages[0].page).toEqual(["first"]);
+  watches[1].value = { page: [], isDone: false, continueCursor: "third" }; watches[1].update?.();
+  stop.loadMore();
+  expect(watches).toHaveLength(3);
+  watches[2].value = { page: [], isDone: true, continueCursor: null }; watches[2].update?.();
+  expect(done).toBe(true);
+  stop.loadMore(); expect(watches).toHaveLength(3);
+  stop(); stop.loadMore();
+  expect(watches.every(row => row.stopped)).toBe(true);
+});
+
 test("single section pagination crosses empty pages, clears stale descendants, and fails closed", () => {
   const watches: Array<{ value: CommunityPage; update?: () => void; stopped: boolean }> = [];
   let output: CommunityPage[] = [];

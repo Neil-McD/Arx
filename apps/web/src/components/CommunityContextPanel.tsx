@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+import { useMemberScrollPagination } from "./useMemberScrollPagination";
 import { Lock, MoreHorizontal } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import type {
@@ -42,7 +42,6 @@ type CommunityContextPanelProps = CommunityJoinRequestReviewProps & {
   getAvatarColor: (seed: string) => string;
 };
 
-const LOAD_MORE_SCROLL_THRESHOLD_PX = 96;
 
 function isAdminRole(member: CommunityRailMember, ownerId?: string | null): boolean {
   return (
@@ -70,9 +69,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     knownMemberCount !== null && loadedMemberCount < knownMemberCount;
   const shouldShowMembersFooter =
     loadedMemberCount > 0 || props.membersHasMore || hasUnloadedKnownMembers;
-  const loadMoreRequestedRef = useRef(false);
-  const membersViewportRef = useRef<HTMLDivElement | null>(null);
-  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const { membersViewportRef, loadMoreSentinelRef, handleMembersScroll, requestLoadMoreMembers } = useMemberScrollPagination(props, loadedMemberCount);
   const membersFooterLabel = props.membersHasMore
     ? props.isLoadingMoreMembers
       ? "Loading more..."
@@ -83,101 +80,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       ? "Member list out of sync"
     : loadedSummary;
 
-  useEffect(() => {
-    if (!props.isLoadingMoreMembers) loadMoreRequestedRef.current = false;
-  }, [
-    loadedMemberCount,
-    props.isLoadingMoreMembers,
-    props.membersHasMore,
-    props.membersLoadError,
-  ]);
-
-
-  const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
-    if (!props.membersHasMore) return;
-    if (props.isLoadingMembers || props.isLoadingMoreMembers) return;
-    if (!props.onLoadMoreMembers) return;
-    if (props.membersLoadError && !options?.force) return;
-    if (loadMoreRequestedRef.current) return;
-    loadMoreRequestedRef.current = true;
-    props.onLoadMoreMembers();
-  }, [
-    props.isLoadingMembers,
-    props.isLoadingMoreMembers,
-    props.membersHasMore,
-    props.membersLoadError,
-    props.onLoadMoreMembers,
-  ]);
-
-  const isMembersViewportNearBottom = useCallback(() => {
-    const viewport = membersViewportRef.current;
-    if (!viewport) return false;
-    const remainingScroll = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-    return remainingScroll <= LOAD_MORE_SCROLL_THRESHOLD_PX;
-  }, []);
-
-  const requestVisibleMemberPage = useCallback(() => {
-    if (!isMembersViewportNearBottom()) return;
-    requestLoadMoreMembers();
-  }, [isMembersViewportNearBottom, requestLoadMoreMembers]);
-
-  const handleMembersScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    const target = event.currentTarget;
-    const remainingScroll = target.scrollHeight - target.scrollTop - target.clientHeight;
-    if (remainingScroll <= LOAD_MORE_SCROLL_THRESHOLD_PX) {
-      requestLoadMoreMembers();
-    }
-  }, [requestLoadMoreMembers]);
-
-  useEffect(() => {
-    if (!props.membersHasMore || props.isLoadingMembers || props.isLoadingMoreMembers || props.membersLoadError) {
-      return;
-    }
-    const frame = requestAnimationFrame(requestVisibleMemberPage);
-    return () => cancelAnimationFrame(frame);
-  }, [
-    loadedMemberCount,
-    props.isLoadingMembers,
-    props.isLoadingMoreMembers,
-    props.membersHasMore,
-    props.membersLoadError,
-    requestVisibleMemberPage,
-  ]);
-
-  useEffect(() => {
-    const viewport = membersViewportRef.current;
-    const sentinel = loadMoreSentinelRef.current;
-    if (
-      !viewport ||
-      !sentinel ||
-      !props.membersHasMore ||
-      props.isLoadingMembers ||
-      props.isLoadingMoreMembers ||
-      props.membersLoadError ||
-      typeof IntersectionObserver === "undefined"
-    ) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) requestLoadMoreMembers();
-      },
-      {
-        root: viewport,
-        rootMargin: `${LOAD_MORE_SCROLL_THRESHOLD_PX}px 0px`,
-        threshold: 0,
-      },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [
-    loadedMemberCount,
-    props.isLoadingMembers,
-    props.isLoadingMoreMembers,
-    props.membersHasMore,
-    props.membersLoadError,
-    requestLoadMoreMembers,
-  ]);
 
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
