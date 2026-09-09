@@ -66,13 +66,13 @@ describe("community channel routes", () => {
     });
   });
 
-  it("round-trips the durable mobile Members route", () => {
+  it("redirects the retired mobile Members route to channel chat", () => {
     const path = buildCommunityMembersPath("polynet");
     expect(path).toBe("/c/polynet/members");
     const parsed = parseAppRouteFromPathname(path ?? "");
     expect(parsed).toMatchObject({
       page: "community",
-      view: "community_members",
+      view: "home",
       communitySlug: "polynet",
       communityTab: "chat",
       communityChannelSlug: null,
@@ -207,7 +207,7 @@ describe("canonical web destinations", () => {
     ["/c/polynet/preview", { kind: "community_funnel_preview", slug: "polynet" }],
     ["/m/c/polynet/onboarding/preview", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/home", { kind: "community_home", slug: "polynet" }],
-    ["/m/c/polynet/members", { kind: "community_members", slug: "polynet" }],
+    ["/m/c/polynet/members", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/chat", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/chat/wins", { kind: "community_chat", slug: "polynet", channelSlug: "wins" }],
     ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
