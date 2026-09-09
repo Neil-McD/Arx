@@ -1,4 +1,21 @@
-# Members directory
+# Members popup (current)
+
+View all beside the channel People heading opens one themed Members popup.
+Search, Auto-join, and join-request review live only in this popup. The sidebar
+retains channel-scoped presence and existing profile/DM/settings shortcuts.
+The popup shares its roster renderer and authorized readers: omitted channel ID
+uses canonical General/community visibility; search uses the bounded directory.
+No private-channel grants or private form/workflow context are exposed.
+
+The popup reuses UserAvatar and CommunityMemberSettingsDialog. It focuses search
+on open and restores focus on close. Profile/thread detail hides it without
+discarding search/scroll; selecting a DM closes it. Viewer/community/channel
+changes clear all state. Both themes use existing modal surfaces. No new tables,
+mutations, permission model, or Members route are introduced. Staging only.
+
+## Historical standalone page (retired)
+
+The notes below describe the superseded page, not the current navigation contract.
 
 Left navigation order: Agent, Knowledge, Events, Members; builder tools follow the divider.
 

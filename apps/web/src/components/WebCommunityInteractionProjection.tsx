@@ -970,7 +970,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           ) : null}
         </ThreadSurface>
       ) : null}
-      {!hasDetailPanel && props.communityId ? <ChannelRosterPanel
+      {props.communityId ? <ChannelRosterPanel
         onCloseNarrow={closePeople}
         narrowOpen={peopleOpen}
         joinReview={{
@@ -988,6 +988,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
         communityName={props.activeCommunityName} presenceSummary={props.presenceSummary} isLoadingPresence={props.isLoadingCommunityPresence}
         currentUserId={props.currentUserId} onMessageUser={props.onMessageUser}
+        memberDetailOpen={hasDetailPanel}
         memberSettings={{
           activeCommunity: { id: props.communityId, owner_id: props.communityOwnerId ?? null },
           canManageMembers: Boolean(props.canManageCommunityMembers && props.onSetCommunityMemberRole && props.onRemoveCommunityMember && props.onBanCommunityMember),

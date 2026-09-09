@@ -2847,6 +2847,22 @@
   padding: 6px 0;
 }
 
+.members-view-all {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.members-view-all:hover { color: var(--text-primary); }
+.modal.members-directory-modal { width: min(580px, calc(100vw - 32px)); }
+.members-directory-community { margin-top: 4px; font-size: 13px; color: var(--text-muted); }
+.members-directory-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.members-directory-content .community-context-members { min-height: 0; overflow-y: auto; padding: 8px 16px 20px; }
+.members-directory-content .community-context-members-total { margin-top: 0; }
+
 .community-context-members-retry {
   display: block;
   width: calc(100% - 16px);
@@ -2972,8 +2988,10 @@
   opacity: 1;
 }
 
-.channel-roster-panel .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
-.channel-roster-panel .community-context-members-total .community-context-section { margin: 0; }
+.channel-roster-panel .community-context-members-total,
+.members-directory-content .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
+.channel-roster-panel .community-context-members-total .community-context-section,
+.members-directory-content .community-context-members-total .community-context-section { margin: 0; }
 
 
 

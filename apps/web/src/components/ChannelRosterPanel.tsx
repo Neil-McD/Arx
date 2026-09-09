@@ -1,5 +1,6 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps } from "react";
-import { MessageCircle, MoreHorizontal, Search } from "lucide-react";
+import { MessageCircle, MoreHorizontal, Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import { useMemberScrollPagination } from "./useMemberScrollPagination";
@@ -21,7 +22,8 @@ import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOv
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
-export function ChannelRosterPanel(props: {
+type RosterProps = {
+  memberDetailOpen?: boolean;
   narrowOpen?: boolean;
   onCloseNarrow?: () => void;
   joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
@@ -36,8 +38,39 @@ export function ChannelRosterPanel(props: {
   memberSettings: Omit<ComponentProps<typeof CommunityMemberSettingsDialog>, "member" | "onClose">;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
+};
+
+export function ChannelRosterPanel(props: RosterProps) {
+  const scope = useContext(CommunityChannelSessionContext);
+  const scopeKey = JSON.stringify([props.currentUserId, scope?.communityId, props.channelId]);
+  return <ChannelRosterWorkspace key={scopeKey} {...props} />;
+}
+
+function ChannelRosterWorkspace(props: RosterProps) {
+  const [membersOpen, setMembersOpen] = useState(false);
+  return <>
+    <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
+    {membersOpen ? <RosterSurface {...props} channelId={undefined} narrowOpen={false}
+      onCloseNarrow={undefined} directory onCloseMembers={() => setMembersOpen(false)}
+      onMessageUser={props.onMessageUser ? id => { setMembersOpen(false); props.onMessageUser?.(id); } : undefined} /> : null}
+  </>;
+}
+
+// Both presentations share the same authorized readers, row rendering and actions.
+function RosterSurface(props: RosterProps & {
+  directory?: boolean;
+  onOpenMembers?: () => void;
+  onCloseMembers?: () => void;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!props.directory || props.memberDetailOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    searchRef.current?.focus();
+    return () => { if (opener?.isConnected) opener.focus(); };
+  }, [props.directory, props.memberDetailOpen]);
   const [search, setSearch] = useState("");
   const searching = Boolean(search.trim());
   const searchResult = useWebMemberDirectorySearch({
@@ -63,7 +96,7 @@ export function ChannelRosterPanel(props: {
   const [memoryRetry, setMemoryRetry] = useState(0);
   useEffect(() => {
     setMemory(null); setMemoryError(false);
-    if (!scope) return;
+    if (!scope || props.directory) return;
     let disposed = false;
     let close: (() => void) | undefined;
     let stop: (() => void) | undefined;
@@ -77,7 +110,7 @@ export function ChannelRosterPanel(props: {
       });
     } catch { setMemoryError(true); }
     return () => { disposed = true; stop?.(); close?.(); };
-  }, [scope?.session, scope?.communityId, memoryRetry]);
+  }, [scope?.session, scope?.communityId, memoryRetry, props.directory]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS);
     return () => window.clearInterval(timer);
@@ -127,7 +160,11 @@ export function ChannelRosterPanel(props: {
   const status = (member: typeof members[number]) => member.last_seen_at === null ? "unknown"
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
-  return <><aside className="community-context-panel channel-roster-panel" aria-label="Channel people and agents"
+  const settings = <CommunityMemberSettingsDialog {...props.memberSettings}
+    member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role, created_at: selectedMember.membership_created_at } : null}
+    onClose={() => setSelectedMembershipId(null)} />;
+  const content = <><aside className={props.directory ? "members-directory-content" : "community-context-panel channel-roster-panel"} aria-label={props.directory ? "Community members" : "Channel people and agents"}
+    style={!props.directory && props.memberDetailOpen ? { display: "none" } : undefined}
     onKeyDown={event => {
       if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
         event.preventDefault(); props.onCloseNarrow?.();
@@ -139,7 +176,7 @@ export function ChannelRosterPanel(props: {
         <span className="back-path">Back to channel</span>
       </button>
     </div> : null}
-    <div className="community-context-rail-head"><span className="community-context-rail-name">{props.communityName}</span></div>
+    {!props.directory ? <><div className="community-context-rail-head"><span className="community-context-rail-name">{props.communityName}</span></div>
     <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
       onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />
     <div className="community-context-memory">
@@ -149,29 +186,31 @@ export function ChannelRosterPanel(props: {
           <div className="community-context-memory-preview"><CommunityMemoryGraphPreview overview={memory} /></div>
           <div className="community-context-memory-status"><span>{(memory.agent.activity_state || memory.agent.status).replace(/_/g, " ").replace(/\b\w/g, value => value.toUpperCase())}</span></div>
         </div> : <div className="community-context-memory-summary" aria-label="Loading memory"><div className="community-context-memory-preview web-skeleton-block" /><div className="community-context-memory-loading-status web-skeleton-row" /></div>}
-    </div>
+    </div></> : null}
     <div className="community-context-members" ref={membersViewportRef} onScroll={handleMembersScroll}>
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>
-          <h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
+          {!props.directory ? <><h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
           {pages[0].agents.length ? <div className="community-context-agent-list">
             {pages[0].agents.map(agent => <div className="community-context-member" key={agent.key}>
               <ActorAvatar seed={agent.key} label="Community agent" className="community-context-member-avatar"
                 getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
               <span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span>
             </div>)}
-          </div> : <p className="community-context-members-status">No agents in this channel.</p>}
+          </div> : <p className="community-context-members-status">No agents in this channel.</p>}</> : null}
         </>}
           <div className="community-context-members-total">
             <h3 className="community-context-section">People{!error && ready && complete ? ` — ${rosterMembers.length}` : ""}</h3>
-            <CommunityAutoJoinControl admission={props.admission} />
+            {props.directory ? <CommunityAutoJoinControl admission={props.admission} />
+              : <button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>}
           </div>
-          {props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
+          {props.directory ? <>{props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
           <label className="community-dm-recipient-search community-dm-inbox-search">
             <Search aria-hidden="true" />
-            <input type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
+            <input ref={searchRef} type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
           </label>
+          </> : null}
       {(searching || (!error && ready)) ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
@@ -208,8 +247,34 @@ export function ChannelRosterPanel(props: {
         </> : null}
     </div>
   </aside>
-    <CommunityMemberSettingsDialog {...props.memberSettings}
-      member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role, created_at: selectedMember.membership_created_at } : null}
-      onClose={() => setSelectedMembershipId(null)} />
   </>;
+  if (!props.directory) return <>{content}{settings}</>;
+  // Keep search and pagination mounted while the existing profile inspector is open.
+  if (props.memberDetailOpen) return null;
+  return createPortal(<><div className="modal-overlay" onMouseDown={props.onCloseMembers}>
+    <section ref={dialogRef} className="modal members-directory-modal" role="dialog" aria-modal="true"
+      aria-labelledby="members-directory-title" onMouseDown={event => event.stopPropagation()}
+      onKeyDown={event => {
+        if (event.defaultPrevented) return;
+        if (selectedMember) {
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
+          return;
+        }
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); props.onCloseMembers?.(); }
+        if (event.key !== "Tab") return;
+        const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? [])
+          .filter(element => element.getClientRects().length > 0);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
+      <div className="modal-header">
+        <div><h2 className="modal-title" id="members-directory-title">Members</h2><div className="members-directory-community">{props.communityName}</div></div>
+        <button type="button" className="modal-close" aria-label="Close members" onClick={props.onCloseMembers}><X size={20} /></button>
+      </div>
+      {content}
+    </section>
+  </div><div onKeyDown={event => {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
+  }}>{settings}</div></>, document.body);
 }
