@@ -154,6 +154,7 @@
 }
 
 .community-utility-panel.workflow-pipeline-shell {
+  padding-inline: 8px;
   padding-bottom: 12px;
   gap: 6px;
 }
@@ -294,8 +295,10 @@
   align-self: center;
   width: 36px;
   height: 36px;
-  border: 0;
-  color: var(--text-muted);
+  border: var(--community-rail-button-border);
+  border-radius: var(--radius-sm);
+  background: var(--community-rail-control-bg);
+  color: var(--text-ink-primary);
 }
 
 .workflow-member-stub {

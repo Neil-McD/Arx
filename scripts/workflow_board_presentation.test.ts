@@ -40,6 +40,9 @@ test("board actions remain discoverable without hover", () => {
   expect(component).toMatch(/\}\)\}\s*<\/div>\s*<button\s+className="workflow-add-milestone-button"/);
   expect(css).toContain("border-bottom: 1px solid var(--stroke-divider-accent)");
   expect(css).toContain(".workflow-board-stage");
+  expect(css).toContain("padding-inline: 8px");
+  expect(css).toContain("background: var(--community-rail-control-bg)");
+  expect(css).toContain("border: var(--community-rail-button-border)");
   expect(component).toContain('aria-label="Add milestone"');
   expect(component).toContain("aria-label={`Edit ${milestone.name}`}");
 });

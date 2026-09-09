@@ -189,7 +189,10 @@ existing replay key and one-terminal-transition writer.
 
 The board keeps its add button in a reserved right-side slot outside horizontal
 scrolling, vertically centered on the lanes. Three-dot header buttons open the
-existing editor directly. Header separators use the sidebar divider token;
+existing editor directly. The board has 8px desktop side insets, with a 36px add
+control centered under the shell DM control and using the community rail card
+tokens. The reduced left inset lets lanes scroll closer to the sidebar.
+Header separators use the sidebar divider token;
 lane bodies own vertical scrolling without a minimum height that clips short
 windows. These layout rules remain board-local, not global shell breakpoints.
 
