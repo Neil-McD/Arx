@@ -185,6 +185,7 @@ import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebSt
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
+import { useWebChannelPeoplePanel } from "./controllers/useWebChannelPeoplePanel";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 import type {
   WebCommunityRecord,
@@ -770,12 +771,7 @@ export default function App() {
   const {
     communityDirectoryMembers,
     communityDirectoryMemberCount,
-    isLoadingCommunityDirectoryMembers,
-    isLoadingMoreCommunityDirectoryMembers,
-    communityDirectoryMembersHasMore,
-    communityDirectoryMembersLoadError,
     loadCommunityDirectoryMembers,
-    loadMoreCommunityDirectoryMembers,
   } = communityAdministration.directory;
   const {
     activeCommunityAccess,
@@ -814,18 +810,15 @@ export default function App() {
 
   useWebCommunityTabAccessGuard({
     activePage,
-    activeView,
     activeCommunityId,
     activeCommunityAccessId:
       activeCommunityAccess?.community_id ?? null,
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
-    canViewMembers: canViewMembersActiveCommunity,
     canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
-    setActiveView,
     applyCommunityShellState,
   });
 
@@ -1333,7 +1326,6 @@ export default function App() {
   }, [activeCommunityId, attentionByCommunityId]);
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
-    activeView,
     communityTab,
     ...sessionArg,
     resumeEpoch: appActivity.resumeEpoch,
@@ -2033,6 +2025,22 @@ export default function App() {
     pushNavSnapshot,
   });
 
+  const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
+    useWebChannelPeoplePanel({
+      userId: session?.user.id,
+      communityId: activeCommunityId,
+      channelSlug: communityChannelSlug,
+      inChat: activePage === "community" && communityTab === "chat",
+      canViewMembers: canViewMembersActiveCommunity,
+      closeDetail: handleCloseCommunityInteractionDrawer,
+      openGeneral: () => {
+        const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
+        if (!path) return false;
+        navigateTo(path);
+        return true;
+      },
+    });
+
   const {
     isDirty: isCommunityFunnelAboutDirty,
     reset: handleResetCommunityFunnelAbout,
@@ -2382,6 +2390,8 @@ export default function App() {
         onClose: closeCommunityChatLightbox,
       },
       interactionProjection: {
+        peopleOpen,
+        onPeopleOpenChange: handlePeoplePanelOpenChange,
         mobileThreadPage: mobileThreadPageOpen,
         activeChannel: isActiveCommunityChannelReady
           ? activeCommunityChannel
@@ -2872,6 +2882,7 @@ export default function App() {
     }
   }
   const shellChromeHostProps = buildWebShellChromeHostProps({
+    onOpenCommunityMembers: handleOpenCommunityMembers,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobilePublicFunnel,

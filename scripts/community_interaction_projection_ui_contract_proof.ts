@@ -369,8 +369,8 @@ assert.match(
 );
 assert.match(
   directoryController,
-  /loadCommunityDirectoryMembers[\s\S]*loadMoreCommunityDirectoryMembers/,
-  "the canonical directory controller must expose initial and paginated reads",
+  /loadCommunityDirectoryMembers[\s\S]*listCloudCommunityDirectoryWindow/,
+  "mention and profile hydration retain the bounded canonical directory reader",
 );
 assert.match(
   directoryController,
@@ -415,10 +415,10 @@ assert.match(
 
 
 
-assert.match(
+assert.doesNotMatch(
   directoryController,
-  /setCommunityDirectoryMembersHasMore\(Boolean\(page\.continueCursor && !page\.isDone\)\)/,
-  "directory controller should only advertise more pages when a continue cursor exists",
+  /setCommunityDirectoryMembersHasMore/,
+  "mention directory must not retain the retired roster pagination state",
 );
 
 
@@ -637,8 +637,8 @@ assert.doesNotMatch(
 );
 assert.match(
   directoryController,
-  /listCloudCommunityDirectoryPage[\s\S]*setCommunityDirectoryMemberCount[\s\S]*setCommunityDirectoryMembersHasMore/,
-  "directory controller should drive count and pagination state from directory pages",
+  /listCloudCommunityDirectoryWindow[\s\S]*setCommunityDirectoryMemberCount\(page.totalCount\)/,
+  "directory hydration should retain the canonical total count",
 );
 assert.match(
   communityDirectory,

@@ -9,6 +9,7 @@ import {createRoot} from 'react-dom/client';
 import {CommunityJoinRequestReview} from '/src/components/CommunityJoinRequestReview';
 import {useMemberScrollPagination} from '/src/components/useMemberScrollPagination';
 import {WebCommunityInteractionProjection} from '/src/components/WebCommunityInteractionProjection';
+import {useWebChannelPeoplePanel} from '/src/controllers/useWebChannelPeoplePanel';
 import '/src/index.css';
 window.React = React;
 function Fixture() {
@@ -27,15 +28,27 @@ function Fixture() {
 }
 function RosterFixture() {
  const [wide,setWide]=useState(false);
+ const [tab,setTab]=useState('agent'), [channel,setChannel]=useState('private');
+ const [community,setCommunity]=useState('synthetic');
+ const panel=useWebChannelPeoplePanel({userId:'viewer',communityId:community,channelSlug:channel,
+ inChat:tab==='chat',canViewMembers:true,closeDetail:()=>{},
+ openGeneral:()=>{setTab('chat');setChannel('general');return true;}});
  return <><label><input type="checkbox" checked={wide} onChange={e=>setWide(e.target.checked)}/>Desktop width</label>
+ <button onClick={panel.openMembers}>Members</button>
+ <button onClick={()=>{setTab('chat');setChannel('private');}}>Private channel</button>
+ <button onClick={()=>setTab('agent')}>Agent page</button>
+ <button onClick={()=>setCommunity(c=>c==='synthetic'?'other':'synthetic')}>Switch community</button>
+ <output>{community}: {tab} / {channel}; roster {panel.peopleOpen?'open':'closed'}</output>
  <div style={{container:'community-chat-area / inline-size',width:wide?1000:500,height:600,display:'flex'}}>
+ {tab==='chat'?
  <WebCommunityInteractionProjection roots={[]} replies={[]} activityEvents={[]} profilesByUserId={{}}
- communityId="synthetic" activeCommunityName="Synthetic community"
- activeChannel={{id:'general',name:'General',slug:'general',is_general:true}}
+ peopleOpen={panel.peopleOpen} onPeopleOpenChange={panel.changeOpen}
+ communityId={community} activeCommunityName="Synthetic community"
+ activeChannel={{id:channel,name:channel,slug:channel,is_general:channel==='general'}}
  displayName={()=>'Applicant'} getInitials={()=>'A'} getAvatarColor={()=>'gray'}
  formatChatTime={()=>''} renderTextWithLinks={text=>text} onSelectRoot={()=>{}}
  mainComposer={<input aria-label="Draft message" />}
- admission={{mode:'approval',canManage:true,pending:false,error:null,onChange:()=>{}}}/>
+ admission={{mode:'approval',canManage:true,pending:false,error:null,onChange:()=>{}}}/>:<p>Agent page fixture</p>}
  </div></>;
 }
 function ScrollFixture() {

@@ -70,6 +70,12 @@ threshold and underfilled viewport checks). No normal Load more button is shown.
 One page is requested at a time without restarting existing subscriptions;
 hidden rosters do not auto-drain pages. Failures retain an explicit Retry.
 No individual request scans until it fills a page.
+Mobile Members controls open the same channel roster, keeping the current chat
+channel or navigating to General from another community page. One shell-owned
+open state is scoped to viewer, community, and channel; Back/Escape return focus
+to the opener. Public funnel previews retain their existing member overlay.
+The directory controller retains only scoped rows, counts, and refresh for
+mentions/profiles; its unused load-more and presentation-loading state are removed.
 The existing reactive page subscriber invalidates descendant pages when an
 ancestor changes, while the UI deduplicates public user IDs. Presence leases still
 determine Online/Offline; ordering within those groups follows last-seen recency.

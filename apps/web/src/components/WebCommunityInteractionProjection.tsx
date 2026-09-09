@@ -49,6 +49,8 @@ import {
 } from "./mobileReadingModePolicy";
 
 export type WebCommunityInteractionProjectionProps = {
+  peopleOpen?: boolean;
+  onPeopleOpenChange?: (open: boolean) => void;
   admission?: CommunityAdmissionControl;
   activeCommunityName: string;
   activeChannel?: WebCommunityChannelHeaderChannel | null;
@@ -186,15 +188,13 @@ export function communityInteractionRootHasRichContent(
 
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
-  const [peopleOpen, setPeopleOpen] = useState(false);
-  const peopleTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const peopleOpen = props.peopleOpen ?? false;
   const closePeople = useCallback(() => {
-    setPeopleOpen(false);
-    requestAnimationFrame(() => peopleTriggerRef.current?.focus());
-  }, []);
+    props.onPeopleOpenChange?.(false);
+  }, [props.onPeopleOpenChange]);
   useEffect(() => {
-    setPeopleOpen(false);
-  }, [props.communityId, props.activeChannel?.id, props.selectedRootId, props.profilePanel]);
+    if (peopleOpen && (props.selectedRootId || props.profilePanel)) props.onPeopleOpenChange?.(false);
+  }, [peopleOpen, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
@@ -530,10 +530,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         {props.activeChannel ? (
           <WebCommunityChannelHeader
             trailingAction={!hasDetailPanel && props.communityId ? <button
-              ref={peopleTriggerRef} type="button"
+              type="button"
               className="community-channel-header-menu-trigger channel-people-trigger"
               aria-label="Show channel people and agents" aria-expanded={peopleOpen}
-              onClick={() => setPeopleOpen(true)}
+              onClick={() => props.onPeopleOpenChange?.(true)}
             ><Users size={18} aria-hidden="true" /></button> : null}
             channel={props.activeChannel}
             canManage={Boolean(props.canManageActiveChannel)}

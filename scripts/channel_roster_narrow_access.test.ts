@@ -4,10 +4,12 @@ const read = (path: string) => readFileSync(new URL("../" + path, import.meta.ur
 test("narrow access reuses one roster and preserves the mounted conversation", () => {
   const source = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
   expect(source.match(/<ChannelRosterPanel\b/g)).toHaveLength(1);
-  expect(source).toContain('ref={peopleTriggerRef}');
-  expect(source).toContain('peopleTriggerRef.current?.focus()');
+  expect(source).toContain('aria-label="Show channel people and agents"');
+  const controller = read("apps/web/src/controllers/useWebChannelPeoplePanel.ts");
+  expect(controller).toContain('openerRef.current.focus()');
   expect(source).toContain('narrowOpen={peopleOpen}');
-  expect(source).toContain('[props.communityId, props.activeChannel?.id, props.selectedRootId, props.profilePanel]');
+  expect(controller).toContain('params.canViewMembers && scope === currentScope ? scope : null');
+  expect(source).toContain('[peopleOpen, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]');
   const css = read("apps/web/src/styles/community-and-content.css");
   expect(css).toContain('.people-panel-open > .community-interaction-main { display: none; }');
   expect(css).toContain('.community-channel-header .channel-people-trigger');

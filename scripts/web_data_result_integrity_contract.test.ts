@@ -185,8 +185,8 @@ describe("web data result integrity contract", () => {
     expect(directory).toContain("listCloudCommunityDirectoryWindow");
     expect(directory).toContain("communityDirectoryMembersRef.current.length");
     expect(directory).toContain("communityDirectoryLoadSeqRef.current === seq");
-    expect(directory).toContain("communityDirectoryRefreshSeqRef.current !== null");
-    expect(directory).toContain("communityDirectoryLoadMoreCursorRef.current === cursor");
+    expect(directory).toContain("communityDirectoryLoadSeqRef.current !== seq");
+    expect(directory).not.toContain("loadMoreCommunityDirectoryMembers");
     expect(access).toContain("profileRequestRegistryRef.current !== registry");
     expect(access).toContain("loadingResetKey");
     expect(admin).toContain("selfProfileLoadSeqRef.current !== seq");

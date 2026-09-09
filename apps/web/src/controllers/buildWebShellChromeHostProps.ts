@@ -14,6 +14,7 @@ import type { CommunityShellCommunity } from "../../../../shared/communityTypes"
 type CommunityLike = CommunityShellCommunity;
 
 export function buildWebShellChromeHostProps(params: {
+  onOpenCommunityMembers: () => void;
   memberNextStep?: ReactNode;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
@@ -141,7 +142,6 @@ export function buildWebShellChromeHostProps(params: {
       isThreadPage: params.mobileThreadPageOpen,
       isCommunityHome: isMobileCommunityHome,
       communityDetailLabel: mobileChannelLabel,
-      communityDetailIcon: "channel",
       showBackButton:
         params.showMobileSettingsIndex ||
         params.mobileThreadPageOpen ||
@@ -185,10 +185,7 @@ export function buildWebShellChromeHostProps(params: {
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
       onOpenMembers: params.isPublicCommunityFunnel
         ? () => params.setMobileOverlay("members")
-        : () => {
-            const slug = String(params.activeCommunity?.slug ?? "").trim();
-            if (slug) params.openCommunityChat(slug);
-          },
+        : params.onOpenCommunityMembers,
       canOpenCommunitySettings:
         isMobileCommunityHome && params.canViewActiveCommunitySettings,
       onOpenCommunitySettings: isMobileCommunityHome
@@ -236,10 +233,7 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityMemberCount: params.activeCommunityMemberCount,
       onOpenMembers: params.isPublicCommunityFunnel
         ? () => params.setMobileOverlay("members")
-        : () => {
-            const slug = String(params.activeCommunity?.slug ?? "").trim();
-            if (slug) params.openCommunityChat(slug);
-          },
+        : params.onOpenCommunityMembers,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
