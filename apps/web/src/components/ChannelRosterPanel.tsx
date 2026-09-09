@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps } from "react";
+import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent } from "react";
 import { MessageCircle, MoreHorizontal, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
@@ -21,6 +21,15 @@ import type { CommunityPresenceSummary } from "../../../../shared/communityTypes
 import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOverview, type CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
+
+function trapTab(event: KeyboardEvent, container: HTMLElement | null) {
+  if (event.key !== "Tab") return;
+  const controls = Array.from(container?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? [])
+    .filter(element => element.getClientRects().length > 0);
+  const first = controls[0], last = controls[controls.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+}
 
 type RosterProps = {
   memberDetailOpen?: boolean;
@@ -64,6 +73,7 @@ function RosterSurface(props: RosterProps & {
 }) {
   const scope = useContext(CommunityChannelSessionContext);
   const dialogRef = useRef<HTMLElement | null>(null);
+  const settingsRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!props.directory || props.memberDetailOpen) return;
@@ -157,6 +167,11 @@ function RosterSurface(props: RosterProps & {
   useEffect(() => {
     if (selectedMembershipId && !selectedMember) setSelectedMembershipId(null);
   }, [selectedMembershipId, selectedMember]);
+  useEffect(() => {
+    if (!props.directory || !selectedMembershipId) return;
+    settingsRef.current?.querySelector<HTMLElement>('button')?.focus();
+    return () => searchRef.current?.focus();
+  }, [props.directory, selectedMembershipId]);
   const status = (member: typeof members[number]) => member.last_seen_at === null ? "unknown"
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
@@ -261,12 +276,7 @@ function RosterSurface(props: RosterProps & {
           return;
         }
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); props.onCloseMembers?.(); }
-        if (event.key !== "Tab") return;
-        const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? [])
-          .filter(element => element.getClientRects().length > 0);
-        const first = controls[0], last = controls[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        trapTab(event, dialogRef.current);
       }}>
       <div className="modal-header">
         <div><h2 className="modal-title" id="members-directory-title">Members</h2><div className="members-directory-community">{props.communityName}</div></div>
@@ -274,7 +284,8 @@ function RosterSurface(props: RosterProps & {
       </div>
       {content}
     </section>
-  </div><div onKeyDown={event => {
+  </div><div ref={settingsRef} onKeyDown={event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
+    trapTab(event, settingsRef.current);
   }}>{settings}</div></>, document.body);
 }

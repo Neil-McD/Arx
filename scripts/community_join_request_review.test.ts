@@ -40,7 +40,7 @@ test("both member surfaces reuse one request renderer and existing decision hand
   expect(source).toContain("isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onDenyJoinRequest");
 });
 
-test("community admission remains available while the channel roster is loading", async () => {
+test("View all remains available while the roster loads; management no longer clutters the sidebar", async () => {
   const { ChannelRosterPanel } = await import("../apps/web/src/components/ChannelRosterPanel");
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
     communityName: "Synthetic community",
@@ -50,6 +50,8 @@ test("community admission remains available while the channel roster is loading"
     getInitials: () => "A", getAvatarColor: () => "gray",
   }));
   expect(html).toContain("Loading channel roster");
-  expect(html).toContain("Auto-join is off");
-  expect(html).toContain("1 request to join");
+  expect(html).toContain("View all");
+  expect(html).not.toContain("Auto-join is off");
+  expect(html).not.toContain("1 request to join");
+  expect(html).not.toContain("Search community members");
 });
