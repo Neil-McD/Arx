@@ -189,6 +189,16 @@ const serviceProps = {
   onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
 };
 
+test("progress is the default and missing conditions are not an empty list", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: undefined } } });
+  expect(html).toContain('id="member-workflow-tab-progress"');
+  expect(html).toContain('aria-labelledby="member-workflow-tab-progress"');
+  expect(html).toContain('Movement conditions unavailable.');
+  expect(html).not.toContain('No automatic movement conditions configured.');
+  const empty = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: [] } } });
+  expect(empty).toContain('No automatic movement conditions configured.');
+});
+
 test("force-move entry reuses themed workflow control and stays hidden after completion", () => {
   const workflow = { ...source.workflow!, override_state: { activation_sequence: 1, transition_seq: 0, next_milestone_name: "Review" } };
   const html = renderDossier({ dossier: { ...source, markdown: "", workflow } });

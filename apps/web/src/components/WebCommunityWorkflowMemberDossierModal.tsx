@@ -12,6 +12,8 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CloudCommunityMemberSuccessDossier } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 import { formatWorkflowMilestoneAge } from "./WebCommunityWorkflowMemberStub";
 import { WorkflowMemberServiceChannel } from "./WorkflowMemberServiceChannel";
+import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 
 function readableLabel(value: string): string {
@@ -69,6 +71,12 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   onOpenServiceChannel: (channelId: string) => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
+  const [view, setView] = useState("progress");
+  useEffect(() => { setView("progress"); }, [props.isOpen, props.dossier?.membership_id]);
+  useEffect(() => {
+    const body = dialogRef.current?.querySelector<HTMLElement>(".workflow-member-dossier-body");
+    if (body) body.scrollTop = 0;
+  }, [view]);
   const [confirmation, setConfirmation] = useState<CloudCommunityMemberSuccessDossier | null>(null);
   const [forcing, setForcing] = useState(false);
   const [forceError, setForceError] = useState<string | null>(null);
@@ -191,6 +199,12 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
           </button>
         </div>
 
+        {dossier && !props.isLoading && !props.error && !confirmation ? <div className="workflow-member-dossier-tabs">
+          <WebPlatformTabList tabs={[{ id: "progress", label: "Progress" }, { id: "responses", label: "Responses" }, { id: "details", label: "Details" }]}
+            activeTab={view} onSelectTab={setView} ariaLabel="Member workflow" idPrefix="member-workflow"
+            className="platform-switcher platform-switcher-compact"
+            style={buildPlatformSwitcherStyle(3, ["progress", "responses", "details"].indexOf(view))} />
+        </div> : null}
         <div className="modal-body workflow-member-dossier-body">
           {confirmation ? <section className="workflow-member-dossier-section" role="alertdialog" aria-labelledby="force-move-title" aria-describedby="force-move-warning">
             <h3 id="force-move-title">Force {confirmation.workflow?.override_state?.next_milestone_name ? "move to next milestone" : "workflow completion"}?</h3>
@@ -208,10 +222,6 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               }}>{forcing ? "Moving…" : confirmation.workflow?.override_state?.next_milestone_name ? "Force move" : "Force complete"}</button>
             </div>
           </section> : <>
-          {dossier?.workflow?.requirements?.length && !dossier.workflow.completed_at ? <section>
-            <h3>Move on when all requirements are met</h3>
-            <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
-          </section> : null}
           {props.isLoading ? (
             <div
               className="workflow-member-dossier-loading"
@@ -234,12 +244,22 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
             </div>
           ) : dossier ? (
             <>
+              <div role="tabpanel" id={platformTabPanelId("member-workflow", view)} aria-labelledby={platformTabId("member-workflow", view)}>
+              <div hidden={view !== "progress"}>
               {dossier.workflow ? <section className="workflow-member-dossier-section">
                 <h3>Milestone goal</h3>
                 <p>{dossier.workflow.goal || "No goal specified."}</p>
-                {!dossier.workflow.completed_at && dossier.workflow.override_state ? <button type="button" className="workflow-secondary-button" data-override-open onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button> : null}
               </section> : null}
-              {props.formResponses}
+              {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
+                <h3>Automatic advancement</h3>
+                {dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
+                  <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
+                  <p>All conditions must be met. These do not wait for agent actions or goal achievement.</p>
+                </> : <p>No automatic movement conditions configured.</p>}
+              </section> : null}
+              </div>
+              <div hidden={view !== "responses"}>{props.formResponses ?? <p>Form responses unavailable.</p>}</div>
+              <div hidden={view !== "details"}>
               <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}
                 channels={props.channels} channelsUnavailable={props.channelsUnavailable}
                 saving={props.isServiceChannelSaving} error={props.serviceChannelError}
@@ -264,7 +284,8 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   </p>
                 )}
               </section>
-
+              </div>
+              <div hidden={view !== "progress"}>
               <section className="workflow-member-dossier-section">
                 <h3>Recent workflow activity</h3>
                 {dossier.recent_workflow_activity.length > 0 ? (
@@ -301,7 +322,8 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   <p>No recorded workflow activity.</p>
                 )}
               </section>
-
+              </div>
+              <div hidden={view !== "details"}>
               <details className="workflow-member-dossier-section workflow-member-milestone-history">
                 <summary>Recent milestone history</summary>
                 {dossier.milestone_history.length > 0 ? (
@@ -323,6 +345,13 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   <p>No recorded milestone changes.</p>
                 )}
               </details>
+              {dossier.workflow && !dossier.workflow.completed_at && dossier.workflow.override_state ? <section className="workflow-member-dossier-section">
+                <h3>Manual override</h3>
+                <p>Bypass unmet requirements without marking the goal achieved.</p>
+                <button type="button" className="workflow-secondary-button" data-override-open onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button>
+              </section> : null}
+              </div>
+              </div>
             </>
           ) : null}
           </>}

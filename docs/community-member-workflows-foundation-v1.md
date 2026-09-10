@@ -2,6 +2,19 @@
 
 ## Product contract
 
+### Member progress presentation
+
+The existing member popup opens on Progress, with the canonical tab control for
+Responses and Details. Progress shows the milestone goal, current automatic
+movement conditions, and bounded recent workflow activity. Missing requirements
+are unavailable, not an empty list; historical assessments are not current goal
+proof. This slice does not infer action completion or readiness from recent runs.
+Responses retains the submitted-form viewer. Details retains service-channel
+assignment, approved member context, milestone history, and the existing guarded
+Force move confirmation. Tab switches do not save, change progression, or remount
+the response/channel controls. The popup reuses the milestone editor surface and
+backdrop; canonical avatars, evidence, permissions, and history bounds remain.
+
 ### Board presentation
 
 The milestone editor opens on Overview (name, instructions, goal), with the
