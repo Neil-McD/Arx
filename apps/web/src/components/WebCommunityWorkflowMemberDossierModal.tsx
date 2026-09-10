@@ -251,6 +251,22 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 <p>{dossier.workflow.goal || "No goal specified."}</p>
               </section> : null}
               {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
+                <h3>Actions</h3>
+                {!dossier.workflow.action_progress ? <p>Action completion unavailable.</p> : <>
+                  {dossier.workflow.action_progress.actions.length ? <ul className="workflow-member-action-progress">
+                    {dossier.workflow.action_progress.actions.map(action => <li key={action.automation_key}>
+                      <div><strong>{action.label}</strong>
+                        <span>{action.status === "complete" ? action.action_type === "request_form" ? "Form submitted" : action.action_type === "prompt_agent" ? "Response delivered" : "Channel ready"
+                          : action.status === "pending" ? action.action_type === "request_form" ? "Awaiting submission" : "Queued"
+                          : action.status === "unavailable" ? "Completion unavailable" : readableLabel(action.status)}</span></div>
+                      {action.evidence ? <small>Verified <ActivityTime value={new Date(action.evidence.completed_at).toISOString()} /></small> : null}
+                    </li>)}
+                  </ul> : <p>No actions configured.</p>}
+                  {dossier.workflow.action_progress.scan_truncated ? <p>Only a bounded set of recent receipts was checked. Unproven actions remain unavailable.</p> : null}
+                  {dossier.workflow.action_progress.actions.some(action => action.action_type === "prompt_agent") ? <p>A delivered response does not prove the milestone goal was achieved.</p> : null}
+                </>}
+              </section> : null}
+              {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
                 <h3>Automatic advancement</h3>
                 {dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
                   <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>

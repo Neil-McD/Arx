@@ -1283,6 +1283,9 @@ export default defineSchema({
     .index("by_member_entry", ["workflowId", "membershipId", "activationSequence", "transitionSeq"]),
 
   communityMemberWorkflowRuns: defineTable({
+    // Old receipts remain history, not proof for a current activation/visit.
+    activationSequence: v.optional(v.number()),
+    transitionSeq: v.optional(v.number()),
     goalAssessment: v.optional(v.object({ verdict: v.union(v.literal("achieved"), v.literal("not_yet"), v.literal("insufficient_evidence")), reason: v.string(), evidenceRefs: v.array(v.string()), assessedAt: v.number() })),
     milestoneContextSnapshot: v.optional(v.object({ instructions: v.string(), goal: v.string() })),
     communityId: v.id("communities"),

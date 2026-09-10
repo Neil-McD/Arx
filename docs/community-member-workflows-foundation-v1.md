@@ -648,3 +648,16 @@ untouched. This proof does not replace authenticated member-journey acceptance.
 ## Generated service-channel labels
 
 New join-created service channels use the canonical profile display projection, falling back to the account name and then `Member`. Active name collisions receive a bounded numeric suffix such as ` (2)` through the canonical channel-name validator. Allocation and creation share the existing transaction; IDs, slugs, access grants, binding, and replay authority remain unchanged. Existing channels, including builder-renamed channels, are never automatically renamed.
+# Current-visit action proof (local completion slice)
+
+The manager-only member Progress view reads completion from existing workflow runs and their linked product results. It does not create tasks, perform inference, or authorize movement. Legacy movement behavior is unchanged by this slice.
+
+- Private channel: the linked result must match the member's currently assigned, accessible service channel.
+- Form: the linked request must have a valid submission against its pinned form version. Dispatch alone remains pending.
+- Agent: the linked serve request must point to an actual live, correctly attributed response. A response does not prove the written goal.
+
+Proof is bound to community, membership activation, stage visit, workflow revision, and action/trigger/context snapshots. Existing runs without the additive activation/visit fields remain history, not current proof; no backfill is performed. Failed and running states remain visible. A proven earlier success in the same definition and visit is not erased by a later failure.
+
+The reader checks at most 256 recent runs using the existing workflow/member index (plus one truncation sentinel). Unproven or out-of-window work is unavailable, never implicitly pending or completed. No configured work does not count as all actions completed. Movement and goal-assessment actions are excluded from work completion.
+
+Release requires the additive Convex schema/receipt writer and web reader to be deployed together through their approved release paths. Local tests and synthetic browser rendering do not constitute staging acceptance.

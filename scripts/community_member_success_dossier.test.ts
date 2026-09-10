@@ -189,6 +189,23 @@ const serviceProps = {
   onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
 };
 
+test("progress distinguishes verified work, empty configuration, and unavailable proof", () => {
+  const dossier = { ...source, markdown: "", workflow: { ...source.workflow!, action_progress: {
+    actions: [{ automation_key: "a", action_key: "b", label: "Ask agent: Introduce yourself",
+      action_type: "prompt_agent" as const, status: "complete" as const,
+      evidence: { run_id: "run", source_id: "response", completed_at: 1_780_000_000_000 } }],
+    all_actions_complete: true, scan_truncated: true,
+  } } };
+  const html = renderDossier({ dossier });
+  expect(html).toContain("Response delivered");
+  expect(html).toContain("Ask agent: Introduce yourself");
+  expect(html).toContain("does not prove the milestone goal");
+  expect(html).toContain("Unproven actions remain unavailable");
+  expect(renderDossier()).toContain("Action completion unavailable.");
+  dossier.workflow.action_progress.actions = [];
+  expect(renderDossier({ dossier })).toContain("No actions configured.");
+});
+
 test("progress is the default and missing conditions are not an empty list", () => {
   const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: undefined } } });
   expect(html).toContain('id="member-workflow-tab-progress"');

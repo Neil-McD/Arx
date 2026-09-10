@@ -4,6 +4,21 @@ import { communityMembershipRowIsActive } from "./communityCore";
 import { formAnswersIssue } from "../shared/communityFormAnswers";
 import type { CommunitySubmittedFormEvidence } from "../shared/communityMembershipContext";
 
+/** Exact-record validator shared by context assembly and action completion. */
+export async function readSubmittedFormRecord(ctx: QueryCtx, membership: Doc<"communityMemberships">, request: Doc<"communityFormRequests">) {
+  if (!communityMembershipRowIsActive(membership) || request.membershipId !== membership._id
+    || request.status !== "submitted" || request.activationSequence !== (membership.activationSequence ?? 0)
+    || request.communityId !== membership.communityId || !request.submittedAt) return null;
+  const version = await ctx.db.get(request.versionId);
+  const form = version ? await ctx.db.get(version.formId) : null;
+  const workflow = await ctx.db.get(request.workflowId);
+  if (!version || version.communityId !== membership.communityId
+    || !form || form.communityId !== membership.communityId || form.key !== request.formKey
+    || !workflow || workflow.communityId !== membership.communityId
+    || formAnswersIssue(version.questions, request.answers, true)) return null;
+  return { request, version };
+}
+
 // Private assembly only: callers must establish builder or execution authority.
 // Scan is bounded even when old activations or invalid records occupy the window.
 export async function readSubmittedFormRecords(ctx: QueryCtx, membership: Doc<"communityMemberships">, requiredRequestId?: Id<"communityFormRequests">) {
@@ -18,18 +33,12 @@ export async function readSubmittedFormRecords(ctx: QueryCtx, membership: Doc<"c
   for (const request of selected) {
     if (request.membershipId !== membership._id || request.status !== "submitted") continue;
     if (request.activationSequence !== (membership.activationSequence ?? 0)) continue;
-    const version = await ctx.db.get(request.versionId);
-    const form = version ? await ctx.db.get(version.formId) : null;
-    const workflow = await ctx.db.get(request.workflowId);
-    if (request.communityId !== membership.communityId || !request.submittedAt ||
-      !version || version.communityId !== membership.communityId ||
-      !form || form.communityId !== membership.communityId || form.key !== request.formKey ||
-      !workflow || workflow.communityId !== membership.communityId ||
-      formAnswersIssue(version.questions, request.answers, true)) {
+    const record = await readSubmittedFormRecord(ctx, membership, request);
+    if (!record) {
       unavailable++;
       continue;
     }
-    records.push({ request, version });
+    records.push(record);
   }
   if (requiredRequestId && records[0]?.request._id !== requiredRequestId) throw new Error("workflow_form_evidence_unavailable");
   return { records, scan_truncated: candidates.length > 50, unavailable };

@@ -470,6 +470,12 @@
 
 .workflow-member-dossier-body [hidden] { display: none; }
 .workflow-member-dossier-tabs { flex-shrink: 0; padding: 0 20px; }
+.workflow-member-action-progress { list-style: none; padding: 0; margin: 0; }
+.workflow-member-action-progress li + li { margin-top: 16px; }
+.workflow-member-action-progress li > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; }
+.workflow-member-action-progress strong { overflow-wrap: anywhere; }
+.workflow-member-action-progress span, .workflow-member-action-progress small { color: var(--text-muted); }
+.workflow-member-action-progress small { display: block; margin-top: 4px; }
 
 .workflow-member-dossier-section {
   padding: 20px 0;

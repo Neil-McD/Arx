@@ -11,8 +11,96 @@ import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from ".
 import { createActiveCommunityChannel } from "./communityChannelCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { bindMemberServiceChannel } from "./communityMemberServiceChannelCore";
+import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
 const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
+
+async function progress(f: Awaited<ReturnType<typeof fixture>>) {
+  return f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    const membership = (await ctx.db.get(f.membershipId))!;
+    return readWorkflowActionProgress(ctx, { workflow, membership, milestone: workflow.milestones[0],
+      milestoneEnteredAt: f.now, transitionSeq: 0 });
+  });
+}
+
+test("completion verifies channel and form outcomes without writes or movement", async () => {
+  const f = await fixture("both");
+  await f.t.mutation(joinHandler, f.job);
+  const before = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect());
+  expect(await progress(f)).toMatchObject({ all_actions_complete: false, actions: [
+    { action_type: "create_service_channel", status: "complete" }, { action_type: "request_form", status: "pending" },
+  ] });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).toEqual(before);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  await f.t.mutation(joinHandler, f.job);
+  expect((await progress(f)).actions).toHaveLength(2);
+  await f.t.run(async ctx => {
+    const member = (await ctx.db.get(f.membershipId))!;
+    await ctx.db.patch(member.serviceChannelId!, { status: "archived" });
+  });
+  expect((await progress(f)).actions[0].status).toBe("unavailable");
+});
+
+test.each(["activation", "visit", "revision", "historical", "definition"])("completion rejects %s evidence", async kind => {
+  const f = await fixture();
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    if (kind === "activation") await ctx.db.patch(run._id, { activationSequence: 999 });
+    if (kind === "visit") await ctx.db.patch(run._id, { transitionSeq: 999 });
+    if (kind === "revision") await ctx.db.patch(run._id, { workflowRevision: 999 });
+    if (kind === "historical") await ctx.db.patch(run._id, { activationSequence: undefined });
+    if (kind === "definition") await ctx.db.patch(run._id, { actionSnapshot: { key: "changed", type: "create_service_channel" } });
+  });
+  expect(await progress(f)).toMatchObject({ all_actions_complete: false, actions: [{ status: "unavailable" }] });
+});
+
+test("submitted forms require valid pinned answers, and progress stays manager-only", async () => {
+  const f = await fixture("form");
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    const request = (await ctx.db.query("communityFormRequests").first())!;
+    await ctx.db.patch(request._id, { status: "submitted", submittedAt: f.now + 1, answers: {} });
+  });
+  expect(await progress(f)).toMatchObject({ all_actions_complete: true, actions: [{ status: "complete" }] });
+  const query = api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier;
+  const args = { communityId: f.communityId, membershipId: f.membershipId };
+  await expect(f.t.withIdentity({ subject: "join-member" }).query(query, args)).rejects.toThrow();
+  const builder = await f.t.withIdentity({ subject: "join-owner" }).query(query, args);
+  expect(builder.workflow?.action_progress?.all_actions_complete).toBe(true);
+  await f.t.run(async ctx => {
+    await ctx.db.patch(f.versionId, { questions: [{ key: "required", type: "short_text", title: "Required", description: "", options: [], required: true }] });
+  });
+  expect((await progress(f)).actions[0].status).toBe("unavailable");
+});
+
+test.each(["failed", "running"] as const)("action progress retains %s outcome", async status => {
+  const f = await fixture();
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    await ctx.db.patch(run._id, { status, actionResult: undefined });
+  });
+  expect((await progress(f)).actions[0].status).toBe(status);
+});
+
+test("empty actions and truncated history never fabricate completion", async () => {
+  const f = await fixture();
+  expect((await progress(f)).actions[0].status).toBe("unavailable");
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    const { _id, _creationTime, ...run } = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    for (let i = 1; i <= 257; i++) await ctx.db.insert("communityMemberWorkflowRuns", { ...run,
+      automationKey: "other", createdAt: run.createdAt + i, triggerReceiptRef: `other-${i}` });
+  });
+  expect(await progress(f)).toMatchObject({ scan_truncated: true, all_actions_complete: false, actions: [{ status: "unavailable" }] });
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], automations: [] }] });
+  });
+  expect(await progress(f)).toEqual({ actions: [], all_actions_complete: false, scan_truncated: false });
+});
 
 async function fixture(mode: "room" | "form" | "both" = "room", reverse = false) {
   const t = convexTest(schema, modules);

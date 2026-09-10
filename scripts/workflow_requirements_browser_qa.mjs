@@ -17,7 +17,7 @@ window.qa={saved:null};
 const root=createRoot(document.getElementById('root'));
 window.qa.responses=page=>root.render(<WebCommunityFormResponses gateway={{responses:async()=>page}} membershipId='qa'/>);
 window.qa.activity=()=>root.render(<WebCommunityWorkflowMemberDossierModal isOpen={true} isLoading={false} error={null}
- dossier={{membership_id:'qa',display_name:'Example member',avatar_url:null,workflow:{id:'workflow',revision:1,current_milestone_key:'new',current_milestone_name:'New',current_milestone_entered_at:new Date().toISOString(),completed_at:null,goal:'Explain your goals.',requirements:[],override_state:{activation_sequence:1,transition_seq:0,next_milestone_name:'Ready'}},service_channel:{status:'unassigned',revision:0,channel_id:null,name:null},approved_community_context:[],milestone_history:[],recent_workflow_activity:
+ dossier={{membership_id:'qa',display_name:'Example member',avatar_url:null,workflow:{id:'workflow',revision:1,current_milestone_key:'new',current_milestone_name:'New',current_milestone_entered_at:new Date().toISOString(),completed_at:null,goal:'Explain your goals.',requirements:[],action_progress:{actions:[{automation_key:'channel',action_key:'channel',label:'Create private channel',action_type:'create_service_channel',status:'complete',evidence:{run_id:'run',source_id:'channel',completed_at:Date.now()}},{automation_key:'form',action_key:'form',label:'Request intake form',action_type:'request_form',status:'pending',evidence:null},{automation_key:'agent',action_key:'agent',label:'Ask agent: Introduce yourself and help the member identify one concrete next step',action_type:'prompt_agent',status:'unavailable',evidence:null}],all_actions_complete:false,scan_truncated:false},override_state:{activation_sequence:1,transition_seq:0,next_milestone_name:'Ready'}},service_channel:{status:'unassigned',revision:0,channel_id:null,name:null},approved_community_context:[],milestone_history:[],recent_workflow_activity:
  ['channel_access_missing','workflow_member_context_changed','unknown'].map((code,i)=>({id:String(i),action_type:'prompt_agent',status:'failed',...workflowActivityExplanation('failed',code),milestone_name:'New',occurred_at:new Date().toISOString()})).concat([{id:'running',action_type:'prompt_agent',status:'running',milestone_name:'New',occurred_at:new Date().toISOString()}])}}
  channels={[]} channelsUnavailable={false} isServiceChannelSaving={false} serviceChannelError={null} onClose={()=>{}} onRetry={()=>{}} onSetServiceChannel={async()=>true} onForceMove={async()=>{}} onOpenServiceChannel={()=>{}}/>);
 root.render(<WebCommunityWorkflowMilestoneModal isOpen={true}
@@ -106,6 +106,9 @@ try{
  await page.getByRole('tab',{name:'Progress',exact:true}).waitFor();
  assert.equal(await page.getByRole('button',{name:'Force move…',exact:true}).isVisible(),false);
  await page.getByText('No automatic movement conditions configured.',{exact:true}).waitFor();
+ await page.getByText('Channel ready',{exact:true}).waitFor();
+ await page.getByText('Awaiting submission',{exact:true}).waitFor();
+ await page.getByText('Completion unavailable',{exact:true}).waitFor();
  await page.getByRole('tab',{name:'Progress',exact:true}).focus();
  await page.keyboard.press('ArrowRight');
  await page.getByText('Form responses unavailable.',{exact:true}).waitFor();
@@ -127,6 +130,8 @@ try{
   assert.ok(tabs && tabs.height>=30 && tabs.y>=0 && tabs.y+tabs.height<850);
   const dialog=await page.getByRole('dialog').boundingBox();assert.ok(dialog.x>=0&&dialog.x+dialog.width<=width+1);
   await page.screenshot({path:resolve(output,'activity-'+width+'-'+theme+'.png'),animations:'disabled'});
+  await page.getByRole('heading',{name:'Actions',exact:true}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:resolve(output,'action-progress-'+width+'-'+theme+'.png'),animations:'disabled'});
   for(const tab of ['Responses','Details']) {
    await page.getByRole('tab',{name:tab,exact:true}).click();
    await page.screenshot({path:resolve(output,'member-'+tab.toLowerCase()+'-'+width+'-'+theme+'.png'),animations:'disabled'});

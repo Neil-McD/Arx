@@ -1,6 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
+import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
 import { workflowActivityExplanation } from "../shared/workflowActivityExplanation";
 import { currentWorkflowRequirementEvidence } from "../shared/communityMemberWorkflow";
 import type { QueryCtx } from "./_generated/server";
@@ -395,7 +396,12 @@ async function readMembershipContextRecords(args: {
         ? {
             id: String(workflow._id),
             revision: workflow.revision,
-            ...(args.view === "builder" ? { goal: current.milestone.goal ?? "", override_state: {
+            ...(args.view === "builder" ? {
+              ...(!current.completedAt ? { action_progress: await readWorkflowActionProgress(args.ctx, {
+                workflow, membership: membership!, milestone: current.milestone,
+                milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: Number(state?.transitionSeq ?? 0),
+              }) } : {}),
+              goal: current.milestone.goal ?? "", override_state: {
               activation_sequence: Number(membership?.activationSequence ?? 0), transition_seq: Number(state?.transitionSeq ?? 0),
               next_milestone_name: workflow.milestones[current.milestoneIndex + 1]?.name ?? null,
             } } : {}),

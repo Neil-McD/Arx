@@ -1688,6 +1688,7 @@ test("prompt_agent admits one linked serve request and never moves the member", 
       prompt: "Help the member choose one concrete next step.",
     }),
   ]);
+  expect(queuedDossier.workflow?.action_progress?.actions[0].status).toBe("pending");
 
   await t.run(async (ctx) => await ctx.db.patch(state.requests[0]._id, {
     status: "responded",
@@ -1699,6 +1700,25 @@ test("prompt_agent admits one linked serve request and never moves the member", 
     { communityId: f.communityId, membershipId: f.membershipId },
   );
   expect(respondedDossier.recent_workflow_activity[0].status).toBe("responded");
+  expect(respondedDossier.workflow?.action_progress?.actions[0].status).toBe("unavailable");
+  const responseId = await t.run(async ctx => {
+    const id = await ctx.db.insert("communityInteractionReplies", {
+      communityId: f.communityId, channelId: f.channelId, rootId, seq: 1,
+      actorType: "community_agent", actorAgentKey: state.requests[0].agentKey, status: "live",
+      visibilityScope: "community", contentSummary: "Here is your next step.", reactionSummary: [],
+      idempotencyKey: `community_agent_serve:${state.requests[0]._id}`,
+      createdAt: f.nowMs + 20, updatedAt: f.nowMs + 20,
+    });
+    await ctx.db.patch(state.requests[0]._id, { responseReplyId: id });
+    return id;
+  });
+  const completedDossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(completedDossier.workflow?.action_progress?.all_actions_complete).toBe(true);
+  await t.run(async ctx => { await ctx.db.delete(responseId); });
+  const missingDossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(missingDossier.workflow?.action_progress?.actions[0].status).toBe("unavailable");
   expect(respondedDossier.markdown).toContain(
     "Agent prompt responded in New — Help the member choose one concrete next step.",
   );

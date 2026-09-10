@@ -869,6 +869,9 @@ async function executeWorkflowAutomation(args: {
   }
   const nowMs = Date.now();
   const workflowRunId = await args.ctx.db.insert("communityMemberWorkflowRuns", {
+    activationSequence: Number(args.membership.activationSequence ?? 0),
+    transitionSeq: Number((await getMemberMilestone({ ctx: args.ctx,
+      workflowId: args.workflow._id, membershipId: args.membership._id }))?.transitionSeq ?? 0),
     communityId: args.workflow.communityId,
     workflowId: args.workflow._id,
     membershipId: args.membership._id,
