@@ -21,6 +21,12 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("tracks and reverts human approval without changing action definitions", () => {
+    const drafts = [toWorkflowAutomationDraft(automation)];
+    expect(isWorkflowMilestoneDraftDirty(snapshot, "New", drafts, "", "", true)).toBe(true);
+    expect(isWorkflowMilestoneDraftDirty(snapshot, "New", drafts, "", "", false)).toBe(false);
+    expect(isWorkflowMilestoneDraftDirty({ ...snapshot, requireHumanApproval: true }, "New", drafts)).toBe(false);
+  });
   it("validates trigger setup independently of an unchosen action", () => {
     const draft = { ...automation, trigger: { type: "member_contributed" as const }, action: { key: "a", type: "prompt_agent" as const, prompt: "" } };
     expect(workflowTriggerIssue(draft, [], false)).toBeNull();

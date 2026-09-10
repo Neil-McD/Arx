@@ -646,6 +646,17 @@
   line-height: 1.5;
 }
 
+.workflow-milestone-form label.community-channel-participant {
+  display: flex;
+  gap: 10px;
+}
+
+.workflow-milestone-form input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
 .workflow-milestone-form > label > textarea,
 .workflow-editor-page > label > textarea {
   min-height: 64px;

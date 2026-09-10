@@ -658,6 +658,12 @@ untouched. This proof does not replace authenticated member-journey acceptance.
 New join-created service channels use the canonical profile display projection, falling back to the account name and then `Member`. Active name collisions receive a bounded numeric suffix such as ` (2)` through the canonical channel-name validator. Allocation and creation share the existing transaction; IDs, slugs, access grants, binding, and replay authority remain unchanged. Existing channels, including builder-renamed channels, are never automatically renamed.
 # Current-visit action proof (local completion slice)
 
+## Human approval gate (local implementation)
+
+The Overview checkbox `Require human approval` is an optional milestone flag, defaulting to false for existing data. With it checked, verified action completion waits for an owner/admin to approve through the existing member Progress popup, with or without a written goal. Normal approval is not Force move: the server atomically checks current membership, activation, workflow revision, stage visit, and all current action proof before reusing the canonical transition writer. Its history receipt records approving actor, reviewed goal, activation, and action evidence. Stale or repeated approvals cannot advance twice.
+
+Changing this flag does not invalidate unchanged work, schedule a transition, or backfill progression. Human approval cannot be combined with legacy movement or goal-evaluation rules. Empty/truncated/unavailable work remains closed. Unchecked blank-goal advancement is unchanged; unchecked written goals still hold pending the separate agent-review slice. No new page, queue, polling loop, or inference is introduced. This is not a staging or production release receipt.
+
 The manager-only member Progress view reads completion from existing workflow runs and their linked product results. It does not create tasks, perform inference, or authorize movement. Legacy movement behavior is unchanged by this slice.
 
 - Private channel: the linked result must match the member's currently assigned, accessible service channel.

@@ -401,6 +401,7 @@ async function readMembershipContextRecords(args: {
                 workflow, membership: membership!, milestone: current.milestone,
                 milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: Number(state?.transitionSeq ?? 0),
               }) } : {}),
+              require_human_approval: current.milestone.requireHumanApproval ?? false,
               goal: current.milestone.goal ?? "", override_state: {
               activation_sequence: Number(membership?.activationSequence ?? 0), transition_seq: Number(state?.transitionSeq ?? 0),
               next_milestone_name: workflow.milestones[current.milestoneIndex + 1]?.name ?? null,

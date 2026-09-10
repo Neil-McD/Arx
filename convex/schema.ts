@@ -1212,6 +1212,7 @@ export default defineSchema({
         name: v.string(),
         instructions: v.optional(v.string()),
         goal: v.optional(v.string()),
+        requireHumanApproval: v.optional(v.boolean()),
         automations: v.array(v.object({
           key: v.string(),
           timerGeneration: v.optional(v.string()),
@@ -1350,6 +1351,7 @@ export default defineSchema({
     .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 
   communityMemberWorkflowTransitions: defineTable({
+    approval: v.optional(v.object({ actorUserId: v.id("users"), goal: v.string(), activationSequence: v.number() })),
     completionEvidence: v.optional(v.array(v.object({ actionKey: v.string(), automationKey: v.string(),
       run_id: v.string(), source_id: v.string(), completed_at: v.number() }))),
     forcedByUserId: v.optional(v.id("users")),

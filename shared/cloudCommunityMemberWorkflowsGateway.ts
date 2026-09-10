@@ -190,6 +190,7 @@ export async function fetchCloudCommunityMemberSuccessDossier<SessionT>(
 
 export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
+    requireHumanApproval?: boolean;
     instructions?: string;
     goal?: string;
     communityId: string;
@@ -203,6 +204,7 @@ export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
   return (await client.mutation(
     api.communityMemberWorkflows.createBuilderWorkflowMilestone,
     {
+      requireHumanApproval: params.requireHumanApproval,
       instructions: params.instructions,
       goal: params.goal,
       authSubject,
@@ -215,6 +217,7 @@ export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
 
 export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
+    requireHumanApproval?: boolean;
     instructions?: string;
     goal?: string;
     communityId: string;
@@ -230,6 +233,7 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
   return (await client.mutation(
     api.communityMemberWorkflows.updateBuilderWorkflowMilestone,
     {
+      requireHumanApproval: params.requireHumanApproval,
       instructions: params.instructions,
       goal: params.goal,
       authSubject,
@@ -254,17 +258,28 @@ export async function setCloudCommunityMemberServiceChannel<SessionT>(params: Wo
 }
 
 export async function forceCloudCommunityMemberMilestone<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }) {
+  return submitCloudCommunityMemberDecision(params, false);
+}
+
+export async function approveCloudCommunityMemberMilestone<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }) {
+  return submitCloudCommunityMemberDecision(params, true);
+}
+
+async function submitCloudCommunityMemberDecision<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }, approval: boolean) {
   const { dossier } = params;
   const workflow = dossier.workflow;
   if (!workflow?.override_state || workflow.completed_at) throw new Error("workflow_override_unavailable");
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return client.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, {
+  const args = {
     authSubject, communityId: dossier.community_id as Id<"communities">, membershipId: dossier.membership_id as Id<"communityMemberships">,
     expectedWorkflowRevision: workflow.revision, expectedMilestoneKey: workflow.current_milestone_key,
     expectedWorkflowId: workflow.id as Id<"communityMemberWorkflows">,
     expectedMilestoneEnteredAt: Date.parse(workflow.current_milestone_entered_at),
     expectedActivationSequence: workflow.override_state.activation_sequence, expectedTransitionSeq: workflow.override_state.transition_seq,
-  });
+  };
+  return approval
+    ? client.mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)
+    : client.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, args);
 }
 
 export async function deleteCloudCommunityMemberWorkflowMilestone<SessionT>(

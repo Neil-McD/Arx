@@ -1613,7 +1613,7 @@ test("a blank milestone has no hidden behavior", async () => {
     expectedRevision: 0,
     name: "New",
   });
-  expect(created.milestone).toEqual({ key: expect.any(String), name: "New", instructions: "", goal: "", automations: [] });
+  expect(created.milestone).toEqual({ key: expect.any(String), name: "New", instructions: "", goal: "", requireHumanApproval: false, automations: [] });
   const rootId = await addRoot(t, f, "blank");
   await expect(t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId }))
     .resolves.toMatchObject({ status: "trigger_unconfigured" });

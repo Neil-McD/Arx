@@ -189,6 +189,22 @@ const serviceProps = {
   onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
 };
 
+test("normal human approval is separate from force move and fails closed on incomplete proof", () => {
+  const workflow = { ...source.workflow!, require_human_approval: true,
+    override_state: { activation_sequence: 1, transition_seq: 0, next_milestone_name: "Review" },
+    action_progress: { actions: [], all_actions_complete: true, scan_truncated: false } };
+  const render = () => renderDossier({ onApproveMilestone: async () => {}, dossier: { ...source, markdown: "", workflow } });
+  expect(render()).toContain("Awaiting human approval");
+  expect(render()).toContain('class="workflow-secondary-button">Approve and advance</button>');
+  expect(render()).toContain("Force move…");
+  workflow.action_progress.scan_truncated = true;
+  expect(render()).toContain('disabled="">Approve and advance</button>');
+  workflow.action_progress.scan_truncated = false;
+  workflow.action_progress.all_actions_complete = false;
+  expect(render()).toContain("All actions must be verified complete before approval");
+  expect(render()).toContain('disabled="">Approve and advance</button>');
+});
+
 test("progress distinguishes verified work, empty configuration, and unavailable proof", () => {
   const dossier = { ...source, markdown: "", workflow: { ...source.workflow!, action_progress: {
     actions: [{ automation_key: "a", action_key: "b", label: "Ask agent: Introduce yourself",

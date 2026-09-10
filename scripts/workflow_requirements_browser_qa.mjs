@@ -33,6 +33,19 @@ let browser;
 try{
  await server.listen();browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1100,height:850}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:5196/qa');
+ const approval=page.getByRole('checkbox',{name:'Require human approval',exact:true});
+ assert.equal(await approval.isChecked(),false);
+ await approval.check();
+ await page.getByRole('button',{name:'Save milestone'}).click();
+ assert.equal(await page.evaluate(()=>window.qa.saved.requireHumanApproval),true);
+ await mkdir(resolve(root,'artifacts/workflow-editor-qa'),{recursive:true});
+ for(const width of [1100,390]){
+   await page.setViewportSize({width,height:850});
+   const box=await approval.boundingBox();assert.ok(box.width<30&&box.height<30,'native checkbox stays compact');
+   await page.screenshot({path:resolve(root,'artifacts/workflow-editor-qa/human-approval-'+width+'.png'),animations:'disabled'});
+ }
+ await approval.uncheck();await page.evaluate(()=>window.qa.saved=null);
+ await page.setViewportSize({width:1100,height:850});
  await page.getByRole('tab',{name:'Automations',exact:true}).click();
  await page.getByRole('button',{name:'Add condition',exact:true}).click();
  assert.equal(await page.getByRole('combobox',{name:'Then',exact:true}).count(),0);
@@ -105,7 +118,7 @@ try{
  await page.evaluate(()=>window.qa.activity());
  await page.getByRole('tab',{name:'Progress',exact:true}).waitFor();
  assert.equal(await page.getByRole('button',{name:'Force move…',exact:true}).isVisible(),false);
- await page.getByText('No automatic movement conditions configured.',{exact:true}).waitFor();
+ await page.getByText('Goal review is required before advancing. Automatic goal review is not enabled yet.',{exact:true}).waitFor();
  await page.getByText('Channel ready',{exact:true}).waitFor();
  await page.getByText('Awaiting submission',{exact:true}).waitFor();
  await page.getByText('Completion unavailable',{exact:true}).waitFor();

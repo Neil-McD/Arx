@@ -80,11 +80,13 @@ export function isWorkflowMilestoneDraftDirty(
   automations: WorkflowAutomationDraft[],
   instructions = snapshot?.instructions ?? "",
   goal = snapshot?.goal ?? "",
+  requireHumanApproval = snapshot?.requireHumanApproval ?? false,
 ): boolean {
   return snapshot !== null && (
     name !== snapshot.name
     || instructions !== (snapshot.instructions ?? "")
     || goal !== (snapshot.goal ?? "")
+    || requireHumanApproval !== (snapshot.requireHumanApproval ?? false)
     || JSON.stringify(workflowDraftAutomations(automations)) !== JSON.stringify(snapshot.automations)
   );
 }

@@ -102,6 +102,7 @@ export type CommunityMembershipContext = {
   service_channel: CommunityMemberServiceChannel;
   workflow: {
     action_progress?: WorkflowActionProgress;
+    require_human_approval?: boolean;
     goal?: string;
     override_state?: { activation_sequence: number; transition_seq: number; next_milestone_name: string | null };
     id: string;

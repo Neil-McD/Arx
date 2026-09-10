@@ -44,13 +44,14 @@ export type WebCommunityWorkflowsSectionProps = {
   memberDossierError: string | null;
   onReload: () => Promise<unknown> | unknown;
   onLoadMore: () => Promise<unknown> | unknown;
-  onCreateMilestone: (name: string, instructions?: string, goal?: string) => Promise<boolean>;
+  onCreateMilestone: (name: string, instructions?: string, goal?: string, requireHumanApproval?: boolean) => Promise<boolean>;
   onUpdateMilestone: (
     milestoneKey: string,
     name: string,
     automations: CommunityMemberWorkflowAutomation[],
     instructions?: string,
     goal?: string,
+    requireHumanApproval?: boolean,
   ) => Promise<boolean>;
   onDeleteMilestone: (milestoneKey: string) => Promise<boolean>;
   onClearActionError: () => void;
@@ -61,6 +62,7 @@ export type WebCommunityWorkflowsSectionProps = {
   serviceChannelError: string | null;
   onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
   onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
+  onApproveMilestone?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onOpenServiceChannel: (channelId: string) => void;
 };
 
@@ -184,13 +186,14 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
 
   const saveMilestone = async (milestone: CommunityMemberWorkflowMilestone) => {
     const saved = !milestone.key || isCreatingMilestone
-      ? await props.onCreateMilestone(milestone.name, milestone.instructions, milestone.goal)
+      ? await props.onCreateMilestone(milestone.name, milestone.instructions, milestone.goal, milestone.requireHumanApproval)
       : await props.onUpdateMilestone(
           milestone.key,
           milestone.name,
           milestone.automations,
           milestone.instructions,
           milestone.goal,
+          milestone.requireHumanApproval,
         );
     if (saved) closeMilestone();
   };
@@ -351,6 +354,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
         serviceChannelError={props.serviceChannelError}
         onSetServiceChannel={props.onSetServiceChannel}
         onForceMove={props.onForceMove}
+        onApproveMilestone={props.onApproveMilestone}
         onOpenServiceChannel={props.onOpenServiceChannel}
       />
     </div>

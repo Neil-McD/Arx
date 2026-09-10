@@ -14,6 +14,7 @@ import {
   updateCloudCommunityMemberWorkflowMilestone,
   setCloudCommunityMemberServiceChannel,
   forceCloudCommunityMemberMilestone,
+  approveCloudCommunityMemberMilestone,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
@@ -446,6 +447,13 @@ export function useWebCommunityWorkflowsController(params: {
     memberDossier,
     isMemberDossierLoading,
     memberDossierError,
+    approveMilestone: async (snapshot: CloudCommunityMemberSuccessDossier) => {
+      const scope = serviceChannelScopeRef.current;
+      if (!params.canManageMembers || snapshot.community_id !== params.activeCommunityId || snapshot.membership_id !== selectedMembershipId) throw new Error("Member changed. Reopen the member panel.");
+      const session = await params.ensureSession(params.session, "community_workflow_approve");
+      if (!session || scope !== serviceChannelScopeRef.current) throw new Error("Session changed. Reopen the member panel.");
+      await approveCloudCommunityMemberMilestone({ session, dossier: snapshot });
+    },
     forceMove: async (snapshot: CloudCommunityMemberSuccessDossier) => {
       const scope = serviceChannelScopeRef.current;
       if (!params.canManageMembers || snapshot.community_id !== params.activeCommunityId || snapshot.membership_id !== selectedMembershipId) throw new Error("Member changed. Reopen the member panel.");
@@ -535,10 +543,10 @@ export function useWebCommunityWorkflowsController(params: {
       setServiceChannelError(null);
       setDossierRefreshNonce((value) => value + 1);
     },
-    createMilestone: (name: string, instructions?: string, goal?: string) =>
+    createMilestone: (name: string, instructions?: string, goal?: string, requireHumanApproval?: boolean) =>
       mutateMilestone("community_workflows_create_milestone", (session, communityId, revision) =>
         createCloudCommunityMemberWorkflowMilestone({
-          instructions, goal,
+          instructions, goal, requireHumanApproval,
           session,
           communityId,
           expectedRevision: revision,
@@ -551,10 +559,11 @@ export function useWebCommunityWorkflowsController(params: {
       automations: CommunityMemberWorkflowAutomation[],
       instructions?: string,
       goal?: string,
+      requireHumanApproval?: boolean,
     ) =>
       mutateMilestone("community_workflows_update_milestone", (session, communityId, revision) =>
         updateCloudCommunityMemberWorkflowMilestone({
-          instructions, goal,
+          instructions, goal, requireHumanApproval,
           session,
           communityId,
           expectedRevision: revision,

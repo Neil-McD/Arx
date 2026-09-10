@@ -58,6 +58,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
   const [goal, setGoal] = useState("");
+  const [requireHumanApproval, setRequireHumanApproval] = useState(false);
   const [automations, setAutomations] = useState<WorkflowAutomationDraft[]>([]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [expandedAutomationKey, setExpandedAutomationKey] = useState<string | null>(null);
@@ -89,6 +90,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     setName(props.milestone.name);
     setInstructions(props.milestone.instructions ?? "");
     setGoal(props.milestone.goal ?? "");
+    setRequireHumanApproval(props.milestone.requireHumanApproval ?? false);
     setAutomations(props.milestone.automations.map(toWorkflowAutomationDraft));
   }, [props.isOpen, props.milestone]);
 
@@ -126,7 +128,8 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   if (!props.isOpen || !props.milestone) return null;
   const hasConflict = editingSnapshot.current !== null
     && JSON.stringify(editingSnapshot.current) !== JSON.stringify(props.milestone);
-  const isDirty = !!pendingAutomation || isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations, instructions, goal);
+  const isDirty = !!pendingAutomation || isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations, instructions, goal, requireHumanApproval);
+  const approvalConflict = requireHumanApproval && automations.some(a => a.action.type === "move_member" || a.action.type === "evaluate_goal");
   const editingAutomation = !!pendingAutomation || !!expandedAutomationKey;
   const requirements = automations.filter(automation => automation.action.type === "move_member");
   const duplicateRequirement = new Set(requirements.map(a => workflowTriggerIdentity(a.trigger))).size !== requirements.length;
@@ -135,6 +138,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const formActions = automations.filter(a => a.trigger.type === "form_submitted" && a.action.type !== "move_member");
   const duplicateFormAction = new Set(formActions.map(a => a.trigger.type === "form_submitted" ? `${a.action.type}:${a.trigger.formKey}` : "")).size !== formActions.length;
   const canSave = name.trim().length > 0
+    && !approvalConflict
     && !pendingAutomation
     && (!automations.some(a => a.action.type === "evaluate_goal") || !!goal.trim())
     && isDirty
@@ -153,6 +157,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
       name,
       instructions,
       goal,
+      requireHumanApproval,
       automations: workflowDraftAutomations(automations).map((automation) => ({
         ...automation,
         key: automation.key.startsWith("draft-") ? "" : automation.key,
@@ -247,8 +252,12 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             </label>
             <label><span className="resource-field-label">Goal</span>
               <textarea rows={2} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
-              <small className="workflow-field-hint">Guides the agent; evaluation alone does not move members.</small>
+              <small className="workflow-field-hint">{requireHumanApproval ? "The approver reviews this goal after all actions are complete." : "Guides the agent; evaluation alone does not move members."}</small>
             </label>
+            <label className="community-channel-participant"><input type="checkbox" checked={requireHumanApproval} disabled={props.isSaving}
+              onChange={event => setRequireHumanApproval(event.target.checked)} /> Require human approval</label>
+            <p className="workflow-field-hint">An owner or admin must approve advancement after all actions are complete.</p>
+            {approvalConflict ? <p role="alert">Remove automatic movement and goal-evaluation rules before requiring human approval.</p> : null}
             {!props.milestone.key ? <p className="workflow-field-hint">Save this milestone to configure actions and movement.</p> : null}
             </> : <>
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}

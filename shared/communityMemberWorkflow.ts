@@ -61,6 +61,7 @@ export type CommunityMemberWorkflowMilestone = {
   name: string;
   instructions?: string;
   goal?: string;
+  requireHumanApproval?: boolean;
   automations: CommunityMemberWorkflowAutomation[];
 };
 

@@ -68,9 +68,20 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   serviceChannelError: string | null;
   onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
   onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
+  onApproveMilestone?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onOpenServiceChannel: (channelId: string) => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const approvalPending = useRef(false);
+  const approvalGeneration = useRef(0);
+  useEffect(() => {
+    approvalGeneration.current += 1;
+    approvalPending.current = false;
+    setApproving(false);
+    setApprovalError(null);
+  }, [props.isOpen, props.dossier?.membership_id, props.dossier?.workflow?.current_milestone_entered_at]);
   const [view, setView] = useState("progress");
   useEffect(() => { setView("progress"); }, [props.isOpen, props.dossier?.membership_id]);
   useEffect(() => {
@@ -267,8 +278,23 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 </>}
               </section> : null}
               {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
-                <h3>Automatic advancement</h3>
-                {dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
+                <h3>{dossier.workflow.require_human_approval ? "Human approval" : "Automatic advancement"}</h3>
+                {dossier.workflow.require_human_approval ? <>
+                  <p>{dossier.workflow.action_progress?.all_actions_complete && !dossier.workflow.action_progress.scan_truncated
+                    ? "Awaiting human approval. Review the actions and goal before advancing."
+                    : "All actions must be verified complete before approval."}</p>
+                  <button type="button" className="workflow-secondary-button" disabled={approving || !props.onApproveMilestone
+                    || !dossier.workflow.action_progress?.all_actions_complete || dossier.workflow.action_progress.scan_truncated}
+                    onClick={async () => {
+                      if (approvalPending.current || !props.onApproveMilestone) return;
+                      const generation = approvalGeneration.current;
+                      approvalPending.current = true; setApproving(true); setApprovalError(null);
+                      try { await props.onApproveMilestone(dossier); }
+                      catch { if (generation === approvalGeneration.current) setApprovalError("Could not approve. Refresh and review the member’s current actions, goal, and stage before trying again."); }
+                      finally { if (generation === approvalGeneration.current) { approvalPending.current = false; setApproving(false); } }
+                    }}>{approving ? "Approving…" : dossier.workflow.override_state?.next_milestone_name ? "Approve and advance" : "Approve and complete"}</button>
+                  {approvalError ? <p role="alert">{approvalError}</p> : null}
+                </> : dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
                   <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
                   <p>All conditions must be met. These do not wait for agent actions or goal achievement.</p>
                 </> : dossier.workflow.goal?.trim() ? <p>Goal review is required before advancing. Automatic goal review is not enabled yet.</p>

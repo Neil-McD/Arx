@@ -16,6 +16,72 @@ const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
 const reconcileCompletion = internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal;
 
+test.each(["", "Member has demonstrated readiness"])("human approval holds completed work with goal %s", async goal => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    const w = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(w._id, { milestones: [{ ...w.milestones[0], goal, requireHumanApproval: true }] });
+  });
+  await f.t.mutation(joinHandler, f.job);
+  const run = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").first()))!;
+  await f.t.mutation(reconcileCompletion, { workflowRunId: run._id });
+  expect(await progress(f)).toMatchObject({ all_actions_complete: true });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  const args = approvalArgs(f);
+  await expect(f.t.withIdentity({ subject: "join-member" }).mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)).rejects.toThrow();
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  await owner.mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args);
+  await expect(owner.mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)).rejects.toThrow();
+  const rows = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ completedWorkflow: true, approval: { actorUserId: f.ownerId, goal, activationSequence: 1 } });
+  expect(rows[0].completionEvidence).toHaveLength(1);
+  expect(rows[0].forcedByUserId).toBeUndefined();
+});
+
+test.each(["incomplete", "unchecked", "revision", "activation", "visit"])("normal approval rejects %s", async kind => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    const w = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(w._id, { milestones: [{ ...w.milestones[0], requireHumanApproval: kind !== "unchecked" }] });
+  });
+  if (kind !== "incomplete") await f.t.mutation(joinHandler, f.job);
+  const args = approvalArgs(f);
+  if (kind === "revision") args.expectedWorkflowRevision = 0;
+  if (kind === "activation") args.expectedActivationSequence = 0;
+  if (kind === "visit") args.expectedTransitionSeq = 99;
+  await expect(f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)).rejects.toThrow();
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+function approvalArgs(f: Awaited<ReturnType<typeof fixture>>) {
+  return { communityId: f.communityId, membershipId: f.membershipId, expectedWorkflowId: f.workflowId,
+    expectedWorkflowRevision: 1, expectedMilestoneKey: "new", expectedMilestoneEnteredAt: f.now,
+    expectedActivationSequence: 1, expectedTransitionSeq: 0 };
+}
+
+test("enabling human approval preserves completed work without scheduling movement", async () => {
+  const f = await fixture();
+  await f.t.mutation(joinHandler, f.job);
+  const before = await progress(f);
+  const jobsBefore = await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New", requireHumanApproval: true,
+    automations: [{ key: "join", trigger: { type: "member_joined" }, action: { key: "room", type: "create_service_channel" } }],
+  });
+  expect(await progress(f)).toEqual(before);
+  expect(await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect())).toHaveLength(jobsBefore.length);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test("human approval rejects legacy automatic movement configuration", async () => {
+  const f = await fixture();
+  await expect(f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New", requireHumanApproval: true,
+    automations: [{ key: "join", trigger: { type: "member_contributed" }, action: { key: "room", type: "move_member", destination: "next_or_complete" } }],
+  })).rejects.toThrow("Remove automatic movement");
+});
+
 test("last proven action advances once and never skips the empty next stage", async () => {
   const f = await fixture("both");
   await f.t.run(async ctx => {

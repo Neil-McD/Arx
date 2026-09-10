@@ -261,6 +261,7 @@ function normalizeAutomations(
 
 export const createBuilderWorkflowMilestone = mutation({
   args: {
+    requireHumanApproval: v.optional(v.boolean()),
     instructions: v.optional(v.string()),
     goal: v.optional(v.string()),
     ...managerIdentityArgs,
@@ -276,7 +277,7 @@ export const createBuilderWorkflowMilestone = mutation({
       authSubject: args.authSubject,
     });
     const name = normalizeCommunityMemberWorkflowMilestoneName(args.name);
-    const context = { instructions: normalizeWorkflowMilestoneContext(args.instructions), goal: normalizeWorkflowMilestoneContext(args.goal) };
+    const context = { instructions: normalizeWorkflowMilestoneContext(args.instructions), goal: normalizeWorkflowMilestoneContext(args.goal), requireHumanApproval: args.requireHumanApproval ?? false };
     const expectedRevision = normalizeExpectedRevision(args.expectedRevision);
     const existing = await getCommunityMemberWorkflowByCommunity({
       ctx,
@@ -330,6 +331,7 @@ export const createBuilderWorkflowMilestone = mutation({
 
 export const updateBuilderWorkflowMilestone = mutation({
   args: {
+    requireHumanApproval: v.optional(v.boolean()),
     instructions: v.optional(v.string()),
     goal: v.optional(v.string()),
     ...managerIdentityArgs,
@@ -364,8 +366,11 @@ export const updateBuilderWorkflowMilestone = mutation({
       name: normalizeCommunityMemberWorkflowMilestoneName(args.name),
       instructions: normalizeWorkflowMilestoneContext(args.instructions ?? current.instructions),
       goal: normalizeWorkflowMilestoneContext(args.goal ?? current.goal),
+      requireHumanApproval: args.requireHumanApproval ?? current.requireHumanApproval ?? false,
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
+    if (milestone.requireHumanApproval && milestone.automations.some(a => a.action.type === "move_member" || a.action.type === "evaluate_goal"))
+      throw new Error("Remove automatic movement and goal-evaluation rules before requiring human approval.");
     const joinRules = milestone.automations.filter(a => a.trigger.type === "member_joined");
     if (milestone.automations.some(a => a.action.type === "evaluate_goal" && (a.trigger.type !== "form_submitted" || !milestone.goal?.trim()))) throw new Error("workflow_assessment_requires_form_and_goal");
     if (joinRules.length > 0 && milestoneIndex !== 0) throw new Error("workflow_join_requires_first_milestone");
@@ -699,6 +704,7 @@ async function transitionMemberForWorkflowAction(args: {
   automaticCompletion?: boolean;
   workflowRunId?: any;
   override?: { workflowId: any; membershipId: any; actorUserId: any; activationSequence: number; transitionSeq: number };
+  approval?: { workflowId: any; membershipId: any; actorUserId: any; activationSequence: number; transitionSeq: number };
   actionKey: string;
   expectedWorkflowRevision: number;
   expectedMilestoneKey: string;
@@ -718,12 +724,13 @@ async function transitionMemberForWorkflowAction(args: {
     };
   }
   const run = args.workflowRunId ? (await args.ctx.db.get(args.workflowRunId)) as WorkflowRunRow | null : null;
-  if (!args.override && (!run || run.status !== (args.automaticCompletion ? "finished" : "running"))) {
+  const human = args.override ?? args.approval;
+  if (!human && (!run || run.status !== (args.automaticCompletion ? "finished" : "running"))) {
     throw new Error("community_member_workflow_run_authority_invalid");
   }
-  const workflow = (await args.ctx.db.get(args.override?.workflowId ?? run!.workflowId)) as WorkflowRow | null;
+  const workflow = (await args.ctx.db.get(human?.workflowId ?? run!.workflowId)) as WorkflowRow | null;
   const membership = (await args.ctx.db.get(
-    args.override?.membershipId ?? run!.membershipId,
+    human?.membershipId ?? run!.membershipId,
   )) as CommunityMembershipLike | null;
   if (
     !workflow ||
@@ -739,7 +746,7 @@ async function transitionMemberForWorkflowAction(args: {
     membershipId: membership!._id,
   });
   const current = resolveCurrentMilestone({ workflow, membership: membership!, state });
-  if (args.override && (Number(membership!.activationSequence ?? 0) !== args.override.activationSequence || Number(state?.transitionSeq ?? 0) !== args.override.transitionSeq)) {
+  if (human && (Number(membership!.activationSequence ?? 0) !== human.activationSequence || Number(state?.transitionSeq ?? 0) !== human.transitionSeq)) {
     throw new Error("community_member_workflow_transition_authority_changed");
   }
   if (
@@ -752,6 +759,15 @@ async function transitionMemberForWorkflowAction(args: {
   const requirements = current.milestone.automations.filter(a => a.action.type === "move_member");
   const evidence = currentWorkflowRequirementEvidence(requirements, state?.requirementEvidence ?? [], Number(membership!.activationSequence ?? 0));
   let completionEvidence;
+  if (!human && current.milestone.requireHumanApproval) return { status: "awaiting_human_approval" as const };
+  if (args.approval) {
+    if (!current.milestone.requireHumanApproval || requirements.length
+      || current.milestone.automations.some(a => a.action.type === "evaluate_goal")) throw new Error("workflow_human_approval_unavailable");
+    const progress = await readWorkflowActionProgress(args.ctx, { workflow: workflow as any, membership: membership as any,
+      milestone: current.milestone, milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: Number(state?.transitionSeq ?? 0) });
+    if (!progress.all_actions_complete || progress.scan_truncated) throw new Error("workflow_actions_incomplete");
+    completionEvidence = progress.actions.map(action => ({ actionKey: action.action_key, automationKey: action.automation_key, ...action.evidence! }));
+  }
   if (args.automaticCompletion) {
     if (args.override || requirements.length || current.milestone.goal?.trim()
       || current.milestone.automations.some(a => a.action.type === "evaluate_goal")
@@ -766,7 +782,7 @@ async function transitionMemberForWorkflowAction(args: {
     completionEvidence = progress.actions.map(action => ({ actionKey: action.action_key,
       automationKey: action.automation_key, ...action.evidence! }));
   }
-  if (!args.override && !args.automaticCompletion && (requirements.length === 0 || evidence.length !== requirements.length)) {
+  if (!human && !args.automaticCompletion && (requirements.length === 0 || evidence.length !== requirements.length)) {
     throw new Error("community_member_workflow_requirements_incomplete");
   }
   const nextMilestone = workflow.milestones[current.milestoneIndex + 1];
@@ -822,6 +838,7 @@ async function transitionMemberForWorkflowAction(args: {
     milestoneEnteredAt: current.milestoneEnteredAt,
     workflowRunId: args.workflowRunId,
     ...(completionEvidence ? { completionEvidence } : {}),
+    ...(args.approval ? { approval: { actorUserId: args.approval.actorUserId, goal: current.milestone.goal ?? "", activationSequence: args.approval.activationSequence } } : {}),
     ...(args.override ? { forcedByUserId: args.override.actorUserId, bypassedRequirementKeys: bypassedRequirements!.map(rule => rule.key), bypassedRequirements } : {}),
     actionKey: args.actionKey,
     requirementEvidence: evidence,
@@ -870,6 +887,23 @@ export const forceBuilderMemberMilestone = mutation({
       expectedWorkflowRevision: args.expectedWorkflowRevision, expectedMilestoneKey: args.expectedMilestoneKey,
       expectedMilestoneEnteredAt: args.expectedMilestoneEnteredAt,
       override: { workflowId: workflow._id, membershipId: args.membershipId, actorUserId: actor.userId,
+        activationSequence: args.expectedActivationSequence, transitionSeq: args.expectedTransitionSeq } });
+  },
+});
+
+export const approveBuilderMemberMilestone = mutation({
+  args: { ...managerIdentityArgs, communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
+    expectedWorkflowId: v.id("communityMemberWorkflows"), expectedWorkflowRevision: v.number(),
+    expectedMilestoneKey: v.string(), expectedMilestoneEnteredAt: v.number(),
+    expectedActivationSequence: v.number(), expectedTransitionSeq: v.number() },
+  handler: async (ctx, args) => {
+    const actor = await requireWorkflowManager({ ctx, ...args });
+    const workflow = await getCommunityMemberWorkflowByCommunity({ ctx, communityId: args.communityId });
+    if (!workflow || workflow._id !== args.expectedWorkflowId) throw new Error("community_member_workflow_transition_authority_changed");
+    return transitionMemberForWorkflowAction({ ctx, actionKey: "human_approved", nowMs: Date.now(),
+      expectedWorkflowRevision: args.expectedWorkflowRevision, expectedMilestoneKey: args.expectedMilestoneKey,
+      expectedMilestoneEnteredAt: args.expectedMilestoneEnteredAt,
+      approval: { workflowId: workflow._id, membershipId: args.membershipId, actorUserId: actor.userId,
         activationSequence: args.expectedActivationSequence, transitionSeq: args.expectedTransitionSeq } });
   },
 });
