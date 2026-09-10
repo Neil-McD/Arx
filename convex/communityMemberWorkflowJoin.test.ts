@@ -42,7 +42,7 @@ test("completion verifies channel and form outcomes without writes or movement",
   expect((await progress(f)).actions[0].status).toBe("unavailable");
 });
 
-test.each(["activation", "visit", "revision", "historical", "definition"])("completion rejects %s evidence", async kind => {
+test.each(["activation", "visit", "revision", "historical", "definition", "trigger", "context"])("completion rejects %s evidence", async kind => {
   const f = await fixture();
   await f.t.mutation(joinHandler, f.job);
   await f.t.run(async ctx => {
@@ -52,8 +52,42 @@ test.each(["activation", "visit", "revision", "historical", "definition"])("comp
     if (kind === "revision") await ctx.db.patch(run._id, { workflowRevision: 999 });
     if (kind === "historical") await ctx.db.patch(run._id, { activationSequence: undefined });
     if (kind === "definition") await ctx.db.patch(run._id, { actionSnapshot: { key: "changed", type: "create_service_channel" } });
+    if (kind === "trigger") await ctx.db.patch(run._id, { triggerSnapshot: { type: "member_contributed" } });
+    if (kind === "context") await ctx.db.patch(run._id, { milestoneContextSnapshot: { instructions: "Different instructions", goal: "" } });
   });
   expect(await progress(f)).toMatchObject({ all_actions_complete: false, actions: [{ status: "unavailable" }] });
+});
+
+test("adding an unrelated action preserves existing channel and submitted-form proof", async () => {
+  const f = await fixture("both");
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    const request = (await ctx.db.query("communityFormRequests").first())!;
+    await ctx.db.patch(request._id, { status: "submitted", submittedAt: f.now + 1, answers: {} });
+  });
+  const before = await progress(f);
+  expect(before.all_actions_complete).toBe(true);
+  const workflow = (await f.t.run(ctx => ctx.db.get(f.workflowId)))!;
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: workflow.revision,
+    milestoneKey: workflow.milestones[0].key, name: "Renamed stage",
+    automations: [...workflow.milestones[0].automations, {
+      key: "", trigger: { type: "member_contributed" },
+      action: { key: "", type: "prompt_agent", prompt: "Introduce yourself." },
+    }],
+  });
+  const after = await progress(f);
+  expect(after.actions.slice(0, 2)).toEqual(before.actions);
+  expect(after.actions[2].status).toBe("unavailable");
+  expect(after.all_actions_complete).toBe(false);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).toHaveLength(2);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  await f.t.run(async ctx => {
+    const current = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(current._id, { revision: current.revision + 1,
+      milestones: [...current.milestones, { key: "unrelated", name: "Unrelated stage", automations: [] }] });
+  });
+  expect((await progress(f)).actions.slice(0, 2)).toEqual(before.actions);
 });
 
 test("submitted forms require valid pinned answers, and progress stays manager-only", async () => {
@@ -71,6 +105,19 @@ test("submitted forms require valid pinned answers, and progress stays manager-o
   expect(builder.workflow?.action_progress?.all_actions_complete).toBe(true);
   await f.t.run(async ctx => {
     await ctx.db.patch(f.versionId, { questions: [{ key: "required", type: "short_text", title: "Required", description: "", options: [], required: true }] });
+  });
+  expect((await progress(f)).actions[0].status).toBe("unavailable");
+});
+
+test("an older receipt for a different form does not prove the current form action", async () => {
+  const f = await fixture("form");
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    if (run.actionSnapshot.type !== "request_form") throw new Error("expected form fixture");
+    await ctx.db.patch(workflow._id, { revision: workflow.revision + 1 });
+    await ctx.db.patch(run._id, { actionSnapshot: { ...run.actionSnapshot, formKey: "different-form" } });
   });
   expect((await progress(f)).actions[0].status).toBe("unavailable");
 });

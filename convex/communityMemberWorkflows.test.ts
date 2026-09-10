@@ -1715,6 +1715,15 @@ test("prompt_agent admits one linked serve request and never moves the member", 
   const completedDossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
     { communityId: f.communityId, membershipId: f.membershipId });
   expect(completedDossier.workflow?.action_progress?.all_actions_complete).toBe(true);
+  await t.run(async ctx => {
+    const run = (await ctx.db.get(state.runs[0]._id))!;
+    if (run.actionSnapshot.type !== "prompt_agent") throw new Error("expected prompt fixture");
+    await ctx.db.patch(run._id, { actionSnapshot: { ...run.actionSnapshot, prompt: "Different work." } });
+  });
+  const changedPromptDossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(changedPromptDossier.workflow?.action_progress?.actions[0].status).toBe("unavailable");
+  await t.run(ctx => ctx.db.patch(state.runs[0]._id, { actionSnapshot: state.runs[0].actionSnapshot }));
   await t.run(async ctx => { await ctx.db.delete(responseId); });
   const missingDossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
     { communityId: f.communityId, membershipId: f.membershipId });

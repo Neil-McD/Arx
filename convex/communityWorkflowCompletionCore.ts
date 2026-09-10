@@ -44,7 +44,9 @@ export async function readWorkflowActionProgress(ctx: QueryCtx, args: {
       if (run.communityId !== workflow.communityId || run.workflowId !== workflow._id || run.membershipId !== membership._id
         || run.activationSequence !== (membership.activationSequence ?? 0) || run.transitionSeq !== args.transitionSeq
         || run.milestoneKey !== milestone.key || run.milestoneEnteredAt !== args.milestoneEnteredAt
-        || run.workflowRevision !== workflow.revision || run.automationKey !== rule.key
+        // Older receipts remain proof when this rule and visit still match.
+        // Keep rejecting impossible future-revision receipts.
+        || run.workflowRevision > workflow.revision || run.automationKey !== rule.key
         || !run.triggerSnapshot || workflowTriggerIdentity(run.triggerSnapshot) !== workflowTriggerIdentity(rule.trigger)
         || run.actionSnapshot.key !== rule.action.key || run.actionSnapshot.type !== rule.action.type
         || (rule.action.type === "prompt_agent" && (run.actionSnapshot.type !== "prompt_agent" || run.actionSnapshot.prompt !== rule.action.prompt))
