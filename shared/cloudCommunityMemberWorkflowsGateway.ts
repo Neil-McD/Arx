@@ -104,6 +104,36 @@ export function subscribeCloudCommunityMemberWorkflowBoardProjection(params: {
   return watch.onUpdate(publish);
 }
 
+export function subscribeCloudCommunityMemberSuccessDossier(params: {
+  liveClient: CloudCommunityMemberWorkflowLiveClient;
+  communityId: string;
+  membershipId: string;
+  onUpdate: (dossier: CloudCommunityMemberSuccessDossier) => void;
+  onError: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as Id<"communities">,
+      membershipId: params.membershipId as Id<"communityMemberships">,
+    },
+  );
+  let active = true;
+  const publish = () => {
+    if (!active) return;
+    try {
+      const result = watch.localQueryResult();
+      if (result !== undefined) params.onUpdate(result as CloudCommunityMemberSuccessDossier);
+    } catch (error) {
+      params.onError(error);
+    }
+  };
+  const unsubscribe = watch.onUpdate(publish);
+  publish();
+  return () => { active = false; unsubscribe(); };
+}
+
 export async function fetchCloudCommunityMemberWorkflowBoardPage<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;

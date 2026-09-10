@@ -639,6 +639,8 @@ from changed configuration.
 
 ## Completed live assessment smoke
 
+The open builder member dossier watches the existing authorized dossier query through the shared authenticated realtime client. Linked form, channel and agent evidence updates independently of the board projection token. Only the selected member is watched; closing, changing scope, or losing manager access releases the watch. Query errors clear the private snapshot and expose explicit retry. Routine updates preserve the current popup tab and scroll position; no polling or separate completion cache is introduced.
+
 The fixed staging campaign `workflow-assessment-smoke-20260907-v1` passed all three
 judgments. Its one-off server module and paid CLI runner are retired. Regression
 fixtures remain in `shared/workflowAssessmentSmoke.ts`; original local evidence is

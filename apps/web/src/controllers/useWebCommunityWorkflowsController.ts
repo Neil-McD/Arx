@@ -10,6 +10,7 @@ import {
   fetchCloudCommunityMemberWorkflowBoardPage,
   fetchCloudCommunityMemberSuccessDossier,
   subscribeCloudCommunityMemberWorkflowBoardProjection,
+  subscribeCloudCommunityMemberSuccessDossier,
   updateCloudCommunityMemberWorkflowMilestone,
   setCloudCommunityMemberServiceChannel,
   forceCloudCommunityMemberMilestone,
@@ -272,7 +273,6 @@ export function useWebCommunityWorkflowsController(params: {
           const tokenKey = JSON.stringify(token);
           if (tokenKey === lastTokenKey) return;
           lastTokenKey = tokenKey;
-          setDossierRefreshNonce((value) => value + 1);
           void requestReconciliation().catch(reportFailure);
         },
         onError: reportFailure,
@@ -327,14 +327,6 @@ export function useWebCommunityWorkflowsController(params: {
     }
   }, [hasMore, isLoadingMore, nextCursor, params.activeCommunityId]);
 
-  const selectedMember = selectedMembershipId
-    ? members.find((member) => member.membership_id === selectedMembershipId)
-    : null;
-  const selectedMemberMilestoneKey = selectedMember?.current_milestone_key ?? null;
-  const selectedMemberMilestoneEnteredAt =
-    selectedMember?.current_milestone_entered_at ?? null;
-  const selectedMemberCompletedAt = selectedMember?.workflow_completed_at ?? null;
-
   useEffect(() => {
     if (
       !selectedMembershipId ||
@@ -344,10 +336,21 @@ export function useWebCommunityWorkflowsController(params: {
       params.activePage !== "community" ||
       params.communityTab !== "workflows"
     ) {
+      setMemberDossier(null);
+      setIsMemberDossierLoading(false);
       return;
     }
     const generation = ++dossierRequestGenerationRef.current;
     let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    let closeLiveClient: (() => void) | undefined;
+    const stillCurrent = () => !cancelled && generation === dossierRequestGenerationRef.current;
+    const reportFailure = (error: unknown) => {
+      if (!stillCurrent()) return;
+      setMemberDossier(null);
+      setMemberDossierError(workflowErrorMessage(error));
+      setIsMemberDossierLoading(false);
+    };
     setIsMemberDossierLoading(true);
     setMemberDossierError(null);
 
@@ -358,35 +361,33 @@ export function useWebCommunityWorkflowsController(params: {
           "community_workflow_member_success_dossier",
         );
         if (!usableSession) throw new Error("auth_session_required");
-        const dossier = await fetchCloudCommunityMemberSuccessDossier({
+        if (!stillCurrent()) return;
+        const liveClient = createCloudCommunityMemberWorkflowLiveClient({
           session: usableSession,
+          ensureSession: params.ensureSession,
+        });
+        closeLiveClient = liveClient.close;
+        unsubscribe = subscribeCloudCommunityMemberSuccessDossier({
+          liveClient,
           communityId: params.activeCommunityId!,
           membershipId: selectedMembershipId,
+          onUpdate: (dossier) => {
+            if (!stillCurrent()) return;
+            setMemberDossier(dossier);
+            setMemberDossierError(null);
+            setIsMemberDossierLoading(false);
+          },
+          onError: reportFailure,
         });
-        if (
-          cancelled ||
-          generation !== dossierRequestGenerationRef.current
-        ) return;
-        setMemberDossier(dossier);
       } catch (dossierError) {
-        if (
-          cancelled ||
-          generation !== dossierRequestGenerationRef.current
-        ) return;
-        setMemberDossier(null);
-        setMemberDossierError(workflowErrorMessage(dossierError));
-      } finally {
-        if (
-          !cancelled &&
-          generation === dossierRequestGenerationRef.current
-        ) {
-          setIsMemberDossierLoading(false);
-        }
+        reportFailure(dossierError);
       }
     })();
 
     return () => {
       cancelled = true;
+      unsubscribe?.();
+      closeLiveClient?.();
     };
   }, [
     params.activeCommunityId,
@@ -396,9 +397,6 @@ export function useWebCommunityWorkflowsController(params: {
     params.ensureSession,
     params.session,
     dossierRefreshNonce,
-    selectedMemberCompletedAt,
-    selectedMemberMilestoneEnteredAt,
-    selectedMemberMilestoneKey,
     selectedMembershipId,
   ]);
 
@@ -458,10 +456,6 @@ export function useWebCommunityWorkflowsController(params: {
       } catch {
         throw new Error("Could not force this move. Refresh the member panel and review their current position before trying again.");
       }
-      if (scope === serviceChannelScopeRef.current) {
-        setIsMemberDossierLoading(true);
-        setDossierRefreshNonce(value => value + 1);
-      }
     },
     isServiceChannelSaving,
     serviceChannelError,
@@ -479,8 +473,6 @@ export function useWebCommunityWorkflowsController(params: {
         await setCloudCommunityMemberServiceChannel({ session, communityId: params.activeCommunityId,
           membershipId: selectedMembershipId, channelId, expectedRevision });
         if (token !== serviceChannelRequestRef.current || scope !== serviceChannelScopeRef.current) return false;
-        setIsMemberDossierLoading(true);
-        setDossierRefreshNonce(value => value + 1);
         return true;
       } catch (error) {
         if (token === serviceChannelRequestRef.current && scope === serviceChannelScopeRef.current) setServiceChannelError(workflowErrorMessage(error));
@@ -496,14 +488,13 @@ export function useWebCommunityWorkflowsController(params: {
       if (!selectedMembershipId || !params.activeCommunityId || serviceChannelPendingRef.current) return;
       const scope = serviceChannelScopeRef.current;
       const token = serviceChannelRequestRef.current;
-      const generation = ++dossierRequestGenerationRef.current;
+      const generation = dossierRequestGenerationRef.current;
       setIsMemberDossierLoading(true);
       try {
         const session = await params.ensureSession(params.session, "community_member_service_channel_open");
         if (!session || scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current) return;
         const dossier = await fetchCloudCommunityMemberSuccessDossier({ session, communityId: params.activeCommunityId, membershipId: selectedMembershipId });
         if (scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current || generation !== dossierRequestGenerationRef.current) return;
-        setMemberDossier(dossier);
         if (dossier.service_channel.status === "available" && dossier.service_channel.channel_id === expectedChannelId) {
           onOpen(expectedChannelId);
           return;
