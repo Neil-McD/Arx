@@ -639,6 +639,12 @@ from changed configuration.
 
 ## Completed live assessment smoke
 
+### No-goal action completion advancement
+
+New product outcome events (joined-member channel/form setup, validated form submission, and actual agent reply delivery) schedule a bounded internal completion reconciliation by existing workflow run ID. Reads and workflow definition edits never schedule it; no bulk backfill or periodic scan is added. The reconciliation and existing transition writer re-read current active membership, activation, stage visit, definition and authoritative action proof in one transaction. At least one work action must exist, every action must be complete, the scan must be untruncated, and the initiating run must still be a matching proof. Blank goals allow a single transition; written goals, goal-assessment rules, and legacy move_member rules remain outside this new path. Existing legacy behavior is unchanged.
+
+Transitions retain exact action/run/source evidence in optional completionEvidence on the existing history row. The existing transition sequence, final-workflow completion, pending-form cancellation and next-stage timer enrollment remain canonical. Duplicate callbacks or callbacks from a prior visit are no-ops. Empty next stages do not auto-skip and community-join actions never replay on stage entry. Goal-based judgment is not implemented by this slice. Local implementation is not a staging or production release receipt.
+
 The open builder member dossier watches the existing authorized dossier query through the shared authenticated realtime client. Linked form, channel and agent evidence updates independently of the board projection token. Only the selected member is watched; closing, changing scope, or losing manager access releases the watch. Query errors clear the private snapshot and expose explicit retry. Routine updates preserve the current popup tab and scroll position; no polling or separate completion cache is introduced.
 
 The fixed staging campaign `workflow-assessment-smoke-20260907-v1` passed all three

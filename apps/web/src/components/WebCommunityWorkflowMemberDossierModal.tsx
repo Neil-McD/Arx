@@ -271,7 +271,10 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 {dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
                   <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
                   <p>All conditions must be met. These do not wait for agent actions or goal achievement.</p>
-                </> : <p>No automatic movement conditions configured.</p>}
+                </> : dossier.workflow.goal?.trim() ? <p>Goal review is required before advancing. Automatic goal review is not enabled yet.</p>
+                  : !dossier.workflow.action_progress ? <p>Action completion information unavailable.</p>
+                  : dossier.workflow.action_progress?.actions.length ? <p>Advances when all actions are verified complete. Existing completed work is not automatically backfilled.</p>
+                  : <p>No actions configured. This milestone will not advance automatically.</p>}
               </section> : null}
               </div>
               <div hidden={view !== "responses"}>{props.formResponses ?? <p>Form responses unavailable.</p>}</div>

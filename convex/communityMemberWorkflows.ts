@@ -2,6 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { WORKFLOW_ASSESSMENT_PROMPT } from "../shared/communityWorkflowAssessment";
+import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
 import { internal } from "./_generated/api";
 import { workflowJoinArgs, resolveFirstMemberWorkflowJoin, provisionJoinedMemberServiceChannel } from "./communityMemberWorkflowJoinCore";
 import { assignWorkflowForm, cancelMilestoneFormRequests, requestIsCurrent } from "./communityFormRequestCore";
@@ -695,6 +696,7 @@ async function getTransitionByRunAction(args: {
 
 async function transitionMemberForWorkflowAction(args: {
   ctx: any;
+  automaticCompletion?: boolean;
   workflowRunId?: any;
   override?: { workflowId: any; membershipId: any; actorUserId: any; activationSequence: number; transitionSeq: number };
   actionKey: string;
@@ -716,7 +718,7 @@ async function transitionMemberForWorkflowAction(args: {
     };
   }
   const run = args.workflowRunId ? (await args.ctx.db.get(args.workflowRunId)) as WorkflowRunRow | null : null;
-  if (!args.override && (!run || run.status !== "running")) {
+  if (!args.override && (!run || run.status !== (args.automaticCompletion ? "finished" : "running"))) {
     throw new Error("community_member_workflow_run_authority_invalid");
   }
   const workflow = (await args.ctx.db.get(args.override?.workflowId ?? run!.workflowId)) as WorkflowRow | null;
@@ -749,7 +751,22 @@ async function transitionMemberForWorkflowAction(args: {
   }
   const requirements = current.milestone.automations.filter(a => a.action.type === "move_member");
   const evidence = currentWorkflowRequirementEvidence(requirements, state?.requirementEvidence ?? [], Number(membership!.activationSequence ?? 0));
-  if (!args.override && (requirements.length === 0 || evidence.length !== requirements.length)) {
+  let completionEvidence;
+  if (args.automaticCompletion) {
+    if (args.override || requirements.length || current.milestone.goal?.trim()
+      || current.milestone.automations.some(a => a.action.type === "evaluate_goal")
+      || run!.activationSequence !== Number(membership!.activationSequence ?? 0)
+      || run!.transitionSeq !== Number(state?.transitionSeq ?? 0)
+      || run!.communityId !== workflow.communityId) return { status: "not_eligible" as const };
+    const progress = await readWorkflowActionProgress(args.ctx, { workflow: workflow as any, membership: membership as any,
+      milestone: current.milestone, milestoneEnteredAt: current.milestoneEnteredAt,
+      transitionSeq: Number(state?.transitionSeq ?? 0) });
+    if (!progress.all_actions_complete || progress.scan_truncated
+      || !progress.actions.some(action => action.evidence?.run_id === String(run!._id))) return { status: "incomplete" as const };
+    completionEvidence = progress.actions.map(action => ({ actionKey: action.action_key,
+      automationKey: action.automation_key, ...action.evidence! }));
+  }
+  if (!args.override && !args.automaticCompletion && (requirements.length === 0 || evidence.length !== requirements.length)) {
     throw new Error("community_member_workflow_requirements_incomplete");
   }
   const nextMilestone = workflow.milestones[current.milestoneIndex + 1];
@@ -804,6 +821,7 @@ async function transitionMemberForWorkflowAction(args: {
     workflowRevision: workflow.revision,
     milestoneEnteredAt: current.milestoneEnteredAt,
     workflowRunId: args.workflowRunId,
+    ...(completionEvidence ? { completionEvidence } : {}),
     ...(args.override ? { forcedByUserId: args.override.actorUserId, bypassedRequirementKeys: bypassedRequirements!.map(rule => rule.key), bypassedRequirements } : {}),
     actionKey: args.actionKey,
     requirementEvidence: evidence,
@@ -816,6 +834,28 @@ async function transitionMemberForWorkflowAction(args: {
   if (nextMilestone) await enrollWorkflowMilestoneTimers({ ctx: args.ctx, membership: membership!, nowMs: args.nowMs });
   return { transitionId, completedWorkflow, replayed: false };
 }
+
+// Called only after product outcomes change, never from reads or definition edits.
+export const reconcileCompletedWorkflowActionsInternal = internalMutation({
+  args: { workflowRunId: v.id("communityMemberWorkflowRuns") },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.workflowRunId);
+    if (!run || run.status !== "finished") return { status: "stale" };
+    const workflow = await ctx.db.get(run.workflowId);
+    const membership = await ctx.db.get(run.membershipId);
+    if (!workflow || !membership || !communityMembershipRowIsActive(membership)
+      || membership.communityId !== workflow.communityId) return { status: "stale" };
+    const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });
+    const current = resolveCurrentMilestone({ workflow, membership, state });
+    if (current.completedAt || run.milestoneKey !== current.milestone.key
+      || run.milestoneEnteredAt !== current.milestoneEnteredAt
+      || run.activationSequence !== Number(membership.activationSequence ?? 0)
+      || run.transitionSeq !== Number(state?.transitionSeq ?? 0)) return { status: "stale" };
+    return transitionMemberForWorkflowAction({ ctx, workflowRunId: run._id, automaticCompletion: true,
+      actionKey: "all_actions_complete", expectedWorkflowRevision: workflow.revision,
+      expectedMilestoneKey: current.milestone.key, expectedMilestoneEnteredAt: current.milestoneEnteredAt, nowMs: Date.now() });
+  },
+});
 
 export const forceBuilderMemberMilestone = mutation({
   args: { ...managerIdentityArgs, communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
@@ -907,6 +947,7 @@ async function executeWorkflowAutomation(args: {
       await args.ctx.db.patch(workflowRunId, { status: "finished", actionResult: {
         actionKey: args.automation.action.key, status: "complete", ...result,
       }, finishedAt: nowMs, updatedAt: nowMs });
+      await args.ctx.scheduler.runAfter(0, internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal, { workflowRunId });
       return { status: args.automation.action.type === "request_form" ? "form_requested" as const : "service_channel_ready" as const,
         workflow_run_id: String(workflowRunId), replayed: false };
     }
@@ -1045,6 +1086,8 @@ async function executeWorkflowAutomation(args: {
 export async function processSubmittedWorkflowForm(ctx: any, request: any) {
   if (!request || request.status !== "submitted") throw new Error("form_submission_missing");
   if (!await requestIsCurrent(ctx, request)) throw new Error("form_request_expired");
+  if (request.workflowRunId) await ctx.scheduler.runAfter(0, internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal,
+    { workflowRunId: request.workflowRunId });
   const workflow = await ctx.db.get(request.workflowId);
   const membership = await ctx.db.get(request.membershipId);
   const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });

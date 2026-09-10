@@ -213,7 +213,7 @@ test("progress is the default and missing conditions are not an empty list", () 
   expect(html).toContain('Movement conditions unavailable.');
   expect(html).not.toContain('No automatic movement conditions configured.');
   const empty = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: [] } } });
-  expect(empty).toContain('No automatic movement conditions configured.');
+  expect(empty).toContain('Action completion information unavailable.');
 });
 
 test("force-move entry reuses themed workflow control and stays hidden after completion", () => {

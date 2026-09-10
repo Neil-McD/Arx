@@ -1350,6 +1350,8 @@ export default defineSchema({
     .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 
   communityMemberWorkflowTransitions: defineTable({
+    completionEvidence: v.optional(v.array(v.object({ actionKey: v.string(), automationKey: v.string(),
+      run_id: v.string(), source_id: v.string(), completed_at: v.number() }))),
     forcedByUserId: v.optional(v.id("users")),
     bypassedRequirementKeys: v.optional(v.array(v.string())),
     bypassedRequirements: v.optional(v.array(v.object({ key: v.string(), label: v.string(), definition: v.string() }))),

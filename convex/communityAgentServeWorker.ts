@@ -1797,6 +1797,8 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
         leaseExpiresAt: undefined,
         updatedAt: nowMs,
       });
+      if (request.workflowRunId && !request.workflowAssessment) await ctx.scheduler.runAfter(0,
+        internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal, { workflowRunId: request.workflowRunId });
       return { ok: true, duplicate: true, responseReplyId: existingReply._id };
     }
 
@@ -1851,6 +1853,8 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       objectType: "reply",
       objectId: replyId,
     });
+    if (request.workflowRunId && !request.workflowAssessment) await ctx.scheduler.runAfter(0,
+      internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal, { workflowRunId: request.workflowRunId });
     return { ok: true, duplicate: false, responseReplyId: replyId };
   },
 });

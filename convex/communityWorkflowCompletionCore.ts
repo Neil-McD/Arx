@@ -7,7 +7,7 @@ import { workflowTriggerIdentity, type CommunityMemberWorkflowMilestone } from "
 import type { WorkflowActionProgress } from "../shared/communityMembershipContext";
 import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
 
-/** Private assembly: callers establish manager authority. No transition writes.
+/** Private assembly: callers establish manager authority or trusted execution scope. No transition writes.
  * A successful dispatch is not completion. Read the exact linked product result.
  * At least one proven execution completes an action for this definition/visit;
  * repeated triggers are not additional tasks and failures cannot erase proof.

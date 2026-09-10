@@ -14,6 +14,69 @@ import { bindMemberServiceChannel } from "./communityMemberServiceChannelCore";
 import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
 const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
+const reconcileCompletion = internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal;
+
+test("last proven action advances once and never skips the empty next stage", async () => {
+  const f = await fixture("both");
+  await f.t.run(async ctx => {
+    const w = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(w._id, { milestones: [...w.milestones, { key: "next", name: "Next", automations: [] }] });
+  });
+  await f.t.mutation(joinHandler, f.job);
+  const runs = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect());
+  await f.t.mutation(reconcileCompletion, { workflowRunId: runs[0]._id });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  const request = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  await f.t.withIdentity({ subject: "join-member" }).mutation(api.communityFormRequests.saveMyAnswers,
+    { communityId: f.communityId, requestId: request._id, expectedRevision: 0, answers: {}, submit: true });
+  const jobs = await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+  expect(jobs.some(job => job.name.includes("reconcileCompletedWorkflowActionsInternal")
+    && (job.args[0] as any).workflowRunId === request.workflowRunId)).toBe(true);
+  await Promise.all(runs.map(run => f.t.mutation(reconcileCompletion, { workflowRunId: run._id })));
+  for (const run of runs) await f.t.mutation(reconcileCompletion, { workflowRunId: run._id });
+  const transitions = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(transitions).toHaveLength(1);
+  expect(transitions[0]).toMatchObject({ toMilestoneKey: "next", seq: 1, completedWorkflow: false });
+  expect(transitions[0].completionEvidence).toHaveLength(2);
+});
+
+test("blank-goal final stage completes once", async () => {
+  const f = await fixture();
+  await f.t.mutation(joinHandler, f.job);
+  const run = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").first()))!;
+  await f.t.mutation(reconcileCompletion, { workflowRunId: run._id });
+  await f.t.mutation(reconcileCompletion, { workflowRunId: run._id });
+  const rows = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(rows).toHaveLength(1);
+  expect(rows[0].completedWorkflow).toBe(true);
+});
+
+test.each(["goal", "legacy", "empty", "activation", "visit", "definition", "failed", "truncated", "human_moved"])("automatic movement stays closed for %s", async kind => {
+  const f = await fixture();
+  await f.t.mutation(joinHandler, f.job);
+  const run = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").first()))!;
+  await f.t.run(async ctx => {
+    const w = (await ctx.db.get(f.workflowId))!;
+    const m = w.milestones[0];
+    if (kind === "goal") m.goal = "A human or agent must judge this.";
+    if (kind === "legacy") m.automations.push({ key: "legacy", trigger: { type: "member_contributed" }, action: { key: "move", type: "move_member", destination: "next_or_complete" } });
+    if (kind === "empty") m.automations = [];
+    if (kind === "definition") m.automations[0].action.key = "different";
+    await ctx.db.patch(w._id, { milestones: [m] });
+    if (kind === "activation") await ctx.db.patch(f.membershipId, { activationSequence: 2 });
+    if (kind === "visit") await ctx.db.patch(run._id, { transitionSeq: 99 });
+    if (kind === "failed") await ctx.db.patch(run._id, { status: "failed" });
+    if (kind === "truncated") {
+      const { _id, _creationTime, ...copy } = run;
+      for (let i = 0; i < 257; i++) await ctx.db.insert("communityMemberWorkflowRuns", { ...copy, createdAt: run.createdAt + i + 1 });
+    }
+    if (kind === "human_moved") await ctx.db.insert("communityMemberWorkflowMemberMilestones", {
+      workflowId: w._id, membershipId: f.membershipId, currentMilestoneKey: "new", milestoneEnteredAt: f.now,
+      transitionSeq: 1, completedAt: f.now + 1, createdAt: f.now, updatedAt: f.now + 1 });
+  });
+  await f.t.mutation(reconcileCompletion, { workflowRunId: run._id });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
 
 async function progress(f: Awaited<ReturnType<typeof fixture>>) {
   return f.t.run(async ctx => {
