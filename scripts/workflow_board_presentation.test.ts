@@ -6,14 +6,14 @@ const component = readFileSync(new URL("../apps/web/src/components/WebCommunityW
 const editor = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx", import.meta.url), "utf8");
 const automation = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowAutomationEditor.tsx", import.meta.url), "utf8");
 
-test("action choices show radio indicators in one consistent trigger grid", () => {
-  const triggerGrid = automation.split('<legend>When</legend>')[1].split('</fieldset>')[0];
-  expect(triggerGrid.match(/<div/g)).toHaveLength(1);
-  expect(triggerGrid.indexOf('Form submitted')).toBeLessThan(triggerGrid.indexOf('</div>'));
-  expect(css).toContain('.workflow-action-choice span::before');
-  expect(css).toContain('.workflow-action-choice input:checked + span::before');
-  expect(css).toContain('border-style: dashed');
-  expect(css).not.toContain('input:focus-visible + span { outline: 2px');
+test("automation editor reuses compact form selectors instead of radio banks", () => {
+  expect(automation).toContain('<label>When');
+  expect(automation).toContain('<label>Then');
+  expect(automation).toContain('Choose a trigger');
+  expect(automation).toContain('Choose an action');
+  expect(automation).not.toContain('type="radio"');
+  expect(automation).not.toContain('ChevronDown');
+  expect(css).not.toContain('.workflow-action-choice span');
 });
 
 test("milestone editor reuses resource styles while retaining bounded scrolling", () => {
@@ -45,9 +45,10 @@ test("milestone views share the draft and progressive creation does not preselec
   expect(editor).toContain('label: "Automations"');
   expect(editor).toContain('&& !pendingAutomation');
   expect(editor).toContain('setSelection({ triggerSelected: false, actionSelected: false })');
-  expect(editor).toContain('Add to milestone');
-  expect(automation).toContain('checked={triggerSelected &&');
-  expect(automation).toContain('checked={actionSelected &&');
+  expect(editor).toContain('>Done</button>');
+  expect(editor).toContain('Each automation runs independently');
+  expect(automation).toContain('value={triggerSelected ? automation.trigger.type : ""}');
+  expect(automation).toContain('value={actionSelected ? automation.action.type : ""}');
   expect(automation).toContain('triggerReady && !isRequirement');
   expect(editor).toContain('Automatic advancement (existing system)');
 });

@@ -147,7 +147,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canSave || props.isSaving || confirmDiscard) return;
+    if (!canSave || props.isSaving || confirmDiscard || editingAutomation) return;
     void props.onSave({
       key: props.milestone!.key,
       name,
@@ -268,7 +268,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             {props.milestone.key ? [false, true].filter(requirement => !expandedAutomationKey || automations.some(a => a.key === expandedAutomationKey && (a.action.type === "move_member") === requirement)).map(requirement => (
               <section key={String(requirement)} className="workflow-milestone-automations" aria-label={requirement ? "Automatic advancement" : "Automations"}>
                 {!editingAutomation ? <div className="workflow-milestone-automations-header">
-                  <div><span id={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>{requirement ? "Automatic advancement (existing system)" : "Automations"}</span><small>{requirement ? "All conditions must be met, in any order." : "When something happens, do something."}</small></div>
+                  <div><span id={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>{requirement ? "Automatic advancement (existing system)" : "Automations"}</span><small>{requirement ? "All conditions must be met, in any order." : "Each automation runs independently when its trigger occurs."}</small></div>
                   <div className="resource-modal-actions">
                     <button ref={requirement ? undefined : addAutomationRef} type="button" className="secondary" onClick={() => {
                       const automation = newAutomation(requirement);
@@ -342,7 +342,16 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                   setAutomations(current => [...current, pendingAutomation]);
                   setPendingAutomation(null);
                   queueMicrotask(() => addAutomationRef.current?.focus());
-                }}>Add to milestone</button>
+                }}>Add automation</button>
+            </div>
+          ) : editingAutomation ? (
+            <div className="resource-modal-actions workflow-milestone-modal-actions">
+              <div>
+              <button type="button" className="platform-save-button" disabled={props.isSaving} onClick={() => {
+                setExpandedAutomationKey(null);
+                queueMicrotask(() => addAutomationRef.current?.focus());
+              }}>Done</button>
+              </div>
             </div>
           ) : (
             <div className="resource-modal-actions workflow-milestone-modal-actions">

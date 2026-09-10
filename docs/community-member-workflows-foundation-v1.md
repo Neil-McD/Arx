@@ -8,16 +8,18 @@ The milestone editor opens on Overview (name, instructions, goal), with the
 canonical platform selector switching to Automations without resetting the
 shared draft. Add automation opens an in-modal trigger-first editor with no
 selected trigger or action. Trigger configuration gates compatible action
-selection; Add to milestone validates and adds only to the draft. Back/Cancel
+selection; Add automation validates and adds only to the draft. Back/Cancel
 addition abandons that pending addition; Save milestone remains the persistence
-boundary. Existing rules open in a focused editor, and automatic advancement
+boundary. Existing rules open in a focused editor; Done returns to the list
+without persisting. Each rule runs independently, not in list order. Automatic advancement
 conditions remain explicitly visible as the existing system until their backend
 replacement is released. This presentation slice does not change execution.
 
-Action editor trigger and action selections reuse their native radio groups in
-equal-width two-column grids, with visible radio indicators, compact left-aligned
-labels, subtle selected fills, and a dashed keyboard-focus border. Conditional
-fields, availability, and trigger/action replacement behavior are unchanged.
+Action editor trigger and action selections reuse native form selectors labeled
+When and Then, with only the selected configuration underneath. No permanent
+choice grids or extra disclosure icons. Switching away from a form trigger also
+replaces its incompatible goal-evaluation action. Availability and execution
+constraints remain unchanged.
 
 The milestone popup uses the panel surface, compact sentence-case labels, and
 short expanding textareas. Input focus changes the themed border and surface,
