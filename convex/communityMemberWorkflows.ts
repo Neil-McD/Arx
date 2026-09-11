@@ -3,6 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { WORKFLOW_ASSESSMENT_PROMPT } from "../shared/communityWorkflowAssessment";
 import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
+import { COMPLETION_REVIEW_KEY, readCompletionReviewSnapshot, requireCompletionReview } from "./communityWorkflowGoalReviewCore";
 import { internal } from "./_generated/api";
 import { workflowJoinArgs, resolveFirstMemberWorkflowJoin, provisionJoinedMemberServiceChannel } from "./communityMemberWorkflowJoinCore";
 import { assignWorkflowForm, cancelMilestoneFormRequests, requestIsCurrent } from "./communityFormRequestCore";
@@ -702,6 +703,7 @@ async function getTransitionByRunAction(args: {
 async function transitionMemberForWorkflowAction(args: {
   ctx: any;
   automaticCompletion?: boolean;
+  completedGoalReview?: boolean;
   workflowRunId?: any;
   override?: { workflowId: any; membershipId: any; actorUserId: any; activationSequence: number; transitionSeq: number };
   approval?: { workflowId: any; membershipId: any; actorUserId: any; activationSequence: number; transitionSeq: number };
@@ -725,7 +727,7 @@ async function transitionMemberForWorkflowAction(args: {
   }
   const run = args.workflowRunId ? (await args.ctx.db.get(args.workflowRunId)) as WorkflowRunRow | null : null;
   const human = args.override ?? args.approval;
-  if (!human && (!run || run.status !== (args.automaticCompletion ? "finished" : "running"))) {
+  if (!human && (!run || run.status !== (args.automaticCompletion || args.completedGoalReview ? "finished" : "running"))) {
     throw new Error("community_member_workflow_run_authority_invalid");
   }
   const workflow = (await args.ctx.db.get(human?.workflowId ?? run!.workflowId)) as WorkflowRow | null;
@@ -760,6 +762,14 @@ async function transitionMemberForWorkflowAction(args: {
   const evidence = currentWorkflowRequirementEvidence(requirements, state?.requirementEvidence ?? [], Number(membership!.activationSequence ?? 0));
   let completionEvidence;
   if (!human && current.milestone.requireHumanApproval) return { status: "awaiting_human_approval" as const };
+  if (args.completedGoalReview) {
+    if (human || args.automaticCompletion) throw new Error("workflow_assessment_source_invalid");
+    const request = run?.actionResult?.serveRequestId ? await args.ctx.db.get(run.actionResult.serveRequestId) : null;
+    if (!request) throw new Error("workflow_assessment_stale");
+    const { review } = await requireCompletionReview(args.ctx, request, true);
+    completionEvidence = review.progress.actions.map(action => ({ actionKey: action.action_key,
+      automationKey: action.automation_key, ...action.evidence! }));
+  }
   if (args.approval) {
     if (!current.milestone.requireHumanApproval || requirements.length
       || current.milestone.automations.some(a => a.action.type === "evaluate_goal")) throw new Error("workflow_human_approval_unavailable");
@@ -782,7 +792,7 @@ async function transitionMemberForWorkflowAction(args: {
     completionEvidence = progress.actions.map(action => ({ actionKey: action.action_key,
       automationKey: action.automation_key, ...action.evidence! }));
   }
-  if (!human && !args.automaticCompletion && (requirements.length === 0 || evidence.length !== requirements.length)) {
+  if (!human && !args.automaticCompletion && !args.completedGoalReview && (requirements.length === 0 || evidence.length !== requirements.length)) {
     throw new Error("community_member_workflow_requirements_incomplete");
   }
   const nextMilestone = workflow.milestones[current.milestoneIndex + 1];
@@ -868,9 +878,60 @@ export const reconcileCompletedWorkflowActionsInternal = internalMutation({
       || run.milestoneEnteredAt !== current.milestoneEnteredAt
       || run.activationSequence !== Number(membership.activationSequence ?? 0)
       || run.transitionSeq !== Number(state?.transitionSeq ?? 0)) return { status: "stale" };
+    if (current.milestone.goal?.trim() && !current.milestone.requireHumanApproval) {
+      const review = await readCompletionReviewSnapshot(ctx, workflow, membership);
+      if (!review || !review.progress.actions.some(a => a.evidence?.run_id === String(run._id))) return { status: "not_eligible" };
+      const existing = await ctx.db.query("communityMemberWorkflowRuns")
+        .withIndex("by_workflow_membership_trigger_automation", q => q.eq("workflowId", workflow._id)
+          .eq("membershipId", membership._id).eq("triggerReceiptRef", review.receiptRef).eq("automationKey", COMPLETION_REVIEW_KEY)).first();
+      if (existing) return { status: "already_reviewed" };
+      const nowMs = Date.now();
+      const reviewRunId = await ctx.db.insert("communityMemberWorkflowRuns", {
+        communityId: workflow.communityId, workflowId: workflow._id, membershipId: membership._id,
+        activationSequence: membership.activationSequence ?? 0, transitionSeq: state?.transitionSeq ?? 0,
+        milestoneKey: current.milestone.key, milestoneName: current.milestone.name, milestoneEnteredAt: current.milestoneEnteredAt,
+        milestoneContextSnapshot: { goal: current.milestone.goal, instructions: current.milestone.instructions ?? "" },
+        workflowRevision: workflow.revision, automationKey: COMPLETION_REVIEW_KEY, triggerType: "all_actions_complete",
+        triggerReceiptRef: review.receiptRef, completionReviewSnapshot: review.snapshot,
+        actionSnapshot: { key: COMPLETION_REVIEW_KEY, type: "evaluate_goal" }, status: "running", createdAt: nowMs, updatedAt: nowMs,
+      });
+      const intake = await intakeCommunityAgentWorkflowAction({ ctx, communityId: workflow.communityId,
+        requesterUserId: membership.userId, workflowRunId: reviewRunId, workflowActionKey: COMPLETION_REVIEW_KEY,
+        workflowPromptSnapshot: WORKFLOW_ASSESSMENT_PROMPT, workflowAssessment: true, workflowCompletionReview: true, nowMs });
+      const admitted = intake.status === "queued" || intake.status === "duplicate";
+      await ctx.db.patch(reviewRunId, { status: admitted ? "finished" : "failed", finishedAt: nowMs, updatedAt: nowMs,
+        ...(admitted ? {} : { errorCode: intake.intake_reason }),
+        actionResult: { actionKey: COMPLETION_REVIEW_KEY, status: admitted ? "complete" : "failed",
+          ...(intake.request_id ? { serveRequestId: ctx.db.normalizeId("communityAgentServeRequests", intake.request_id)! } : {}) } });
+      return { status: admitted ? "review_queued" : "review_unavailable" };
+    }
     return transitionMemberForWorkflowAction({ ctx, workflowRunId: run._id, automaticCompletion: true,
       actionKey: "all_actions_complete", expectedWorkflowRevision: workflow.revision,
       expectedMilestoneKey: current.milestone.key, expectedMilestoneEnteredAt: current.milestoneEnteredAt, nowMs: Date.now() });
+  },
+});
+
+export const applyCompletedGoalReviewInternal = internalMutation({
+  args: { workflowRunId: v.id("communityMemberWorkflowRuns") },
+  handler: async (ctx, { workflowRunId }) => {
+    const run = await ctx.db.get(workflowRunId);
+    if (!run || run.triggerType !== "all_actions_complete" || run.goalAssessment?.verdict !== "achieved" || run.errorCode) return { status: "not_eligible" };
+    try {
+      // Catch only read-only preflight failures. A writer failure must roll back
+      // the entire mutation, never commit a partially applied transition.
+      const replay = await getTransitionByRunAction({ ctx, workflowRunId, actionKey: COMPLETION_REVIEW_KEY });
+      if (replay) return { transitionId: replay._id, completedWorkflow: replay.completedWorkflow, replayed: true };
+      const request = run.actionResult?.serveRequestId ? await ctx.db.get(run.actionResult.serveRequestId) : null;
+      if (!request) throw new Error("workflow_assessment_stale");
+      await requireCompletionReview(ctx, request, true);
+    } catch (error) {
+      if (!(error instanceof Error) || !/^(workflow_|community_member_workflow_)/.test(error.message)) throw error;
+      await ctx.db.patch(run._id, { errorCode: error.message, updatedAt: Date.now() });
+      return { status: "stale", reason: error.message };
+    }
+    return await transitionMemberForWorkflowAction({ ctx, workflowRunId, completedGoalReview: true,
+      actionKey: COMPLETION_REVIEW_KEY, expectedWorkflowRevision: run.workflowRevision,
+      expectedMilestoneKey: run.milestoneKey, expectedMilestoneEnteredAt: run.milestoneEnteredAt, nowMs: Date.now() });
   },
 });
 

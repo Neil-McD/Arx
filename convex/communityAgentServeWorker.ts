@@ -248,6 +248,7 @@ type VisibilityScope = "private" | "admin" | "community" | "public";
 
 type ServeRequestRow = {
   workflowAssessment?: boolean;
+  workflowCompletionReview?: boolean;
   _id: any;
   communityId: any;
   agentKey: string;
@@ -535,7 +536,7 @@ function serveRequestIsClaimable(request: ServeRequestRow): boolean {
   return (
     request.agentKey === CANONICAL_COMMUNITY_AGENT_KEY &&
     request.intakeReason === "accepted" &&
-    Boolean(request.sourceRootId || (request.triggerKind === "workflow" && (request.workflowTimerId || request.workflowFormRequestId) && (request.serviceChannelId || (request.workflowAssessment && request.workflowFormRequestId)))) &&
+    Boolean(request.sourceRootId || (request.triggerKind === "workflow" && ((request.workflowAssessment && request.workflowCompletionReview) || ((request.workflowTimerId || request.workflowFormRequestId) && (request.serviceChannelId || (request.workflowAssessment && request.workflowFormRequestId)))))) &&
     Boolean(request.requesterUserId) &&
     Boolean(request.sponsorUserId) &&
     normalizeIdValue(request.requesterUserId) ===
@@ -1098,7 +1099,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
 
     let workflowOrientation: CommunityAgentWorkflowOrientation | undefined;
     let resolvedWorkflowPrompt: string | null = null;
-    if (request.workflowTimerId || request.workflowFormRequestId) {
+    if (request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
       try { await requireServiceWorkflowDestination(ctx, request); }
       catch (error) {
         if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
@@ -1127,10 +1128,12 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         (request.workflowAssessment ? workflowRun.actionSnapshot?.type !== "evaluate_goal" : workflowRun.actionSnapshot?.type !== "prompt_agent") ||
         workflowRun.actionSnapshot.key !== request.workflowActionKey ||
         (workflowRun.actionSnapshot.type === "prompt_agent" ? workflowRun.actionSnapshot.prompt !== request.workflowPromptSnapshot : request.workflowPromptSnapshot !== WORKFLOW_ASSESSMENT_PROMPT) ||
-        workflowRun.triggerReceiptRef !== (request.workflowTimerId ? `workflow-timer:${request.workflowTimerId}` : request.workflowFormRequestId ? `form_submission:${request.workflowFormRequestId}` : buildCommunityInteractionEvidenceRef({
+        // Completion-review receipt and snapshot were revalidated by
+        // requireServiceWorkflowDestination above; other origins retain exact links.
+        (request.workflowCompletionReview ? workflowRun.triggerType !== "all_actions_complete" : workflowRun.triggerReceiptRef !== (request.workflowTimerId ? `workflow-timer:${request.workflowTimerId}` : request.workflowFormRequestId ? `form_submission:${request.workflowFormRequestId}` : buildCommunityInteractionEvidenceRef({
           objectType: request.sourceReplyId ? "reply" : "root",
           objectId: normalizeIdValue(request.sourceReplyId ?? request.sourceRootId),
-        }))
+        })))
       ) {
         return {
           ok: false as const,
@@ -1254,7 +1257,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
-    if (request.workflowTimerId || request.workflowFormRequestId) {
+    if (request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
       // Form evidence is audience-gated; builder-only facts never enter this projection.
       let timedMemberContext: string;
       try { timedMemberContext = await readServiceMemberContext(ctx, request); }
@@ -1271,7 +1274,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
           workflowTimerId: request.workflowTimerId, workflowFormRequestId: request.workflowFormRequestId, serviceChannelId: request.serviceChannelId,
           requesterUserId: request.requesterUserId, sponsorUserId: request.sponsorUserId,
           authSubject: sponsorAuthSubject, attempt: normalizeCommunityAgentServeAttempt(request.attempt),
-          sourceRootId: null, sourceReplyId: null, responseVisibilityScope: "community" as const },
+          sourceRootId: null, sourceReplyId: null, responseVisibilityScope: request.workflowAssessment ? "admin" as const : "community" as const },
         community: { name: canonicalContext.communityName ?? "", slug: canonicalContext.communitySlug ?? "",
           oneLiner: canonicalContext.communityOneLiner ?? "", about: boundedText(canonicalContext.communityAbout, 2000) },
         agent: { displayName: canonicalContext.agentDisplayName, systemPrompt: boundedText(canonicalContext.communitySystemPrompt, 4000) },
@@ -1482,7 +1485,7 @@ export const recordCommunityAgentServeContextSnapshotInternal =
     } catch {
       return { ok: false, errorCode: "requester_access_missing" };
     }
-    if (request.workflowTimerId || request.workflowFormRequestId) {
+    if (request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
       try { await requireServiceWorkflowDestination(ctx, request); }
       catch (error) {
         if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
@@ -1670,7 +1673,7 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       return { ok: false, errorCode: "requester_access_missing" };
     }
 
-    if (request.workflowTimerId || request.workflowFormRequestId) {
+    if (request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
       try {
         if (request.workflowAssessment) return await finalizeWorkflowAssessment(ctx, request, args.content, nowMs);
         return await publishServiceWorkflowPost(ctx, request, boundedText(args.content, REPLY_TEXT_MAX_CHARS), nowMs);
@@ -1986,7 +1989,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         attempt: context.request.attempt,
       });
       const conciergeProviderTools =
-        (context.request.workflowTimerId || context.request.workflowFormRequestId) ? [] : buildCommunityAgentConciergeFunctionTools();
+        (context.privateAssessment || context.request.workflowTimerId || context.request.workflowFormRequestId) ? [] : buildCommunityAgentConciergeFunctionTools();
 
       const isWorkflowAction = context.request.triggerKind === "workflow";
       const receiptKey = isWorkflowAction

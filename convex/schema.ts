@@ -1284,6 +1284,7 @@ export default defineSchema({
     .index("by_member_entry", ["workflowId", "membershipId", "activationSequence", "transitionSeq"]),
 
   communityMemberWorkflowRuns: defineTable({
+    completionReviewSnapshot: v.optional(v.string()),
     // Old receipts remain history, not proof for a current activation/visit.
     activationSequence: v.optional(v.number()),
     transitionSeq: v.optional(v.number()),
@@ -1297,7 +1298,7 @@ export default defineSchema({
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
-    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted")),
+    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted"), v.literal("all_actions_complete")),
     // Optional for historical runs. New runs capture the condition that matched.
     triggerSnapshot: v.optional(v.union(
       v.object({ type: v.literal("member_joined") }),
@@ -2058,6 +2059,7 @@ export default defineSchema({
     workflowTimerId: v.optional(v.id("communityMemberWorkflowTimers")),
     workflowFormRequestId: v.optional(v.id("communityFormRequests")),
     workflowAssessment: v.optional(v.boolean()),
+    workflowCompletionReview: v.optional(v.boolean()),
     serviceChannelId: v.optional(v.id("communityChannels")),
     serviceChannelRevision: v.optional(v.number()),
     status: v.union(

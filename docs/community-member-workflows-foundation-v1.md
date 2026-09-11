@@ -2,6 +2,36 @@
 
 ## Product contract
 
+### Completion-triggered private goal review
+
+After a canonical action-completion callback, all current-visit work must have
+verified product evidence. Human approval takes precedence. With no written goal,
+the existing automatic transition remains unchanged. With a goal, a private agent
+review is admitted through the existing serving/funding path. This is an internal
+`all_actions_complete` origin, not another builder automation or a fabricated form
+submission. Legacy configured movement/evaluation rules remain separate and exclude
+this path.
+
+The review uses bounded, pinned submitted answers and attributed completion facts.
+Channel creation proves creation; agent delivery proves delivery, not external
+results. Unsupported KPI claims cannot be treated as verified outcomes. Truncated,
+missing, or oversized evidence fails closed. The durable run captures the exact
+visit, activation, definition and evidence, with a SHA-256 identity for deduplication.
+Repeated callbacks do not requeue unchanged reviews, including failures. No reads,
+definition edits, polling, or historical backfill initiate inference.
+
+The evaluator has no tools or public delivery. It records a cited achieved,
+not-yet, or insufficient-evidence judgment. Only an achieved result schedules the
+existing transition writer; that writer rechecks current access, manager authority,
+agent enablement, human approval, workflow revision, visit and evidence before
+moving once. The transition points to the assessment run and retains action proof.
+Human approval toggled on after judgment still blocks automatic movement.
+
+Progress uses the existing popup to show reviewing, unmet goal, missing proof,
+or failure. Historical assessment disclosures retain captured citations. Continuous
+reassessment, manual retry UI, and external integration/KPI evidence are not included.
+Local mocked-model verification is separate from a funded staging inference canary.
+
 ### Member progress presentation
 
 The existing member popup opens on Progress, with the canonical tab control for
@@ -662,7 +692,7 @@ New join-created service channels use the canonical profile display projection, 
 
 The Overview checkbox `Require human approval` is an optional milestone flag, defaulting to false for existing data. With it checked, verified action completion waits for an owner/admin to approve through the existing member Progress popup, with or without a written goal. Normal approval is not Force move: the server atomically checks current membership, activation, workflow revision, stage visit, and all current action proof before reusing the canonical transition writer. Its history receipt records approving actor, reviewed goal, activation, and action evidence. Stale or repeated approvals cannot advance twice.
 
-Changing this flag does not invalidate unchanged work, schedule a transition, or backfill progression. Human approval cannot be combined with legacy movement or goal-evaluation rules. Empty/truncated/unavailable work remains closed. Unchecked blank-goal advancement is unchanged; unchecked written goals still hold pending the separate agent-review slice. No new page, queue, polling loop, or inference is introduced. This is not a staging or production release receipt.
+Changing this flag does not invalidate unchanged work, schedule a transition, or backfill progression. Human approval cannot be combined with legacy movement or goal-evaluation rules. Empty/truncated/unavailable work remains closed. Unchecked blank-goal advancement is unchanged. Unchecked written goals now use the completion-triggered private review described at the top of this contract; toggling the flag itself never starts inference. No new page, queue, or polling loop is introduced. This is not a staging or production release receipt.
 
 The manager-only member Progress view reads completion from existing workflow runs and their linked product results. It does not create tasks, perform inference, or authorize movement. Legacy movement behavior is unchanged by this slice.
 

@@ -2,6 +2,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
 import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
+import { readCompletionReviewStatus } from "./communityWorkflowGoalReviewCore";
 import { workflowActivityExplanation } from "../shared/workflowActivityExplanation";
 import { currentWorkflowRequirementEvidence } from "../shared/communityMemberWorkflow";
 import type { QueryCtx } from "./_generated/server";
@@ -378,6 +379,9 @@ async function readMembershipContextRecords(args: {
       };
     }),
   );
+  const actionProgress = args.view === "builder" && workflow && membership && current && !current.completedAt
+    ? await readWorkflowActionProgress(args.ctx, { workflow, membership, milestone: current.milestone,
+      milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: Number(state?.transitionSeq ?? 0) }) : undefined;
   return {
     user_id: String(args.subjectUserId),
     community_id: String(args.communityId),
@@ -397,11 +401,11 @@ async function readMembershipContextRecords(args: {
             id: String(workflow._id),
             revision: workflow.revision,
             ...(args.view === "builder" ? {
-              ...(!current.completedAt ? { action_progress: await readWorkflowActionProgress(args.ctx, {
-                workflow, membership: membership!, milestone: current.milestone,
-                milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: Number(state?.transitionSeq ?? 0),
-              }) } : {}),
+              ...(actionProgress ? { action_progress: actionProgress } : {}),
               require_human_approval: current.milestone.requireHumanApproval ?? false,
+              ...(!current.completedAt && !current.milestone.requireHumanApproval && current.milestone.goal?.trim()
+                ? { goal_review: current.milestone.automations.some(a => ["move_member", "evaluate_goal"].includes(a.action.type))
+                  ? { status: "configured" as const } : await readCompletionReviewStatus(args.ctx, workflow, membership, actionProgress) } : {}),
               goal: current.milestone.goal ?? "", override_state: {
               activation_sequence: Number(membership?.activationSequence ?? 0), transition_seq: Number(state?.transitionSeq ?? 0),
               next_milestone_name: workflow.milestones[current.milestoneIndex + 1]?.name ?? null,

@@ -297,7 +297,17 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 </> : dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
                   <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
                   <p>All conditions must be met. These do not wait for agent actions or goal achievement.</p>
-                </> : dossier.workflow.goal?.trim() ? <p>Goal review is required before advancing. Automatic goal review is not enabled yet.</p>
+                </> : dossier.workflow.goal?.trim() ? <>
+                  <p>{dossier.workflow.goal_review?.status === "reviewing" ? "The agent is reviewing the goal against verified action evidence."
+                    : dossier.workflow.goal_review?.status === "configured" ? "This milestone uses a configured assessment rule. Its judgment does not automatically advance the member."
+                    : dossier.workflow.goal_review?.status === "achieved" ? "Goal met. Advancement is being validated."
+                    : dossier.workflow.goal_review?.status === "not_yet" ? "Goal not met. The member remains in this milestone."
+                    : dossier.workflow.goal_review?.status === "insufficient_evidence" ? "More proof is needed. The member remains in this milestone."
+                    : dossier.workflow.goal_review?.status === "failed" ? "Goal review could not complete. No advancement was made."
+                    : dossier.workflow.goal_review?.status === "not_started" ? "No review has started for this evidence. Existing work is not automatically backfilled."
+                    : "Once all actions are verified complete, the agent reviews the goal before advancing."}</p>
+                  {dossier.workflow.goal_review?.reason ? <p>{dossier.workflow.goal_review.reason}</p> : null}
+                </>
                   : !dossier.workflow.action_progress ? <p>Action completion information unavailable.</p>
                   : dossier.workflow.action_progress?.actions.length ? <p>Advances when all actions are verified complete. Existing completed work is not automatically backfilled.</p>
                   : <p>No actions configured. This milestone will not advance automatically.</p>}

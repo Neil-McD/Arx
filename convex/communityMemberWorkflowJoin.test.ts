@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -15,6 +16,170 @@ import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
 const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
 const reconcileCompletion = internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal;
+afterEach(() => vi.useRealTimers());
+
+async function completionReviewFixture(mode: "room" | "both" = "room") {
+  vi.useFakeTimers();
+  const f = await fixture(mode);
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], goal: "The member has a private channel." }] });
+  });
+  await f.t.mutation(joinHandler, f.job);
+  const work = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).filter(r => r.actionSnapshot.type !== "evaluate_goal");
+  const reconcile = () => f.t.mutation(reconcileCompletion, { workflowRunId: work[0]._id });
+  return { ...f, work, reconcile };
+}
+
+async function claimedCompletionReview() {
+  const f = await completionReviewFixture();
+  expect((await f.reconcile()).status).toBe("review_queued");
+  const request = (await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  expect(request).toMatchObject({ workflowCompletionReview: true, workflowAssessment: true, status: "queued", sourceVisibilityScope: "admin", responseVisibilityScope: "admin" });
+  expect(request.workflowFormRequestId).toBeUndefined();
+  expect(request.sourceRootId).toBeUndefined();
+  expect(request.serviceChannelId).toBeUndefined();
+  const claim = await f.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  const args = { requestId: request._id, expectedAttempt: claim.attempt! };
+  const context = await f.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
+  expect(context.privateAssessment).toBe(true);
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  expect(bundle.messages[bundle.messages.length - 1]?.content).toContain("assessment JSON only");
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  expect((await f.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
+  const refs = JSON.parse(context.timedMemberContext!).evidenceRefs;
+  const finish = (verdict = "achieved", evidenceRefs = refs) => f.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: JSON.stringify({ verdict, reason: "The cited product evidence establishes the private channel.", evidenceRefs }) });
+  const apply = () => f.t.mutation(internal.communityMemberWorkflows.applyCompletedGoalReviewInternal, { workflowRunId: request.workflowRunId! });
+  return { ...f, request, args, finish, apply };
+}
+
+test("completion review is private, deduplicated, and advances exactly once through the canonical writer", async () => {
+  const f = await claimedCompletionReview();
+  await Promise.all([f.reconcile(), f.reconcile()]);
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(1);
+  expect((await f.finish()).ok).toBe(true);
+  await f.apply(); await f.apply();
+  const transitions = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(transitions).toHaveLength(1);
+  expect(transitions[0].completionEvidence).toHaveLength(1);
+  expect(transitions[0].workflowRunId).toBe(f.request.workflowRunId);
+  expect(transitions[0].forcedByUserId).toBeUndefined();
+  expect(await f.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(0);
+});
+
+test.each(["not_yet", "insufficient_evidence"])("completion review %s holds without rescheduling inference", async verdict => {
+  const f = await claimedCompletionReview();
+  expect((await f.finish(verdict)).ok).toBe(true);
+  expect((await f.apply()).status).toBe("not_eligible");
+  await f.reconcile();
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(1);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test.each(["goal", "human", "membership", "revision", "proof", "invented"])("completion review rejects %s changed during inference", async change => {
+  const f = await claimedCompletionReview();
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    if (change === "goal" || change === "human") await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0],
+      ...(change === "goal" ? { goal: "A different goal" } : { requireHumanApproval: true }) }] });
+    if (change === "membership") await ctx.db.patch(f.membershipId, { active: false });
+    if (change === "revision") await ctx.db.patch(workflow._id, { revision: 2 });
+    if (change === "proof") await ctx.db.patch(f.work[0]._id, { status: "failed" });
+  });
+  expect((await f.finish("achieved", change === "invented" ? ["fabricated"] : undefined)).ok).toBe(false);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test("human approval enabled after judgment still blocks queued movement", async () => {
+  const f = await claimedCompletionReview();
+  expect((await f.finish()).ok).toBe(true);
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], requireHumanApproval: true }] });
+  });
+  expect((await f.apply()).status).toBe("stale");
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test("pending forms do not start completion inference", async () => {
+  const f = await completionReviewFixture("both");
+  expect((await f.reconcile()).status).toBe("not_eligible");
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+});
+
+test("completion review uses pinned form answers only after the required form is submitted", async () => {
+  const f = await completionReviewFixture("both");
+  const form = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  await f.t.run(async ctx => {
+    // Test-only fixture version, never a provider or shared staging write.
+    await ctx.db.patch(f.versionId, { questions: [{ key: "offer", title: "Your offer", type: "short_text", description: "", required: true, options: [] }] });
+  });
+  await f.t.withIdentity({ subject: "join-member" }).mutation(api.communityFormRequests.saveMyAnswers, {
+    communityId: f.communityId, requestId: form._id, expectedRevision: 0, answers: { offer: "I help founders onboard their members." }, submit: true,
+  });
+  await f.reconcile();
+  const review = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).find(r => r.triggerType === "all_actions_complete")!;
+  const evidence = JSON.parse(review.completionReviewSnapshot!);
+  expect(evidence.evidence.submissions[0].questions[0].answer).toBe("I help founders onboard their members.");
+  expect(evidence.evidenceRefs).toContain(`${form._id}:${f.versionId}:offer`);
+  expect(evidence.facts).toHaveLength(2);
+});
+
+test("funding refusal is durable and repeated completion callbacks do not retry", async () => {
+  const f = await completionReviewFixture();
+  await f.t.run(async ctx => {
+    const role = (await ctx.db.query("operatorRoles").first())!;
+    await ctx.db.patch(role._id, { active: false });
+  });
+  expect((await f.reconcile()).status).toBe("review_unavailable");
+  expect((await f.reconcile()).status).toBe("already_reviewed");
+  const requests = await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  expect(requests[0].status).toBe("skipped");
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test("truncated submitted answers hold without inference and explain the evidence limit", async () => {
+  const f = await completionReviewFixture("both");
+  const form = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  await f.t.run(ctx => ctx.db.patch(f.versionId, { questions: [{ key: "offer", title: "Your offer", type: "short_text", description: "", required: true, options: [] }] }));
+  await f.t.withIdentity({ subject: "join-member" }).mutation(api.communityFormRequests.saveMyAnswers, {
+    communityId: f.communityId, requestId: form._id, expectedRevision: 0, answers: { offer: "x".repeat(2000) }, submit: true,
+  });
+  expect((await f.reconcile()).status).toBe("not_eligible");
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+  const dossier = await f.t.withIdentity({ subject: "join-owner" }).query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(dossier.workflow?.goal_review).toMatchObject({ status: "insufficient_evidence" });
+  expect(dossier.workflow?.action_progress?.all_actions_complete).toBe(true);
+});
+
+test("concurrent first completion callbacks admit one review and dossier reads never admit another", async () => {
+  const f = await completionReviewFixture();
+  await Promise.all([f.reconcile(), f.reconcile()]);
+  const read = () => f.t.withIdentity({ subject: "join-owner" }).query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect((await read()).workflow?.goal_review?.status).toBe("reviewing");
+  await read(); await read();
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(1);
+});
+
+test.each(["goal", "proof", "activation", "revision"])("completed assessment cannot advance after %s changes", async change => {
+  const f = await claimedCompletionReview();
+  expect((await f.finish()).ok).toBe(true);
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    if (change === "goal") await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], goal: "Changed" }] });
+    if (change === "proof") await ctx.db.patch(f.work[0]._id, { status: "failed" });
+    if (change === "activation") await ctx.db.patch(f.membershipId, { activationSequence: 2 });
+    if (change === "revision") await ctx.db.patch(workflow._id, { revision: 2 });
+  });
+  expect((await f.apply()).status).toBe("stale");
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
 
 test.each(["", "Member has demonstrated readiness"])("human approval holds completed work with goal %s", async goal => {
   const f = await fixture();

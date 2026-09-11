@@ -163,6 +163,7 @@ async function scheduleImmediateServeWorker(args: {
 }
 
 async function insertServeRequest(args: {
+  workflowCompletionReview?: boolean;
   workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
@@ -196,6 +197,7 @@ async function insertServeRequest(args: {
     }
   }
   return await args.ctx.db.insert("communityAgentServeRequests" as any, {
+    ...(args.workflowCompletionReview ? { workflowCompletionReview: true } : {}),
     ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
     communityId: args.communityId,
     agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
@@ -674,6 +676,7 @@ export async function intakeCommunityAgentTurn(args: {
 }
 
 export async function intakeCommunityAgentWorkflowAction(args: {
+  workflowCompletionReview?: boolean;
   workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
@@ -722,8 +725,9 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       request_id: normalizeIdValue(existing._id),
     };
   }
-  const timedMembership = (args.workflowTimerId || args.workflowFormRequestId) ? await args.ctx.db.get(workflowRun.membershipId) : null;
-  const timedDestination = (args.workflowTimerId || args.workflowFormRequestId) ? {
+  const timedMembership = (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? await args.ctx.db.get(workflowRun.membershipId) : null;
+  const timedDestination = (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? {
+    ...(args.workflowCompletionReview ? { workflowCompletionReview: true } : {}),
     ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
     workflowTimerId: args.workflowTimerId,
     workflowFormRequestId: args.workflowFormRequestId,
@@ -762,7 +766,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       nowMs: args.nowMs,
     })),
   });
-  if (args.workflowTimerId || args.workflowFormRequestId) {
+  if (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) {
     try {
       await requireServiceWorkflowDestination(args.ctx, {
         ...args, ...timedDestination, triggerKind: "workflow", sponsorUserId: args.requesterUserId,
@@ -792,7 +796,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       communityId: args.communityId,
       userId: args.requesterUserId,
     });
-    if (!args.workflowTimerId && !args.workflowFormRequestId) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
+    if (!args.workflowTimerId && !args.workflowFormRequestId && !args.workflowCompletionReview) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
   } catch {
     return await skip(
       "requester_access_missing",

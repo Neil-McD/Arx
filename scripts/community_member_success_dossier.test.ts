@@ -232,6 +232,19 @@ test("progress is the default and missing conditions are not an empty list", () 
   expect(empty).toContain('Action completion information unavailable.');
 });
 
+test.each([
+  ["reviewing", "The agent is reviewing the goal"],
+  ["not_yet", "Goal not met"],
+  ["insufficient_evidence", "More proof is needed"],
+  ["failed", "Goal review could not complete"],
+] as const)("progress renders current goal review %s in the existing popup", (status, text) => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: [],
+    goal: "Member is ready", goal_review: { status, reason: "Bounded evidence explanation" } } } });
+  expect(html).toContain(text);
+  expect(html).toContain("Bounded evidence explanation");
+  expect(html).not.toContain("Automatic goal review is not enabled yet");
+});
+
 test("force-move entry reuses themed workflow control and stays hidden after completion", () => {
   const workflow = { ...source.workflow!, override_state: { activation_sequence: 1, transition_seq: 0, next_milestone_name: "Review" } };
   const html = renderDossier({ dossier: { ...source, markdown: "", workflow } });

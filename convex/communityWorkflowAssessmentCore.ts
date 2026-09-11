@@ -3,9 +3,12 @@ import { requestIsCurrent } from "./communityFormRequestCore";
 import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { parseWorkflowGoalAssessment, WORKFLOW_ASSESSMENT_PROMPT } from "../shared/communityWorkflowAssessment";
+import { requireCompletionReview } from "./communityWorkflowGoalReviewCore";
+import { internal } from "./_generated/api";
 
 /** Private execution authority, never authority to publish or move a member. */
 export async function requireWorkflowAssessment(ctx: any, request: any) {
+  if (request.workflowCompletionReview) return requireCompletionReview(ctx, request);
   if (!request.workflowAssessment || request.triggerKind !== "workflow" || !request.workflowFormRequestId
     || request.workflowTimerId || request.sourceRootId || request.sourceReplyId || request.serviceChannelId) throw new Error("workflow_assessment_source_invalid");
   if (request._id && (request.status !== "running" || (request.leaseExpiresAt ?? 0) <= Date.now())) throw new Error("workflow_assessment_lease_expired");
@@ -42,6 +45,7 @@ export async function requireWorkflowAssessment(ctx: any, request: any) {
 }
 
 export async function readWorkflowAssessmentEvidence(ctx: any, request: any) {
+  if (request.workflowCompletionReview) return (await requireCompletionReview(ctx, request)).review.snapshot;
   const { membership, form } = await requireWorkflowAssessment(ctx, request);
   const page = await readSubmittedFormRecords(ctx, membership, form._id);
   const evidence = projectSubmittedFormEvidence({ ...page, records: page.records.slice(0, 1), scan_truncated: false });
@@ -59,5 +63,7 @@ export async function finalizeWorkflowAssessment(ctx: any, request: any, content
   const assessment = parseWorkflowGoalAssessment(content, evidence.evidenceRefs, evidence.evidence.truncated);
   await ctx.db.patch(run._id, { goalAssessment: { ...assessment, assessedAt: nowMs }, updatedAt: nowMs });
   await ctx.db.patch(request._id, { status: "responded", respondedAt: nowMs, leaseExpiresAt: undefined, updatedAt: nowMs });
+  if (request.workflowCompletionReview && assessment.verdict === "achieved")
+    await ctx.scheduler.runAfter(0, internal.communityMemberWorkflows.applyCompletedGoalReviewInternal, { workflowRunId: run._id });
   return { ok: true, assessmentRecorded: true };
 }
