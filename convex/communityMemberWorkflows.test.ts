@@ -1289,6 +1289,13 @@ test("milestone context saves, snapshots at admission, and never changes advance
     automations: [{ key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "prompt_agent", prompt: "Offer one next step." } }],
   });
   expect(configured.milestone.goal).toBe("A clear offer."); // Older clients preserve context.
+  const dossier = await owner.query(dossierQuery, { communityId: f.communityId, membershipId: f.membershipId });
+  expect(dossier.membership_status).toBe("active");
+  expect(dossier.workflow?.instructions).toBe("Coach gently.");
+  expect(dossier.markdown).toContain("Instructions: Coach gently.");
+  expect(dossier.markdown).toContain("Goal: A clear offer.");
+  expect(dossier.markdown).toContain("Human approval required: No");
+  expect(dossier.markdown).toContain("## Action progress");
   await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: await addRoot(t, f, "context-snapshot") });
   const run = (await t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").first()))!;
   expect(run.milestoneContextSnapshot).toEqual({ instructions: "Coach gently.", goal: "A clear offer." });

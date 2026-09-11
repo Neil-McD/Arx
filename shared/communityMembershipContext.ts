@@ -99,12 +99,14 @@ export type CommunityMembershipContext = {
   avatar_focus_y: number | null;
   avatar_zoom: number | null;
   joined_at: string;
+  membership_status?: "active";
   service_channel: CommunityMemberServiceChannel;
   workflow: {
     action_progress?: WorkflowActionProgress;
     require_human_approval?: boolean;
     goal_review?: { status: "waiting" | "not_started" | "reviewing" | "failed" | "achieved" | "not_yet" | "insufficient_evidence" | "configured"; reason?: string };
     goal?: string;
+    instructions?: string;
     override_state?: { activation_sequence: number; transition_seq: number; next_milestone_name: string | null };
     id: string;
     revision: number;

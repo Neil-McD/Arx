@@ -67,6 +67,7 @@ export async function resolveBuilderCommunityMembershipContext(args: {
     });
   return {
     ...context,
+    membership_status: "active",
     membership_id: String(membership._id),
     joined_at: toIsoString(membership.activatedAt ?? membership.createdAt),
   };
@@ -401,6 +402,7 @@ async function readMembershipContextRecords(args: {
             id: String(workflow._id),
             revision: workflow.revision,
             ...(args.view === "builder" ? {
+              instructions: current.milestone.instructions ?? "",
               ...(actionProgress ? { action_progress: actionProgress } : {}),
               require_human_approval: current.milestone.requireHumanApproval ?? false,
               ...(!current.completedAt && !current.milestone.requireHumanApproval && current.milestone.goal?.trim()

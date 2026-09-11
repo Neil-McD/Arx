@@ -174,6 +174,13 @@ The reader is not registered as a member-agent or MCP tool.
 
 Both lenses continue to exclude observed behavior and unapproved/withdrawn evidence.
 Authorization to read the confidential dossier is not authorization to publish it.
+The builder Markdown document is derived from the same membership-context projection
+as the member popup. It includes current stage instructions, goal, approval and review
+status, action progress with source references, pinned submitted forms, and approved
+fact provenance. Missing fields and bounded action scans are explicit; neither a
+historical form answer nor action completion alone grants movement authority.
+This projection adds no stored document, new query, inference, or broader reader
+permission. Community-owned agents remain excluded from the builder-private path.
 Channel-facing agents continue to receive profile orientation only; confidential
 model consumption/disclosure is not enabled by this slice. A future form writer
 must set its audience explicitly rather than reinterpret historical profile facts.
