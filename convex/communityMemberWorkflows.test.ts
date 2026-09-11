@@ -18,6 +18,7 @@ const modules = import.meta.glob([
   "./communityMentionLifecycle.ts",
   "./communityOnboarding.ts",
   "./communityAgentServeWorker.ts",
+  "./communityAgentChannelAccess.ts",
   "./communityIntelligenceDirectory.ts",
   "./communityEvidenceAudit.ts",
   "./communityMemberWorkflows.ts",
@@ -732,6 +733,8 @@ async function goalAssessmentFixture() {
   const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
   expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
   expect(context.privateAssessment).toBe(true);
+  expect(await s.t.query(internal.communityAgentChannelAccess.authorizeServeToolsInternal, args))
+    .toEqual({ restricted: true, timed: true });
   const bundle = buildCommunityAgentServePromptBundle(context);
   expect(bundle.messages[bundle.messages.length - 1]?.content).toContain("assessment JSON only");
   expect(bundle.messages[bundle.messages.length - 1]?.content).not.toContain("Write the scheduled check-in");

@@ -20,6 +20,10 @@ visit, activation, definition and evidence, with a SHA-256 identity for deduplic
 Repeated callbacks do not requeue unchanged reviews, including failures. No reads,
 definition edits, polling, or historical backfill initiate inference.
 
+The worker's final pre-inference authorization check recognizes the explicit
+completion-review origin and invokes the same strict validator again. It retains
+the existing prompt-only tool restriction; the origin flag alone grants no access.
+
 The evaluator has no tools or public delivery. It records a cited achieved,
 not-yet, or insufficient-evidence judgment. Only an achieved result schedules the
 existing transition writer; that writer rechecks current access, manager authority,

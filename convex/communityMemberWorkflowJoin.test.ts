@@ -2,6 +2,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
+import { executeConciergeTool } from "./communityAgentServeWorker";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -44,6 +45,13 @@ async function claimedCompletionReview() {
   const context = await f.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
   expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
   expect(context.privateAssessment).toBe(true);
+  // Exercise the worker's last authorization boundary before funding/provider
+  // dispatch, not just context loading and direct result finalization.
+  expect(await f.t.query(internal.communityAgentChannelAccess.authorizeServeToolsInternal, args))
+    .toEqual({ restricted: true, timed: true });
+  const tool = await executeConciergeTool({ ctx: { runQuery: (ref: any, input: any) => f.t.query(ref, input) }, context,
+    requestId: args.requestId, toolName: "polynet_read", rawArguments: { path: "/members/me/context.md" } });
+  expect(tool.errorCode).toBe("timed_check_in_prompt_only");
   const bundle = buildCommunityAgentServePromptBundle(context);
   expect(bundle.messages[bundle.messages.length - 1]?.content).toContain("assessment JSON only");
   const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
@@ -108,6 +116,30 @@ test("pending forms do not start completion inference", async () => {
   const f = await completionReviewFixture("both");
   expect((await f.reconcile()).status).toBe("not_eligible");
   expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+});
+
+test.each(["membership", "goal", "human", "activation", "visit", "proof", "origin", "assessment", "lease", "attempt"])("pre-inference completion review authorization rejects %s changes", async change => {
+  const f = await claimedCompletionReview();
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    if (change === "membership") await ctx.db.patch(f.membershipId, { active: false });
+    if (change === "goal" || change === "human") await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0],
+      ...(change === "goal" ? { goal: "Changed goal" } : { requireHumanApproval: true }) }] });
+    if (change === "activation") await ctx.db.patch(f.membershipId, { activationSequence: 2 });
+    if (change === "visit") {
+      const state = await ctx.db.query("communityMemberWorkflowMemberMilestones").first();
+      const visit = { currentMilestoneKey: "new", milestoneEnteredAt: f.now + 1, transitionSeq: 1, updatedAt: f.now + 1 };
+      if (state) await ctx.db.patch(state._id, visit);
+      else await ctx.db.insert("communityMemberWorkflowMemberMilestones", { ...visit, workflowId: f.workflowId, membershipId: f.membershipId, createdAt: f.now });
+    }
+    if (change === "proof") await ctx.db.patch(f.work[0]._id, { status: "failed" });
+    if (change === "origin") await ctx.db.patch(f.request.workflowRunId!, { triggerType: "member_joined" });
+    if (change === "assessment") await ctx.db.patch(f.request._id, { workflowAssessment: false });
+    if (change === "lease") await ctx.db.patch(f.request._id, { leaseExpiresAt: Date.now() - 1 });
+  });
+  await expect(f.t.query(internal.communityAgentChannelAccess.authorizeServeToolsInternal,
+    { ...f.args, ...(change === "attempt" ? { expectedAttempt: f.args.expectedAttempt + 1 } : {}) })).rejects.toThrow();
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
 });
 
 test("completion review uses pinned form answers only after the required form is submitted", async () => {
