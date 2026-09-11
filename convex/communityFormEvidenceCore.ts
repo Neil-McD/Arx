@@ -19,7 +19,8 @@ export async function readSubmittedFormRecord(ctx: QueryCtx, membership: Doc<"co
   return { request, version };
 }
 
-// Private assembly only: callers must establish builder or execution authority.
+// Private assembly only: callers must establish builder, execution, or authenticated
+// self authority for this exact membership. Never accepts a client-chosen self subject.
 // Scan is bounded even when old activations or invalid records occupy the window.
 export async function readSubmittedFormRecords(ctx: QueryCtx, membership: Doc<"communityMemberships">, requiredRequestId?: Id<"communityFormRequests">) {
   if (!communityMembershipRowIsActive(membership)) throw new Error("form_context_forbidden");

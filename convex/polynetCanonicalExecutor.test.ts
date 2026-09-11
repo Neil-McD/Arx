@@ -89,6 +89,14 @@ test.each(["personal_agent", "external_mcp"] as const)("%s reads builder workflo
   expect(JSON.stringify(read)).toContain("PRIVATE_PRICING_HELP");
   expect(JSON.stringify(read)).toContain(versionId);
   expect(JSON.stringify(read)).not.toContain("Changed draft");
+  const selfRead = await execute(f.memberSubject, f.memberId, "polynet_read", selfContextPath);
+  expect(selfRead).toMatchObject({ ok: true, value: { writable: false } });
+  expect(JSON.stringify(selfRead)).toContain("PRIVATE_PRICING_HELP");
+  expect(JSON.stringify(selfRead)).toContain(versionId);
+  expect(JSON.stringify(selfRead)).not.toContain("Changed draft");
+  const ownerSelf = await execute(f.ownerSubject, f.ownerId, "polynet_read", selfContextPath);
+  expect(JSON.stringify(ownerSelf)).not.toContain("PRIVATE_PRICING_HELP");
+  expect(await execute(f.memberSubject, f.memberId, "polynet_read", selfContextPath, "community_agent")).toMatchObject({ ok: false });
   expect(entry.forms_path).toBe(`${directory}${entry.membership_id}/forms.md`);
   expect(JSON.stringify(read)).toContain(entry.forms_path);
   const forms = await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.forms_path);
@@ -228,7 +236,8 @@ test("self context bounds facts and omits builder prompt snapshots from activity
   await t.run(async (ctx) => {
     const membership = (await ctx.db.query("communityMemberships").first())!;
     const workflowId = await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId,
-      milestones: [{ key: "new", name: "New", automations: [] }], revision: 1,
+      milestones: [{ key: "new", name: "New", instructions: "SECRET_STAGE_INSTRUCTION", goal: "Define an offer", requireHumanApproval: true,
+        automations: [{ key: "help", trigger: { type: "member_joined" }, action: { key: "help", type: "prompt_agent", prompt: "SECRET_BUILDER_INSTRUCTION" } }] }], revision: 1,
       createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: 100, updatedAt: 100 });
     for (let i = 0; i < 121; i++) await ctx.db.insert("memberFacts", { userId: f.memberId, communityId: f.communityId,
       kind: "goal", body: "X".repeat(2000), provenance: "form_answer", consentState: "approved",
@@ -251,6 +260,11 @@ test("self context bounds facts and omits builder prompt snapshots from activity
   expect(result.context.recent_workflow_activity).toHaveLength(12);
   expect(result.context.recent_workflow_activity.every((activity) => activity.status === "unavailable")).toBe(true);
   expect(JSON.stringify(result)).not.toContain("SECRET_BUILDER_INSTRUCTION");
+  expect(JSON.stringify(result)).not.toContain("SECRET_STAGE_INSTRUCTION");
+  expect(result.context.workflow).toMatchObject({ goal: "Define an offer", require_human_approval: true,
+    action_progress: { actions: [expect.objectContaining({ label: "Agent assistance", status: "unavailable" })] } });
+  expect(result.context.workflow).not.toHaveProperty("goal_review");
+  expect(result.context.workflow).not.toHaveProperty("override_state");
   expect(result.context.recent_workflow_activity.every((activity) => !("prompt" in activity))).toBe(true);
   const { body } = renderCommunityMemberSelfContext(result.context);
   expect(body.length).toBeLessThan(24_000);
@@ -262,6 +276,10 @@ test("self context bounds facts and omits builder prompt snapshots from activity
   expect(oversized.body.length).toBeLessThanOrEqual(24_000);
   expect(oversized.truncated).toBe(true);
   expect(JSON.parse(oversized.body.split("\n").slice(-1)[0]).workflow).toEqual(result.context.workflow);
+  const longGoal = renderCommunityMemberSelfContext({ ...result.context,
+    workflow: { ...result.context.workflow!, goal: "X".repeat(30_000) } });
+  expect(longGoal.body.length).toBeLessThanOrEqual(24_000);
+  expect(longGoal.truncated).toBe(true);
 });
 
 test.each(["/self.md", "/communities/canonical-community/self.md", "/communities/canonical-community/members/canonical-owner/context.md"])("retired and other-member self-context paths are denied: %s", async (path) => {

@@ -961,11 +961,11 @@ test("form evidence: submitted historical answers keep pinned labels, remain pri
   expect(dossier.workflow?.current_milestone_key).not.toBe(request.milestoneKey);
   expect(dossier.markdown).toContain("PRIVATE_INTAKE");
   const { self } = await readActivityViews(t, f);
-  expect(JSON.stringify(self)).not.toContain("PRIVATE_INTAKE");
-  expect(self).not.toHaveProperty("submitted_form_evidence");
+  expect(self.submitted_form_evidence).toEqual(dossier.submitted_form_evidence);
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toHaveLength(1);
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, { ...scope, includeCompleteness: true })).toMatchObject({ rows: [expect.objectContaining({ answers: { q: "PRIVATE_INTAKE" } })], truncated: false, unavailable_records: 0 });
   await t.run(ctx => ctx.db.patch(f.membershipId, { activationSequence: request.activationSequence + 1 }));
+  expect((await readActivityViews(t, f)).self.submitted_form_evidence.submissions).toEqual([]);
   expect((await owner.query(dossierQuery, scope)).submitted_form_evidence.submissions).toEqual([]);
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, scope)).toEqual([]);
   expect(await owner.query(api.communityFormRequests.listBuilderResponses, { ...scope, includeCompleteness: true })).toEqual({ rows: [], truncated: false, unavailable_records: 0 });

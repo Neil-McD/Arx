@@ -172,6 +172,18 @@ run/member/action, active community membership and agent/source/destination acce
 Clients cannot choose an arbitrary subject or inherit a sponsor's manager role.
 The reader is not registered as a member-agent or MCP tool.
 
+The existing authenticated `/members/me/context.md` read resolves its subject
+from the caller, rechecks current community access, and now includes that member's
+stage goal, human-approval requirement, verified action progress, and submitted
+forms from the current membership activation. It reuses the canonical pinned-form
+validator and bounded evidence projection; drafts and other memberships are not
+included. The self view excludes stage instructions, builder prompt text (including
+action labels), workflow-only facts, internal assessments, and override controls.
+The community-owned agent remains denied this subtree; its sponsor is not a self
+identity. No table, tool, polling loop, automatic prompt injection, or movement
+behavior is added. Markdown remains bounded to 24,000 characters with explicit
+truncation when content is shortened or omitted.
+
 Both lenses continue to exclude observed behavior and unapproved/withdrawn evidence.
 Authorization to read the confidential dossier is not authorization to publish it.
 The builder Markdown document is derived from the same membership-context projection

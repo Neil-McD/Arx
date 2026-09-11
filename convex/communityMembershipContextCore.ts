@@ -113,6 +113,7 @@ export async function resolveSelfCommunityMembershipContext(args: {
     service_channel: context.service_channel,
     approved_community_context: context.approved_community_context,
     facts_truncated: context.facts_truncated,
+    submitted_form_evidence: context.submitted_form_evidence,
     recent_workflow_activity: context.recent_workflow_activity.map(
       (entry) => {
         const { prompt: _prompt, ...activity } = entry;
@@ -380,7 +381,7 @@ async function readMembershipContextRecords(args: {
       };
     }),
   );
-  const actionProgress = args.view === "builder" && workflow && membership && current && !current.completedAt
+  const actionProgress = args.view !== "workflow" && workflow && membership && current && !current.completedAt
     ? await readWorkflowActionProgress(args.ctx, { workflow, membership, milestone: current.milestone,
       milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: Number(state?.transitionSeq ?? 0) }) : undefined;
   return {
@@ -401,6 +402,16 @@ async function readMembershipContextRecords(args: {
         ? {
             id: String(workflow._id),
             revision: workflow.revision,
+            ...(args.view === "self" ? {
+              goal: current.milestone.goal ?? "",
+              require_human_approval: current.milestone.requireHumanApproval ?? false,
+              ...(actionProgress ? { action_progress: { ...actionProgress,
+                actions: actionProgress.actions.map(action => ({ ...action,
+                  // Builder prompt text is not member-facing action context.
+                  label: action.action_type === "prompt_agent" ? "Agent assistance" : action.label,
+                })),
+              } } : {}),
+            } : {}),
             ...(args.view === "builder" ? {
               instructions: current.milestone.instructions ?? "",
               ...(actionProgress ? { action_progress: actionProgress } : {}),
@@ -437,7 +448,7 @@ async function readMembershipContextRecords(args: {
           }
         : null,
     facts_truncated: factPage.truncated,
-    submitted_form_evidence: args.view !== "self" && membership
+    submitted_form_evidence: membership
       ? projectSubmittedFormEvidence(await readSubmittedFormRecords(args.ctx, membership))
       : { submissions: [], truncated: false, unavailable_records: 0 },
     approved_community_context: factPage.facts
