@@ -8,7 +8,7 @@ const root = resolve(import.meta.dirname, '..');
 const requireWeb = createRequire(resolve(root, 'apps/web/package.json'));
 const { createServer } = await import(requireWeb.resolve('vite'));
 const entry = `import React,{useRef,useState} from 'react'; import {createRoot} from 'react-dom/client';
-import {CommunityFormEditor} from '/src/components/WebCommunityForms.tsx'; import '/src/index.css'; import '/src/components/WebCommunityWorkflowsSection.css'; window.React=React;
+import {CommunityFormEditor,WebCommunityForms} from '/src/components/WebCommunityForms.tsx'; import '/src/index.css'; import '/src/components/WebCommunityWorkflowsSection.css'; window.React=React;
 const question=(key,title)=>({key,title,description:'',type:'short_text',required:true,options:[]});
 window.qa={row:{key:'qa',name:'Intake',questions:[question('q1','First question'),question('q2','')],revision:1,publishedRevision:null},calls:[],versions:{},delay:500};
 const qa=window.qa;
@@ -22,13 +22,15 @@ const gateway={scopeKey:'qa',load:async()=>[structuredClone(qa.row)],save:async 
  qa.versions[form.revision]=structuredClone(qa.row);qa.row.publishedRevision=form.revision;
  if(qa.failPublish){qa.failPublish=false;throw Error('response lost');}return structuredClone(qa.row);
 }};
-function App(){const guard=useRef(null);const [open,setOpen]=useState(true);return <>
+function App(){const guard=useRef(null);const [open,setOpen]=useState(true);
+if(new URLSearchParams(location.search).has('layout'))return <div className="workflow-page workflow-sections" style={{position:'fixed',inset:16,left:innerWidth>760?340:16}}><div className="workflow-section-content"><WebCommunityForms gateway={gateway}/></div></div>;
+return <>
 <button onClick={async()=>{if(await guard.current?.())setOpen(false)}}>Leave Forms</button>
 {open?<CommunityFormEditor initial={structuredClone(qa.row)} gateway={gateway} leaveGuard={guard} onBack={()=>setOpen(false)}/>:<button onClick={()=>setOpen(true)}>Reopen form</button>}</>}
 createRoot(document.getElementById('root')).render(<App/>);`;
 const server = await createServer({root:resolve(root,'apps/web'),configFile:false,server:{host:'127.0.0.1',port:5197,strictPort:true},
  plugins:[{name:'form-builder-qa',resolveId:id=>id==='/qa-entry.tsx'?id:null,load:id=>id==='/qa-entry.tsx'?entry:null,
- configureServer(s){s.middlewares.use((req,res,next)=>{if(req.url!=='/qa')return next();res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/qa-entry.tsx"></script></body></html>');});}}]});
+ configureServer(s){s.middlewares.use((req,res,next)=>{if(req.url?.split('?')[0]!=='/qa')return next();res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/qa-entry.tsx"></script></body></html>');});}}]});
 let browser;
 try {
  await server.listen();browser=await chromium.launch({headless:true});
@@ -89,5 +91,20 @@ try {
  const output=resolve(root,'artifacts/workflow-editor-qa');await mkdir(output,{recursive:true});
  for(const theme of ['dark','light']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await page.waitForFunction(t=>getComputedStyle(document.querySelector('.community-form-name')).color===(t==='light'?'rgb(23, 23, 25)':'rgb(252, 248, 240)'),theme);await page.screenshot({path:resolve(output,'form-builder-'+theme+'.png')});}
  assert.deepEqual(errors,[]);
+ // Real list/editor inside the production section sizing contract, not a
+ // standalone component whose body happens to provide enough space.
+ for(const width of [2560,1440,1000,390]){
+  await page.setViewportSize({width,height:900});await page.goto('http://127.0.0.1:5197/qa?layout');
+  await page.getByRole('button',{name:/Intake 2 questions/}).waitFor();
+  const listFit=await page.locator('.community-form-list').evaluate(el=>{const p=el.parentElement,s=getComputedStyle(p);return {width:el.getBoundingClientRect().width,available:p.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight),overflow:p.scrollWidth>p.clientWidth};});
+  assert.ok(Math.abs(listFit.width-listFit.available)<2,JSON.stringify({width,listFit}));assert.equal(listFit.overflow,false);
+  await page.screenshot({path:resolve(output,'forms-list-'+width+'.png')});
+  await page.getByRole('button',{name:/Intake 2 questions/}).click();
+  const fit=await page.locator('.community-form-workspace').evaluate(el=>{const p=document.querySelector('.workflow-section-content'),r=el.getBoundingClientRect();return {width:r.width,panel:p.getBoundingClientRect().width,overflow:p.scrollWidth>p.clientWidth,questionsDisplay:getComputedStyle(document.querySelector('.community-form-questions')).display};});
+  assert.equal(fit.overflow,false,JSON.stringify({width,fit}));
+  assert.equal(fit.questionsDisplay,fit.panel<=760?'flex':'block');
+  if(fit.panel<=760)assert.ok(await page.locator('.community-form-questions').evaluate(el=>el.getBoundingClientRect().height<90),'Compact navigation must not stretch into a tall card');
+  await page.screenshot({path:resolve(output,'forms-editor-'+width+'.png')});
+ }
  console.log('PASS: actual form editor validation target/focus, lost publish response retry, slow save/newer edits, leave/reopen, save retry, conflict preservation/reload, immutable republish, preview isolation, dark/light screenshots. Synthetic transport only.');
 } finally {await browser?.close();await server.close();}

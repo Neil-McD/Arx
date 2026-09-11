@@ -3,6 +3,11 @@
 Forms live inside Workflows. Owners and entitled admins author an ordered question
 list on one canvas and preview one question at a time. There is no new global tab.
 
+The form list spans the available shell panel rather than a fixed 800px column.
+The editor switches to compact question navigation at the workflow container's
+width, not the monitor width. Question text retains its centered readable measure;
+the surrounding workspace fills the panel. No shell breakpoints are changed.
+
 Workflows uses one persistent Workflows / Integrations / Forms selector built on
 the canonical platform tab primitive. The `section` query parameter selects Forms
 or Integrations; absence selects the board. Integrations is explicitly unavailable,
