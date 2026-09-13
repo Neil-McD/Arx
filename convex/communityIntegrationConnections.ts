@@ -15,6 +15,7 @@ import {
 } from "./communityCore";
 import { integrationStatus } from "../shared/communityIntegrationStatus";
 import { canActivateIntegrationBinding } from "./communityIntegrationReadCore";
+import { admittedIntegrationPilot, integrationVerificationPilot } from "./integrationVerificationPilot";
 
 async function findBinding(ctx: any, communityId: any, ownerUserId: any) {
   return ctx.db
@@ -113,6 +114,11 @@ export const beginConnectionInternal = internalMutation({
       throw new Error("integration_disabled");
     const existing = await findBinding(ctx, args.communityId, actor.dbUserId);
     const now = Date.now();
+    const pilot = admittedIntegrationPilot({communityId: args.communityId,
+      actorUserId: actor.dbUserId, authConfigId: args.authConfigId, nowMs: now}, integrationVerificationPilot());
+    if (!pilot) throw new Error("integration_pilot_unavailable");
+    if (await ctx.db.query("communityPaidToolReceipts").withIndex("by_pilot", q => q.eq("pilotId", pilot.id)).first())
+      throw new Error("integration_pilot_exhausted");
     if (existing?.revokePending || existing?.initiationState === "unknown")
       throw new Error("integration_reconciliation_required");
     if (
@@ -152,7 +158,7 @@ export const beginConnectionInternal = internalMutation({
       generation: (existing?.generation ?? 0) + 1,
       status: "pending" as const,
       scopes: [],
-      expiresAt: now + 10 * 60_000,
+      expiresAt: Math.min(now + 10 * 60_000, pilot.expiresAt),
       updatedAt: now,
     };
     const bindingId = existing
@@ -204,7 +210,9 @@ export const verifyConnectionInternal = internalMutation({
       binding.status !== "pending"
     )
       return false;
-    const valid = canActivateIntegrationBinding(binding, args, Date.now());
+    const valid = Boolean(admittedIntegrationPilot({communityId: args.communityId,
+      actorUserId: actor.dbUserId, authConfigId: args.authConfigId, nowMs: Date.now()}, integrationVerificationPilot())) &&
+      canActivateIntegrationBinding(binding, args, Date.now());
     await ctx.db.patch(binding._id, {
       status: valid ? "active" : "error",
       scopes: valid ? [...new Set(args.scopes)] : [],
@@ -231,6 +239,8 @@ export const claimCallbackInternal = internalMutation({
     const actor = await resolveAuthenticatedActorByTrustedSubject({ ctx, ...args });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: actor.dbUserId });
     const b = await findBinding(ctx, args.communityId, actor.dbUserId);
+    if (!b || !admittedIntegrationPilot({communityId: args.communityId,
+      actorUserId: actor.dbUserId, authConfigId: b.authConfigId, nowMs: Date.now()}, integrationVerificationPilot())) return false;
     if (!(await ctx.db.get(args.communityId))?.integrationReadPilotEnabled || !b || b.generation !== args.generation || b.status !== "pending" ||
       !Number.isFinite(b.expiresAt) || b.expiresAt <= Date.now() || !b.connectedAccountId || b.callbackClaimed) return false;
     await ctx.db.patch(b._id, { callbackClaimed: true, updatedAt: Date.now() });

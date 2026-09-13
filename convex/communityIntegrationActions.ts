@@ -7,6 +7,7 @@ import { authorizeFounderPaidToolFundingSession, markFounderPaidToolProviderStar
 import { HUBSPOT_PILOT_VERSION } from "./hubspotPilotContract";
 import type { AdmitConnectionMetadata } from "./composioConnectionAdapter";
 import type { IntegrationReceiptIntent } from "./communityIntegrationReceiptIntent";
+import { admittedIntegrationPilot, integrationVerificationPilot } from "./integrationVerificationPilot";
 
 // Intent comes from the authenticated connection snapshot, never callback input.
 export function admittedConnectionMetadata(ctx: any, who: {communityId: string; userId: string},
@@ -62,6 +63,9 @@ export async function connectWithAdapter(
   const access = await ctx.runQuery(refs.readPilotBindingInternal, who);
   if (!access.enabled) throw new Error("integration_disabled");
   if (!adapter) return { available: false };
+  if (!admittedIntegrationPilot({communityId, actorUserId: who.userId,
+    authConfigId: adapter.authConfigId, nowMs: Date.now()}, integrationVerificationPilot()))
+    throw new Error("integration_pilot_unavailable");
   const attempt = await ctx.runMutation(refs.beginConnectionInternal, {
     ...who,
     authConfigId: adapter.authConfigId,
@@ -108,6 +112,9 @@ export async function verifyWithAdapter(
   const who = await identity(ctx, communityId);
   const access = await ctx.runQuery(refs.readPilotBindingInternal, who);
   const b = access.binding;
+  if (!adapter || !admittedIntegrationPilot({communityId, actorUserId: who.userId,
+    authConfigId: adapter.authConfigId, nowMs: Date.now()}, integrationVerificationPilot()) ||
+    b?.authConfigId !== adapter.authConfigId) return false;
   if (
     !adapter ||
     !access.enabled ||
@@ -151,7 +158,10 @@ export async function revokeWithAdapter(
   );
   const b = await ctx.runQuery(refs.ownBindingInternal, who);
   if (!b?.revokePending) return { cleanupPending: false };
-  if (!adapter || !b.connectedAccountId) return { cleanupPending: true };
+  // Never consult pilot expiry or community enablement for cleanup. The query
+  // resolves only this authenticated owner's binding; mismatched adapters fail closed.
+  if (!adapter || !b.connectedAccountId || b.authConfigId !== adapter.authConfigId ||
+    b.provider !== "composio" || b.toolkit !== "hubspot") return { cleanupPending: true };
   try {
     await adapter.revoke(b.connectedAccountId);
     const finished = await ctx.runMutation(refs.finishRevocationInternal, {

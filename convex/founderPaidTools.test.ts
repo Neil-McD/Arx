@@ -17,7 +17,7 @@ const modules = import.meta.glob([
   "./providerConnections.ts",
   "./_generated/**/*.*s",
 ]);
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
 
 async function createFixture(suffix: string, nowMs = 100_000) {
   const t = convexTest(schema, modules);
@@ -710,6 +710,7 @@ async function integrationFixture(suffix: string) {
 }
 
 async function includedFixture(suffix: string) {
+  vi.stubEnv("CONVEX_CLOUD_URL", verificationPilot.INTEGRATION_PILOT_TARGET.deploymentUrl);
   const f = await integrationFixture(suffix);
   await f.t.run(ctx => ctx.db.patch(f.bindingId, {status: "pending", callbackClaimed: true, expiresAt: 200_000}));
   const policy = {id: "one-verification", communityId: f.fixture.communityId,

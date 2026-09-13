@@ -26,7 +26,7 @@ import { integrationReceiptIntentValidator, validIntegrationReceiptIntent,
   type IntegrationReceiptIntent } from "./communityIntegrationReceiptIntent";
 import { requireCommunityChatAccess } from "./communityCore";
 import { HUBSPOT_CONTACT_READ_SCOPE } from "./hubspotPilotContract";
-import { integrationVerificationPilot } from "./integrationVerificationPilot";
+import { integrationVerificationPilot, admittedIntegrationPilot } from "./integrationVerificationPilot";
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -76,11 +76,8 @@ type IncludedToolReceiptRow = Pick<MonetaryToolReceiptRow,
 export type FounderPaidToolReceiptRow = MonetaryToolReceiptRow | IncludedToolReceiptRow;
 
 function pilotAllows(args: {communityId: unknown; actorUserId: unknown; integrationIntent: IntegrationReceiptIntent; nowMs: number}, pilot = integrationVerificationPilot()) {
-  return pilot && pilot.id.trim() && Number.isFinite(args.nowMs) &&
-    Number.isFinite(pilot.expiresAt) && pilot.expiresAt > args.nowMs &&
-    pilot.communityId === args.communityId && pilot.actorUserId === args.actorUserId &&
-    pilot.authConfigId === args.integrationIntent.authConfigId &&
-    args.integrationIntent.tool === "HUBSPOT_LIST_GRANTED_SCOPES" ? pilot : null;
+  return args.integrationIntent.tool === "HUBSPOT_LIST_GRANTED_SCOPES"
+    ? admittedIntegrationPilot({...args, authConfigId: args.integrationIntent.authConfigId}, pilot) : null;
 }
 
 async function finalizeIncluded(ctx: any, receipt: IncludedToolReceiptRow,

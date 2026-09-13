@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import * as verificationPilot from "./integrationVerificationPilot";
+afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
 
 import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
@@ -14,6 +16,43 @@ import { buildCommunityFunnelContentTestFixture } from "../scripts/community_fun
 import { renderCommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
 
 const selfContextPath = "/communities/canonical-community/members/me/context.md";
+test.each(["deployment", "member", "community", "config", "expired", "disabled"])("pilot %s denial precedes remote initiation", async mode => {
+  const t = convexTest(schema, modules); const f = await createFixture(t);
+  await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: true}));
+  const policy = verificationPilot.integrationVerificationPilot()!;
+  if (mode === "deployment") vi.stubEnv("CONVEX_CLOUD_URL", "https://wry-hawk-715.convex.cloud");
+  else vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue(mode === "disabled" ? null : {
+    ...policy, ...(mode === "member" ? {actorUserId: "other"} : mode === "community" ? {communityId: "other"} :
+      mode === "config" ? {authConfigId: "other"} : {expiresAt: Date.now() - 1}),
+  });
+  const adapter = {authConfigId: "config", initiate: vi.fn(), verify: vi.fn(), revoke: vi.fn()};
+  const ctx = executionContext(t.withIdentity({subject: f.memberSubject}));
+  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow("integration_pilot_unavailable");
+  expect(await verifyWithAdapter(ctx, f.communityId, "session", adapter)).toBe(false);
+  expect(adapter.initiate).not.toHaveBeenCalled(); expect(adapter.verify).not.toHaveBeenCalled();
+  expect(await t.run(c => c.db.query("communityIntegrationConnections").collect())).toEqual([]);
+});
+
+test.each(["expired", "disabled"])("pilot %s and community disablement do not prevent cleanup", async mode => {
+  const t = convexTest(schema, modules); const f = await createFixture(t);
+  await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: true}));
+  const policy = verificationPilot.integrationVerificationPilot()!;
+  vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue({...policy, expiresAt: Date.now() + 30_000});
+  const ctx = executionContext(t.withIdentity({subject: f.memberSubject}));
+  const adapter = {authConfigId: "config", initiate: vi.fn(async () => ({connectedAccountId: "account", authorizationUrl: "https://connect.composio.dev/link"})), verify: vi.fn(), revoke: vi.fn(async () => {})};
+  const attempt = await connectWithAdapter(ctx, f.communityId, adapter);
+  expect(attempt.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
+  vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue(mode === "disabled" ? null : {...policy, expiresAt: 1});
+  await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: false}));
+  expect(await verifyWithAdapter(ctx, f.communityId, "late", adapter)).toBe(false);
+  expect(await revokeWithAdapter(ctx, f.communityId, {...adapter, authConfigId: "wrong"})).toEqual({cleanupPending: true});
+  expect(adapter.revoke).not.toHaveBeenCalled();
+  adapter.revoke.mockRejectedValueOnce(new Error("uncertain"));
+  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({cleanupPending: true});
+  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({cleanupPending: false});
+  expect(adapter.revoke).toHaveBeenLastCalledWith("account");
+});
+
 test("attempt correlation is stable, opaque and isolated by binding and generation",async()=>{
   const alias=await integrationAttemptAlias("binding-one",1);
   expect(alias).toMatch(/^pn_[a-f0-9]{64}$/);
@@ -538,7 +577,7 @@ const modules = import.meta.glob([
 
 async function createFixture(t: ReturnType<typeof convexTest>) {
   const nowMs = 1_760_000_000_000;
-  return await t.run(async (ctx) => {
+  const fixture = await t.run(async (ctx) => {
     const createUser = async (subject: string, handle: string) => {
       const userId = await ctx.db.insert("users", {
         authSubject: subject,
@@ -655,6 +694,10 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       memberSubject: "canonical-member-subject",
     };
   });
+  vi.stubEnv("CONVEX_CLOUD_URL", verificationPilot.INTEGRATION_PILOT_TARGET.deploymentUrl);
+  vi.spyOn(verificationPilot, "integrationVerificationPilot").mockReturnValue({id: "test-pilot",
+    communityId: fixture.communityId, actorUserId: fixture.memberId, authConfigId: "config", expiresAt: Date.now() + 600_000});
+  return fixture;
 }
 
 async function createAdminFixture(

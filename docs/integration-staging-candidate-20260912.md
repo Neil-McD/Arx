@@ -76,3 +76,29 @@ No root-workspace changes, main reconciliation, historical branch commits beyond
 3. Verify backend release source and intended staging deployment path before deploying this candidate.
 4. Deploy coordinated schema/backend/frontend only in a separately authorized slice.
 5. Inspect consent before OAuth grant; then one sandbox verification and confirmed revocation.
+
+## Admission and cleanup slice
+
+Shared `admittedIntegrationPilot` now checks the server deployment URL, exact
+configured community/member/auth config, finite time and fixed expiry. Actions
+check it before initiation; the binding mutation rechecks it transactionally,
+rejects an already-consumed pilot receipt, and caps callback lifetime at expiry.
+Callback claim, activation and funding admission reuse the same policy. Reconnection
+does not replenish the existing one-operation receipt budget.
+
+Disconnect deliberately does not require pilot enablement, current membership,
+or unexpired policy: authenticated ownership of the existing stored binding is
+the cleanup authority. Remote cleanup additionally checks the adapter auth config,
+provider and toolkit. Provider uncertainty leaves cleanupPending true. The existing
+generation/attachment logic retains late-created account IDs for revocation.
+
+1,542 tests pass, including new wrong-deployment/member/community/config and
+expired/disabled pilot cases, plus disabled-community cleanup, wrong cleanup
+adapter, and uncertain revocation. Existing replay, disconnect-race and budget
+tests pass. Convex/web typechecks, web build and diff check pass.
+
+Live adapter and policy remain null. The target deployment, callback and sandbox
+portal are recorded in the policy module, but concrete member/config/expiry
+activation and adapter construction remain a separately reviewed activation step.
+No deployment, OAuth, credentials, or provider calls in this slice. Gates 1–2
+above are implemented locally; backend provenance and live acceptance remain open.
