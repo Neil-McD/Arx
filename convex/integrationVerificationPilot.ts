@@ -14,6 +14,9 @@ export function integrationVerificationPilot(): IntegrationVerificationPilot | n
 
 export const INTEGRATION_PILOT_TARGET = Object.freeze({
   deploymentUrl: "https://quick-porcupine-949.convex.cloud",
+  communityId: "jx7f4fcw4x3hjsvy2t02j669xx8cvj6s",
+  actorUserId: "jn7ckswapk976rra6egsxydm0x82a7nc",
+  authConfigId: "ac_uxRir8eo8Vma",
   expectedPortalId: "247370940",
   returnUrl: "https://polynet-staging.vercel.app/integrations/callback",
 });

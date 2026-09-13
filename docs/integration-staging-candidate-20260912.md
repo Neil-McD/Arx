@@ -102,3 +102,24 @@ portal are recorded in the policy module, but concrete member/config/expiry
 activation and adapter construction remain a separately reviewed activation step.
 No deployment, OAuth, credentials, or provider calls in this slice. Gates 1–2
 above are implemented locally; backend provenance and live acceptance remain open.
+
+## Live readiness inspection
+
+Read-only Convex query confirmed the designated community and user exist, the
+community owner matches that user, the slug matches the disposable fixture, and
+integrationReadPilotEnabled is false. Exact fixture IDs/auth config are recorded
+in INTEGRATION_PILOT_TARGET; integrationVerificationPilot still returns null.
+
+Dashboard history for quick-porcupine-949 shows the last function deployment as
+one day ago and the COMPOSIO_API_KEY creation as one hour ago at inspection. It
+does not expose a source commit, so no exact backend SHA is asserted. No secret
+value was read. The CLI deploy help says deploy defaults to production when using
+CONVEX_DEPLOYMENT; it was not invoked. Its dry-run describes generated config,
+not an independently established deployed source commit.
+
+Do not activate against inferred backend provenance. Recommended next release:
+explicitly target staging and deploy the disabled, validated candidate with its
+commit recorded in the deployment message; verify that receipt before setting a
+short fixed pilot expiry and constructing the live adapter. This establishes new
+known provenance rather than pretending to recover an unavailable old SHA.
+No remote writes, OAuth grants, connections, or provider calls in this inspection.
