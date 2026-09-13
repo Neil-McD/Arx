@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { executeCommunityIntegrationRead, type IntegrationReadDependencies } from "./communityIntegrationReadCore";
 import { renderCommunitySubmittedFormsMarkdown } from "../shared/communityMemberSuccessDossier";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
 import { parseCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract.ts";
@@ -1031,6 +1032,10 @@ async function executeCanonicalList(args: {
 }
 
 async function executeCanonicalRead(args: {
+  toolCallId?: string | null;
+  integrationRead?: IntegrationReadDependencies;
+  communityBoundConversation?: boolean;
+  runId?: string;
   ctx: any;
   authSubject: string;
   userId: string;
@@ -1074,6 +1079,19 @@ async function executeCanonicalRead(args: {
       "semantic_not_found",
       "Repository path not found or not accessible.",
     );
+  }
+
+  if (target.localPath.startsWith("/integrations/")) {
+    const match = /^\/integrations\/hubspot\/contacts\/([0-9]{1,32})$/.exec(target.localPath);
+    if (!match || args.principalKind !== "personal_agent" ||
+      args.evidenceSurface !== "member_agent_dock" || !args.communityBoundConversation ||
+      args.mountedCommunityId !== target.communityId || !args.runId || !args.toolCallId) {
+      return canonicalError("integration_access_denied", "Integration read unavailable.");
+    }
+    // No production adapter is installed in this mocked pilot slice.
+    if (!args.integrationRead) return canonicalError("integration_pilot_unavailable", "Integration pilot is not connected.");
+    return executeCommunityIntegrationRead({ communityId: target.communityId, userId: args.userId,
+      runId: args.runId, toolCallId: args.toolCallId, contactId: match[1] }, args.integrationRead);
   }
 
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
@@ -2010,6 +2028,10 @@ async function executeCanonicalCall(args: {
 }
 
 export async function executePolynetCanonicalTool(args: {
+  toolCallId?: string | null;
+  integrationRead?: IntegrationReadDependencies;
+  communityBoundConversation?: boolean;
+  runId?: string;
   ctx: any;
   authSubject: string;
   userId: string;

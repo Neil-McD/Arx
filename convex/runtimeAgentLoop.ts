@@ -91,6 +91,7 @@ import {
 } from "./runtimeHarnessTelemetry";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
+import type { IntegrationReadDependencies } from "./communityIntegrationReadCore";
 import {
   POLYNET_CANONICAL_TOOL_NAMES,
   type PolynetCanonicalToolName,
@@ -228,6 +229,7 @@ function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
 }
 
 export async function executeRetrievalHarnessTool(params: {
+  integrationRead?: IntegrationReadDependencies;
   ctx: any;
   userId: string;
   authSubject?: string | null;
@@ -337,6 +339,10 @@ export async function executeRetrievalHarnessTool(params: {
       }
     }
     const execution = await executePolynetCanonicalTool({
+      integrationRead: params.integrationRead,
+      toolCallId: params.toolCallId,
+      communityBoundConversation: params.communityBoundConversation,
+      runId: params.runId,
       ctx: params.ctx,
       authSubject,
       userId: params.userId,

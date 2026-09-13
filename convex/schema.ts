@@ -1,4 +1,5 @@
 import { defineSchema, defineTable } from "convex/server";
+import { integrationReceiptIntentValidator } from "./communityIntegrationReceiptIntent";
 import { communityFormQuestionValidator } from "./communityFormValidators";
 import { v } from "convex/values";
 import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
@@ -324,7 +325,7 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_payer_createdAt", ["payerUserId", "createdAt"]),
 
-  communityPaidToolReceipts: defineTable({
+  communityPaidToolReceipts: defineTable(v.union(v.object({
     receiptKey: v.string(),
     sourceRunId: v.string(),
     toolCallId: v.string(),
@@ -364,8 +365,22 @@ export default defineSchema({
     failedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
+  }), v.object({
+    receiptKey: v.string(), sourceRunId: v.string(), toolCallId: v.string(),
+    communityId: v.id("communities"), actorUserId: v.id("users"),
+    fundingMode: v.literal("platform_included_allowance"),
+    pilotId: v.string(), pilotExpiresAt: v.number(), reservedOperations: v.literal(1),
+    costEvidence: v.literal("unknown"),
+    integrationIntent: integrationReceiptIntentValidator,
+    toolName: v.literal("integration"), action: v.literal("verify_scopes"),
+    status: v.union(v.literal("authorized"), v.literal("settled"), v.literal("failed"), v.literal("indeterminate")),
+    claimToken: v.string(), leaseExpiresAt: v.number(), providerStartedAt: v.optional(v.number()),
+    outcomeCode: v.optional(v.string()), failureCode: v.optional(v.string()),
+    authorizedAt: v.number(), settledAt: v.optional(v.number()), failedAt: v.optional(v.number()),
+    createdAt: v.number(), updatedAt: v.number(),
+  })))
     .index("by_receipt_key", ["receiptKey"])
+    .index("by_pilot", ["pilotId"])
     .index("by_source_run", ["sourceRunId"])
     .index("by_actor_community_createdAt", ["actorUserId", "communityId", "createdAt"])
     .index("by_cycle_createdAt", ["usageCycleId", "createdAt"])
@@ -1036,7 +1051,20 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
+  communityIntegrationConnections: defineTable({
+    communityId: v.id("communities"), ownerUserId: v.id("users"),
+    provider: v.literal("composio"), toolkit: v.literal("hubspot"),
+    providerUserId: v.string(), authConfigId: v.string(), connectedAccountId: v.string(),
+    generation: v.number(),
+    status: v.union(v.literal("pending"), v.literal("active"), v.literal("disconnected"), v.literal("error")),
+    scopes: v.array(v.string()), expiresAt: v.optional(v.number()),
+    initiationState: v.optional(v.union(v.literal("awaiting"), v.literal("ready"), v.literal("unknown"))),
+    callbackClaimed: v.optional(v.boolean()),
+    authorizationUrl: v.optional(v.string()), revokePending: v.optional(v.boolean()),
+    createdAt: v.number(), updatedAt: v.number(),
+  }).index("by_community_owner_toolkit", ["communityId", "ownerUserId", "toolkit"]),
   communities: defineTable({
+    integrationReadPilotEnabled: v.optional(v.boolean()),
     ownerId: v.id("users"),
     slug: v.string(),
     name: v.string(),

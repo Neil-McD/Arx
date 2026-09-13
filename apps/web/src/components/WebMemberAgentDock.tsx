@@ -66,6 +66,8 @@ import {
 } from "./RuntimeResourceChangesetApprovalCards";
 import type { WebCommunityRecord } from "../webAppContracts";
 import "./WebMemberAgentDock.css";
+import { WebCommunityIntegration } from "./WebCommunityIntegration";
+import { useWebCommunityIntegrationGateway } from "../controllers/useWebCommunityIntegrationGateway";
 
 type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
@@ -183,6 +185,7 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMemberAgentDockProps>(
 function WebMemberAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
+  const integrations = useWebCommunityIntegrationGateway({ communityId, session: props.session, ensureSession: props.ensureSession });
   const communityName = String(props.community?.name ?? "").trim();
   const isOpenSurface = props.pageMode
     ? Boolean(props.pageActive)
@@ -1130,6 +1133,7 @@ function WebMemberAgentDock(props, ref) {
             </span>
           </div>}
           <div className={props.pageMode ? "community-channel-header-actions" : "member-agent-dock-header-actions"}>
+            {props.pageMode && <WebCommunityIntegration gateway={integrations} />}
             <button
               type="button"
               className={props.pageMode ? "community-channel-header-menu-trigger" : undefined}

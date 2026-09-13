@@ -380,6 +380,7 @@ export function parsePolynetSemanticPath(value: unknown) {
     /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
+    /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(value) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(value) ||
     /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(value)
     ? { ok: true as const, path: value }
@@ -510,6 +511,7 @@ export function validateCommunitySemanticOperationInput(args: {
     "memberHandle" in parsed ||
     "memberUserId" in parsed;
   const isCanonicalVirtualDocumentRead =
+    /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(parsed.path) ||
     /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||

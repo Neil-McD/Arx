@@ -2242,6 +2242,7 @@ export default function App() {
       },
       workflows: {
         forms: communityWorkflows.forms,
+        integrations: communityWorkflows.integrations,
         channels: activeCommunityChannels.filter((channel) => channel.id && channel.community_id === activeCommunityId),
         channelsUnavailable: isLoadingActiveCommunityChannels || Boolean(activeCommunityChannelsError),
         board: communityWorkflows.board,

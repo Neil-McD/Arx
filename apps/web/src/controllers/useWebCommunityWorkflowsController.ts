@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AuthSession } from "../auth";
 import { useWebCommunityFormsGateway } from "./useWebCommunityFormsGateway";
+import { useWebCommunityIntegrationGateway } from "./useWebCommunityIntegrationGateway";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
   createCloudCommunityMemberWorkflowLiveClient,
@@ -133,6 +134,7 @@ export function useWebCommunityWorkflowsController(params: {
   session: AuthSession | null;
 }) {
   const forms = useWebCommunityFormsGateway(params);
+  const integrations = useWebCommunityIntegrationGateway({ ...params, communityId: params.activeCommunityId });
   const [board, setBoard] = useState<CloudCommunityMemberWorkflowBoard | null>(null);
   const [members, setMembers] = useState<CloudCommunityMemberWorkflowMember[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -432,7 +434,7 @@ export function useWebCommunityWorkflowsController(params: {
   );
 
   return {
-    forms,
+    forms, integrations,
     board,
     members,
     hasMore,

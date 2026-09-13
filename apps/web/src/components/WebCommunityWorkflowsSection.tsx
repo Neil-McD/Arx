@@ -23,8 +23,11 @@ import "./WebCommunityWorkflowsSection.css";
 import { WebCommunityForms } from "./WebCommunityForms";
 import { WebCommunityFormResponses } from "./WebCommunityFormResponses";
 import type { CommunityFormsGateway } from "../controllers/useWebCommunityFormsGateway";
+import type { IntegrationGateway } from "../controllers/useWebCommunityIntegrationGateway";
+import { WebCommunityIntegration } from "./WebCommunityIntegration";
 
 export type WebCommunityWorkflowsSectionProps = {
+  integrations?: IntegrationGateway;
   forms?: CommunityFormsGateway;
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
@@ -121,7 +124,8 @@ export function WebCommunityWorkflowsSection(
       {section === "workflows" ? <WorkflowBoard {...props} /> : section === "forms" ? props.forms
         ? <WebCommunityForms key={props.forms.scopeKey} gateway={props.forms} leaveGuard={beforeLeave} />
         : <p role="status">Forms are unavailable.</p>
-        : <div className="workflow-integrations-empty"><h2>Integrations are not available yet</h2><p>App and MCP connections are not enabled for workflows.</p></div>}
+        : props.integrations ? <WebCommunityIntegration gateway={props.integrations} builder />
+        : <div className="workflow-integrations-empty"><h2>Integrations are not available yet</h2><p>App connections are unavailable.</p></div>}
     </div>
   </div>;
 }
