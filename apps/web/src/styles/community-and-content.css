@@ -11055,8 +11055,16 @@ button.chat-reply-quote:hover {
   opacity: 0.55;
 }
 
-.member-settings-modal {
-  width: min(560px, calc(100vw - 32px));
+.modal-overlay.member-settings-overlay {
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+.modal.member-settings-modal {
+  box-sizing: border-box;
+  width: min(560px, 100%);
+  min-width: 0;
+  max-height: min(720px, calc(100dvh - 32px));
 }
 
 .member-settings-modal .modal-header {

@@ -292,7 +292,9 @@ function RosterSurface(props: RosterProps & {
     </div>
   </aside>
   </>;
-  if (!props.directory) return <>{content}{settings}</>;
+  // The chat shell isolates its stacking context beneath the community rail.
+  // Keep overlays outside that shell, as the directory already does below.
+  if (!props.directory) return <>{content}{createPortal(settings, document.body)}</>;
   // Keep search and pagination mounted while the existing profile inspector is open.
   return createPortal(<><div className="modal-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>
     <section ref={dialogRef} className="modal members-directory-modal" role="dialog" aria-modal="true"

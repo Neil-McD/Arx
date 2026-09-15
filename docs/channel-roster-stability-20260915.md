@@ -234,3 +234,25 @@ had occurred at inspection (0 of 44 captured requests matched). No throttling
 was active. Actual normal credential renewal and member-side revocation remain
 open; the separate member login has not been provided. The staged product build
 remains 06bc2cfdc; this follow-up changes only the fixture and evidence document.
+
+### Member-settings popup shell fit
+
+The user supplied a screenshot showing the left edge of member settings hidden
+behind the community rail. Live DOM inspection confirmed the popup was nested
+inside product-shell-surface's isolated stacking context, and the generic .modal
+rule overrode its intended width to 720px. Channel-launched settings now portal
+to document.body, matching the existing directory/workflow overlay approach.
+The directory's existing portal and focus wrapper remain intact. Scoped overlay
+padding and a more specific member-modal selector enforce 560px maximum width,
+available-width containment, and dynamic-viewport height with internal scrolling.
+
+The reproducible shell.html fixture uses the real web styles and roster component
+inside an isolated shell with a higher rail. Browser measurements after the fix:
+- 702x706: dialog x=71, width=560, no horizontal overflow.
+- 360x320: dialog x=16, y=16, width=328, height=288; body scrolls internally.
+- 1440x900: dialog x=440, width=560, centered.
+
+Screenshots at constrained and short widths showed an unobscured title and close
+control. All 43 roster browser assertions, web typecheck, web production build,
+and diff whitespace checks passed. This fixes the demonstrated member-settings
+popup; it does not assert that every unrelated overlay has been audited.
