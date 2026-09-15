@@ -125,6 +125,63 @@ checks.querySelector('button')!.onclick = async () => {
     channel = 'final'; await render();
     await update(() => publish(replacement, ['previous channel']));
     check(!fixture.textContent?.includes('previous channel'), 'multi-page callbacks cannot cross channel switch');
+    channel = 'presence-anchor'; await render();
+    const presencePage = latest();
+    await update(() => {
+      publish(presencePage, ['Presence subject', ...Array.from({ length: 61 }, (_, i) => `Reader ${i}`)]);
+      for (const member of presencePage.value.page) member.last_seen_at = 1;
+      presencePage.update();
+    });
+    const presenceViewport = fixture.querySelector('.community-context-members') as HTMLElement;
+    presenceViewport.style.flex = 'none'; presenceViewport.style.height = '414px';
+    const paint = async () => { await act(async () => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }); };
+    await paint();
+    presenceViewport.scrollTop = presenceViewport.scrollHeight;
+    await paint();
+    const reader = fixture.querySelector(`[aria-label="Open Reader 60's profile"]`) as HTMLElement;
+    const readerY = () => reader.getBoundingClientRect().top - presenceViewport.getBoundingClientRect().top;
+    const baselineY = readerY();
+    const baselineScroll = presenceViewport.scrollTop;
+    check(baselineY >= 0 && baselineY < presenceViewport.clientHeight, 'presence anchor is visible at the bottom of a full roster');
+    await update(() => {
+      presencePage.value.page[0].last_seen_at = Date.now();
+      presencePage.value.page[0].active_until = Date.now() + 60000;
+      presencePage.update();
+    });
+    await paint();
+    check(fixture.contains(reader), 'presence regrouping retains unrelated member DOM nodes');
+    check(Math.abs(readerY() - baselineY) < 1, 'adding Online heading preserves visible member position');
+    const onlineScroll = presenceViewport.scrollTop;
+    await update(() => {
+      presencePage.value.page[0].last_seen_at = 1;
+      presencePage.value.page[0].active_until = 1;
+      presencePage.update();
+    });
+    await paint();
+    check(Math.abs(readerY() - baselineY) < 1, 'removing Online heading preserves visible member position');
+    out.textContent += `Presence geometry: scroll ${baselineScroll} -> ${onlineScroll} -> ${presenceViewport.scrollTop}; reader offset ${baselineY} -> ${readerY()}\n`;
+    const middleReader = fixture.querySelector(`[aria-label="Open Reader 30's profile"]`) as HTMLElement;
+    presenceViewport.scrollTop += middleReader.getBoundingClientRect().top - presenceViewport.getBoundingClientRect().top - 100;
+    await paint();
+    const middleY = () => middleReader.getBoundingClientRect().top - presenceViewport.getBoundingClientRect().top;
+    const middleBaseline = middleY();
+    check(middleBaseline >= 0 && middleBaseline < presenceViewport.clientHeight, 'presence anchor is visible in the middle of the roster');
+    await update(() => {
+      presencePage.value.page[0].last_seen_at = Date.now();
+      presencePage.value.page[0].active_until = Date.now() + 60000;
+      presencePage.update();
+    });
+    await paint();
+    check(Math.abs(middleY() - middleBaseline) < 1, 'adding Online heading preserves mid-list reading position');
+    await update(() => {
+      presencePage.value.page[0].last_seen_at = 1;
+      presencePage.value.page[0].active_until = 1;
+      presencePage.update();
+    });
+    await paint();
+    check(Math.abs(middleY() - middleBaseline) < 1, 'removing Online heading preserves mid-list reading position');
     out.textContent += 'ALL CHECKS PASSED\n';
   } catch (e) { out.textContent += `FAIL ${e}\n`; }
 };

@@ -150,3 +150,87 @@ three-page credential renewal, unchanged subscription count and preserved member
 controls. All 36 browser assertions passed. The focused helper/authorization/
 realtime-pool suite passed 34 tests and the web typecheck passed. Narrow header
 polish is deferred at the user's request, not a release gate for this slice.
+
+### Reversible grant fixture baseline
+
+Staging community Concierge Welcome Canary 2026-08-20, Private channel QA:
+`test test` checkbox checked, community agent checked, Join Approval Canary,
+Join UI Canary, Workflow Completion Canary unchecked. Only `test`'s private
+channel grant is authorized for this revoke/restore check; community membership,
+role, workflow state, and other grants remain untouched. Restore target: checked.
+Observer is a second owner tab on build 06bc2cfdc with test's member settings open.
+
+### Corrected staging build and grant-test outcome
+
+Committed and deployed the bounded renewal fix as
+`06bc2cfdc2708e2bd85a5596946f28d8fb6c4df5` through origin/staging.
+Staging version.json verified that exact build. Web build passed.
+
+On that build, a second owner browser tab had test's member settings open.
+Unchecked only test's Private channel QA grant in the first tab. The observer
+immediately showed one person (owner), no test row, and no Member settings dialog.
+Rechecked the grant: both views returned to owner + test, and the permission UI
+confirmed the original checkbox state for all four listed members and the agent.
+No community membership, role, workflow state, or other grant was changed.
+This proves live roster removal/restoration and settings closure; it does NOT
+prove clearing in a revoked member's own session or server rejection under that
+member's credentials. A dedicated member login was requested and remains needed.
+
+DevTools network conditions were explicitly restored to No throttling after the
+first interruption test. The corrected-build reconnect retest could not finish:
+native browser control was interrupted while the user was using other tabs.
+Do not mark corrected-build forced reconnect or real credential expiry/renewal
+as passed. The renewal path has typecheck, pooled-transport unit coverage and
+36 real-component browser assertions, but live token rotation is still unverified.
+
+Remaining only: corrected-build interruption retest, real credential renewal,
+and a dedicated test-member session for self-access revocation. Header polish
+remains deferred. Production and backend were not deployed in this pass.
+
+### Corrected-build sustained offline/reconnect acceptance
+
+On September 15, the dedicated Chrome tab on build `06bc2cfdc` loaded all
+62 Polynet members and opened Platform Home Racecheck's member settings.
+Baseline: 62 rows, footer “Showing 62 of 62”, scrollTop 2291.5.
+Chrome DevTools Network was set to Offline through a heartbeat interval
+(over 30 seconds). Both offline observations retained all rows, the settings
+dialog, the completed footer, and scrollTop 2291.5.
+
+Selected No throttling in DevTools to reconnect. The settings dialog and all
+62 rows remained. The first sampled scrollTop was 2257; the settled value
+returned to 2291.5 with headings “Online — 1” and “Offline — 61”. Presence
+regrouping may explain the temporary movement, but this was not instrumented
+frame by frame. This is evidence against the previous pagination/settings
+reset, not proof of universally zero flicker or zero scroll movement.
+
+Saved screenshot:
+`/Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/roster-staging-20260915/reconnect-settings-preserved.png`.
+
+The final DOM check confirmed the settings dialog, 62 rows, completed footer,
+and baseline scroll position. Further native DevTools inspection was blocked
+by an unrelated Chrome “Leave site?” dialog; that dialog was left untouched.
+Actual normal credential renewal was not observed. The separate member login
+was requested and remains unavailable, so member-side self-access revocation
+is still unverified. No further code, deployment, backend, or grant changes
+were made in this pass. The prior fixture grant restoration remains intact.
+
+### Presence geometry acceptance follow-up
+
+Extended the existing real-component browser fixture to distinguish scrollTop
+changes from visible reading-position changes. With 62 rows and a 414px roster
+viewport, toggling the first member between offline and online added/removed
+the Online heading. At the bottom, scrollTop changed 2216 -> 2249 -> 2216,
+while the observed last member remained at viewport offset 363px. The same
+heading changes preserved a visible middle-list member's position to within
+1px. Unrelated member DOM identity was retained. All 43 browser assertions
+passed, and git diff --check passed. No production component change is needed
+on this evidence. These settled-frame checks do not prove every animation frame
+or every browser, but support native scroll anchoring as the explanation for
+the prior sampled scrollTop movement.
+
+A fresh staging owner tab was prepared with all 62 rows, later-page settings
+open, and the Network panel recording with a refresh filter. No refresh request
+had occurred at inspection (0 of 44 captured requests matched). No throttling
+was active. Actual normal credential renewal and member-side revocation remain
+open; the separate member login has not been provided. The staged product build
+remains 06bc2cfdc; this follow-up changes only the fixture and evidence document.
