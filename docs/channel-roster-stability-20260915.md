@@ -90,3 +90,63 @@ member settings, rapid channel changes and scope revocation. Do not call the
 candidate live-accepted until these pass. No production or backend deployment is
 required for the frontend candidate. A backend optimization of repeated per-member
 reads is a separate measured follow-up, not part of this candidate.
+
+## Authorized staging deployment and live smoke check
+
+User explicitly approved deploying `fb9f3477453d3117dd71595bcef2eedd084e7201`
+to staging only. Pushed that exact commit to `origin/staging` through Git.
+Vercel deployment `dpl_8Ud4V7gxMEhQxPATnGPFcyuWFANA` became READY, and
+`https://polynet-staging.vercel.app/version.json` served that exact build ID.
+Production's version remains `496e06f42b6b4117b56c544fff75fc52e70c4716`;
+the production project's staging-branch build was CANCELED as configured.
+No backend deployment or manual fixture/grant mutation was performed.
+
+Authenticated browser observations on the deployed candidate:
+
+- Polynet roster reached “Showing 62 of 62.”
+- A later-page member's settings remained open across an observation interval
+  exceeding the configured 30-second presence heartbeat. Roster count remained
+  62 and scrollTop remained 2309.5; focus remained on its opener. This is a
+  sampled observation, not a frame-by-frame flicker trace.
+- Concierge canary General showed five people; Private channel QA showed the
+  owner and test member; General returned to five; Workflow Completion Canary
+  showed the owner and its assigned member. Community memory remained displayed
+  throughout same-community channel changes.
+- At 390 x 844 the channel-people control opened the roster and Escape returned
+  to the conversation. Viewport override was reset afterward.
+- Narrow visual/accessibility issue remains: the back arrow overlaps the
+  community heading and its button is unnamed in the accessibility snapshot.
+  This slice did not change that control's markup or CSS.
+
+Evidence screenshot:
+`/Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/roster-staging-20260915/narrow-roster.png`.
+
+Live smoke checks passed, but full interruption acceptance is NOT complete:
+forced network delay/reconnect, actual credential renewal and live grant
+revocation were not exercised. The browser control surface exposes viewport
+controls but no network emulation, and the native DevTools attempt was
+interrupted. Existing controlled-reader tests cover these state transitions
+only to the extent recorded above; they are not live-network proof. Keep this
+candidate on staging until the remaining gates and narrow control polish pass.
+
+## Interruption follow-up: credential lease continuity
+
+The next authorized acceptance pass successfully used Chrome DevTools on a
+dedicated tab. Slow 4G loaded 62/62 members. On switching that tab offline,
+later-page settings closed and scrollTop changed from the settled bottom to
+1891.5, while 62 rows remained and the footer returned to “Loading more...”.
+Networking was restored before implementation work.
+
+Code inspection identified an uncovered renewal path: the roster effect depended
+on the complete session object and recreated pagination at page one. The shared
+realtime pool already updates credentials and reauthenticates the same client.
+The fix acquires/releases credential leases separately, retaining watches while
+the authenticated transport identity is unchanged. Scope keys and reader-error
+clearing remain intact. This is a supported cause, not proof that token rotation
+alone caused the observed interruption; the live scenario must be rerun.
+
+The real-component fixture now models the shared transport and explicitly checks
+three-page credential renewal, unchanged subscription count and preserved member
+controls. All 36 browser assertions passed. The focused helper/authorization/
+realtime-pool suite passed 34 tests and the web typecheck passed. Narrow header
+polish is deferred at the user's request, not a release gate for this slice.

@@ -38,8 +38,7 @@ checks.querySelector('button')!.onclick = async () => {
     check(fixture.contains(ada) && document.activeElement === ada, 'credential renewal preserves row node and focus while pending');
     check(viewport.scrollTop === scroll, 'credential renewal preserves scroll');
     check(!fixture.querySelector('[aria-label="Loading memory"]'), 'credential renewal preserves loaded memory');
-    await update(() => { old.error = new Error('late old error'); old.update(); });
-    check(fixture.contains(ada), 'disposed subscription cannot clear current rows');
+    check(latest() === old && !old.stopped, 'credential renewal retains the existing query watch');
     await update(() => publish(latest()));
     check(fixture.contains(ada), 'fresh same-channel response preserves row identity');
     await update(() => (fixture.querySelector('[aria-label="Open settings for Ada"]') as HTMLElement).click());
@@ -103,6 +102,10 @@ checks.querySelector('button')!.onclick = async () => {
     check(scroller.scrollTop === multiScroll, 'three-page scroll survives first-page presence updates');
     await update(() => (fixture.querySelector('[aria-label="Open settings for Cora"]') as HTMLElement).click());
     const coraSettings = fixture.querySelector('.modal-overlay');
+    const renewalWatches = watches.length;
+    token++; await render();
+    check(watches.length === renewalWatches && !third.stopped, 'multi-page credential renewal creates no replacement watches');
+    check(fixture.querySelector('.modal-overlay') === coraSettings, 'multi-page credential renewal preserves selected-member controls');
     await update(() => publish(first, ['Ada', 'New join'], 'b'));
     check(fixture.querySelector('.modal-overlay') === coraSettings, 'page-three settings survives a stable first-page join');
     await update(() => publish(second, ['Bea'], 'new-c'));

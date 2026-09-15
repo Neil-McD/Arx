@@ -10,7 +10,7 @@ import { ActorAvatar } from "./communityInteractionFeed";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
-import { createCloudCommunityChatLiveClient } from "../../../../shared/cloudCommunityChatGateway";
+import { createCloudCommunityChatLiveClient, type CloudCommunityChatLiveClient } from "../../../../shared/cloudCommunityChatGateway";
 import { subscribeCommunityPages } from "../../../../shared/subscribeCommunityPages";
 import { communityPresenceLeaseIsActive, COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -99,6 +99,8 @@ function RosterSurface(props: RosterProps & {
   useEffect(() => {
     if (props.narrowOpen && backRef.current?.getClientRects().length) backRef.current.focus();
   }, [props.narrowOpen]);
+  // Credential leases update the shared transport without rebuilding query watches.
+  const [liveState, setLiveState] = useState<{ live: CloudCommunityChatLiveClient | null; failed: boolean }>({ live: null, failed: false });
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
@@ -142,15 +144,23 @@ function RosterSurface(props: RosterProps & {
     setSelectedMembershipId(null); setSearch(""); setRebuilding(false);
   }
   useEffect(() => {
-    // Keep the current authorized view while this same-scope subscription warms.
-    setError(false); setLoadingMore(false);
     if (!scope) return;
-    let close: (() => void) | undefined;
+    try {
+      const lease = createCloudCommunityChatLiveClient({ session: scope.session });
+      setLiveState(previous => previous.live?.client === lease.client && !previous.failed
+        ? previous : { live: lease, failed: false });
+      return lease.close;
+    } catch { setLiveState({ live: null, failed: true }); }
+  }, [scope?.session, retry]);
+  useEffect(() => {
+    // Watch identity follows the authenticated transport, not the session object.
+    setError(liveState.failed); setLoadingMore(false);
+    if (liveState.failed) { setRebuilding(false); setPages([]); }
+    if (!scope || !liveState.live) return;
+    const live = liveState.live;
     let stop: (() => void) | undefined;
     let disposed = false;
     try {
-      const live = createCloudCommunityChatLiveClient({ session: scope.session });
-      close = live.close;
       const pagination = subscribeCommunityPages<Page>({
         sections: ["shared"], maxPages: 1, preserveStablePages: true,
         watch: (_section, cursor) => live.client.watchQuery(api.communityChannelParticipants.listChannelRoster, {
@@ -164,8 +174,8 @@ function RosterSurface(props: RosterProps & {
       paginationRef.current = pagination;
       stop = pagination;
     } catch { setRebuilding(false); setPages([]); setError(true); }
-    return () => { disposed = true; paginationRef.current = null; stop?.(); close?.(); };
-  }, [scope?.session, scope?.communityId, props.channelId, retry]);
+    return () => { disposed = true; paginationRef.current = null; stop?.(); };
+  }, [liveState, scope?.communityId, props.channelId, retry]);
   const { membersViewportRef, loadMoreSentinelRef, handleMembersScroll } = useMemberScrollPagination({
     membersHasMore: searching ? searchResult.hasMore && !searchResult.paused : !complete,
     isLoadingMembers: searching ? false : !pages.length,
