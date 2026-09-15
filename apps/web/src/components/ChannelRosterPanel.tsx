@@ -19,6 +19,7 @@ import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOverview, type CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
@@ -51,12 +52,17 @@ type RosterProps = {
 
 export function ChannelRosterPanel(props: RosterProps) {
   const scope = useContext(CommunityChannelSessionContext);
-  const scopeKey = JSON.stringify([props.currentUserId, scope?.communityId, props.channelId]);
+  const scopeKey = JSON.stringify([props.currentUserId, resolveAuthSubject(scope?.session as AuthSessionLike), scope?.communityId]);
   return <ChannelRosterWorkspace key={scopeKey} {...props} />;
 }
 
 function ChannelRosterWorkspace(props: RosterProps) {
   const [membersOpen, setMembersOpen] = useState(false);
+  const [channel, setChannel] = useState(props.channelId);
+  if (channel !== props.channelId) {
+    setChannel(props.channelId);
+    setMembersOpen(false);
+  }
   return <>
     <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
     {membersOpen ? <RosterSurface {...props} channelId={undefined} narrowOpen={false}
@@ -98,14 +104,16 @@ function RosterSurface(props: RosterProps & {
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState(false);
   const paginationRef = useRef<ReturnType<typeof subscribeCommunityPages<Page>> | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [retry, setRetry] = useState(0);
   const [now, setNow] = useState(Date.now);
   const [memory, setMemory] = useState<CloudCommunityPolynetOverview | null>(null);
   const [memoryError, setMemoryError] = useState(false);
   const [memoryRetry, setMemoryRetry] = useState(0);
+  // The workspace identity resets memory; credential renewal only revalidates it.
   useEffect(() => {
-    setMemory(null); setMemoryError(false);
+    setMemoryError(false);
     if (!scope || props.directory) return;
     let disposed = false;
     let close: (() => void) | undefined;
@@ -118,35 +126,45 @@ function RosterSurface(props: RosterProps & {
         onUpdate: value => { if (!disposed) { setMemory(value); setMemoryError(false); } },
         onError: () => { if (!disposed) { setMemory(null); setMemoryError(true); } },
       });
-    } catch { setMemoryError(true); }
+    } catch { setMemory(null); setMemoryError(true); }
     return () => { disposed = true; stop?.(); close?.(); };
   }, [scope?.session, scope?.communityId, memoryRetry, props.directory]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
+  // Reset channel-private state before commit, not in an effect after old rows paint.
+  // Community memory stays mounted because its authorization scope did not change.
+  const [rosterChannel, setRosterChannel] = useState(props.channelId);
+  if (rosterChannel !== props.channelId) {
+    setRosterChannel(props.channelId);
     setPages([]); setComplete(false); setError(false); setLoadingMore(false);
+    setSelectedMembershipId(null); setSearch(""); setRebuilding(false);
+  }
+  useEffect(() => {
+    // Keep the current authorized view while this same-scope subscription warms.
+    setError(false); setLoadingMore(false);
     if (!scope) return;
     let close: (() => void) | undefined;
     let stop: (() => void) | undefined;
+    let disposed = false;
     try {
       const live = createCloudCommunityChatLiveClient({ session: scope.session });
       close = live.close;
       const pagination = subscribeCommunityPages<Page>({
-        sections: ["shared"], maxPages: 1,
+        sections: ["shared"], maxPages: 1, preserveStablePages: true,
         watch: (_section, cursor) => live.client.watchQuery(api.communityChannelParticipants.listChannelRoster, {
           authSubject: live.authSubject, communityId: scope.communityId as Id<"communities">,
           channelId: props.channelId as Id<"communityChannels"> | undefined,
           paginationOpts: { numItems: 50, cursor },
         }),
-        onUpdate: (next, done) => { setPages(next); setComplete(done); setError(false); setLoadingMore(false); },
-        onError: () => { setPages([]); setError(true); setLoadingMore(false); },
+        onUpdate: (next, done, pending) => { if (disposed) return; setRebuilding(Boolean(pending)); setPages(next); setComplete(done); setError(false); setLoadingMore(false); },
+        onError: () => { if (disposed) return; setRebuilding(false); setPages([]); setError(true); setLoadingMore(false); },
       });
       paginationRef.current = pagination;
       stop = pagination;
-    } catch { setError(true); }
-    return () => { paginationRef.current = null; stop?.(); close?.(); };
+    } catch { setRebuilding(false); setPages([]); setError(true); }
+    return () => { disposed = true; paginationRef.current = null; stop?.(); close?.(); };
   }, [scope?.session, scope?.communityId, props.channelId, retry]);
   const { membersViewportRef, loadMoreSentinelRef, handleMembersScroll } = useMemberScrollPagination({
     membersHasMore: searching ? searchResult.hasMore && !searchResult.paused : !complete,
@@ -165,8 +183,8 @@ function RosterSurface(props: RosterProps & {
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
   useEffect(() => {
-    if (selectedMembershipId && !selectedMember) setSelectedMembershipId(null);
-  }, [selectedMembershipId, selectedMember]);
+    if (selectedMembershipId && !selectedMember && !rebuilding) setSelectedMembershipId(null);
+  }, [selectedMembershipId, selectedMember, rebuilding]);
   useEffect(() => {
     if (!props.directory || !selectedMembershipId) return;
     settingsRef.current?.querySelector<HTMLElement>('button')?.focus();
@@ -203,6 +221,7 @@ function RosterSurface(props: RosterProps & {
         </div> : <div className="community-context-memory-summary" aria-label="Loading memory"><div className="community-context-memory-preview web-skeleton-block" /><div className="community-context-memory-loading-status web-skeleton-row" /></div>}
     </div></> : null}
     <div className="community-context-members" ref={membersViewportRef} onScroll={handleMembersScroll}>
+      {rebuilding ? <p role="status">Updating members…</p> : null}
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>
           {!props.directory ? <><h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
