@@ -69,6 +69,14 @@ the actual section count. UI gateway wiring is removed from both entry points;
 existing backend services and connection records are unchanged. This is a product
 navigation restriction, not a replacement for backend authorization.
 
+Staging build a3a9fb98774448b83733c11d35a177c7cc299a72 was verified through
+version.json. A fresh section=integrations link resolved to the workflow board
+with the retired parameter removed. Only Workflows and Forms tabs rendered;
+Forms listed the published Browser acceptance intake, and browser Back restored
+Workflows. The Agent page rendered without the connection control. Nine focused
+section/save/pagination tests, web typecheck, build and diff checks passed.
+No provider state or backend deployment changed.
+
 Screenshot:
 /Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/form-workflow-acceptance-20260915/saved-response.png
 
