@@ -60,9 +60,14 @@ submission or automatic transition. Approval was not clicked.
 After a full browser reload, reopening the dossier and response showed the same
 saved text, selected choice and unanswered optional question.
 
-The workflow navigation still renders an Integrations tab on this staging build.
-Hiding that surface for a forms/workflows-only launch is a separate outstanding
-release task, not completed by this acceptance pass.
+At the initial acceptance build, workflow navigation still rendered Integrations.
+The subsequent forms/workflows launch slice removes that tab and the Agent-page
+connection control. Workflow section parsing now admits only Workflows and Forms;
+old section=integrations links resolve to Workflows and have the retired section
+removed from the URL, including history navigation. The two-tab switcher uses
+the actual section count. UI gateway wiring is removed from both entry points;
+existing backend services and connection records are unchanged. This is a product
+navigation restriction, not a replacement for backend authorization.
 
 Screenshot:
 /Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/form-workflow-acceptance-20260915/saved-response.png

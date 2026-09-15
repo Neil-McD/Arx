@@ -23,11 +23,8 @@ import "./WebCommunityWorkflowsSection.css";
 import { WebCommunityForms } from "./WebCommunityForms";
 import { WebCommunityFormResponses } from "./WebCommunityFormResponses";
 import type { CommunityFormsGateway } from "../controllers/useWebCommunityFormsGateway";
-import type { IntegrationGateway } from "../controllers/useWebCommunityIntegrationGateway";
-import { WebCommunityIntegration } from "./WebCommunityIntegration";
 
 export type WebCommunityWorkflowsSectionProps = {
-  integrations?: IntegrationGateway;
   forms?: CommunityFormsGateway;
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
@@ -86,7 +83,11 @@ export function WebCommunityWorkflowsSection(
   useEffect(() => {
     scopeEpoch.current++;
     pending.current = false; setSwitching(false);
-    setSection(workflowSectionFromSearch(window.location.search));
+    const next = workflowSectionFromSearch(window.location.search);
+    setSection(next);
+    if (new URLSearchParams(window.location.search).get("section") === "integrations") {
+      window.history.replaceState(window.history.state, "", workflowSectionUrl(window.location.href, next));
+    }
     return () => { scopeEpoch.current++; };
   }, [props.forms?.scopeKey]);
   const select = async (next: WorkflowSection, replace = false, fromHistory = false) => {
@@ -94,7 +95,10 @@ export function WebCommunityWorkflowsSection(
       if (fromHistory) window.history.replaceState(window.history.state, "", workflowSectionUrl(window.location.href, section));
       return;
     }
-    if (next === section) return;
+    if (next === section) {
+      if (fromHistory) window.history.replaceState(window.history.state, "", workflowSectionUrl(window.location.href, section));
+      return;
+    }
     const epoch = scopeEpoch.current;
     pending.current = true; setSwitching(true);
     try {
@@ -119,13 +123,11 @@ export function WebCommunityWorkflowsSection(
   return <div className="workflow-page workflow-sections">
     <WebPlatformTabList tabs={tabs} activeTab={section} onSelectTab={(next, meta) => void select(next, meta.source === "keyboard")}
       ariaLabel="Workflow sections" idPrefix="workflow-sections" className="platform-switcher platform-switcher-compact workflow-section-tabs"
-      style={buildPlatformSwitcherStyle(3, WORKFLOW_SECTIONS.indexOf(section))} />
+      style={buildPlatformSwitcherStyle(WORKFLOW_SECTIONS.length, WORKFLOW_SECTIONS.indexOf(section))} />
     <div className="workflow-section-content" role="tabpanel" id={platformTabPanelId("workflow-sections", section)} aria-labelledby={platformTabId("workflow-sections", section)}>
-      {section === "workflows" ? <WorkflowBoard {...props} /> : section === "forms" ? props.forms
+      {section === "workflows" ? <WorkflowBoard {...props} /> : props.forms
         ? <WebCommunityForms key={props.forms.scopeKey} gateway={props.forms} leaveGuard={beforeLeave} />
-        : <p role="status">Forms are unavailable.</p>
-        : props.integrations ? <WebCommunityIntegration gateway={props.integrations} builder />
-        : <div className="workflow-integrations-empty"><h2>Integrations are not available yet</h2><p>App connections are unavailable.</p></div>}
+        : <p role="status">Forms are unavailable.</p>}
     </div>
   </div>;
 }
