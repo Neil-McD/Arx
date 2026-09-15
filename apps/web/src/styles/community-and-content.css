@@ -2990,6 +2990,7 @@
 
 .channel-roster-panel .community-context-members-total,
 .members-directory-content .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
+.channel-roster-panel .community-context-members-total { justify-content: flex-end; }
 .channel-roster-panel .community-context-members-total .community-context-section,
 .members-directory-content .community-context-members-total .community-context-section { margin: 0; }
 

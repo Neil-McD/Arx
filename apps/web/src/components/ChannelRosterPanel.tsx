@@ -244,7 +244,7 @@ function RosterSurface(props: RosterProps & {
           </div> : <p className="community-context-members-status">No agents in this channel.</p>}</> : null}
         </>}
           <div className="community-context-members-total">
-            <h3 className="community-context-section">People{!error && ready && complete ? ` — ${rosterMembers.length}` : ""}</h3>
+            {props.directory ? <h3 className="community-context-section">People{!error && ready && complete ? ` — ${rosterMembers.length}` : ""}</h3> : null}
             {props.directory ? <CommunityAutoJoinControl admission={props.admission} />
               : <button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>}
           </div>

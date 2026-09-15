@@ -256,3 +256,11 @@ Screenshots at constrained and short widths showed an unobscured title and close
 control. All 43 roster browser assertions, web typecheck, web production build,
 and diff whitespace checks passed. This fixes the demonstrated member-settings
 popup; it does not assert that every unrelated overlay has been audited.
+
+### Channel roster label simplification
+
+Removed the redundant People heading from the channel panel at the user's
+request. Presence groups and their counts remain; View all stays right-aligned.
+The full member directory retains its own People heading. Verified the rendered
+channel fixture has View all and the presence group without the People heading;
+web typecheck and diff whitespace checks passed.
