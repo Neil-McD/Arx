@@ -203,6 +203,7 @@ function RosterSurface(props: RosterProps & {
   const status = (member: typeof members[number]) => member.last_seen_at === null ? "unknown"
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
+  const firstPresenceGroup = (["online", "offline", "unknown"] as const).find(group => members.some(member => status(member) === group));
   const settings = <CommunityMemberSettingsDialog {...props.memberSettings}
     member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role, created_at: selectedMember.membership_created_at } : null}
     onClose={() => setSelectedMembershipId(null)} />;
@@ -243,11 +244,12 @@ function RosterSurface(props: RosterProps & {
             </div>)}
           </div> : <p className="community-context-members-status">No agents in this channel.</p>}</> : null}
         </>}
-          <div className="community-context-members-total">
-            {props.directory ? <h3 className="community-context-section">People{!error && ready && complete ? ` — ${rosterMembers.length}` : ""}</h3> : null}
-            {props.directory ? <CommunityAutoJoinControl admission={props.admission} />
-              : <button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>}
-          </div>
+          {props.directory ? <div className="community-context-members-total">
+            <h3 className="community-context-section">People{!error && ready && complete ? ` — ${rosterMembers.length}` : ""}</h3>
+            <CommunityAutoJoinControl admission={props.admission} />
+          </div> : !ready || error || !firstPresenceGroup ? <div className="community-context-members-total">
+            <button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>
+          </div> : null}
           {props.directory ? <>{props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
           <label className="community-dm-recipient-search community-dm-inbox-search">
@@ -259,8 +261,11 @@ function RosterSurface(props: RosterProps & {
           {(["online", "offline", "unknown"] as const).map(group => {
             const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;
+            const heading = <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>;
             return <Fragment key={group}>
-              <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>
+              {!props.directory && group === firstPresenceGroup ? <div className="community-context-presence-heading">
+                {heading}<button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>
+              </div> : heading}
               {rows.map(member => {
                 const name = member.profile.display_name || "Member";
                 return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>

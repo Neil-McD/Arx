@@ -25,5 +25,8 @@ const ready = setInterval(() => {
   if (!watches.length || !memoryWatches.length) return;
   clearInterval(ready);
   publish(watches.at(-1), ['Platform Home Racecheck']);
+  watches.at(-1).value.page[0].last_seen_at = Date.now();
+  watches.at(-1).value.page[0].active_until = Date.now() + 60000;
+  watches.at(-1).update();
   memoryWatches.at(-1).onUpdate({ memory: { total_visible_nodes: 0 }, agent: { status: 'resting' }, graph: { nodes: [], edges: [], root_node_id: null } });
 }, 10);

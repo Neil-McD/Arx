@@ -264,3 +264,8 @@ request. Presence groups and their counts remain; View all stays right-aligned.
 The full member directory retains its own People heading. Verified the rendered
 channel fixture has View all and the presence group without the People heading;
 web typecheck and diff whitespace checks passed.
+
+Follow-up: View all now shares a flex row with the first visible presence heading
+(Online, otherwise Offline or Presence unavailable). Empty/loading/error states
+retain access to the directory. Rendered geometry confirmed identical vertical
+centers for Online and View all, with the button to the right. Typecheck passed.
