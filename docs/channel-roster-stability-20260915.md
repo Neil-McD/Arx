@@ -1,6 +1,6 @@
 # Channel roster continuity
 
-Person names and avatars expose community-scoped last activity on hover, using
+Only person names expose community-scoped last activity on hover, using
 the existing roster presence data: "Last active: now", a relative time, or
 "Last active: unavailable" when no timestamp is available. The same text is
 available as an accessible description. This adds no request or polling timer.

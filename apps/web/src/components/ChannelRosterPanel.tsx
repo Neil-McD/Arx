@@ -274,7 +274,7 @@ function RosterSurface(props: RosterProps & {
                   : member.last_seen_at === null ? "Last active: unavailable"
                   : `Last active: ${formatRelativeTimeFromIso(new Date(member.last_seen_at).toISOString())}`;
                 return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
-                  <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} title={lastActive} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
+                  <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
                     <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}>
                       <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
                         name={name} imageUrl={member.profile.avatar_url}
@@ -282,7 +282,7 @@ function RosterSurface(props: RosterProps & {
                         alt="" aria-hidden={true} fallback={<span>{props.getInitials(name)}</span>} />
                       {group === "online" ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
                     </span>
-                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
+                    <span className="community-context-member-copy"><span title={lastActive} className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
                   </button>
                   {props.onMessageUser && member.user_id !== props.currentUserId ? <button type="button" className="community-context-member-action" aria-label={`Message ${name}`} title="Direct message" onClick={() => props.onMessageUser?.(member.user_id)}><MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}
                   {props.memberSettings.canManageMembers && member.membership_id && member.role !== "owner" ? <button type="button" className="community-context-member-action" aria-label={`Open settings for ${name}`} title="Member settings" onClick={() => setSelectedMembershipId(member.membership_id!)}><MoreHorizontal size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}
