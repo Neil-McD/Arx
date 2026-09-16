@@ -18,7 +18,8 @@ import type {
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
-import { firstYouTubeEmbedInText } from "../../../../shared/linkEmbedUi";
+import { youTubeEmbedsInText } from "../../../../shared/linkEmbedUi";
+import { pdfLinksInText } from "../../../../shared/messagePdf";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type { CommunityAdmissionJoinRequest } from "./CommunityJoinRequestReview";
 import type { MentionCandidate } from "./communityMentionAutocomplete";
@@ -182,8 +183,10 @@ export function resolveSelectedCommunityInteractionRoot(
 export function communityInteractionRootHasRichContent(
   bundle: CommunityInteractionRootBundle,
 ): boolean {
+  const text = bundleText(bundle.content_blocks, bundle.root.content_summary);
   return bundle.attachments.length > 0
-    || firstYouTubeEmbedInText(bundleText(bundle.content_blocks, bundle.root.content_summary)) !== null;
+    || youTubeEmbedsInText(text).length > 0
+    || pdfLinksInText(text).length > 0;
 }
 
 

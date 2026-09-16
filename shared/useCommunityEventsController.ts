@@ -1,4 +1,5 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 import {
   cancelCloudCommunityEvent,
   listCloudCommunityEvents,
@@ -19,6 +20,7 @@ type UseCommunityEventsControllerArgs<SessionT extends SessionLike> = {
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
+  visibleRange?: CommunityEventsRange;
   setCommunityEvents: Dispatch<SetStateAction<CloudCommunityEvent[]>>;
   setIsLoadingCommunityEvents: Dispatch<SetStateAction<boolean>>;
   setCommunityEventsError: Dispatch<SetStateAction<string | null>>;
@@ -31,6 +33,13 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
   const argsRef = useRef(args);
   argsRef.current = args;
   const eventsLoadGenerationRef = useRef(0);
+  const scopeKey = JSON.stringify([resolveAuthSubject(args.session as AuthSessionLike), args.activeCommunityId, args.visibleRange]);
+  const scopeRef = useRef(scopeKey);
+  if (scopeRef.current !== scopeKey) {
+    scopeRef.current = scopeKey;
+    eventsLoadGenerationRef.current += 1;
+  }
+  useEffect(() => () => { eventsLoadGenerationRef.current += 1; }, []);
 
   const loadCommunityEvents = useCallback(async (
     communityId: string,
@@ -38,23 +47,32 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
     range: CommunityEventsRange,
   ) => {
     const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
     const requestedCommunityId = String(communityId ?? "").trim();
-    if (!requestedCommunityId) return;
+    const account = resolveAuthSubject(session as AuthSessionLike);
+    if (!requestedCommunityId || requestedCommunityId !== current.activeCommunityId || !account || account !== resolveAuthSubject(current.session as AuthSessionLike)) return;
+    if (current.visibleRange && (current.visibleRange.startIso !== range.startIso || current.visibleRange.endIso !== range.endIso)) return;
+    const requestScope = scopeRef.current;
     const generation = (eventsLoadGenerationRef.current += 1);
     const isCurrentEventsLoad = () =>
       eventsLoadGenerationRef.current === generation &&
+      scopeRef.current === requestScope &&
       String(argsRef.current.activeCommunityId ?? "").trim() === requestedCommunityId;
     current.setIsLoadingCommunityEvents(true);
     current.setCommunityEventsError(null);
     try {
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (!isCurrentEventsLoad()) return;
+      if (resolveAuthSubject(usableSession as AuthSessionLike) !== account) {
+        current.setCommunityEventsError("Your session could not be verified. Try again, or sign in again.");
+        return;
+      }
       const rows = await listCloudCommunityEvents({
         session: usableSession,
         communityId: requestedCommunityId,
         startIso: range.startIso,
         endIso: range.endIso,
         limit: 500,
+        overlap: true,
       });
       if (!isCurrentEventsLoad()) return;
       current.setCommunityEvents(rows);

@@ -16,6 +16,8 @@ type SessionLike = {
 } | null;
 
 type WebProfileSettingsSectionProps = {
+  profileLoadStatus?: "idle" | "loading" | "ready" | "missing" | "error";
+  reloadProfile?: () => void;
   session: SessionLike;
   cloudProfile: unknown | null;
   profileAvatarUrl: string | null;
@@ -31,7 +33,6 @@ type WebProfileSettingsSectionProps = {
   isSavingProfile: boolean;
   isProfileDirty: boolean;
   profileSaveError: string | null;
-  profileSaveSuccess: boolean;
   isProfileAvatarFocusModalOpen: boolean;
   setIsProfileAvatarDragOver: (value: boolean) => void;
   setProfileAvatarFocusX: (value: number) => void;
@@ -66,7 +67,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     isSavingProfile,
     isProfileDirty,
     profileSaveError,
-    profileSaveSuccess,
     isProfileAvatarFocusModalOpen,
     setIsProfileAvatarDragOver,
     setProfileAvatarFocusX,
@@ -83,6 +83,8 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     setProfileSocialLink,
     saveProfileToCloud,
   } = props;
+  const isInitialLoad = Boolean(session && !cloudProfile && (props.profileLoadStatus === "idle" || props.profileLoadStatus === "loading"));
+  const syncLabel = !session ? "Sign in to sync" : isSavingProfile ? "Saving…" : props.profileLoadStatus === "error" ? "Could not refresh profile" : isInitialLoad ? "Loading profile…" : isProfileDirty ? "Unsaved changes" : cloudProfile ? "Saved" : "Not saved yet";
 
   return (
     <div className="settings-section">
@@ -107,6 +109,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         >
           {session ? (
             <UserAvatar
+              identityPending={isInitialLoad && !profileAvatarUrl}
               className="profile-avatar-drop-avatar"
               readyClassName="has-image"
               name={(profileName || session.user.email || "AR").replace(/^@/, "")}
@@ -161,6 +164,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         <input
           type="text"
           placeholder="Name"
+          aria-label="Name"
           value={profileName}
           onChange={(event) => setProfileName(event.target.value)}
           maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
@@ -171,6 +175,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         <input
           type="text"
           placeholder="handle"
+          aria-label="Handle"
           value={profileHandle}
           onChange={(event) => setProfileHandle(event.target.value)}
           autoCapitalize="none"
@@ -180,6 +185,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
       <textarea
         className="profile-bio"
         placeholder="Bio"
+        aria-label="Bio"
         value={profileBio}
         onChange={(event) => setProfileBio(event.target.value)}
         rows={3}
@@ -188,16 +194,14 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
       <div className="account-row">
         <div className="account-identity">
           <span>Sync</span>
-          <strong>
-            {session ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
-          </strong>
+          <strong role="status">{syncLabel}</strong>
         </div>
         <div className="auth-actions">
           <button
             className={profileNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
             type="button"
             onClick={() => void saveProfileToCloud()}
-            disabled={!session || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
+            disabled={!session || isSavingProfile || !profileNeedsSave}
           >
             {isSavingProfile ? "Saving…" : "Save"}
           </button>
@@ -205,13 +209,13 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
       </div>
       <WebSocialProfileLinksFields
         values={profileSocialLinks}
-        disabled={!session || isSavingProfile}
+        disabled={!session || isSavingProfile || isInitialLoad || (!cloudProfile && props.profileLoadStatus === "error")}
         variant="settings"
         onChange={setProfileSocialLink}
         onSave={(nextLinks) => saveProfileToCloud({ socialLinks: nextLinks })}
       />
-      {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
-      {profileSaveSuccess && <div className="auth-success">Saved.</div>}
+      {props.profileLoadStatus === "error" && <div className="auth-error" role="alert">Your profile could not be loaded. Your edits are preserved. <button type="button" onClick={props.reloadProfile}>Retry</button></div>}
+      {profileSaveError && <div className="auth-error" role="alert">{profileSaveError}</div>}
       <WebUserAvatarEditorModal
         isOpen={isProfileAvatarFocusModalOpen}
         avatarUrl={profileAvatarUrl}

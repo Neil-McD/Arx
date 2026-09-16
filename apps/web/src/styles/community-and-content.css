@@ -5051,78 +5051,6 @@
   font-size: 12px;
 }
 
-.community-interaction-youtube-wrap {
-  width: min(100%, 480px);
-  margin-top: 8px;
-}
-
-.deferred-youtube,
-.deferred-youtube iframe,
-.deferred-youtube-play {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-}
-
-.deferred-youtube {
-  position: relative;
-  overflow: hidden;
-  border-radius: 10px;
-  background: #000;
-}
-
-.deferred-youtube iframe {
-  height: 100%;
-  border: 0;
-  background: #000;
-}
-
-.deferred-youtube-play {
-  position: relative;
-  padding: 0;
-  border: 0;
-  background: #000;
-  color: #fff;
-  cursor: pointer;
-}
-
-.deferred-youtube-play img,
-.deferred-youtube-empty {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.deferred-youtube-empty {
-  background: #000;
-}
-
-.deferred-youtube-play-icon {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, #fff 72%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, #050505 78%, transparent);
-  color: #fff;
-  transform: translate(-50%, -50%);
-  transition: transform 140ms ease, background-color 140ms ease;
-}
-
-.deferred-youtube-play:hover .deferred-youtube-play-icon {
-  background: color-mix(in srgb, #050505 90%, transparent);
-  transform: translate(-50%, -50%) scale(1.05);
-}
-
-.deferred-youtube-play:focus-visible {
-  outline: 2px solid var(--chat-link);
-  outline-offset: -3px;
-}
 
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
    side-by-side, the drawer takes over the area (back arrow returns to chat).
@@ -7016,7 +6944,7 @@
 
 .community-interaction-attachments .chat-media-grid,
 .community-interaction-attachments .chat-media-players {
-  max-width: 360px;
+  max-width: 640px;
 }
 
 .community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) {
@@ -7179,11 +7107,14 @@
   margin-top: 0;
 }
 
-.chat-media-grid.community-dm-media-grid.count-2,
-.chat-media-grid.community-dm-media-grid.count-3,
-.chat-media-grid.community-dm-media-grid.count-4 {
+.chat-media-grid.chat-media-grid-composer.community-dm-media-grid:not(.count-1) {
   width: min(168px, 56vw);
   max-width: 168px;
+}
+
+.community-dm-panel-message .chat-media-grid.community-dm-media-grid:not(.count-1) {
+  width: 300px;
+  max-width: 100%;
 }
 
 .chat-media-grid.community-dm-media-grid.count-1 .chat-media-item {
@@ -8220,6 +8151,28 @@ button.chat-reply-quote:hover {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-muted);
+}
+
+.resource-read-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 0;
+  color: var(--accent-error);
+  font-size: 13px;
+}
+
+.resource-read-error button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .resources-back-btn {

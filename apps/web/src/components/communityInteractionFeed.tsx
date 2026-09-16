@@ -368,7 +368,7 @@ export function ActorAvatar(props: {
       imageClassName="community-interaction-avatar-image"
       fallbackClassName="community-interaction-avatar-fallback"
       name={props.label}
-      imageUrl={props.profile?.avatar_url ?? null}
+      imageUrl={props.profile?.avatar_url}
       focusX={props.profile?.avatar_focus_x ?? 0.5}
       focusY={props.profile?.avatar_focus_y ?? 0.5}
       zoom={props.profile?.avatar_zoom ?? 1}

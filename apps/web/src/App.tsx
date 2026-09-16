@@ -1012,36 +1012,20 @@ export default function App() {
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
     getProfileSaveSession: () => sessionRef.current ?? session,
-    profileName: profileUi.profileName,
-    profileHandle: profileUi.profileHandle,
-    profileBio: profileUi.profileBio,
-    profileSocialLinks: profileUi.profileSocialLinks,
-    profileAvatarUrl: profileUi.profileAvatarUrl,
-    profileAvatarStorageId: profileUi.profileAvatarStorageId,
-    profileAvatarFocusX: profileUi.profileAvatarFocusX,
-    profileAvatarFocusY: profileUi.profileAvatarFocusY,
-    profileAvatarZoom: profileUi.profileAvatarZoom,
-    profileSaveTimeoutRef: profileUi.profileSaveTimeoutRef,
     profileSaveFailureMessage: "Failed to save profile.",
     profileSaveUnauthenticatedErrorMessage: null,
     onProfileSaveUnauthenticated: () => {
       requireSignIn();
     },
     applyLoadedProfileToLocal: profileUi.applyLoadedProfileToLocal,
+    profileIsActive: activePage === "settings" && settingsGroup === "profile",
+    captureProfileDraft: profileUi.captureProfileDraft,
+    applySavedProfileToLocal: profileUi.applySavedProfileToLocal,
+    setProfileLoadStatus: profileUi.setProfileLoadStatus,
     setProfilesByUserId,
     setCloudProfile,
-    setProfileName: profileUi.setProfileName,
-    setProfileHandle: profileUi.setProfileHandle,
-    setProfileBio: profileUi.setProfileBio,
-    setProfileSocialLinks: profileUi.setProfileSocialLinks,
-    setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
-    setProfileAvatarStorageId: profileUi.setProfileAvatarStorageId,
-    setProfileAvatarFocusX: profileUi.setProfileAvatarFocusX,
-    setProfileAvatarFocusY: profileUi.setProfileAvatarFocusY,
-    setProfileAvatarZoom: profileUi.setProfileAvatarZoom,
     setIsSavingProfile: profileUi.setIsSavingProfile,
     setProfileSaveError: profileUi.setProfileSaveError,
-    setProfileSaveSuccess: profileUi.setProfileSaveSuccess,
     setIsLoadingCommunityAnalytics,
     setCommunityAnalyticsError,
     setCommunityAnalyticsSummary,
@@ -1214,13 +1198,6 @@ export default function App() {
   };
   useWebUiPersistenceLifecycle({
     communityAnalyticsRange,
-    profileStorageUserId,
-    profileName: profileUi.profileName,
-    profileHandle: profileUi.profileHandle,
-    profileBio: profileUi.profileBio,
-    setProfileName: profileUi.setProfileName,
-    setProfileHandle: profileUi.setProfileHandle,
-    setProfileBio: profileUi.setProfileBio,
   });
 
   // Cloud session is hydrated from browser auth continuity during lifecycle bootstrap.
@@ -1580,7 +1557,6 @@ export default function App() {
       setPendingPurchasesError(null);
       setPendingPurchasesSuccess(null);
       profileUi.setProfileSaveError(null);
-      profileUi.setProfileSaveSuccess(false);
     },
   };
 
@@ -2293,6 +2269,8 @@ export default function App() {
         openPlatformAnalytics: () => openOperatorConsole("platform"),
       },
       resourcesState: {
+        resourceRead: communityContent.resourceRead,
+        moduleRead: communityContent.moduleRead,
         isLoadingResources,
         isLoadingResourceModules,
         modules: communityResourceModules,
@@ -2300,6 +2278,7 @@ export default function App() {
         selectedModuleId: communityResourceModuleId,
       },
       resourcesActions: {
+        retryRead: communityContent.retryResourceRead,
         handleSelectModule: setCommunityResourceModuleId,
         openNewModuleModal,
         handleEditModule,
@@ -2315,6 +2294,7 @@ export default function App() {
       },
       eventsState: {
         events: communityEvents,
+        hasLoadedVisibleRange: hasLoadedActiveCommunityEventsRange,
         isLoadingEvents: isLoadingCommunityEvents,
         eventsError: communityEventsError,
         visibleMonthIso: communityEventsVisibleMonthIso,
@@ -2530,6 +2510,7 @@ export default function App() {
       session: session,
       cloudProfile,
       profileUi,
+      reloadProfile: () => { const currentSession = sessionRef.current; if (currentSession) void loadSelfProfile(currentSession); },
       handleProfileAvatarDrop,
       handleProfileAvatarUpload,
       getInitials,

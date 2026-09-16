@@ -19,7 +19,7 @@ type ReorderDirection = "up" | "down";
 
 export type ResourceCourseCatalogItem = {
   module: CommunityResourceModule;
-  lessonCount: number;
+  lessonCount: number | null;
 };
 
 type ResourceCourseCatalogProps = {
@@ -185,7 +185,7 @@ function ResourceCourseCard(props: {
             {module.description_md?.trim() || "A guided collection of community lessons."}
           </span>
           <span className="resource-course-card-meta">
-            {lessonCount} {lessonCount === 1 ? "lesson" : "lessons"}
+            {lessonCount === null ? "Lessons not loaded" : `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"}`}
           </span>
         </span>
       </button>

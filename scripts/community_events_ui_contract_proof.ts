@@ -27,8 +27,8 @@ assert.match(
 
 assert.match(
   webContentController,
-  /buildEventsCacheKey\(activeCommunityId, eventsVisibleRange\)/,
-  "events cache key must include the active community and the active visible range",
+  /buildEventsCacheKey\(`\$\{activeCommunityId\}:\$\{resolveAuthSubject\(session\)\}`, eventsVisibleRange\)/,
+  "events cache key must include account, active community, and visible range",
 );
 
 assert.match(

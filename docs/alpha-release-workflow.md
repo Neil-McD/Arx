@@ -358,6 +358,7 @@ single local decision before proposing a release:
 cd /Users/neilmcdevitt/code/arx
 npm ci
 npm --prefix apps/web ci
+npx playwright install chromium # once per matching Playwright version
 npm run release:gate
 ```
 
@@ -365,7 +366,7 @@ The local gate runs checked-in Convex generated-surface sanity and typechecking,
 web typechecking, a production web build with an unambiguous Git build marker,
 bundle budget, foundation invariants, all conventional
 behavior tests, and dependency security checks. It writes machine-readable
-evidence to `artifacts/release-gate.json`.
+evidence to `artifacts/release-gate.json`. The required media browser proof writes screenshots to `artifacts/media-reading/`; CI installs matching Chromium and uploads these artifacts even on failure. Missing browser binaries fail the gate.
 
 Release-gated repository absence checks distinguish all three search outcomes:
 matches fail the contract, no matches pass it, and scanner or target failures

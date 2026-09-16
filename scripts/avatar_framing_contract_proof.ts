@@ -200,7 +200,8 @@ assertNearlyEqual(bannerSmall.left / 300, bannerLarge.left / 600, "banner horizo
 assertNearlyEqual(bannerSmall.top / 100, bannerLarge.top / 200, "banner vertical crop ratio");
 
 assert.match(profileSettings, /WebUserAvatarEditorModal/);
-assert.match(onboardingPage, /WebUserAvatarEditorModal/);
+assert.match(onboardingPage, /WebAccountSetupForm/);
+assert.match(read("apps/web/src/components/WebAccountSetupForm.tsx"), /WebUserAvatarEditorModal/);
 assert.doesNotMatch(profileSettings, /WebCommunityAvatarEditorModal/);
 assert.doesNotMatch(onboardingPage, /WebCommunityAvatarEditorModal/);
 assert.match(

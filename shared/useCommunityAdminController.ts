@@ -1,4 +1,5 @@
-import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import type { ProfileDraftSnapshot } from "./profileDraftState";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthSubject } from "./authSession";
 import { formatProfileMutationError } from "./profileMutationErrors";
@@ -46,35 +47,19 @@ type UseCommunityAdminControllerArgs<
   reloadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
 
   getProfileSaveSession: () => SessionT | null;
-  profileName: string;
-  profileHandle: string;
-  profileBio: string;
-  profileSocialLinks: SocialProfileLinks;
-  profileAvatarUrl: string | null;
-  profileAvatarStorageId: string | null;
-  profileAvatarFocusX: number;
-  profileAvatarFocusY: number;
-  profileAvatarZoom: number;
-  profileSaveTimeoutRef: MutableRefObject<number | null>;
   profileSaveFailureMessage: string;
   profileSaveUnauthenticatedErrorMessage: string | null;
   onProfileSaveUnauthenticated?: () => void;
   applyLoadedProfileToLocal?: (profile: UserProfileDetailT) => void;
+  profileIsActive?: boolean;
+  captureProfileDraft: () => ProfileDraftSnapshot;
+  applySavedProfileToLocal: (profile: UserProfileDetailT, submitted: ProfileDraftSnapshot) => void;
+  setProfileLoadStatus?: (status: "idle" | "loading" | "ready" | "missing" | "error") => void;
 
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   setCloudProfile: Dispatch<SetStateAction<UserProfileDetailT | null>>;
-  setProfileName: Dispatch<SetStateAction<string>>;
-  setProfileHandle: Dispatch<SetStateAction<string>>;
-  setProfileBio: Dispatch<SetStateAction<string>>;
-  setProfileSocialLinks: Dispatch<SetStateAction<SocialProfileLinks>>;
-  setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
-  setProfileAvatarStorageId: Dispatch<SetStateAction<string | null>>;
-  setProfileAvatarFocusX: Dispatch<SetStateAction<number>>;
-  setProfileAvatarFocusY: Dispatch<SetStateAction<number>>;
-  setProfileAvatarZoom: Dispatch<SetStateAction<number>>;
   setIsSavingProfile: Dispatch<SetStateAction<boolean>>;
   setProfileSaveError: Dispatch<SetStateAction<string | null>>;
-  setProfileSaveSuccess: Dispatch<SetStateAction<boolean>>;
 
   setIsLoadingCommunityAnalytics: Dispatch<SetStateAction<boolean>>;
   setCommunityAnalyticsError: Dispatch<SetStateAction<string | null>>;
@@ -101,21 +86,46 @@ export function useCommunityAdminController<
   argsRef.current = args;
   const communityAnalyticsLoadSeqRef = useRef(0);
   const selfProfileLoadSeqRef = useRef(0);
+  const profileAccountId = resolveCanonicalProfileUserId(args.session);
+  const profileAccountRef = useRef(profileAccountId);
+  const profileScopeEpochRef = useRef(0);
+  const profileSaveInFlightRef = useRef(false);
+  const profileReadInFlightRef = useRef(false);
+  if (profileAccountRef.current !== profileAccountId) {
+    profileAccountRef.current = profileAccountId;
+    profileScopeEpochRef.current += 1;
+    selfProfileLoadSeqRef.current += 1;
+    profileSaveInFlightRef.current = false;
+    profileReadInFlightRef.current = false;
+  }
+  useEffect(() => () => {
+    profileScopeEpochRef.current += 1;
+    selfProfileLoadSeqRef.current += 1;
+    profileReadInFlightRef.current = false;
+    profileSaveInFlightRef.current = false;
+  }, []);
 
   const loadSelfProfile = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
-    const profileUserId = resolveCanonicalProfileUserId(usableSession);
-    if (!profileUserId) return;
+    const profileUserId = resolveCanonicalProfileUserId(session);
+    if (!profileUserId || profileUserId !== profileAccountRef.current || profileSaveInFlightRef.current || profileReadInFlightRef.current) return;
+    profileReadInFlightRef.current = true;
     const seq = (selfProfileLoadSeqRef.current += 1);
+    const epoch = profileScopeEpochRef.current;
+    const isCurrent = () => selfProfileLoadSeqRef.current === seq && profileScopeEpochRef.current === epoch && profileAccountRef.current === profileUserId;
+    current.setProfileLoadStatus?.("loading");
     try {
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (!isCurrent()) return;
+      if (!usableSession || resolveCanonicalProfileUserId(usableSession) !== profileUserId) {
+        current.setProfileLoadStatus?.("error"); return;
+      }
       const row = await fetchCloudProfileDetailByUserId<SessionT, UserProfileDetailT>({
         session: usableSession,
         userId: profileUserId,
       });
       if (
-        !row ||
+        !isCurrent() ||
         selfProfileLoadSeqRef.current !== seq ||
         resolveCanonicalProfileUserId(argsRef.current.session) !== profileUserId
       ) {
@@ -123,6 +133,8 @@ export function useCommunityAdminController<
       }
       const latest = argsRef.current;
       latest.setCloudProfile(row);
+      latest.setProfileLoadStatus?.(row ? "ready" : "missing");
+      if (!row) return;
       latest.setProfilesByUserId((prev) => ({
         ...prev,
         [row.user_id]: mergeUserProfileEntry(prev[row.user_id], {
@@ -139,47 +151,64 @@ export function useCommunityAdminController<
       }));
       latest.applyLoadedProfileToLocal?.(row);
     } catch {
-      // ignore
+      if (isCurrent()) argsRef.current.setProfileLoadStatus?.("error");
+    } finally {
+      if (profileScopeEpochRef.current === epoch) profileReadInFlightRef.current = false;
     }
   }, [resolveCanonicalProfileUserId]);
 
+  // Active Profile requests join the same loader as account-graph hydration.
+  useEffect(() => {
+    const session = argsRef.current.session;
+    if (args.profileIsActive && session) void loadSelfProfile(session);
+  }, [args.profileIsActive, profileAccountId, loadSelfProfile]);
+
   const saveProfileToCloud = useCallback(async (options: SaveProfileToCloudOptions = {}): Promise<boolean> => {
+    if (profileSaveInFlightRef.current) return false;
     selfProfileLoadSeqRef.current += 1;
     const current = argsRef.current;
-    const session = await resolveUsableSession(current.getProfileSaveSession(), current.ensureSession);
-    if (!session) {
-      current.setProfileSaveError(current.profileSaveUnauthenticatedErrorMessage);
+    const candidate = current.getProfileSaveSession();
+    const accountId = resolveCanonicalProfileUserId(candidate);
+    const unauthenticatedMessage = current.profileSaveUnauthenticatedErrorMessage
+      ?? "Your session could not be verified. Your edits are preserved. Try saving again, or sign in again.";
+    if (!accountId || accountId !== profileAccountRef.current) {
+      current.setProfileSaveError(unauthenticatedMessage);
       current.onProfileSaveUnauthenticated?.();
       return false;
     }
+    const epoch = profileScopeEpochRef.current;
+    const isCurrent = () => profileScopeEpochRef.current === epoch && profileAccountRef.current === accountId;
+    const submitted = current.captureProfileDraft();
+    const fields = submitted.values;
+    if (submitted.accountId !== accountId) return false;
+    profileSaveInFlightRef.current = true;
 
     const { trimmedName, trimmedHandle, trimmedBio } = trimProfileFields(
-      current.profileName,
-      current.profileHandle,
-      current.profileBio,
+      fields.name,
+      fields.handle,
+      fields.bio,
     );
-    if (trimmedName !== current.profileName) current.setProfileName(trimmedName);
-    if (trimmedHandle !== current.profileHandle) current.setProfileHandle(trimmedHandle);
-    if (trimmedBio !== current.profileBio) current.setProfileBio(trimmedBio);
-
-    if (current.profileSaveTimeoutRef.current) {
-      window.clearTimeout(current.profileSaveTimeoutRef.current);
-      current.profileSaveTimeoutRef.current = null;
-    }
 
     current.setIsSavingProfile(true);
     current.setProfileSaveError(null);
-    current.setProfileSaveSuccess(false);
     try {
+      const session = await resolveUsableSession(candidate, current.ensureSession);
+      if (!isCurrent()) return false;
+      if (!session || resolveCanonicalProfileUserId(session) !== accountId) {
+        current.setProfileSaveError(unauthenticatedMessage);
+        current.onProfileSaveUnauthenticated?.();
+        return false;
+      }
       const profileUserId = resolveCanonicalProfileUserId(session);
       if (!profileUserId) throw new Error("profile_user_id_required");
       const avatarField = await prepareCloudProfileAvatarField({
         session,
-        nextValue: current.profileAvatarUrl,
-        currentStorageId: current.profileAvatarStorageId,
-        currentResolvedUrl: current.profileAvatarUrl,
+        nextValue: fields.avatarUrl,
+        currentStorageId: fields.avatarStorageId,
+        currentResolvedUrl: fields.avatarUrl,
       });
-      const nextSocialLinks = options.socialLinks ?? current.profileSocialLinks;
+      if (!isCurrent()) return false;
+      const nextSocialLinks = options.socialLinks ?? fields.socialLinks;
       const saved = await upsertCloudProfileDetail<SessionT, UserProfileDetailT>({
         session,
         userId: profileUserId,
@@ -187,18 +216,20 @@ export function useCommunityAdminController<
         handle: trimmedHandle || null,
         avatarStorageId: avatarField.storageId ?? null,
         avatarUrl: avatarField.url ?? null,
-        avatarFocusX: current.profileAvatarFocusX,
-        avatarFocusY: current.profileAvatarFocusY,
-        avatarZoom: current.profileAvatarZoom,
+        avatarFocusX: fields.avatarFocusX,
+        avatarFocusY: fields.avatarFocusY,
+        avatarZoom: fields.avatarZoom,
         bio: trimmedBio || null,
         socialLinks: nextSocialLinks,
       });
+      if (!isCurrent()) return false;
       if (!saved) {
         current.setProfileSaveError(current.profileSaveFailureMessage);
         return false;
       }
       selfProfileLoadSeqRef.current += 1;
       current.setCloudProfile(saved);
+      current.setProfileLoadStatus?.("ready");
       current.setProfilesByUserId((prev) => ({
         ...prev,
         [saved.user_id]: mergeUserProfileEntry(prev[saved.user_id], {
@@ -213,27 +244,16 @@ export function useCommunityAdminController<
           avatar_zoom: saved.avatar_zoom ?? 1,
         } as UserProfileT),
       }));
-      current.setProfileName(saved.display_name ?? "");
-      current.setProfileHandle(saved.handle ?? "");
-      current.setProfileBio(saved.bio ?? "");
-      current.setProfileSocialLinks(saved.social_links ?? {
-        youtube: "",
-        x: "",
-        instagram: "",
-      });
-      current.setProfileAvatarUrl(saved.avatar_url ?? null);
-      current.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
-      current.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
-      current.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
-      current.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
-      current.setProfileSaveSuccess(true);
-      current.profileSaveTimeoutRef.current = window.setTimeout(() => current.setProfileSaveSuccess(false), 2000);
+      current.applySavedProfileToLocal(saved, submitted);
       return true;
     } catch (error) {
-      current.setProfileSaveError(formatProfileMutationError(error, current.profileSaveFailureMessage));
+      if (isCurrent()) current.setProfileSaveError(formatProfileMutationError(error, current.profileSaveFailureMessage));
       return false;
     } finally {
-      current.setIsSavingProfile(false);
+      if (isCurrent()) {
+        profileSaveInFlightRef.current = false;
+        current.setIsSavingProfile(false);
+      }
     }
   }, [resolveCanonicalProfileUserId]);
 

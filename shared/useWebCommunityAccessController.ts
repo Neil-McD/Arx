@@ -130,17 +130,18 @@ export function useWebCommunityAccessController<
     session: SessionT,
     options: LoadUserProfilesOptions = {},
   ): Promise<void> => {
-    const usableSession = await resolveUsableSession(
-      session,
-      argsRef.current.ensureSession,
-    );
-    if (!usableSession) return;
     const current = argsRef.current;
     const requestScope = String(current.loadingResetKey ?? "");
     const registry = profileRequestRegistryRef.current;
     const request = beginProfileHydrationRequest(registry, userIds, options);
     if (!request) return;
     try {
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (profileRequestRegistryRef.current !== registry || String(argsRef.current.loadingResetKey ?? "") !== requestScope) return;
+      if (!usableSession) {
+        finishProfileHydrationRequest(registry, request, { successful: false });
+        return;
+      }
       const profiles = (await listCloudProfileRowsByUserIds<SessionT>({
         session: usableSession,
         userIds: request.userIds,
