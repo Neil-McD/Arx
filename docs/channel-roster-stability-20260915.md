@@ -311,3 +311,19 @@ Restore the production desktop allocation `clamp(300px, 22vw, 380px)`
 on the channel roster grid and explicitly set panel `min-width: 0`.
 The existing 640px narrow people-view switch remains unchanged. This is CSS
 only: channel scope, access teardown and subscription lifetimes are unchanged.
+
+Verified deployed build 08ce8fc3f08c4e1ca00b024bad24012f5a37910c:
+2200px viewport -> 380px panel; 1440 -> 316.797px; 1000 and 700 -> 300px;
+640 and 390 -> hidden side panel with separate people control. Narrow people
+open/back restored chat and focus. Profile at 1440 -> 1000 and thread at
+1000 -> 700 resized and returned correctly. Loaded roster scroll remained
+2087px across 1440 -> 1000 resizing; profile/action button count stayed 123,
+with no page-one reset observed. Long fixture names truncate within the panel.
+Typecheck, build and 14 focused checks passed. Screenshots are under
+`/Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/panel-layout-audit-20260916/fixed-*.png`.
+
+Separate existing issue observed: at 390px desktop viewport the narrow people
+back arrow overlaps the community title. The 700px side-by-side layout also
+remains dense, consistent with the retained 640px breakpoint. Neither is caused
+by the desktop width restoration. Browser viewport override reset afterward.
+No production or backend changes.
