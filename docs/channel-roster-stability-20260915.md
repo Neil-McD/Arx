@@ -289,3 +289,18 @@ its explicit active channel.
 
 Actual scheduled credential renewal remains unverified; reload/bootstrap does
 not count as that proof. No backend or production deployment performed.
+
+### Corrected staging verification
+
+Build b4853e5961616f6a168e4f85a4d1222b99c2d48f was confirmed via staging
+version.json. Repeating the member-session test with the narrow roster open
+closed the panel and displayed channel unavailable with disabled composer.
+Restoring the grant restored channel navigation, private messages and composer
+without reloading; all grant checkboxes matched baseline. Screenshot:
+`/Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/roster-staging-20260915/member-revocation-fixed.png`.
+
+Validation: web typecheck and build passed; 14 focused roster pagination, narrow
+access and mobile navigation checks passed. The existing source-contract
+assertion was updated for the expanded close-effect dependencies. Native Chrome
+Network observation was interrupted before a normal refresh request could be
+verified; scheduled credential renewal remains an explicit open gate.

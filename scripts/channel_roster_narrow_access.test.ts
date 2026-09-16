@@ -9,7 +9,7 @@ test("narrow access reuses one roster and preserves the mounted conversation", (
   expect(controller).toContain('openerRef.current.focus()');
   expect(source).toContain('narrowOpen={peopleOpen}');
   expect(controller).toContain('params.canViewMembers && scope === currentScope ? scope : null');
-  expect(source).toContain('[peopleOpen, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]');
+  expect(source).toContain('[props.peopleOpen, hasChannelContext, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]');
   const css = read("apps/web/src/styles/community-and-content.css");
   expect(css).toContain('.people-panel-open > .community-interaction-main { display: none; }');
   expect(css).toContain('.community-channel-header .channel-people-trigger');
