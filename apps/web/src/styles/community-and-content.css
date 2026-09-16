@@ -2903,7 +2903,10 @@
     min-height: 0;
     border-left: 0;
   }
-  .people-panel-open .channel-people-back { display: flex; }
+  .people-panel-open .channel-people-back { display: flex; flex-shrink: 0; }
+  .people-panel-open .community-context-rail-head { justify-content: flex-start; gap: 8px; }
+  .channel-people-back .back-to-workspace { padding: 8px; }
+  .channel-people-back .back-icon { width: 17px; height: 17px; }
 }
 
 .community-context-autojoin {

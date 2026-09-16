@@ -327,3 +327,10 @@ back arrow overlaps the community title. The 700px side-by-side layout also
 remains dense, consistent with the retained 640px breakpoint. Neither is caused
 by the desktop width restoration. Browser viewport override reset afterward.
 No production or backend changes.
+
+## Narrow header layout — 2026-09-16
+
+Place the narrow Back control in the community title flex row rather than
+borrowing the absolutely positioned thread-drawer control. Give the icon-only
+button an explicit accessible Back to channel label. Desktop still hides the
+control; existing close/focus/scroll behavior stays unchanged.

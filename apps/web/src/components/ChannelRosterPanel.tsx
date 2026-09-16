@@ -214,13 +214,14 @@ function RosterSurface(props: RosterProps & {
         event.preventDefault(); props.onCloseNarrow?.();
       }
     }}>
-    {props.onCloseNarrow ? <div className="community-interaction-drawer-back channel-people-back">
-      <button ref={backRef} className="back-to-workspace" type="button" onClick={props.onCloseNarrow}>
-        <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
-        <span className="back-path">Back to channel</span>
-      </button>
-    </div> : null}
-    {!props.directory ? <><div className="community-context-rail-head"><span className="community-context-rail-name">{props.communityName}</span></div>
+    {!props.directory ? <><div className="community-context-rail-head">
+      {props.onCloseNarrow ? <div className="channel-people-back">
+        <button ref={backRef} className="back-to-workspace" type="button" aria-label="Back to channel" onClick={props.onCloseNarrow}>
+          <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+        </button>
+      </div> : null}
+      <span className="community-context-rail-name">{props.communityName}</span>
+    </div>
     <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
       onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />
     <div className="community-context-memory">
