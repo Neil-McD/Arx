@@ -45,19 +45,12 @@ export function useWebCommunityIntegrationGateway(params: {
       if (!valid()) throw new Error("integration_scope_changed");
       return result;
     };
-    const mutation = (name: string, extra = {}) =>
-      run((client) =>
-        client.mutation(`communityIntegrationConnections:${name}`, {
-          communityId,
-          ...extra,
-        }),
-      );
     return {
       scopeKey: `${communityId}:${session.user.id}`,
       load: () =>
         run(client => client.query("communityIntegrationConnections:connectionStatus", { communityId })),
       enable: async (enabled) => {
-        await mutation("setPilotEnabled", { enabled });
+        await run(client => client.mutation("communityIntegrationConnections:setPilotEnabled", { communityId, enabled }));
       },
       connect: async () => {
         const result: any = await run(client => client.action("communityIntegrationActions:requestConnection", { communityId }));

@@ -334,3 +334,12 @@ Place the narrow Back control in the community title flex row rather than
 borrowing the absolutely positioned thread-drawer control. Give the icon-only
 button an explicit accessible Back to channel label. Desktop still hides the
 control; existing close/focus/scroll behavior stays unchanged.
+
+Narrow header verified on staging 09432e145 at 390px and 640px: button
+right edge 172px, title left edge 180px (8px separation). Back and Escape
+restore the channel people trigger focus. Temporary viewport override reset.
+
+Release preflight also found an unverifiable dynamic operation helper in the
+retained integration gateway. Replace its single use with explicit
+communityIntegrationConnections:setPilotEnabled, preserving behavior.
+The integrity proof now validates 209 call sites / 202 public operations.
