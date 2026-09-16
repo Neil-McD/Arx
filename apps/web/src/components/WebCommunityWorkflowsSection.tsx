@@ -347,7 +347,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
         onDelete={deleteEditingMilestone}
       />
       <WebCommunityWorkflowMemberDossierModal
-        formResponses={props.forms?.responses && props.memberDossier ? <WebCommunityFormResponses key={`${props.forms.scopeKey}:${props.memberDossier.membership_id}`} gateway={props.forms} membershipId={props.memberDossier.membership_id} /> : null}
+        formResponses={props.forms?.responses && props.memberDossier ? <WebCommunityFormResponses key={`${props.forms.scopeKey}:${props.memberDossier.membership_id}`} gateway={props.forms} membershipId={props.memberDossier.membership_id} evidenceKey={JSON.stringify(props.memberDossier.submitted_form_evidence)} /> : null}
         isOpen={Boolean(props.selectedMembershipId)}
         dossier={props.memberDossier}
         isLoading={props.isMemberDossierLoading}

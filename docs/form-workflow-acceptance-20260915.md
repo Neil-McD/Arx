@@ -90,3 +90,37 @@ With the member login available, use an isolated no-agent two-milestone fixture
 for draft/reopen, submit, exactly one transition, owner response freshness and
 reload, then repeat/lost-response and stale-visit checks. Preserve the existing
 agent and human-approval fixtures. No product fix is justified by this pass.
+
+## Fresh member acceptance and demonstrated freshness defect
+
+The isolated in-app browser offered the existing test member's Google login.
+Read-only identity comparison confirmed it differed from the owner; normal login
+succeeded. Created Forms Release Acceptance Sep15 using included operator access,
+with two required short-text questions and Intake -> Ready milestones. A join
+requests the published form; submission directly advances, with no agent or
+integration workflow action. Existing fixtures were left untouched.
+
+Fixture: community jx70dntfr0aw6mt727tfje48x58ee8bn; workflow
+sh7kxhz8n4jzhy2rsfjkczdewn8eejyf; member ks7cegnag715aea6jfkm2bz1b58ee4ag.
+The owner approved the dedicated test member's free join. The pending join page
+still displayed Request pending at the next observation; direct community
+navigation then opened the admitted member view. That admission-page freshness
+observation is separate from the form acceptance.
+
+The member saved one answer, closed, reloaded, and resumed at question two.
+Back showed the exact original answer. Submission displayed Submitted and the
+owner board moved the member from Intake to Ready live. Read-only storage proof:
+request tx7sbv2djky1anxrhh5hz2k2kn8eeqmf, revision 2, submitted, pinned version
+tn7qt34snyhm3v55ey6mf3qfn18ee4dg; exactly one transition,
+t97n39wy6xwrapb28tzy8tvath8egw8y, sequence 1, Intake -> Ready.
+
+The owner Responses tab was open before submission and stayed empty despite the
+live dossier changing to Ready. Its one-shot read lacked invalidation. The fix
+uses the live dossier's submitted-form evidence as its refresh dependency while
+retaining the full response endpoint (dossier prose is deliberately truncated).
+Existing rows/disclosures remain during same-scope refresh; failed reads clear
+private answers; scope keys and callback cancellation remain enforced.
+
+Eight real-component browser assertions passed for first arrival, retained open
+disclosures, superseded callbacks, access-error clearing and member changes.
+All 142 form/workflow/save/pagination tests, web typecheck and build passed.
