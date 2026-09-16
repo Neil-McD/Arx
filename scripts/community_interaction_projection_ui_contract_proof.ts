@@ -5,7 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
 assert.match(roster, /const selectedMember = props\.memberSettings\.canManageMembers/);
-assert.match(roster, /if \(selectedMembershipId && !selectedMember\) setSelectedMembershipId\(null\)/);
+assert.match(roster, /if \(selectedMembershipId && !selectedMember && !rebuilding\) setSelectedMembershipId\(null\)/);
 assert.match(roster, /member\.role !== "owner"/);
 assert.match(roster, /<CommunityMemberSettingsDialog \{\.\.\.props\.memberSettings\}/);
 const memberScroll = read("apps/web/src/components/useMemberScrollPagination.ts");
