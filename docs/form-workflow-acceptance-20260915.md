@@ -1,7 +1,10 @@
 # Forms and workflow acceptance — September 15, 2026
 
-Status: automated contract and existing owner-view checks pass; fresh authenticated
-member-to-builder acceptance remains open. No production or staging data changed.
+Current status: fresh member submission, progression, saved-answer recovery and
+live owner response acceptance passed after the freshness fix below. Remaining
+release gates include actual credential renewal and member-side access revocation.
+Earlier sections describe the initial read-only pass; later sections record the
+new staging fixture, synthetic writes and corrective web deployment.
 
 ## Build and scope
 
@@ -124,3 +127,28 @@ private answers; scope keys and callback cancellation remain enforced.
 Eight real-component browser assertions passed for first arrival, retained open
 disclosures, superseded callbacks, access-error clearing and member changes.
 All 142 form/workflow/save/pagination tests, web typecheck and build passed.
+
+### Corrected-build live retest
+
+Verified staging a0bab617cd5ab0dd4196ba49c79c4a7f2667db75. Added a fixture-only
+request-form rule in Ready triggered by a synthetic contribution from the test
+member, visible only to the two accounts in this fixture. The existing first
+response remained expanded in the owner's Responses tab before the second submit.
+The new response appeared there without tab switching or manual refresh; the
+first disclosure remained expanded, and opening the second showed the exact new
+answers. The member saw Submitted and its pending next step disappeared.
+
+The second request is tx7q0ap64hzcw3w1zsf9skrp5x8ehjqy, revision 2, submitted,
+pinned to the same published version. Existing action-completion semantics also
+completed Ready, producing transition t97h9h9bpc30sftq7tfzw529r58egc90, sequence 2.
+Thus this was not a no-transition test: final storage has two submitted requests,
+one Intake -> Ready transition and one Ready -> completed transition. Configured
+workflow actions are request_form, move_member, request_form only.
+
+Screenshot: /Users/neilmcdevitt/.codex/visualizations/2026/09/14/01a0a1e9-bd4a-7840-af65-dba2355f5063/form-workflow-acceptance-20260915/fresh-live-responses.png
+
+Both authenticated sessions are preserved for the remaining renewal/access checks.
+After a full owner reload, workflow completion and both submitted responses remained
+available in the dossier.
+Production and backend deployment remain unchanged. The new staging fixture and
+its synthetic submissions/history are retained as acceptance evidence.
