@@ -15,6 +15,7 @@ export type CommunityChannelLike = {
   systemRole?: "general";
   slug: string;
   name: string;
+  normalizedName?: string;
   accessMode: "all_members" | "restricted";
   postingPolicy: "members" | "managers";
   replyPolicy?: "members" | "managers" | "disabled";
@@ -164,6 +165,11 @@ export async function ensureGeneralChannel(args: {
 
   const existing = await getGeneralChannel(args.ctx, args.communityId);
   if (existing) {
+    const normalizedName = normalizeCommunityChannelName(existing.name).toLocaleLowerCase("en-US");
+    if (existing.normalizedName !== normalizedName) {
+      await args.ctx.db.patch(existing._id, { normalizedName });
+      return { ...existing, normalizedName };
+    }
     return existing;
   }
 
@@ -648,7 +654,7 @@ export async function renameActiveCommunityChannel(args: {
   const channel = await requireMutableCommunityChannel(args);
   const name = normalizeCommunityChannelName(args.name);
   const normalizedName = await requireAvailableChannelName({ ...args, name, excludeId: channel._id });
-  if (channel.name === name) return channel;
+  if (channel.name === name && channel.normalizedName === normalizedName) return channel;
   await args.ctx.db.patch(channel._id, {
     name,
     normalizedName,

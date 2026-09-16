@@ -1,0 +1,32 @@
+{
+  "checked": 629,
+  "failures": [
+    {
+      "identifier": "communityCompilerEvidence.js:drainSelfAuthoredPendingSourceTracesInternal",
+      "visibility": {
+        "kind": "internal"
+      },
+      "reasons": [
+        "missing"
+      ]
+    },
+    {
+      "identifier": "communityInteractions.js:createCommunityAgentCanonicalInteractionInternal",
+      "visibility": {
+        "kind": "internal"
+      },
+      "reasons": [
+        "args"
+      ]
+    },
+    {
+      "identifier": "communityChannels.js:listCommunityChannelsInternal",
+      "visibility": {
+        "kind": "internal"
+      },
+      "reasons": [
+        "missing"
+      ]
+    }
+  ]
+}
