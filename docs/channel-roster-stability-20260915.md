@@ -1,9 +1,11 @@
 # Channel roster continuity
 
-Only person names expose community-scoped last activity on hover, using
-the existing roster presence data: "Last active: now", a relative time, or
-"Last active: unavailable" when no timestamp is available. The same text is
-available as an accessible description. This adds no request or polling timer.
+Hovering a person name shows community-scoped last activity inline between
+the name and the DM action, never in a tooltip, using
+the existing roster presence data: "now", a relative time such as "6h ago", or
+"unavailable" when no timestamp exists. The full "Last active" label is
+available as an accessible description and on keyboard focus. Space is reserved
+to avoid moving the row on hover. This adds no request or polling timer.
 
 Local slice based on `2eb457700`; no deployment or database changes.
 

@@ -2799,6 +2799,20 @@
   color: var(--accent-gold);
 }
 
+.community-context-member-last-active {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.community-context-member:has(.community-context-member-name:hover) .community-context-member-last-active,
+.community-context-member:has(.community-context-member-trigger:focus-visible) .community-context-member-last-active {
+  opacity: 1;
+}
+
 .community-context-member-action {
   width: 26px;
   height: 26px;
