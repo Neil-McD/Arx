@@ -269,3 +269,23 @@ Follow-up: View all now shares a flex row with the first visible presence headin
 (Online, otherwise Offline or Presence unavailable). Empty/loading/error states
 retain access to the directory. Rendered geometry confirmed identical vertical
 centers for Online and View all, with the button to the right. Typecheck passed.
+
+## Member-session revocation acceptance — 2026-09-16
+
+On staging a0bab617c, the existing test member opened Private channel QA in
+Concierge Welcome Canary while the owner revoked only that member grant.
+Private messages cleared, the channel disappeared from navigation, and a direct
+reload showed unavailable with the composer disabled. Restoring the original
+grant restored the private channel and messages without another reload. All
+other grant checkboxes remained unchanged.
+
+This exposed a presentation defect: a narrow people panel already open during
+revocation remained open and loaded the general community roster when
+activeChannel became null. No private message remained visible, but the panel
+misrepresented its scope. The projection now requires an available channel to
+mount the roster and apply people-panel layout, and clears the controlled open
+state when the channel becomes unavailable. General remains supported through
+its explicit active channel.
+
+Actual scheduled credential renewal remains unverified; reload/bootstrap does
+not count as that proof. No backend or production deployment performed.

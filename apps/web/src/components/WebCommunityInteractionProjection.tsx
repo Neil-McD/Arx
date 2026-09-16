@@ -188,13 +188,14 @@ export function communityInteractionRootHasRichContent(
 
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
-  const peopleOpen = props.peopleOpen ?? false;
+  const hasChannelContext = Boolean(props.communityId && props.activeChannel);
+  const peopleOpen = Boolean(props.peopleOpen && hasChannelContext);
   const closePeople = useCallback(() => {
     props.onPeopleOpenChange?.(false);
   }, [props.onPeopleOpenChange]);
   useEffect(() => {
-    if (peopleOpen && (props.selectedRootId || props.profilePanel)) props.onPeopleOpenChange?.(false);
-  }, [peopleOpen, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]);
+    if (props.peopleOpen && (!hasChannelContext || props.selectedRootId || props.profilePanel)) props.onPeopleOpenChange?.(false);
+  }, [props.peopleOpen, hasChannelContext, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
@@ -525,7 +526,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : props.communityId ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
@@ -970,7 +971,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           ) : null}
         </ThreadSurface>
       ) : null}
-      {props.communityId ? <ChannelRosterPanel
+      {props.communityId && props.activeChannel ? <ChannelRosterPanel
         onCloseNarrow={closePeople}
         narrowOpen={peopleOpen}
         joinReview={{
