@@ -304,3 +304,10 @@ access and mobile navigation checks passed. The existing source-contract
 assertion was updated for the expanded close-effect dependencies. Native Chrome
 Network observation was interrupted before a normal refresh request could be
 verified; scheduled credential renewal remains an explicit open gate.
+
+## Responsive panel width — 2026-09-16
+
+Restore the production desktop allocation `clamp(300px, 22vw, 380px)`
+on the channel roster grid and explicitly set panel `min-width: 0`.
+The existing 640px narrow people-view switch remains unchanged. This is CSS
+only: channel scope, access teardown and subscription lifetimes are unchanged.

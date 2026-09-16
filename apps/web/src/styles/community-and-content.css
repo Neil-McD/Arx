@@ -2164,7 +2164,7 @@
 }
 
 .community-interaction-projection.has-channel-context {
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 380px);
 }
 @media (max-width: 640px) {
   .community-interaction-projection.has-channel-context { grid-template-columns: minmax(0, 1fr); }
@@ -2172,6 +2172,7 @@
 }
 
 .community-context-panel {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
