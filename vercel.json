@@ -1,6 +1,6 @@
 {
   "installCommand": "npm ci && npm --prefix apps/web ci",
-  "buildCommand": "npm run build",
+  "buildCommand": "node scripts/cached-client-preview-guard.mjs && npm run build",
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/source-url-fetch.js": {
@@ -16,13 +16,37 @@
       },
       "continue": true
     },
-    { "src": "/runtime/mcp", "dest": "/api/mcp/runtime" },
-    { "src": "/\\.well-known/oauth-protected-resource", "dest": "/api/mcp/oauth-protected-resource" },
-    { "src": "/\\.well-known/oauth-authorization-server", "dest": "/api/mcp/oauth-authorization-server" },
-    { "src": "/api/preview(/.*)?", "status": 404 },
-    { "src": "/_preview/start(/.*)?", "status": 404 },
-    { "handle": "filesystem" },
-    { "src": "/(.*\\..*)", "status": 404 },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+    {
+      "src": "/runtime/mcp",
+      "dest": "/api/mcp/runtime"
+    },
+    {
+      "src": "/\\.well-known/oauth-protected-resource",
+      "dest": "/api/mcp/oauth-protected-resource"
+    },
+    {
+      "src": "/\\.well-known/oauth-authorization-server",
+      "dest": "/api/mcp/oauth-authorization-server"
+    },
+    {
+      "src": "/api/preview(/.*)?",
+      "status": 404
+    },
+    {
+      "src": "/_preview/start(/.*)?",
+      "status": 404
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*\\..*)",
+      "status": 404
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "ignoreCommand": "if [ \"$VERCEL_ENV\" = \"preview\" ] && [ \"$VERCEL_GIT_COMMIT_REF\" = \"codex/cached-client-acceptance-20260916\" ]; then case \"$VERCEL_URL\" in polynet-staging-*) exit 1;; esac; fi; exit 0"
 }
