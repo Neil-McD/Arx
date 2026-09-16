@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { subscribeCloudCommunityAttentionRows } from "../shared/cloudCommunityAttentionGateway";
+import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
 import {
   applyInFlightCommunityAttentionClears,
   type CommunityAttentionIndicators,
@@ -8,7 +9,7 @@ import {
 } from "../shared/useCommunityAttentionController";
 
 type WatchHarness = {
-  args: { communityId: string; section: string; paginationOpts: { numItems: number } };
+  args: { communityIds: string[] };
   result: unknown;
   listener: (() => void) | null;
   disposed: boolean;
@@ -20,7 +21,7 @@ function createLiveClientHarness() {
     authSubject: "attention-test-user",
     close: () => {},
     client: {
-      watchQuery: (_query: unknown, args: WatchHarness["args"]) => {
+      watchQuery: (_query: unknown, args: { communityIds: string[] }) => {
         const harness: WatchHarness = {
           args,
           result: undefined,
@@ -45,32 +46,41 @@ function createLiveClientHarness() {
 }
 
 describe("community attention realtime gateway", () => {
-  it("pages each community, keeps partial results unknown, and clears revoked descendants", () => {
+  it("bounds large accounts per query, publishes one complete map, and disposes every batch", () => {
     const harness = createLiveClientHarness();
-    const updates: any[] = [];
-    const dispose = subscribeCloudCommunityAttentionRows({ liveClient: harness.liveClient as any,
-      communityIds: ["one", "one", "two"], onUpdate: rows => updates.push(rows) });
-    expect(harness.watches.map(w => w.args.communityId)).toEqual(["one", "two"]);
-    expect(harness.watches.every(w => w.args.paginationOpts.numItems === 10)).toBe(true);
-    const emit = (index: number, isDone: boolean, channels: any[], cursor = "") => {
-      const w = harness.watches[index]!;
-      w.result = { page: channels, isDone, continueCursor: cursor,
-        attention: { community_id: w.args.communityId, chat: channels.some(c => c.chat),
-          mentions: false, resources: false, events: false, channels } };
-      w.listener?.();
-    };
-    emit(0, true, []);
-    expect(updates.at(-1)).toEqual([]);
-    emit(2, false, [], "later");
-    emit(3, true, [{ channel_id: "late", channel_slug: "late", chat: true, mentions: false }]);
-    expect(updates.at(-1)).toMatchObject([{ community_id: "one", chat: true, channels: [{ channel_id: "late" }] }]);
-    emit(2, false, [], "changed");
-    expect(harness.watches[3]!.disposed).toBe(true);
-    expect(updates.at(-1)).toEqual([]);
-    emit(4, true, []);
-    expect(updates.at(-1)).toMatchObject([{ community_id: "one", chat: false, channels: [] }]);
+    const updates: Array<Array<{ community_id: string }>> = [];
+    const communityIds = Array.from(
+      { length: MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY * 2 + 1 },
+      (_, index) => `community-${String(index).padStart(3, "0")}`,
+    ).reverse();
+
+    const dispose = subscribeCloudCommunityAttentionRows({
+      liveClient: harness.liveClient as any,
+      communityIds: [...communityIds, communityIds[0]!],
+      onUpdate: (rows) => updates.push(rows),
+    });
+
+    expect(harness.watches.map((watch) => watch.args.communityIds.length)).toEqual([
+      MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY,
+      MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY,
+      1,
+    ]);
+    expect(harness.watches.flatMap((watch) => watch.args.communityIds)).toEqual(
+      [...new Set(communityIds)].sort(),
+    );
+
+    for (const [index, watch] of harness.watches.entries()) {
+      watch.result = watch.args.communityIds.map((communityId) => ({
+        community_id: communityId,
+        batch: index,
+      }));
+      watch.listener?.();
+      expect(updates).toHaveLength(index === harness.watches.length - 1 ? 1 : 0);
+    }
+    expect(updates[0]).toHaveLength(communityIds.length);
+
     dispose();
-    expect(harness.watches.every(w => w.disposed)).toBe(true);
+    expect(harness.watches.every((watch) => watch.disposed)).toBe(true);
   });
 
   it("returns an inert subscription for an empty scope", () => {

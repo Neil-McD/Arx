@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AuthSession } from "../auth";
-import { communityChannelCapacityError, MAX_TOTAL_COMMUNITY_CHANNELS } from "../../../../shared/communityChannelCapacity";
 import {
   createCloudCommunityChannel,
   deleteCloudCommunityChannel,
-  moveCloudCommunityChannel,
+  reorderCloudCommunityChannels,
   renameCloudCommunityChannel,
   subscribeCloudCommunityChannels,
   type CloudCommunityChannel,
@@ -57,9 +56,10 @@ const GENERAL_FALLBACK_CHANNEL: CloudCommunityChannel = {
 };
 
 function formatChannelError(error: unknown): string {
-  const capacityError = communityChannelCapacityError(error);
-  if (capacityError) return capacityError;
   const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("community_channel_limit_reached")) {
+    return "This community already has the maximum number of channels.";
+  }
   if (message.includes("community_channel_name_required")) {
     return "Enter a channel name.";
   }
@@ -83,12 +83,6 @@ function formatChannelError(error: unknown): string {
   }
   if (message.includes("community_channel_order_stale")) {
     return "The channel list changed. Try moving it again.";
-  }
-  if (message.includes("community_channel_order_space_exhausted")) {
-    return "These channels cannot be placed any closer together. Try another position.";
-  }
-  if (message.includes("community_channel_name_migration_required")) {
-    return "Channel names are being updated. Please try again shortly.";
   }
   if (message.includes("auth_session_required")) {
     return "Sign in again to load channels.";
@@ -219,7 +213,7 @@ export function useWebCommunityChannelsController(params: {
   const [channels, setChannels] = useState<CloudCommunityChannel[]>([
     GENERAL_FALLBACK_CHANNEL,
   ]);
-  const [maxActiveChannels, setMaxActiveChannels] = useState(MAX_TOTAL_COMMUNITY_CHANNELS);
+  const [maxActiveChannels, setMaxActiveChannels] = useState(10);
   const [hasResolvedChannels, setHasResolvedChannels] = useState(false);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [channelsError, setChannelsError] = useState<string | null>(null);
@@ -250,7 +244,7 @@ export function useWebCommunityChannelsController(params: {
       setChannels([
         { ...GENERAL_FALLBACK_CHANNEL, community_id: communityId },
       ]);
-      setMaxActiveChannels(MAX_TOTAL_COMMUNITY_CHANNELS);
+      setMaxActiveChannels(10);
       setHasResolvedChannels(false);
       createInFlightCommunityIdRef.current = null;
       manageInFlightChannelIdRef.current = null;
@@ -298,8 +292,8 @@ export function useWebCommunityChannelsController(params: {
             lastSubscribedChannelsRef.current = normalizedChannels;
             setChannels(normalizedChannels);
             setMaxActiveChannels(result.max_active_channels);
-            setHasResolvedChannels(result.isComplete !== false);
-            setIsLoadingChannels(result.isComplete === false);
+            setHasResolvedChannels(true);
+            setIsLoadingChannels(false);
             setChannelsError(null);
           },
           onError: (error) => {
@@ -348,7 +342,7 @@ export function useWebCommunityChannelsController(params: {
     channelsError: presentedChannelsError,
   });
 
-  const createChannel = useCallback(async (nameRaw: string, accessMode: "all_members" | "restricted" = "all_members"): Promise<CloudCommunityChannel | null> => {
+  const createChannel = useCallback(async (nameRaw: string): Promise<CloudCommunityChannel | null> => {
     const current = paramsRef.current;
     const communityId = String(current.activeCommunityId ?? "").trim();
     const name = String(nameRaw ?? "").trim().replace(/\s+/g, " ");
@@ -360,7 +354,6 @@ export function useWebCommunityChannelsController(params: {
       const usableSession = await current.ensureSession(current.session ?? undefined);
       if (!usableSession) throw new Error("auth_session_required");
       const created = await createCloudCommunityChannel({
-        accessMode,
         session: usableSession,
         communityId,
         name,
@@ -476,7 +469,7 @@ export function useWebCommunityChannelsController(params: {
     }
   }, []);
 
-  const reorderChannels = useCallback(async (orderedChannelIdsRaw: string[], movedChannelId: string): Promise<boolean> => {
+  const reorderChannels = useCallback(async (orderedChannelIdsRaw: string[]): Promise<boolean> => {
     const current = paramsRef.current;
     const communityId = String(current.activeCommunityId ?? "").trim();
     const orderedChannelIds = orderedChannelIdsRaw
@@ -484,7 +477,6 @@ export function useWebCommunityChannelsController(params: {
       .filter(Boolean);
     if (
       !communityId ||
-      !hasResolvedChannels || isLoadingChannels ||
       reorderInFlightCommunityIdRef.current ||
       manageInFlightChannelIdRef.current ||
       createInFlightCommunityIdRef.current
@@ -501,16 +493,6 @@ export function useWebCommunityChannelsController(params: {
       return false;
     }
 
-    const previousIds = channels.filter((channel) => !channel.is_general).map((channel) => channel.id);
-    if (previousIds.every((id, index) => id === orderedChannelIds[index])) return true;
-    const moved = channels.find((channel) => channel.id === movedChannelId && !channel.is_general);
-    if (!moved || previousIds.filter(id => id !== moved.id).join("|") !==
-      orderedChannelIds.filter(id => id !== moved.id).join("|")) {
-      setReorderChannelsError("Move one channel at a time.");
-      return false;
-    }
-    const movedIndex = orderedChannelIds.indexOf(moved.id);
-
     reorderInFlightCommunityIdRef.current = communityId;
     setIsReorderingChannels(true);
     setReorderChannelsError(null);
@@ -518,18 +500,13 @@ export function useWebCommunityChannelsController(params: {
     try {
       const usableSession = await current.ensureSession(current.session ?? undefined);
       if (!usableSession) throw new Error("auth_session_required");
-      const reordered = await moveCloudCommunityChannel({
+      const reordered = await reorderCloudCommunityChannels({
         session: usableSession,
         communityId,
-        channelId: moved.id,
-        afterChannelId: orderedChannelIds[movedIndex - 1] ?? null,
-        beforeChannelId: orderedChannelIds[movedIndex + 1] ?? null,
-        expectedPosition: moved.position,
+        orderedChannelIds,
       });
       if (paramsRef.current.activeCommunityId !== communityId) return false;
-      setChannels(normalizeChannels(communityId, lastSubscribedChannelsRef.current.map(
-        (channel) => channel.id === reordered.id ? reordered : channel,
-      )));
+      setChannels(normalizeChannels(communityId, reordered));
       return true;
     } catch (error) {
       if (paramsRef.current.activeCommunityId === communityId) {
@@ -546,7 +523,7 @@ export function useWebCommunityChannelsController(params: {
         setIsReorderingChannels(false);
       }
     }
-  }, [channels, hasResolvedChannels, isLoadingChannels]);
+  }, [channels]);
 
   const activeChannelId = selection.selectedChannel?.is_general
     ? null

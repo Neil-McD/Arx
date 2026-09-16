@@ -11,7 +11,7 @@
   /* Fixed topbar actions float over the shell. Reserve their full footprint
      (right inset + 34px control + focus/badge breathing room) in surfaces
      that render underneath them. */
-  --web-topbar-right-action-safe-inset: 66px;
+  --web-topbar-right-action-safe-inset: 62px;
   /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
   --mobile-topbar-control-size: 34px;
@@ -178,11 +178,6 @@
   -webkit-backdrop-filter: none;
 }
 
-/* Inset the desktop DM control equally from the rounded corner. */
-.app-root:not(.mobile-shell) .app-topbar .direct-messages-topbar-button {
-  transform: translate(-4px, 4px);
-}
-
 .app-topbar .icon-button,
 .app-topbar .new-session-header-btn {
   width: 32px;
@@ -328,18 +323,18 @@
   }
 }
 
-.community-utility-panel {
+.resources-panel {
   gap: 10px;
   padding: 0 24px 24px;
 }
 
-.community-utility-panel > .feed-header-row {
+.resources-panel > .feed-header-row {
   min-height: var(--web-topbar-height);
   align-items: center;
   padding-right: var(--web-topbar-right-action-safe-inset);
 }
 
-.app-root.mobile-shell .community-utility-panel > .feed-header-row {
+.app-root.mobile-shell .resources-panel > .feed-header-row {
   min-height: auto;
   padding-right: 0;
 }
@@ -1714,6 +1709,10 @@
     background: var(--surface-workspace, var(--surface-app));
   }
 
+  .product-shell-surface--community {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
   .product-shell-surface--settings {
     grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
   }
@@ -1741,11 +1740,28 @@
     padding-top: calc(10px + var(--web-topbar-height));
   }
 
-  .product-shell-surface--community {
-    grid-template-columns: 56px minmax(0, 1fr);
+  .back-to-workspace {
+    width: 28px;
+    height: 28px;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 8px;
   }
 
-  .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-header,
+  .back-to-workspace .back-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .back-to-workspace .back-path {
+    display: none;
+  }
+
+  .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-header {
+    display: none;
+  }
+
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-identity {
     display: none;
   }
@@ -1765,24 +1781,6 @@
 
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-divider {
     margin: 8px 0;
-  }
-
-  .back-to-workspace {
-    width: 28px;
-    height: 28px;
-    justify-content: center;
-    gap: 0;
-    padding: 0;
-    border-radius: 8px;
-  }
-
-  .back-to-workspace .back-icon {
-    width: 18px;
-    height: 18px;
-  }
-
-  .back-to-workspace .back-path {
-    display: none;
   }
 
   .community-chat .chat-messages {

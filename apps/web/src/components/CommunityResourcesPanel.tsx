@@ -396,9 +396,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => moduleSections
       .map((section) => ({
         module: section.module,
-        lessonCount: section.lessonResources.length,
+        lessonCount: state.resourceRead.hasData ? section.lessonResources.length : null,
       })),
-    [moduleSections],
+    [moduleSections, state.resourceRead.hasData],
   );
   const allLessonResources = useMemo(
     () => moduleSections.flatMap((section) => section.lessonResources),
@@ -441,16 +441,13 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
   const hasVisibleResourceContent = moduleViews.length > 0 || allLessonResources.length > 0;
-  const wasRefreshingResourcesRef = useRef(false);
-  const hasCompletedResourceLoadRef = useRef(false);
-  useEffect(() => {
-    if (!isRefreshingResources && wasRefreshingResourcesRef.current) {
-      hasCompletedResourceLoadRef.current = true;
-    }
-    wasRefreshingResourcesRef.current = isRefreshingResources;
-  }, [isRefreshingResources]);
+  const readErrors = (["modules", "resources"] as const).flatMap((collection) => {
+    const read = collection === "modules" ? state.moduleRead : state.resourceRead;
+    return read.status === "error" ? [{ collection, message: read.error }] : [];
+  });
   const showInitialResourceLoading =
-    isRefreshingResources && !hasResourceContent && !hasCompletedResourceLoadRef.current;
+    !hasResourceContent && readErrors.length === 0 &&
+    (!state.moduleRead.hasData || !state.resourceRead.hasData);
 
   useEffect(() => {
     if (capabilities.canOperateResources || !isPreviewMode) return;
@@ -476,11 +473,10 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     const selectedModuleExists = selectedModuleId
       ? moduleViews.some((module) => module.id === selectedModuleId)
       : false;
-    if (selectedModuleId && !selectedModuleExists && !isRefreshingResources) {
-      if (!hasResourceContent && !hasCompletedResourceLoadRef.current) return;
+    if (selectedModuleId && !selectedModuleExists && state.moduleRead.status === "ready" && state.resourceRead.status === "ready") {
       actions.handleSelectModule(null);
     }
-  }, [actions, hasResourceContent, isRefreshingResources, moduleViews, selectedModuleId]);
+  }, [actions, state.moduleRead.status, state.resourceRead.status, moduleViews, selectedModuleId]);
 
   useEffect(() => {
     if (pendingDeleteResourceId && !pendingDeleteResource) {
@@ -826,7 +822,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   return (
     <>
-      <div className="community-panel community-utility-panel resources-panel">
+      <div className="community-panel resources-panel">
         <div className="feed-header-row">
           <div className="feed-header-copy">
             {selectedModule ? (
@@ -875,6 +871,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           </div>
         </div>
 
+        {readErrors.map(({ collection, message }) => <div className="resource-read-error" role="alert" key={collection}>
+          <span>{collection === "modules" ? "Courses" : "Lessons"} could not be refreshed. {message}</span>{" "}
+          <button type="button" onClick={() => void actions.retryRead(collection)}>Retry {collection === "modules" ? "courses" : "lessons"}</button>
+        </div>)}
+        {isRefreshingResources && hasResourceContent ? <div role="status">Refreshing resources…</div> : null}
         {showInitialResourceLoading ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
@@ -885,7 +886,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
-        ) : !hasVisibleResourceContent && !canManageResources ? (
+        ) : !hasVisibleResourceContent && readErrors.length > 0 ? null : !hasVisibleResourceContent && !canManageResources ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
               <div className="chat-empty-icon">
@@ -940,7 +941,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   {selectedModule.name}
                 </span>
                 <span className="resource-course-outline-count">
-                  {selectedModuleSection?.lessonResources.length ?? 0}
+                  {state.resourceRead.hasData ? selectedModuleSection?.lessonResources.length ?? 0 : <span aria-label="Lesson count not loaded">—</span>}
                   <ChevronDown aria-hidden="true" />
                 </span>
               </button>
@@ -983,9 +984,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                         <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
                       </svg>
                     </div>
-                    <div className="chat-empty-title">No lessons yet</div>
+                    <div className="chat-empty-title">{state.resourceRead.hasData ? "No lessons yet" : "Lessons not loaded"}</div>
                     <div className="chat-empty-text">
-                      {canManageResources
+                      {!state.resourceRead.hasData ? "Lessons will appear once loading succeeds." : canManageResources
                         ? "Add the first lesson to begin building this course."
                         : "The community team has not published a lesson here yet."}
                     </div>

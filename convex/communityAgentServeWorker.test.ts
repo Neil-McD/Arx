@@ -14,7 +14,6 @@ import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentSe
 
 const modules = import.meta.glob([
   "./communityAgentServeWorker.ts",
-  "./communityAgentChannelAccess.ts",
   "./communityInteractionEvidence.ts",
   "./_generated/**/*.*s",
 ]);
@@ -349,69 +348,6 @@ test("only the current attempt can materialize the one canonical reply", async (
   expect(respondedRequest).not.toHaveProperty("leaseExpiresAt");
 });
 
-test.each(["archived", "restricted", "replies_disabled"])("final posting rechecks channel authority after claim: %s", async (change) => {
-  const t = convexTest(schema, modules);
-  const f = await createServeFixture(t, `channel-recheck-${change}`);
-  const requestId = await insertServeRequest(t, f);
-  const claimed = await t.mutation(
-    internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
-    { requestId, nowMs: 10_000 },
-  );
-  await t.run(async (ctx) => {
-    await ctx.db.patch(f.channelId, change === "archived" ? { status: "archived" }
-      : change === "restricted" ? { accessMode: "restricted" } : { replyPolicy: "disabled" });
-  });
-  await expect(t.mutation(internalRefs.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, {
-    requestId, expectedAttempt: claimed.attempt, content: "Must not post", nowMs: 10_001,
-  })).resolves.toMatchObject({ ok: false, errorCode: "channel_access_missing" });
-  expect(await t.run(ctx => ctx.db.query("communityInteractionReplies").collect())).toHaveLength(0);
-  expect(await t.run(ctx => ctx.db.get(requestId))).toMatchObject({ status: "error", errorCode: "channel_access_missing" });
-});
-
-test.each([false, true])("private-room agent execution is scoped and revocation blocks final output: revoked=%s", async (revoked) => {
-  const t = convexTest(schema, modules);
-  const f = await createServeFixture(t, `private-agent-${revoked}`);
-  const grantId = await t.run(async ctx => {
-    await ctx.db.patch(f.channelId, { systemRole: undefined, slug: "private-client", name: "Private client", position: 1, accessMode: "restricted" });
-    return ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: f.channelId,
-      principalKey: "community_agent", status: "active", createdByUserId: f.userId, createdAt: 1, updatedAt: 1 });
-  });
-  const requestId = await insertServeRequest(t, f);
-  const claim = await t.mutation(internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
-    { requestId, nowMs: 10_000 });
-  const args = { requestId, expectedAttempt: claim.attempt };
-  expect(await t.query(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, args)).toEqual({ restricted: true });
-  expect(await t.query(internalRefs.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args)).toMatchObject({ ok: true });
-  if (revoked) {
-    await t.run(ctx => ctx.db.patch(grantId, { status: "revoked" }));
-    await expect(t.query(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, args)).rejects.toThrow();
-  }
-  expect(await t.mutation(internalRefs.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
-    { ...args, content: "Private room answer", nowMs: 10_001 })).toMatchObject({ ok: !revoked });
-  const replies = await t.run(ctx => ctx.db.query("communityInteractionReplies").collect());
-  expect(replies).toHaveLength(revoked ? 0 : 1);
-  if (!revoked) expect(replies[0]).toMatchObject({ rootId: f.rootId, channelId: f.channelId });
-});
-
-test("ordinary owner mentions need no membership row or workflow", async () => {
-  const t = convexTest(schema, modules);
-  const f = await createServeFixture(t, "owner-no-membership");
-  await t.run(async (ctx) => {
-    const membership = (await ctx.db.query("communityMemberships").first())!;
-    await ctx.db.delete(membership._id);
-  });
-  const requestId = await insertServeRequest(t, f);
-  const claim = await t.mutation(internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, {
-    requestId, nowMs: 10_000,
-  });
-  const context = await t.query(internalRefs.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, {
-    requestId, expectedAttempt: claim.attempt,
-  });
-  expect(context).toMatchObject({ ok: true, workflowPrompt: null });
-  expect(context.threadContext.rendered).toContain("role=owner");
-  expect(context.threadContext.rendered).not.toContain("Workflow orientation");
-});
-
 test("thread context is chronological, cutoff-bound, and scoped through member orientation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createServeFixture(t, "thread-context");
@@ -629,36 +565,4 @@ test("context snapshots are mandatory, exact, idempotent, and attempt-fenced", a
   expect(events.map((event) => event.seq)).toEqual([0, 0]);
   expect(events.every((event) => event.kind === "context_snapshot")).toBe(true);
   expect(events.map((event) => event.content)).toEqual([snapshotJson, snapshotV2Json]);
-});
-
-test("workflow prompts are accepted only as an explicit fourth policy section", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createServeFixture(t, "workflow-prompt-snapshot");
-  const requestId = await insertServeRequest(t, fixture);
-  const claim = await t.mutation(
-    internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
-    { requestId, nowMs: 10_000 },
-  );
-  const promptBundle = buildCommunityAgentServePromptBundle({
-    community: { name: "Workflow", slug: "workflow" },
-    agent: { displayName: "Workflow agent" },
-    threadContext: { rendered: "thread" },
-    workflowPrompt: "Help the member choose one concrete next step.",
-  });
-  expect(promptBundle.systemPromptBundle.sections.map((section) => section.id)).toEqual([
-    "community_agent_identity",
-    "concierge_operating_policy",
-    "community_system_prompt",
-    "community_workflow_action",
-  ]);
-  const snapshotJson = JSON.stringify({
-    version: 2,
-    sha256: "b".repeat(64),
-    messages: promptBundle.messages,
-    prompt_sections: promptBundle.systemPromptBundle.sections,
-  });
-  await expect(t.mutation(
-    internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
-    { requestId, expectedAttempt: claim.attempt, snapshotJson, nowMs: 10_001 },
-  )).resolves.toMatchObject({ ok: true, duplicate: false });
 });

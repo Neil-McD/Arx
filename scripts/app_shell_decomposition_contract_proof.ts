@@ -124,8 +124,8 @@ assert.match(
 );
 assert.match(
   communityInteractionBootstrap,
-  /community-interaction-projection community-interaction-bootstrap[\s\S]*community-interaction-main-composer/,
-  "one shared bootstrap must own center and composer geometry",
+  /community-interaction-projection has-context-panel community-interaction-bootstrap[\s\S]*community-interaction-main-composer[\s\S]*community-context-panel/,
+  "one shared bootstrap must own center, composer, and context-panel geometry",
 );
 assert.match(
   compositionRoot,

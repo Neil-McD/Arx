@@ -52,9 +52,7 @@ import {
 } from "./platformHomeCommunity";
 import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import {
-  activateCommunityMembershipCore,
-} from "./communityMembershipLifecycle";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -1663,6 +1661,7 @@ export const revokeCommunityMemberInternal = internalMutation({
             after: revokedMembership,
           });
         }
+
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
           .withIndex("by_community_user", (q: any) =>

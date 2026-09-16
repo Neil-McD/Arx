@@ -1,5 +1,4 @@
 import { normalizeIdValue } from "./communityCore";
-import { interactionTraceHasSharedSource } from "./communityInteractionEvidenceCore";
 import {
   applyTrustedCommunityIntelligenceChangeRequestCore,
   createOrReuseTrustedCommunityIntelligenceChangeRequest,
@@ -80,7 +79,6 @@ type ChangeRequestRow = {
 type SourceTraceRow = {
   _id: any;
   communityId: any;
-  channelId?: any;
   sourceType: string;
   sourceId?: string;
   title?: string;
@@ -203,8 +201,7 @@ async function resolveCurrentDigestItemTrace(args: {
   communityId: any;
   item: DigestItem;
   workKey: string;
-  nowMs: number;
-}): Promise<SourceTraceRow | null> {
+}): Promise<SourceTraceRow> {
   if (args.item.sourceTraceIds.length !== 1 || (args.item.sourceRevisions ?? []).length !== 1) {
     throw new Error("community_compiler_digest_item_exact_trace_required");
   }
@@ -214,17 +211,6 @@ async function resolveCurrentDigestItemTrace(args: {
     traceId: args.item.sourceTraceIds[0],
   });
   if (!trace) throw new Error("community_compiler_digest_item_trace_not_found");
-  if (!(await interactionTraceHasSharedSource({ ctx: args.ctx, communityId: args.communityId, trace }))) {
-    await args.ctx.db.patch(trace._id, {
-      compilerState: "excluded_by_visibility",
-      compilerPendingSince: undefined,
-      compilerContinuationReady: undefined,
-      compilerLastHandledAt: args.nowMs,
-      compilerLastDigestId: undefined,
-      updatedAt: args.nowMs,
-    });
-    return null;
-  }
   if (await buildCommunitySourceTraceRevision(trace) !== args.item.sourceRevisions?.[0]) {
     throw new Error("community_compiler_digest_item_source_revision_mismatch");
   }
@@ -372,12 +358,7 @@ export async function settleCommunityIntelligenceFromDigestItemsCore(args: {
       communityId: args.communityId,
       item,
       workKey: decision.workKey,
-      nowMs,
     });
-    if (!trace) {
-      results.push({ work_key: decision.workKey, status: "excluded_by_visibility" });
-      continue;
-    }
     if (trace.compilerDecision?.workKey === decision.workKey) {
       results.push({
         work_key: decision.workKey,

@@ -13,7 +13,6 @@ import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
-import { registerCommunityAttachmentRoutes } from "./httpCommunityAttachments";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 import { normalizeEmailForVerification } from "./workosEmailVerification";
 
@@ -343,8 +342,6 @@ registerMemberAgentAttachmentRoutes({
   optionsResponse,
   requireAuthenticatedActor,
 });
-
-registerCommunityAttachmentRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
 
 registerRuntimeContextRoutes({
   http,

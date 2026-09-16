@@ -12,7 +12,6 @@ import type {
 type MobileSettingsView = "index" | "detail";
 
 export function useWebMobileShellController(params: {
-  isCommunityAgentPage: boolean;
   activeCommunitySlug: string | null;
   selectedActiveCommunitySlug: string | null;
   mobileRootPage: MobileRootPage;
@@ -37,12 +36,6 @@ export function useWebMobileShellController(params: {
   closeThreadPage: () => void;
   openCommunityCreateFlow: () => void;
 }) {
-  useEffect(() => {
-    if (params.showMobileShell && params.isCommunityAgentPage && !params.forceCommunityRoot) {
-      params.setMobileRootPage("agent");
-    }
-  }, [params.showMobileShell, params.isCommunityAgentPage, params.forceCommunityRoot, params.setMobileRootPage]);
-
   const openMobileCommunitySurface = useCallback(() => {
     const nextCommunitySlug = String(
       params.selectedActiveCommunitySlug ?? params.activeCommunitySlug ?? "",

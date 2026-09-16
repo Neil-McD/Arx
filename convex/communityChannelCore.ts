@@ -1,12 +1,9 @@
 import { normalizeIdValue } from "./communityCore";
-import { getCommunityChannelCapabilities, requireCommunityChannelCapability, type ChannelActor, type ChannelCapabilities } from "./communityChannelAccess";
 
 export const GENERAL_CHANNEL_SYSTEM_ROLE = "general" as const;
 export const GENERAL_CHANNEL_SLUG = "general" as const;
 export const GENERAL_CHANNEL_NAME = "General" as const;
-import { MAX_SHARED_COMMUNITY_CHANNELS, MAX_PRIVATE_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
-export const LEGACY_CHANNEL_LIST_LIMIT = 10;
-const CHANNEL_SLUG_COLLISION_ATTEMPTS = 12;
+export const MAX_ACTIVE_COMMUNITY_CHANNELS = 10;
 export const MAX_COMMUNITY_CHANNEL_NAME_CHARS = 48;
 
 export type CommunityChannelLike = {
@@ -15,9 +12,8 @@ export type CommunityChannelLike = {
   systemRole?: "general";
   slug: string;
   name: string;
-  accessMode: "all_members" | "restricted";
-  postingPolicy: "members" | "managers";
-  replyPolicy?: "members" | "managers" | "disabled";
+  accessMode: "all_members";
+  postingPolicy: "members";
   status: "active" | "archived";
   position: number;
   pinnedRootId?: any;
@@ -37,7 +33,6 @@ type GeneralChannelReadableRow = {
   _id: any;
   communityId: any;
   channelId?: any;
-  rootId?: any;
   visibilityScope: "private" | "admin" | "community" | "public";
   status: "live" | "hidden" | "deleted";
   kind?: string;
@@ -65,6 +60,13 @@ function channelSlugBase(name: string): string {
   return slug || "channel";
 }
 
+function channelHasFixedMemberPolicy(channel: CommunityChannelLike): boolean {
+  return (
+    channel.accessMode === "all_members" &&
+    channel.postingPolicy === "members"
+  );
+}
+
 function channelHasCanonicalCustomContract(
   channel: CommunityChannelLike,
 ): boolean {
@@ -79,7 +81,7 @@ function channelHasCanonicalCustomContract(
     channel.slug !== GENERAL_CHANNEL_SLUG &&
     /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(channel.slug) &&
     normalizedName === channel.name &&
-    Number.isFinite(channel.position) &&
+    Number.isInteger(channel.position) &&
     channel.position > 0
   );
 }
@@ -90,9 +92,7 @@ function assertChannelForCommunity(
 ): void {
   if (
     normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) ||
-    !["all_members", "restricted"].includes(channel.accessMode) ||
-    !["members", "managers"].includes(channel.postingPolicy) ||
-    !["members", "managers", "disabled"].includes(channel.replyPolicy ?? "members")
+    !channelHasFixedMemberPolicy(channel)
   ) {
     throw new Error("community_channel_invalid");
   }
@@ -119,7 +119,6 @@ export function channelHasCanonicalGeneralSystemContract(
     channel.slug === GENERAL_CHANNEL_SLUG &&
     channel.accessMode === "all_members" &&
     channel.postingPolicy === "members" &&
-    (channel.replyPolicy ?? "members") === "members" &&
     channel.status === "active" &&
     channel.position === 0
   );
@@ -179,15 +178,12 @@ export async function ensureGeneralChannel(args: {
     throw new Error("community_general_channel_slug_conflict");
   }
 
-  await requireCommunityChannelCapacity({ ...args, accessMode: "all_members", forGeneral: true });
-
   const nowMs = args.nowMs ?? Date.now();
   const channelId = await args.ctx.db.insert("communityChannels" as any, {
     communityId: args.communityId,
     systemRole: GENERAL_CHANNEL_SYSTEM_ROLE,
     slug: GENERAL_CHANNEL_SLUG,
     name: GENERAL_CHANNEL_NAME,
-    normalizedName: GENERAL_CHANNEL_NAME.toLocaleLowerCase("en-US"),
     accessMode: "all_members",
     postingPolicy: "members",
     status: "active",
@@ -229,7 +225,7 @@ export async function requireActiveCommunityChannel(args: {
   return channel;
 }
 
-export function legacyGeneralChannelSelection(
+function legacyGeneralChannelSelection(
   communityId: any,
 ): CommunityChannelLike {
   return {
@@ -262,14 +258,11 @@ export async function resolveRequestedCommunityChannel(args: {
 }): Promise<CommunityChannelLike> {
   if (normalizeIdValue(args.channelId)) {
     try {
-      const channel = await requireActiveCommunityChannel({
+      return await requireActiveCommunityChannel({
         ctx: args.ctx,
         communityId: args.communityId,
         channelId: args.channelId,
       });
-      // Unscoped background callers never gain private-room access.
-      if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
-      return channel;
     } catch {
       // Public callers receive one unavailable outcome for absent, archived,
       // malformed, and cross-community ids so channel resolution is not an
@@ -290,38 +283,6 @@ export async function resolveRequestedCommunityChannel(args: {
   );
 }
 
-// Interactive entry points must use an authenticated actor. Unscoped helpers
-// remain shared-only for community-wide background consumers.
-export async function resolveAuthorizedCommunityChannel(args: {
-  ctx: any;
-  communityId: any;
-  channelId?: any | null;
-  channelSlug?: string | null;
-  ensureGeneralForWrite?: boolean;
-  nowMs?: number;
-  actor: ChannelActor;
-  capability: keyof ChannelCapabilities;
-}): Promise<CommunityChannelLike> {
-  let channel: CommunityChannelLike;
-  try {
-    const slug = String(args.channelSlug ?? "").trim();
-    if (args.channelId) channel = await requireCommunityChannelLineage({ ...args, channelId: args.channelId });
-    else if (slug) {
-      const matches = await args.ctx.db.query("communityChannels").withIndex("by_community_slug", (q: any) =>
-        q.eq("communityId", args.communityId).eq("slug", slug)).take(2);
-      if (matches.length > 1) throw new Error("community_channel_unavailable");
-      if (!matches.length && slug === GENERAL_CHANNEL_SLUG) channel = await resolveRequestedCommunityChannel(args);
-      else if (matches.length === 1) channel = await requireCommunityChannelLineage({ ...args, channelId: matches[0]._id });
-      else throw new Error("community_channel_unavailable");
-    } else channel = await resolveRequestedCommunityChannel(args);
-    if (slug && channel.slug !== slug) throw new Error("community_channel_unavailable");
-  } catch {
-    throw new Error("community_channel_unavailable");
-  }
-  await requireCommunityChannelCapability({ ...args, channel });
-  return channel;
-}
-
 export async function listActiveCommunityChannels(args: {
   ctx: { db: any };
   communityId: any;
@@ -331,9 +292,9 @@ export async function listActiveCommunityChannels(args: {
     .withIndex("by_community_status_position", (q: any) =>
       q.eq("communityId", args.communityId).eq("status", "active"),
     )
-    .take(LEGACY_CHANNEL_LIST_LIMIT + 1)) as CommunityChannelLike[];
-  if (channels.length > LEGACY_CHANNEL_LIST_LIMIT) {
-    throw new Error("community_channel_refresh_required");
+    .take(MAX_ACTIVE_COMMUNITY_CHANNELS + 1)) as CommunityChannelLike[];
+  if (channels.length > MAX_ACTIVE_COMMUNITY_CHANNELS) {
+    throw new Error("community_channel_limit_invalid");
   }
   for (const channel of channels) {
     assertChannelForCommunity(channel, args.communityId);
@@ -344,75 +305,16 @@ export async function listActiveCommunityChannels(args: {
   });
 }
 
-// The canonical bounded directory read. Authorization is evaluated on every
-// page; a member's private scan starts from their grants, not other clients.
-export async function listAuthorizedCommunityChannelPage(args: {
-  ctx: any; communityId: any; actor: ChannelActor;
-  section: "shared" | "private";
-  paginationOpts: { cursor: string | null; numItems: number };
-}): Promise<{ page: CommunityChannelLike[]; isDone: boolean; continueCursor: string }> {
-  if (args.actor.kind === "community_agent" && args.section === "private") {
-    return { page: [], isDone: true, continueCursor: "" };
-  }
-  const { ctx, communityId, actor, section } = args;
-  const opts = { ...args.paginationOpts, numItems: Math.min(50, Math.max(1, args.paginationOpts.numItems)) };
-  const byGrant = section === "private" && !actor.isManager;
-  const result = byGrant
-    ? await ctx.db.query("communityChannelParticipants").withIndex("by_community_principal_status", (q: any) =>
-      q.eq("communityId", communityId).eq("principalKey", actor.principalKey).eq("status", "active")).paginate(opts)
-    : await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", (q: any) =>
-      q.eq("communityId", communityId).eq("accessMode", section === "shared" ? "all_members" : "restricted")
-        .eq("status", "active")).paginate(opts);
-  const candidates = byGrant
-    ? await Promise.all(result.page.map((row: any) => ctx.db.get(row.channelId))) : result.page;
-  const page: CommunityChannelLike[] = [];
-  for (const channel of candidates) {
-    if (!channel || normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) || channel.status !== "active"
-      || channel.accessMode !== (section === "shared" ? "all_members" : "restricted")) continue;
-    assertChannelForCommunity(channel, communityId);
-    if ((await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) page.push(channel);
-  }
-  if (section === "shared" && args.paginationOpts.cursor === null && !await getGeneralChannel(ctx, communityId)) {
-    const general = legacyGeneralChannelSelection(communityId);
-    if ((await getCommunityChannelCapabilities({ ctx, channel: general, actor })).canRead) page.unshift(general);
-  }
-  return { ...result, page };
-}
-
-export async function listAuthorizedCommunityChannels(args: {
-  ctx: any; communityId: any; actor: ChannelActor;
-}): Promise<CommunityChannelLike[]> {
-  const general = await getGeneralChannel(args.ctx, args.communityId);
-  const rows = await listActiveCommunityChannels(args);
-  if (!general) {
-    if (rows.length >= LEGACY_CHANNEL_LIST_LIMIT) throw new Error("community_channel_refresh_required");
-    rows.unshift(legacyGeneralChannelSelection(args.communityId));
-  }
-  const visible = await Promise.all(rows.map(async channel =>
-    (await getCommunityChannelCapabilities({ ...args, channel })).canRead ? channel : null));
-  return visible.filter((row): row is CommunityChannelLike => row !== null);
-}
-
-export async function listSharedCommunityChannels(args: {
+export async function listReadableCommunityChannels(args: {
   ctx: { db: any };
   communityId: any;
 }): Promise<CommunityChannelLike[]> {
   // getGeneralChannel detects duplicate system rows even if both happen to be
   // otherwise canonical.
   const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
-  // Audience filtering happens in the index BEFORE the bounded read. Private
-  // room volume must neither occupy this window nor break shared projections.
-  const activeChannels = await args.ctx.db.query("communityChannels")
-    .withIndex("by_community_access_status_position", (q: any) =>
-      q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
-    .take(MAX_SHARED_COMMUNITY_CHANNELS + 1) as CommunityChannelLike[];
-  if (activeChannels.length > MAX_SHARED_COMMUNITY_CHANNELS) throw new Error("community_channel_limit_invalid");
-  for (const channel of activeChannels) assertChannelForCommunity(channel, args.communityId);
-  activeChannels.sort((left, right) =>
-    left.position - right.position || normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id)),
-  );
+  const activeChannels = await listActiveCommunityChannels(args);
   if (generalChannel) return activeChannels;
-  if (activeChannels.length >= MAX_SHARED_COMMUNITY_CHANNELS) {
+  if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
     // A missing General row still consumes the required system-channel slot.
     // Refuse to project an eleventh readable channel from drifted storage.
     throw new Error("community_channel_limit_invalid");
@@ -420,20 +322,10 @@ export async function listSharedCommunityChannels(args: {
   return [legacyGeneralChannelSelection(args.communityId), ...activeChannels];
 }
 
-export function requireSharedChannelForAddressableRow(args: {
+export function requireReadableChannelForAddressableRow(args: {
   row: ChannelAddressableInteractionLike;
   communityId: any;
   channels: CommunityChannelLike[];
-}): CommunityChannelLike {
-  const channel = requireChannelFromAuthorizedSet(args);
-  if (channel.accessMode !== "all_members") throw new Error("interaction_channel_invalid");
-  return channel;
-}
-
-// This set must come from listAuthorizedCommunityChannels or an authorized
-// exact-room lookup. Community-wide consumers use the shared wrapper above.
-export function requireChannelFromAuthorizedSet(args: {
-  row: ChannelAddressableInteractionLike; communityId: any; channels: CommunityChannelLike[];
 }): CommunityChannelLike {
   if (
     !interactionIsChannelAddressable(args.row) ||
@@ -457,21 +349,6 @@ export function requireChannelFromAuthorizedSet(args: {
   return channel;
 }
 
-// Direct evidence lookup checks only the source room, not the full directory.
-// The missing-channel lane is strictly the existing General migration adapter.
-export async function requireSharedChannelForInteraction(args: {
-  ctx: { db: any };
-  communityId: any;
-  row: ChannelAddressableInteractionLike;
-}): Promise<CommunityChannelLike> {
-  const channel = args.row.channelId
-    ? await args.ctx.db.get(args.row.channelId)
-    : (await getGeneralChannel(args.ctx, args.communityId)) ?? legacyGeneralChannelSelection(args.communityId);
-  return requireSharedChannelForAddressableRow({
-    row: args.row, communityId: args.communityId, channels: channel ? [channel] : [],
-  });
-}
-
 async function resolveAvailableChannelSlug(args: {
   ctx: { db: any };
   communityId: any;
@@ -482,11 +359,11 @@ async function resolveAvailableChannelSlug(args: {
   const timestampToken = Math.max(0, Math.floor(args.nowMs)).toString(36);
   const suffixes = [
     ...Array.from(
-      { length: CHANNEL_SLUG_COLLISION_ATTEMPTS },
+      { length: MAX_ACTIVE_COMMUNITY_CHANNELS + 1 },
       (_, index) => index === 0 ? "" : `-${index + 1}`,
     ),
     ...Array.from(
-      { length: CHANNEL_SLUG_COLLISION_ATTEMPTS },
+      { length: MAX_ACTIVE_COMMUNITY_CHANNELS + 1 },
       (_, index) => `-${timestampToken}${index === 0 ? "" : `-${index + 1}`}`,
     ),
   ];
@@ -503,67 +380,11 @@ async function resolveAvailableChannelSlug(args: {
   throw new Error("community_channel_slug_unavailable");
 }
 
-/** Allocate a readable generated label in the same transaction as channel creation. */
-export async function resolveGeneratedCommunityChannelName(args: {
-  ctx: { db: any }; communityId: any; name: string;
-}): Promise<string> {
-  await ensureGeneralChannel(args);
-  const base = normalizeCommunityChannelName(args.name.slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS));
-  // There cannot be more occupied names than the combined active-channel capacity.
-  for (let index = 0; index <= MAX_SHARED_COMMUNITY_CHANNELS + MAX_PRIVATE_COMMUNITY_CHANNELS; index++) {
-    const suffix = index === 0 ? "" : ` (${index + 1})`;
-    const candidate = `${base.slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS - suffix.length).trimEnd()}${suffix}`;
-    try {
-      await requireAvailableChannelName({ ...args, name: candidate });
-      return candidate;
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== "community_channel_name_taken") throw error;
-    }
-  }
-  throw new Error("community_channel_name_unavailable");
-}
-
-async function requireAvailableChannelName(args: {
-  ctx: { db: any }; communityId: any; name: string; excludeId?: any;
-}): Promise<string> {
-  // Old rows must be backfilled before writes; never silently miss a collision.
-  const missing = await args.ctx.db.query("communityChannels").withIndex(
-    "by_community_status_normalizedName",
-    (q: any) => q.eq("communityId", args.communityId).eq("status", "active").eq("normalizedName", undefined),
-  ).first();
-  if (missing) throw new Error("community_channel_name_migration_required");
-  const normalizedName = args.name.toLocaleLowerCase("en-US");
-  const matches = await args.ctx.db.query("communityChannels").withIndex(
-    "by_community_status_normalizedName",
-    (q: any) => q.eq("communityId", args.communityId).eq("status", "active").eq("normalizedName", normalizedName),
-  ).take(2);
-  if (matches.some((row: any) => normalizeIdValue(row._id) !== normalizeIdValue(args.excludeId))) {
-    throw new Error("community_channel_name_taken");
-  }
-  return normalizedName;
-}
-
-export async function requireCommunityChannelCapacity(args: {
-  ctx: { db: any }; communityId: any; accessMode: "all_members" | "restricted";
-  forGeneral?: boolean;
-}): Promise<void> {
-  const limit = args.accessMode === "all_members" ? MAX_SHARED_COMMUNITY_CHANNELS : MAX_PRIVATE_COMMUNITY_CHANNELS;
-  const rows = await args.ctx.db.query("communityChannels").withIndex(
-    "by_community_access_status_position",
-    (q: any) => q.eq("communityId", args.communityId).eq("accessMode", args.accessMode).eq("status", "active"),
-  ).take(limit);
-  const reservedGeneral = args.accessMode === "all_members" && !args.forGeneral
-    && !rows.some((row: CommunityChannelLike) => row.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) ? 1 : 0;
-  if (rows.length + reservedGeneral >= limit) throw new Error(args.accessMode === "all_members"
-    ? "community_shared_channel_limit_reached" : "community_private_channel_limit_reached");
-}
-
 export async function createActiveCommunityChannel(args: {
   ctx: { db: any };
   communityId: any;
   createdByUserId: any;
   name: unknown;
-  accessMode?: "all_members" | "restricted";
   nowMs?: number;
 }): Promise<CommunityChannelLike> {
   const name = normalizeCommunityChannelName(args.name);
@@ -572,8 +393,23 @@ export async function createActiveCommunityChannel(args: {
     communityId: args.communityId,
     nowMs: args.nowMs,
   });
-  await requireCommunityChannelCapacity({ ...args, accessMode: args.accessMode ?? "all_members" });
-  const normalizedName = await requireAvailableChannelName({ ...args, name });
+  const activeChannels = await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
+    throw new Error("community_channel_limit_reached");
+  }
+  const normalizedName = name.toLocaleLowerCase("en-US");
+  if (
+    activeChannels.some(
+      (channel) =>
+        normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US") ===
+        normalizedName,
+    )
+  ) {
+    throw new Error("community_channel_name_taken");
+  }
   const nowMs = args.nowMs ?? Date.now();
   const slug = await resolveAvailableChannelSlug({
     ctx: args.ctx,
@@ -581,20 +417,15 @@ export async function createActiveCommunityChannel(args: {
     name,
     nowMs,
   });
-  const last = await args.ctx.db.query("communityChannels").withIndex(
-    "by_community_status_position",
-    (q: any) => q.eq("communityId", args.communityId).eq("status", "active"),
-  ).order("desc").first();
-  const position = (last?.position ?? 0) + 1;
-  if (!Number.isFinite(position) || position <= (last?.position ?? 0)) {
-    throw new Error("community_channel_order_space_exhausted");
-  }
+  const position = activeChannels.reduce(
+    (maximum, channel) => Math.max(maximum, channel.position),
+    -1,
+  ) + 1;
   const channelId = await args.ctx.db.insert("communityChannels" as any, {
     communityId: args.communityId,
     slug,
     name,
-    normalizedName,
-    accessMode: args.accessMode ?? "all_members",
+    accessMode: "all_members",
     postingPolicy: "members",
     status: "active",
     position,
@@ -647,11 +478,24 @@ export async function renameActiveCommunityChannel(args: {
 }): Promise<CommunityChannelLike> {
   const channel = await requireMutableCommunityChannel(args);
   const name = normalizeCommunityChannelName(args.name);
-  const normalizedName = await requireAvailableChannelName({ ...args, name, excludeId: channel._id });
+  const normalizedName = name.toLocaleLowerCase("en-US");
+  const activeChannels = await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  if (
+    activeChannels.some(
+      (candidate) =>
+        normalizeIdValue(candidate._id) !== normalizeIdValue(channel._id) &&
+        normalizeCommunityChannelName(candidate.name).toLocaleLowerCase("en-US") ===
+          normalizedName,
+    )
+  ) {
+    throw new Error("community_channel_name_taken");
+  }
   if (channel.name === name) return channel;
   await args.ctx.db.patch(channel._id, {
     name,
-    normalizedName,
     updatedAt: args.nowMs ?? Date.now(),
   });
   return await requireActiveCommunityChannel({
@@ -661,38 +505,65 @@ export async function renameActiveCommunityChannel(args: {
   });
 }
 
-export async function moveActiveCommunityChannel(args: {
+export async function reorderActiveCommunityChannels(args: {
   ctx: { db: any };
   communityId: any;
-  channelId: any;
-  afterChannelId: any | null;
-  beforeChannelId: any | null;
-  expectedPosition: number;
+  orderedChannelIds: any[];
   nowMs?: number;
-}): Promise<CommunityChannelLike> {
-  const channel = await requireMutableCommunityChannel(args);
-  if (channel.position !== args.expectedPosition) throw new Error("community_channel_order_stale");
-  const ids = [args.channelId, args.afterChannelId, args.beforeChannelId].filter(Boolean).map(normalizeIdValue);
-  if (new Set(ids).size !== ids.length) throw new Error("community_channel_order_duplicate_id");
-  const after = args.afterChannelId ? await requireMutableCommunityChannel({ ...args, channelId: args.afterChannelId }) : null;
-  const before = args.beforeChannelId ? await requireMutableCommunityChannel({ ...args, channelId: args.beforeChannelId }) : null;
-  const lower = after?.position ?? 0;
-  // Validate adjacency against current storage, excluding the moving row. This
-  // indexed range also participates in Convex's serializable conflict checks.
-  const next = await args.ctx.db.query("communityChannels").withIndex(
-    "by_community_status_position",
-    (q: any) => q.eq("communityId", args.communityId).eq("status", "active").gt("position", lower),
-  ).take(2);
-  const neighbor = next.find((row: any) => normalizeIdValue(row._id) !== normalizeIdValue(channel._id));
-  if (normalizeIdValue(neighbor?._id) !== normalizeIdValue(before?._id) || (before && before.position <= lower)) {
+}): Promise<CommunityChannelLike[]> {
+  await ensureGeneralChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    nowMs: args.nowMs,
+  });
+  const activeChannels = await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const general = activeChannels.find(
+    (channel) => channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE,
+  );
+  if (!general) throw new Error("community_general_channel_missing");
+
+  const customChannels = activeChannels.filter(
+    (channel) => channel.systemRole !== GENERAL_CHANNEL_SYSTEM_ROLE,
+  );
+  const requestedIds = args.orderedChannelIds.map(normalizeIdValue);
+  const requestedIdSet = new Set(requestedIds);
+  const existingIds = new Set(customChannels.map((channel) => normalizeIdValue(channel._id)));
+
+  if (requestedIds.includes(normalizeIdValue(general._id))) {
+    throw new Error("community_general_channel_immutable");
+  }
+  if (requestedIds.length !== requestedIdSet.size) {
+    throw new Error("community_channel_order_duplicate_id");
+  }
+  if (requestedIds.length !== existingIds.size) {
     throw new Error("community_channel_order_stale");
   }
-  const position = before ? lower + (before.position - lower) / 2 : lower + 1;
-  if (!Number.isFinite(position) || position <= lower || (before && position >= before.position)) {
-    throw new Error("community_channel_order_space_exhausted");
+  for (const channelId of requestedIds) {
+    if (!existingIds.has(channelId)) {
+      throw new Error("community_channel_unavailable");
+    }
   }
-  await args.ctx.db.patch(channel._id, { position, updatedAt: args.nowMs ?? Date.now() });
-  return { ...channel, position, updatedAt: args.nowMs ?? Date.now() };
+
+  const nowMs = args.nowMs ?? Date.now();
+  await Promise.all(
+    requestedIds.map((channelId, index) => {
+      const channel = customChannels.find(
+        (candidate) => normalizeIdValue(candidate._id) === channelId,
+      );
+      if (!channel) throw new Error("community_channel_unavailable");
+      const position = index + 1;
+      return channel.position === position
+        ? Promise.resolve()
+        : args.ctx.db.patch(channel._id, { position, updatedAt: nowMs });
+    }),
+  );
+  return await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
 }
 
 type PinnableCommunityInteractionRoot = ChannelAddressableInteractionLike & {
@@ -727,19 +598,16 @@ export async function setActiveCommunityChannelPinnedRoot(args: {
   channelId?: any;
   rootId: any | null;
   actorUserId: any;
-  actor?: ChannelActor;
   nowMs?: number;
 }): Promise<CommunityChannelLike> {
   const nowMs = args.nowMs ?? Date.now();
-  const selection = {
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
     communityId: args.communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,
     nowMs,
-  };
-  const channel = args.actor ? await resolveAuthorizedCommunityChannel({ ...selection, actor: args.actor, capability: "canManage" })
-    : await resolveRequestedCommunityChannel(selection);
+  });
   const nextRootId = args.rootId ? normalizeIdValue(args.rootId) : "";
   const previousRootId = normalizeIdValue(channel.pinnedRootId);
   if (nextRootId === previousRootId) return channel;
@@ -859,8 +727,6 @@ export async function requireChannelForAddressableRoot(args: {
   ctx: { db: any };
   root: ChannelAddressableInteractionLike;
   nowMs?: number;
-  actor?: ChannelActor;
-  capability?: keyof ChannelCapabilities;
 }): Promise<CommunityChannelLike> {
   if (!interactionIsChannelAddressable(args.root)) {
     throw new Error("interaction_not_channel_addressable");
@@ -874,17 +740,14 @@ export async function requireChannelForAddressableRoot(args: {
       !channel ||
       normalizeIdValue(channel.communityId) !==
         normalizeIdValue(args.root.communityId) ||
-      channel.status !== "active"
+      channel.status !== "active" ||
+      channel.accessMode !== "all_members" ||
+      channel.postingPolicy !== "members"
     ) {
       throw new Error("interaction_channel_invalid");
     }
     if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
       assertGeneralChannelForCommunity(channel, args.root.communityId);
-    }
-    assertChannelForCommunity(channel, args.root.communityId);
-    if (channel.accessMode === "restricted") {
-      if (!args.actor) throw new Error("community_channel_unavailable");
-      await requireCommunityChannelCapability({ ctx: args.ctx, channel, actor: args.actor, capability: args.capability ?? "canRead" });
     }
     return channel;
   }
@@ -904,7 +767,6 @@ export async function ensureReplyChannelMatchesRoot(args: {
   root: ChannelAddressableInteractionLike;
   reply: { _id: any; communityId: any; rootId: any; channelId?: any };
   nowMs?: number;
-  actor?: ChannelActor;
 }): Promise<CommunityChannelLike> {
   if (
     normalizeIdValue(args.reply.communityId) !==
@@ -917,7 +779,6 @@ export async function ensureReplyChannelMatchesRoot(args: {
     ctx: args.ctx,
     root: args.root,
     nowMs: args.nowMs,
-    actor: args.actor,
   });
   if (
     args.reply.channelId &&
@@ -966,7 +827,6 @@ export async function listChannelProjectionRows(args: {
   streamKind?: "chat";
 }): Promise<any[]> {
   assertChannelForCommunity(args.channel, args.communityId);
-  if (args.channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   if (args.channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -1130,13 +990,8 @@ export async function listChannelReadableRows<
   limit: number;
   beforeCreatedAt?: number | null;
   kind?: string | null;
-  actor?: ChannelActor;
 }): Promise<T[]> {
   assertChannelForCommunity(args.channel, args.communityId);
-  if (args.channel.accessMode === "restricted") {
-    if (!args.actor) throw new Error("community_channel_unavailable");
-    await requireCommunityChannelCapability({ ctx: args.ctx, channel: args.channel, actor: args.actor, capability: "canRead" });
-  }
   if (args.channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -1154,9 +1009,9 @@ export async function listChannelReadableRows<
 }
 
 // Community-intelligence projections deliberately aggregate every active,
-// all-member channel. The ten-shared-channel cap bounds this fanout while the
+// all-member channel. The ten-channel product cap bounds this fanout while the
 // selected-channel path above remains exact and independently pageable.
-export async function listSharedChannelReadableRows<
+export async function listAllActiveChannelReadableRows<
   T extends GeneralChannelReadableRow,
 >(args: {
   ctx: { db: any };
@@ -1171,7 +1026,7 @@ export async function listSharedChannelReadableRows<
     Number.isFinite(requestedLimit) && requestedLimit > 0
       ? Math.min(200, Math.floor(requestedLimit))
       : 1;
-  const channels = await listSharedCommunityChannels({
+  const channels = await listReadableCommunityChannels({
     ctx: args.ctx,
     communityId: args.communityId,
   });
@@ -1188,7 +1043,7 @@ export async function listSharedChannelReadableRows<
       }),
     ),
   );
-  const rows = Array.from(
+  return Array.from(
     new Map(
       batches
         .flat()
@@ -1197,21 +1052,6 @@ export async function listSharedChannelReadableRows<
   )
     .sort((left, right) => right.createdAt - left.createdAt)
     .slice(0, limit);
-  if (args.tableName === "communityInteractionRoots") return rows;
-  const roots = new Map<string, GeneralChannelReadableRow | null>(await Promise.all(
-    Array.from(new Set(rows.map((row) => normalizeIdValue(row.rootId)))).map(async (rootId) =>
-      [rootId, rootId ? await args.ctx.db.get(rootId) : null] as const),
-  ));
-  return rows.filter((row) => {
-    const root = roots.get(normalizeIdValue(row.rootId));
-    if (!root || root.status !== "live") return false;
-    try {
-      const channel = requireSharedChannelForAddressableRow({ row: root, communityId: args.communityId, channels });
-      return interactionBelongsToChannel(row, channel);
-    } catch {
-      return false;
-    }
-  });
 }
 
 // Rolling-deployment adapter for existing General-only call paths. New

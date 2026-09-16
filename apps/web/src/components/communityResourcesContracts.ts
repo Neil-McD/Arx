@@ -1,6 +1,7 @@
 import type {
   CommunitySourceIntakePhase,
   CommunitySourceIntakeResult,
+  ResourceReadState,
 } from "../../../../shared/useCommunityResourceController";
 
 export type CommunityResource = {
@@ -60,6 +61,8 @@ export type CommunityResourcesCapabilities = {
 };
 
 export type CommunityResourcesState = {
+  resourceRead: ResourceReadState;
+  moduleRead: ResourceReadState;
   isLoadingResources: boolean;
   isLoadingResourceModules: boolean;
   modules: CommunityResourceModule[];
@@ -68,6 +71,7 @@ export type CommunityResourcesState = {
 };
 
 export type CommunityResourcesActions = {
+  retryRead: (collection: "resources" | "modules") => Promise<void>;
   handleSelectModule: (moduleId: string | null) => void;
   openNewModuleModal: () => void;
   handleEditModule: (module: CommunityResourceModule) => void;

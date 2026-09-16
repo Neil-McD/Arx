@@ -71,7 +71,7 @@ assert.match(shared, /COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-5\.6-luna"/);
 assert.doesNotMatch(shared, /LEGACY_BYOK|OWNER_INFERENCE_TERMS|FounderInferenceGrantStatus/);
 assert.match(
   shared,
-  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_funnel_builder"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"[\s\S]*"community_workflow_action"[\s\S]*"community_setup_generation"/,
+  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_funnel_builder"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"[\s\S]*"community_setup_generation"/,
 );
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000/);
@@ -106,11 +106,11 @@ assert.match(receiptSchema, /\.index\("by_receipt_key", \["receiptKey"\]\)/);
 assert.doesNotMatch(receiptSchema, /owner_api_key|founderGrantId|founderInferenceGrants/);
 assert.match(
   receiptSchema,
-  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_funnel_builder[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_workflow_action[\s\S]*community_setup_generation/,
+  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_funnel_builder[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
 );
 assert.match(
   backend,
-  /const communityInferenceSurfaceValidator = v\.union\([\s\S]*member_agent_dock[\s\S]*community_funnel_builder[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_workflow_action[\s\S]*community_setup_generation/,
+  /const communityInferenceSurfaceValidator = v\.union\([\s\S]*member_agent_dock[\s\S]*community_funnel_builder[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
 );
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
@@ -288,14 +288,13 @@ assert.match(
 assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
 assert.doesNotMatch(intake, /connect an OpenAI API key|activate an OpenAI API key/);
 assert.doesNotMatch(intake + worker + admissionResolver, /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_api_key/);
-assert.match(worker, /const isWorkflowAction = context\.request\.triggerKind === "workflow"/);
-assert.match(worker, /const receiptKey = isWorkflowAction[\s\S]*communityWorkflowActionReceiptKey\(requestId\)[\s\S]*communityAgentMentionReceiptKey\(requestId\)/);
+assert.match(worker, /const receiptKey = communityAgentMentionReceiptKey\(requestId\)/);
 assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
 assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(worker, /aggregatePromptTokens \+=/);
 assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
 assert.match(worker, /claimCommunityInferenceFundingSession/);
-assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action"[\s\S]*"community_agent_mention"/);
+assert.match(worker, /surface: "community_agent_mention"/);
 assert.match(
   worker,
   /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,

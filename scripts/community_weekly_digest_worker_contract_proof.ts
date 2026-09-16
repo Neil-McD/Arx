@@ -12,7 +12,6 @@ function read(relativePath: string): string {
 }
 
 const worker = read("convex/communityWeeklyDigestWorker.ts");
-const channels = read("convex/communityChannelCore.ts");
 const schedule = read("convex/communityWeeklyDigestSchedule.ts");
 const email = read("convex/email.ts");
 const crons = read("convex/crons.ts");
@@ -34,18 +33,13 @@ assert.match(
 );
 assert.match(
   worker,
-  /listSharedChannelReadableRows\(\{[\s\S]*tableName: "communityInteractionRoots"[\s\S]*limit: COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED[\s\S]*beforeCreatedAt: params.periodEndExclusiveMs/,
-  "digest roots must use the bounded shared-audience reader",
+  /communityInteractionRoots[\s\S]*by_community_status_createdAt[\s\S]*\.take\(COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED\)/,
+  "digest conversation content must come from bounded canonical interaction roots",
 );
 assert.match(
   worker,
-  /listSharedChannelReadableRows\(\{[\s\S]*tableName: "communityInteractionReplies"[\s\S]*limit: COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED[\s\S]*beforeCreatedAt: params.periodEndExclusiveMs/,
-  "digest replies must use the bounded shared-audience reader",
-);
-assert.match(
-  channels,
-  /by_community_access_status_position[\s\S]*eq\("accessMode", "all_members"\)[\s\S]*\.take\(/,
-  "shared audience must be selected by index before applying the channel limit",
+  /communityInteractionReplies[\s\S]*by_community_status_createdAt[\s\S]*\.take\(COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED\)/,
+  "digest conversation content must include bounded canonical interaction replies",
 );
 assert.doesNotMatch(
   worker,
@@ -94,7 +88,7 @@ assert.doesNotMatch(
 );
 assert.match(
   contract,
-  /Lifecycle enrollment is wired atomically[\s\S]*bounded worker remains\s+dormant because no digest cron is active/,
+  /bounded worker is present but dormant[\s\S]*no digest cron or\s+automatic schedule enrollment is active/,
   "the cost contract must distinguish a proven worker from activation",
 );
 

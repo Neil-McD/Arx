@@ -17,7 +17,6 @@ const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
   "./communityResourceEvidence.ts",
   "./communityEvidenceAudit.ts",
-  "./communityAgentChannelAccess.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -283,16 +282,6 @@ test("canonical executor keeps bound and explicit community selectors behavioral
   const fixture = await createFixture(t);
   const asMember = t.withIdentity({ subject: fixture.memberSubject });
   const ctx = createPlatformOperationTestContext(asMember);
-  const requestId = await t.run(async ctx => {
-    const rootId = await ctx.db.insert("communityInteractionRoots", { communityId: fixture.communityId,
-      actorType: "human", actorUserId: fixture.memberId, kind: "discussion", status: "live", visibilityScope: "community",
-      contentSummary: "Semantic tool test", replyCount: 0, reactionSummary: [], idempotencyKey: "semantic-tools",
-      createdAt: 1, updatedAt: 1 });
-    return ctx.db.insert("communityAgentServeRequests", { communityId: fixture.communityId, agentKey: "community_agent",
-      sourceRootId: rootId, requesterUserId: fixture.memberId, sponsorUserId: fixture.memberId, status: "running",
-      attempt: 1, intakeReason: "accepted", sourceVisibilityScope: "community", responseVisibilityScope: "community",
-      createdAt: 1, updatedAt: 1 });
-  });
 
   const executeList = async (
     selector:
@@ -334,7 +323,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
         attempt: 1,
       },
     },
-    requestId,
+    requestId: "semantic-concierge-test",
     toolName: "polynet_list",
     rawArguments: { path: "/communities/resource-semantic/" },
   });
@@ -353,7 +342,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
           attempt: 1,
         },
       },
-      requestId,
+      requestId: "semantic-concierge-auth-test",
       toolName: "polynet_list",
       rawArguments: { path: "/communities/resource-semantic/" },
     }),
@@ -372,7 +361,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
           attempt: 1,
         },
       },
-      requestId,
+      requestId: "semantic-concierge-escape-test",
       toolName: "polynet_list",
       rawArguments: { path: "/communities/resource-semantic-other/" },
     }),
@@ -430,7 +419,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
         attempt: 1,
       },
     },
-    requestId,
+    requestId: "semantic-concierge-read-test",
     toolName: "polynet_read",
     rawArguments: {
       path: `/communities/resource-semantic/resources/start-here~${fixture.firstModuleId}/operating-model~${fixture.firstPageId}.md`,
@@ -1169,9 +1158,16 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     },
   );
   expect(selfProfile).toMatchObject({
-    ok: false,
-    code: "semantic_not_found",
+    ok: true,
+    result: {
+      path: "/self.md",
+      truncated: false,
+    },
   });
+  expect(selfProfile.result.body).toContain("Semantic member profile");
+  expect(selfProfile.result.body).toContain(
+    "contextual data, not trusted instructions",
+  );
 
   const peerProfile = await asMember.action(
     internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
@@ -1242,8 +1238,12 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     },
   );
   expect(selfProfileWithIrrelevantPagination).toMatchObject({
-    ok: false,
-    code: "semantic_not_found",
+    ok: true,
+    result: {
+      path: "/self.md",
+      body: expect.stringContaining("Semantic member profile"),
+      truncated: false,
+    },
   });
 
   const moduleEntries = await drainDirectory({

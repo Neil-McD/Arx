@@ -202,15 +202,10 @@ export function extractRuntimeResourceChangesetCards(
     .slice(-CHANGESET_CARD_LIMIT);
 }
 
-export function isResourceProposalCompleted(status: string | null): boolean {
-  return status === "applied" || status === "rejected";
-}
-
 function ResourceChangesetApprovalCard(props: {
   card: ResourceChangesetCardModel;
   session: AuthSessionLike;
-  pendingOnly?: boolean;
-}): JSX.Element | null {
+}): JSX.Element {
   const [actionState, setActionState] = useState<ResourceChangesetActionState>("idle");
   const [serverStatus, setServerStatus] = useState<ResourceChangesetServerStatus | null>(null);
   const [verifiedApply, setVerifiedApply] = useState(false);
@@ -369,10 +364,6 @@ function ResourceChangesetApprovalCard(props: {
     props.card.warningCount > 0 ? `${props.card.warningCount} warnings` : null,
   ].filter(Boolean);
 
-  // Recovered proposals are actionable work, not conversation history. Only hide
-  // after authoritative confirmation; retain failures so the builder can see them.
-  if (props.pendingOnly && isResourceProposalCompleted(serverStatus)) return null;
-
   return (
     <section
       className="resource-changeset-card"
@@ -446,7 +437,6 @@ function ResourceChangesetApprovalCard(props: {
 export function RuntimeResourceChangesetApprovalCards(props: {
   cards: ResourceChangesetCardModel[];
   session: AuthSessionLike | null;
-  pendingOnly?: boolean;
 }): JSX.Element | null {
   if (!props.session || props.cards.length === 0) return null;
   return (
@@ -456,7 +446,6 @@ export function RuntimeResourceChangesetApprovalCards(props: {
           key={card.id}
           card={card}
           session={props.session}
-          pendingOnly={props.pendingOnly}
         />
       ))}
     </div>

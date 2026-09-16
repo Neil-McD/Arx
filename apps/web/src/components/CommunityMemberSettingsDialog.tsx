@@ -316,7 +316,7 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
   if (!member || !props.activeCommunity) return null;
 
   return (
-    <div className="modal-overlay member-settings-overlay" onClick={props.onClose}>
+    <div className="modal-overlay" onClick={props.onClose}>
       <div
         className="modal member-settings-modal"
         role="dialog"

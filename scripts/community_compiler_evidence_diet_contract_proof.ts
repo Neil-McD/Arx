@@ -91,19 +91,19 @@ assert.match(
 
 assert.match(
   evidenceCore,
-  /drainIneligiblePendingSourceTracesForCommunity[\s\S]*compilerState", "pending"[\s\S]*isCommunityAgentSelfAuthoredTrace\(row\)[\s\S]*interactionTraceHasSharedSource[\s\S]*compilerState: selfAuthored \? "excluded_self_authored" : "excluded_by_visibility"[\s\S]*compilerPendingSince: undefined/,
-  "digest-time drain must exclude self-authored and no-longer-shared pending traces",
+  /drainSelfAuthoredPendingSourceTracesForCommunity[\s\S]*compilerState", "pending"[\s\S]*isCommunityAgentSelfAuthoredTrace\(row\)[\s\S]*compilerState: "excluded_self_authored" as const[\s\S]*compilerPendingSince: undefined/,
+  "digest-time drain must self-heal any existing pending community-agent traces",
 );
 
 assert.match(
   digest,
-  /drainIneligiblePendingSourceTracesForCommunity\(\{[\s\S]*communityId: args\.communityId[\s\S]*nowMs[\s\S]*\}\)[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
+  /drainSelfAuthoredPendingSourceTracesForCommunity\(\{[\s\S]*communityId: args\.communityId[\s\S]*nowMs[\s\S]*\}\)[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
   "digest pass must drain self-authored pending traces before measuring evidence",
 );
 
 assert.match(
   heartbeat,
-  /drainIneligiblePendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
+  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
   "heartbeat must drain self-authored pending traces before the canonical planner measures wake work",
 );
 

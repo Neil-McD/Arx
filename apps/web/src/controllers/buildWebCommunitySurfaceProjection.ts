@@ -23,7 +23,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
   session: WebCommunityChatPanelProps["session"];
-  canViewCommunityKnowledgeGraph: boolean;
   ensureSession: WebCommunitySecondaryPanelsProps["settings"]["ensureSession"];
   selectedActiveCommunitySlug: string | null;
   isAuthBootstrapComplete: boolean;
@@ -74,7 +73,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   isLoadingCommunityFunnel: WebCommunitySecondaryPanelsProps["funnel"]["isLoadingCommunityFunnel"];
   communityFunnelError: WebCommunitySecondaryPanelsProps["funnel"]["communityFunnelError"];
   funnelEditorProps: WebCommunitySecondaryPanelsProps["funnel"]["editorProps"];
-  workflows: WebCommunitySecondaryPanelsProps["workflows"];
   canViewActiveCommunityAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewActiveCommunityAnalytics"];
   canViewPlatformAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewPlatformAnalytics"];
   analyticsState: WebCommunitySecondaryPanelsProps["analytics"]["state"];
@@ -216,7 +214,6 @@ export function buildWebCommunitySurfaceProjection(
       onRequireSignIn: params.requireSignIn,
       editorProps: params.funnelEditorProps,
     },
-    workflows: params.workflows,
     analytics: {
       hasActiveCommunity: Boolean(params.activeCommunity),
       hasSession: params.hasAuthenticatedPresentation,
@@ -225,14 +222,6 @@ export function buildWebCommunitySurfaceProjection(
       onRequireSignIn: params.requireSignIn,
       state: params.analyticsState,
       actions: params.analyticsActions,
-    },
-    knowledge: {
-      communityId: params.activeCommunity?.id ?? null,
-      communityName: params.activeCommunity?.name ?? null,
-      session: params.session,
-      ensureSession: params.ensureSession,
-      requireSignIn: params.requireSignIn,
-      canViewGraph: params.canViewCommunityKnowledgeGraph,
     },
     resources: {
       capabilities: {

@@ -109,12 +109,12 @@ assert.match(
 );
 assert.match(
   interactions,
-  /listCanonicalInteractionAttachmentsForTarget[\s\S]*hasCanonicalInteractionAttachmentsForTarget[\s\S]*resolveLegacyMessageAttachments/,
-  "canonical row existence, including tombstones, must prevent legacy resurrection",
+  /listCanonicalInteractionAttachmentsForTarget[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments/,
+  "canonical read bundles should prefer canonical attachment rows before legacy fallback",
 );
 assert.match(
   attachmentBridge,
-  /insertLegacyInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*listCanonicalInteractionAttachmentsForTarget/,
+  /insertCanonicalInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*listCanonicalInteractionAttachmentsForTarget/,
   "canonical attachment bridge should own shadow-writing and reading canonical attachment rows",
 );
 

@@ -5,7 +5,6 @@ import { expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
 import schema from "./schema";
-import { buildCommunityConversationThreadKey } from "../shared/communityConversationIdentity";
 import {
   buildRuntimeProviderContextAttestation,
   type RuntimeProviderContextAttestationV1,
@@ -158,18 +157,6 @@ test.each(["member_agent_dock", "community_funnel_builder"] as const)(
     expect(JSON.stringify(events[1].payload)).not.toContain("private");
   },
 );
-
-test("community-bound threads retain canonical provider-context receipt validation", async () => {
-  const { t, ids, attestation } = await createFixture("member_agent_dock");
-  await t.run(async ctx => {
-    const thread = await ctx.db.get(ids.threadId);
-    await ctx.db.patch(ids.threadId, { threadKey: buildCommunityConversationThreadKey(String(thread!.communityId), 1) });
-    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId: ids.userId, communityId: thread!.communityId as any, scopeKey: "community", nextOrdinal: 2, createdAt: 1000, updatedAt: 1000 });
-    const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId: ids.threadId, ordinal: 1, status: "active", startedAt: 1000, createdAt: 1000, updatedAt: 1000 });
-    await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
-  });
-  await expect(t.mutation(internalRefs.threads.recordRuntimeProviderContextAttestationInternal, { ownerId: ids.userId, threadId: ids.threadId, runId: ids.runId, attestation, nowMs: 2000 })).resolves.toMatchObject({ ok: true, duplicate: false });
-});
 
 test("attestation persistence deduplicates exact retries and rejects conflicts", async () => {
   const { t, ids, attestation } = await createFixture("member_agent_dock");

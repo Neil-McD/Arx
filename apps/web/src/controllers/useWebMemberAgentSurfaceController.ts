@@ -10,7 +10,6 @@ import type {
 import type { WebCommunityRecord } from "../webAppContracts";
 
 export function useWebMemberAgentSurfaceController(params: {
-  pageMode: boolean;
   activePage: AppPage;
   communityTab: CommunityTab;
   activeCommunity: WebCommunityRecord | null;
@@ -41,7 +40,7 @@ export function useWebMemberAgentSurfaceController(params: {
     params.activePage === "community" &&
     params.hasResolvedCommunities &&
     Boolean(surfaceContext) &&
-    (params.pageMode || !params.isDirectMessagesOpen) &&
+    !params.isDirectMessagesOpen &&
     !params.isOnboardingModalOpen;
   const voiceScopeKey =
     `${params.activePage}:${params.communityTab}:${community?.id ?? "none"}`;
@@ -53,13 +52,12 @@ export function useWebMemberAgentSurfaceController(params: {
     previousVoiceScopeKeyRef.current = voiceScopeKey;
     if (
       params.memberAgentVoiceUiState !== "idle" &&
-      (!isVisible || params.isDirectMessagesOpen || scopeChanged)
+      (!isVisible || scopeChanged)
     ) {
       params.cancelVoiceInput();
     }
   }, [
     isVisible,
-    params.isDirectMessagesOpen,
     params.cancelVoiceInput,
     params.memberAgentVoiceUiState,
     voiceScopeKey,

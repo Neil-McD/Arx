@@ -1,5 +1,4 @@
 import { internal } from "./_generated/api";
-import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -9,6 +8,7 @@ import {
 import {
   buildCheckoutSuccessUrl,
   type CommunityLike,
+  type CommunityMembershipLike,
   type CommunityPricePointLike,
   type PurchaseClaimLike,
   newOpaqueToken,
@@ -25,8 +25,6 @@ import {
 } from "./billingCore";
 import {
   adjustCommunityActiveMemberCountForMembershipTransition,
-  type CommunityMembershipLike,
-  communityMembershipRowIsActive,
   communitySubscriptionStatusGrantsAccess,
   communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
@@ -421,18 +419,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         existingRevokedReason === "subscription_dispute_opened" ||
         existingRevokedReason === "subscription_dispute_lost"
       );
-    const wasActive = communityMembershipRowIsActive(membership);
-    const willBeActive = !shouldPreserveRiskRevocation && grantsAccess;
     const updatedMembership = {
       ...membership,
       pricePointId,
-      active: willBeActive,
-      activationSequence:
-        !wasActive && willBeActive
-          ? Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))) + 1
-          : membership.activationSequence,
-      activatedAt:
-        !wasActive && willBeActive ? nowMs : membership.activatedAt,
+      active: shouldPreserveRiskRevocation ? false : grantsAccess,
       revokedAt: shouldPreserveRiskRevocation
         ? membership.revokedAt ?? nowMs
         : grantsAccess ? undefined : nowMs,
@@ -444,8 +434,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     await ctx.db.patch(membership._id, {
       pricePointId,
       active: updatedMembership.active,
-      activationSequence: updatedMembership.activationSequence,
-      activatedAt: updatedMembership.activatedAt,
       revokedAt: updatedMembership.revokedAt,
       revokedReason: updatedMembership.revokedReason,
       updatedAt: nowMs,
@@ -456,9 +444,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       before: membership,
       after: updatedMembership,
     });
-    if (!wasActive && willBeActive) {
-      await enrollWorkflowMilestoneTimers({ ctx, membership: updatedMembership, nowMs });
-    }
+
     if (status === "past_due" && previousStatus !== "past_due") {
       const issueMarker = [
         String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),

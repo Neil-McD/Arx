@@ -120,7 +120,7 @@ assert.match(
 
 assert.match(
   appShellNavigation,
-  /OPERATOR_TABS = \[\s*"platform",\s*"business",\s*"email",\s*"communities",?\s*\] as const[\s\S]*export type OperatorTab = \(typeof OPERATOR_TABS\)\[number\]/,
+  /OPERATOR_TABS = \["platform", "business", "email", "communities"\] as const[\s\S]*export type OperatorTab = \(typeof OPERATOR_TABS\)\[number\]/,
   "canonical operator navigation must expose Email as one of four bounded operator tabs",
 );
 

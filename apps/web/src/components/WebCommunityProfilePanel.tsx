@@ -95,11 +95,10 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
     >
       <div className="community-profile-panel-top">
         <UserAvatar
-          className="community-interaction-avatar"
+          className="community-profile-panel-avatar"
           readyClassName="has-image"
-          fallbackClassName="community-interaction-avatar-fallback"
           name={displayName}
-          imageUrl={profile?.avatar_url ?? null}
+          imageUrl={profile?.avatar_url}
           focusX={profile?.avatar_focus_x ?? 0.5}
           focusY={profile?.avatar_focus_y ?? 0.5}
           zoom={profile?.avatar_zoom ?? 1}

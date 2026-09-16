@@ -67,7 +67,6 @@ export type CommunityInteractionOptimisticInsert<AttachmentT> = {
   text: string;
   attachments: AttachmentT[];
   serializedAttachments: unknown[];
-  serializedMentions: { userId?: string; agentKey?: string; roleKey?: string }[];
   createdAt: string;
   senderId: string;
 };
@@ -89,6 +88,7 @@ type UseWebCommunityInteractionProjectionParams = {
 
 export type CommunityInteractionSidecar =
   | { kind: "context" }
+  | { kind: "memory" }
   | { kind: "thread"; rootId: string };
 
 function formatProjectionError(error: unknown): string {
@@ -104,11 +104,6 @@ function formatProjectionError(error: unknown): string {
     return "Finish your profile to view community threads.";
   }
   return message.trim() || "Failed to load community threads.";
-}
-
-export function communityProjectionAccessLost(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return /community_channel_(unavailable|inactive|not_found)|community_(forbidden|archived|entitlement_required)|auth_session|convex_auth/i.test(message);
 }
 
 function formatPinnedRootError(error: unknown): string {
@@ -359,6 +354,7 @@ export function useWebCommunityInteractionProjection<
   const lastSubscribedPinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinMutationBoundaryRef = useRef<string | null>(null);
+  const memoryTriggerRef = useRef<HTMLElement | null>(null);
 
   sessionRef.current = session;
   rootsRef.current = roots;
@@ -400,6 +396,7 @@ export function useWebCommunityInteractionProjection<
     setError(null);
     setIsLoadingRoots(isNextBoundaryLoading);
     setSidecar({ kind: "context" });
+    memoryTriggerRef.current = null;
     setSelectedRoot(null);
     setRepliesByRootId({});
     setRepliesErrorByRootId({});
@@ -433,7 +430,6 @@ export function useWebCommunityInteractionProjection<
       setRepliesByRootId((current) => ({ ...current, [rootId]: replies }));
     } catch (loadError) {
       if (repliesRequestIdRef.current[rootId] !== requestId) return;
-      if (communityProjectionAccessLost(loadError)) setRepliesByRootId(current => ({ ...current, [rootId]: [] }));
       setRepliesErrorByRootId((current) => ({
         ...current,
         [rootId]: formatProjectionError(loadError),
@@ -487,9 +483,6 @@ export function useWebCommunityInteractionProjection<
         return;
       }
       setError(formatProjectionError(loadError));
-      if (communityProjectionAccessLost(loadError)) {
-        setRoots([]); setSelectedRoot(null); setRepliesByRootId({}); setPinnedRoot(null); setSidecar({ kind: "context" });
-      }
     } finally {
       if (
         rootsRequestIdRef.current === requestId
@@ -603,10 +596,6 @@ export function useWebCommunityInteractionProjection<
               activeChannelIdRef.current !== activeChannelId
             ) return;
             setError(formatProjectionError(subscriptionError));
-            if (communityProjectionAccessLost(subscriptionError)) {
-              ++rootsRequestIdRef.current;
-              setRoots([]); setSelectedRoot(null); setRepliesByRootId({}); setPinnedRoot(null); setSidecar({ kind: "context" });
-            }
             setIsLoadingRoots(false);
           },
         });
@@ -862,10 +851,6 @@ export function useWebCommunityInteractionProjection<
           },
           onError: (subscriptionError) => {
             if (cancelled) return;
-            if (communityProjectionAccessLost(subscriptionError)) {
-              repliesRequestIdRef.current[rootId] = (repliesRequestIdRef.current[rootId] ?? 0) + 1;
-              setRepliesByRootId(current => ({ ...current, [rootId]: [] }));
-            }
             setRepliesErrorByRootId((current) => ({
               ...current,
               [rootId]: formatProjectionError(subscriptionError),
@@ -927,7 +912,6 @@ export function useWebCommunityInteractionProjection<
           rootId: interaction.rootId,
           replyToMessageId: interaction.replyToMessageId,
           attachments: interaction.serializedAttachments,
-          mentions: interaction.serializedMentions,
         });
       } catch {
         markFailed();
@@ -959,7 +943,27 @@ export function useWebCommunityInteractionProjection<
     setSelectedRoot(null);
   }, []);
 
+  const openMemory = useCallback(() => {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      memoryTriggerRef.current = document.activeElement;
+    }
+    setSelectedRoot(null);
+    setSidecar({ kind: "memory" });
+  }, []);
 
+  const closeMemory = useCallback(() => {
+    setSidecar((current) => current.kind === "memory" ? { kind: "context" } : current);
+    const trigger = memoryTriggerRef.current;
+    memoryTriggerRef.current = null;
+    if (trigger && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        const focusTarget = trigger.isConnected
+          ? trigger
+          : document.querySelector<HTMLElement>('button[aria-label="Open community memory"]');
+        focusTarget?.focus({ preventScroll: true });
+      });
+    }
+  }, []);
 
   const toggleReaction = useCallback(async (
     targetType: "root" | "reply",
@@ -1097,10 +1101,7 @@ export function useWebCommunityInteractionProjection<
   ) => {
     setPending((current) => [
       ...current.filter((item) => item.idempotencyKey !== interaction.idempotencyKey),
-      { ...interaction,
-        serializedAttachments: structuredClone(interaction.serializedAttachments),
-        serializedMentions: structuredClone(interaction.serializedMentions),
-        status: "sending" },
+      { ...interaction, status: "sending" },
     ]);
   }, []);
 
@@ -1181,6 +1182,8 @@ export function useWebCommunityInteractionProjection<
     loadOlderRoots,
     selectRoot,
     closeDrawer,
+    openMemory,
+    closeMemory,
     toggleReaction,
     editMessage,
     deleteMessage,

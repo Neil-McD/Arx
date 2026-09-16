@@ -19,7 +19,6 @@ export type CommunityInteractionAttachment = {
   size: number;
   url?: string | null;
   storage_id?: string | null;
-  protected_download?: boolean;
   data_url?: string | null;
 };
 

@@ -22,7 +22,7 @@ SCHEMA_FILE="convex/schema.ts"
 ADMIN_GATEWAY_FILE="shared/cloudCommunityAdminGateway.ts"
 MEMBERSHIP_GATEWAY_FILE="shared/cloudCommunityMembershipGateway.ts"
 WEB_APP_FILE="apps/web/src/App.tsx"
-WEB_CONTEXT_PANEL_FILE="apps/web/src/components/ChannelRosterPanel.tsx"
+WEB_CONTEXT_PANEL_FILE="apps/web/src/components/CommunityContextPanel.tsx"
 WEB_MEMBER_DIALOG_FILE="apps/web/src/components/CommunityMemberSettingsDialog.tsx"
 WEB_INTERACTION_PROJECTION_FILE="apps/web/src/components/WebCommunityInteractionProjection.tsx"
 WEB_MEMBER_MANAGEMENT_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityMemberManagementController.ts"
@@ -272,10 +272,10 @@ require_no_match "$WEB_JOIN_REQUESTS_CONTROLLER_FILE" \
   'communityMembers|filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|isJoinRequestsModalOpen' \
   "join-request controller does not keep member roster or deleted modal state"
 require_multiline_match "$WEB_CONTEXT_PANEL_FILE" \
-  'props\.memberSettings\.canManageMembers && member\.membership_id && member\.role !== "owner"' \
+  'const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)' \
   "right-panel member settings action is manager-gated and hidden for owner rows"
 require_multiline_match "$WEB_INTERACTION_PROJECTION_FILE" \
-  'canManageMembers: Boolean\(props\.canManageCommunityMembers && props\.onSetCommunityMemberRole && props\.onRemoveCommunityMember && props\.onBanCommunityMember\)' \
+  'const canManageCommunityMembers = Boolean\([\s\S]*props\.canManageCommunityMembers[\s\S]*props\.communityId[\s\S]*props\.onSetCommunityMemberRole[\s\S]*props\.onRemoveCommunityMember[\s\S]*props\.onBanCommunityMember' \
   "right-panel member settings fail closed unless manager callbacks are wired"
 require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
   'const canChangeRole = Boolean\([\s\S]*props\.canManageMembers[\s\S]*!memberIsOwner[\s\S]*\(props\.isActiveCommunityOwner \|\| !memberIsAdmin\)' \

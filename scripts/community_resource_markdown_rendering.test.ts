@@ -58,7 +58,7 @@ describe("community resource markdown rendering", () => {
     expect(markup).not.toContain("alert('nope')");
   });
 
-  it("keeps lesson YouTube media thumbnail-first until the learner plays it", () => {
+  it("defers the native lesson player until layout and viewport are known", () => {
     const resource: CommunityResource = {
       id: "lesson-1",
       module_id: "course-1",
@@ -79,8 +79,8 @@ describe("community resource markdown rendering", () => {
     );
 
     expect(markup).toContain('data-community-youtube-embed="M7lc1UVf-VE"');
-    expect(markup).toContain("i.ytimg.com/vi/M7lc1UVf-VE/maxresdefault.jpg");
-    expect(markup).toContain('aria-label="Play Fast lesson switching video"');
+    expect(markup).not.toContain("i.ytimg.com");
+    expect(markup).toContain("Watch on YouTube");
     expect(markup).not.toContain("<iframe");
   });
 });

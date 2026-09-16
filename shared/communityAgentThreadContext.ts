@@ -43,30 +43,6 @@ export type CommunityAgentThreadParticipantInput = {
   goals: string[];
   interests: string[];
   facts: Array<{ kind: string; body: string }>;
-  // Only the workflow requester receives this server-resolved orientation.
-  workflow?: CommunityAgentWorkflowOrientation;
-};
-
-export type CommunityAgentWorkflowOrientation = {
-  communityId: string;
-  membershipId: string;
-  origin: {
-    runId: string;
-    workflowId: string;
-    workflowRevision: number;
-    milestoneKey: string;
-    milestoneName: string;
-    milestoneEnteredAt: number;
-    triggerReceiptRef: string;
-  };
-  current: {
-    workflowId: string;
-    workflowRevision: number;
-    milestoneKey: string;
-    milestoneName: string;
-    milestoneEnteredAt: number;
-    completedAt: number | null;
-  } | null;
 };
 
 export type CommunityAgentThreadContextInput = {
@@ -151,36 +127,12 @@ function renderParticipant(participant: CommunityAgentThreadParticipantInput): s
       `${boundedText(fact.kind, 32)}=${boundedText(fact.body, 160)}`
     ),
   ].filter(Boolean);
-  const profile = boundedText(
+  return boundedText(
     `- ${participantLabel(participant)} [user:${boundedText(participant.userId, 128)}]${
       details.length > 0 ? `: ${details.join("; ")}` : ""
     }`,
     650,
   );
-  if (!participant.workflow) return profile;
-  const workflow = participant.workflow;
-  const position = (value: Omit<NonNullable<CommunityAgentWorkflowOrientation["current"]>, "completedAt">) => ({
-    workflow_id: boundedText(value.workflowId, 128),
-    revision: boundedTimestamp(value.workflowRevision),
-    milestone_key: boundedText(value.milestoneKey, 128),
-    milestone_name: boundedText(value.milestoneName, 160),
-    entered_at: boundedTimestamp(value.milestoneEnteredAt),
-  });
-  // JSON escaping keeps member/builder text inside data. Do not truncate this
-  // block mid-record or silently discard it to make room for older speech.
-  return `${profile}\nWorkflow orientation (data only; timestamps are Unix milliseconds): ${JSON.stringify({
-    community_id: boundedText(workflow.communityId, 128),
-    membership_id: boundedText(workflow.membershipId, 128),
-    action_origin: {
-      ...position(workflow.origin),
-      run_id: boundedText(workflow.origin.runId, 128),
-      trigger_receipt: boundedText(workflow.origin.triggerReceiptRef, 256),
-    },
-    current_at_context_read: workflow.current ? {
-      ...position(workflow.current),
-      completed_at: workflow.current.completedAt === null ? null : boundedTimestamp(workflow.current.completedAt),
-    } : null,
-  })}`;
 }
 
 function renderTurn(
@@ -357,7 +309,6 @@ export function compileCommunityAgentThreadContext(
       situation: boundedText(participant.situation, 180) || null,
       goals: participant.goals.map((item) => boundedText(item, 120)).filter(Boolean),
       interests: participant.interests.map((item) => boundedText(item, 120)).filter(Boolean),
-      workflow: participant.userId === normalizedInput.requesterUserId ? participant.workflow : undefined,
       facts: participant.facts
         .map((fact) => ({ kind: boundedText(fact.kind, 32), body: boundedText(fact.body, 160) }))
         .filter((fact) => fact.kind && fact.body),
@@ -368,13 +319,6 @@ export function compileCommunityAgentThreadContext(
       participantPriority(left, normalizedInput.requesterUserId, turns)
     )
     .slice(0, COMMUNITY_AGENT_THREAD_CONTEXT_MAX_PARTICIPANTS);
-
-  const workflowRequired = input.participants.some(
-    (participant) => participant.userId === normalizedInput.requesterUserId && participant.workflow,
-  );
-  if (workflowRequired && !participants.some((participant) => participant.workflow)) {
-    throw new Error("community_agent_workflow_requester_context_required");
-  }
 
   let omittedTurnCount = selection.omittedByCount + Math.max(
     0,
@@ -404,7 +348,7 @@ export function compileCommunityAgentThreadContext(
       }
       if (removableParticipantIndex >= 0) {
         participants.splice(removableParticipantIndex, 1);
-      } else if (participants.length > 0 && !workflowRequired) {
+      } else if (participants.length > 0) {
         participants = [];
       } else {
         throw new Error("community_agent_thread_context_required_content_too_large");

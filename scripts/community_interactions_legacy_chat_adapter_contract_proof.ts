@@ -114,7 +114,7 @@ assert.match(
 );
 assert.match(
   attachmentBridge,
-  /insertLegacyInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*insertLegacyInteractionAttachmentsForTarget/,
+  /insertCanonicalInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*insertCanonicalInteractionAttachmentsForTarget/,
   "attachment bridge should shadow-write canonical attachment rows from legacy message payloads",
 );
 assert.match(

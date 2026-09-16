@@ -17,7 +17,6 @@ const modules = import.meta.glob([
   "./communityAccessQueries.ts",
   "./communityCapabilityContext.ts",
   "./communityIntelligenceDirectory.ts",
-  "./communityMemberWorkflows.ts",
   "./memberEntryDestination.ts",
   "./email.ts",
   "./_generated/**/*.*s",

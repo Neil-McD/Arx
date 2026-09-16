@@ -7,14 +7,14 @@ type CommunityComposerControlsProps = {
   contextKey: string;
   groupLabel: string;
   attachLabel: string;
-  mentionLabel?: string;
-  mentionMenuId?: string;
-  mentionMenuOpen?: boolean;
+  mentionLabel: string;
+  mentionMenuId: string;
+  mentionMenuOpen: boolean;
   toolsDisabled: boolean;
   attachDisabled: boolean;
   onAttach: () => void;
-  onMention?: () => void;
-  onEmoji?: (emoji: string) => void;
+  onMention: () => void;
+  onEmoji: (emoji: string) => void;
   voiceControl: ReactNode;
   sendControl: ReactNode;
 };
@@ -58,7 +58,7 @@ export function CommunityComposerControls(props: CommunityComposerControlsProps)
         >
           <Plus size={17} strokeWidth={1.8} aria-hidden="true" />
         </button>
-        {props.onMention ? <button
+        <button
           className="ask-icon-btn ask-mention"
           type="button"
           onMouseDown={(event) => event.preventDefault()}
@@ -71,8 +71,8 @@ export function CommunityComposerControls(props: CommunityComposerControlsProps)
           title={props.mentionLabel}
         >
           <AtSign size={17} strokeWidth={1.8} aria-hidden="true" />
-        </button> : null}
-        {props.onEmoji ? <div className="community-composer-emoji-picker" ref={emojiPickerRef}>
+        </button>
+        <div className="community-composer-emoji-picker" ref={emojiPickerRef}>
           <button
             className={`ask-icon-btn community-composer-emoji${emojiOpen ? " is-active" : ""}`}
             type="button"
@@ -97,7 +97,7 @@ export function CommunityComposerControls(props: CommunityComposerControlsProps)
                   aria-label={`Insert ${emoji}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
-                    props.onEmoji?.(emoji);
+                    props.onEmoji(emoji);
                     setEmojiOpen(false);
                   }}
                 >
@@ -106,7 +106,7 @@ export function CommunityComposerControls(props: CommunityComposerControlsProps)
               ))}
             </div>
           ) : null}
-        </div> : null}
+        </div>
       </div>
       <div className="community-composer-submit-tools" role="group" aria-label="Voice and send">
         {props.voiceControl}

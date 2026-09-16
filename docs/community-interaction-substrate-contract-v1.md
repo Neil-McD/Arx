@@ -100,170 +100,6 @@ Post mode changes the feed projection, density, ranking, and root card rendering
 
 ### `communityChannels`
 
-#### Channel authority foundation (staging, not private-room availability)
-
-The storage schema now reserves `restricted` access, `managers` posting, and
-`members | managers | disabled` reply policies. An omitted reply policy retains
-the existing member-reply behavior. `communityChannelParticipants` stores one
-active/revoked grant per channel/principal, indexed by that pair and by
-community/principal/status. No public policy or participant mutation is exposed.
-
-`communityChannelAccess.ts` owns effective read/post/reply/manage capabilities.
-Interactive handlers authenticate the caller before resolving a channel actor;
-actor resolution reuses the canonical community entitlement, blocking, and
-builder-access checks. A channel grant cannot replace those checks. Owner/admin
-oversight is explicit; moderator status alone grants no restricted-room access.
-Personal agents and official MCP use their authenticated user's participation
-identity, without channel-management authority. The community agent uses its
-own `community_agent` principal: its sponsor grants neither room membership nor
-manager authority. Duplicate grant rows fail closed rather than selecting one.
-
-Channel lists expose effective capabilities. Canonical channel message reads,
-posts, replies, direct-ID edits/deletes/reactions, and repository channel
-resolution use the shared authority foundation. Community-agent finalization
-revalidates the channel and permission before materializing a reply; a channel
-that becomes unavailable terminates through the existing error receipt path.
-
-Public creation still accepts only a name and creates an all-member channel.
-Existing channel entry points still reject restricted rooms. Unscoped background
-reads are explicitly shared-community reads: `listSharedCommunityChannels`
-selects active `all_members` channels by index before the ten-channel limit;
-`listSharedChannelReadableRows` reads those exact lanes before the message limit.
-Restricted-room volume cannot crowd out shared messages. Shared announcement
-rooms remain readable independently of who may post or reply. Reply aggregates
-also validate the current root and matching room.
-
-Recent context, public interaction counts, attention, evidence search and fresh
-weekly digest snapshots use this shared scope. Canonical interaction evidence
-resolves the live source room, not just a captured visibility flag. Compiler
-measurement and settlement recheck that source; the existing pending-trace drain
-now excludes both self-authored and no-longer-shared traces. A revoked digest
-item is excluded without rolling back other valid decisions. No second queue,
-memory store, or scheduler is introduced.
-
-The policy/grant model is exercised with isolated
-test fixtures only: schema support is NOT authorization to create restricted
-rooms in staging or production. Do not relax this deployment boundary until
-search, attachments, notifications, presence, digests, public projections,
-agent context and shared memory have complete audience enforcement. Previously
-captured digest email snapshots remain a separate gate. In particular,
-directly inserting a restricted row is not a supported rollout.
-
-#### Notification audience (staging foundation)
-
-`communityNotificationAccess.ts` resolves the canonical live message/root,
-source room, and current recipient together. It reuses community entitlement,
-blocking, and channel capability authority. Mention/channel IDs are provenance,
-not grants. Direct mention insertion validates recipients in the same mutation
-as the message write; invalid targets roll back that write. Delayed `@everybody`
-fanout checks each recipient, including existing overlapping direct mentions.
-Inaccessible existing recipients are suppressed without stopping other work.
-Attention ignores inaccessible sources using bounded recent mention windows.
-
-Mention emails retain `sourceMentionId` plus existing community lifecycle and
-recipient fields in `emailOutbox`. Queued jobs contain no copied message preview.
-Source access, preferences, verified delivery address, read state, and community
-lifecycle are checked at admission, claim, and immediately before provider
-dispatch as applicable. Untraceable legacy mention jobs fail closed; unrelated
-outbox templates retain their existing behavior. Delivery links use the source
-channel route. Retries retain the same dedupe key; the first prepared body is
-fingerprinted so changed content cannot reuse that key with a different body.
-The fingerprint is not an authorization grant and contains no message text.
-
-The existing mention ledger, outbox, broadcast pagination, cooldowns, preferences,
-and provider receipts remain canonical. Mention `sent` still means notification
-processing has settled, not proof of provider delivery; the outbox owns that
-receipt. Suppression does not remove the member's underlying message.
-
-Database authorization and an external provider send are not one transaction.
-Revocation before the final dispatch check prevents delivery; a provider request
-already dispatched cannot be recalled. No real email sends, scheduling activation,
-private-room creation, or deployment are part of this foundation slice.
-
-The current ten-channel cap, ordering, General backfill compatibility, and UI
-remain unchanged. This slice does not implement private-room discovery,
-participant management, room instructions, or workflow destination routing.
-
-#### Attachment ownership (staging foundation)
-
-New composer writes accept only `{ attachmentId }` references. Neither a raw
-storage ID nor an inline data URL grants write authority. Uploads use the
-authenticated `/runtime/community_attachment_upload` route; its storage upload
-URL stays server-side. The route streams bounded bytes to storage, classifies
-media from a bounded byte prefix, and finalizes against provider metadata.
-Generic unknown files are opaque downloads, not trusted inline content. This
-is format classification, not malware scanning or a full media decoder.
-
-`communityInteractionAttachments` is the single attachment ledger. A pending
-row binds uploader, community, channel, optional reply parent, and composer
-message key. Current profile, community access, and channel posting/reply policy
-are checked before upload, after upload, and when the composer atomically claims
-the row for a root/reply. Idempotent sends reuse the canonical message and claim;
-cross-member, cross-community, cross-channel, parent, or message-key reuse fails
-closed. Uploaded bytes supply size, storage hash, and canonical media metadata.
-
-Existing limits remain 8 files per message, 25 MiB per image, 50 MiB per media
-file, and 5 MiB per generic file. An indexed cap allows at most 16 pending files
-per uploader and 8 per composer key. Pending rows expire after 30 minutes using
-one-shot scheduled cleanup, not a new cron. If storage has not returned when a
-reservation expires or is cancelled, its row becomes unclaimable (`failed`) and
-retains ownership until 30 minutes after its original expiry. One additional
-scheduled cleanup bounds this retention; repeated cleanup does not reschedule.
-The authenticated HTTP handler can reconcile its late storage response against
-that retained reservation and remove the unclaimed blob. Cleanup removes only
-unclaimed uploads; it cannot delete a claimed or historically shared blob, or
-delete a caller-supplied blob without a matching reservation owner. A process loss
-between provider upload completion and recording its returned storage ID can
-still leave an untracked orphan; this slice does not claim transactional storage
-and database writes or run a historical storage sweep.
-
-Legacy message creation rejects attachments. Legacy edits may retain or remove
-persisted attachments, not introduce or relabel uploaded bytes. Historical
-hydration is isolated from new writes and uses the persisted pre-edit message.
-Deleted canonical rows remain tombstones: their existence prevents fallback to
-legacy attachment payloads. No historical files are deleted by this migration.
-
-Deployment must coordinate backend and web changes; stale raw-ID upload clients
-must refresh rather than use an insecure compatibility shim. Local streaming
-and fixture tests do not prove deployed-provider upload behavior. Verify a small
-file, a large media upload, reply upload, and revoked access on the exact staging
-deployment before accepting the live flow. The provider's general HTTP upload
-guide and its limits reference differ about request size; the streaming route
-avoids full-body buffering, but the large-upload staging gate remains explicit.
-References: [HTTP upload guide](https://docs.convex.dev/file-storage/upload-files),
-[runtime limits](https://docs.convex.dev/production/state/limits).
-
-Read projections still resolve storage URLs. This slice protects attachment
-ownership, not per-request download access or revocation of previously issued
-URLs. Protected byte delivery remains a prerequisite for private-room rollout.
-See [Convex storage security](https://docs.convex.dev/file-storage/overview).
-Member-agent attachments, DMs, resources, and profile/branding storage are not
-migrated here. Private-room creation and production releases remain disabled
-for this work.
-
-#### Composer recovery identity
-
-Each new composer root/reply stores `composerPayloadHash`: a versioned SHA-256
-fingerprint of normalized full text, canonical channel/root/reply destination,
-ordered attachment claim IDs, and canonical committed mentions. The existing
-idempotency key and actor identity locate the attempt; the fingerprint rejects
-different payloads under that key. Editable/truncated summaries are not replay
-authority. Current access checks still apply on every request.
-
-Human, personal-agent, and community-agent sends share this contract. Historical
-ordinary composer rows without a fingerprint fail closed on replay; no hash is
-guessed from potentially edited history. The existing server-generated founder
-welcome bootstrap retains its explicit once-per-community contract.
-
-Before an optimistic attempt exists, failure restores the composer draft. After
-it exists, failure marks that same attempt for retry, without also restoring a
-competing draft. Retry retains the original key, destination, text, attachment
-claims, and committed mentions. This is in-memory recovery, not a new durable
-client queue; reloading the browser does not preserve unsent attempts. Local
-regression tests are not a substitute for a response-loss staging browser canary.
-
-#### Currently available shared-channel behavior
-
 A channel is an addressable community interaction stream, not a second message
 model. Public Channels V1 permits at most ten active channels per community,
 including exactly one system-identified General channel:
@@ -583,7 +419,7 @@ Rules:
 - mention rows create canonical `communityInteractionMentions` bound to the
   source interaction channel; `@everybody` broadcast and recipient rows inherit
   that exact channel
-- prepared upload claims bind canonical `communityInteractionAttachments`
+- prepared attachments create canonical `communityInteractionAttachments`
 - write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
 
 ## Current Read-Model Slice
@@ -664,8 +500,8 @@ Rules:
 - composer writes create canonical roots/replies only
 - composer writes must not create legacy `communityChatMessages`
 - composer writes must not create `communityInteractionLegacyChatLinks`
-- composer writes may include bounded, server-issued attachment claim IDs; metadata is loaded server-side
-- composer attachment rows are claimed in `communityInteractionAttachments` in the same transaction as the message
+- composer writes may include bounded, already-prepared attachment metadata
+- composer attachment rows are written to `communityInteractionAttachments`
 - composer user mentions are limited to existing users who can access the target community chat
 - composer community-agent mentions remain structural (`community_agent`) and
   fail closed unless the visible current-community-name token is present
@@ -691,14 +527,15 @@ Rules:
 
 - ordinary links render as authored blue links through the shared semantic chat-link token
 - links remain visible, copyable, keyboard-focusable, and stable in optimistic and persisted messages
-- generic websites, meeting links, documents, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards
+- generic websites, meeting links, extensionless document links, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards
 - typed `link` content blocks retain bounded canonical URL semantics without creating `communityInteractionEmbeds` rows
-- YouTube is the only URL-derived rich media exception in community chat
-- the first valid HTTPS YouTube video URL adds one deterministic thumbnail/player beneath the still-visible authored link; additional YouTube URLs remain links
+- YouTube videos and explicit HTTPS PDF links are the bounded URL-derived rich media exceptions in community chat
+- up to 12 distinct YouTube videos and 12 distinct PDF URLs render in authored order beneath still-visible links; additional URLs remain links
 - YouTube URL parsing accepts exact approved hosts and known video paths, rejects credentials and custom ports, and preserves validated start times
 - URLs inside inline or fenced code never create media
-- YouTube players are click-to-activate, sandboxed, lazy, and never depend on OpenGraph, oEmbed, a remote preview fetch, or persisted preview state
-- thumbnail failure degrades to a neutral player surface while the authored link remains authoritative
+- native YouTube iframes mount near the viewport without autoplay; YouTube owns titles, branding, and playback controls. Mounted players survive scrolling and ordinary rerenders
+- players retain sandbox, referrer, fullscreen, and inline playback permissions, need at least 200 by 200 pixels, and do not depend on custom thumbnails, OpenGraph, oEmbed, or persisted preview state
+- authored links remain available when a provider refuses playback; PDF cards share the lazy reader described in `message-media-reading-v1.md`
 - uploaded images, video, audio, and files remain canonical attachments and do not share the URL-derived media path
 - historical link embed rows are ignored by interaction and evidence read models pending a separate bounded data cleanup
 - workspace-reference embed compatibility remains unchanged until its protected migration substrate receives an explicit census and decision

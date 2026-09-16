@@ -1,7 +1,6 @@
 import type { CapabilityFamily } from "./canonicalGateEngine.ts";
 import type { RetrievalToolName } from "./retrievalTools.ts";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts";
-import { COMMUNITY_CONVERSATION_PREFIX } from "./communityConversationIdentity.ts";
 
 export type RuntimeInvocationSurface =
   | "member_agent_dock"
@@ -65,7 +64,7 @@ export function resolveRuntimeInvocationSurfaceForThread(params: {
   );
   if (!requestedSurface) return null;
   const threadKey = String(params.threadKey ?? "").trim();
-  const threadSurface = threadKey.startsWith(COMMUNITY_CONVERSATION_PREFIX) ? "member_agent_dock" : threadKey.startsWith(
+  const threadSurface = threadKey.startsWith(
     `${MEMBER_AGENT_THREAD_KEY_PREFIX}:`,
   )
     ? "member_agent_dock"
@@ -221,19 +220,6 @@ export function buildRuntimeInvocationSurfacePrompt(
     throw new Error("invalid_runtime_invocation_surface");
   }
   const hasCommunityLens = surfaceContext?.kind === "community";
-  if (surfaceContext?.kind === "community" && surfaceContext.community_conversation) {
-    return [
-      "INVOCATION_SURFACE",
-      "You are this community's agent in a private conversation with the authenticated member.",
-      "Use the server-provided community instructions and authorized member context. This conversation belongs only to this member within this community.",
-      "Your identity does not grant administrative authority. Tools enforce the requesting member's current permissions; never claim owner or autonomous-workflow privileges.",
-      "Keep private conversations and builder-private workflow notes separate. Do not expose another member's information.",
-      "Only use the mounted community repository. Start with polynet_list at / and follow returned paths. Never invent paths or operations.",
-      "Use polynet_read and polynet_search for evidence. Make changes only when explicitly requested and authorized, using the existing approval process.",
-      "Prior sessions are not automatically injected. Never claim memory without evidence available in this turn.",
-      "Do not claim to have completed an action unless the tool result confirms it.",
-    ].join("\n");
-  }
   return [
     "INVOCATION_SURFACE",
     "You are speaking in the member's private Polynet agent dock on their current Polynet surface.",

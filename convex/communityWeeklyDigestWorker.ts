@@ -1,7 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
 import {
   communityIsActive,
@@ -14,6 +13,7 @@ import {
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import {
+  COMMUNITY_WEEKLY_DIGEST_MAX_CHANNELS_SCANNED,
   COMMUNITY_WEEKLY_DIGEST_MAX_COMMUNITIES_PER_RUN,
   COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED,
   COMMUNITY_WEEKLY_DIGEST_MAX_ITEMS,
@@ -104,6 +104,14 @@ function stripMarkdown(raw: unknown): string {
   );
 }
 
+function memberVisibleInteraction(row: any, activeChannelIds: Set<string>): boolean {
+  return (
+    (row.visibilityScope === "community" || row.visibilityScope === "public") &&
+    Boolean(row.channelId) &&
+    activeChannelIds.has(String(row.channelId))
+  );
+}
+
 async function buildDigestSnapshot(ctx: any, params: {
   community: any;
   periodStartMs: number;
@@ -111,15 +119,35 @@ async function buildDigestSnapshot(ctx: any, params: {
   periodStartDay: string;
   periodEndDay: string;
 }): Promise<DigestSnapshot | null> {
-  const [roots, replies, modules, resources, recentMemberships] = await Promise.all([
-    listSharedChannelReadableRows({
-      ctx, tableName: "communityInteractionRoots", communityId: params.community._id,
-      limit: COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED, beforeCreatedAt: params.periodEndExclusiveMs,
-    }),
-    listSharedChannelReadableRows({
-      ctx, tableName: "communityInteractionReplies", communityId: params.community._id,
-      limit: COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED, beforeCreatedAt: params.periodEndExclusiveMs,
-    }),
+  const [channels, roots, replies, modules, resources, recentMemberships] = await Promise.all([
+    ctx.db
+      .query("communityChannels")
+      .withIndex("by_community_status_position", (q: any) =>
+        q.eq("communityId", params.community._id).eq("status", "active"),
+      )
+      .take(COMMUNITY_WEEKLY_DIGEST_MAX_CHANNELS_SCANNED),
+    ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q
+          .eq("communityId", params.community._id)
+          .eq("status", "live")
+          .gte("createdAt", params.periodStartMs)
+          .lt("createdAt", params.periodEndExclusiveMs),
+      )
+      .order("desc")
+      .take(COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED),
+    ctx.db
+      .query("communityInteractionReplies")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q
+          .eq("communityId", params.community._id)
+          .eq("status", "live")
+          .gte("createdAt", params.periodStartMs)
+          .lt("createdAt", params.periodEndExclusiveMs),
+      )
+      .order("desc")
+      .take(COMMUNITY_WEEKLY_DIGEST_MAX_INTERACTIONS_SCANNED),
     ctx.db
       .query("communityResourceModules")
       .withIndex("by_community", (q: any) => q.eq("communityId", params.community._id))
@@ -145,8 +173,9 @@ async function buildDigestSnapshot(ctx: any, params: {
       .take(COMMUNITY_WEEKLY_DIGEST_MAX_NEW_MEMBERS_SCANNED),
   ]);
 
+  const activeChannelIds = new Set<string>(channels.map((row: any) => String(row._id)));
   const interactions = [...roots, ...replies]
-    .filter((row: any) => row.createdAt >= params.periodStartMs)
+    .filter((row: any) => memberVisibleInteraction(row, activeChannelIds))
     .sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
   const liveModuleIds = new Set<string>(
     modules

@@ -3,12 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
-assert.match(roster, /const selectedMember = props\.memberSettings\.canManageMembers/);
-assert.match(roster, /if \(selectedMembershipId && !selectedMember && !rebuilding\) setSelectedMembershipId\(null\)/);
-assert.match(roster, /member\.role !== "owner"/);
-assert.match(roster, /<CommunityMemberSettingsDialog \{\.\.\.props\.memberSettings\}/);
-const memberScroll = read("apps/web/src/components/useMemberScrollPagination.ts");
 
 function read(relativePath: string): string {
   return readFileSync(join(root, relativePath), "utf8");
@@ -51,7 +45,7 @@ const chatPresentationMode = read(
 const projection = read(
   "apps/web/src/components/WebCommunityInteractionProjection.tsx",
 );
-const joinReview = read("apps/web/src/components/CommunityJoinRequestReview.tsx");
+const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read(
   "apps/web/src/components/CommunityMemberSettingsDialog.tsx",
 );
@@ -294,13 +288,13 @@ assert.doesNotMatch(
 );
 assert.match(
   youtubeEmbed,
-  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setIsActive\(true\)/,
-  "YouTube should use one click-activated, sandboxed deterministic media component",
+  /IntersectionObserver[\s\S]*data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"/,
+  "YouTube should share one viewport-loaded native player with its sandbox intact",
 );
 assert.match(
   projection,
-  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*firstYouTubeEmbedInText\(bundleText\(bundle\.content_blocks, bundle\.root\.content_summary\)\)/,
-  "rich-content detection should reflect attachments or renderable YouTube media only",
+  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*youTubeEmbedsInText\(text\)\.length > 0[\s\S]*pdfLinksInText\(text\)\.length > 0/,
+  "rich-content detection should match attachments, YouTube and pasted PDF cards",
 );
 assert.doesNotMatch(
   projection,
@@ -369,8 +363,8 @@ assert.match(
 );
 assert.match(
   directoryController,
-  /loadCommunityDirectoryMembers[\s\S]*listCloudCommunityDirectoryWindow/,
-  "mention and profile hydration retain the bounded canonical directory reader",
+  /loadCommunityDirectoryMembers[\s\S]*loadMoreCommunityDirectoryMembers/,
+  "the canonical directory controller must expose initial and paginated reads",
 );
 assert.match(
   directoryController,
@@ -382,51 +376,110 @@ assert.match(
   /communityAdministration\.directory/,
   "App should compose the canonical directory owner",
 );
+assert.match(
+  app,
+  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
+  "App should pass directory count/loading/pagination state into the chat right rail",
+);
 assert.doesNotMatch(
   app,
   /interactionProjection:\s*\{[\s\S]*communityMembers:\s*communityMembers[\s\S]*loadMoreCommunityMembers/,
   "chat right rail must not depend on the admin member roster",
 );
-
-
+assert.match(
+  projection,
+  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
+  "interaction projection should model roster count/loading/pagination state for the right rail",
+);
+assert.match(
+  projection,
+  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
+  "interaction projection should pass roster state through to the context panel",
+);
+assert.match(
+  contextPanel,
+  /Members — \{memberCountLabel\}/,
+  "context panel should label the member population from a total-count label",
+);
+assert.match(
+  projection,
+  /COMMUNITY_CONTEXT_PROJECTION_KEYS[\s\S]*StableCommunityInteractionContextPanelSurface = memo[\s\S]*pickCommunityContextProjection\(props\)/,
+  "right-panel rendering should be isolated from feed-only prop churn",
+);
 assert.match(
   communityNav,
   /export const CommunityNav = memo\(function CommunityNav/,
   "left navigation should not rerender for unrelated shell content updates",
 );
-
-
 assert.match(
-  memberScroll,
+  contextPanel,
+  /Offline — \{offlineCountLabel\}/,
+  "context panel should label offline members from the total-count model",
+);
+assert.doesNotMatch(
+  contextPanel,
+  /Offline — \{offlineMembers\.length\}/,
+  "context panel must not present the loaded offline row count as the full offline population",
+);
+assert.match(
+  contextPanel,
   /LOAD_MORE_SCROLL_THRESHOLD_PX[\s\S]*props\.onLoadMoreMembers\(\)/,
   "context panel should load additional roster pages as the member rail scrolls near the bottom",
 );
-
 assert.match(
-  memberScroll,
+  contextPanel,
+  /onScroll=\{handleMembersScroll\}/,
+  "context panel should attach the load-more scroll handler to the member rail",
+);
+assert.match(
+  contextPanel,
   /membersViewportRef[\s\S]*loadMoreSentinelRef[\s\S]*IntersectionObserver[\s\S]*observer\.observe\(sentinel\)/,
   "context panel should observe a footer sentinel so visible additional pages load without requiring another scroll event",
 );
 assert.match(
-  memberScroll,
+  contextPanel,
   /requestAnimationFrame\(requestVisibleMemberPage\)/,
   "context panel should re-check after render when the member viewport is already near the bottom",
 );
-
-
-
-assert.doesNotMatch(
-  directoryController,
-  /setCommunityDirectoryMembersHasMore/,
-  "mention directory must not retain the retired roster pagination state",
+assert.match(
+  contextPanel,
+  /const membersFooterLabel = props\.membersHasMore[\s\S]*\? "Loading more\.\.\."[\s\S]*: loadedSummary;/,
+  "context panel must not show the terminal loaded-summary label while more member pages are available",
 );
-
-
-
+assert.match(
+  contextPanel,
+  /const hasUnloadedKnownMembers =[\s\S]*loadedMemberCount < knownMemberCount[\s\S]*Member list out of sync/,
+  "context panel should not present a partial loaded member page as terminal when known total is higher",
+);
+assert.match(
+  contextPanel,
+  /ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
+  "context panel footer should be the load-more sentinel while additional member pages exist",
+);
+assert.match(
+  directoryController,
+  /setCommunityDirectoryMembersHasMore\(Boolean\(page\.continueCursor && !page\.isDone\)\)/,
+  "directory controller should only advertise more pages when a continue cursor exists",
+);
+assert.match(
+  contextPanel,
+  /canManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
+  "context panel should model an optional manager-only member settings affordance",
+);
+assert.match(
+  contextPanel,
+  /const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)/,
+  "context panel should hide member settings for normal viewers and owner rows",
+);
+assert.match(
+  contextPanel,
+  /className="community-context-member-action"[\s\S]*aria-label=\{`Open settings for \$\{name\}`\}[\s\S]*props\.onOpenMemberSettings\?\.\(member\)/,
+  "context panel should open the supplied settings callback from the stable row action button",
+);
 assert.match(
   baseCss,
-  /\.community-context-member-action\s*\{[\s\S]*width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*opacity:\s*1;/,
-  "directory actions should be visible without hover",
+  /\.community-context-member-action\s*\{[\s\S]*width:\s*26px;[\s\S]*height:\s*26px;[\s\S]*opacity:\s*0;/,
+  "member rail settings action should reserve a stable icon footprint without always showing management chrome",
 );
 assert.match(
   baseCss,
@@ -434,16 +487,35 @@ assert.match(
   "member rail settings action should reveal on hover and keyboard focus",
 );
 assert.match(
-  roster,
+  projection,
   /import \{ CommunityMemberSettingsDialog \} from "\.\/CommunityMemberSettingsDialog";/,
-  "channel roster should reuse the shared member settings dialog",
+  "interaction projection should reuse the shared member settings dialog",
 );
 assert.match(
   projection,
   /canManageCommunityMembers\?: boolean;[\s\S]*onSetCommunityMemberRole\?: \(membershipId: string, role: "admin" \| "moderator" \| "member"\) => Promise<void> \| void;[\s\S]*loadMemberBillingHistory\?: \(membershipId: string\) => Promise<CloudCommunityMemberBillingHistory \| null>;/,
   "interaction projection should accept the existing member-management controller contract explicitly",
 );
-assert.match(projection, /handleSetCommunityMemberRole: \(id, role\) => props\.onSetCommunityMemberRole\?\.\(id, role\)/);
+assert.match(
+  projection,
+  /const canManageCommunityMembers = Boolean\([\s\S]*props\.canManageCommunityMembers[\s\S]*props\.communityId[\s\S]*props\.onSetCommunityMemberRole[\s\S]*props\.onRemoveCommunityMember[\s\S]*props\.onBanCommunityMember/,
+  "interaction projection should fail closed unless community id and member-management mutation callbacks are available",
+);
+assert.match(
+  projection,
+  /if \(!canManageCommunityMembers\) \{[\s\S]*setSelectedCommunityMemberId\(null\);[\s\S]*return;[\s\S]*\}/,
+  "interaction projection should close member settings if the manager gate disappears while open",
+);
+assert.match(
+  projection,
+  /CommunityContextPanel[\s\S]*canManageMembers=\{canManageCommunityMembers\}[\s\S]*onOpenMemberSettings=\{\(member\) => setSelectedCommunityMemberId\(member\.id\)\}/,
+  "interaction projection should only wire right-rail member settings through the manager gate",
+);
+assert.match(
+  projection,
+  /<CommunityMemberSettingsDialog[\s\S]*member=\{selectedCommunityMember\}[\s\S]*canManageMembers=\{canManageCommunityMembers\}[\s\S]*handleSetCommunityMemberRole=\{\(membershipId, role\) =>[\s\S]*props\.onSetCommunityMemberRole\?\.\(membershipId, role\)/,
+  "interaction projection should route right-panel role changes through the existing mutation callback",
+);
 assert.match(
   memberManagementController,
   /const reloadDirectory = useCallback[\s\S]*await params\.loadDirectoryMembers\(communityId, session\);/,
@@ -460,17 +532,37 @@ assert.match(
   "App should wire manager-only right-panel controls from the existing active-community permission and action contract",
 );
 assert.match(
-  joinReview,
+  contextPanel,
+  /entryPolicy\?: CommunityAdmissionEntryPolicy \| null;[\s\S]*canSetFreeAccessMode\?: boolean;[\s\S]*onSetFreeAccessMode\?: \(mode: "open" \| "approval"\) => Promise<void> \| void;/,
+  "context panel should model a manager-only free-access mode control instead of inventing an autojoin data model",
+);
+assert.match(
+  contextPanel,
+  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canSetFreeAccessMode[\s\S]*props\.onSetFreeAccessMode/,
+  "context panel should hide the Auto-join switch for paid communities and unauthorized viewers",
+);
+assert.match(
+  contextPanel,
+  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*aria-busy=\{props\.isSettingFreeAccessMode \|\| undefined\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
+  "context panel should render the free-access mode as an accessible, server-pending Auto-join switch",
+);
+assert.match(
+  contextPanel,
+  /community-context-members-total[\s\S]*community-context-autojoin[\s\S]*community-context-request-divider/,
+  "context panel should keep Auto-join in the stable members header and render confirmed join requests as a separate divider",
+);
+assert.match(
+  contextPanel,
   /canReviewJoinRequests\?: boolean;[\s\S]*joinReviewMode\?: "paid" \| "free_auto" \| "free_approval" \| null;[\s\S]*pendingJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;/,
   "context panel should receive the existing join-review queue projection explicitly",
 );
 assert.match(
-  joinReview,
+  contextPanel,
   /const canShowJoinRequests = Boolean\([\s\S]*props\.canReviewJoinRequests[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
   "context panel should only pop the request affordance for free approval queues the viewer can review",
 );
 assert.match(
-  joinReview,
+  contextPanel,
   /PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200[\s\S]*hasPendingJoinRequestOverflow[\s\S]*\? "200\+"[\s\S]*requestDividerLabel[\s\S]*requestDividerAriaLabel[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
   "context panel should render a bounded 200+ pending-request projection with an accessible divider label",
 );
@@ -480,31 +572,35 @@ assert.match(
   "admin gateway should fetch one extra pending request so the context rail can honestly show 200+ without an exact count query",
 );
 assert.match(
-  joinReview,
+  contextPanel,
   /className=\{`community-context-request-divider[\s\S]*aria-busy=\{props\.isLoadingJoinRequests \|\| undefined\}[\s\S]*aria-controls=\{joinRequestPanelId\}[\s\S]*aria-expanded=\{joinRequestsExpanded\}[\s\S]*id=\{joinRequestPanelId\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
   "context panel should expand confirmed pending requests from an accessible member-rail divider",
 );
 assert.doesNotMatch(
-  joinReview,
+  contextPanel,
   /community-context-request-chip|community-context-request-control-row|Loading requests\.\.\./,
   "context panel should not retain the legacy request pill or mount a transient loading affordance",
 );
 assert.match(
-  joinReview,
+  contextPanel,
   /const canShowJoinRequestLoadError = Boolean\([\s\S]*pendingJoinRequests\.length === 0[\s\S]*!props\.isLoadingJoinRequests[\s\S]*props\.joinRequestsError[\s\S]*role="status"/,
   "zero-count request load failures should remain readable without recreating the request control",
 );
 assert.match(
-  joinReview,
+  contextPanel,
   /props\.onApproveJoinRequest\?\.\(request\.id\)[\s\S]*props\.onDenyJoinRequest\?\.\(request\.id\)/,
   "context panel request rows should reuse the existing approve and deny callbacks",
 );
 assert.match(
   projection,
-  /communityJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;[\s\S]*onApproveCommunityJoinRequest\?: \(requestId: string\) => Promise<void> \| void;/,
+  /communityEntryPolicy\?: CommunityAdmissionEntryPolicy \| null;[\s\S]*canSetCommunityFreeAccessMode\?: boolean;[\s\S]*communityJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;[\s\S]*onApproveCommunityJoinRequest\?: \(requestId: string\) => Promise<void> \| void;/,
   "interaction projection should carry admission controls and join-review callbacks into the context rail",
 );
-
+assert.match(
+  projection,
+  /<CommunityContextPanel[\s\S]*entryPolicy=\{props\.communityEntryPolicy \?\? null\}[\s\S]*onSetFreeAccessMode=\{props\.onSetCommunityFreeAccessMode\}[\s\S]*pendingJoinRequests=\{props\.communityJoinRequests \?\? null\}[\s\S]*onApproveJoinRequest=\{props\.onApproveCommunityJoinRequest\}/,
+  "interaction projection should pass admission controls through to CommunityContextPanel",
+);
 assert.match(
   memberManagementController,
   /const setFreeAccessMode = useCallback[\s\S]*setCloudCommunityFreeAccessMode\(\{[\s\S]*mode,[\s\S]*\}\);[\s\S]*entry_policy: result\?\.entry_policy \?\? mode/,
@@ -514,6 +610,11 @@ assert.match(
   memberManagementController,
   /const isStillActive = \(\) => getActiveCommunity\(\) === communityId;[\s\S]*approved_pending_request_count[\s\S]*params\.clearJoinRequests\(\)[\s\S]*params\.loadDirectoryMembers\(communityId, session\)[\s\S]*if \(!isStillActive\(\)\) return;/,
   "member-management controller should key Auto-join side effects to the initiating community and refresh after backend approvals",
+);
+assert.match(
+  app,
+  /canSetCommunityFreeAccessMode:[\s\S]*canManageMembersActiveCommunity &&[\s\S]*\(activeCommunity\?\.entry_policy === "open" \|\| activeCommunity\?\.entry_policy === "approval"\)/,
+  "App should expose the Auto-join switch only to managers of free communities",
 );
 assert.match(
   app,
@@ -568,6 +669,7 @@ assert.doesNotMatch(
   "base CSS should not keep stale workspace approval styles after the queue moves to the member rail",
 );
 [
+  ".community-context-autojoin",
   ".community-context-request-divider",
   ".community-context-request-panel",
   ".community-context-request-row",
@@ -588,6 +690,16 @@ assert.match(
   baseCss,
   /\.community-context-members \{[\s\S]*scrollbar-gutter: stable;/,
   "member rail should reserve stable scrollbar space so roster refreshes do not move admission controls",
+);
+assert.match(
+  baseCss,
+  /\.community-context-autojoin \{[\s\S]*padding: 0;[\s\S]*border: 0;[\s\S]*background: transparent;/,
+  "Auto-join should render as plain text and a switch without an outer capsule",
+);
+assert.match(
+  baseCss,
+  /\.community-context-autojoin:disabled \{[\s\S]*cursor: wait;[\s\S]*opacity: 1;/,
+  "Auto-join should remain visually stable while the canonical access mutation is pending",
 );
 assert.match(
   memberSettingsDialog,
@@ -637,8 +749,8 @@ assert.doesNotMatch(
 );
 assert.match(
   directoryController,
-  /listCloudCommunityDirectoryWindow[\s\S]*setCommunityDirectoryMemberCount\(page.totalCount\)/,
-  "directory hydration should retain the canonical total count",
+  /listCloudCommunityDirectoryPage[\s\S]*setCommunityDirectoryMemberCount[\s\S]*setCommunityDirectoryMembersHasMore/,
+  "directory controller should drive count and pagination state from directory pages",
 );
 assert.match(
   communityDirectory,
@@ -647,22 +759,22 @@ assert.match(
 );
 assert.match(
   communityDirectoryPageQuery,
-  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor,[\s\S]*maximumRowsRead:/,
+  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor: args\.cursor \?\? null[\s\S]*maximumRowsRead:/,
   "directory pages should use the activity ledger and an opaque bounded cursor",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /communityMembershipRowIsActive[\s\S]*resolveCommunityPresenceAuthorization[\s\S]*authorization\.authorized[\s\S]*page: memberRows/,
+  /resolveCommunityPresenceAuthorization[\s\S]*authorization\.authorized[\s\S]*communityMembershipRowIsActive[\s\S]*page: memberRows/,
   "directory pages should reauthorize activity rows and filter inactive memberships",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*continueCursor: rawPage\.isDone \? null : prefix \+ rawPage\.continueCursor/,
+  /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*continueCursor: rawPage\.isDone \? null : rawPage\.continueCursor/,
   "directory pages should consume the durable member count and preserve Convex cursor semantics",
 );
 assert.match(
   communityDirectory,
-  /last_active_at: args.lastSeenAt === null \? "" : toIsoString\(args\.lastSeenAt\)/,
+  /last_active_at: toIsoString\(args\.lastSeenAt\)/,
   "directory rows should carry activity from the canonical ordering ledger",
 );
 assert.doesNotMatch(
@@ -685,16 +797,25 @@ assert.doesNotMatch(
   /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
   "public community funnel payloads must not expose per-member last active timestamps",
 );
-
+assert.match(
+  contextPanel,
+  /formatMemberActivityLabel[\s\S]*Active now[\s\S]*Active \$\{relative\}/,
+  "context panel should format online and relative member activity labels",
+);
+assert.match(
+  `${communityTypes}\n${contextPanel}`,
+  /last_active_at: string;[\s\S]*formatMemberActivityLabel\([\s\S]*member\.last_active_at,[\s\S]*community-context-member-activity/,
+  "context panel should render activity directly from directory rows",
+);
 assert.doesNotMatch(
   projection,
   /online_last_active_at_by_user_id|onlineLastActiveAtByUserId|activityScopeKey/,
   "interaction projection should not carry the retired live-only activity map",
 );
-assert.doesNotMatch(
+assert.match(
   baseCss,
-  /\.community-context-member-activity/,
-  "deleted activity labels should not retain styles",
+  /\.community-context-member:hover \.community-context-member-activity,[\s\S]*\.community-context-member:focus-within \.community-context-member-activity/,
+  "member activity labels should reveal on hover and keyboard focus",
 );
 
 assert.match(
@@ -738,13 +859,6 @@ assert.match(
   /current\.interaction\.insertOptimistic\(\{[\s\S]*idempotencyKey,[\s\S]*attachments: preparedAttachments,[\s\S]*serializedAttachments/,
   "canonical optimistic projection rows should use the write idempotency key and prepared attachments",
 );
-assert.match(chatController, /serializedMentions: mentionsToSend/,
-  "pending attempts must retain the original committed mentions");
-assert.match(interactionController, /attachments: interaction\.serializedAttachments,[\s\S]*mentions: interaction\.serializedMentions/,
-  "retries must submit original attachment claims and mentions");
-assert.match(chatController,
-  /if \(insertedOptimistic\) \{[\s\S]*settleOptimistic\([\s\S]*\} else \{\s*restoreDraft\(\);\s*\}\s*setError\(mapCommunityComposerErrorMessage\(sendError\)\);\s*\} finally/,
-  "a failed pending attempt and a restored draft must be mutually exclusive recovery paths");
 assert.match(
   interactionController,
   /function appendPendingRoots[\s\S]*new Set\(roots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*storedIdempotencyKey\(item\.idempotencyKey, "root"\)/,
@@ -848,8 +962,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*firstYouTubeEmbedInText\(bundleText\(bundle\.content_blocks, bundle\.root\.content_summary\)\)[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
-  "rich pinned roots should preserve real attachments and YouTube media without treating generic links as rich cards",
+  /communityInteractionRootHasRichContent[\s\S]*pdfLinksInText\(text\)[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
+  "pinned roots should classify the same PDF cards and YouTube media as the feed",
 );
 assert.doesNotMatch(
   `${app}\n${projection}\n${feed}`,
@@ -940,9 +1054,9 @@ assert.match(
   "Dark should inherit one accessible semantic treatment for chat links",
 );
 assert.match(
-  baseCss,
-  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.deferred-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.deferred-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
-  "YouTube media should use one bounded 16:9 surface with the semantic chat-link focus treatment",
+  read("apps/web/src/styles/message-media.css"),
+  /\.deferred-youtube \{[^}]*min-height: 200px;[^}]*aspect-ratio: 16 \/ 9;[\s\S]*iframe:focus-visible[^}]*outline: 2px solid var\(--chat-link\)/,
+  "native YouTube should reserve space, meet minimum height and retain keyboard focus",
 );
 assert.doesNotMatch(
   baseCss,
@@ -977,13 +1091,13 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical chat writer[\s\S]*must not create legacy `communityChatMessages`[\s\S]*bounded, server-issued attachment claim IDs[\s\S]*communityInteractionAttachments/,
+  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical chat writer[\s\S]*must not create legacy `communityChatMessages`[\s\S]*bounded, already-prepared attachment metadata[\s\S]*communityInteractionAttachments/,
   "interaction contract should document the active canonical composer bridge slice",
 );
 assert.match(
   contract,
-  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*generic websites, meeting links, documents, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards[\s\S]*YouTube is the only URL-derived rich media exception/,
-  "interaction contract should require simple authored links and one deterministic YouTube exception",
+  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*generic websites, meeting links, extensionless document links, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards[\s\S]*YouTube videos and explicit HTTPS PDF links/,
+  "interaction contract should require simple authored links and bounded YouTube/PDF media",
 );
 
 console.log("community interaction projection UI contract proof passed");

@@ -54,7 +54,7 @@ import {
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
 import {
-  listSharedChannelReadableRows,
+  listAllActiveChannelReadableRows,
 } from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import type { CommunityPublicFace } from "../shared/communityTypes";
@@ -110,13 +110,13 @@ export async function resolvePublicCommunityInteractionActivityCounts(
   );
   const sinceMs = (options.nowMs ?? Date.now()) - PUBLIC_MESSAGES_TODAY_WINDOW_MS;
   const [readableRoots, readableReplies] = await Promise.all([
-    listSharedChannelReadableRows<PublicCommunityInteractionActivityRow>({
+    listAllActiveChannelReadableRows<PublicCommunityInteractionActivityRow>({
       ctx,
       tableName: "communityInteractionRoots",
       communityId,
       limit: cap,
     }),
-    listSharedChannelReadableRows<PublicCommunityInteractionActivityRow>({
+    listAllActiveChannelReadableRows<PublicCommunityInteractionActivityRow>({
       ctx,
       tableName: "communityInteractionReplies",
       communityId,

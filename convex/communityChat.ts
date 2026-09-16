@@ -278,6 +278,30 @@ export const ensureCommunityChatThread = mutation({
   },
 });
 
+export const generateCommunityChatAttachmentUploadUrl = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    await requireProfileSetupCompleteForUser(ctx, userId);
+    return {
+      uploadUrl: await ctx.storage.generateUploadUrl(),
+    };
+  },
+});
+
 export const listThreadMessages = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -441,7 +465,6 @@ export const createThreadUserMessage = mutation({
 
     const seq = Math.max(0, Math.floor(thread.lastSeq ?? 0) + 1);
     const text = String(args.text ?? "").trim();
-    if ((args.attachments?.length ?? 0) > 0) throw new Error("community_attachment_use_canonical_composer");
     const attachments = normalizeStoredChatAttachments(args.attachments, { enforceWritePolicy: true });
     if (!text && attachments.length === 0) throw new Error("message_payload_required");
 
@@ -519,13 +542,6 @@ export const patchOwnMessageContent = mutation({
       args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)
         ? normalizeStoredChatAttachments((args.contentJson as Record<string, unknown>).attachments, { enforceWritePolicy: true })
         : [];
-    const storedAttachments = normalizeStoredChatAttachments(
-      message.contentJson && typeof message.contentJson === "object"
-        ? (message.contentJson as Record<string, unknown>).attachments : [],
-    );
-    if (nextAttachments.some(next => !storedAttachments.some(stored => JSON.stringify(stored) === JSON.stringify(next)))) {
-      throw new Error("community_attachment_legacy_edit_cannot_add");
-    }
     if (!nextText && nextAttachments.length === 0) {
       throw new Error("message_payload_required");
     }

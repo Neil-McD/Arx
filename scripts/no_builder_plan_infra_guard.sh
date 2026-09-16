@@ -142,6 +142,7 @@ for pattern in "${ACCOUNT_NAMING_FORBIDDEN_PATTERNS[@]}"; do
 done
 
 SCHEMA_FORBIDDEN_PATTERNS=(
+  'v\.literal\("builder"\)'
   'builder_upgrade'
   'targetTier'
 )
@@ -153,18 +154,6 @@ for pattern in "${SCHEMA_FORBIDDEN_PATTERNS[@]}"; do
     failed=1
   fi
 done
-
-if node --input-type=module <<'NODE'
-import { readFileSync } from "node:fs";
-
-const source = readFileSync("convex/schema.ts", "utf8");
-const block = source.match(/userEntitlements: defineTable\(\{[\s\S]*?\n  \}\)/)?.[0] ?? "";
-process.exit(block.includes('v.literal("builder")') ? 0 : 1);
-NODE
-then
-  echo "Forbidden legacy Builder plan tier found: userEntitlements.tier builder" >&2
-  failed=1
-fi
 
 if node --input-type=module <<'NODE'
 import { readFileSync } from "node:fs";

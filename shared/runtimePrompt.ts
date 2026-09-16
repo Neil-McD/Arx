@@ -387,7 +387,6 @@ function buildCommunityResourceLanePrompt(params: {
     return [
       "COMMUNITY_RESOURCE_BUILDER_LANE",
       "The active user can build Resources for this exact community lens.",
-      "For questions about a member's workflow position or submitted forms, use polynet_list on /communities/<active-community-slug>/builder/workflow-members/ and polynet_read on the exact returned member document. For form answers alone, read the returned forms_path (forms.md), also linked from the member document. This private evidence is not in shared-content search. Follow next_cursor when needed; clarify duplicate names. Cite the submitted form/version, distinguish statements from inference, and respect truncation. Never publish private answers to shared channels without explicit authority.",
       "Use builder-only resource state only for this community: drafts, review items, source inbox, imported source references, provenance, and health.",
       "For read-only member-style questions, follow the live Resources read workflow before using builder-only state.",
       "Broad requests like improve resources, clean this up, refactor knowledge, or organize references are discovery requests first.",
@@ -458,13 +457,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       `- Use polynet_read with path ${communityRoot}community.md when the answer depends on the active community's full identity, mission, audience, offer, or positioning.`,
       `- Use polynet_list with path ${communityRoot}members/ to navigate bounded community memberships.`,
       "- Member directories are paginated. Use total_count for community size, never describe a page as the complete roster while next_cursor is non-null, and continue cursors only when full enumeration is necessary.",
-      "- Use polynet_read with a returned member document path for the community relationship. When that document includes a /users/<handle>/profile.md path, read it for the person's authorized global profile. /users/me/profile.md is the signed-in member's global profile, not their community workflow progress.",
-      ...(communitySlug
-        ? [
-            `- For questions about the signed-in member's milestone, progress, recent workflow actions, or next steps in this community, first list ${communityRoot}members/, follow the returned me/ directory, and read its returned context.md document. Use the active community only; reread for a new progress question rather than treating an earlier community or turn's result as current. This is on-demand retrieval, not a required read for unrelated turns.`,
-            "- Member self-context is a bounded snapshot as of read_at, not an exhaustive dossier. Unavailable means the action's outcome cannot be verified from its linked records; it does not mean queued, running, failed, or completed. Distinguish a suggested next step from a configured requirement; context and replies never authorize milestone movement.",
-          ]
-        : []),
+      "- Use polynet_read with a returned member document path for the community relationship. When that document includes a /users/<handle>/profile.md path, read it for the person's authorized profile. Use /users/me/profile.md for the signed-in member.",
       `- Use polynet_list with path ${communityRoot}resources/ to navigate live member-visible resource categories. Pass each returned path directly to polynet_list or polynet_read; the stable ref is also accepted and remains the authority and receipt identity.`,
       `- Use polynet_list with path ${communityRoot}channels/ to discover every authorized active channel, then follow each returned channel path with limit 5 for bounded recent activity. For broad community-status requests, inspect ${communityRoot}community.md plus the bounded ${communityRoot}members/, ${communityRoot}resources/, and ${communityRoot}events/ surfaces and every returned channel directory. Channel directory snippets are sufficient for a bounded pulse; use polynet_read only when an exact document is materially necessary.`,
       "- When stating an event time, use starts_at_zoned and ends_at_zoned. The unsuffixed event timestamps are UTC transport instants.",

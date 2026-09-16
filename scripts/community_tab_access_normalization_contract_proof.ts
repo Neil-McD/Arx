@@ -57,12 +57,8 @@ assert.equal(normalizeCommunityTabForAccess("analytics", builderAccess), "analyt
 assert.equal(isCommunityTabAllowedForAccess("funnel", memberAccess), false);
 assert.equal(normalizeCommunityTabForAccess("funnel", memberAccess), "chat");
 assert.equal(normalizeCommunityTabForAccess("funnel", builderAccess), "funnel");
-assert.equal(isCommunityTabAllowedForAccess("workflows", memberAccess), false);
-assert.equal(normalizeCommunityTabForAccess("workflows", memberAccess), "chat");
-assert.equal(normalizeCommunityTabForAccess("workflows", builderAccess), "workflows");
 assert.equal(parseCommunityTab("ai_agent"), "settings");
 assert.equal(parseCommunityTab("funnel"), "funnel");
-assert.equal(parseCommunityTab("workflows"), "workflows");
 assert.deepEqual(
   listCommunitySettingsPanesForAccess({
     canViewSettings: true,
@@ -70,7 +66,7 @@ assert.deepEqual(
     canManageMembers: true,
     isOwner: false,
   }),
-  ["community", "agent"],
+  ["community", "workflows", "agent"],
   "admins must receive configuration panes without the owner-only Danger pane",
 );
 
@@ -98,8 +94,8 @@ assert.match(
     navigation.indexOf("export const COMMUNITY_TABS"),
     navigation.indexOf("export type CommunityTab"),
   ),
-  /"workflows"[\s\S]*"funnel"[\s\S]*"analytics"/,
-  "Workflows, Funnel, and Analytics must be ordered builder surfaces",
+  /"funnel"[\s\S]*"analytics"/,
+  "Funnel must be a first-class community tab ordered before Analytics",
 );
 assert.doesNotMatch(
   navigation,
@@ -113,11 +109,6 @@ assert.doesNotMatch(
 );
 assert.match(
   navigation,
-  /case "workflows":[\s\S]*case "funnel":[\s\S]*return access\.canManageMembers;/,
-  "Workflows must remain builder-only",
-);
-assert.match(
-  navigation,
   /case "funnel":[\s\S]*return access\.canManageMembers;/,
   "Funnel must remain builder-only",
 );
@@ -128,8 +119,8 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /onSelectTab\("workflows"\)[\s\S]*Workflows[\s\S]*onSelectTab\("funnel"\)[\s\S]*Funnel[\s\S]*onSelectTab\("analytics"\)/,
-  "the shared community nav must render Workflows directly above Funnel and Analytics",
+  /onSelectTab\("funnel"\)[\s\S]*Funnel[\s\S]*onSelectTab\("analytics"\)/,
+  "the shared community nav must render Funnel directly above Analytics",
 );
 assert.match(
   tabAccessGuard,

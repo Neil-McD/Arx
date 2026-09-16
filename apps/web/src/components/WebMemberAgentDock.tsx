@@ -15,12 +15,12 @@ import {
 import {
   LoaderCircle,
   MessageSquarePlus,
+  Paperclip,
   Sparkles,
   Square,
   X,
 } from "lucide-react";
 import { getAuthUrl, type AuthSession } from "../auth";
-import { CommunityComposerControls } from "./CommunityComposerControls";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import {
   extractTextFromContentJson,
@@ -36,11 +36,16 @@ import {
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import {
-  ensureCloudCommunityAgentConversation,
-  startNewCloudCommunityAgentConversation,
+  ensureCloudMemberAgentGlobalChannel,
+  startNewCloudMemberAgentGlobalEpisode,
   type CloudMemberAgentChannel,
 } from "../../../../shared/cloudMemberAgentGateway";
 import { listCloudPendingCommunityResourceBuilderChangesets } from "../../../../shared/cloudCommunityAdminGateway";
+import {
+  fetchCloudThreadContextById,
+  setCloudThreadContext,
+} from "../../../../shared/cloudThreadContextGateway";
+import { syncThreadCommunityLensCloud } from "../../../../shared/threadContextCloudSync";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
@@ -105,8 +110,6 @@ type MemberAgentRetryState = {
 };
 
 export type WebMemberAgentDockProps = {
-  pageMode?: boolean;
-  pageActive?: boolean;
   isVisible: boolean;
   isSuppressed?: boolean;
   canManageResources?: boolean;
@@ -184,9 +187,10 @@ export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMember
 function WebMemberAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
   const communityName = String(props.community?.name ?? "").trim();
-  const isOpenSurface = props.pageMode
-    ? Boolean(props.pageActive)
-    : Boolean(props.mobileShellActive && props.mobileRoot);
+  const [isOpen, setIsOpen] = useState(false);
+  const isOpenSurface = props.mobileShellActive
+    ? Boolean(props.mobileRoot)
+    : isOpen;
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
@@ -226,7 +230,7 @@ function WebMemberAgentDock(props, ref) {
   const activeThreadKeyRef = useRef<string | null>(null);
   const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
   const surfaceKey = JSON.stringify([
-    props.pageMode ? "community-conversation" : props.surfaceContext,
+    props.surfaceContext,
     communityId,
   ]);
   const agentScopeRef = useRef<AgentScope>({
@@ -296,7 +300,8 @@ function WebMemberAgentDock(props, ref) {
       }
       resourceBuildStartInFlightRef.current = true;
       const launchScope = agentScopeRef.current;
-      props.onRequestOpen?.();
+      if (props.mobileShellActive) props.onRequestOpen?.();
+      else setIsOpen(true);
       setLocalError(null);
       try {
         const usableSession = await props.ensureSession(
@@ -502,14 +507,7 @@ function WebMemberAgentDock(props, ref) {
     pendingResourceBuildRef.current = null;
     resourceBuildStartInFlightRef.current = false;
     setRecoveredResourceChangesetCards([]);
-  }, [clearAttachmentDrafts, props.session?.user.id, communityId, stopStreamingTurn]);
-
-  useEffect(() => () => {
-    agentScopeRef.current = { ...agentScopeRef.current, generation: agentScopeRef.current.generation + 1 };
-    const previousThreadKey = activeThreadKeyRef.current;
-    activeThreadKeyRef.current = null;
-    if (previousThreadKey) stopStreamingTurn(previousThreadKey);
-  }, [stopStreamingTurn]);
+  }, [clearAttachmentDrafts, props.session?.user.id, stopStreamingTurn]);
 
   const previousSurfaceKeyRef = useRef(surfaceKey);
   useEffect(() => {
@@ -537,6 +535,7 @@ function WebMemberAgentDock(props, ref) {
 
   useEffect(() => {
     if (!props.isVisible) {
+      setIsOpen(false);
       setIsPreparing(false);
     }
   }, [props.isVisible]);
@@ -560,7 +559,7 @@ function WebMemberAgentDock(props, ref) {
           "member_agent_dock_open",
         );
         if (!usableSession || cancelled || !isCurrentScope(scope)) return;
-        const thread = await ensureCloudCommunityAgentConversation({
+        const thread = await ensureCloudMemberAgentGlobalChannel({
           session: usableSession,
           initialCommunityId: communityId,
         });
@@ -728,7 +727,32 @@ function WebMemberAgentDock(props, ref) {
         observeThreadContext(channel.community_id, channel.context_version);
         return channel;
       }
-      throw new Error("Community conversation scope does not match.");
+      const context = await syncThreadCommunityLensCloud({
+        threadId: channel.thread_key,
+        desiredCommunityId,
+        initialExpectedContextVersion: channel.context_version,
+        fetchLatestContext: () =>
+          fetchCloudThreadContextById({
+            session,
+            threadId: channel.thread_key,
+          }),
+        setThreadContext: (expectedContextVersion) =>
+          setCloudThreadContext({
+            session,
+            threadId: channel.thread_key,
+            expectedContextVersion,
+            communityId: desiredCommunityId,
+          }),
+      });
+      if (!context || context.community_id !== desiredCommunityId) {
+        throw new Error("Community context was not confirmed.");
+      }
+      observeThreadContext(desiredCommunityId, context.context_version);
+      return {
+        ...channel,
+        community_id: desiredCommunityId,
+        context_version: context.context_version,
+      };
     },
     [observeThreadContext],
   );
@@ -782,7 +806,7 @@ function WebMemberAgentDock(props, ref) {
         "member_agent_dock_new_chat",
       );
       if (!usableSession || !isCurrentScope(scope)) return;
-      const thread = await startNewCloudCommunityAgentConversation({
+      const thread = await startNewCloudMemberAgentGlobalEpisode({
         session: usableSession,
         initialCommunityId: communityId,
         expectedActiveEpisodeId: expectedEpisodeId,
@@ -794,7 +818,7 @@ function WebMemberAgentDock(props, ref) {
       console.warn("member_agent_dock_new_chat_failed", error);
       if (usableSession) {
         try {
-          const current = await ensureCloudCommunityAgentConversation({
+          const current = await ensureCloudMemberAgentGlobalChannel({
             session: usableSession,
             initialCommunityId: communityId,
           });
@@ -933,7 +957,7 @@ function WebMemberAgentDock(props, ref) {
       );
       if (!usableSession) throw new Error("auth_session_required");
       if (!isCurrentScope(scope)) return;
-      let thread = await ensureCloudCommunityAgentConversation({
+      let thread = await ensureCloudMemberAgentGlobalChannel({
         session: usableSession,
         initialCommunityId: desiredCommunityId,
       });
@@ -1086,11 +1110,10 @@ function WebMemberAgentDock(props, ref) {
 
   if (!props.isVisible || !props.surfaceContext) return null;
 
-  const legacyPresentation = buildMemberAgentSurfacePresentation(
+  const presentation = buildMemberAgentSurfacePresentation(
     props.surfaceContext,
     communityName,
   );
-  const presentation = { ...legacyPresentation, title: "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Message the community agent", loadingLabel: "Loading conversation" };
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
@@ -1108,16 +1131,28 @@ function WebMemberAgentDock(props, ref) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${props.pageMode ? " community-agent-page" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
+      {!props.mobileShellActive ? (
+        <button
+          type="button"
+          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}`}
+          onClick={() => setIsOpen((open) => !open)}
+          aria-label={isOpen ? presentation.closeLabel : presentation.openLabel}
+          title={isOpen ? presentation.closeLabel : presentation.openLabel}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <X aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+        </button>
+      ) : null}
 
       <section className="member-agent-dock-panel" aria-label={presentation.title}>
-        <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "member-agent-dock-header"}>
-          {props.pageMode ? <div className="community-channel-header-identity"><Sparkles size={18} aria-hidden="true" /><h1>{presentation.title}</h1></div> : <div className="member-agent-dock-identity">
-            {!props.pageMode && <span className="member-agent-dock-avatar" aria-hidden="true">
+        <header className="member-agent-dock-header">
+          <div className="member-agent-dock-identity">
+            <span className="member-agent-dock-avatar" aria-hidden="true">
               <Sparkles />
-            </span>}
+            </span>
             <span>
               <strong>{presentation.title}</strong>
               <small>
@@ -1125,14 +1160,13 @@ function WebMemberAgentDock(props, ref) {
                   ? "Uploading images"
                   : turnIsActive
                     ? "Working"
-                    : props.pageMode ? "Private conversation" : `${presentation.surfaceLabel} · Private conversation`}
+                    : `${presentation.surfaceLabel} context`}
               </small>
             </span>
-          </div>}
-          <div className={props.pageMode ? "community-channel-header-actions" : "member-agent-dock-header-actions"}>
+          </div>
+          <div className="member-agent-dock-header-actions">
             <button
               type="button"
-              className={props.pageMode ? "community-channel-header-menu-trigger" : undefined}
               onClick={() => void startNewChat()}
               disabled={
                 composerIsBusy ||
@@ -1143,8 +1177,18 @@ function WebMemberAgentDock(props, ref) {
               aria-label="Start fresh conversation"
               title="Start fresh conversation"
             >
-              <MessageSquarePlus size={props.pageMode ? 18 : undefined} aria-hidden="true" />
+              <MessageSquarePlus aria-hidden="true" />
             </button>
+            {!props.mobileShellActive ? (
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                <X aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -1183,7 +1227,6 @@ function WebMemberAgentDock(props, ref) {
             <RuntimeResourceChangesetApprovalCards
               cards={persistentResourceChangesetCards}
               session={props.session}
-              pendingOnly
             />
           ) : null}
 
@@ -1255,7 +1298,7 @@ function WebMemberAgentDock(props, ref) {
           ) : null}
           <form
             ref={composerFormRef}
-            className={`member-agent-dock-composer community-agent-composer chat-input-bar${isAttachmentDragOver ? " drag-over" : ""}`}
+            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}`}
             onSubmit={submit}
             onDragEnter={(event) => {
               if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
@@ -1286,10 +1329,17 @@ function WebMemberAgentDock(props, ref) {
                 event.currentTarget.value = "";
               }}
             />
-            <div className="community-composer-editor-row">
-            <div className="mention-composer-field">
+            <button
+              className="member-agent-dock-attach"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={composerIsBusy || isPreparing || isStartingNewChat}
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <Paperclip aria-hidden="true" />
+            </button>
             <textarea
-              className="chat-input"
               ref={textareaRef}
               value={input}
               onChange={(event) => {
@@ -1310,16 +1360,7 @@ function WebMemberAgentDock(props, ref) {
               rows={1}
               disabled={composerIsBusy || isPreparing || isStartingNewChat}
             />
-            </div>
-            </div>
-            <CommunityComposerControls
-              contextKey={`agent:${threadKey ?? "new"}`}
-              groupLabel="Message tools"
-              attachLabel="Attach images"
-              toolsDisabled={composerIsBusy || isPreparing || isStartingNewChat}
-              attachDisabled={composerIsBusy || isPreparing || isStartingNewChat}
-              onAttach={() => fileInputRef.current?.click()}
-              voiceControl={<VoiceInputButton
+            <VoiceInputButton
               {...props.voiceButtonProps}
               disabled={
                 props.voiceButtonProps.disabled ||
@@ -1327,10 +1368,10 @@ function WebMemberAgentDock(props, ref) {
                 isPreparing ||
                 isStartingNewChat
               }
-            />}
-              sendControl={runtimeEvents.length > 0 && threadKey ? (
+            />
+            {runtimeEvents.length > 0 && threadKey ? (
               <button
-                className="chat-send ask-send-btn ask-send-btn-v2"
+                className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
                 type="button"
                 onClick={() => stopStreamingTurn(threadKey)}
                 aria-label="Stop"
@@ -1340,7 +1381,7 @@ function WebMemberAgentDock(props, ref) {
               </button>
             ) : (
               <button
-                className="chat-send ask-send-btn ask-send-btn-v2"
+                className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
                 type="submit"
                 disabled={
                   (!input.trim() && attachments.length === 0) ||
@@ -1356,7 +1397,6 @@ function WebMemberAgentDock(props, ref) {
                 </svg>
               </button>
             )}
-            />
           </form>
         </div>
       </section>

@@ -1,7 +1,8 @@
 import { api } from "../convex/_generated/api";
-import { subscribeCommunityPages, type CommunityPage } from "./subscribeCommunityPages";
+import { coerceGatewayRows } from "./cloudGateway";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
+import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "./communityAttentionContract";
 
 type CloudCommunityAttentionGatewayParams<SessionT> = {
   session: SessionT;
@@ -26,8 +27,6 @@ export type CloudCommunityAttentionRow = {
   }>;
 };
 
-type AttentionPage = CommunityPage & { attention: CloudCommunityAttentionRow };
-
 export function subscribeCloudCommunityAttentionRows(params: {
   liveClient: CloudCommunityChatLiveClient;
   communityIds: string[];
@@ -41,30 +40,41 @@ export function subscribeCloudCommunityAttentionRows(params: {
     params.onUpdate([]);
     return () => {};
   }
-  const rows = new Map<string, CloudCommunityAttentionRow>();
-  const disposers = normalizedCommunityIds.map(communityId => subscribeCommunityPages<AttentionPage>({
-    watch: (section, cursor) => params.liveClient.client.watchQuery(
-      (api as any).communityAttention.listMyCommunityAttentionPage,
-      { authSubject: params.liveClient.authSubject, communityId,
-        section, paginationOpts: { cursor, numItems: 10 } } as any,
-    ) as any,
-    onUpdate: (pages, isComplete) => {
-      rows.delete(communityId);
-      if (isComplete && pages.length) {
-        const channels = [...new Map(pages.flatMap(p => p.attention.channels ?? [])
-          .map(channel => [channel.channel_id || channel.channel_slug, channel])).values()];
-        const first = pages[0]!.attention;
-        rows.set(communityId, { ...first, channels,
-          chat: channels.some(channel => channel.chat), mentions: channels.some(channel => channel.mentions),
-          chat_last_seen_at: channels.find(channel => channel.channel_slug === "general")?.chat_last_seen_at ?? null });
+  const communityIdBatches = Array.from(
+    { length: Math.ceil(normalizedCommunityIds.length / MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY) },
+    (_, batchIndex) => normalizedCommunityIds.slice(
+      batchIndex * MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY,
+      (batchIndex + 1) * MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY,
+    ),
+  );
+  const rowsByBatch = new Map<number, CloudCommunityAttentionRow[]>();
+  const disposers = communityIdBatches.map((communityIds, batchIndex) => {
+    const watch = params.liveClient.client.watchQuery(
+      (api as any).communityAttention.listMyCommunityAttention,
+      {
+        authSubject: params.liveClient.authSubject,
+        communityIds,
+      } as any,
+    );
+    const publish = () => {
+      try {
+        const result = watch.localQueryResult();
+        if (typeof result === "undefined") return;
+        rowsByBatch.set(batchIndex, coerceGatewayRows<CloudCommunityAttentionRow>(result));
+        if (rowsByBatch.size !== communityIdBatches.length) return;
+        params.onUpdate(
+          communityIdBatches.flatMap((_, index) => rowsByBatch.get(index) ?? []),
+        );
+      } catch (error) {
+        params.onError?.(error);
       }
-      // Omitted communities are unknown/loading, not an authoritative false.
-      // This also removes previously authorized private rows on invalidation.
-      params.onUpdate([...rows.values()]);
-    },
-    onError: params.onError,
-  }));
-  return () => { for (const dispose of disposers) dispose(); };
+    };
+    publish();
+    return watch.onUpdate(publish);
+  });
+  return () => {
+    for (const dispose of disposers) dispose();
+  };
 }
 
 export async function markCloudCommunitySurfaceSeen<SessionT>(

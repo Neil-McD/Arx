@@ -1,5 +1,18 @@
+:root {
+  --member-agent-desktop-launcher-size: 60px;
+  --member-agent-desktop-launcher-edge: 20px;
+  --member-agent-desktop-launcher-clearance: calc(
+    var(--member-agent-desktop-launcher-size) + var(--member-agent-desktop-launcher-edge)
+  );
+}
+
 .member-agent-dock {
   --member-agent-accent: var(--accent-selection);
+  --member-agent-accent-strong: color-mix(
+    in srgb,
+    var(--member-agent-accent) 82%,
+    var(--text-primary) 18%
+  );
   --member-agent-accent-soft: color-mix(
     in srgb,
     var(--member-agent-accent) 16%,
@@ -10,65 +23,79 @@
     var(--member-agent-accent) 32%,
     transparent
   );
+  --member-agent-launcher-background: color-mix(
+    in srgb,
+    var(--member-agent-accent) 18%,
+    #111115 82%
+  );
+  --member-agent-launcher-background-hover: color-mix(
+    in srgb,
+    var(--member-agent-accent) 24%,
+    #111115 76%
+  );
+  --member-agent-launcher-border: var(--member-agent-accent-border);
+  --member-agent-launcher-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.46),
+    0 2px 8px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
+  --member-agent-launcher-shadow-hover:
+    0 10px 28px rgba(0, 0, 0, 0.52),
+    0 2px 8px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 14%, transparent);
+  --member-agent-launcher-state-elevation: 0 8px 24px rgba(0, 0, 0, 0.46);
+  --member-agent-launcher-state-highlight:
+    inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
+  --member-agent-launcher-glyph-filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: var(--member-agent-desktop-launcher-edge);
+  bottom: var(--member-agent-desktop-launcher-edge);
   z-index: 70;
   pointer-events: none;
 }
 
-.community-agent-workspace {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.member-agent-dock.community-agent-page {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  z-index: auto;
-  pointer-events: auto;
-}
-
-.member-agent-dock.community-agent-page .member-agent-dock-panel {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  background: var(--community-chat-surface, var(--bg-workspace));
-  transform: none;
-}
-
-.community-channel-header.community-agent-page-header {
-  padding-right: var(--web-topbar-right-action-safe-inset, 62px);
-}
-
-.community-agent-page .member-agent-dock-transcript {
-  padding: 24px max(24px, calc((100% - 800px) / 2));
-}
-
-.community-agent-page .member-agent-dock-composer-shell {
-  width: min(800px, calc(100% - 48px));
-  margin: 0 auto 12px;
-}
-
-@media (max-width: 600px) {
-  .community-agent-page .member-agent-dock-transcript {
-    padding: 16px;
-  }
-  .community-agent-page .member-agent-dock-composer-shell {
-    width: calc(100% - 32px);
-    margin-bottom: 16px;
-  }
-}
-
 .member-agent-dock.is-suppressed {
   display: none;
+}
+
+:root[data-theme="light"] .member-agent-dock {
+  --member-agent-launcher-background: var(--surface-selected);
+  --member-agent-launcher-background-hover: var(--surface-selected);
+  --member-agent-launcher-border: var(--stroke-default);
+  --member-agent-launcher-shadow: 0 4px 12px rgba(23, 23, 25, 0.14);
+  --member-agent-launcher-shadow-hover: 0 4px 12px rgba(23, 23, 25, 0.16);
+  --member-agent-launcher-state-elevation: 0 4px 12px rgba(23, 23, 25, 0.14);
+  --member-agent-launcher-state-highlight: 0 0 0 0 transparent;
+  --member-agent-launcher-glyph-filter: none;
+}
+
+.member-agent-dock-launcher {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: var(--member-agent-desktop-launcher-size);
+  height: var(--member-agent-desktop-launcher-size);
+  place-items: center;
+  overflow: visible;
+  color: var(--member-agent-accent);
+  background: var(--member-agent-launcher-background);
+  border: 1px solid var(--member-agent-launcher-border);
+  border-radius: 16px;
+  box-shadow: var(--member-agent-launcher-shadow);
+  pointer-events: auto;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.member-agent-dock-launcher:hover {
+  color: var(--member-agent-accent-strong);
+  background: var(--member-agent-launcher-background-hover);
+  border-color: color-mix(in srgb, var(--member-agent-accent) 48%, transparent);
+  box-shadow: var(--member-agent-launcher-shadow-hover);
 }
 
 .member-agent-dock button:focus-visible {
@@ -76,8 +103,37 @@
   outline-offset: 2px;
 }
 
+:root[data-theme="light"] .member-agent-dock .member-agent-dock-launcher:focus-visible {
+  outline-color: var(--member-agent-accent);
+}
+
 .member-agent-dock textarea:focus-visible {
   outline: none;
+}
+
+.member-agent-dock-launcher svg {
+  width: 28px;
+  height: 28px;
+  opacity: 1;
+  filter: var(--member-agent-launcher-glyph-filter);
+  transition: color 140ms ease, filter 140ms ease;
+}
+
+.member-agent-dock-launcher.is-working {
+  color: var(--member-agent-accent-strong);
+  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, transparent);
+  animation: member-agent-dock-working-pulse 1.6s ease-in-out infinite;
+}
+
+.member-agent-dock-launcher.is-working:hover,
+.member-agent-dock-launcher.is-working:focus-visible {
+  animation: none;
+}
+
+.member-agent-dock-launcher:hover svg,
+.member-agent-dock-launcher:focus-visible svg {
+  opacity: 1;
+  filter: var(--member-agent-launcher-glyph-filter);
 }
 
 .member-agent-dock-panel {
@@ -102,6 +158,12 @@
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
+}
+
+.member-agent-dock.is-open .member-agent-dock-launcher {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
 }
 
 .member-agent-dock-header {
@@ -384,11 +446,127 @@
   height: 13px;
 }
 
-.member-agent-dock-file-input { display: none; }
-.community-agent-composer.chat-input-bar { margin: 0; }
+.member-agent-dock-composer {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px 34px;
+  align-items: end;
+  gap: 4px;
+  padding: 7px 7px;
+  background: var(--composer-surface, var(--bg-card-solid, #2a2a2a));
+  border: 1px solid var(--composer-border, var(--stroke-default));
+  border-radius: var(--composer-radius, 24px);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.member-agent-dock-composer.is-dragging {
+  border-color: var(--stroke-strong);
+  background: var(--surface-card-alt);
+}
+
+.member-agent-dock-file-input {
+  display: none;
+}
+
+.member-agent-dock-composer textarea {
+  min-width: 0;
+  max-height: 112px;
+  padding: 7px 0;
+  resize: none;
+  color: var(--text-ink-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.member-agent-dock-composer textarea::placeholder {
+  color: var(--text-ink-faint);
+}
+
+.member-agent-dock-composer > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--icon-default);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.member-agent-dock-composer > button:hover:not(:disabled) {
+  color: var(--icon-hover);
+  background: var(--hover-overlay);
+}
+
+.member-agent-dock-composer > button:focus-visible,
+.member-agent-dock-composer .ask-icon-btn:focus-visible {
+  outline: none;
+  color: var(--icon-hover);
+  background: var(--hover-overlay);
+}
+
+.member-agent-dock-composer .member-agent-dock-send:focus-visible {
+  color: var(--bg-button-text);
+  background: var(--bg-button-hover, var(--bg-button));
+}
+
+.member-agent-dock-composer > button:disabled {
+  color: var(--text-ink-faint);
+  background: transparent;
+  cursor: default;
+}
+
+.member-agent-dock-composer > button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.member-agent-dock-composer .ask-icon-btn {
+  width: 34px;
+  height: 34px;
+  color: var(--icon-default);
+  background: transparent;
+  border: 0;
+}
+
+.member-agent-dock-composer .member-agent-dock-send {
+  color: var(--bg-button-text);
+  background: var(--bg-button);
+}
+
+.member-agent-dock-composer .member-agent-dock-send:hover:not(:disabled) {
+  color: var(--bg-button-text);
+  background: var(--bg-button-hover, var(--bg-button));
+}
+
+.member-agent-dock-composer .member-agent-dock-send:disabled {
+  color: var(--text-ink-faint);
+  background: var(--surface-card-alt);
+}
 
 @keyframes member-agent-dock-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes member-agent-dock-working-pulse {
+  0%, 100% {
+    box-shadow:
+      var(--member-agent-launcher-state-elevation),
+      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 8%, transparent),
+      0 0 12px color-mix(in srgb, var(--member-agent-accent) 16%, transparent),
+      var(--member-agent-launcher-state-highlight);
+  }
+  50% {
+    box-shadow:
+      var(--member-agent-launcher-state-elevation),
+      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 22%, transparent),
+      0 0 20px color-mix(in srgb, var(--member-agent-accent) 34%, transparent),
+      var(--member-agent-launcher-state-highlight);
+  }
 }
 
 @media (max-width: 700px) {
@@ -437,10 +615,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .member-agent-dock-panel {
+  .member-agent-dock-panel,
+  .member-agent-dock-launcher {
     transition: none;
   }
+
   .member-agent-dock-reasoning svg,
+  .member-agent-dock-launcher,
   .is-spinning {
     animation: none;
   }

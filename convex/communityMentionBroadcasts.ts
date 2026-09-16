@@ -4,13 +4,12 @@ import { v } from "convex/values";
 import {
   communityMembershipRowIsActive,
   normalizeIdValue,
+  requireCommunityChatAccess,
   type CommunityLike,
   type CommunityMembershipLike,
 } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
-import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
-import { readCommunityChannelReadState } from "./communityReadCursorCore";
-import type { CommunityChannelLike } from "./communityChannelCore";
+import { readCommunityChatReadState } from "./communityReadCursorCore";
 
 export const EVERYBODY_MENTION_ROLE_KEY = "everybody";
 const EVERYBODY_MENTION_TOKEN_ALIASES = ["everybody", "everyone"] as const;
@@ -366,17 +365,17 @@ async function getExistingMentionRowForBroadcastRecipient(args: {
 async function readRecipientInitialNotifyState(args: {
   ctx: any;
   communityId: any;
-  channel: CommunityChannelLike;
+  channelId?: any;
   userId: any;
   sourceCreatedAt: number;
   emailMode: BroadcastEmailMode;
 }): Promise<"pending" | "sent" | "read"> {
   if (args.emailMode === "in_app_only") return "sent";
-  const readState = await readCommunityChannelReadState(
+  const readState = await readCommunityChatReadState(
     args.ctx,
     args.communityId,
     args.userId,
-    args.channel,
+    args.channelId,
   );
   return readState.mentionSeenThroughAt >= Math.floor(args.sourceCreatedAt)
     ? "read"
@@ -423,14 +422,6 @@ async function processBroadcastRecipient(args: {
   if (!userKey || userKey === normalizeIdValue(args.broadcast.actorUserId)) return "skipped";
 
   const existing = await getExistingMentionRowForBroadcastRecipient(args);
-  const authorized = await resolveNotificationRecipientSource({
-    ctx: args.ctx, communityId: args.broadcast.communityId, userId: args.userId,
-    channelId: args.broadcast.channelId, rootId: args.broadcast.sourceRootId, replyId: args.broadcast.sourceReplyId,
-  });
-  if (!authorized) {
-    if (existing) await forceSuppressMentionRow(args.ctx, existing._id, args.nowMs);
-    return "skipped";
-  }
   if (existing) {
     return (await attachBroadcastToExistingMention({
       ctx: args.ctx,
@@ -442,10 +433,20 @@ async function processBroadcastRecipient(args: {
       : "skipped";
   }
 
+  try {
+    await requireCommunityChatAccess({
+      ctx: args.ctx,
+      communityId: args.broadcast.communityId,
+      userId: args.userId,
+    });
+  } catch {
+    return "skipped";
+  }
+
   const notifyState = await readRecipientInitialNotifyState({
     ctx: args.ctx,
     communityId: args.broadcast.communityId,
-    channel: authorized.channel,
+    channelId: args.broadcast.channelId,
     userId: args.userId,
     sourceCreatedAt: args.broadcast.sourceCreatedAt,
     emailMode: args.broadcast.emailMode,

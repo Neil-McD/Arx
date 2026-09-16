@@ -30,7 +30,7 @@ async function createUser(
   );
 }
 
-test("member directory pages membership with owner once and activity as annotation", async () => {
+test("member directory pages authorized activity newest-first with canonical timestamps", async () => {
   const t = convexTest(schema, modules);
   const ownerId = await createUser(t, OWNER_SUBJECT, 100);
   const fixture = await t.run(async (ctx) => {
@@ -147,8 +147,8 @@ test("member directory pages membership with owner once and activity as annotati
       pageSize: 10,
     },
   );
-  expect(firstPage.page[0]?.id).toBe(`owner:${String(fixture.communityId)}`);
-  expect(firstPage.page[1]?.last_active_at).toBe(new Date(100_000).toISOString());
+  expect(firstPage.page[0]?.id).toBe(fixture.activeMembershipIds[0]);
+  expect(firstPage.page[0]?.last_active_at).toBe(new Date(100_000).toISOString());
   expect(firstPage.totalCount).toBe(31);
   expect(firstPage.continueCursor).toEqual(expect.any(String));
   expect(Number.isFinite(Number(firstPage.continueCursor))).toBe(false);
@@ -172,13 +172,13 @@ test("member directory pages membership with owner once and activity as annotati
   }
 
   expect(rows.map((row) => row.id)).toEqual([
-    `owner:${String(fixture.communityId)}`,
     ...fixture.activeMembershipIds,
+    `owner:${String(fixture.communityId)}`,
   ]);
   expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
   expect(rows.some((row) => row.id === fixture.revokedMembershipId)).toBe(false);
   expect(rows.every((row) => typeof row.last_active_at === "string")).toBe(true);
-  expect(rows[0]).toMatchObject({
+  expect(rows[rows.length - 1]).toMatchObject({
     id: `owner:${String(fixture.communityId)}`,
     display_name: "Directory owner",
     avatar_url: "https://example.com/directory-owner.png",
@@ -206,28 +206,8 @@ test("member directory pages membership with owner once and activity as annotati
     api.communityDirectory.listCommunityDirectoryPage,
     { communityId: fixture.communityId, cursor: null, pageSize: 10 },
   );
-  expect(refreshedFirstPage.page.map(row => row.id)).toEqual(firstPage.page.map(row => row.id));
-});
-
-test("never-present members and owner are included without inventing activity; revoked members stay excluded", async () => {
-  const t = convexTest(schema, modules);
-  const ownerId = await createUser(t, OWNER_SUBJECT, 100);
-  const memberId = await createUser(t, "never-present", 200);
-  const fixture = await t.run(async ctx => {
-    const communityId = await ctx.db.insert("communities", { ownerId, slug: "never-present", name: "Never present", visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", createdAt: 100, updatedAt: 100, activeMemberCount: 2 });
-    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true, createdAt: 200, updatedAt: 200 });
-    return { communityId, membershipId };
-  });
-  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const page = await asOwner.query(api.communityDirectory.listCommunityDirectoryPage, { communityId: fixture.communityId, pageSize: 2 });
-  expect(page.page.map(row => row.id)).toEqual([`owner:${fixture.communityId}`, String(fixture.membershipId)]);
-  expect(page.page.every(row => row.last_active_at === "")).toBe(true);
-  // A cached activity cursor restarts the new reader instead of entering the wrong index.
-  const restarted = await asOwner.query(api.communityDirectory.listCommunityDirectoryPage, { communityId: fixture.communityId, cursor: "legacy-presence-cursor", pageSize: 2 });
-  expect(restarted.page).toEqual(page.page);
-  await t.run(ctx => ctx.db.patch(fixture.membershipId, { active: false, revokedAt: 300 }));
-  const revoked = await asOwner.query(api.communityDirectory.listCommunityDirectoryPage, { communityId: fixture.communityId });
-  expect(revoked.page.map(row => row.id)).toEqual([`owner:${fixture.communityId}`]);
+  expect(refreshedFirstPage.page[0]?.id).toBe(fixture.activeMembershipIds[29]);
+  expect(refreshedFirstPage.page[0]?.last_active_at).toBe(new Date(900_000).toISOString());
 });
 
 test("member directory fails closed and never scans to invent a missing durable count", async () => {

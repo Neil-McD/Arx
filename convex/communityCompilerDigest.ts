@@ -8,7 +8,7 @@ import {
 } from "./communityCore";
 import {
   buildCommunitySourceTraceRevision,
-  drainIneligiblePendingSourceTracesForCommunity,
+  drainSelfAuthoredPendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
   type SourceTraceRow,
 } from "./communityCompilerEvidenceCore";
@@ -188,7 +188,7 @@ async function runCommunityCompilerDigestPassCore(
     const userId = args.triggeredByUserId ?? undefined;
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;
-    await drainIneligiblePendingSourceTracesForCommunity({
+    await drainSelfAuthoredPendingSourceTracesForCommunity({
       ctx,
       communityId: args.communityId,
       nowMs,

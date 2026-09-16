@@ -30,15 +30,12 @@ const nav = read(navPath);
 [
   '"Add Channel"',
   "canManageMembersActiveCommunity && onCreateChannel",
-  "Choose who can access this channel.",
-  "Invite-only",
-  "channelAccessMode",
+  "Channels are visible to every community member.",
   'className="community-channel-loading-row web-skeleton-row"',
   'className="community-channel-loading-row is-short web-skeleton-row"',
   "MODAL_FOCUSABLE_SELECTOR",
   "trapModalFocus",
   "onReorderChannels",
-  "onReorderChannels(orderedIds, movedChannelId)",
   "usePointerSortableList",
   "getChannelItemBindings",
   "community-channel-reorder-trigger",
@@ -103,11 +100,11 @@ const header = read(headerPath);
 const gatewayPath = "shared/cloudCommunityChannelsGateway.ts";
 const gateway = read(gatewayPath);
 [
-  ".communityChannels.listCommunityChannelPage",
+  ".communityChannels.listCommunityChannels",
   '"communityChannels:createCommunityChannel"',
   '"communityChannels:renameCommunityChannel"',
   '"communityChannels:deleteCommunityChannel"',
-  '"communityChannels:moveCommunityChannel"',
+  '"communityChannels:reorderCommunityChannels"',
   '"communityChannels:setCommunityChannelPinnedRoot"',
   "authSubject",
 ].forEach((required) => assertIncludes(gatewayPath, gateway, required));
@@ -128,9 +125,7 @@ const channelController = read(channelControllerPath);
   "manageInFlightChannelIdRef",
   "onChannelDeleted",
   "resolveWebCommunityChannelDeleteCompletion(paramsRef, communityId)",
-  "moveCloudCommunityChannel",
-  "channel.id === movedChannelId && !channel.is_general",
-  "channelId: moved.id",
+  "reorderCloudCommunityChannels",
   "lastSubscribedChannelsRef",
   "reorderInFlightCommunityIdRef",
 ].forEach((required) => assertIncludes(channelControllerPath, channelController, required));
@@ -148,13 +143,13 @@ assertNotMatches(
 const channelApiPath = "convex/communityChannels.ts";
 const channelApi = read(channelApiPath);
 [
-  "listAuthorizedCommunityChannelPage",
+  "listReadableCommunityChannels",
   "renameCommunityChannel",
   "deleteCommunityChannel",
   "requireCommunityManager",
   "renameActiveCommunityChannel",
   "archiveActiveCommunityChannel",
-  "moveCommunityChannel",
+  "reorderCommunityChannels",
   "setCommunityChannelPinnedRoot",
 ].forEach((required) => assertIncludes(channelApiPath, channelApi, required));
 
@@ -167,7 +162,7 @@ const channelCore = read(channelCorePath);
   "archiveActiveCommunityChannel",
   'status: "archived"',
   'if (channel.status === "archived") return channel',
-  "moveActiveCommunityChannel",
+  "reorderActiveCommunityChannels",
   "setActiveCommunityChannelPinnedRoot",
   "community_channel_order_stale",
   "community_channel_pin_target_invalid",

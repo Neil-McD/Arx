@@ -89,7 +89,7 @@ assert.doesNotMatch(
 assert.match(executorSource, /normalizeToolArguments\(args\.toolName/);
 assert.match(executorSource, /derivePolynetHumanAuthority/);
 assert.match(executorSource, /idempotencyKey/);
-assert.match(executorSource, /listCommunityChannelPageInternal/);
+assert.match(executorSource, /listCommunityChannelsInternal/);
 assert.match(executorSource, /parseCommunityChannelSemanticPath/);
 assert.match(executorSource, /expectedChannelId: channel\.id/);
 assert.match(executorSource, /channelId: channel\.id/);

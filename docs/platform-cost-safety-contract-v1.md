@@ -106,7 +106,7 @@ Grounded on 2026-08-13 against production and `origin/main` commit
 
 | Operation | Trigger/cadence | Current bounds | Status / required action |
 | --- | --- | --- | --- |
-| Community attention subscription | one pooled realtime transport with one community and at most 10 stored channel/grant rows per reactive page | no fixed poll, no manual post-mutation refresh, and every execution is scope-bounded; total subscriptions scale with authorized pages | incomplete/failed assemblies are unknown, never fabricated all-read results; measure reads before adding a stored head projection |
+| Community attention subscription | one pooled realtime transport with query subscriptions chunked to 25 communities per backend query | no fixed poll, no manual post-mutation refresh, and every execution is scope-bounded | `implemented; staging proof pending`: measure reactive update reads before deciding whether a stored head projection is justified |
 | Active-community presence | mount, resume, and every 30 seconds while visible | one in-flight call; 90-second lease; scan limit 64 | `keep, verify`: behavior is bounded; prove one effective lease per actor/community across multiple tabs |
 | Founder checkout reconciliation | 1.5-second polling after checkout | canceled on teardown; route-specific | `keep, prove`: bounded commercial recovery must have an explicit attempt/time cap on every branch |
 | Checkout finalization | delayed retries after provider redirect | centralized timeout ref and terminal attempt rules | `keep, prove`: idempotent finalization is required; no indefinite retry |
@@ -123,7 +123,6 @@ CI admits exactly these six first-party `setInterval` call sites:
 | Canonical call site | Classification | Required lifetime bound |
 | --- | --- | --- |
 | `apps/web/src/components/RuntimeLiveTimeline.tsx` | UI-only elapsed clock | active unfinished run; cleared by effect teardown |
-| `apps/web/src/components/ChannelRosterPanel.tsx` | UI-only 30-second presence-lease expiry clock; no network calls | mounted channel roster; cleared by effect teardown |
 | `shared/useCommunityTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |

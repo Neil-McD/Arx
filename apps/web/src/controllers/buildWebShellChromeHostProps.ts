@@ -14,8 +14,6 @@ import type { CommunityShellCommunity } from "../../../../shared/communityTypes"
 type CommunityLike = CommunityShellCommunity;
 
 export function buildWebShellChromeHostProps(params: {
-  onOpenCommunityMembers: () => void;
-  memberNextStep?: ReactNode;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -85,8 +83,9 @@ export function buildWebShellChromeHostProps(params: {
   isLoadingCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
-  openCommunityHome: (slug: string) => void;
   openCommunityChat: (slug: string) => void;
+  openCommunityHome: (slug: string) => void;
+  openCommunityMembers: (slug: string) => void;
   communityInitials: (value: string) => string;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
@@ -110,6 +109,12 @@ export function buildWebShellChromeHostProps(params: {
     params.showMobileAppShell &&
     !params.showMobileSettingsShell &&
     isWebCommunityDetailDestination(params.destination) &&
+    params.mobileRootPage === "community" &&
+    !params.isPublicCommunityFunnel;
+  const isMobileCommunityMembers =
+    params.showMobileAppShell &&
+    !params.showMobileSettingsShell &&
+    params.destination.kind === "community_members" &&
     params.mobileRootPage === "community" &&
     !params.isPublicCommunityFunnel;
   const mobileChannelSlug = params.destination.kind === "community_chat"
@@ -141,16 +146,19 @@ export function buildWebShellChromeHostProps(params: {
           : params.mobileRootPage,
       isThreadPage: params.mobileThreadPageOpen,
       isCommunityHome: isMobileCommunityHome,
-      communityDetailLabel: mobileChannelLabel,
+      communityDetailLabel: isMobileCommunityMembers ? "Members" : mobileChannelLabel,
+      communityDetailIcon: isMobileCommunityMembers ? "members" : "channel",
       showBackButton:
         params.showMobileSettingsIndex ||
         params.mobileThreadPageOpen ||
+        isMobileCommunityMembers ||
         isMobileCommunityDetail,
       showDrawerButton:
         !params.isPublicCommunityFunnel &&
         !params.showMobileSettingsShell &&
         !params.mobileThreadPageOpen &&
         !isMobileCommunityHome &&
+        !isMobileCommunityMembers &&
         !isMobileCommunityDetail,
       hasActiveCommunity: Boolean(params.activeCommunity),
       activeCommunityId: params.activeCommunity?.id ?? null,
@@ -175,7 +183,7 @@ export function buildWebShellChromeHostProps(params: {
         ? params.handleCloseMobileThreadPage
         : params.showMobileSettingsIndex
           ? params.handleExitMobileSettings
-          : isMobileCommunityDetail
+          : isMobileCommunityDetail || isMobileCommunityMembers
             ? () => {
                 const slug = String(params.activeCommunity?.slug ?? "").trim();
                 if (slug) params.openCommunityHome(slug);
@@ -185,7 +193,10 @@ export function buildWebShellChromeHostProps(params: {
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
       onOpenMembers: params.isPublicCommunityFunnel
         ? () => params.setMobileOverlay("members")
-        : params.onOpenCommunityMembers,
+        : () => {
+            const slug = String(params.activeCommunity?.slug ?? "").trim();
+            if (slug) params.openCommunityMembers(slug);
+          },
       canOpenCommunitySettings:
         isMobileCommunityHome && params.canViewActiveCommunitySettings,
       onOpenCommunitySettings: isMobileCommunityHome
@@ -233,7 +244,10 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityMemberCount: params.activeCommunityMemberCount,
       onOpenMembers: params.isPublicCommunityFunnel
         ? () => params.setMobileOverlay("members")
-        : params.onOpenCommunityMembers,
+        : () => {
+            const slug = String(params.activeCommunity?.slug ?? "").trim();
+            if (slug) params.openCommunityMembers(slug);
+          },
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
@@ -242,7 +256,6 @@ export function buildWebShellChromeHostProps(params: {
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,
-      memberNextStep: params.memberNextStep,
       canOpenDirectMessages: params.canOpenDirectMessages,
       directMessagesUnreadCount: params.directMessagesUnreadCount,
       onOpenDiscover: () => {

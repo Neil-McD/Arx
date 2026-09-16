@@ -96,7 +96,7 @@ assert.doesNotMatch(
 );
 assert.match(
   heartbeat,
-  /drainIneligiblePendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal/,
+  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal/,
   "heartbeat action should drain self-authored traces before using the canonical work planner",
 );
 assert.match(

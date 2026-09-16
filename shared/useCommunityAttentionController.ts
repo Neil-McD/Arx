@@ -44,10 +44,19 @@ function buildAttentionMap(
   rows: CloudCommunityAttentionRow[],
 ): Record<string, CommunityAttentionIndicators> {
   const next: Record<string, CommunityAttentionIndicators> = {};
-  // Absence is unknown: never fabricate an all-read row while pages load.
+  for (const communityId of communityIds) {
+    next[communityId] = {
+      chat: false,
+      resources: false,
+      events: false,
+      mentions: false,
+      chat_last_seen_at: null,
+      channels: [],
+    };
+  }
   for (const row of rows) {
     const communityId = String(row.community_id ?? "").trim();
-    if (!communityId || !communityIds.includes(communityId)) continue;
+    if (!communityId) continue;
     next[communityId] = {
       chat: Boolean(row.chat),
       resources: Boolean(row.resources),

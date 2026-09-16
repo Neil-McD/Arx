@@ -10,15 +10,15 @@ import {
   ensureGeneralChannel,
   ensureReplyChannelMatchesRoot,
   getGeneralChannel,
-  listSharedChannelReadableRows,
+  listAllActiveChannelReadableRows,
   listChannelProjectionRows,
   listChannelReadableRows,
   listGeneralChannelReadableRows,
-  listSharedCommunityChannels,
+  listReadableCommunityChannels,
   requireActiveCommunityChannel,
   requireChannelForAddressableRoot,
   requireCommunityChannelLineage,
-  requireSharedChannelForAddressableRow,
+  requireReadableChannelForAddressableRow,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 
@@ -476,7 +476,7 @@ test("community aggregate reads merge active channels and preserve exact row own
     const generalId = await insertRoot("general", 2_200, general._id);
     const customId = await insertRoot("custom", 2_300, customChannelId);
 
-    const rows = await listSharedChannelReadableRows({
+    const rows = await listAllActiveChannelReadableRows({
       ctx,
       tableName: "communityInteractionRoots",
       communityId: fixture.communityId,
@@ -484,19 +484,19 @@ test("community aggregate reads merge active channels and preserve exact row own
     });
     expect(rows.map((row) => row._id)).toEqual([customId, generalId, legacyId]);
 
-    const channels = await listSharedCommunityChannels({
+    const channels = await listReadableCommunityChannels({
       ctx,
       communityId: fixture.communityId,
     });
     expect(
-      requireSharedChannelForAddressableRow({
+      requireReadableChannelForAddressableRow({
         row: rows[0]!,
         communityId: fixture.communityId,
         channels,
       }).slug,
     ).toBe("custom");
     expect(
-      requireSharedChannelForAddressableRow({
+      requireReadableChannelForAddressableRow({
         row: rows[2]!,
         communityId: fixture.communityId,
         channels,

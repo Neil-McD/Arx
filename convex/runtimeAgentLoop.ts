@@ -91,7 +91,6 @@ import {
 } from "./runtimeHarnessTelemetry";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
-import type { IntegrationReadDependencies } from "./communityIntegrationReadCore";
 import {
   POLYNET_CANONICAL_TOOL_NAMES,
   type PolynetCanonicalToolName,
@@ -229,7 +228,6 @@ function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
 }
 
 export async function executeRetrievalHarnessTool(params: {
-  integrationRead?: IntegrationReadDependencies;
   ctx: any;
   userId: string;
   authSubject?: string | null;
@@ -240,7 +238,6 @@ export async function executeRetrievalHarnessTool(params: {
   args: Record<string, unknown>;
   evidenceSurface?: CommunityEvidenceSurface;
   communityFunnelSlot?: CommunityCustomFunnelSlot | null;
-  communityBoundConversation?: boolean;
   signal?: AbortSignal;
 }): Promise<NativeToolExecutionResult> {
   let normalizedArgs: Record<string, unknown>;
@@ -327,22 +324,8 @@ export async function executeRetrievalHarnessTool(params: {
     const communityOwned =
       params.evidenceSurface === "community_concierge";
     const communityMounted =
-      communityOwned || params.evidenceSurface === "community_funnel_builder" || params.communityBoundConversation === true;
-    if (params.communityBoundConversation && !params.communityId) throw new Error("community_context_required");
-    if (params.communityBoundConversation) {
-      const path = String(normalizedArgs.path ?? "").trim();
-      if (path === "/" && params.toolName === "polynet_list") {
-        const context = await params.ctx.runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal, { authSubject, userId: params.userId as any, communityId: params.communityId as any });
-        normalizedArgs = { ...normalizedArgs, path: `/communities/${context.community_slug}/` };
-      } else if (!path.startsWith("/communities/")) {
-        return { status: "error", exitCode: null, outputText: "", errorCode: "community_context_mismatch", errorMessage: "Use paths within this conversation's community." };
-      }
-    }
+      communityOwned || params.evidenceSurface === "community_funnel_builder";
     const execution = await executePolynetCanonicalTool({
-      integrationRead: params.integrationRead,
-      toolCallId: params.toolCallId,
-      communityBoundConversation: params.communityBoundConversation,
-      runId: params.runId,
       ctx: params.ctx,
       authSubject,
       userId: params.userId,
@@ -961,7 +944,7 @@ async function executeRetrievalAgentLoop(
   ).packet;
   let memberIdentityContextMd: string | null = null;
   let memberIdentityContextStatus: MemberIdentityContextStatus = "not_applicable";
-  if (params.invocationSurface === "member_agent_dock" && !(params.memberAgentSurfaceContext?.kind === "community" && params.memberAgentSurfaceContext.community_conversation)) {
+  if (params.invocationSurface === "member_agent_dock") {
     memberIdentityContextStatus = "empty";
     try {
       const identity = await params.ctx.runQuery(
@@ -1890,7 +1873,6 @@ async function executeRetrievalAgentLoop(
                       ? "community_funnel_builder"
                       : "coding_harness",
                 communityFunnelSlot: params.communityFunnelSlot ?? null,
-                communityBoundConversation: params.memberAgentSurfaceContext?.kind === "community" && params.memberAgentSurfaceContext.community_conversation === true,
                 signal,
               }),
           });

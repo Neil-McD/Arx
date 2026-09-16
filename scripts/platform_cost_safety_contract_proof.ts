@@ -67,7 +67,6 @@ const communityHeartbeat = read("convex/communityAgentHeartbeat.ts");
 const communityDirectory = read("convex/communityIntelligenceDirectory.ts");
 
 const uiOnlyIntervalFiles = [
-  "apps/web/src/components/ChannelRosterPanel.tsx",
   "apps/web/src/components/RuntimeLiveTimeline.tsx",
   "shared/useCommunityTypingPresence.ts",
   "shared/useDirectMessageTypingPresence.ts",
@@ -194,8 +193,8 @@ assert.match(
 );
 assert.match(
   attentionGateway,
-  /subscribeCommunityPages[\s\S]*watchQuery[\s\S]*listMyCommunityAttentionPage[\s\S]*numItems: 10/,
-  "attention subscriptions must bound each execution to one community and a channel page",
+  /MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY[\s\S]*communityIdBatches[\s\S]*watchQuery[\s\S]*listMyCommunityAttention/,
+  "attention subscriptions must chunk account growth into bounded backend executions",
 );
 assert.match(
   attentionBackend,

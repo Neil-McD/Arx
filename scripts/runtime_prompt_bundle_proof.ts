@@ -55,16 +55,6 @@ const params = {
 };
 
 const bundle = buildPlatformHarnessRuntimePromptBundle(params);
-assert.match(bundle.text, /first list \/communities\/bundle-community\/members\/, follow the returned me\/ directory, and read its returned context\.md document/);
-assert.match(bundle.text, /global profile, not their community workflow progress/);
-assert.match(bundle.text, /on-demand retrieval, not a required read for unrelated turns/);
-assert.match(bundle.text, /Unavailable means the action's outcome cannot be verified/);
-const switchedCommunity = buildPlatformHarnessRuntimePromptBundle({
-  ...params, communityId: "community_2", communityName: "Second", communitySlug: "second-community",
-  memberAgentSurfaceContext: { ...params.memberAgentSurfaceContext, community_slug: "second-community" },
-});
-assert.match(switchedCommunity.text, /first list \/communities\/second-community\/members\//);
-assert.doesNotMatch(switchedCommunity.text, /first list \/communities\/bundle-community\/members\//);
 assert.equal(bundle.text, buildPlatformHarnessRuntimeSystemPrompt(params));
 assert.deepEqual(
   bundle.sections.map((section) => section.id),
@@ -139,7 +129,6 @@ const globalBundle = buildPlatformHarnessRuntimePromptBundle({
     section: "communities",
   } as const,
 });
-assert.doesNotMatch(globalBundle.text, /follow the returned me\/ directory/);
 assert.match(
   globalBundle.text,
   /Polynet Intelligence[\s\S]*No community lens is active on this surface/,

@@ -1,6 +1,4 @@
 import { v } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
-import { resolveMentionRecipientSource } from "./communityNotificationAccess";
 import { mutation, query } from "./_generated/server";
 import {
   type CommunityMemberSettingsLike,
@@ -19,13 +17,10 @@ import {
 import {
   type CommunityChannelLike,
   listChannelReadableRows,
-  listAuthorizedCommunityChannels,
-  listAuthorizedCommunityChannelPage,
-  resolveAuthorizedCommunityChannel,
+  listReadableCommunityChannels,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
-import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
@@ -114,13 +109,11 @@ async function getLatestCommunityChannelChatActivityAt(
   ctx: any,
   communityId: any,
   channel: CommunityChannelLike,
-  actor?: ChannelActor,
 ): Promise<number | null> {
   const [roots, replies] =
     await Promise.all([
       listChannelReadableRows<CommunityInteractionRootLike>({
         ctx,
-        actor,
         tableName: "communityInteractionRoots",
         communityId,
         channel,
@@ -128,7 +121,6 @@ async function getLatestCommunityChannelChatActivityAt(
       }),
       listChannelReadableRows<CommunityInteractionReplyLike>({
         ctx,
-        actor,
         tableName: "communityInteractionReplies",
         communityId,
         channel,
@@ -213,15 +205,6 @@ async function getLatestCommunityEventsUpdatedAt(
     : null;
 }
 
-const MENTION_SOURCE_SCAN_LIMIT = 5;
-
-async function latestReadableMentionAt(ctx: any, userId: any, mentions: Array<Record<string, any>>): Promise<number> {
-  for (const mention of mentions) {
-    if (await resolveMentionRecipientSource({ ctx, mention, userId })) return mention.createdAt;
-  }
-  return 0;
-}
-
 async function getLatestCommunityMentionOfUserCreatedAt(
   ctx: any,
   communityId: any,
@@ -235,8 +218,8 @@ async function getLatestCommunityMentionOfUserCreatedAt(
         q.eq("mentionedUserId", userId).eq("communityId", communityId).eq("notifyState", notifyState),
       )
       .order("desc")
-      .take(MENTION_SOURCE_SCAN_LIMIT)) as Array<Record<string, any>>;
-    const createdAt = await latestReadableMentionAt(ctx, userId, latest);
+      .take(1)) as Array<{ createdAt?: number }>;
+    const createdAt = latest[0]?.createdAt;
     if (typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0) {
       latestCreatedAt = Math.max(latestCreatedAt ?? 0, Math.floor(createdAt));
     }
@@ -279,13 +262,13 @@ async function getLatestCommunityMentionsByChannel(args: {
                     .eq("notifyState", notifyState),
               )
               .order("desc")
-              .take(MENTION_SOURCE_SCAN_LIMIT)) as Array<Record<string, any>>,
+              .take(1)) as Array<{ createdAt: number }>,
         ),
       ),
     );
     const latestCreatedAt = Math.max(
       0,
-      ...await Promise.all(batches.map(mentions => latestReadableMentionAt(args.ctx, args.userId, mentions))),
+      ...batches.flat().map((mention) => mention.createdAt),
     );
     if (latestCreatedAt > 0) {
       latestByChannel.set(
@@ -301,11 +284,9 @@ async function getCommunityAttentionRow(
   ctx: any,
   communityId: any,
   userId: any,
-  selectedChannels?: CommunityChannelLike[],
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
-  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
-  const channels = selectedChannels ?? await listAuthorizedCommunityChannels({ ctx, communityId, actor });
+  const channels = await listReadableCommunityChannels({ ctx, communityId });
   const [
     channelAttentionInputs,
     latestMentionsByChannel,
@@ -325,7 +306,6 @@ async function getCommunityAttentionRow(
           ctx,
           communityId,
           channel,
-          actor,
         ),
       })),
     ),
@@ -491,10 +471,8 @@ async function acknowledgeCommunityChatReadForUser(args: {
   userId: any;
   requestedThroughAt?: number | null;
 }): Promise<{ ok: true; advanced: boolean; seenThroughAt: number }> {
-  const actor = await resolveCommunityChannelActor(args);
-  const channel = await resolveAuthorizedCommunityChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
-    actor, capability: "canRead",
     communityId: args.communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,
@@ -503,7 +481,6 @@ async function acknowledgeCommunityChatReadForUser(args: {
     args.ctx,
     args.communityId,
     channel,
-    actor,
   );
   const result = await advanceCommunityChatReadCursor({
     ctx: args.ctx,
@@ -520,22 +497,6 @@ async function acknowledgeCommunityChatReadForUser(args: {
   };
 }
 
-export const listMyCommunityAttentionPage = query({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"),
-    section: v.union(v.literal("shared"), v.literal("private")), paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
-    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
-    // Attention has several indexed reads per room, so use smaller pages than
-    // a plain directory listing. No read cursor is mutated by this query.
-    const result = await listAuthorizedCommunityChannelPage({ ctx, communityId: args.communityId, actor,
-      section: args.section, paginationOpts: { ...args.paginationOpts, numItems: Math.min(10, args.paginationOpts.numItems) } });
-    const attention = await getCommunityAttentionRow(ctx, args.communityId, userId, result.page);
-    return { ...result, page: attention.channels, attention };
-  },
-});
-
-// Cached-client bounded adapter. New clients use the paged endpoint above.
 export const listMyCommunityAttention = query({
   args: {
     userId: v.optional(v.id("users")),

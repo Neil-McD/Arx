@@ -73,7 +73,7 @@ assert.match(
 );
 assert.match(
   evidenceCore,
-  /fetchHasMorePending =[\s\S]*pendingRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*legacyRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*hasMorePending = fetchHasMorePending \|\| sharedTraceRows\.length > COMPILER_EVIDENCE_SCAN_LIMIT/,
+  /fetchHasMorePending =[\s\S]*pendingRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*legacyRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*hasMorePending = fetchHasMorePending \|\| eligibleTraceRows\.length > COMPILER_EVIDENCE_SCAN_LIMIT/,
   "scan-cap lower-bound reporting should be conservative whenever the bounded fetch may hide more rows",
 );
 assert.match(

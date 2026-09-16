@@ -1,12 +1,10 @@
 export const MEMBER_AGENT_COMMUNITY_SECTIONS = [
   "chat",
-  "agent",
   "resources",
   "events",
   "settings",
   "polynet",
   "ai_agent",
-  "workflows",
   "funnel",
   "analytics",
 ] as const;
@@ -34,8 +32,6 @@ export type MemberAgentSurfaceContextV1 =
       version: 1;
       kind: "community";
       community_slug: string;
-      /** Server-derived from the persisted thread; never accepted by normalization. */
-      community_conversation?: true;
       section: MemberAgentCommunitySection;
     }
   | {
@@ -126,6 +122,8 @@ export function describeMemberAgentSurface(
 export type MemberAgentSurfacePresentation = {
   surfaceLabel: string;
   title: string;
+  openLabel: string;
+  closeLabel: string;
   composerLabel: string;
   emptyLabel: string;
   loadingLabel: string;
@@ -139,6 +137,8 @@ export function buildMemberAgentSurfacePresentation(
   return {
     surfaceLabel,
     title: "Polynet Intelligence",
+    openLabel: "Open Polynet Intelligence",
+    closeLabel: "Close Polynet Intelligence",
     composerLabel: "Message Polynet Intelligence",
     emptyLabel: surface.kind === "discover"
       ? "Ask Polynet Intelligence to help you explore communities."

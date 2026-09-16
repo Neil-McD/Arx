@@ -457,8 +457,8 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /community-nav-utility-loading[\s\S]*?\{!isLoadingAccess \? \([\s\S]*?title="Agent"[\s\S]*?title="Knowledge"[\s\S]*?title="Events"/,
-  "community navigation keeps Members after Events within the access-gated utility group",
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{isLoadingAccess \? \([\s\S]*?community-nav-utility-loading[\s\S]*?Array\.from\(\{ length: 3 \}\)[\s\S]*?\) : showMembersItem \? \([\s\S]*?\) : null\}\s*\{!isLoadingAccess \? \([\s\S]*?title="Resources"[\s\S]*?title="Events"/,
+  "community navigation should use one shared shimmer state for Members, Resources, and Events",
 );
 assert.doesNotMatch(
   baseCss,
@@ -641,8 +641,28 @@ assert.match(
 
 assert.match(
   memberAgentCss,
+  /\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 18%,\s*#111115 82%\s*\);[\s\S]*?--member-agent-launcher-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
+  "Dark should retain the launcher's exact legacy surface and elevation",
+);
+assert.match(
+  memberAgentCss,
+  /:root\[data-theme="light"\]\s*\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border:\s*var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow:\s*0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-glyph-filter:\s*none;/,
+  "Light should use the selected surface without dark-theme highlights or glyph shadow",
+);
+assert.match(
+  memberAgentCss,
+  /\.member-agent-dock-launcher\s*\{[\s\S]*?background:\s*var\(--member-agent-launcher-background\);[\s\S]*?border:\s*1px solid var\(--member-agent-launcher-border\);[\s\S]*?box-shadow:\s*var\(--member-agent-launcher-shadow\);/,
+  "the launcher should consume the scoped visual adapter",
+);
+assert.match(
+  memberAgentCss,
   /\.member-agent-dock-panel\s*\{[\s\S]*?background:\s*var\(--web-context-panel-surface\);[\s\S]*?border:\s*1px solid var\(--web-context-panel-border\);[\s\S]*?box-shadow:\s*var\(--web-context-panel-shadow\);/,
   "the open member-agent panel should use the same semantic context material as other utility panels",
+);
+assert.doesNotMatch(
+  memberAgentCss,
+  /backdrop-filter/,
+  "the opaque launcher should not carry a visually inert backdrop filter",
 );
 
 assert.doesNotMatch(

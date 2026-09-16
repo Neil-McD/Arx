@@ -1,24 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
 
 import {
   buildResourceChangesetCardFromPayload,
   extractRuntimeResourceChangesetCards,
-  isResourceProposalCompleted,
 } from "../apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx";
 
 describe("resource changeset approval cards", () => {
-  it("dismisses recovered proposals only after confirmed application or rejection", () => {
-    expect(isResourceProposalCompleted("applied")).toBe(true);
-    expect(isResourceProposalCompleted("rejected")).toBe(true);
-    for (const status of [null, "staged", "approved", "applying", "rejecting", "failed", "expired"]) {
-      expect(isResourceProposalCompleted(status)).toBe(false);
-    }
-  });
-  it("uses pending-only presentation for recovered proposals, not historical cards", () => {
-    const source = readFileSync(new URL("../apps/web/src/components/WebMemberAgentDock.tsx", import.meta.url), "utf8");
-    expect(source).toMatch(/cards=\{persistentResourceChangesetCards\}[\s\S]*?pendingOnly/);
-  });
   it("extracts a staged changeset from the canonical polynet_write envelope", () => {
     const cards = extractRuntimeResourceChangesetCards([
       {

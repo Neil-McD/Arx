@@ -12,7 +12,6 @@ import { activateCommunityMembershipCore } from "./communityMembershipLifecycle"
 import schema from "./schema";
 
 const modules = import.meta.glob([
-  "./communityMemberWorkflows.ts",
   "./email.ts",
   "./_generated/**/*.*s",
 ]);

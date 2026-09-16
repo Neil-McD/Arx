@@ -1,8 +1,7 @@
 import {
   type CommunityChannelLike,
-  resolveAuthorizedCommunityChannel,
+  resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
-import { resolveCommunityChannelActor } from "./communityChannelAccess";
 
 type CommunityReadCursorLike = {
   _id: any;
@@ -98,21 +97,11 @@ export async function readCommunityChatReadState(
   userId: any,
   channelId?: any | null,
 ): Promise<CommunityChatReadState> {
-  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
-  const channel = await resolveAuthorizedCommunityChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx,
-    actor, capability: "canRead",
     communityId,
     channelId,
   });
-  return readCommunityChannelReadState(ctx, communityId, userId, channel);
-}
-
-// Internal projection only; callers supply a channel whose audience they have
-// already authorized. This does not enable restricted-room entry APIs.
-export async function readCommunityChannelReadState(
-  ctx: any, communityId: any, userId: any, channel: CommunityChannelLike,
-): Promise<CommunityChatReadState> {
   const cursor = await getCommunityReadCursor(
     ctx,
     communityId,
@@ -158,10 +147,8 @@ export async function advanceCommunityChatReadCursor(args: {
     userId,
   } = args;
   const latestReadableAt = normalizeCommunityReadPosition(args.latestReadableAt);
-  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
-  const channel = await resolveAuthorizedCommunityChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx,
-    actor, capability: "canRead",
     communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,

@@ -17,9 +17,8 @@ import {
   type CommunityChannelLike,
   interactionBelongsToChannel,
   requireChannelForAddressableRoot,
-  resolveAuthorizedCommunityChannel,
+  resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
-import { getCommunityChannelCapabilities, resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
 
 export {
   COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT,
@@ -41,7 +40,6 @@ async function requireCommunityTypingRoot(args: {
   communityId: any;
   channel: CommunityChannelLike;
   rootId?: any | null;
-  actor: ChannelActor;
 }): Promise<any | null> {
   const normalizedRootId = normalizeTypingRootId(args.rootId);
   if (!normalizedRootId) return null;
@@ -57,7 +55,6 @@ async function requireCommunityTypingRoot(args: {
   const rootChannel = await requireChannelForAddressableRoot({
     ctx: args.ctx,
     root,
-    actor: args.actor,
   });
   if (
     normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channel._id)
@@ -75,10 +72,8 @@ export async function renewCommunityTypingLease(args: {
   rootId?: any | null;
   nowMs?: number;
 }): Promise<{ displayUntil: number; rootId: string | null; updatedAt: number }> {
-  const actor = await resolveCommunityChannelActor({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
-  const channel = await resolveAuthorizedCommunityChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
-    actor, capability: args.rootId ? "canReply" : "canPost",
     communityId: args.communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,
@@ -87,7 +82,6 @@ export async function renewCommunityTypingLease(args: {
   const validatedRootId = await requireCommunityTypingRoot({
     ...args,
     channel,
-    actor,
   });
   const issuedLease = issueTypingPresenceLease(args.nowMs ?? Date.now());
   const channelPresence = (await args.ctx.db
@@ -150,10 +144,8 @@ export async function clearCommunityTypingLease(args: {
   rootId?: any | null;
 }): Promise<{ cleared: boolean }> {
   const requestedRootId = normalizeTypingRootId(args.rootId);
-  const actor = await resolveCommunityChannelActor({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
-  const channel = await resolveAuthorizedCommunityChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
-    actor, capability: "canRead",
     communityId: args.communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,
@@ -191,11 +183,10 @@ async function communityTypingCandidateRemainsAuthorized(args: {
   ctx: any;
   communityId: any;
   userId: any;
-  channel: CommunityChannelLike;
 }): Promise<boolean> {
   try {
-    const actor = await resolveCommunityChannelActor(args);
-    return (await getCommunityChannelCapabilities({ ...args, actor })).canRead;
+    await requireCommunityChatAccess(args);
+    return true;
   } catch {
     return false;
   }
@@ -242,10 +233,8 @@ export async function resolveCommunityTypingPresence(args: {
   }>;
 }> {
   const nowMs = Date.now();
-  const actor = await resolveCommunityChannelActor({ ctx: args.ctx, communityId: args.community._id, userId: args.viewerUserId });
-  const channel = await resolveAuthorizedCommunityChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
-    actor, capability: "canRead",
     communityId: args.community._id,
     channelId: args.channelId,
   });
@@ -295,7 +284,6 @@ export async function resolveCommunityTypingPresence(args: {
             ctx: args.ctx,
             communityId: args.community._id,
             userId: row.userId,
-            channel,
           })
           && await communityTypingRootRemainsValid({
             ctx: args.ctx,

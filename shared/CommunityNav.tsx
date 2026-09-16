@@ -1,22 +1,19 @@
-import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  Brain,
   Check,
   ChevronDown,
   ChevronUp,
-  GitFork,
   GripVertical,
   Hash,
-  LockKeyhole,
   Plus,
   Settings,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
-import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -33,11 +30,9 @@ type CommunityNavChannel = {
   name: string;
   is_general: boolean;
   position: number;
-  access_mode?: "all_members" | "restricted";
 };
 
 type CommunityNavProps = {
-  memberNextStep?: ReactNode;
   activeCommunity: CommunityNavCommunityLike;
   hideIdentity?: boolean;
   hideIdentitySettings?: boolean;
@@ -48,6 +43,8 @@ type CommunityNavProps = {
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  memberCount?: number | null;
+  onOpenMembers?: () => void;
   isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
@@ -58,13 +55,13 @@ type CommunityNavProps = {
   selectedChannelSlug?: string | null;
   channelIndicators?: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectChannel?: (channel: CommunityNavChannel) => void;
-  onCreateChannel?: (name: string, accessMode?: "all_members" | "restricted") => Promise<unknown>;
+  onCreateChannel?: (name: string) => Promise<unknown>;
   isCreatingChannel?: boolean;
   createChannelError?: string | null;
   clearCreateChannelError?: () => void;
   isAtChannelLimit?: boolean;
   maxActiveChannels?: number;
-  onReorderChannels?: (orderedChannelIds: string[], movedChannelId: string) => Promise<boolean> | boolean;
+  onReorderChannels?: (orderedChannelIds: string[]) => Promise<boolean> | boolean;
   isReorderingChannels?: boolean;
   reorderChannelsError?: string | null;
   clearReorderChannelsError?: () => void;
@@ -152,6 +149,10 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
   return new URL(joinPath, window.location.origin).toString();
 }
 
+function formatMemberCount(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.floor(value)).toLocaleString();
+}
 
 export const CommunityNav = memo(function CommunityNav({
   activeCommunity,
@@ -164,9 +165,10 @@ export const CommunityNav = memo(function CommunityNav({
   canViewActiveCommunitySettings,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
+  memberCount = null,
+  onOpenMembers,
   isLoadingAccess = false,
   onSelectTab,
-  memberNextStep,
   onCopyCommunityJoinLink,
   lockedTabs = {},
   channels = [],
@@ -179,7 +181,7 @@ export const CommunityNav = memo(function CommunityNav({
   createChannelError = null,
   clearCreateChannelError,
   isAtChannelLimit = false,
-  maxActiveChannels = MAX_TOTAL_COMMUNITY_CHANNELS,
+  maxActiveChannels = 10,
   onReorderChannels,
   isReorderingChannels = false,
   reorderChannelsError = null,
@@ -189,9 +191,6 @@ export const CommunityNav = memo(function CommunityNav({
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
   const [channelName, setChannelName] = useState("");
-  const [channelAccessMode, setChannelAccessMode] = useState<"all_members" | "restricted">("all_members");
-  const { sharedFull, privateFull } = communityChannelCapacity(channels);
-  const selectedCapacityFull = channelAccessMode === "all_members" ? sharedFull : privateFull;
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
   const communityIdentityFrameRef = useRef<number | null>(null);
@@ -206,6 +205,8 @@ export const CommunityNav = memo(function CommunityNav({
   const showManagementSection =
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
+  const memberCountLabel = formatMemberCount(memberCount);
+  const showMembersItem = Boolean(canViewMembersActiveCommunity && onOpenMembers);
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -219,10 +220,10 @@ export const CommunityNav = memo(function CommunityNav({
   const canReorderChannels = Boolean(
     canManageMembersActiveCommunity && onReorderChannels && reorderableChannelIds.length > 1,
   );
-  const commitChannelOrder = (orderedIds: string[] | null, movedChannelId: string) => {
+  const commitChannelOrder = (orderedIds: string[] | null) => {
     if (!orderedIds || !onReorderChannels || isReorderingChannels) return;
     clearReorderChannelsError?.();
-    void onReorderChannels(orderedIds, movedChannelId);
+    void onReorderChannels(orderedIds);
   };
   const {
     setContainerElement: setChannelListElement,
@@ -236,7 +237,7 @@ export const CommunityNav = memo(function CommunityNav({
         reorderableChannelIds,
         draggedChannelId,
         targetIndex,
-      ), draggedChannelId);
+      ));
     },
   });
   const restoreModalTriggerFocus = (
@@ -280,7 +281,6 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     setIsAddChannelOpen(false);
     setChannelName("");
-    setChannelAccessMode("all_members");
     setReorderControlsChannelId(null);
     clearCreateChannelError?.();
     clearReorderChannelsError?.();
@@ -365,7 +365,6 @@ export const CommunityNav = memo(function CommunityNav({
     if (isCreatingChannel) return;
     setIsAddChannelOpen(false);
     setChannelName("");
-    setChannelAccessMode("all_members");
     clearCreateChannelError?.();
     restoreModalTriggerFocus(addChannelTriggerRef.current);
   };
@@ -375,9 +374,8 @@ export const CommunityNav = memo(function CommunityNav({
     const normalizedName = channelName.trim().replace(/\s+/g, " ");
     if (!normalizedName || !onCreateChannel || isCreatingChannel) return;
     clearCreateChannelError?.();
-    const created = await onCreateChannel(normalizedName, channelAccessMode);
+    const created = await onCreateChannel(normalizedName);
     if (!created) return;
-    setChannelAccessMode("all_members");
     setIsAddChannelOpen(false);
     setChannelName("");
     restoreModalTriggerFocus(addChannelTriggerRef.current);
@@ -427,7 +425,6 @@ export const CommunityNav = memo(function CommunityNav({
           />
         </div>
       ) : null}
-      {memberNextStep}
       <div
         className="community-channel-list"
         aria-label="Channels"
@@ -466,7 +463,7 @@ export const CommunityNav = memo(function CommunityNav({
                 title={channel.name}
               >
                 <span className="nav-icon community-channel-icon" aria-hidden="true">
-                  {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.8} /> : <Hash size={17} strokeWidth={1.8} />}
+                  <Hash size={17} strokeWidth={1.8} />
                 </span>
                 <span className="nav-item-label">{channel.name}</span>
                 {lockedTabs.chat ? <NavLockGlyph /> : !isSelected && (indicator?.chat || indicator?.mentions) ? (
@@ -495,7 +492,7 @@ export const CommunityNav = memo(function CommunityNav({
                         reorderableChannelIds,
                         channel.id,
                         event.key === "ArrowUp" ? -1 : 1,
-                      ), channel.id);
+                      ));
                     }}
                   >
                     <GripVertical size={15} aria-hidden="true" />
@@ -505,7 +502,7 @@ export const CommunityNav = memo(function CommunityNav({
                       <button
                         type="button"
                         disabled={reorderableChannelIds[0] === channel.id || isReorderingChannels}
-                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, -1), channel.id)}
+                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, -1))}
                         aria-label={`Move ${channel.name} up`}
                         title="Move up"
                       >
@@ -514,7 +511,7 @@ export const CommunityNav = memo(function CommunityNav({
                       <button
                         type="button"
                         disabled={reorderableChannelIds.at(-1) === channel.id || isReorderingChannels}
-                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, 1), channel.id)}
+                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, 1))}
                         aria-label={`Move ${channel.name} down`}
                         title="Move down"
                       >
@@ -540,7 +537,6 @@ export const CommunityNav = memo(function CommunityNav({
             disabled={isAtChannelLimit}
             onClick={() => {
               clearCreateChannelError?.();
-              setChannelAccessMode(sharedFull ? "restricted" : "all_members");
               setIsAddChannelOpen(true);
             }}
             title={
@@ -565,23 +561,38 @@ export const CommunityNav = memo(function CommunityNav({
             <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
           ))}
         </div>
+      ) : showMembersItem ? (
+        <button
+          className="nav-item community-nav-members"
+          type="button"
+          onClick={onOpenMembers}
+          title="Members"
+          aria-label={memberCountLabel ? `Members, ${memberCountLabel}` : "Members"}
+        >
+          <span className="nav-icon" aria-hidden="true">
+            <Users size={18} strokeWidth={1.7} />
+          </span>
+          <span className="nav-item-label">Members</span>
+          {memberCountLabel ? (
+            <span className="community-nav-members-count">{memberCountLabel}</span>
+          ) : null}
+        </button>
       ) : null}
       {!isLoadingAccess ? (
         <>
-          <button className={showActiveSelection && communityTab === "agent" ? "nav-item active" : "nav-item"} type="button" onClick={() => onSelectTab("agent")} title="Agent">
-            <span className="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" /></svg></span>
-            <span className="nav-item-label">Agent</span>
-          </button>
           <button
             className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
             type="button"
             onClick={() => onSelectTab("resources")}
-            title="Knowledge"
+            title="Resources"
           >
             <span className="nav-icon">
-              <Brain size={18} strokeWidth={1.7} aria-hidden="true" />
+              <svg viewBox="0 0 24 24">
+                <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+                <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+              </svg>
             </span>
-            <span className="nav-item-label">Knowledge</span>
+            <span className="nav-item-label">Resources</span>
             {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
           <button
@@ -618,19 +629,6 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
-          {canManageMembersActiveCommunity && (
-            <button
-              className={showActiveSelection && communityTab === "workflows" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("workflows")}
-              title="Workflows"
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <GitFork size={18} strokeWidth={1.7} />
-              </span>
-              Workflows
-            </button>
-          )}
           {canManageMembersActiveCommunity && (
             <button
               className={showActiveSelection && communityTab === "funnel" ? "nav-item active" : "nav-item"}
@@ -713,7 +711,7 @@ export const CommunityNav = memo(function CommunityNav({
             <div className="community-channel-modal-header">
               <div>
                 <h2 id="community-channel-modal-title">Add channel</h2>
-                <p>Choose who can access this channel.</p>
+                <p>Channels are visible to every community member.</p>
               </div>
               <button
                 type="button"
@@ -739,15 +737,6 @@ export const CommunityNav = memo(function CommunityNav({
                 disabled={isCreatingChannel}
               />
             </label>
-            <label className="community-channel-modal-field">
-              <span>Access</span>
-              <select value={channelAccessMode} disabled={isCreatingChannel}
-                onChange={event => { setChannelAccessMode(event.target.value as "all_members" | "restricted"); clearCreateChannelError?.(); }}>
-                <option value="all_members" disabled={sharedFull}>All community members{sharedFull ? " (10-channel limit reached)" : ""}</option>
-                <option value="restricted" disabled={privateFull}>Invite-only{privateFull ? " (100-channel limit reached)" : ""}</option>
-              </select>
-            </label>
-            {channelAccessMode === "restricted" ? <p>Only owners/admins and people you add in channel settings can enter.</p> : null}
             {createChannelError ? (
               <div className="community-channel-modal-error" role="alert">
                 {createChannelError}
@@ -760,7 +749,7 @@ export const CommunityNav = memo(function CommunityNav({
               <button
                 type="submit"
                 className="is-primary"
-                disabled={isCreatingChannel || !channelName.trim() || selectedCapacityFull}
+                disabled={isCreatingChannel || !channelName.trim()}
               >
                 {isCreatingChannel ? "Adding…" : "Add channel"}
               </button>

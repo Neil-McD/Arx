@@ -495,7 +495,7 @@ assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button \{[
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic app-topbar icon-button glyph size");
 assert.match(
   indexCss,
-  /--web-topbar-right-action-safe-inset:\s*66px;/,
+  /--web-topbar-right-action-safe-inset:\s*62px;/,
   "the shell must expose one explicit safe inset for content rendered beneath the floating DM action",
 );
 assert.match(

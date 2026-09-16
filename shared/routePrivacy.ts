@@ -7,7 +7,6 @@ const SENSITIVE_ROUTE_SEARCH_PARAM_NAMES = new Set([
   "id_token",
   "refresh_token",
   "session_id",
-  "session_uri",
   "state",
   "token",
 ]);

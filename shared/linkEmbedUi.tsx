@@ -236,20 +236,6 @@ export function parseYouTubeEmbedUrl(
   };
 }
 
-export function firstYouTubeEmbedInText(text: string): {
-  href: string;
-  embed: Extract<ParsedEmbed, { provider: "youtube" }>;
-} | null {
-  const href = extractCommunityInteractionLinkSources(
-    text,
-    (rawUrl) => (parseYouTubeEmbedUrl(rawUrl) ? rawUrl : null),
-    1,
-  )[0];
-  if (!href) return null;
-  const embed = parseYouTubeEmbedUrl(href);
-  return embed ? { href, embed } : null;
-}
-
 /** One preview per video, in authored order; code samples remain plain text. */
 export function youTubeEmbedsInText(text: string) {
   const seen = new Set<string>();
