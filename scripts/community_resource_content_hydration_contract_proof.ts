@@ -108,12 +108,12 @@ assert.match(
 assert.match(
   viewer,
   /embed\.provider === "youtube"[\s\S]*<DeferredYouTubeEmbed[\s\S]*<StableMediaEmbedFrame[\s\S]*src=\{embed\.src\}/,
-"resource viewer should defer YouTube loading while keeping one stable frame for other media providers",
+  "resource viewer should defer YouTube activation while keeping one stable frame for other media providers",
 );
 assert.match(
   deferredYouTube,
-  /export function DeferredYouTubeEmbed[\s\S]*IntersectionObserver[\s\S]*<iframe[\s\S]*sandbox=/,
-  "chat and Resources should share one native, viewport-loaded YouTube implementation",
+  /export function DeferredYouTubeEmbed[\s\S]*<iframe[\s\S]*sandbox=[\s\S]*setIsActive\(true\)/,
+  "chat and Resources should share one safe click-to-play YouTube implementation",
 );
 assert.match(
   markdown,

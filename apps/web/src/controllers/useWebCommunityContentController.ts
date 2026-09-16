@@ -9,7 +9,6 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
-import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import {
@@ -125,22 +124,12 @@ export function useWebCommunityContentController(
     getSession,
     session,
   } = params;
-  const resourceIdentity = JSON.stringify([resolveAuthSubject(session), activeCommunityId]);
-  const resourceOwner = useRef({ identity: resourceIdentity, epoch: 0 });
-  if (resourceOwner.current.identity !== resourceIdentity) resourceOwner.current = { identity: resourceIdentity, epoch: resourceOwner.current.epoch + 1 };
-  const resourceScope = `${resourceIdentity}:${resourceOwner.current.epoch}`;
-  const [resourceData, setResourceData] = useState<{ scope: string; resources: WebCommunityResource[]; modules: WebCommunityResourceModule[] }>(() => ({ scope: resourceScope, resources: [], modules: [] }));
-  const ownedResourceData = resourceData.scope === resourceScope ? resourceData : { scope: resourceScope, resources: [], modules: [] };
-  if (ownedResourceData !== resourceData) setResourceData(ownedResourceData);
-  const { resources, modules } = ownedResourceData;
-  const setResources = useCallback<Dispatch<SetStateAction<WebCommunityResource[]>>>((next) => {
-    setResourceData((current) => current.scope !== resourceScope ? current : { ...current, resources: typeof next === "function" ? next(current.resources) : next });
-  }, [resourceScope]);
-  const setModules = useCallback<Dispatch<SetStateAction<WebCommunityResourceModule[]>>>((next) => {
-    setResourceData((current) => current.scope !== resourceScope ? current : { ...current, modules: typeof next === "function" ? next(current.modules) : next });
-  }, [resourceScope]);
+  const [resources, setResources] = useState<WebCommunityResource[]>([]);
   const getSessionRef = useRef(getSession);
   getSessionRef.current = getSession;
+  const [modules, setModules] = useState<WebCommunityResourceModule[]>([]);
+  const [isLoadingResources, setIsLoadingResources] = useState(false);
+  const [isLoadingModules, setIsLoadingModules] = useState(false);
   const [eventsByCacheKey, setEventsByCacheKey] =
     useState<Record<string, CloudCommunityEvent[]>>({});
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
@@ -154,10 +143,10 @@ export function useWebCommunityContentController(
   );
   const eventsCacheKey = useMemo(
     () =>
-      activeCommunityId && resolveAuthSubject(session)
-        ? buildEventsCacheKey(`${activeCommunityId}:${resolveAuthSubject(session)}`, eventsVisibleRange)
+      activeCommunityId
+        ? buildEventsCacheKey(activeCommunityId, eventsVisibleRange)
         : null,
-    [activeCommunityId, eventsVisibleRange, session?.user.id],
+    [activeCommunityId, eventsVisibleRange],
   );
   const events = useMemo(
     () => (eventsCacheKey ? eventsByCacheKey[eventsCacheKey] ?? [] : []),
@@ -213,6 +202,8 @@ export function useWebCommunityContentController(
     communityResourceModules: modules,
     setCommunityResources: setResources,
     setCommunityResourceModules: setModules,
+    setIsLoadingResources,
+    setIsLoadingResourceModules: setIsLoadingModules,
   });
 
   const {
@@ -221,7 +212,6 @@ export function useWebCommunityContentController(
     handleCancelCommunityEvent,
   } = useCommunityEventsController<AuthSession>({
     activeCommunityId,
-    visibleRange: eventsVisibleRange,
     session,
     ensureSession,
     setCommunityEvents: setEvents,
@@ -254,7 +244,10 @@ export function useWebCommunityContentController(
       if (!detail || detail.communityId !== activeCommunityId) return;
       const activeSession = getSessionRef.current();
       if (!activeSession) return;
-      void resourceUi.loadCommunityResources(detail.communityId, activeSession).catch((loadError) => {
+      void Promise.all([
+        resourceUi.loadCommunityResourceModules(detail.communityId, activeSession),
+        resourceUi.loadCommunityResources(detail.communityId, activeSession),
+      ]).catch((loadError) => {
         console.warn(
           "[community-resources] failed to refresh after resource mutation:",
           loadError,
@@ -267,12 +260,15 @@ export function useWebCommunityContentController(
     };
   }, [
     activeCommunityId,
+    resourceUi.loadCommunityResourceModules,
     resourceUi.loadCommunityResources,
   ]);
 
   const resetContentState = useCallback(() => {
     setResources([]);
     setModules([]);
+    setIsLoadingResources(false);
+    setIsLoadingModules(false);
     resetEventsCache();
     setIsLoadingEvents(false);
     setEventsError(null);
@@ -286,31 +282,31 @@ export function useWebCommunityContentController(
   }, [resetEventsCache, resourceUi]);
 
   useEffect(() => {
+    setResources([]);
+    setModules([]);
     setIsLoadingEvents(false);
     setEventsError(null);
   }, [activeCommunityId]);
 
   const reloadActiveEvents = useCallback(
     async (range: CommunityEventsRange): Promise<void> => {
-      if (!activeCommunityId || !session) return;
+      if (!activeCommunityId) return;
+      const activeSession = await ensureSession();
+      if (!activeSession) return;
       await loadCommunityEvents(
         activeCommunityId,
-        session,
+        activeSession,
         range,
       );
     },
-    [activeCommunityId, session, loadCommunityEvents],
+    [activeCommunityId, ensureSession, loadCommunityEvents],
   );
 
   return {
     resources,
     modules,
-    isLoadingResources: resourceUi.resourceRead.status === "pending",
-    isLoadingModules: resourceUi.moduleRead.status === "pending",
-    retryResourceRead: (collection: "resources" | "modules") => {
-      if (!activeCommunityId || !session) return Promise.resolve();
-      return resourceUi.refreshCommunityResources(activeCommunityId, session, [collection]);
-    },
+    isLoadingResources,
+    isLoadingModules,
     events,
     hasLoadedVisibleEventsRange,
     isLoadingEvents,

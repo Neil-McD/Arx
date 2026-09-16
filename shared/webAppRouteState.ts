@@ -57,7 +57,7 @@ export type AppRoutePathState = {
  *
  * AppRoutePathState remains the compatibility adapter for the existing shell
  * state while consumers migrate. New shell decisions should use this union so
- * impossible combinations such as `community_members + communityTab: chat`
+ * impossible combinations such as contradictory community destinations
  * are not re-interpreted independently in each component.
  */
 export type WebDestination =
@@ -70,11 +70,12 @@ export type WebDestination =
   | { kind: "community_funnel"; slug: string }
   | { kind: "community_funnel_preview"; slug: string }
   | { kind: "community_home"; slug: string }
-  | { kind: "community_members"; slug: string }
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
+  | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
+  | { kind: "community_workflows"; slug: string }
   | { kind: "community_funnel_editor"; slug: string }
   | { kind: "community_analytics"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
@@ -245,13 +246,6 @@ export function buildCommunityHomePath(
   return `/c/${encodeURIComponent(slug)}/home`;
 }
 
-export function buildCommunityMembersPath(
-  communitySlug: string | null | undefined,
-): string | null {
-  const slug = String(communitySlug ?? "").trim();
-  if (!slug) return null;
-  return `/c/${encodeURIComponent(slug)}/members`;
-}
 
 export function buildCommunityFunnelPreviewPath(
   communitySlug: string | null | undefined,
@@ -497,7 +491,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     if (!slug) return null;
     return {
       page: "community",
-      view: "community_members",
+      view: "home",
       settingsPage: "profile",
       communitySlug: slug,
       communityTab: "chat",
@@ -512,7 +506,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     if (!slug) return null;
     const tabSegment = String(segments[2] ?? "").trim();
     const legacyAgentSettingsPane =
-      tabSegment === "agent" || tabSegment === "ai_agent"
+      tabSegment === "ai_agent"
         ? "agent"
         : null;
     const isLegacyFunnelSettingsRoute =
@@ -572,9 +566,6 @@ export function deriveWebDestinationFromAppRoute(
       if (route.view === "community_home") {
         return { kind: "community_home", slug };
       }
-      if (route.view === "community_members") {
-        return { kind: "community_members", slug };
-      }
       switch (route.communityTab) {
         case "chat":
           return {
@@ -590,12 +581,16 @@ export function deriveWebDestinationFromAppRoute(
           };
         case "events":
           return { kind: "community_events", slug };
+        case "agent":
+          return { kind: "community_agent", slug };
         case "settings":
           return {
             kind: "community_settings",
             slug,
             pane: parseCommunitySettingsPane(route.communitySettingsPane),
           };
+        case "workflows":
+          return { kind: "community_workflows", slug };
         case "funnel":
           return { kind: "community_funnel_editor", slug };
         case "analytics":
@@ -648,7 +643,9 @@ export function isWebCommunityDetailDestination(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_agent":
     case "community_settings":
+    case "community_workflows":
     case "community_funnel_editor":
     case "community_analytics":
       return true;
@@ -662,7 +659,6 @@ export function isWebCommunityAppDestination(
 ): boolean {
   return (
     destination.kind === "community_home" ||
-    destination.kind === "community_members" ||
     isWebCommunityDetailDestination(destination)
   );
 }
@@ -676,7 +672,9 @@ export function webDestinationHasCommunityNavSelection(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_agent":
     case "community_settings":
+    case "community_workflows":
     case "community_funnel_editor":
     case "community_analytics":
       return true;
@@ -779,9 +777,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   if (state.page === "community") {
     if (state.view === "community_home") {
       return buildCommunityHomePath(state.communitySlug);
-    }
-    if (state.view === "community_members") {
-      return buildCommunityMembersPath(state.communitySlug);
     }
     return buildCommunityTabPath(
       state.communitySlug,

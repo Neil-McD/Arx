@@ -11,7 +11,6 @@ const stableMedia = read("shared/StableFramedMedia.tsx");
 const imageResource = read("shared/useImageResource.ts");
 const discoverCard = read("shared/DiscoverCommunityCard.tsx");
 const communityNav = read("shared/CommunityNav.tsx");
-const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const discoverBanner = discoverCard.match(
   /<StableFramedMedia\b(?=[^>]*className="discover-card-banner")[^>]*\/>/,
@@ -64,18 +63,14 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /className="community-nav-banner has-image"[\s\S]{0,500}loading="eager"[\s\S]{0,80}fetchPriority="high"/,
+  /className=\{`community-nav-banner[\s\S]{0,500}loading="eager"[\s\S]{0,80}fetchPriority="high"/,
   "the active community banner must remain eager and high priority",
 );
 assert.match(
-  read("apps/web/src/components/MemberAvatarStack.tsx"),
-  /loading=\{props\.imageLoading \?\? "eager"\}[\s\S]{0,120}fetchPriority=\{index === 0 && props\.imageLoading !== "lazy" \? "high" : "auto"\}/,
+  facepile,
+  /loading="eager"[\s\S]{0,100}fetchPriority=\{index === 0 \? "high" : "auto"\}/,
   "visible presence faces must load eagerly with one highest-priority identity",
 );
-assert.match(
-  contextPanel,
-  /loading=\{isOnline \? "eager" : "lazy"\}[\s\S]{0,100}fetchPriority=\{isOnline \? "auto" : "low"\}/,
-  "offline member avatars must not contend with visible online identities",
-);
+
 
 console.log("image loading latency contract proof passed");

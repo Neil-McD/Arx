@@ -59,7 +59,6 @@ export async function listCloudCommunityEvents<SessionT>(
     startIso: string;
     endIso: string;
     includeCancelled?: boolean;
-    overlap?: boolean;
     limit?: number;
   },
 ): Promise<CloudCommunityEvent[]> {
@@ -70,7 +69,6 @@ export async function listCloudCommunityEvents<SessionT>(
     startIso: params.startIso,
     endIso: params.endIso,
     includeCancelled: params.includeCancelled ?? false,
-    ...(params.overlap === undefined ? {} : { overlap: params.overlap }),
     limit:
       typeof params.limit === "number" && Number.isFinite(params.limit)
         ? Math.max(1, Math.floor(params.limit))

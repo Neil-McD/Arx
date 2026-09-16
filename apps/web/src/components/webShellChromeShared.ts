@@ -45,6 +45,7 @@ export type WebDesktopShellHeaderProps = {
 };
 
 export type WebCommunityShellProps = {
+  memberNextStep?: ReactNode;
   showMobileShell: boolean;
   showMobileGlobalShell: boolean;
   mobileOverlay: MobileOverlay;
@@ -62,6 +63,7 @@ export type WebCommunityShellProps = {
     name: string;
     is_general: boolean;
     position: number;
+    access_mode?: "all_members" | "restricted";
   }>;
   isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
@@ -73,13 +75,13 @@ export type WebCommunityShellProps = {
     is_general: boolean;
     position: number;
   }) => void;
-  onCreateCommunityChannel: (name: string) => Promise<unknown>;
+  onCreateCommunityChannel: (name: string, accessMode?: "all_members" | "restricted") => Promise<unknown>;
   isCreatingCommunityChannel: boolean;
   communityChannelCreateError: string | null;
   clearCommunityChannelCreateError: () => void;
   isAtCommunityChannelLimit: boolean;
   maxActiveCommunityChannels: number;
-  onReorderCommunityChannels: (orderedChannelIds: string[]) => Promise<boolean> | boolean;
+  onReorderCommunityChannels: (orderedChannelIds: string[], movedChannelId: string) => Promise<boolean> | boolean;
   isReorderingCommunityChannels: boolean;
   communityChannelReorderError: string | null;
   clearCommunityChannelReorderError: () => void;

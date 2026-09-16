@@ -4,6 +4,8 @@ import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
+import { requireServiceWorkflowDestination } from "./communityAgentServiceWorkflowCore";
 
 const internalRefs = internal as any;
 
@@ -61,13 +63,13 @@ type InteractionReplyRow = {
 export type ConciergeIntakeResult = {
   mention_id: string | null;
   invocation_key: string;
-  trigger_kind: "mention" | "direct_reply" | null;
+  trigger_kind: "mention" | "direct_reply" | "workflow" | null;
   status: "queued" | "skipped" | "duplicate" | "ignored";
   intake_reason: ServeRequestIntakeReason;
   request_id: string | null;
 };
 
-type CommunityAgentTriggerKind = "mention" | "direct_reply";
+type CommunityAgentTriggerKind = "mention" | "direct_reply" | "workflow";
 
 function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
@@ -161,6 +163,8 @@ async function scheduleImmediateServeWorker(args: {
 }
 
 async function insertServeRequest(args: {
+  workflowCompletionReview?: boolean;
+  workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
   invocationKey: string;
@@ -171,6 +175,13 @@ async function insertServeRequest(args: {
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
+  workflowRunId?: any;
+  workflowActionKey?: string;
+  workflowPromptSnapshot?: string;
+  workflowTimerId?: any;
+  workflowFormRequestId?: any;
+  serviceChannelId?: any;
+  serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
@@ -186,6 +197,8 @@ async function insertServeRequest(args: {
     }
   }
   return await args.ctx.db.insert("communityAgentServeRequests" as any, {
+    ...(args.workflowCompletionReview ? { workflowCompletionReview: true } : {}),
+    ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
     communityId: args.communityId,
     agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
     ...(args.mention ? { sourceMentionId: args.mention._id } : {}),
@@ -194,6 +207,13 @@ async function insertServeRequest(args: {
     ...(args.sourceRootId ? { sourceRootId: args.sourceRootId } : {}),
     ...(args.sourceReplyId ? { sourceReplyId: args.sourceReplyId } : {}),
     ...(args.requesterUserId ? { requesterUserId: args.requesterUserId, sponsorUserId } : {}),
+    ...(args.workflowRunId ? { workflowRunId: args.workflowRunId } : {}),
+    ...((args.workflowTimerId || args.workflowFormRequestId) ? { workflowTimerId: args.workflowTimerId, workflowFormRequestId: args.workflowFormRequestId,
+      serviceChannelId: args.serviceChannelId, serviceChannelRevision: args.serviceChannelRevision } : {}),
+    ...(args.workflowActionKey ? { workflowActionKey: args.workflowActionKey } : {}),
+    ...(args.workflowPromptSnapshot
+      ? { workflowPromptSnapshot: args.workflowPromptSnapshot }
+      : {}),
     status: args.status,
     intakeReason: args.intakeReason,
     ...(args.sourceVisibilityScope ? { sourceVisibilityScope: args.sourceVisibilityScope } : {}),
@@ -214,6 +234,13 @@ async function skipInvocation(args: {
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
+  workflowRunId?: any;
+  workflowActionKey?: string;
+  workflowPromptSnapshot?: string;
+  workflowTimerId?: any;
+  workflowFormRequestId?: any;
+  serviceChannelId?: any;
+  serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
@@ -230,6 +257,13 @@ async function skipInvocation(args: {
     sourceRootId: args.sourceRootId,
     sourceReplyId: args.sourceReplyId,
     requesterUserId: args.requesterUserId,
+    workflowRunId: args.workflowRunId,
+    workflowActionKey: args.workflowActionKey,
+    workflowPromptSnapshot: args.workflowPromptSnapshot,
+    workflowTimerId: args.workflowTimerId,
+    workflowFormRequestId: args.workflowFormRequestId,
+    serviceChannelId: args.serviceChannelId,
+    serviceChannelRevision: args.serviceChannelRevision,
     sourceVisibilityScope: args.sourceVisibilityScope,
     responseVisibilityScope: args.responseVisibilityScope,
     skipReason: args.skipReason,
@@ -522,6 +556,7 @@ export async function intakeCommunityAgentTurn(args: {
       communityId: args.communityId,
       userId: source.requesterUserId,
     });
+    await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: source.requesterUserId });
   } catch {
     const skipped = await skipInvocation({
       ctx: args.ctx,
@@ -634,6 +669,184 @@ export async function intakeCommunityAgentTurn(args: {
     mention_id: mentionId ? normalizeIdValue(mentionId) : null,
     invocation_key: invocationKey,
     trigger_kind: triggerKind,
+    status: "queued",
+    intake_reason: "accepted",
+    request_id: normalizeIdValue(requestId),
+  };
+}
+
+export async function intakeCommunityAgentWorkflowAction(args: {
+  workflowCompletionReview?: boolean;
+  workflowAssessment?: boolean;
+  ctx: any;
+  communityId: any;
+  rootId?: any;
+  workflowTimerId?: any;
+  workflowFormRequestId?: any;
+  replyId?: any;
+  requesterUserId: any;
+  workflowRunId: any;
+  workflowActionKey: string;
+  workflowPromptSnapshot: string;
+  nowMs: number;
+}): Promise<ConciergeIntakeResult> {
+  const workflowActionKey = boundedText(args.workflowActionKey, 64);
+  const workflowPromptSnapshot = String(args.workflowPromptSnapshot ?? "")
+    .trim()
+    .slice(0, 4_000);
+  if (!workflowActionKey || !workflowPromptSnapshot) {
+    throw new Error("community_agent_workflow_action_invalid");
+  }
+  const workflowRun = await args.ctx.db.get(args.workflowRunId);
+  if (
+    !workflowRun ||
+    workflowRun.status !== "running" ||
+    normalizeIdValue(workflowRun.communityId) !== normalizeIdValue(args.communityId) ||
+    workflowRun.actionSnapshot?.type !== (args.workflowAssessment ? "evaluate_goal" : "prompt_agent") ||
+    workflowRun.actionSnapshot?.key !== workflowActionKey ||
+    (!args.workflowAssessment && workflowRun.actionSnapshot?.prompt !== workflowPromptSnapshot)
+  ) {
+    throw new Error("community_agent_workflow_run_authority_invalid");
+  }
+  const invocationKey = `workflow:${normalizeIdValue(args.workflowRunId)}:${workflowActionKey}`;
+  const existing = (await args.ctx.db
+    .query("communityAgentServeRequests" as any)
+    .withIndex("by_community_invocationKey", (q: any) =>
+      q.eq("communityId", args.communityId).eq("invocationKey", invocationKey),
+    )
+    .first()) as Record<string, any> | null;
+  if (existing) {
+    return {
+      mention_id: null,
+      invocation_key: invocationKey,
+      trigger_kind: "workflow",
+      status: "duplicate",
+      intake_reason: "duplicate",
+      request_id: normalizeIdValue(existing._id),
+    };
+  }
+  const timedMembership = (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? await args.ctx.db.get(workflowRun.membershipId) : null;
+  const timedDestination = (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? {
+    ...(args.workflowCompletionReview ? { workflowCompletionReview: true } : {}),
+    ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
+    workflowTimerId: args.workflowTimerId,
+    workflowFormRequestId: args.workflowFormRequestId,
+    serviceChannelId: args.workflowAssessment ? undefined : timedMembership?.serviceChannelId,
+    serviceChannelRevision: timedMembership?.serviceChannelRevision ?? 0,
+  } : {};
+  const source = await resolveInvocationSource({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    rootId: args.rootId,
+    replyId: args.replyId,
+  });
+  const skip = async (
+    intakeReason: Exclude<ServeRequestIntakeReason, "accepted">,
+    skipReason: string,
+  ): Promise<ConciergeIntakeResult> => ({
+    mention_id: null,
+    invocation_key: invocationKey,
+    trigger_kind: "workflow",
+    ...(await skipInvocation({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind: "workflow",
+      intakeReason,
+      sourceRootId: source.sourceRootId ?? args.rootId,
+      sourceReplyId: source.sourceReplyId ?? args.replyId,
+      requesterUserId: source.requesterUserId ?? args.requesterUserId,
+      workflowRunId: args.workflowRunId,
+      workflowActionKey,
+      workflowPromptSnapshot,
+      ...timedDestination,
+      sourceVisibilityScope: source.visibilityScope,
+      responseVisibilityScope: source.visibilityScope,
+      skipReason,
+      nowMs: args.nowMs,
+    })),
+  });
+  if (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) {
+    try {
+      await requireServiceWorkflowDestination(args.ctx, {
+        ...args, ...timedDestination, triggerKind: "workflow", sponsorUserId: args.requesterUserId,
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
+      return await skip("requester_access_missing", error instanceof Error ? error.message : "workflow_timer_unavailable");
+    }
+  } else {
+  if (!source.root && !source.reply) {
+    return await skip("source_missing", "The triggering contribution no longer exists.");
+  }
+  if (source.root?.status !== "live" || (source.reply && source.reply.status !== "live")) {
+    return await skip("source_not_live", "The triggering contribution is not live.");
+  }
+  if (
+    source.actorType !== "human" ||
+    !source.requesterUserId ||
+    normalizeIdValue(source.requesterUserId) !== normalizeIdValue(args.requesterUserId)
+  ) {
+    return await skip("source_not_human", "The workflow trigger is not an eligible member contribution.");
+  }
+  }
+  try {
+    await requireCommunityChatAccess({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.requesterUserId,
+    });
+    if (!args.workflowTimerId && !args.workflowFormRequestId && !args.workflowCompletionReview) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
+  } catch {
+    return await skip(
+      "requester_access_missing",
+      "The triggering member no longer has community chat access.",
+    );
+  }
+  const config = await latestCommunityAgentConfig(args.ctx, args.communityId);
+  if (config?.agentEnabled === false) {
+    return await skip("agent_disabled", "The community agent is disabled by the owner.");
+  }
+  const funding = await resolveCommunityInferenceFundingAdmission(
+    args.ctx,
+    args.communityId,
+  );
+  if (funding.ok === false) {
+    const intakeReason = funding.code === "community_not_found"
+      ? "source_missing"
+      : funding.code;
+    return await skip(
+      intakeReason,
+      funding.code === "founder_subscription_inactive"
+        ? "The community founder subscription is inactive."
+        : funding.code === "founder_plan_required"
+          ? "The community requires an active founder plan."
+          : "Community inference funding could not be resolved.",
+    );
+  }
+  const requestId = await insertServeRequest({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    invocationKey,
+    triggerKind: "workflow",
+    status: "queued",
+    intakeReason: "accepted",
+    sourceRootId: source.sourceRootId,
+    sourceReplyId: source.sourceReplyId,
+    requesterUserId: args.requesterUserId,
+    workflowRunId: args.workflowRunId,
+    workflowActionKey,
+    workflowPromptSnapshot,
+    ...timedDestination,
+    sourceVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    responseVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    nowMs: args.nowMs,
+  });
+  await scheduleImmediateServeWorker({ ctx: args.ctx, requestId });
+  return {
+    mention_id: null,
+    invocation_key: invocationKey,
+    trigger_kind: "workflow",
     status: "queued",
     intake_reason: "accepted",
     request_id: normalizeIdValue(requestId),

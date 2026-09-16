@@ -356,24 +356,16 @@ export function mountCommunitySemanticResult(args: {
       path,
     };
   }
-  const entries = rawEntries
-    .filter((entry) => {
-      const entryPath =
-        entry && typeof entry === "object"
-          ? String((entry as Record<string, unknown>).path ?? "")
-          : "";
-      return entryPath !== "/self.md";
-    })
-    .map((entry) => {
-      const record = entry as Record<string, unknown>;
-      const kind = record.kind === "directory" ? "directory" : "document";
-      const mountedPath = communityMountedPath(args.communitySlug, record.path);
-      return {
-        ...record,
-        path: mountedPath,
-        type: inferMountedEntryType(mountedPath, kind),
-      };
-    });
+  const entries = rawEntries.map((entry) => {
+    const record = entry as Record<string, unknown>;
+    const kind = record.kind === "directory" ? "directory" : "document";
+    const mountedPath = communityMountedPath(args.communitySlug, record.path);
+    return {
+      ...record,
+      path: mountedPath,
+      type: inferMountedEntryType(mountedPath, kind),
+    };
+  });
   return {
     ...args.result,
     path,

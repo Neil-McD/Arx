@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { InteractionContent } from "../apps/web/src/components/communityInteractionFeed";
 import { DeferredYouTubeEmbed } from "../apps/web/src/components/DeferredYouTubeEmbed";
 import {
-
+  firstYouTubeEmbedInText,
   parseEmbedUrl,
   parseYouTubeEmbedUrl,
   renderTextWithLinks,
@@ -47,8 +47,7 @@ describe("community interaction link presentation", () => {
     expect(markup).toContain('class="chat-link"');
     expect(markup).toContain(url.replaceAll("&", "&amp;"));
     expect(markup).toContain('data-community-youtube-embed="M7lc1UVf-VE"');
-    expect(markup).not.toContain("<img");
-    expect(markup).not.toContain("message-video-caption");
+    expect(markup).toContain("i.ytimg.com/vi/M7lc1UVf-VE/maxresdefault.jpg");
     expect(markup).not.toContain("<iframe");
   });
 
@@ -68,8 +67,8 @@ describe("community interaction link presentation", () => {
   });
 
   it("ignores YouTube URLs inside inline and fenced code", () => {
-    expect(youTubeEmbedsInText("`https://youtu.be/M7lc1UVf-VE`")).toEqual([]);
-    expect(youTubeEmbedsInText("```\nhttps://youtu.be/M7lc1UVf-VE\n```")).toEqual([]);
+    expect(firstYouTubeEmbedInText("`https://youtu.be/M7lc1UVf-VE`")).toBeNull();
+    expect(firstYouTubeEmbedInText("```\nhttps://youtu.be/M7lc1UVf-VE\n```")).toBeNull();
   });
 
   it("rejects lookalike hosts and unsafe YouTube URLs", () => {
@@ -81,14 +80,12 @@ describe("community interaction link presentation", () => {
     expect(parseEmbedUrl("https://evilwistia.com/medias/abc123def")).toBeNull();
   });
 
-  it("keeps start time and reserves native player space before viewport loading", () => {
+  it("keeps start time in the click-activated YouTube source", () => {
     const resolved = parseYouTubeEmbedUrl("https://youtu.be/M7lc1UVf-VE?t=1m2s");
     expect(resolved?.src).toBe("https://www.youtube.com/embed/M7lc1UVf-VE?start=62");
     const markup = renderToStaticMarkup(
       createElement(DeferredYouTubeEmbed, { embed: resolved! }),
     );
-    expect(markup).toContain("Watch on YouTube");
-    expect(markup).toContain("t=62");
-    expect(markup).not.toContain("<button");
+    expect(markup).toContain('aria-label="Play YouTube video"');
   });
 });

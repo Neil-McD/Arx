@@ -1,13 +1,15 @@
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { communityMembershipRowIsActive, normalizeIdValue } from "./communityCore";
+import { normalizeIdValue } from "./communityCore";
+import { normalizeCommunityLifecycle } from "../shared/communityLifecycle";
+import { resolveMentionRecipientSource } from "./communityNotificationAccess";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import {
   EVERYBODY_MENTION_ROLE_KEY,
   mentionBroadcastAllowsEmail,
 } from "./communityMentionBroadcasts";
-import { readCommunityChatReadState } from "./communityReadCursorCore";
+import { readCommunityChannelReadState } from "./communityReadCursorCore";
 
 // M2b: the mention email ping. In-app attention (the accent dot) is the
 // primary signal; email is the fallback for people who are not around. A
@@ -24,52 +26,8 @@ import { readCommunityChatReadState } from "./communityReadCursorCore";
 const MENTION_EMAIL_GRACE_MS = 15 * 60 * 1000;
 const MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 * 60 * 1000;
 const MENTION_EMAIL_BATCH_LIMIT = 25;
-const MENTION_EMAIL_SNIPPET_MAX_CHARS = 140;
 
 const internalRefs = internal as any;
-
-const PUBLIC_APP_URL_ENV_KEYS = ["ARX_PUBLIC_APP_URL", "PUBLIC_APP_URL", "VITE_PUBLIC_APP_URL", "VITE_APP_URL"] as const;
-
-// Same resolution as the digest emails; empty string (no CTA button) when the
-// public URL is not configured, rather than failing the whole ping run.
-function buildAppActionUrl(path: string): string {
-  for (const key of PUBLIC_APP_URL_ENV_KEYS) {
-    try {
-      const value = String((globalThis as any)?.process?.env?.[key] ?? "").trim().replace(/\/+$/, "");
-      if (value && /^https?:\/\//i.test(value)) return new URL(path, `${value}/`).toString();
-    } catch {
-      // ignore
-    }
-  }
-  return "";
-}
-
-function boundedText(raw: unknown, maxLength: number): string {
-  return String(raw ?? "").trim().slice(0, maxLength);
-}
-
-async function readFirstMarkdownBlockText(
-  ctx: any,
-  target: { rootId?: any; replyId?: any },
-): Promise<string> {
-  const rows = target.replyId
-    ? await ctx.db
-        .query("communityInteractionContentBlocks" as any)
-        .withIndex("by_reply_order", (q: any) => q.eq("replyId", target.replyId))
-        .take(5)
-    : target.rootId
-      ? await ctx.db
-          .query("communityInteractionContentBlocks" as any)
-          .withIndex("by_root_order", (q: any) => q.eq("rootId", target.rootId))
-          .take(5)
-      : [];
-  for (const row of rows as Array<Record<string, any>>) {
-    if (row.blockType === "markdown_text" && String(row.text ?? "").trim()) {
-      return boundedText(row.text, MENTION_EMAIL_SNIPPET_MAX_CHARS);
-    }
-  }
-  return "";
-}
 
 export const listPendingMentionEmailJobsInternal = internalQuery({
   args: {
@@ -90,10 +48,8 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       recipientUserId: string;
       suppressed: boolean;
       collapsed: boolean;
-      communityName: string;
-      mentionerName: string;
-      snippet: string;
-      urlPath: string;
+      communityId?: string;
+      communityLifecycleGeneration?: number;
       emailSkipped?: boolean;
       read?: boolean;
     }> = [];
@@ -103,10 +59,6 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         recipientUserId: normalizeIdValue(mention.mentionedUserId),
         suppressed: true,
         collapsed: false,
-        communityName: "",
-        mentionerName: "",
-        snippet: "",
-        urlPath: "/",
       });
     };
     const readOnlyJob = (mention: Record<string, any>) => {
@@ -116,10 +68,6 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         suppressed: false,
         collapsed: false,
         read: true,
-        communityName: "",
-        mentionerName: "",
-        snippet: "",
-        urlPath: "/",
       });
     };
     // Per-recipient email caps: one send per run, and a cooldown since the
@@ -133,13 +81,18 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         continue;
       }
       if (Number(mention.createdAt ?? 0) > dueBefore) continue;
+      const authorized = await resolveMentionRecipientSource({ ctx, mention, userId: mention.mentionedUserId });
+      if (!authorized) {
+        suppressOnlyJob(mention);
+        continue;
+      }
       let readState;
       try {
-        readState = await readCommunityChatReadState(
+        readState = await readCommunityChannelReadState(
           ctx,
           mention.communityId,
           mention.mentionedUserId,
-          mention.channelId,
+          authorized.channel,
         );
       } catch {
         // One corrupt or cross-community channel reference must fail closed
@@ -176,55 +129,21 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
           suppressed: false,
           collapsed: false,
           emailSkipped: true,
-          communityName: "",
-          mentionerName: "",
-          snippet: "",
-          urlPath: "/",
         });
         continue;
       }
-      const source = mention.replyId
-        ? ((await ctx.db.get(mention.replyId)) as Record<string, any> | null)
-        : mention.rootId
-          ? ((await ctx.db.get(mention.rootId)) as Record<string, any> | null)
-          : null;
-      if (!source || source.status !== "live") {
-        suppressOnlyJob(mention);
-        continue;
-      }
-      if (mention.replyId && source.rootId) {
-        const root = (await ctx.db.get(source.rootId)) as Record<string, any> | null;
-        if (!root || root.status !== "live") {
-          suppressOnlyJob(mention);
-          continue;
-        }
-      }
+      const source = authorized.source.row;
       const authorUserId = source.actorUserId ?? null;
       // Never ping someone about their own message.
       if (authorUserId && normalizeIdValue(authorUserId) === normalizeIdValue(mention.mentionedUserId)) {
         suppressOnlyJob(mention);
         continue;
       }
-      const community = (await ctx.db.get(mention.communityId)) as Record<string, any> | null;
-      if (!community) {
-        suppressOnlyJob(mention);
-        continue;
-      }
-      // Membership re-check at email time: the recipient may have left (or
-      // been removed) since the mention was written; no content leaves the
-      // community for ex-members.
-      const membership = (await ctx.db
-        .query("communityMemberships" as any)
-        .withIndex("by_community_user", (q: any) =>
-          q.eq("communityId", mention.communityId).eq("userId", mention.mentionedUserId))
-        .first()) as Record<string, any> | null;
       const preferences = (await ctx.db
         .query("emailPreferences" as any)
         .withIndex("by_user", (q: any) => q.eq("userId", mention.mentionedUserId))
         .first()) as Record<string, any> | null;
-      const suppressed =
-        !communityMembershipRowIsActive(membership as any) ||
-        preferences?.mentionEmailsEnabled === false;
+      const suppressed = preferences?.mentionEmailsEnabled === false;
       const recipientKey = normalizeIdValue(mention.mentionedUserId);
       let collapsed = false;
       if (!suppressed) {
@@ -250,26 +169,13 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
           emailJobsThisRun += 1;
         }
       }
-      const author = authorUserId
-        ? ((await ctx.db.get(authorUserId)) as Record<string, any> | null)
-        : null;
-      const snippet =
-        suppressed || collapsed
-          ? ""
-          : await readFirstMarkdownBlockText(ctx, {
-              rootId: mention.rootId,
-              replyId: mention.replyId,
-            });
-      const slug = boundedText(community.slug, 200);
       jobs.push({
         mentionId: normalizeIdValue(mention._id),
         recipientUserId: recipientKey,
         suppressed,
         collapsed,
-        communityName: boundedText(community.name, 200) || "your community",
-        mentionerName: boundedText(author?.displayName, 120) || "A community member",
-        snippet,
-        urlPath: slug ? `/c/${encodeURIComponent(slug)}/chat` : "/",
+        communityId: normalizeIdValue(authorized.community._id),
+        communityLifecycleGeneration: normalizeCommunityLifecycle(authorized.community).generation,
       });
     }
     return jobs;
@@ -312,10 +218,8 @@ export const processPendingMentionEmailsInternal = internalAction({
       recipientUserId: string;
       suppressed: boolean;
       collapsed: boolean;
-      communityName: string;
-      mentionerName: string;
-      snippet: string;
-      urlPath: string;
+      communityId?: string;
+      communityLifecycleGeneration?: number;
       emailSkipped?: boolean;
       read?: boolean;
     }>;
@@ -351,18 +255,21 @@ export const processPendingMentionEmailsInternal = internalAction({
         updates.push({ mentionId: job.mentionId, notifyState: "sent" });
         continue;
       }
-      await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
+      const result = await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
         kind: "mention_notification",
         recipientUserId: job.recipientUserId,
+        sourceMentionId: job.mentionId,
+        communityId: job.communityId,
+        communityLifecycleGeneration: job.communityLifecycleGeneration,
         templateKey: "mention_notification",
-        payload: {
-          communityName: job.communityName,
-          mentionerName: job.mentionerName,
-          snippet: job.snippet,
-          actionUrl: buildAppActionUrl(job.urlPath),
-        },
+        payload: {},
         dedupeKey: `mention_notification:${job.mentionId}`,
       });
+      if (result.status === "suppressed") {
+        suppressed += 1;
+        updates.push({ mentionId: job.mentionId, notifyState: "suppressed" });
+        continue;
+      }
       enqueued += 1;
       updates.push({ mentionId: job.mentionId, notifyState: "sent" });
     }

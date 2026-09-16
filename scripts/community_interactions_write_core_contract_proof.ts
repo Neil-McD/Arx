@@ -4,6 +4,9 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const channelAccess = readFileSync(join(root, "convex/communityChannelAccess.ts"), "utf8");
+assert.match(channelAccess, /resolveCommunityChannelActor[\s\S]*await requireCommunityChatAccess\(args\)/,
+  "channel actors must retain the canonical community access gate");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
@@ -83,7 +86,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*YouTube videos and explicit HTTPS PDF links[\s\S]*community chat does not invoke an interaction-preview mode/,
+  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*YouTube is the only URL-derived rich media exception[\s\S]*community chat does not invoke an interaction-preview mode/,
   "contract should document the deterministic simple-link boundary",
 );
 
@@ -148,7 +151,7 @@ const canonicalReplyTargetResolver = functionBlock(
 );
 assert.match(
   createComposerMessage,
-  /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*requireProfileSetupCompleteForUser/,
+  /resolveUserIdForAuthenticatedRequest[\s\S]*resolveCommunityChannelActor[\s\S]*requireProfileSetupCompleteForUser/,
   "composer bridge should reuse authenticated community chat/profile gates",
 );
 assert.match(
@@ -163,7 +166,7 @@ assert.doesNotMatch(
 );
 assert.match(
   createComposerMessage,
-  /normalizeInteractionAttachmentInputs\(args\.attachments \?\? \[\]\)[\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
+  /resolveInteractionAttachmentClaims\([\s\S]*attachments: args\.attachments \?\? \[\][\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
   "composer bridge should allow attachment-only sends while rejecting empty payloads",
 );
 assert.match(
@@ -178,7 +181,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*resolveRequestedCommunityChannel\(\{[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
+  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*resolveAuthorizedCommunityChannel\(\{[\s\S]*actor: channelActor[\s\S]*capability: "canPost"[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
   "composer root writes should bind the authorized requested channel and retain explicit human or personal-agent attribution",
 );
 assert.match(
@@ -186,6 +189,12 @@ assert.match(
   /existingChannel[\s\S]*normalizeIdValue\(existingChannel\._id\)[\s\S]*normalizeIdValue\(requestedChannel\._id\)[\s\S]*interaction_idempotency_key_conflict/,
   "composer root idempotency must bind the original channel",
 );
+assert.match(createComposerMessage, /root\.composerPayloadHash !== composerPayloadHash/,
+  "root retries must compare the original full payload fingerprint");
+assert.match(createComposerMessage, /reply\.composerPayloadHash !== composerPayloadHash/,
+  "reply retries must compare the original full payload fingerprint");
+assert.doesNotMatch(createComposerMessage, /contentSummary !== summary/,
+  "editable and truncated summaries must not determine retry identity");
 assert.match(
   createComposerMessage,
   /const idempotencyKey = composerIdempotencyKey\([\s\S]*normalizeIdempotencyKey\(args\.idempotencyKey\),[\s\S]*"root",[\s\S]*actorType,[\s\S]*\)[\s\S]*getExistingRootByIdempotencyKey/,
@@ -233,8 +242,8 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
-  "composer bridge should write canonical attachment rows for roots and replies",
+  /claimInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*claimInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
+  "composer bridge should claim canonical attachment rows for roots and replies",
 );
 assert.match(
   createComposerMessage,
@@ -275,8 +284,13 @@ assert.match(
 );
 assert.match(
   mentionResolver,
-  /normalizeId\("users" as any, rawUserId\)[\s\S]*withIndex\("by_authSubject"[\s\S]*interaction_mention_user_not_found[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId: user\._id[\s\S]*interaction_mention_user_not_allowed/,
-  "mention resolver should resolve existing users by canonical id or auth subject and require community chat access",
+  /normalizeId\("users" as any, rawUserId\)[\s\S]*withIndex\("by_authSubject"[\s\S]*interaction_mention_user_not_found/,
+  "mention resolver should resolve existing users by canonical id or auth subject",
+);
+assert.match(
+  functionBlock(interactions, "insertCommunityInteractionMentionRows"),
+  /resolveNotificationRecipientSource\([\s\S]*interaction_mention_user_not_allowed/,
+  "mention insertion must authorize recipients against the persisted source room in the write transaction",
 );
 assert.match(
   mentionResolver,

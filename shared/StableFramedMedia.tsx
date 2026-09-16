@@ -22,8 +22,6 @@ import {
 } from "./useImageResource";
 
 export type StableFramedMediaProps = {
-  identityPending?: boolean;
-  quietLoading?: boolean;
   imageUrl: string | null | undefined;
   frame?: CoverFrame;
   alt: string;
@@ -50,7 +48,7 @@ export type StableFramedMediaProps = {
 export function StableFramedMedia(props: StableFramedMediaProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rootSize, setRootSize] = useState({ width: 0, height: 0 });
-  const url = normalizeImageResourceUrl(props.identityPending ? null : props.imageUrl);
+  const url = normalizeImageResourceUrl(props.imageUrl);
   const loading = props.loading ?? "eager";
   const [loadPermission, setLoadPermission] = useState(() => ({
     url,
@@ -103,13 +101,10 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
   }, [imageResource, props.frame?.focusX, props.frame?.focusY, props.frame?.zoom, rootSize.height, rootSize.width]);
 
   const showImage = Boolean(url && layout);
-  const isPending = Boolean(props.identityPending || (props.quietLoading && url && !showImage && imageResource.status !== "error"));
-  const combinedClassName = ["stable-framed-media", props.className, showImage ? props.readyClassName : !isPending ? props.fallbackClassName : undefined]
+  const combinedClassName = ["stable-framed-media", props.className, showImage ? props.readyClassName : props.fallbackClassName]
     .filter(Boolean)
     .join(" ");
-  const rootStyle: CSSProperties | undefined = isPending
-    ? { ...props.style, backgroundColor: "var(--bg-tertiary, #292929)" }
-    : showImage
+  const rootStyle: CSSProperties | undefined = showImage
     ? props.style
     : (props.fallbackStyle ?? props.style);
 
@@ -117,8 +112,6 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
     <div
       ref={rootRef}
       className={combinedClassName}
-      data-image-state={isPending ? "loading" : showImage ? "ready" : imageResource.status}
-      aria-busy={isPending || undefined}
       style={rootStyle}
       title={props.title}
       onClick={props.onClick}
@@ -136,12 +129,12 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
           alt={props.alt}
           decoding="async"
           loading={loading}
-          {...{ fetchpriority: props.fetchPriority }}
+          fetchPriority={props.fetchPriority}
           referrerPolicy="no-referrer"
           draggable={false}
           style={{ ...props.imageStyle, ...getCoverFrameImageStyle(layout) }}
         />
-      ) : isPending ? null : props.fallback ?? null}
+      ) : props.fallback ?? null}
     </div>
   );
 }

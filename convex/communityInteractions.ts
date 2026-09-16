@@ -1,6 +1,9 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
+import { fingerprintCommunityComposerPayload } from "./communityComposerReplay";
 import { v } from "convex/values";
+import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
@@ -21,7 +24,9 @@ import {
   legacyChatIdempotencyKey,
 } from "./communityInteractionLegacyBridge";
 import {
-  insertCanonicalInteractionAttachmentsForTarget,
+  claimInteractionAttachmentsForTarget,
+  resolveInteractionAttachmentClaims,
+  hasCanonicalInteractionAttachmentsForTarget,
   insertCanonicalInteractionAttachmentsFromLegacyMessage,
   listCanonicalInteractionAttachmentsForTarget,
   normalizeInteractionAttachmentInputs,
@@ -58,7 +63,7 @@ import {
   interactionIsChannelAddressable,
   listChannelReadableRows,
   requireChannelForAddressableRoot,
-  resolveRequestedCommunityChannel,
+  resolveAuthorizedCommunityChannel,
   type CommunityChannelLike,
 } from "./communityChannelCore";
 
@@ -84,6 +89,7 @@ type InteractionRootRow = {
   replyCount: number;
   reactionSummary: Array<{ emoji: string; count: number }>;
   idempotencyKey: string;
+  composerPayloadHash?: string;
   lastReplyAt?: number;
   lockedAt?: number;
   hiddenAt?: number;
@@ -108,6 +114,7 @@ type InteractionReplyRow = {
   contentSummary: string;
   reactionSummary: Array<{ emoji: string; count: number }>;
   idempotencyKey: string;
+  composerPayloadHash?: string;
   hiddenAt?: number;
   deletedAt?: number;
   editedAt?: number;
@@ -226,15 +233,7 @@ const rootKindValidator = v.union(
 );
 
 const interactionAttachmentInputValidator = v.object({
-  id: v.optional(v.string()),
-  name: v.string(),
-  type: v.string(),
-  mime: v.optional(v.union(v.string(), v.null())),
-  size: v.number(),
-  storageId: v.optional(v.id("_storage")),
-  data_url: v.optional(v.string()),
-  text: v.optional(v.string()),
-  truncated: v.optional(v.boolean()),
+  attachmentId: v.id("communityInteractionAttachments"),
 });
 
 function normalizeBoundedText(raw: unknown, maxLength: number): string {
@@ -790,7 +789,7 @@ async function mapRootBundle(
   const mentions = await listMentionsForRoot(ctx, root._id);
   const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
   const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
-  const attachments = canonicalAttachments.length > 0
+  const attachments = await hasCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id })
     ? canonicalAttachments
     : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = root.actorUserId
@@ -856,7 +855,7 @@ async function mapReplyBundle(
   const mentions = await listMentionsForReply(ctx, reply._id);
   const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
   const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
-  const attachments = canonicalAttachments.length > 0
+  const attachments = await hasCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id })
     ? canonicalAttachments
     : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = reply.actorUserId
@@ -1566,15 +1565,8 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
       throw new Error("interaction_mentions_limit_exceeded");
     }
     directMentionCount += 1;
-    try {
-      await requireCommunityChatAccess({
-        ctx: args.ctx,
-        communityId: args.communityId,
-        userId: user._id,
-      });
-    } catch {
-      throw new Error("interaction_mention_user_not_allowed");
-    }
+    // Recipient authority is checked against the persisted source and channel
+    // by insertCommunityInteractionMentionRows in the same transaction.
     const spec: UserInteractionMentionSpec = { kind: "user", userId: user._id };
     userSpecsById.set(normalized, spec);
     out.push(spec);
@@ -1606,6 +1598,9 @@ async function insertCommunityInteractionMentionRows(args: {
     throw new Error("interaction_mention_broadcast_source_required");
   }
   for (const spec of orderedMentionSpecs) {
+    if (spec.kind === "user" && !(await resolveNotificationRecipientSource({
+      ...args, userId: spec.userId,
+    }))) throw new Error("interaction_mention_user_not_allowed");
     const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
       channelId: args.channelId,
@@ -1676,11 +1671,16 @@ export const createCommunityInteractionComposerMessage = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const channelActor = await resolveCommunityChannelActor({
+      ctx, communityId: args.communityId, userId,
+      kind: args.asPersonalAgent ? "personal_agent" : "human",
+    });
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    const attachments = normalizeInteractionAttachmentInputs(args.attachments ?? []);
+    const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
+      actorUserId: userId, messageKey: args.idempotencyKey, rootId: args.rootId,
+      attachments: args.attachments ?? [] });
     if (!text && attachments.length === 0) throw new Error("interaction_content_required");
     if (args.rootId && textContainsEverybodyMentionToken(text)) {
       throw new Error("interaction_mention_everybody_reply_not_allowed");
@@ -1707,8 +1707,10 @@ export const createCommunityInteractionComposerMessage = mutation({
     const nowMs = Date.now();
 
     if (!args.rootId) {
-      const requestedChannel = await resolveRequestedCommunityChannel({
+      const requestedChannel = await resolveAuthorizedCommunityChannel({
         ctx,
+        actor: channelActor,
+        capability: "canPost",
         communityId: args.communityId,
         channelId: args.channelId,
         ensureGeneralForWrite: true,
@@ -1719,6 +1721,10 @@ export const createCommunityInteractionComposerMessage = mutation({
         "root",
         actorType,
       );
+      const composerPayloadHash = await fingerprintCommunityComposerPayload({
+        channelId: String(requestedChannel._id), text,
+        attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+      });
       let root = await getExistingRootByIdempotencyKey(ctx, args.communityId, idempotencyKey);
       let communityAgentMention: ConciergeMentionRow | null = null;
       let deduped = true;
@@ -1728,7 +1734,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           normalizeIdValue(root.actorUserId) !== normalizeIdValue(userId) ||
           normalizeIdValue(root.actorAgentKey) !==
             normalizeIdValue(actorAgentKey) ||
-          root.contentSummary !== summary)
+          root.composerPayloadHash !== composerPayloadHash)
       ) {
         throw new Error("interaction_idempotency_key_conflict");
       }
@@ -1737,6 +1743,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           ctx,
           root,
           nowMs,
+          actor: channelActor,
         });
         if (
           normalizeIdValue(existingChannel._id) !==
@@ -1759,6 +1766,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           replyCount: 0,
           reactionSummary: [],
           idempotencyKey,
+          composerPayloadHash,
           createdAt: nowMs,
           updatedAt: nowMs,
         });
@@ -1783,24 +1791,33 @@ export const createCommunityInteractionComposerMessage = mutation({
         communityAgentMention = mentionRows.communityAgentMention;
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
-        await insertCanonicalInteractionAttachmentsForTarget({
+        await claimInteractionAttachmentsForTarget({
           ctx,
+          messageKey: args.idempotencyKey,
           communityId: args.communityId,
           rootId: root._id,
           attachments,
           actorUserId: userId,
           nowMs,
-          contentHashPrefix: `community-composer:${idempotencyKey}`,
         });
         deduped = false;
       }
 
-      const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
+      const rootChannel = await requireChannelForAddressableRoot({ ctx, root, actor: channelActor });
       if (
         normalizeIdValue(rootChannel._id) !==
         normalizeIdValue(requestedChannel._id)
       ) {
         throw new Error("interaction_channel_mismatch");
+      }
+
+      if (actorType === "human" && !deduped) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.communityMemberWorkflows
+            .handleChannelContributionRootInternal,
+          { rootId: root._id },
+        );
       }
 
       if (actorType === "human") {
@@ -1839,7 +1856,8 @@ export const createCommunityInteractionComposerMessage = mutation({
     if (root.status !== "live" || root.lockedAt) {
       throw new Error("interaction_root_closed");
     }
-    const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
+    const rootChannel = await requireChannelForAddressableRoot({ ctx, root, actor: channelActor });
+    await requireCommunityChannelCapability({ ctx, channel: rootChannel, actor: channelActor, capability: "canReply" });
     if (
       args.channelId &&
       normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channelId)
@@ -1858,6 +1876,11 @@ export const createCommunityInteractionComposerMessage = mutation({
       rootChannel,
       replyToMessageId: args.replyToMessageId ?? null,
     });
+    const composerPayloadHash = await fingerprintCommunityComposerPayload({
+      channelId: String(rootChannel._id), rootId: String(root._id),
+      targetReplyId: replyTarget.targetReplyId ? String(replyTarget.targetReplyId) : undefined,
+      text, attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+    });
     let reply = await getExistingReplyByIdempotencyKey(ctx, root.communityId, idempotencyKey);
     let communityAgentMention: ConciergeMentionRow | null = null;
     let deduped = true;
@@ -1870,7 +1893,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           normalizeIdValue(actorAgentKey) ||
         normalizeIdValue(reply.targetReplyId) !==
           normalizeIdValue(replyTarget.targetReplyId) ||
-        reply.contentSummary !== summary)
+        reply.composerPayloadHash !== composerPayloadHash)
     ) {
       throw new Error("interaction_idempotency_key_conflict");
     }
@@ -1892,6 +1915,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         contentSummary: summary,
         reactionSummary: [],
         idempotencyKey,
+        composerPayloadHash,
         createdAt: nowMs,
         updatedAt: nowMs,
       });
@@ -1921,19 +1945,28 @@ export const createCommunityInteractionComposerMessage = mutation({
       });
       reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
       if (!reply) throw new Error("interaction_reply_create_failed");
-      await insertCanonicalInteractionAttachmentsForTarget({
+      await claimInteractionAttachmentsForTarget({
         ctx,
+        messageKey: args.idempotencyKey,
         communityId: root.communityId,
         replyId: reply._id,
         attachments,
         actorUserId: userId,
         nowMs,
-        contentHashPrefix: `community-composer:${idempotencyKey}`,
       });
       deduped = false;
     }
 
-    await ensureReplyChannelMatchesRoot({ ctx, root, reply });
+    await ensureReplyChannelMatchesRoot({ ctx, root, reply, actor: channelActor });
+
+    if (actorType === "human" && !deduped) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.communityMemberWorkflows
+          .handleChannelContributionReplyInternal,
+        { replyId: reply._id },
+      );
+    }
 
     if (actorType === "human") {
       await intakeCommunityAgentTurn({
@@ -2020,16 +2053,17 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         authSubject: args.authSubject ?? null,
       });
     }
-    await requireCommunityChatAccess({
+    const channelActor = await resolveCommunityChannelActor({
       ctx,
       communityId: args.communityId,
       userId: sponsorUserId,
+      kind: "community_agent",
     });
 
     const text = normalizeBoundedText(canonicalText, MAX_INTERACTION_TEXT_CHARS);
-    const attachments = normalizeInteractionAttachmentInputs(
-      args.attachments ?? [],
-    );
+    const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
+      actorUserId: sponsorUserId, messageKey: args.idempotencyKey, rootId: args.rootId,
+      attachments: args.attachments ?? [] });
     if (!text && attachments.length === 0) {
       throw new Error("interaction_content_required");
     }
@@ -2056,8 +2090,10 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         mentions: args.mentions ?? [],
       });
     const nowMs = Date.now();
-    const requestedChannel = await resolveRequestedCommunityChannel({
+    const requestedChannel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: args.rootId ? "canReply" : "canPost",
       communityId: args.communityId,
       channelId: args.channelId,
       ensureGeneralForWrite: true,
@@ -2070,6 +2106,10 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     );
 
     if (!args.rootId) {
+      const composerPayloadHash = await fingerprintCommunityComposerPayload({
+        channelId: String(requestedChannel._id), text,
+        attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+      });
       let root = await getExistingRootByIdempotencyKey(
         ctx,
         args.communityId,
@@ -2081,7 +2121,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         (root.actorType !== "community_agent" ||
           Boolean(root.actorUserId) ||
           root.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
-          (!founderBootstrap && root.contentSummary !== summary))
+          (!founderBootstrap && root.composerPayloadHash !== composerPayloadHash))
       ) {
         throw new Error("interaction_idempotency_key_conflict");
       }
@@ -2090,6 +2130,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           ctx,
           root,
           nowMs,
+          actor: channelActor,
         });
         if (
           normalizeIdValue(existingChannel._id) !==
@@ -2111,6 +2152,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           replyCount: 0,
           reactionSummary: [],
           idempotencyKey,
+          composerPayloadHash,
           createdAt: nowMs,
           updatedAt: nowMs,
         });
@@ -2134,18 +2176,18 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         });
         root = (await ctx.db.get(rootId)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
-        await insertCanonicalInteractionAttachmentsForTarget({
+        await claimInteractionAttachmentsForTarget({
           ctx,
+          messageKey: args.idempotencyKey,
           communityId: args.communityId,
           rootId: root._id,
           attachments,
           actorUserId: sponsorUserId,
           nowMs,
-          contentHashPrefix: `community-canonical-agent:${idempotencyKey}`,
         });
         deduped = false;
       }
-      await requireChannelForAddressableRoot({ ctx, root, nowMs });
+      await requireChannelForAddressableRoot({ ctx, root, nowMs, actor: channelActor });
       await scheduleCommunityInteractionEvidenceSync({
         ctx,
         communityId: args.communityId,
@@ -2179,6 +2221,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       ctx,
       root,
       nowMs,
+      actor: channelActor,
     });
     if (
       normalizeIdValue(rootChannel._id) !==
@@ -2191,6 +2234,11 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       root,
       rootChannel,
       replyToMessageId: args.replyToMessageId ?? null,
+    });
+    const composerPayloadHash = await fingerprintCommunityComposerPayload({
+      channelId: String(rootChannel._id), rootId: String(root._id),
+      targetReplyId: replyTarget.targetReplyId ? String(replyTarget.targetReplyId) : undefined,
+      text, attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
     });
     let reply = await getExistingReplyByIdempotencyKey(
       ctx,
@@ -2206,7 +2254,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         reply.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
         normalizeIdValue(reply.targetReplyId) !==
           normalizeIdValue(replyTarget.targetReplyId) ||
-        reply.contentSummary !== summary)
+        reply.composerPayloadHash !== composerPayloadHash)
     ) {
       throw new Error("interaction_idempotency_key_conflict");
     }
@@ -2233,6 +2281,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           contentSummary: summary,
           reactionSummary: [],
           idempotencyKey,
+          composerPayloadHash,
           createdAt: nowMs,
           updatedAt: nowMs,
         },
@@ -2262,18 +2311,18 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       });
       reply = (await ctx.db.get(replyId)) as InteractionReplyRow | null;
       if (!reply) throw new Error("interaction_reply_create_failed");
-      await insertCanonicalInteractionAttachmentsForTarget({
+      await claimInteractionAttachmentsForTarget({
         ctx,
+        messageKey: args.idempotencyKey,
         communityId: args.communityId,
         replyId: reply._id,
         attachments,
         actorUserId: sponsorUserId,
         nowMs,
-        contentHashPrefix: `community-canonical-agent:${idempotencyKey}`,
       });
       deduped = false;
     }
-    await ensureReplyChannelMatchesRoot({ ctx, root, reply, nowMs });
+    await ensureReplyChannelMatchesRoot({ ctx, root, reply, nowMs, actor: channelActor });
     await scheduleCommunityInteractionEvidenceSync({
       ctx,
       communityId: args.communityId,
@@ -2309,9 +2358,11 @@ export const listCommunityInteractionRoots = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const channel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: args.communityId,
       channelId: args.channelId,
     });
@@ -2321,6 +2372,7 @@ export const listCommunityInteractionRoots = query({
     const kind = args.kind ?? null;
     const visibleRows = await listChannelReadableRows<InteractionRootRow>({
       ctx,
+      actor: channelActor,
       tableName: "communityInteractionRoots",
       communityId: args.communityId,
       channel,
@@ -2356,9 +2408,11 @@ export const getCommunityChannelPinnedRoot = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const channel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: args.communityId,
       channelId: args.channelId,
     });
@@ -2394,9 +2448,11 @@ export const getCommunityChannelInteractionRoot = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const channel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: args.communityId,
       channelId: args.channelId,
     });
@@ -2434,9 +2490,11 @@ export const listCommunityInteractionReplies = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: root.communityId, userId });
-    const rootChannel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: root.communityId, userId });
+    const rootChannel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: root.communityId,
       channelId: root.channelId,
     });
@@ -2530,6 +2588,25 @@ function applyReactionSummaryDelta(
   return Array.from(counts.entries()).map(([emojiValue, count]) => ({ emoji: emojiValue, count }));
 }
 
+async function requireTargetChannelAccess(args: {
+  ctx: any; target: InteractionRootRow | InteractionReplyRow; userId: any;
+}) {
+  // Non-channel dock interactions retain their existing separate authority.
+  if (!interactionIsChannelAddressable(args.target)) return;
+  const root = "rootId" in args.target
+    ? await args.ctx.db.get(args.target.rootId)
+    : args.target;
+  if (!root || normalizeIdValue(root.communityId) !== normalizeIdValue(args.target.communityId)) {
+    throw new Error("community_channel_unavailable");
+  }
+  const actor = await resolveCommunityChannelActor({ ctx: args.ctx, communityId: root.communityId, userId: args.userId });
+  const channel = await resolveAuthorizedCommunityChannel({
+    ctx: args.ctx, communityId: root.communityId, channelId: root.channelId,
+    actor, capability: "canRead",
+  });
+  if (!interactionBelongsToChannel(args.target, channel)) throw new Error("community_channel_unavailable");
+}
+
 export const toggleCommunityInteractionReaction = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -2553,7 +2630,7 @@ export const toggleCommunityInteractionReaction = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId, userId });
-
+    await requireTargetChannelAccess({ ctx, target, userId });
     const actorKey = normalizeIdValue(userId);
     const nowMs = Date.now();
     const existing = await ctx.db
@@ -2650,19 +2727,17 @@ async function editCommunityInteractionTargetCore(args: {
     if (existingAttachments.length > 32) {
       throw new Error("interaction_attachment_replace_limit_exceeded");
     }
-    for (const attachment of existingAttachments) {
-      await args.ctx.db.delete(attachment._id as any);
-    }
     const normalizedAttachments = normalizeInteractionAttachmentInputs(args.legacyAttachments);
-    await insertCanonicalInteractionAttachmentsForTarget({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
-      attachments: normalizedAttachments,
-      actorUserId: args.actorUserId,
-      nowMs: args.nowMs,
-      contentHashPrefix: `legacy-chat-edit:${normalizeIdValue(args.legacyMessageId) || normalizeIdValue(args.target._id)}`,
-    });
+    const matches = (row: any, input: NormalizedInteractionAttachmentInput) =>
+      row.status === "uploaded" && (input.storageId ? String(row.storageId) === input.storageId : row.externalUrl === input.dataUrl);
+    if (normalizedAttachments.some(input => !existingAttachments.some((row: any) => matches(row, input)))) {
+      throw new Error("community_attachment_legacy_edit_cannot_add");
+    }
+    for (const attachment of existingAttachments) {
+      if (attachment.status === "uploaded" && !normalizedAttachments.some(input => matches(attachment, input))) {
+        await args.ctx.db.patch(attachment._id, { status: "deleted", updatedAt: args.nowMs });
+      }
+    }
   }
   await suppressPendingMentionsMissingFromInteractionText({
     ctx: args.ctx,
@@ -2728,6 +2803,13 @@ export async function syncLegacyChatMessageEditToInteractionCore(args: {
   if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
     throw new Error("legacy_chat_interaction_link_target_invalid");
   }
+  // Hydrate only the persisted pre-edit message, never the submitted attachments.
+  const originalMessage = await args.ctx.db.get(args.messageId);
+  if (originalMessage) await insertCanonicalInteractionAttachmentsFromLegacyMessage({
+    ctx: args.ctx, communityId,
+    ...(targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
+    message: originalMessage, nowMs: args.nowMs,
+  });
   await editCommunityInteractionTargetCore({
     ctx: args.ctx,
     targetType,
@@ -2868,6 +2950,7 @@ export const editCommunityInteractionMessage = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId, userId });
+    await requireTargetChannelAccess({ ctx, target, userId });
     if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId)) {
       throw new Error("interaction_edit_forbidden");
     }
@@ -2906,6 +2989,7 @@ export const deleteCommunityInteractionMessage = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId, userId });
+    await requireTargetChannelAccess({ ctx, target, userId });
     const isOwner = normalizeIdValue(target.actorUserId) === normalizeIdValue(userId);
     if (!isOwner) {
       let isModerator = false;

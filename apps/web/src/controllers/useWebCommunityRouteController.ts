@@ -4,7 +4,6 @@ import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShell
 import { deriveOpenCommunityTabTransition } from "../../../../shared/appNavTransitions";
 import {
   buildCommunityHomePath,
-  buildCommunityMembersPath,
 } from "../../../../shared/webAppRouteState";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean }) => void;
@@ -143,25 +142,6 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     [openPublicCommunityFunnel, resolveCommunityBySlug],
   );
 
-  const openCommunityMembers = useCallback(
-    (nextCommunitySlug: string, opts?: { pushSnapshot?: boolean }) => {
-      const current = paramsRef.current;
-      const normalizedSlug = String(nextCommunitySlug ?? "").trim();
-      if (!normalizedSlug) return;
-      const matchedCommunity = resolveCommunityBySlug(normalizedSlug);
-      if (!matchedCommunity) return;
-      const path = buildCommunityMembersPath(matchedCommunity.slug);
-      if (!path) return;
-      const isAlreadyOpen =
-        current.activePage === "community" &&
-        current.activeView === "community_members" &&
-        current.activeCommunityId === matchedCommunity.id;
-      if ((opts?.pushSnapshot ?? true) && !isAlreadyOpen) current.pushNavSnapshot();
-      current.navigateTo(path);
-    },
-    [resolveCommunityBySlug],
-  );
-
   const openCommunityBySlug = useCallback(
     (communitySlug: string, opts?: { pushSnapshot?: boolean }) => {
       const slug = String(communitySlug ?? "").trim();
@@ -191,7 +171,6 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     openPublicCommunityFunnel,
     openCommunityTab,
     openCommunityHome,
-    openCommunityMembers,
     openCommunityChat,
     openCommunityBySlug,
     openJoinedCommunityBySlug,

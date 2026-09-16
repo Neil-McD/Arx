@@ -15,7 +15,7 @@ export type AppPage =
   | "discover"
   | "docs";
 
-export type AppView = "home" | "community_home" | "community_members";
+export type AppView = "home" | "community_home";
 
 export type DesktopShellContextualBackPage = "settings" | "operator";
 
@@ -45,9 +45,11 @@ export function parseOperatorTab(
 
 export const COMMUNITY_TABS = [
   "chat",
+  "agent",
   "resources",
   "events",
   "settings",
+  "workflows",
   "funnel",
   "analytics",
 ] as const;
@@ -64,6 +66,7 @@ export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
+  "workflows",
   "funnel",
   "analytics",
 ]);
@@ -85,11 +88,13 @@ export function isCommunityTabAllowedForAccess(
   switch (tab) {
     case "settings":
       return access.canViewSettings;
+    case "workflows":
     case "funnel":
       return access.canManageMembers;
     case "analytics":
       return access.canViewAnalytics;
     case "chat":
+    case "agent":
     case "resources":
     case "events":
       return true;
@@ -123,9 +128,12 @@ export function parseCommunityTab(
       return "events";
     case "settings":
       return "settings";
-    // The retired top-level Agent route normalizes to Settings. Funnel is a
-    // canonical acquisition surface beside Analytics.
+    case "workflows":
+    case "workflow":
+    case "success":
+      return "workflows";
     case "agent":
+      return "agent";
     case "ai_agent":
       return "settings";
     case "funnel":

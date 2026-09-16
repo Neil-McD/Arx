@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
 import { decryptStoredSecret } from "./providerConnections";
 import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig";
 import { type RetrievalToolName } from "../shared/retrievalTools";
@@ -369,7 +370,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  const memberAgentSurfaceContext =
+  let memberAgentSurfaceContext =
     invocationSurface === "member_agent_dock"
       ? normalizeMemberAgentSurfaceContext(input.surface_context)
       : null;
@@ -658,6 +659,9 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         message: "Historical member-agent episodes are available through recall only.",
       }),
     };
+  }
+  if (parseCommunityConversationIdentity({ threadKey, communityId: threadCommunityId ?? undefined }) && memberAgentSurfaceContext?.kind === "community") {
+    memberAgentSurfaceContext = { ...memberAgentSurfaceContext, community_conversation: true };
   }
   if (threadCommunityId) {
     try {

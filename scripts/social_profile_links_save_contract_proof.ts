@@ -38,13 +38,12 @@ assert.match(
 );
 assert.match(
   adminController,
-  /if \(!accountId \|\| accountId !== profileAccountRef\.current\) \{[\s\S]*onProfileSaveUnauthenticated\?\.\(\);[\s\S]*return false;[\s\S]*\}/,
+  /if \(!session\) \{[\s\S]*onProfileSaveUnauthenticated\?\.\(\);[\s\S]*return false;[\s\S]*\}/,
   "unauthenticated profile saves must notify the shell and report failure",
 );
 assert.match(adminController, /if \(!saved\) \{[\s\S]*return false;[\s\S]*\}/, "empty profile save responses must report failure");
 assert.match(adminController, /catch \(error\) \{[\s\S]*return false;[\s\S]*\}/, "profile save exceptions must report failure");
-assert.match(adminController, /applySavedProfileToLocal\(saved, submitted\)/, "successful saves must acknowledge the submitted draft using server truth");
-assert.match(read("shared/profileDraftState.ts"), /socialLinks: normalizeSocialProfileLinks\(profile\.social_links/, "social links must normalize from server truth");
+assert.match(adminController, /setProfileSocialLinks\(saved\.social_links/, "successful saves must hydrate social links from server truth");
 
 assert.match(
   profileSettings,

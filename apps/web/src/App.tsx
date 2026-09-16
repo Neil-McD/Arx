@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
 } from "react";
 import "highlight.js/styles/github-dark.css";
+import { WebCommunityNextStep } from "./components/WebCommunityNextStep";
 import {
   beginBrowserSignedOutState,
   getAuthPublicKey,
@@ -71,6 +72,7 @@ import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLif
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
+import { useWebCommunityWorkflowsController } from "./controllers/useWebCommunityWorkflowsController";
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
@@ -162,7 +164,6 @@ import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPrel
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
 import { useWebBuilderOfferController } from "./controllers/useWebBuilderOfferController";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
-import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
@@ -184,6 +185,7 @@ import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebSt
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
+import { useWebChannelPeoplePanel } from "./controllers/useWebChannelPeoplePanel";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 import type {
   WebCommunityRecord,
@@ -609,7 +611,6 @@ export default function App() {
     selectedReplies: selectedCommunityInteractionReplies,
     selectedRootId: selectedCommunityInteractionRootId,
     selectedRoot: selectedCommunityInteractionRoot,
-    sidecar: communityInteractionSidecar,
     pinnedRoot: pinnedCommunityInteractionRoot,
     isUpdatingPinnedRoot: isUpdatingPinnedCommunityInteractionRoot,
     pinnedRootError: pinnedCommunityInteractionRootError,
@@ -626,8 +627,6 @@ export default function App() {
     loadOlderRoots: loadOlderCommunityInteractionRoots,
     selectRoot: handleSelectCommunityInteractionRoot,
     closeDrawer: handleCloseCommunityInteractionDrawer,
-    openMemory: handleOpenCommunityMemory,
-    closeMemory: handleCloseCommunityMemory,
     toggleReaction: handleToggleCommunityInteractionReaction,
     editMessage: handleEditCommunityInteractionMessage,
     deleteMessage: handleDeleteCommunityInteractionMessage,
@@ -772,12 +771,7 @@ export default function App() {
   const {
     communityDirectoryMembers,
     communityDirectoryMemberCount,
-    isLoadingCommunityDirectoryMembers,
-    isLoadingMoreCommunityDirectoryMembers,
-    communityDirectoryMembersHasMore,
-    communityDirectoryMembersLoadError,
     loadCommunityDirectoryMembers,
-    loadMoreCommunityDirectoryMembers,
   } = communityAdministration.directory;
   const {
     activeCommunityAccess,
@@ -816,18 +810,15 @@ export default function App() {
 
   useWebCommunityTabAccessGuard({
     activePage,
-    activeView,
     activeCommunityId,
     activeCommunityAccessId:
       activeCommunityAccess?.community_id ?? null,
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
-    canViewMembers: canViewMembersActiveCommunity,
     canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
-    setActiveView,
     applyCommunityShellState,
   });
 
@@ -951,7 +942,6 @@ export default function App() {
     openPublicCommunityFunnel,
     openCommunityTab,
     openCommunityHome,
-    openCommunityMembers,
     openCommunityChat,
     openCommunityBySlug,
   } = useWebCommunityRouteController<CommunityRecord>({
@@ -1022,20 +1012,36 @@ export default function App() {
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
     getProfileSaveSession: () => sessionRef.current ?? session,
+    profileName: profileUi.profileName,
+    profileHandle: profileUi.profileHandle,
+    profileBio: profileUi.profileBio,
+    profileSocialLinks: profileUi.profileSocialLinks,
+    profileAvatarUrl: profileUi.profileAvatarUrl,
+    profileAvatarStorageId: profileUi.profileAvatarStorageId,
+    profileAvatarFocusX: profileUi.profileAvatarFocusX,
+    profileAvatarFocusY: profileUi.profileAvatarFocusY,
+    profileAvatarZoom: profileUi.profileAvatarZoom,
+    profileSaveTimeoutRef: profileUi.profileSaveTimeoutRef,
     profileSaveFailureMessage: "Failed to save profile.",
     profileSaveUnauthenticatedErrorMessage: null,
     onProfileSaveUnauthenticated: () => {
       requireSignIn();
     },
     applyLoadedProfileToLocal: profileUi.applyLoadedProfileToLocal,
-    profileIsActive: activePage === "settings" && settingsGroup === "profile",
-    captureProfileDraft: profileUi.captureProfileDraft,
-    applySavedProfileToLocal: profileUi.applySavedProfileToLocal,
-    setProfileLoadStatus: profileUi.setProfileLoadStatus,
     setProfilesByUserId,
     setCloudProfile,
+    setProfileName: profileUi.setProfileName,
+    setProfileHandle: profileUi.setProfileHandle,
+    setProfileBio: profileUi.setProfileBio,
+    setProfileSocialLinks: profileUi.setProfileSocialLinks,
+    setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
+    setProfileAvatarStorageId: profileUi.setProfileAvatarStorageId,
+    setProfileAvatarFocusX: profileUi.setProfileAvatarFocusX,
+    setProfileAvatarFocusY: profileUi.setProfileAvatarFocusY,
+    setProfileAvatarZoom: profileUi.setProfileAvatarZoom,
     setIsSavingProfile: profileUi.setIsSavingProfile,
     setProfileSaveError: profileUi.setProfileSaveError,
+    setProfileSaveSuccess: profileUi.setProfileSaveSuccess,
     setIsLoadingCommunityAnalytics,
     setCommunityAnalyticsError,
     setCommunityAnalyticsSummary,
@@ -1105,6 +1111,14 @@ export default function App() {
   const {
     handleSaveCommunityAgentConfig,
   } = communityAgentAndFunnel;
+  const communityWorkflows = useWebCommunityWorkflowsController({
+    activeCommunityId,
+    activePage,
+    canManageMembers: canManageMembersActiveCommunity,
+    communityTab,
+    ensureSession: ensureUsableAuthSession,
+    session,
+  });
   const communitySettingsController = useWebCommunitySettingsController({
     activeCommunity,
     activeCommunityId,
@@ -1198,19 +1212,15 @@ export default function App() {
       setDiscoverCommunities,
     });
   };
-  const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
-    activePage,
-    communityTab,
-    isMemoryOpen: communityInteractionSidecar.kind === "memory",
-    activeCommunityId,
-    session: session,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn: () => requireSignIn(),
-    canViewPolynet: canViewActiveCommunityPolynet,
-  });
-
   useWebUiPersistenceLifecycle({
     communityAnalyticsRange,
+    profileStorageUserId,
+    profileName: profileUi.profileName,
+    profileHandle: profileUi.profileHandle,
+    profileBio: profileUi.profileBio,
+    setProfileName: profileUi.setProfileName,
+    setProfileHandle: profileUi.setProfileHandle,
+    setProfileBio: profileUi.setProfileBio,
   });
 
   // Cloud session is hydrated from browser auth continuity during lifecycle bootstrap.
@@ -1316,7 +1326,6 @@ export default function App() {
   }, [activeCommunityId, attentionByCommunityId]);
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
-    activeView,
     communityTab,
     ...sessionArg,
     resumeEpoch: appActivity.resumeEpoch,
@@ -1571,6 +1580,7 @@ export default function App() {
       setPendingPurchasesError(null);
       setPendingPurchasesSuccess(null);
       profileUi.setProfileSaveError(null);
+      profileUi.setProfileSaveSuccess(false);
     },
   };
 
@@ -1842,9 +1852,7 @@ export default function App() {
     && activeView === "home"
     && selectedCommunityInteractionRootId,
   );
-  const mobileCommunityDetailOpen = Boolean(
-    mobileThreadPageOpen || communityInteractionSidecar.kind === "memory"
-  );
+  const mobileCommunityDetailOpen = mobileThreadPageOpen;
   const mobileChromeAutoHideEnabled = Boolean(
     showMobileAppShell
     && shellPublicRoute.kind === "app"
@@ -1970,6 +1978,7 @@ export default function App() {
       openMobileCreateCommunity,
       prepareMobileGlobalNavigation,
     } = useWebMobileShellController({
+      isCommunityAgentPage: activePage === "community" && communityTab === "agent",
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
       mobileRootPage,
@@ -2016,6 +2025,25 @@ export default function App() {
     pushNavSnapshot,
   });
 
+  const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
+    useWebChannelPeoplePanel({
+      userId: session?.user.id,
+      communityId: activeCommunityId,
+      channelSlug: communityChannelSlug,
+      inChat: activePage === "community" && communityTab === "chat",
+      canViewMembers: canViewMembersActiveCommunity,
+      closeDetail: () => {
+        if (showMobileShell) prepareMobileGlobalNavigation();
+        handleCloseCommunityInteractionDrawer();
+      },
+      openGeneral: () => {
+        const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
+        if (!path) return false;
+        navigateTo(path);
+        return true;
+      },
+    });
+
   const {
     isDirty: isCommunityFunnelAboutDirty,
     reset: handleResetCommunityFunnelAbout,
@@ -2057,6 +2085,7 @@ export default function App() {
 
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
+      canViewCommunityKnowledgeGraph: canViewActiveCommunityPolynet,
       activePage,
       communityTab,
       activeCommunity,
@@ -2211,6 +2240,45 @@ export default function App() {
           member_faces_preview: funnelPreviewOnlineFaces,
         },
       },
+      workflows: {
+        forms: communityWorkflows.forms,
+        channels: activeCommunityChannels.filter((channel) => channel.id && channel.community_id === activeCommunityId),
+        channelsUnavailable: isLoadingActiveCommunityChannels || Boolean(activeCommunityChannelsError),
+        board: communityWorkflows.board,
+        members: communityWorkflows.members,
+        totalCount: communityWorkflows.totalCount,
+        hasMore: communityWorkflows.hasMore,
+        hasLoaded: communityWorkflows.hasLoaded,
+        isLoading: communityWorkflows.isLoading,
+        isLoadingMore: communityWorkflows.isLoadingMore,
+        error: communityWorkflows.error,
+        isSaving: communityWorkflows.isSaving,
+        actionError: communityWorkflows.actionError,
+        selectedMembershipId: communityWorkflows.selectedMembershipId,
+        memberDossier: communityWorkflows.memberDossier,
+        isMemberDossierLoading: communityWorkflows.isMemberDossierLoading,
+        memberDossierError: communityWorkflows.memberDossierError,
+        onReload: communityWorkflows.reload,
+        onLoadMore: communityWorkflows.loadMore,
+        onCreateMilestone: communityWorkflows.createMilestone,
+        onUpdateMilestone: communityWorkflows.updateMilestone,
+        onDeleteMilestone: communityWorkflows.deleteMilestone,
+        onClearActionError: communityWorkflows.clearActionError,
+        onOpenMemberDossier: communityWorkflows.openMemberDossier,
+        onCloseMemberDossier: communityWorkflows.closeMemberDossier,
+        onRetryMemberDossier: communityWorkflows.retryMemberDossier,
+        isServiceChannelSaving: communityWorkflows.isServiceChannelSaving,
+        serviceChannelError: communityWorkflows.serviceChannelError,
+        onSetServiceChannel: communityWorkflows.setServiceChannel,
+        onForceMove: communityWorkflows.forceMove,
+        onApproveMilestone: communityWorkflows.approveMilestone,
+        onOpenServiceChannel: (expectedChannelId: string) => communityWorkflows.openServiceChannel(expectedChannelId, (channelId) => {
+          const channel = activeCommunityChannels.find(item => item.id === channelId && item.community_id === activeCommunityId);
+          if (!channel) return;
+          const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, channel.slug);
+          if (path) { communityWorkflows.closeMemberDossier(); navigateTo(path); }
+        }),
+      },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,
       analyticsState: {
@@ -2225,8 +2293,6 @@ export default function App() {
         openPlatformAnalytics: () => openOperatorConsole("platform"),
       },
       resourcesState: {
-        resourceRead: communityContent.resourceRead,
-        moduleRead: communityContent.moduleRead,
         isLoadingResources,
         isLoadingResourceModules,
         modules: communityResourceModules,
@@ -2234,7 +2300,6 @@ export default function App() {
         selectedModuleId: communityResourceModuleId,
       },
       resourcesActions: {
-        retryRead: communityContent.retryResourceRead,
         handleSelectModule: setCommunityResourceModuleId,
         openNewModuleModal,
         handleEditModule,
@@ -2250,7 +2315,6 @@ export default function App() {
       },
       eventsState: {
         events: communityEvents,
-        hasLoadedVisibleRange: hasLoadedActiveCommunityEventsRange,
         isLoadingEvents: isLoadingCommunityEvents,
         eventsError: communityEventsError,
         visibleMonthIso: communityEventsVisibleMonthIso,
@@ -2330,6 +2394,8 @@ export default function App() {
         onClose: closeCommunityChatLightbox,
       },
       interactionProjection: {
+        peopleOpen,
+        onPeopleOpenChange: handlePeoplePanelOpenChange,
         mobileThreadPage: mobileThreadPageOpen,
         activeChannel: isActiveCommunityChannelReady
           ? activeCommunityChannel
@@ -2424,27 +2490,9 @@ export default function App() {
           : undefined,
         presenceSummary: activeCommunityPresenceSummary,
         isLoadingCommunityPresence: isLoadingActiveCommunityPresence,
-        onlineUserIds: activeCommunityOnlineUserIds,
-        communityMemberCount: communityDirectoryMemberCount,
-        communityMembers: communityDirectoryMembers,
-        communityMembersHasMore: communityDirectoryMembersHasMore,
-        isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,
-        isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,
-        communityMembersLoadError: communityDirectoryMembersLoadError,
-        onLoadMoreCommunityMembers: () => {
-          if (!activeCommunityId || !session) return;
-          void loadMoreCommunityDirectoryMembers(activeCommunityId, session);
-        },
         communityId: activeCommunityId,
         communityOwnerId: activeCommunity?.owner_id ?? null,
         canManageCommunityMembers: canManageMembersActiveCommunity,
-        communityEntryPolicy: activeCommunity?.entry_policy ?? null,
-        canSetCommunityFreeAccessMode:
-          canManageMembersActiveCommunity &&
-          (activeCommunity?.entry_policy === "open" || activeCommunity?.entry_policy === "approval"),
-        isSettingCommunityFreeAccessMode,
-        communityFreeAccessModeError,
-        onSetCommunityFreeAccessMode: handleSetCommunityContextFreeAccessMode,
         canReviewCommunityJoinRequests: canReviewJoinRequestsActiveCommunity,
         communityJoinReviewMode: activeCommunityMembersJoinReviewMode,
         communityJoinRequests: communityContextJoinRequests,
@@ -2453,13 +2501,6 @@ export default function App() {
         decidingCommunityJoinRequestId,
         onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
         onDenyCommunityJoinRequest: handleDenyCommunityJoinRequest,
-        communityMemoryOverview: communityPolynetController.state.overview,
-        isLoadingCommunityMemory: communityPolynetController.state.isLoading,
-        communityMemoryError: communityPolynetController.state.error,
-        onRefreshCommunityMemory: communityPolynetController.actions.refresh,
-        isCommunityMemoryOpen: communityInteractionSidecar.kind === "memory",
-        onOpenCommunityMemory: handleOpenCommunityMemory,
-        onCloseCommunityMemory: handleCloseCommunityMemory,
         canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
         communityInitials,
@@ -2489,7 +2530,6 @@ export default function App() {
       session: session,
       cloudProfile,
       profileUi,
-      reloadProfile: () => { const currentSession = sessionRef.current; if (currentSession) void loadSelfProfile(currentSession); },
       handleProfileAvatarDrop,
       handleProfileAvatarUpload,
       getInitials,
@@ -2763,6 +2803,13 @@ export default function App() {
         ...communityChatPanelProps,
       },
       secondaryPanelsProps: communitySecondarySurfaceProps,
+      admission: {
+        mode: activeCommunity?.entry_policy === "open" || activeCommunity?.entry_policy === "approval" ? activeCommunity.entry_policy : null,
+        canManage: canManageMembersActiveCommunity,
+        pending: isSettingCommunityFreeAccessMode,
+        error: communityFreeAccessModeError,
+        onChange: handleSetCommunityContextFreeAccessMode,
+      },
     },
     discoverPanelProps: {
       isLoadingDiscover,
@@ -2810,6 +2857,7 @@ export default function App() {
     surfaceContext: memberAgentSurfaceContext,
     isVisible: isMemberAgentDockVisible,
   } = useWebMemberAgentSurfaceController({
+    pageMode: !showMobileShell,
     activePage,
     communityTab,
     activeCommunity,
@@ -2838,6 +2886,7 @@ export default function App() {
     }
   }
   const shellChromeHostProps = buildWebShellChromeHostProps({
+    onOpenCommunityMembers: handleOpenCommunityMembers,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobilePublicFunnel,
@@ -2882,6 +2931,8 @@ export default function App() {
     communityTab,
     communityTabIndicators,
     communityChannels: activeCommunityChannels,
+    memberNextStep: session && activeCommunityId && canViewMembersActiveCommunity && !isPublicCommunityFunnel
+      ? <WebCommunityNextStep key={`${activeCommunityId}:${session.user.id}`} communityId={activeCommunityId} session={session} ensureSession={ensureUsableAuthSession} /> : null,
     isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: activeCommunityChannelSlug,
     communityChannelIndicators,
@@ -2933,7 +2984,6 @@ export default function App() {
     },
     openCommunityChat,
     openCommunityHome,
-    openCommunityMembers,
     communityInitials,
     showDesktopCommunityRail,
     showDesktopCommunityNav,
@@ -3006,13 +3056,15 @@ export default function App() {
       globalOverlayHostProps={globalOverlayHostProps}
       memberAgentDockRef={memberAgentComposerApiRef}
       memberAgentDockProps={{
+        pageMode: !showMobileShell,
+        pageActive: activePage === "community" && communityTab === "agent",
         isVisible: isMemberAgentDockVisible,
         isSuppressed:
           activePage === "community" && communityTab === "funnel",
         canManageResources: canManageResourcesActiveCommunity,
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
-        onRequestOpen: () => setMobileRootPage("agent"),
+        onRequestOpen: () => showMobileShell ? setMobileRootPage("agent") : handleSelectCommunityTab("agent"),
         community: memberAgentDockCommunity,
         surfaceContext: memberAgentSurfaceContext,
         session,

@@ -35,6 +35,18 @@ function normalizeMemberAgentChannel(payload: CloudMemberAgentChannel | null): C
   };
 }
 
+export async function ensureCloudCommunityAgentConversation(params: { session: AuthSessionLike; initialCommunityId: string | null }): Promise<CloudMemberAgentChannel> {
+  if (!params.initialCommunityId) throw new Error("community_required");
+  const { client } = await bootstrapConvexAuthenticatedClient(params.session);
+  return normalizeMemberAgentChannel(await client.mutation("threads:ensureCommunityAgentConversation" as any, { communityId: params.initialCommunityId }) as CloudMemberAgentChannel);
+}
+
+export async function startNewCloudCommunityAgentConversation(params: { session: AuthSessionLike; initialCommunityId: string | null; expectedActiveEpisodeId: string }): Promise<CloudMemberAgentChannel> {
+  if (!params.initialCommunityId) throw new Error("community_required");
+  const { client } = await bootstrapConvexAuthenticatedClient(params.session);
+  return normalizeMemberAgentChannel(await client.mutation("threads:startNewCommunityAgentConversation" as any, { communityId: params.initialCommunityId, expectedActiveEpisodeId: params.expectedActiveEpisodeId }) as CloudMemberAgentChannel);
+}
+
 export async function ensureCloudMemberAgentGlobalChannel(params: {
   session: AuthSessionLike;
   initialCommunityId: string | null;

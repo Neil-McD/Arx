@@ -72,7 +72,7 @@ const directory = read(directoryPath);
   "`communitySourceTraces.sourceType`",
   "## Current Link Presentation Slice",
   "ordinary links render as authored blue links",
-  "YouTube videos and explicit HTTPS PDF links",
+  "YouTube is the only URL-derived rich media exception",
   "community chat does not invoke an interaction-preview mode",
 ].forEach((needle) => assertIncludes(contractPath, contract, needle));
 

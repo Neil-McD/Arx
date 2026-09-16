@@ -50,7 +50,7 @@ export function MemberAvatarStack(props: {
           className="member-avatar-stack-face"
           readyClassName="has-image"
           name={(face.display_name ?? "").trim() || "Member"}
-          imageUrl={face.avatar_url ?? null}
+          imageUrl={face.avatar_url}
           focusX={face.avatar_focus_x}
           focusY={face.avatar_focus_y}
           zoom={face.avatar_zoom}

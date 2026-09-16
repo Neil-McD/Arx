@@ -75,18 +75,10 @@ assert.match(
   /\.community-member-chat \.community-interaction-drawer-composer \{[\s\S]*position: absolute;[\s\S]*bottom: 0;[\s\S]*background: transparent;/,
   "the shared thread composer should retain its mobile docked fallback",
 );
-const desktopAgentThreadSafeAreaRule = baseCss.match(
-  /\.app-root:not\(\.mobile-shell\):has\(\.member-agent-dock:not\(\.is-open\) \.member-agent-dock-launcher\)\s+\.community-member-chat\s+\.community-interaction-thread-drawer \{[^}]*\}/,
-)?.[0] ?? "";
-assert.match(
-  desktopAgentThreadSafeAreaRule,
-  /--community-thread-composer-bottom-offset: var\(--member-agent-desktop-launcher-clearance\);/,
-  "a closed desktop agent launcher should reserve its exact safe area below the thread composer",
-);
 assert.doesNotMatch(
-  desktopAgentThreadSafeAreaRule,
-  /padding-right|community-interaction-main-composer/,
-  "the agent launcher safe area must not narrow either community composer",
+  baseCss,
+  /member-agent-dock-launcher|member-agent-desktop-launcher-clearance/,
+  "retired agent launcher must not reserve space beneath thread composers",
 );
 assert.match(
   baseCss,
@@ -190,8 +182,8 @@ assert.match(
 );
 assert.match(
   memberAgentCss,
-  /\.member-agent-dock-composer \{[\s\S]*background: var\(--composer-surface,[\s\S]*border-radius: var\(--composer-radius/,
-  "member-agent composer should share the canonical material and shape",
+  /\.community-agent-composer\.chat-input-bar \{ margin: 0; \}/,
+  "member-agent composer only owns placement; the channel composer owns its material and shape",
 );
 assert.doesNotMatch(
   memberAgentCss,

@@ -51,14 +51,14 @@ assert.doesNotMatch(
 
 assert.match(
   mentionEmails,
-  /suppressOnlyJob[\s\S]*!source \|\| source\.status !== "live"[\s\S]*suppressOnlyJob\(mention\)/,
+  /suppressOnlyJob[\s\S]*resolveMentionRecipientSource[\s\S]*if \(!authorized\)[\s\S]*suppressOnlyJob\(mention\)/,
   "dead-source user mention rows must drain to suppressed instead of staying pending forever",
 );
 
 assert.match(
-  mentionEmails,
-  /mention\.replyId && source\.rootId[\s\S]*ctx\.db\.get\(source\.rootId\)[\s\S]*!root \|\| root\.status !== "live"[\s\S]*suppressOnlyJob\(mention\)/,
-  "reply mentions whose parent root is gone must drain instead of emailing from a deleted thread",
+  read("convex/communityNotificationAccess.ts"),
+  /resolveCommunityInteractionEvidenceSource[\s\S]*communityInteractionEvidenceSourceIsReadable\(source\)/,
+  "notification eligibility must reuse the canonical source-and-parent readability check",
 );
 
 assert.match(
@@ -80,8 +80,8 @@ assert.match(
 );
 
 assert.match(
-  mentionEmails,
-  /if \(!community\) \{[\s\S]*suppressOnlyJob\(mention\)/,
+  read("convex/communityNotificationAccess.ts"),
+  /if \(!community \|\| !communityIsActive\(community\)\) return null/,
   "mentions whose community disappeared must drain to suppressed",
 );
 
@@ -99,7 +99,7 @@ assert.match(
 
 assert.match(
   mentionEmails,
-  /readCommunityChatReadState[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
+  /readCommunityChannelReadState[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
   "pending mentions covered by the cursor must settle asynchronously without email",
 );
 

@@ -3,18 +3,24 @@ import {
   useId,
   useRef,
   useState,
+  useContext,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
+import { ChannelAccessSettings } from "./ChannelAccessSettings";
+import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 
 export type WebCommunityChannelHeaderChannel = {
   id: string;
   slug: string;
   name: string;
   is_general: boolean;
+  access_mode?: "all_members" | "restricted";
 };
 
 type WebCommunityChannelHeaderProps = {
+  trailingAction?: ReactNode;
   channel: WebCommunityChannelHeaderChannel;
   canManage: boolean;
   managingChannelId?: string | null;
@@ -57,6 +63,7 @@ function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
 }
 
 export function WebCommunityChannelHeader({
+  trailingAction,
   channel,
   canManage,
   managingChannelId = null,
@@ -65,6 +72,7 @@ export function WebCommunityChannelHeader({
   onRenameChannel,
   onDeleteChannel,
 }: WebCommunityChannelHeaderProps) {
+  const sessionScope = useContext(CommunityChannelSessionContext);
   const renameTitleId = useId();
   const deleteTitleId = useId();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -195,9 +203,10 @@ export function WebCommunityChannelHeader({
     <>
       <header className="community-channel-header" aria-label={`Channel ${channel.name}`}>
         <div className="community-channel-header-identity" title={channel.name}>
-          <Hash size={17} strokeWidth={1.9} aria-hidden="true" />
+          {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
           <h1>{channel.name}</h1>
         </div>
+        {trailingAction}
         {canOpenChannelMenu ? (
           <div className="community-channel-header-actions" ref={menuRef}>
             <button
@@ -234,7 +243,7 @@ export function WebCommunityChannelHeader({
                   <>
                     <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
                       <Pencil size={15} aria-hidden="true" />
-                      Rename channel
+                      {sessionScope ? "Channel settings" : "Rename channel"}
                     </button>
                     <button
                       className="is-danger"
@@ -275,14 +284,14 @@ export function WebCommunityChannelHeader({
             >
               <div className="community-channel-modal-header">
                 <div>
-                  <h2 id={renameTitleId}>Rename channel</h2>
+                  <h2 id={renameTitleId}>{sessionScope ? "Channel settings" : "Rename channel"}</h2>
                   <p>The channel URL will stay the same so existing links keep working.</p>
                 </div>
                 <button
                   type="button"
                   className="community-channel-modal-close"
                   onClick={() => closeManagement()}
-                  aria-label="Close rename channel dialog"
+                  aria-label="Close channel settings"
                   disabled={Boolean(managingChannelId)}
                 >
                   <X size={18} aria-hidden="true" />
@@ -306,20 +315,21 @@ export function WebCommunityChannelHeader({
                   {manageChannelError}
                 </div>
               ) : null}
+              {sessionScope ? <ChannelAccessSettings channelId={channel.id} /> : null}
               <div className="community-channel-modal-actions">
                 <button
                   type="button"
                   onClick={() => closeManagement()}
                   disabled={Boolean(managingChannelId)}
                 >
-                  Cancel
+                  {sessionScope ? "Close" : "Cancel"}
                 </button>
                 <button
                   type="submit"
                   className="is-primary"
                   disabled={Boolean(managingChannelId) || !renamedChannelName.trim()}
                 >
-                  {managingChannelId ? "Saving…" : "Save"}
+                  {managingChannelId ? "Saving…" : sessionScope ? "Save name" : "Save"}
                 </button>
               </div>
             </form>

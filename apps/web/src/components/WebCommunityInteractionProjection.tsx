@@ -1,6 +1,7 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
+  Users,
   MessageSquare,
   Pencil,
   Trash2,
@@ -17,19 +18,11 @@ import type {
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
-import { youTubeEmbedsInText } from "../../../../shared/linkEmbedUi";
-import { pdfLinksInText } from "../../../../shared/messagePdf";
+import { firstYouTubeEmbedInText } from "../../../../shared/linkEmbedUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
-import {
-  CommunityContextPanel,
-  type CommunityAdmissionEntryPolicy,
-  type CommunityAdmissionJoinRequest,
-  type CommunityPresenceFace,
-  type CommunityRailMember,
-} from "./CommunityContextPanel";
+import type { CommunityAdmissionJoinRequest } from "./CommunityJoinRequestReview";
 import type { MentionCandidate } from "./communityMentionAutocomplete";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
-import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import {
   WebCommunityChannelHeader,
   type WebCommunityChannelHeaderChannel,
@@ -43,10 +36,8 @@ import type {
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import type {
-  CloudCommunityPolynetOverview,
-  CloudCommunityPolynetOverviewNode,
-} from "../../../../shared/cloudCommunityPolynetGateway";
+import { ChannelRosterPanel } from "./ChannelRosterPanel";
+import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import {
   MOBILE_READING_MODE_POLICY,
   advanceMobileReadingMode,
@@ -58,6 +49,9 @@ import {
 } from "./mobileReadingModePolicy";
 
 export type WebCommunityInteractionProjectionProps = {
+  peopleOpen?: boolean;
+  onPeopleOpenChange?: (open: boolean) => void;
+  admission?: CommunityAdmissionControl;
   activeCommunityName: string;
   activeChannel?: WebCommunityChannelHeaderChannel | null;
   canManageActiveChannel?: boolean;
@@ -130,22 +124,9 @@ export type WebCommunityInteractionProjectionProps = {
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
   presenceSummary?: CommunityPresenceSummary | null;
   isLoadingCommunityPresence?: boolean;
-  onlineUserIds?: Set<string> | null;
-  communityMemberCount?: number | null;
-  communityMembers?: CommunityRailMember[] | null;
-  communityMembersHasMore?: boolean;
-  isLoadingCommunityMembers?: boolean;
-  isLoadingMoreCommunityMembers?: boolean;
-  communityMembersLoadError?: string | null;
-  onLoadMoreCommunityMembers?: () => void;
   communityId?: string | null;
   communityOwnerId?: string | null;
   canManageCommunityMembers?: boolean;
-  communityEntryPolicy?: CommunityAdmissionEntryPolicy | null;
-  canSetCommunityFreeAccessMode?: boolean;
-  isSettingCommunityFreeAccessMode?: boolean;
-  communityFreeAccessModeError?: string | null;
-  onSetCommunityFreeAccessMode?: (mode: "open" | "approval") => Promise<void> | void;
   canReviewCommunityJoinRequests?: boolean;
   communityJoinReviewMode?: "paid" | "free_auto" | "free_approval" | null;
   communityJoinRequests?: CommunityAdmissionJoinRequest[] | null;
@@ -154,17 +135,6 @@ export type WebCommunityInteractionProjectionProps = {
   decidingCommunityJoinRequestId?: string | null;
   onApproveCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
   onDenyCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
-  communityMemoryOverview?: CloudCommunityPolynetOverview | null;
-  isLoadingCommunityMemory?: boolean;
-  communityMemoryError?: string | null;
-  onRefreshCommunityMemory?: () => void;
-  isCommunityMemoryOpen?: boolean;
-  onOpenCommunityMemory?: () => void;
-  onCloseCommunityMemory?: () => void;
-  contextPanelLockedSections?: { members?: boolean; memory?: boolean } | null;
-  onContextPanelLockedSectionActivate?: (section: "members" | "memory") => void;
-  communityMemoryCountLabel?: string | null;
-  contextPanelMembersPreview?: CommunityPresenceFace[] | null;
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;
@@ -196,208 +166,6 @@ import {
 } from "./communityInteractionFeed";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
-import { CommunityMemoryGraph } from "./CommunityMemoryGraph";
-
-const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
-  "activeCommunityName",
-  "presenceSummary",
-  "isLoadingCommunityPresence",
-  "onlineUserIds",
-  "communityMemberCount",
-  "communityMembers",
-  "communityMembersHasMore",
-  "isLoadingCommunityMembers",
-  "isLoadingMoreCommunityMembers",
-  "communityMembersLoadError",
-  "onLoadMoreCommunityMembers",
-  "communityId",
-  "communityOwnerId",
-  "canManageCommunityMembers",
-  "communityEntryPolicy",
-  "canSetCommunityFreeAccessMode",
-  "isSettingCommunityFreeAccessMode",
-  "communityFreeAccessModeError",
-  "onSetCommunityFreeAccessMode",
-  "canReviewCommunityJoinRequests",
-  "communityJoinReviewMode",
-  "communityJoinRequests",
-  "isLoadingCommunityJoinRequests",
-  "communityJoinRequestsError",
-  "decidingCommunityJoinRequestId",
-  "onApproveCommunityJoinRequest",
-  "onDenyCommunityJoinRequest",
-  "communityMemoryOverview",
-  "isLoadingCommunityMemory",
-  "communityMemoryError",
-  "onRefreshCommunityMemory",
-  "onOpenCommunityMemory",
-  "contextPanelLockedSections",
-  "onContextPanelLockedSectionActivate",
-  "communityMemoryCountLabel",
-  "contextPanelMembersPreview",
-  "onOpenProfile",
-  "onMessageUser",
-  "currentUserId",
-  "displayName",
-  "getInitials",
-  "getAvatarColor",
-  "canViewMemberPlanDetails",
-  "isActiveCommunityOwner",
-  "communityInitials",
-  "onSetCommunityMemberRole",
-  "onRemoveCommunityMember",
-  "onBanCommunityMember",
-  "loadMemberBillingHistory",
-] as const satisfies readonly (keyof WebCommunityInteractionProjectionProps)[];
-
-type CommunityContextProjectionProps = Pick<
-  WebCommunityInteractionProjectionProps,
-  (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]
-> & {
-  containerClassName?: string;
-  ariaLabel?: string;
-  sectionMode?: "all" | "members";
-};
-
-function pickCommunityContextProjection(
-  props: WebCommunityInteractionProjectionProps & {
-    containerClassName?: string;
-    ariaLabel?: string;
-    sectionMode?: "all" | "members";
-  },
-): CommunityContextProjectionProps {
-  return {
-    ...Object.fromEntries(
-      COMMUNITY_CONTEXT_PROJECTION_KEYS.map((key) => [key, props[key]]),
-    ) as Pick<WebCommunityInteractionProjectionProps, (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]>,
-    containerClassName: props.containerClassName,
-    ariaLabel: props.ariaLabel,
-    sectionMode: props.sectionMode,
-  };
-}
-
-const StableCommunityInteractionContextPanelSurface = memo(function StableCommunityInteractionContextPanelSurface(
-  props: CommunityContextProjectionProps,
-) {
-  const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
-  const selectedCommunityMember = useMemo(() => {
-    if (!selectedCommunityMemberId) return null;
-    return (props.communityMembers ?? []).find((member) => member.id === selectedCommunityMemberId) ?? null;
-  }, [props.communityMembers, selectedCommunityMemberId]);
-  const canManageCommunityMembers = Boolean(
-    props.canManageCommunityMembers &&
-      props.communityId &&
-      props.onSetCommunityMemberRole &&
-      props.onRemoveCommunityMember &&
-      props.onBanCommunityMember,
-  );
-  const communityMemberSettingsCommunity = props.communityId
-    ? {
-        id: props.communityId,
-        owner_id: props.communityOwnerId ?? null,
-      }
-    : null;
-
-  useEffect(() => {
-    if (!selectedCommunityMemberId) return;
-    if (!canManageCommunityMembers) {
-      setSelectedCommunityMemberId(null);
-      return;
-    }
-    if (selectedCommunityMember) return;
-    setSelectedCommunityMemberId(null);
-  }, [canManageCommunityMembers, selectedCommunityMember, selectedCommunityMemberId]);
-
-  return (
-    <>
-      <aside
-        className={props.containerClassName ?? "community-interaction-drawer community-context-panel"}
-        aria-label={props.ariaLabel ?? "Community"}
-      >
-        <CommunityContextPanel
-          sectionMode={props.sectionMode}
-          communityName={props.activeCommunityName}
-          onlineFaces={props.presenceSummary?.online_faces ?? null}
-          onlineCount={props.presenceSummary?.online_count ?? null}
-          onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)}
-          isLoadingPresence={props.isLoadingCommunityPresence}
-          onlineUserIds={props.onlineUserIds ?? null}
-          memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
-          members={props.communityMembers ?? null}
-          membersHasMore={props.communityMembersHasMore}
-          isLoadingMembers={props.isLoadingCommunityMembers}
-          isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
-          membersLoadError={props.communityMembersLoadError}
-          onLoadMoreMembers={props.onLoadMoreCommunityMembers}
-          ownerId={props.communityOwnerId ?? null}
-          canManageMembers={canManageCommunityMembers}
-          entryPolicy={props.communityEntryPolicy ?? null}
-          canSetFreeAccessMode={props.canSetCommunityFreeAccessMode}
-          isSettingFreeAccessMode={props.isSettingCommunityFreeAccessMode}
-          freeAccessModeError={props.communityFreeAccessModeError}
-          onSetFreeAccessMode={props.onSetCommunityFreeAccessMode}
-          canReviewJoinRequests={props.canReviewCommunityJoinRequests}
-          joinReviewMode={props.communityJoinReviewMode}
-          pendingJoinRequests={props.communityJoinRequests ?? null}
-          isLoadingJoinRequests={props.isLoadingCommunityJoinRequests}
-          joinRequestsError={props.communityJoinRequestsError}
-          decidingJoinRequestId={props.decidingCommunityJoinRequestId}
-          onApproveJoinRequest={props.onApproveCommunityJoinRequest}
-          onDenyJoinRequest={props.onDenyCommunityJoinRequest}
-          memoryOverview={props.communityMemoryOverview ?? null}
-          isLoadingMemory={props.isLoadingCommunityMemory}
-          memoryLoadError={props.communityMemoryError}
-          onRefreshMemory={props.onRefreshCommunityMemory}
-          onOpenMemory={props.onOpenCommunityMemory}
-          lockedSections={props.contextPanelLockedSections ?? null}
-          onLockedSectionActivate={props.onContextPanelLockedSectionActivate}
-          memoryCountLabelOverride={props.communityMemoryCountLabel ?? null}
-          membersPreview={props.contextPanelMembersPreview ?? null}
-          onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
-          onOpenMemberProfile={props.onOpenProfile}
-          onMessageMember={props.onMessageUser}
-          currentUserId={props.currentUserId}
-          displayName={props.displayName}
-          getInitials={props.getInitials}
-          getAvatarColor={props.getAvatarColor}
-        />
-      </aside>
-      <CommunityMemberSettingsDialog
-        member={selectedCommunityMember}
-        activeCommunity={communityMemberSettingsCommunity}
-        canManageMembers={canManageCommunityMembers}
-        canViewMemberPlanDetails={Boolean(props.canViewMemberPlanDetails)}
-        isActiveCommunityOwner={Boolean(props.isActiveCommunityOwner)}
-        onClose={() => setSelectedCommunityMemberId(null)}
-        displayName={props.displayName}
-        getInitials={props.getInitials}
-        communityInitials={props.communityInitials ?? props.getInitials}
-        handleSetCommunityMemberRole={(membershipId, role) =>
-          props.onSetCommunityMemberRole?.(membershipId, role)
-        }
-        handleRemoveCommunityMember={(membershipId) =>
-          props.onRemoveCommunityMember?.(membershipId)
-        }
-        handleBanCommunityMember={(membershipId) =>
-          props.onBanCommunityMember?.(membershipId)
-        }
-        loadMemberBillingHistory={(membershipId) =>
-          props.loadMemberBillingHistory?.(membershipId) ?? Promise.resolve(null)
-        }
-      />
-    </>
-  );
-});
-
-export function CommunityInteractionContextPanelSurface(
-  props: WebCommunityInteractionProjectionProps & {
-    containerClassName?: string;
-    ariaLabel?: string;
-    sectionMode?: "all" | "members";
-  },
-) {
-  return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;
-}
 
 export function resolveSelectedCommunityInteractionRoot(
   roots: CommunityInteractionRootBundle[],
@@ -414,20 +182,25 @@ export function resolveSelectedCommunityInteractionRoot(
 export function communityInteractionRootHasRichContent(
   bundle: CommunityInteractionRootBundle,
 ): boolean {
-  const text = bundleText(bundle.content_blocks, bundle.root.content_summary);
   return bundle.attachments.length > 0
-    || youTubeEmbedsInText(text).length > 0
-    || pdfLinksInText(text).length > 0;
+    || firstYouTubeEmbedInText(bundleText(bundle.content_blocks, bundle.root.content_summary)) !== null;
 }
 
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
+  const hasChannelContext = Boolean(props.communityId && props.activeChannel);
+  const peopleOpen = Boolean(props.peopleOpen && hasChannelContext);
+  const closePeople = useCallback(() => {
+    props.onPeopleOpenChange?.(false);
+  }, [props.onPeopleOpenChange]);
+  useEffect(() => {
+    if (props.peopleOpen && (!hasChannelContext || props.selectedRootId || props.profilePanel)) props.onPeopleOpenChange?.(false);
+  }, [props.peopleOpen, hasChannelContext, props.selectedRootId, props.profilePanel, props.onPeopleOpenChange]);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const drawerScrollRef = useRef<HTMLDivElement | null>(null);
   const drawerComposerRef = useRef<HTMLDivElement | null>(null);
-  const memoryBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const isNearBottomRef = useRef(true);
   const isMainComposerFocusedRef = useRef(false);
   const mobileReadingModeStateRef = useRef(createMobileReadingModeState());
@@ -747,33 +520,22 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const selectedRootBadge = selectedRoot ? agentBadgeLabel(selectedRoot.root.actor_type) : null;
   const isMobileThreadPage = Boolean(props.mobileThreadPage && selectedRoot && !props.profilePanel);
   const ThreadSurface = isMobileThreadPage ? "section" : "aside";
-  const hasDetailPanel = Boolean(selectedRoot || props.profilePanel || props.isCommunityMemoryOpen);
-
-  useEffect(() => {
-    if (!props.isCommunityMemoryOpen) return;
-    const focusFrame = window.requestAnimationFrame(() => {
-      memoryBackButtonRef.current?.focus({ preventScroll: true });
-    });
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      (props.onCloseCommunityMemory ?? props.onCloseDrawer)();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [props.isCommunityMemoryOpen, props.onCloseCommunityMemory, props.onCloseDrawer]);
+  const hasDetailPanel = Boolean(selectedRoot || props.profilePanel);
 
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
+            trailingAction={!hasDetailPanel && props.communityId ? <button
+              type="button"
+              className="community-channel-header-menu-trigger channel-people-trigger"
+              aria-label="Show channel people and agents" aria-expanded={peopleOpen}
+              onClick={() => props.onPeopleOpenChange?.(true)}
+            ><Users size={18} aria-hidden="true" /></button> : null}
             channel={props.activeChannel}
             canManage={Boolean(props.canManageActiveChannel)}
             managingChannelId={props.managingChannelId}
@@ -904,35 +666,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             </button>
           </div>
           <div className="community-interaction-drawer-scroll">{props.profilePanel}</div>
-        </aside>
-      ) : props.isCommunityMemoryOpen ? (
-        <aside className="community-interaction-drawer community-memory-drawer" aria-label="Community memory">
-          <div className="community-interaction-drawer-back community-memory-drawer-header">
-            <button
-              ref={memoryBackButtonRef}
-              className="back-to-workspace"
-              type="button"
-              onClick={props.onCloseCommunityMemory ?? props.onCloseDrawer}
-              title="Back to community"
-              aria-label="Back to community"
-            >
-              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span className="back-path">memory</span>
-            </button>
-          </div>
-          <div className="community-interaction-drawer-scroll community-memory-drawer-scroll">
-            <CommunityMemoryGraph
-              activeCommunityName={props.activeCommunityName}
-              onRefresh={props.onRefreshCommunityMemory}
-              state={{
-                overview: props.communityMemoryOverview ?? null,
-                isLoading: Boolean(props.isLoadingCommunityMemory),
-                error: props.communityMemoryError ?? null,
-              }}
-            />
-          </div>
         </aside>
       ) : selectedRoot ? (
         <ThreadSurface
@@ -1237,9 +970,39 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             </div>
           ) : null}
         </ThreadSurface>
-      ) : (
-        <CommunityInteractionContextPanelSurface {...props} />
-      )}
+      ) : null}
+      {props.communityId && props.activeChannel ? <ChannelRosterPanel
+        onCloseNarrow={closePeople}
+        narrowOpen={peopleOpen}
+        joinReview={{
+          canReviewJoinRequests: props.canReviewCommunityJoinRequests,
+          joinReviewMode: props.communityJoinReviewMode,
+          pendingJoinRequests: props.communityJoinRequests,
+          isLoadingJoinRequests: props.isLoadingCommunityJoinRequests,
+          joinRequestsError: props.communityJoinRequestsError,
+          decidingJoinRequestId: props.decidingCommunityJoinRequestId,
+          onApproveJoinRequest: props.onApproveCommunityJoinRequest,
+          onDenyJoinRequest: props.onDenyCommunityJoinRequest,
+          displayName: props.displayName,
+        }}
+        admission={props.admission}
+        key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}
+        communityName={props.activeCommunityName} presenceSummary={props.presenceSummary} isLoadingPresence={props.isLoadingCommunityPresence}
+        currentUserId={props.currentUserId} onMessageUser={props.onMessageUser}
+        memberDetailOpen={hasDetailPanel}
+        memberSettings={{
+          activeCommunity: { id: props.communityId, owner_id: props.communityOwnerId ?? null },
+          canManageMembers: Boolean(props.canManageCommunityMembers && props.onSetCommunityMemberRole && props.onRemoveCommunityMember && props.onBanCommunityMember),
+          canViewMemberPlanDetails: Boolean(props.canViewMemberPlanDetails), isActiveCommunityOwner: Boolean(props.isActiveCommunityOwner),
+          displayName: props.displayName, getInitials: props.getInitials, communityInitials: props.communityInitials ?? props.getInitials,
+          handleSetCommunityMemberRole: (id, role) => props.onSetCommunityMemberRole?.(id, role),
+          handleRemoveCommunityMember: id => props.onRemoveCommunityMember?.(id),
+          handleBanCommunityMember: id => props.onBanCommunityMember?.(id),
+          loadMemberBillingHistory: id => props.loadMemberBillingHistory?.(id) ?? Promise.resolve(null),
+        }}
+        channelId={props.activeChannel?.is_general ? undefined : props.activeChannel?.id}
+        onOpenProfile={props.onOpenProfile} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+      /> : null}
     </div>
     </>
   );

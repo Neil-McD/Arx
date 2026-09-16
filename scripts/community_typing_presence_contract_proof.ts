@@ -107,7 +107,7 @@ assert.match(
 );
 assert.match(
   core,
-  /communityTypingCandidateRemainsAuthorized[\s\S]*requireCommunityChatAccess/,
+  /communityTypingCandidateRemainsAuthorized[\s\S]*resolveCommunityChannelActor\(args\)[\s\S]*getCommunityChannelCapabilities\(\{ \.\.\.args, actor \}\)\)\.canRead/,
   "typing candidates must be reauthorized before projection",
 );
 assert.match(

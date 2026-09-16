@@ -5,7 +5,6 @@ import {
   useCommunityResourceController,
   type CommunitySourceIntakePhase,
   type CommunitySourceIntakeResult,
-  type ResourceReadState,
 } from "../../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
 import { WebDeleteResourceModuleModal } from "../components/WebDeleteResourceModuleModal";
@@ -55,6 +54,8 @@ type UseWebCommunityResourceUiControllerParams<
   communityResourceModules: ResourceModuleT[];
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
+  setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
+  setIsLoadingResourceModules: Dispatch<SetStateAction<boolean>>;
 };
 
 export type UseWebCommunityResourceUiControllerResult<
@@ -63,9 +64,6 @@ export type UseWebCommunityResourceUiControllerResult<
   ResourceModuleT extends ResourceModuleLike,
 > = {
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
-  resourceRead: ResourceReadState;
-  moduleRead: ResourceReadState;
-  refreshCommunityResources: (communityId: string, session: SessionT, collections?: ("resources" | "modules")[]) => Promise<void>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
   setResourceBodyInput: Dispatch<SetStateAction<string>>;
@@ -156,9 +154,6 @@ export function useWebCommunityResourceUiController<
   const [isDeletingResourceModule, setIsDeletingResourceModule] = useState(false);
 
   const {
-    resourceRead,
-    moduleRead,
-    refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
     handleSaveCommunityResourceModule,
@@ -201,6 +196,8 @@ export function useWebCommunityResourceUiController<
     communityResources: params.communityResources,
     setCommunityResources: params.setCommunityResources,
     setCommunityResourceModules: params.setCommunityResourceModules,
+    setIsLoadingResources: params.setIsLoadingResources,
+    setIsLoadingResourceModules: params.setIsLoadingResourceModules,
     setIsSavingResource,
     setIsSavingResourceModule,
     setResourceError,
@@ -472,9 +469,6 @@ export function useWebCommunityResourceUiController<
       },
       onConfirm: confirmDeleteModule,
     },
-    resourceRead,
-    moduleRead,
-    refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
   };

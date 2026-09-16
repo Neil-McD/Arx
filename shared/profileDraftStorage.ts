@@ -2,7 +2,6 @@ export type LocalProfileDraft = {
   name: string;
   handle: string;
   bio: string;
-  touched?: Partial<Record<"name" | "handle" | "bio", boolean>>;
 };
 
 function emptyDraft(): LocalProfileDraft {
@@ -47,15 +46,6 @@ export function readProfileDraftForUser(userId: string | null | undefined): Loca
       handle,
       bio,
     };
-    const rawState = localStorage.getItem(`${keys.name}:draft-state`);
-    if (rawState) {
-      try {
-        const state = JSON.parse(rawState);
-        if (state.version === 1) scopedDraft.touched = {
-          name: state.name === true, handle: state.handle === true, bio: state.bio === true,
-        };
-      } catch { /* Ignore malformed local metadata, not the existing text draft. */ }
-    }
     return scopedDraft;
   } catch {
     return emptyDraft();
@@ -70,7 +60,6 @@ export function writeProfileDraftForUser(userId: string | null | undefined, draf
       localStorage.removeItem(keys.username);
       localStorage.removeItem(keys.bio);
       localStorage.removeItem(keys.avatar);
-      localStorage.removeItem(`${keys.name}:draft-state`);
     } catch {
       // ignore
     }
@@ -87,8 +76,6 @@ export function writeProfileDraftForUser(userId: string | null | undefined, draf
     if (bio) localStorage.setItem(keys.bio, bio);
     else localStorage.removeItem(keys.bio);
     localStorage.removeItem(keys.avatar);
-    if (draft.touched) localStorage.setItem(`${keys.name}:draft-state`, JSON.stringify({ version: 1, ...draft.touched }));
-    else localStorage.removeItem(`${keys.name}:draft-state`);
   } catch {
     // ignore
   }

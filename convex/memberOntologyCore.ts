@@ -52,6 +52,7 @@ export type MissingBridgeSocialLinkFactInsertResult = {
 
 function toFactLike(row: any): MemberFactLike {
   return {
+    contextKind: row.contextKind,
     communityId: row.communityId ? String(row.communityId) : null,
     kind: row.kind,
     body: row.body,
@@ -106,6 +107,7 @@ export async function insertMemberFacts(ctx: any, args: {
     /* Same-kind same-body duplicates supersede the older row instead of
        accumulating — idempotent writes for replayed bridges/interviews. */
     for (const existing of existingRows) {
+      if (existing.contextKind === "workflow") continue;
       if (existing.kind !== normalized.kind || existing.body !== normalized.body) continue;
       if (supersededIds.has(String(existing._id))) continue;
       if (
@@ -219,6 +221,7 @@ export async function transitionMemberFactConsent(ctx: any, args: {
 }): Promise<void> {
   const fact = await ctx.db.get(args.factId);
   if (!fact) throw new Error("member_fact_not_found");
+  if (fact.contextKind === "workflow") throw new Error("member_fact_consent_forbidden");
   /* Only the subject member consents about themselves. */
   if (args.actorType === "member" && String(fact.userId) !== String(args.actorUserId)) {
     throw new Error("member_fact_consent_forbidden");
@@ -281,6 +284,23 @@ export async function readMemberFactsForLens(ctx: any, args: {
         .withIndex("by_user", (q: any) => q.eq("userId", args.subjectUserId))
         .collect()) as any[]);
   return rows.filter((row) => memberFactVisibleToLens(toFactLike(row), args.lens)) as MemberFactRow[];
+}
+
+// Bounded semantic projection, not an exhaustive fact export. Filtering remains
+// owned by the same visibility predicate as all other fact readers.
+export async function readBoundedMemberOrientationFacts(ctx: any, args: {
+  subjectUserId: any;
+  communityId: any;
+}) {
+  const scanLimit = 120;
+  const rows = await ctx.db.query("memberFacts")
+    .withIndex("by_user_community", (q: any) =>
+      q.eq("userId", args.subjectUserId).eq("communityId", args.communityId))
+    .order("desc").take(scanLimit + 1) as MemberFactRow[];
+  const visible = rows.slice(0, scanLimit).filter((row) => memberFactVisibleToLens(toFactLike(row), {
+    kind: "member_orientation", communityId: String(args.communityId),
+  })).sort((a, b) => b.updatedAt - a.updatedAt || String(a._id).localeCompare(String(b._id)));
+  return { facts: visible.slice(0, 12), truncated: rows.length > scanLimit || visible.length > 12 };
 }
 
 /* The deterministic account block for member.md — assembled from data the

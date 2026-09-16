@@ -2163,11 +2163,16 @@
   grid-template-columns: minmax(0, 1fr) clamp(340px, 34vw, 760px);
 }
 
-.community-interaction-projection.has-context-panel {
+.community-interaction-projection.has-channel-context {
   grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 380px);
+}
+@media (max-width: 640px) {
+  .community-interaction-projection.has-channel-context { grid-template-columns: minmax(0, 1fr); }
+  .community-context-panel.channel-roster-panel { display: none; }
 }
 
 .community-context-panel {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2223,6 +2228,73 @@
   border-radius: var(--composer-radius);
 }
 
+.community-context-memory {
+  padding: 12px 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--stroke-divider-accent);
+}
+
+.community-context-memory-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.community-context-memory-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+/* Live mini-render of the memory graph — same layout + node/edge encoding as the
+   full Polynet page, fit into the rail slot. */
+.community-context-memory-preview {
+  display: block;
+  width: 100%;
+  height: 132px;
+  padding: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+  overflow: hidden;
+}
+
+/* When memory can be expanded, the whole preview is the click target. */
+.community-context-memory-preview.is-interactive {
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.community-context-memory-preview.is-interactive:hover,
+.community-context-memory-preview.is-interactive:focus-visible {
+  border-color: color-mix(in srgb, var(--border-strong) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
+  outline: none;
+}
+
+.community-context-memory-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.community-context-memory-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.community-context-memory-loading-status {
+  width: 38%;
+  height: 9px;
+  border-radius: 999px;
+}
+
 .community-context-rail-name {
   display: block;
   min-width: 0;
@@ -2273,18 +2345,7 @@
   font-size: 10px;
 }
 
-.community-context-memory {
-  padding: 12px 16px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--stroke-divider-accent);
-}
 
-.community-context-memory-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
 
 .community-context-section {
   font-size: 11px;
@@ -2294,26 +2355,7 @@
   color: var(--text-muted);
 }
 
-.community-context-memory-empty {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 9px;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.4;
-}
 
-.community-context-memory-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 9px;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.4;
-}
 
 /* Visitor mode: a locked section body. The header above it keeps its true
    count — the lock gates the content, never the metadata. */
@@ -2344,10 +2386,6 @@
 }
 
 /* Visitor glass layer: real content visible, verbs gated. */
-.community-context-memory-inert {
-  pointer-events: none;
-  user-select: none;
-}
 
 .community-context-locked-hint {
   display: flex;
@@ -2429,100 +2467,21 @@
   backdrop-filter: blur(1.5px);
 }
 
-.community-context-memory-error button {
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font-size: 12px;
-  cursor: pointer;
-}
 
-.community-context-memory-summary {
-  display: grid;
-  gap: 8px;
-  margin-top: 9px;
-}
 
 /* Live mini-render of the memory graph — same layout + node/edge encoding as the
    full Polynet page, fit into the rail slot. */
-.community-context-memory-preview {
-  display: block;
-  width: 100%;
-  height: 132px;
-  padding: 0;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
-  overflow: hidden;
-}
 
 /* When memory can be expanded, the whole preview is the click target. */
-.community-context-memory-preview.is-interactive {
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
 
-.community-context-memory-preview.is-interactive:hover,
-.community-context-memory-preview.is-interactive:focus-visible {
-  border-color: color-mix(in srgb, var(--border-strong) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
-  outline: none;
-}
 
-.community-context-memory-graph {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
 
-.community-context-memory-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-faint);
-  font-size: 11px;
-  line-height: 1.3;
-}
 
-.community-context-memory-loading-status {
-  width: 38%;
-  height: 9px;
-  border-radius: 999px;
-}
 
-.community-context-memory-list {
-  display: grid;
-  gap: 5px;
-}
 
-.community-context-memory-node {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: 7px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-card) 58%, transparent);
-}
 
-.community-context-memory-node strong,
-.community-context-memory-node span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.community-context-memory-node strong {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
 
-.community-context-memory-node span {
-  color: var(--text-faint);
-  font-size: 11px;
-}
 
 .community-context-members {
   flex: 1;
@@ -2532,6 +2491,17 @@
   padding: 10px 8px 14px;
 }
 
+.community-context-agent-list {
+  margin: 0 8px;
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.community-context-agent-list .community-context-member + .community-context-member {
+  border-top: 1px solid var(--stroke-divider-accent);
+}
+
 .community-context-members .community-context-section {
   padding: 0 8px;
   margin: 0 0 6px;
@@ -2539,104 +2509,6 @@
 
 .community-context-members .community-context-section:not(:first-child) {
   margin-top: 14px;
-}
-
-.community-context-members-total {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-secondary);
-}
-
-.community-context-members-total > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.community-context-autojoin {
-  min-width: 0;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
-  cursor: pointer;
-}
-
-.community-context-autojoin {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  transition: color 0.12s ease;
-}
-
-.community-context-autojoin-label {
-  max-width: 58px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.community-context-autojoin-track {
-  position: relative;
-  width: 24px;
-  height: 14px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-muted) 20%, transparent);
-  flex: 0 0 auto;
-  transition: background 0.12s ease;
-}
-
-.community-context-autojoin-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--text-muted);
-  transition:
-    background 0.12s ease,
-    transform 0.12s ease;
-}
-
-.community-context-autojoin.is-on {
-  color: var(--text-primary);
-}
-
-.community-context-autojoin.is-on .community-context-autojoin-track {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.community-context-autojoin.is-on .community-context-autojoin-thumb {
-  background: var(--accent);
-  transform: translateX(10px);
-}
-
-.community-context-autojoin:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.community-context-autojoin:focus-visible {
-  outline: none;
-}
-
-.community-context-autojoin:focus-visible .community-context-autojoin-track {
-  box-shadow: 0 0 0 2px var(--border-active);
-}
-
-.community-context-autojoin:disabled {
-  cursor: wait;
-  opacity: 1;
 }
 
 .community-context-request-divider {
@@ -2808,6 +2680,9 @@
   background: var(--hover-overlay);
 }
 
+.community-context-member.is-offline { opacity: 0.5; }
+.community-context-member.is-offline:hover { opacity: 1; }
+
 .community-context-members-loading {
   display: grid;
   gap: 1px;
@@ -2831,9 +2706,6 @@
   width: 43%;
 }
 
-.community-context-member.is-offline {
-  opacity: 0.5;
-}
 
 .community-context-member-avatar {
   position: relative;
@@ -2888,29 +2760,12 @@
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.community-context-member-activity {
-  flex: 0 0 auto;
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.2;
-  white-space: nowrap;
-  transition:
-    max-width 0.14s ease,
-    opacity 0.12s ease;
-}
 
-.community-context-member:hover .community-context-member-activity,
-.community-context-member:focus-within .community-context-member-activity {
-  max-width: 128px;
-  opacity: 1;
-}
 
 .community-context-member-name.is-admin {
   color: var(--accent-gold);
@@ -2933,11 +2788,6 @@
   cursor: pointer;
 }
 
-/* Hover lights the person up: the dimmed (offline) row returns to full, the name
-   brightens, and the name underlines — so the one you're pointing at stands out. */
-.community-context-member.is-offline:hover {
-  opacity: 1;
-}
 
 .community-context-member-name:hover {
   color: var(--text-primary);
@@ -2960,11 +2810,18 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  opacity: 0;
+  opacity: 1;
   transition:
     background 0.12s ease,
     color 0.12s ease,
     opacity 0.12s ease;
+}
+
+
+@media (hover: hover) and (pointer: fine) {
+  .channel-roster-panel .community-context-member-action { opacity: 0; }
+  .channel-roster-panel .community-context-member:hover .community-context-member-action,
+  .channel-roster-panel .community-context-member:focus-within .community-context-member-action { opacity: 1; }
 }
 
 .community-context-member:hover .community-context-member-action,
@@ -2991,6 +2848,22 @@
   padding: 6px 0;
 }
 
+.members-view-all {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.members-view-all:hover { color: var(--text-primary); }
+.modal.members-directory-modal { width: min(580px, calc(100vw - 32px)); }
+.members-directory-community { margin-top: 4px; font-size: 13px; color: var(--text-muted); }
+.members-directory-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.members-directory-content .community-context-members { min-height: 0; overflow-y: auto; padding: 8px 16px 20px; }
+.members-directory-content .community-context-members-total { margin-top: 0; }
+
 .community-context-members-retry {
   display: block;
   width: calc(100% - 16px);
@@ -3015,40 +2888,122 @@
   opacity: 0.6;
 }
 
-.app-root.mobile-shell .community-interaction-projection.has-context-panel {
-  grid-template-columns: minmax(0, 1fr);
-}
 
 .app-root.mobile-shell .community-context-panel {
   display: none;
 }
 
-.community-members-page {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  overflow: hidden;
-  background: var(--community-chat-surface, var(--bg-workspace));
+.community-channel-header .channel-people-trigger,
+.channel-people-back { display: none; }
+@media (max-width: 640px) {
+  .community-channel-header .channel-people-trigger { display: inline-flex; margin-left: auto; }
+  .people-panel-open > .community-interaction-main { display: none; }
+  .community-interaction-projection.people-panel-open > .channel-roster-panel {
+    display: flex;
+    min-height: 0;
+    border-left: 0;
+  }
+  .people-panel-open .channel-people-back { display: flex; flex-shrink: 0; }
+  .people-panel-open .community-context-rail-head { justify-content: flex-start; gap: 8px; }
+  .channel-people-back .back-to-workspace { padding: 8px; }
+  .channel-people-back .back-icon { width: 17px; height: 17px; }
 }
 
-.app-root.mobile-shell .community-members-page .community-members-page-panel {
-  display: flex;
-  flex: 1;
-  min-height: 0;
+.community-context-autojoin {
   min-width: 0;
-  border-left: 0;
-  background: transparent;
-}
-
-.community-members-page-state {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  padding: 24px;
   color: var(--text-muted);
-  text-align: center;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
 }
+
+.community-context-autojoin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transition: color 0.12s ease;
+}
+
+.community-context-autojoin-label {
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-context-autojoin-track {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  flex: 0 0 auto;
+  transition: background 0.12s ease;
+}
+
+.community-context-autojoin-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  transition:
+    background 0.12s ease,
+    transform 0.12s ease;
+}
+
+.community-context-autojoin.is-on {
+  color: var(--text-primary);
+}
+
+.community-context-autojoin.is-on .community-context-autojoin-track {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.community-context-autojoin.is-on .community-context-autojoin-thumb {
+  background: var(--accent);
+  transform: translateX(10px);
+}
+
+.community-context-autojoin:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.community-context-autojoin:focus-visible {
+  outline: none;
+}
+
+.community-context-autojoin:focus-visible .community-context-autojoin-track {
+  box-shadow: 0 0 0 2px var(--border-active);
+}
+
+.community-context-autojoin:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+.channel-roster-panel .community-context-members-total,
+.members-directory-content .community-context-members-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 8px; margin: 14px 0 6px; }
+.channel-roster-panel .community-context-members-total { justify-content: flex-end; }
+.community-context-presence-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px; margin: 14px 0 6px; }
+.community-context-members .community-context-presence-heading .community-context-section { margin: 0; padding: 0; }
+.community-context-presence-heading .members-view-all { flex-shrink: 0; }
+.channel-roster-panel .community-context-members-total .community-context-section,
+.members-directory-content .community-context-members-total .community-context-section { margin: 0; }
+
+
+
+
 
 .community-interaction-main,
 .community-interaction-drawer {
@@ -3419,28 +3374,7 @@
   -webkit-backdrop-filter: none;
 }
 
-.community-member-chat .community-memory-drawer .community-interaction-drawer-back {
-  position: relative;
-  top: 0;
-  right: 0;
-  left: 0;
-  flex: 0 0 var(--web-topbar-height, 48px);
-  height: var(--web-topbar-height, 48px);
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  border: 0;
-  border-bottom: 1px solid var(--stroke-divider-accent);
-  border-radius: 0;
-  background: var(--community-chat-surface);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
-.community-member-chat .community-memory-drawer .community-memory-drawer-header {
-  padding-right: 58px;
-}
 
 .community-memory-graph-surface {
   display: flex;
@@ -3460,12 +3394,6 @@
   padding-top: calc(var(--web-topbar-height, 48px) + 12px);
 }
 
-.community-memory-drawer > .community-memory-drawer-scroll {
-  display: flex;
-  flex: 1 1 auto;
-  padding-top: 0;
-  overflow: hidden;
-}
 
 .community-interaction-main-composer,
 .community-interaction-drawer-composer {
@@ -3612,14 +3540,6 @@
   background: transparent;
 }
 
-/* A closed desktop agent launcher stacks below the thread composer instead of
-   narrowing it. The composer's existing 12px bottom inset becomes the gap. */
-.app-root:not(.mobile-shell):has(.member-agent-dock:not(.is-open) .member-agent-dock-launcher)
-  .community-member-chat
-  .community-interaction-thread-drawer {
-  --community-thread-composer-bottom-offset: var(--member-agent-desktop-launcher-clearance);
-}
-
 /* Desktop threads keep the reply box in the conversation flow. Sparse threads
    end naturally after the final reply; long threads shrink the scroll region
    and keep the composer visible without covering content. */
@@ -3654,6 +3574,7 @@
   );
 }
 
+.community-agent-composer.chat-input-bar,
 .community-member-chat .community-interaction-main-composer .chat-input-bar,
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   --community-composer-control-size: 36px;
@@ -3670,6 +3591,7 @@
   min-height: var(--community-composer-input-size);
 }
 
+.community-agent-composer.chat-input-bar,
 .community-member-chat .community-interaction-main-composer .chat-input-bar {
   border-radius: 18px;
   padding: 10px 12px 8px;
@@ -3687,6 +3609,7 @@
 /* Desktop community composers sit between the quiet memory preview and a
    dedicated authoring surface: clearly contained, but never outlined like a
    form field. Mobile keeps its larger one-row touch shape in its overrides. */
+.app-root:not(.mobile-shell) .community-agent-composer.chat-input-bar,
 .app-root:not(.mobile-shell)
   .community-member-chat
   .community-interaction-main-composer
@@ -3706,6 +3629,7 @@
 
 /* Preserve the accent/dashed drop target instead of letting the stronger
    resting edge win the cascade while a file is dragged over the composer. */
+.app-root:not(.mobile-shell) .community-agent-composer.chat-input-bar:not(.drag-over),
 .app-root:not(.mobile-shell)
   .community-member-chat
   .community-interaction-main-composer
@@ -3719,6 +3643,7 @@
 
 /* Paper surfaces need a structural edge to separate authoring from reading.
    Reuse the canonical panel edge without changing Dark or drag-over feedback. */
+:root[data-theme="light"] .app-root:not(.mobile-shell) .community-agent-composer.chat-input-bar:not(.drag-over),
 :root[data-theme="light"]
   .app-root:not(.mobile-shell)
   .community-member-chat
@@ -5126,6 +5051,78 @@
   font-size: 12px;
 }
 
+.community-interaction-youtube-wrap {
+  width: min(100%, 480px);
+  margin-top: 8px;
+}
+
+.deferred-youtube,
+.deferred-youtube iframe,
+.deferred-youtube-play {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.deferred-youtube {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #000;
+}
+
+.deferred-youtube iframe {
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.deferred-youtube-play {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+}
+
+.deferred-youtube-play img,
+.deferred-youtube-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.deferred-youtube-empty {
+  background: #000;
+}
+
+.deferred-youtube-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, #fff 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #050505 78%, transparent);
+  color: #fff;
+  transform: translate(-50%, -50%);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.deferred-youtube-play:hover .deferred-youtube-play-icon {
+  background: color-mix(in srgb, #050505 90%, transparent);
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.deferred-youtube-play:focus-visible {
+  outline: 2px solid var(--chat-link);
+  outline-offset: -3px;
+}
 
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
    side-by-side, the drawer takes over the area (back arrow returns to chat).
@@ -5555,32 +5552,11 @@
   gap: 12px;
 }
 
-.community-profile-panel-avatar {
-  position: relative;
+/* Profile presentation scales the canonical holder; framing stays shared. */
+.community-profile-panel-top .community-interaction-avatar {
   width: 64px;
   height: 64px;
-  flex: 0 0 64px;
-  border: 1px solid var(--web-context-panel-border);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  color: #fff;
   font-size: 18px;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--bg-card-alt) 82%, var(--border-default));
-  box-shadow: none;
-}
-
-.community-profile-panel-avatar.has-image {
-  background: transparent;
-}
-
-.community-profile-panel-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .community-profile-panel-actions {
@@ -7040,7 +7016,7 @@
 
 .community-interaction-attachments .chat-media-grid,
 .community-interaction-attachments .chat-media-players {
-  max-width: 640px;
+  max-width: 360px;
 }
 
 .community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) {
@@ -7203,14 +7179,11 @@
   margin-top: 0;
 }
 
-.chat-media-grid.chat-media-grid-composer.community-dm-media-grid:not(.count-1) {
+.chat-media-grid.community-dm-media-grid.count-2,
+.chat-media-grid.community-dm-media-grid.count-3,
+.chat-media-grid.community-dm-media-grid.count-4 {
   width: min(168px, 56vw);
   max-width: 168px;
-}
-
-.community-dm-panel-message .chat-media-grid.community-dm-media-grid:not(.count-1) {
-  width: 300px;
-  max-width: 100%;
 }
 
 .chat-media-grid.community-dm-media-grid.count-1 .chat-media-item {
@@ -8247,28 +8220,6 @@ button.chat-reply-quote:hover {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-muted);
-}
-
-.resource-read-error {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  padding: 12px 0;
-  color: var(--accent-error);
-  font-size: 13px;
-}
-
-.resource-read-error button {
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  border: 1px solid currentColor;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
 }
 
 .resources-back-btn {
@@ -11112,8 +11063,16 @@ button.chat-reply-quote:hover {
   opacity: 0.55;
 }
 
-.member-settings-modal {
-  width: min(560px, calc(100vw - 32px));
+.modal-overlay.member-settings-overlay {
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+.modal.member-settings-modal {
+  box-sizing: border-box;
+  width: min(560px, 100%);
+  min-width: 0;
+  max-height: min(720px, calc(100dvh - 32px));
 }
 
 .member-settings-modal .modal-header {

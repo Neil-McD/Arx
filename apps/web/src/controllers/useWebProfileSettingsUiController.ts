@@ -1,186 +1,220 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type SetStateAction,
-} from "react";
-import { type SocialProfileKind } from "../../../../shared/socialProfileLinks";
-import {
-  writeProfileDraftForUser,
-  type LocalProfileDraft,
-} from "../../../../shared/profileDraftStorage";
-import {
-  createProfileDraft,
-  editProfileDraft,
-  equalProfileFields,
-  hydrateProfileDraft,
-  profileFields,
-  type LoadedProfile,
-  type ProfileDraftSnapshot,
-  type ProfileField,
-  type ProfileFields,
-} from "../../../../shared/profileDraftState";
+  SOCIAL_PROFILE_KINDS,
+  emptySocialProfileLinks,
+  normalizeSocialProfileLinks,
+  type SocialProfileKind,
+  type SocialProfileLinks,
+} from "../../../../shared/socialProfileLinks";
 
-export type ProfileLoadStatus =
-  | "idle"
-  | "loading"
-  | "ready"
-  | "missing"
-  | "error";
-
-export function useWebProfileSettingsUiController(params: {
-  profileStorageUserId: string | null;
-  initialProfileDraft: LocalProfileDraft;
-  session: {
-    user?: { id?: string | null; email?: string | null } | null;
+type SessionLike = {
+  user?: {
+    id?: string | null;
+    email?: string | null;
   } | null;
-  cloudProfile: LoadedProfile | null;
-}) {
-  const accountId = params.profileStorageUserId;
-  const [draft, setDraft] = useState(() =>
-    createProfileDraft(accountId, params.initialProfileDraft),
-  );
-  const [load, setLoad] = useState<{
-    accountId: string | null;
-    status: ProfileLoadStatus;
-  }>({ accountId, status: params.cloudProfile ? "ready" : "idle" });
-  const current =
-    draft.accountId === accountId
-      ? draft
-      : createProfileDraft(accountId, params.initialProfileDraft);
-  if (current !== draft) setDraft(current);
-  const draftRef = useRef(current);
-  draftRef.current = current;
-  const [isProfileAvatarFocusModalOpen, setIsProfileAvatarFocusModalOpen] =
-    useState(false);
+} | null;
+
+type CloudProfileLike = {
+  display_name?: string | null;
+  handle?: string | null;
+  bio?: string | null;
+  avatar_url?: string | null;
+  avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+  social_links?: Partial<Record<SocialProfileKind, string | null>> | null;
+} | null;
+
+type ProfileDraftLike = {
+  name: string;
+  handle: string;
+  bio: string;
+};
+
+type UseWebProfileSettingsUiControllerParams = {
+  profileStorageUserId: string | null;
+  initialProfileDraft: ProfileDraftLike;
+  session: SessionLike;
+  cloudProfile: CloudProfileLike;
+};
+
+function trimSocialProfileLinks(links: SocialProfileLinks): SocialProfileLinks {
+  return {
+    youtube: links.youtube.trim(),
+    x: links.x.trim(),
+    instagram: links.instagram.trim(),
+  };
+}
+
+export function useWebProfileSettingsUiController(
+  params: UseWebProfileSettingsUiControllerParams,
+) {
+  const { profileStorageUserId, initialProfileDraft, session, cloudProfile } = params;
+
+  const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
+  const [profileHandle, setProfileHandle] = useState(() => initialProfileDraft.handle);
+  const [profileBio, setProfileBio] = useState(() => initialProfileDraft.bio);
+  const [profileSocialLinks, setProfileSocialLinks] = useState<SocialProfileLinks>(() => emptySocialProfileLinks());
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const [profileAvatarStorageId, setProfileAvatarStorageId] = useState<string | null>(null);
+  const [profileAvatarFocusX, setProfileAvatarFocusX] = useState(0.5);
+  const [profileAvatarFocusY, setProfileAvatarFocusY] = useState(0.5);
+  const [profileAvatarZoom, setProfileAvatarZoom] = useState(1);
+  const [isProfileAvatarFocusModalOpen, setIsProfileAvatarFocusModalOpen] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
+  const profileSaveTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setProfileSaveError(null);
-    setIsSavingProfile(false);
-    setIsProfileAvatarFocusModalOpen(false);
-  }, [accountId]);
+    setProfileSaveSuccess(false);
+    if (profileSaveTimeoutRef.current) {
+      window.clearTimeout(profileSaveTimeoutRef.current);
+      profileSaveTimeoutRef.current = null;
+    }
+  }, [profileStorageUserId]);
 
   useEffect(() => {
-    writeProfileDraftForUser(current.accountId, {
-      ...current.values,
-      touched: {
-        name: current.touched.name === true,
-        handle: current.touched.handle === true,
-        bio: current.touched.bio === true,
-      },
-    });
+    if (session) return;
+    if (
+      !profileName &&
+      !profileHandle &&
+      !profileBio &&
+      !SOCIAL_PROFILE_KINDS.some((kind) => profileSocialLinks[kind].trim()) &&
+      !profileAvatarUrl &&
+      !profileAvatarStorageId
+    ) return;
+    setProfileName("");
+    setProfileHandle("");
+    setProfileBio("");
+    setProfileSocialLinks(emptySocialProfileLinks());
+    setProfileAvatarUrl(null);
+    setProfileAvatarStorageId(null);
+    setProfileAvatarFocusX(0.5);
+    setProfileAvatarFocusY(0.5);
+    setProfileAvatarZoom(1);
+    setIsProfileAvatarFocusModalOpen(false);
+  }, [profileAvatarStorageId, profileAvatarUrl, profileBio, profileHandle, profileName, profileSocialLinks, session]);
+
+  const applyLoadedProfileToLocal = (profile: NonNullable<CloudProfileLike>) => {
+    setProfileName((prev) => (prev.trim() ? prev : profile.display_name ?? ""));
+    setProfileHandle((prev) => (prev.trim() ? prev : profile.handle ?? ""));
+    setProfileBio((prev) => (prev.trim() ? prev : profile.bio ?? ""));
+    setProfileSocialLinks((prev) =>
+      SOCIAL_PROFILE_KINDS.some((kind) => prev[kind].trim())
+        ? prev
+        : normalizeSocialProfileLinks(profile.social_links ?? {}),
+    );
+    setProfileAvatarUrl((prev) => prev ?? profile.avatar_url ?? null);
+    setProfileAvatarStorageId((prev) => prev ?? profile.avatar_storage_id ?? null);
+    setProfileAvatarFocusX(profile.avatar_focus_x ?? 0.5);
+    setProfileAvatarFocusY(profile.avatar_focus_y ?? 0.5);
+    setProfileAvatarZoom(profile.avatar_zoom ?? 1);
+  };
+
+  const isProfileDirty = useMemo(() => {
+    if (!session) return false;
+    const nextName = profileName.trim();
+    const nextHandle = profileHandle.trim();
+    const nextBio = profileBio.trim();
+    const nextSocialLinks = trimSocialProfileLinks(profileSocialLinks);
+    const nextAvatar = profileAvatarUrl ?? null;
+    const nextAvatarStorageId = profileAvatarStorageId ?? null;
+    const nextAvatarFocusX = profileAvatarFocusX;
+    const nextAvatarFocusY = profileAvatarFocusY;
+    const nextAvatarZoom = profileAvatarZoom;
+    const prevName = (cloudProfile?.display_name ?? "").trim();
+    const prevHandle = (cloudProfile?.handle ?? "").trim();
+    const prevBio = (cloudProfile?.bio ?? "").trim();
+    const prevSocialLinks = normalizeSocialProfileLinks(cloudProfile?.social_links ?? {});
+    const prevAvatar = cloudProfile?.avatar_url ?? null;
+    const prevAvatarStorageId = cloudProfile?.avatar_storage_id ?? null;
+    const prevAvatarFocusX = cloudProfile?.avatar_focus_x ?? 0.5;
+    const prevAvatarFocusY = cloudProfile?.avatar_focus_y ?? 0.5;
+    const prevAvatarZoom = cloudProfile?.avatar_zoom ?? 1;
+    if (!cloudProfile) {
+      return Boolean(
+        nextName ||
+        nextHandle ||
+        nextBio ||
+        SOCIAL_PROFILE_KINDS.some((kind) => nextSocialLinks[kind]) ||
+        nextAvatar,
+      );
+    }
+    return (
+      nextName !== prevName ||
+      nextHandle !== prevHandle ||
+      nextBio !== prevBio ||
+      SOCIAL_PROFILE_KINDS.some((kind) => nextSocialLinks[kind] !== prevSocialLinks[kind]) ||
+      nextAvatar !== prevAvatar ||
+      nextAvatarStorageId !== prevAvatarStorageId ||
+      nextAvatarFocusX !== prevAvatarFocusX ||
+      nextAvatarFocusY !== prevAvatarFocusY ||
+      nextAvatarZoom !== prevAvatarZoom
+    );
   }, [
-    current.accountId,
-    current.values.name,
-    current.values.handle,
-    current.values.bio,
-    current.touched.name,
-    current.touched.handle,
-    current.touched.bio,
+    cloudProfile,
+    profileAvatarFocusX,
+    profileAvatarFocusY,
+    profileAvatarStorageId,
+    profileAvatarUrl,
+    profileAvatarZoom,
+    profileBio,
+    profileHandle,
+    profileName,
+    profileSocialLinks,
+    session,
   ]);
 
-  const updateDraft = useCallback((next: ProfileDraftSnapshot) => {
-    draftRef.current = next;
-    setDraft(next);
-  }, []);
-  const setters = useMemo(() => {
-    const fieldSetter =
-      <K extends ProfileField>(field: K) =>
-      (action: SetStateAction<ProfileFields[K]>) => {
-        const previous = draftRef.current;
-        if (previous.accountId !== accountId) return;
-        const value =
-          typeof action === "function"
-            ? (action as (v: ProfileFields[K]) => ProfileFields[K])(
-                previous.values[field],
-              )
-            : action;
-        updateDraft(editProfileDraft(previous, field, value));
-      };
-    return {
-      setProfileName: fieldSetter("name"),
-      setProfileHandle: fieldSetter("handle"),
-      setProfileBio: fieldSetter("bio"),
-      setProfileSocialLinks: fieldSetter("socialLinks"),
-      setProfileAvatarUrl: fieldSetter("avatarUrl"),
-      setProfileAvatarStorageId: fieldSetter("avatarStorageId"),
-      setProfileAvatarFocusX: fieldSetter("avatarFocusX"),
-      setProfileAvatarFocusY: fieldSetter("avatarFocusY"),
-      setProfileAvatarZoom: fieldSetter("avatarZoom"),
-    };
-  }, [accountId, updateDraft]);
-  const applyLoadedProfileToLocal = useCallback(
-    (profile: LoadedProfile) => {
-      if (profile.user_id && profile.user_id !== draftRef.current.accountId)
-        return;
-      updateDraft(hydrateProfileDraft(draftRef.current, profile));
-    },
-    [updateDraft],
-  );
-  const captureProfileDraft = useCallback(() => draftRef.current, []);
-  const applySavedProfileToLocal = useCallback(
-    (profile: LoadedProfile, submitted: ProfileDraftSnapshot) => {
-      updateDraft(hydrateProfileDraft(draftRef.current, profile, submitted));
-    },
-    [updateDraft],
-  );
-  const setProfileLoadStatus = useCallback((status: ProfileLoadStatus) => {
-    setLoad({ accountId: draftRef.current.accountId, status });
-  }, []);
-  const profileLoadStatus = load.accountId === accountId ? load.status : "idle";
-  const cloudProfile =
-    params.cloudProfile?.user_id && params.cloudProfile.user_id !== accountId
-      ? null
-      : params.cloudProfile;
-  const isProfileDirty = Boolean(
-    params.session &&
-    !equalProfileFields(current.values, profileFields(cloudProfile ?? {})),
-  );
-  const isProfileResolved =
-    profileLoadStatus === "ready" ||
-    profileLoadStatus === "missing" ||
-    Boolean(cloudProfile);
-  const profileNeedsSave = Boolean(
-    params.session &&
-    isProfileResolved &&
-    (isProfileDirty || profileLoadStatus === "missing"),
-  );
-  const v = current.values;
+  const setProfileSocialLink = (kind: SocialProfileKind, value: string) => {
+    setProfileSocialLinks((prev) => ({
+      ...prev,
+      [kind]: value,
+    }));
+  };
+
+  const profileNeedsSave = Boolean(session && (isProfileDirty || cloudProfile === null));
+
   return {
-    profileName: v.name,
-    profileHandle: v.handle,
-    profileBio: v.bio,
-    profileSocialLinks: v.socialLinks,
-    profileAvatarUrl: v.avatarUrl,
-    profileAvatarStorageId: v.avatarStorageId,
-    profileAvatarFocusX: v.avatarFocusX,
-    profileAvatarFocusY: v.avatarFocusY,
-    profileAvatarZoom: v.avatarZoom,
-    ...setters,
-    setProfileSocialLink: (kind: SocialProfileKind, value: string) =>
-      setters.setProfileSocialLinks((prev) => ({ ...prev, [kind]: value })),
+    profileName,
+    setProfileName,
+    profileHandle,
+    setProfileHandle,
+    profileBio,
+    setProfileBio,
+    profileSocialLinks,
+    setProfileSocialLinks,
+    setProfileSocialLink,
+    profileAvatarUrl,
+    setProfileAvatarUrl,
+    profileAvatarStorageId,
+    setProfileAvatarStorageId,
+    profileAvatarFocusX,
+    setProfileAvatarFocusX,
+    profileAvatarFocusY,
+    setProfileAvatarFocusY,
+    profileAvatarZoom,
+    setProfileAvatarZoom,
     isProfileAvatarFocusModalOpen,
     setIsProfileAvatarFocusModalOpen,
     isSavingProfile,
     setIsSavingProfile,
     profileSaveError,
     setProfileSaveError,
+    profileSaveSuccess,
+    setProfileSaveSuccess,
+    profileSaveTimeoutRef,
     isProfileAvatarDragOver,
     setIsProfileAvatarDragOver,
     isProfileDirty,
     profileNeedsSave,
-    profileLoadStatus,
-    setProfileLoadStatus,
     applyLoadedProfileToLocal,
-    captureProfileDraft,
-    applySavedProfileToLocal,
   };
 }
+
 export type UseWebProfileSettingsUiControllerResult = ReturnType<
   typeof useWebProfileSettingsUiController
 >;

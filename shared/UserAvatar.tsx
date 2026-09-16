@@ -4,7 +4,6 @@ import type { ImageFetchPriority } from "./useImageResource";
 
 type UserAvatarProps = {
   name: string;
-  identityPending?: boolean;
   imageUrl?: string | null;
   focusX?: number | null;
   focusY?: number | null;
@@ -43,7 +42,6 @@ function userInitials(name: string): string {
 export function UserAvatar(props: UserAvatarProps) {
   return (
     <StableAvatar
-      identityPending={props.identityPending ?? props.imageUrl === undefined}
       className={props.className}
       readyClassName={props.readyClassName}
       fallbackClassName={props.fallbackClassName}

@@ -1,0 +1,97 @@
+import type {
+  CommunityMemberWorkflowAction,
+  CommunityMemberWorkflowAutomation,
+  CommunityMemberWorkflowMilestone,
+} from "../../../../shared/communityMemberWorkflow";
+import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
+import { normalizeWorkflowDelayMinutes } from "../../../../shared/communityMemberWorkflow";
+
+export function workflowChannelLabel(channelId: string | undefined, channels: CloudCommunityChannel[], unavailable: boolean): string {
+  if (channelId === undefined) return "Any channel";
+  const channel = channels.find((item) => item.id === channelId);
+  if (channel) return `#${channel.name}`;
+  return unavailable ? "Channels unavailable" : "Unavailable channel";
+}
+
+export function workflowMoveLabel(nextMilestoneName: string | null): string {
+  return nextMilestoneName === null ? "Complete workflow" : `Move to ${nextMilestoneName}`;
+}
+
+export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
+  if (automation.action.type === "evaluate_goal" && automation.trigger.type !== "form_submitted") return "Goal evaluation requires Form submitted";
+  if ((automation.action.type === "create_service_channel" && automation.trigger.type !== "member_joined")
+    || (automation.trigger.type === "member_joined" && automation.action.type !== "create_service_channel" && automation.action.type !== "request_form")) return "Member joins requires Create private channel or Request form";
+  if ((automation.action.type === "request_form" && !automation.action.formKey) || (automation.trigger.type === "form_submitted" && !automation.trigger.formKey)) return "Choose a published form";
+  if (automation.trigger.type === "form_submitted" && automation.action.type === "request_form") return "Choose Ask agent or Move member";
+  const triggerIssue = workflowTriggerIssue(automation, channels, unavailable);
+  if (triggerIssue) return triggerIssue;
+  return automation.action.type === "prompt_agent" && !automation.action.prompt.trim() ? "Add agent instructions" : null;
+}
+
+export function workflowTriggerIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
+  if (automation.trigger.type === "form_submitted" && !automation.trigger.formKey) return "Choose a published form";
+  if (automation.trigger.type === "milestone_elapsed") {
+    try { normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes); }
+    catch { return "Choose a duration from 1 minute to 365 days"; }
+  }
+  const channelId = automation.trigger.type === "member_contributed" ? automation.trigger.channelId : undefined;
+  if (channelId !== undefined) {
+    if (unavailable) return "Waiting for channels";
+    if (!channels.some((channel) => channel.id === channelId)) return "Choose an available channel";
+  }
+  return null;
+}
+
+// Editor-only state. Hidden prompt drafts must never enter the saved contract.
+export type WorkflowAutomationDraft = CommunityMemberWorkflowAutomation & { promptDraft: string };
+
+export function toWorkflowAutomationDraft(automation: CommunityMemberWorkflowAutomation): WorkflowAutomationDraft {
+  return {
+    ...automation,
+    promptDraft: automation.action.type === "prompt_agent" ? automation.action.prompt : "",
+  };
+}
+
+export function replaceWorkflowDraftAction(
+  automation: WorkflowAutomationDraft,
+  type: CommunityMemberWorkflowAction["type"],
+): WorkflowAutomationDraft {
+  if (automation.action.type === type) return automation;
+  const promptDraft = automation.action.type === "prompt_agent" ? automation.action.prompt : automation.promptDraft;
+  return {
+    ...automation,
+    promptDraft,
+    action: type === "prompt_agent"
+      ? { key: automation.action.key, type, prompt: promptDraft }
+      : type === "evaluate_goal" ? { key: automation.action.key, type }
+      : type === "request_form" ? { key: automation.action.key, type, formKey: "" }
+      : type === "create_service_channel" ? { key: automation.action.key, type }
+      : { key: automation.action.key, type, destination: "next_or_complete" },
+  };
+}
+
+export function workflowDraftAutomations(automations: WorkflowAutomationDraft[]): CommunityMemberWorkflowAutomation[] {
+  return automations.map(({ promptDraft: _promptDraft, ...automation }) => automation);
+}
+
+export function isWorkflowMilestoneDraftDirty(
+  snapshot: CommunityMemberWorkflowMilestone | null,
+  name: string,
+  automations: WorkflowAutomationDraft[],
+  instructions = snapshot?.instructions ?? "",
+  goal = snapshot?.goal ?? "",
+  requireHumanApproval = snapshot?.requireHumanApproval ?? false,
+): boolean {
+  return snapshot !== null && (
+    name !== snapshot.name
+    || instructions !== (snapshot.instructions ?? "")
+    || goal !== (snapshot.goal ?? "")
+    || requireHumanApproval !== (snapshot.requireHumanApproval ?? false)
+    || JSON.stringify(workflowDraftAutomations(automations)) !== JSON.stringify(snapshot.automations)
+  );
+}
+export function hasAssessmentMovementOverlap(automations: CommunityMemberWorkflowAutomation[]): boolean {
+  return automations.some(rule => rule.action.type === "evaluate_goal" && rule.trigger.type === "form_submitted" && Boolean(rule.trigger.formKey.trim())
+    && automations.some(other => other.action.type === "move_member" && other.trigger.type === "form_submitted"
+      && rule.trigger.type === "form_submitted" && other.trigger.formKey === rule.trigger.formKey));
+}

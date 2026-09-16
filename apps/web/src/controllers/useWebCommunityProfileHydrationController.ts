@@ -111,9 +111,11 @@ export function useWebCommunityProfileHydrationController(
         bio: cloudProfile.bio ?? existing?.bio ?? null,
         social_links:
           cloudProfile.social_links ?? existing?.social_links ?? null,
-        avatar_url: cloudProfile.avatar_url,
+        avatar_url: cloudProfile.avatar_url ?? existing?.avatar_url ?? null,
         avatar_storage_id:
-          cloudProfile.avatar_storage_id,
+          cloudProfile.avatar_storage_id ??
+          existing?.avatar_storage_id ??
+          null,
         avatar_focus_x: cloudHasAvatar
           ? cloudProfile.avatar_focus_x ?? 0.5
           : existing?.avatar_focus_x ?? 0.5,

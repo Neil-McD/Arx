@@ -1,0 +1,22 @@
+import { readFileSync } from "node:fs";
+import { expect, test } from "vitest";
+const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+test("Sidebar Auto-join retains canonical permission and save authority", () => {
+  const settings = read("apps/web/src/components/CommunityAutoJoinControl.tsx");
+  expect(settings).toContain("!admission?.canManage || !admission.mode");
+  expect(settings).toContain('role="switch"');
+  expect(settings).toContain("disabled={admission.pending}");
+  expect(settings).toContain("admission.onChange");
+  expect(settings).toContain("approves pending requests");
+  const app = read("apps/web/src/App.tsx");
+  expect(app).toMatch(/admission: \{[\s\S]*entry_policy === "open"[\s\S]*entry_policy === "approval"[\s\S]*canManage: canManageMembersActiveCommunity[\s\S]*onChange: handleSetCommunityContextFreeAccessMode/);
+  expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).not.toContain("onSetCommunityFreeAccessMode");
+  expect(read("apps/web/src/components/WebCommunityHost.tsx")).toContain("admission: props.admission");
+  expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain("admission={props.admission}");
+  const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
+  expect(roster).toContain("<CommunityAutoJoinControl admission={props.admission}");
+  expect(roster).not.toContain("setCloudCommunityFreeAccessMode");
+  expect(roster).toContain('role="alert"');
+  expect(read("apps/web/src/styles/community-and-content.css")).toContain(".community-context-autojoin-track");
+  expect(read("apps/web/src/components/WebCommunitySettingsSection.tsx")).not.toContain("Auto-join");
+});

@@ -1,4 +1,5 @@
 import { normalizeIdValue, toIsoString } from "./communityCore";
+import { interactionTraceHasSharedSource } from "./communityInteractionEvidenceCore";
 export { buildCommunitySourceTraceRevision } from "../shared/communitySourceTraceRevision.ts";
 
 export const COMPILER_EVIDENCE_BATCH_THRESHOLD = 8;
@@ -33,6 +34,7 @@ type TriggerReason =
 export type SourceTraceRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   sourceType: string;
   sourceId?: string;
   title?: string;
@@ -282,8 +284,11 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
       a.updatedAt - b.updatedAt ||
       normalizeIdValue(a._id).localeCompare(normalizeIdValue(b._id))
     );
-  const hasMorePending = fetchHasMorePending || eligibleTraceRows.length > COMPILER_EVIDENCE_SCAN_LIMIT;
-  const traceRows = eligibleTraceRows.slice(0, COMPILER_EVIDENCE_SCAN_LIMIT);
+  const sharedEligibility = await Promise.all(eligibleTraceRows.map((trace) =>
+    interactionTraceHasSharedSource({ ctx: args.ctx, communityId: args.communityId, trace })));
+  const sharedTraceRows = eligibleTraceRows.filter((_row, index) => sharedEligibility[index]);
+  const hasMorePending = fetchHasMorePending || sharedTraceRows.length > COMPILER_EVIDENCE_SCAN_LIMIT;
+  const traceRows = sharedTraceRows.slice(0, COMPILER_EVIDENCE_SCAN_LIMIT);
   const pending: PendingEvidence[] = traceRows.map((row) => ({ row, priority: classifyEvidencePriority(row) }));
   const packets = groupPendingEvidence(pending);
 
@@ -354,7 +359,7 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
   };
 }
 
-export async function drainSelfAuthoredPendingSourceTracesForCommunity(args: {
+export async function drainIneligiblePendingSourceTracesForCommunity(args: {
   ctx: any;
   communityId: any;
   nowMs: number;
@@ -372,9 +377,13 @@ export async function drainSelfAuthoredPendingSourceTracesForCommunity(args: {
       .order("asc")
       .take(COMPILER_EVIDENCE_SCAN_LIMIT)) as SourceTraceRow[];
     for (const row of rows) {
-      if (!isCommunityAgentSelfAuthoredTrace(row)) continue;
+      const selfAuthored = isCommunityAgentSelfAuthoredTrace(row);
+      const sharedSource = selfAuthored || await interactionTraceHasSharedSource({
+        ctx: args.ctx, communityId: args.communityId, trace: row,
+      });
+      if (!selfAuthored && sharedSource) continue;
       await args.ctx.db.patch(row._id as any, {
-        compilerState: "excluded_self_authored" as const,
+        compilerState: selfAuthored ? "excluded_self_authored" : "excluded_by_visibility",
         compilerPendingSince: undefined,
         compilerContinuationReady: undefined,
         compilerLastHandledAt: args.nowMs,

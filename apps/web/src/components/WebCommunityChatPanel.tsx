@@ -10,6 +10,7 @@ import type {
   SetStateAction,
 } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
   ProfileCommunityContext as SharedProfileCommunityContext,
@@ -743,10 +744,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     setProfilePanelUserId(null);
     interactionProjection?.onSelectRoot(rootId);
   }, [interactionProjection]);
-  const handleOpenCommunityMemory = useCallback(() => {
-    setProfilePanelUserId(null);
-    interactionProjection?.onOpenCommunityMemory?.();
-  }, [interactionProjection]);
   const communityComposerFocusTargetKey = (() => {
     if (
       !activeCommunity?.id ||
@@ -1445,7 +1442,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   ) : null;
 
   return (
-    <>
+    <CommunityChannelSessionContext.Provider value={session && activeCommunity ? { session, communityId: activeCommunity.id } : null}>
       <div
         className={`community-chat community-member-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
         onDrop={canUseCommunityAttachments ? onCommunityAttachmentDrop : undefined}
@@ -1468,7 +1465,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               <WebCommunityInteractionProjection
                 {...interactionProjection}
                 onSelectRoot={handleSelectCommunityRoot}
-                onOpenCommunityMemory={handleOpenCommunityMemory}
                 floatingComposers
                 onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
                 activeCommunityName={activeCommunity?.name ?? "Community"}
@@ -1567,6 +1563,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       </div>
 
       <WebCommunityChatLightboxModal {...lightboxModalProps} />
-    </>
+    </CommunityChannelSessionContext.Provider>
   );
 }

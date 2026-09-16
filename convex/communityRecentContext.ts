@@ -19,9 +19,9 @@ import {
 } from "../shared/communityEvidenceContract";
 import {
   interactionBelongsToChannel,
-  listAllActiveChannelReadableRows,
-  listReadableCommunityChannels,
-  requireReadableChannelForAddressableRow,
+  listSharedChannelReadableRows,
+  listSharedCommunityChannels,
+  requireSharedChannelForAddressableRow,
 } from "./communityChannelCore";
 
 type RecentContextSourceType = "interaction" | "resource";
@@ -113,18 +113,18 @@ async function listRecentInteractionItems(args: {
   communityId: any;
   tokens: string[];
 }): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const channels = await listReadableCommunityChannels({
+  const channels = await listSharedCommunityChannels({
     ctx: args.ctx,
     communityId: args.communityId,
   });
   const [roots, replies] = await Promise.all([
-    listAllActiveChannelReadableRows<InteractionContextRow>({
+    listSharedChannelReadableRows<InteractionContextRow>({
       ctx: args.ctx,
       tableName: "communityInteractionRoots",
       communityId: args.communityId,
       limit: INTERACTION_ROOT_WINDOW_LIMIT,
     }),
-    listAllActiveChannelReadableRows<InteractionContextRow>({
+    listSharedChannelReadableRows<InteractionContextRow>({
       ctx: args.ctx,
       tableName: "communityInteractionReplies",
       communityId: args.communityId,
@@ -138,7 +138,7 @@ async function listRecentInteractionItems(args: {
       return;
     }
     try {
-      const channel = requireReadableChannelForAddressableRow({
+      const channel = requireSharedChannelForAddressableRow({
         row: root,
         communityId: args.communityId,
         channels,

@@ -1,4 +1,6 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
+import { downloadCloudCommunityChatAttachment } from "../../../../shared/cloudCommunityChatGateway";
 import {
   MessageCircle,
   MessageSquare,
@@ -366,7 +368,7 @@ export function ActorAvatar(props: {
       imageClassName="community-interaction-avatar-image"
       fallbackClassName="community-interaction-avatar-fallback"
       name={props.label}
-      imageUrl={props.profile?.avatar_url}
+      imageUrl={props.profile?.avatar_url ?? null}
       focusX={props.profile?.avatar_focus_x ?? 0.5}
       focusY={props.profile?.avatar_focus_y ?? 0.5}
       zoom={props.profile?.avatar_zoom ?? 1}
@@ -766,17 +768,59 @@ export function InteractionContent(
 
 // Render the attachments carried on a projected legacy chat message: images in a grid, video/audio
 // as inline players, and any other file as a download chip.
+function ProtectedInteractionAttachment({ attachment, onOpenImage }: {
+  attachment: CommunityInteractionAttachment;
+  onOpenImage?: (images: CommunityChatMediaImage[], index: number) => void;
+}) {
+  const scope = useContext(CommunityChannelSessionContext);
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const objectUrl = useRef<string | null>(null);
+  useEffect(() => {
+    setUrl(null); setBusy(false); setError(null);
+    return () => {
+      request.current?.abort();
+      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+      objectUrl.current = null;
+    };
+  }, [scope?.session, scope?.communityId, attachment.id]);
+  const open = async () => {
+    if (!scope?.session || busy) return;
+    const abort = new AbortController(); request.current = abort;
+    setBusy(true); setError(null);
+    try {
+      const bytes = await downloadCloudCommunityChatAttachment({ session: scope.session, attachmentId: attachment.id, signal: abort.signal });
+      if (abort.signal.aborted) return;
+      const media = /^(image|video|audio)\//.test(attachment.mime ?? "");
+      const blob = new Blob([bytes], { type: media ? attachment.mime! : "application/octet-stream" });
+      const nextUrl = URL.createObjectURL(blob); objectUrl.current = nextUrl;
+      if (media) setUrl(nextUrl);
+      else {
+        const link = document.createElement("a"); link.href = nextUrl; link.download = attachment.name; link.click();
+        URL.revokeObjectURL(nextUrl); objectUrl.current = null;
+      }
+    } catch { if (!abort.signal.aborted) setError("Attachment unavailable. Check your access and try again."); }
+    finally { if (!abort.signal.aborted) setBusy(false); }
+  };
+  return url ? <InteractionAttachments attachments={[{ ...attachment, protected_download: false, url }]} onOpenImage={onOpenImage} />
+    : <div><button className="attachment-item" type="button" disabled={busy || !scope?.session} onClick={() => void open()}>
+      <span className="attachment-name">{busy ? "Opening…" : attachment.name}</span></button>{error ? <p role="alert">{error}</p> : null}</div>;
+}
+
 export function InteractionAttachments(props: {
   attachments: CommunityInteractionAttachment[];
   onOpenImage?: (images: CommunityChatMediaImage[], index: number) => void;
 }) {
   const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } =
-    partitionCommunityAttachments(props.attachments);
+    partitionCommunityAttachments(props.attachments.filter(attachment => !attachment.protected_download));
   if (
     imageAttachments.length === 0 &&
     videoAttachments.length === 0 &&
     audioAttachments.length === 0 &&
     fileAttachments.length === 0
+    && !props.attachments.some(attachment => attachment.protected_download)
   ) {
     return null;
   }
@@ -789,6 +833,8 @@ export function InteractionAttachments(props: {
   }));
   return (
     <div className="community-interaction-attachments">
+      {props.attachments.filter(attachment => attachment.protected_download).map(attachment =>
+        <ProtectedInteractionAttachment key={attachment.id} attachment={attachment} onOpenImage={props.onOpenImage} />)}
       {imageViews.length > 0 ? (
         <CommunityChatMediaGrid
           images={imageViews}

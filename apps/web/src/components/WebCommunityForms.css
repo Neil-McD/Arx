@@ -1,0 +1,52 @@
+.community-forms-page { flex-direction: column; overflow: auto; padding: 24px 32px; gap: 24px; width: 100%; box-sizing: border-box; }
+.community-forms-header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex-shrink: 0; }
+.community-forms-header .resources-header { margin: 0; }
+.community-form-name { flex: 1; min-width: 120px; border: 0; background: transparent; color: var(--text-primary); font-weight: 650 !important; padding: 8px 0; }
+.community-form-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.community-form-workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr); flex: 1; min-height: 460px; }
+.community-form-workspace.is-preview { grid-template-columns: minmax(0, 1fr); }
+.community-form-questions { border-right: 1px solid var(--border-default); padding: 12px 18px 12px 0; }
+.community-form-questions > div { display: flex; align-items: center; border-radius: 6px; margin-bottom: 5px; transition: background-color 140ms; }
+.community-form-questions .is-selected { background: var(--hover-overlay); }
+.community-form-questions button { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; padding: 10px 3px; }
+.community-form-questions > div > button:first-child { flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 12px 8px; }
+.community-form-questions button span { display: inline-block; width: 20px; }
+.community-form-questions .is-selected > button:first-child { color: var(--text-primary); }
+.community-form-questions > .workflow-secondary-button { margin-top: 12px; width: 100%; }
+.community-form-canvas { padding: 8px 28px; min-width: 0; }
+.community-form-tools { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); }
+.community-form-tools label { display: flex; gap: 8px; align-items: center; }
+.community-form-tools select { color: var(--text-primary); background: var(--surface-workspace); border: 1px solid var(--border-default); border-radius: 6px; padding: 8px; font: inherit; }
+.community-form-question { max-width: 640px; margin: 64px auto 24px; overflow-wrap: anywhere; }
+.community-form-question h2, .community-form-title { font-size: clamp(24px, 2.5vw, 34px); font-weight: 600; line-height: 1.35; letter-spacing: -.025em; }
+.community-form-title, .community-form-description { display: block; width: 100%; border: 0; background: transparent; color: var(--text-primary); resize: vertical; padding: 4px 0; font-family: inherit; }
+.community-form-description { font-size: 15px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 24px; }
+.community-form-title::placeholder, .community-form-description::placeholder { color: var(--text-secondary); opacity: .75; }
+.community-form-answer { display: block; width: 100%; color: var(--text-primary); background: transparent; border: 0; border-bottom: 1px solid var(--border-strong); padding: 12px 0; font: inherit; resize: vertical; margin: 28px 0; }
+.community-form-options { display: grid; gap: 10px; margin: 24px 0; }
+.community-form-options > div, .community-form-options > label { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-default); border-radius: 7px; }
+.community-form-options input:not([type=radio]):not([type=checkbox]) { min-width: 0; flex: 1; background: transparent; border: 0; color: var(--text-primary); }
+.community-form-options > div > button { background: transparent; color: var(--text-secondary); border: 0; cursor: pointer; }
+.community-form-options > .workflow-secondary-button { justify-self: start; }
+.community-form-navigation { display: flex; gap: 10px; margin-top: 28px; }
+.community-form-list { display: grid; width: 100%; min-width: 0; }
+.community-form-list > button { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 0; background: transparent; border: 0; border-bottom: 1px solid var(--border-default); color: var(--text-primary); text-align: left; cursor: pointer; }
+.community-form-list > button > span { min-width: 0; overflow-wrap: anywhere; }
+.community-form-list small { color: var(--text-secondary); flex-shrink: 0; }
+.community-forms-page > .workflow-secondary-button { align-self: flex-start; }
+.community-forms-page textarea:focus-visible, .community-forms-page select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+.community-forms-page button:disabled { opacity: .4; cursor: not-allowed; }
+.workflow-pipeline-header { justify-content: space-between; }
+/* The shell can constrain Forms even on a large monitor (for example with DMs
+   open). Match the existing compact layout to its actual workspace width. */
+@container workflow-sections (max-width: 760px) {
+  .community-forms-page { padding: 18px; }
+  .community-form-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: max-content 1fr; }
+  .community-form-questions { display: flex; overflow-x: auto; gap: 8px; border-right: 0; border-bottom: 1px solid var(--border-default); padding: 0 0 12px; }
+  .community-form-questions > div { flex: 0 0 170px; }
+  .community-form-questions > .workflow-secondary-button { flex: 0 0 auto; width: auto; margin: 0; }
+  .community-form-canvas { padding: 20px 0; }
+  .community-form-question { margin-top: 32px; }
+  .community-forms-header > [role=status] { order: 5; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .community-form-questions > div { transition: none; } }

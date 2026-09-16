@@ -28,7 +28,6 @@ const communityTypes = read("shared/communityTypes.ts");
 const controller = read(
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
 );
-const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const webAppContracts = read("apps/web/src/webAppContracts.ts");
@@ -216,12 +215,12 @@ assert.doesNotMatch(
 
 assert.match(
   communityDirectory,
-  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
+  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
   "the member directory must page the durable activity ledger through one bounded canonical cursor",
 );
 assert.match(
   communityDirectory,
-  /resolveCommunityPresenceAuthorization[\s\S]*last_active_at: toIsoString\(args\.lastSeenAt\)/,
+  /resolveCommunityPresenceAuthorization[\s\S]*last_active_at: args.lastSeenAt === null \? "" : toIsoString\(args\.lastSeenAt\)/,
   "directory activity ordering must reauthorize rows and expose the canonical timestamp",
 );
 assert.match(
@@ -235,16 +234,8 @@ assert.doesNotMatch(
   "the directory gateway must not expose a recount surface",
 );
 
-assert.match(
-  contextPanel,
-  /onlineCountCapped\?: boolean[\s\S]*onlineCountIsLowerBound[\s\S]*onlineCountLabel = `\$\{onlineTotal\}\$\{onlineCountIsLowerBound \? "\+" : ""\}`/,
-  "the member rail must label bounded online counts as lower bounds",
-);
-assert.match(
-  contextPanel,
-  /hasResolvedPresence = props\.onlineUserIds instanceof Set[\s\S]*props\.isLoadingPresence[\s\S]*Recently active/,
-  "the member rail must wait for live presence and degrade without falsely classifying members offline",
-);
+
+
 assert.match(
   controller,
   /activeCommunityPresenceSummary\.online_user_ids[\s\S]*new Set/,

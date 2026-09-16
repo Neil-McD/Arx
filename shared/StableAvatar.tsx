@@ -9,7 +9,6 @@ import { StableFramedMedia } from "./StableFramedMedia";
 import type { ImageFetchPriority } from "./useImageResource";
 
 type StableAvatarProps = {
-  identityPending?: boolean;
   imageUrl: string | null | undefined;
   alt: string;
   fallback: ReactNode;
@@ -34,5 +33,5 @@ type StableAvatarProps = {
 };
 
 export function StableAvatar(props: StableAvatarProps) {
-  return <StableFramedMedia {...props} quietLoading frame={props.imageFrame} />;
+  return <StableFramedMedia {...props} frame={props.imageFrame} />;
 }

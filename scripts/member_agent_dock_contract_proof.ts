@@ -142,8 +142,6 @@ assert.deepEqual(
   {
     surfaceLabel: "Polynet · Resources",
     title: "Polynet Intelligence",
-    openLabel: "Open Polynet Intelligence",
-    closeLabel: "Close Polynet Intelligence",
     composerLabel: "Message Polynet Intelligence",
     emptyLabel: "Ask Polynet Intelligence about Polynet · Resources.",
     loadingLabel: "Opening Polynet Intelligence",
@@ -155,8 +153,6 @@ assert.deepEqual(
   {
     surfaceLabel: "Discover",
     title: "Polynet Intelligence",
-    openLabel: "Open Polynet Intelligence",
-    closeLabel: "Close Polynet Intelligence",
     composerLabel: "Message Polynet Intelligence",
     emptyLabel: "Ask Polynet Intelligence to help you explore communities.",
     loadingLabel: "Opening Polynet Intelligence",
@@ -484,8 +480,8 @@ assert.doesNotMatch(JSON.stringify(identityManifest), /Neil McDevitt|neilmcd|you
 
 assert.match(
   schema,
-  /memberAgentChannels: defineTable\([\s\S]*scopeKey: v\.optional\(v\.literal\("global"\)\)[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)[\s\S]*activeEpisodeId: v\.optional\(v\.id\("memberAgentEpisodes"\)\)[\s\S]*\.index\("by_owner_scope", \["ownerId", "scopeKey"\]\)[\s\S]*\.index\("by_owner", \["ownerId"\]\)[\s\S]*\.index\("by_owner_community", \["ownerId", "communityId"\]\)/,
-  "the stable user-global channel must coexist additively with legacy community channels",
+  /memberAgentChannels: defineTable\([\s\S]*scopeKey: v\.optional\(v\.union\(v\.literal\("global"\), v\.literal\("community"\)\)\)[\s\S]*\.index\("by_owner_scope_community", \["ownerId", "scopeKey", "communityId"\]\)/,
+  "scoped conversations must use the canonical owner/scope/community index while retaining global history",
 );
 assert.match(
   schema,
@@ -544,8 +540,8 @@ assert.match(
 );
 assert.equal(
   (threads.match(/requireWritableMemberAgentThread\(\{/g) ?? []).length,
-  3,
-  "both message creation paths plus the shared claimed-image authority must reject retained legacy episodes",
+  5,
+  "message, image, runtime admission and runtime history paths must share active-session authority",
 );
 assert.equal(
   (threads.match(/requireWritableClaimedImageAttachmentThread\(\{/g) ?? [])
@@ -725,8 +721,8 @@ assert.doesNotMatch(
 );
 assert.match(
   runtimeLoop,
-  /if \(params\.invocationSurface === "member_agent_dock"\) \{[\s\S]*resolveMemberAgentIdentityContextInternal[\s\S]*renderMemberAgentIdentityContext[\s\S]*catch \{[\s\S]*memberIdentityContextMd = null;/,
-  "identity loading must be dock-only and fail soft",
+  /params\.invocationSurface === "member_agent_dock" && !\(params\.memberAgentSurfaceContext\?\.kind === "community" && params\.memberAgentSurfaceContext\.community_conversation\)[\s\S]*resolveMemberAgentIdentityContextInternal[\s\S]*renderMemberAgentIdentityContext[\s\S]*catch \{[\s\S]*memberIdentityContextMd = null;/,
+  "global personal identity loading must exclude community-bound conversations and fail soft",
 );
 assert.match(
   runtimePrompt,
@@ -768,8 +764,8 @@ assert.match(
 
 assert.match(
   gateway,
-  /threads:ensureMemberAgentGlobalChannel[\s\S]*threads:startNewMemberAgentGlobalEpisode/,
-  "the browser must use the dedicated user-global channel mutations",
+  /threads:ensureCommunityAgentConversation[\s\S]*threads:startNewCommunityAgentConversation/,
+  "the browser must expose dedicated community-bound conversation mutations",
 );
 assert.doesNotMatch(
   gateway,
@@ -782,17 +778,17 @@ assert.match(
 );
 assert.match(
   component,
-  /ensureCloudMemberAgentGlobalChannel[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
-  "the dock must use the retained personal runtime and streaming controller",
+  /ensureCloudCommunityAgentConversation[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
+  "the scoped conversation must reuse the canonical runtime and streaming controller",
 );
 assert.match(
   component,
-  /startNewCloudMemberAgentGlobalEpisode[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
+  /startNewCloudCommunityAgentConversation[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
   "New chat must switch the active thread only after the server returns the new episode",
 );
 assert.match(
   component,
-  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudMemberAgentGlobalChannel[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
+  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudCommunityAgentConversation[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
   "an ambiguous New chat result must reconcile to the active server episode",
 );
 const startNewChatBlock =
@@ -815,8 +811,8 @@ assert.match(component, /agentScopeRef[\s\S]*isCurrentScope/);
 assert.doesNotMatch(component, /\}, \[props\.communityId, props\.session\?\.user\.id, stopStreamingTurn\]\);/);
 assert.match(
   component,
-  /synchronizeDesiredLens[\s\S]*syncThreadCommunityLensCloud[\s\S]*setCloudThreadContext[\s\S]*createThreadMessage/,
-  "the dock must validate and synchronize the desired community lens before persisting the next user turn",
+  /synchronizeDesiredLens[\s\S]*channel\.community_id === desiredCommunityId[\s\S]*throw new Error\("Community conversation scope does not match\."\)/,
+  "scoped conversation identity must reject mismatches instead of switching lenses",
 );
 assert.match(
   component,
@@ -895,7 +891,7 @@ assert.doesNotMatch(
 );
 assert.match(
   styles,
-  /--member-agent-accent: var\(--accent-selection\);[\s\S]*--member-agent-accent-strong: color-mix\([\s\S]*var\(--member-agent-accent\) 82%,[\s\S]*var\(--text-primary\) 18%[\s\S]*--member-agent-accent-soft: color-mix\([\s\S]*var\(--member-agent-accent\) 16%,[\s\S]*transparent[\s\S]*--member-agent-accent-border: color-mix\([\s\S]*var\(--member-agent-accent\) 32%,[\s\S]*transparent/,
+  /--member-agent-accent: var\(--accent-selection\);[\s\S]*--member-agent-accent-soft: color-mix\([\s\S]*var\(--member-agent-accent\) 16%,[\s\S]*transparent[\s\S]*--member-agent-accent-border: color-mix\([\s\S]*var\(--member-agent-accent\) 32%,[\s\S]*transparent/,
   "the dock must derive its identity palette from the active theme accent",
 );
 assert.match(
@@ -910,36 +906,6 @@ assert.match(
 );
 assert.match(
   styles,
-  /:root \{[\s\S]*--member-agent-desktop-launcher-size: 60px;[\s\S]*--member-agent-desktop-launcher-edge: 20px;[\s\S]*--member-agent-desktop-launcher-clearance: calc\([\s\S]*var\(--member-agent-desktop-launcher-size\) \+ var\(--member-agent-desktop-launcher-edge\)[\s\S]*\);/,
-  "the launcher should expose one shared desktop footprint contract",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock \{[\s\S]*?right: var\(--member-agent-desktop-launcher-edge\);[\s\S]*?bottom: var\(--member-agent-desktop-launcher-edge\);/,
-  "the desktop dock should consume its shared viewport-edge contract",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock-launcher \{[\s\S]*?width: var\(--member-agent-desktop-launcher-size\);[\s\S]*?height: var\(--member-agent-desktop-launcher-size\);[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: var\(--member-agent-launcher-background\);[\s\S]*?border: 1px solid var\(--member-agent-launcher-border\);[\s\S]*?border-radius: 16px;[\s\S]*?box-shadow: var\(--member-agent-launcher-shadow\);/,
-  "the agent launcher must keep its theme-derived identity inside a compact, high-contrast control",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 18%,\s*#111115 82%\s*\);[\s\S]*?--member-agent-launcher-background-hover: color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 24%,\s*#111115 76%\s*\);[\s\S]*?--member-agent-launcher-border: var\(--member-agent-accent-border\);/,
-  "Dark must retain the launcher's exact legacy surface and border",
-);
-assert.match(
-  styles,
-  /:root\[data-theme="light"\] \.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-background-hover: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border: var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-shadow-hover: 0 4px 12px rgba\(23, 23, 25, 0\.16\);[\s\S]*?--member-agent-launcher-state-elevation: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-state-highlight: 0 0 0 0 transparent;[\s\S]*?--member-agent-launcher-glyph-filter: none;/,
-  "Light must use a flat raised surface with restrained elevation and no dark glyph effects",
-);
-assert.doesNotMatch(
-  styles,
-  /backdrop-filter/,
-  "the opaque launcher surface must not pay for a visually inert backdrop filter",
-);
-assert.match(
-  styles,
   /\.member-agent-dock-error \{[\s\S]*?color: #e8b4c4;[\s\S]*?background: rgba\(214, 106, 138, 0\.1\);[\s\S]*?border-left: 2px solid var\(--accent-gold\);/,
   "Dark must retain the dock error's exact legacy treatment",
 );
@@ -948,69 +914,10 @@ assert.match(
   /:root\[data-theme="light"\] \.member-agent-dock-error \{[\s\S]*?color: var\(--accent-error\);[\s\S]*?background: color-mix\(in srgb, var\(--accent-error\) 10%, transparent\);[\s\S]*?border-left-color: var\(--accent-error\);/,
   "Light dock errors must use the functional error role",
 );
-assert.match(
-  styles,
-  /--member-agent-launcher-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
-  "the Dark launcher must retain its legacy separation from busy community content",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock-launcher svg \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*opacity: 1;[\s\S]*filter: var\(--member-agent-launcher-glyph-filter\);/,
-  "the launcher glyph treatment must adapt through the component theme contract",
-);
-assert.match(
-  component,
-  /member-agent-dock-launcher\$\{composerIsBusy \? " is-working" : ""\}/,
-  "the launcher must derive its working presence from the existing turn lifecycle",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock-launcher\.is-working \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 58%, transparent\);[\s\S]*animation: member-agent-dock-working-pulse 1\.6s ease-in-out infinite;/,
-  "an active agent turn must derive its working treatment from the active theme accent",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: var\(--member-agent-launcher-background-hover\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);[\s\S]*box-shadow: var\(--member-agent-launcher-shadow-hover\);/,
-  "hover must clarify the floating control without moving it",
-);
-assert.match(
-  styles,
-  /@keyframes member-agent-dock-working-pulse \{[\s\S]*?var\(--member-agent-launcher-state-elevation\),[\s\S]*?var\(--member-agent-launcher-state-highlight\);/,
-  "working presence must consume the theme-adapted elevation and highlight roles",
-);
-assert.match(
-  styles,
-  /:root\[data-theme="light"\] \.member-agent-dock \.member-agent-dock-launcher:focus-visible \{\s*outline-color: var\(--member-agent-accent\);\s*\}/,
-  "the Light launcher must keep an explicit intelligence-blue keyboard focus ring",
-);
 assert.doesNotMatch(
   styles,
   /#a78bfa|#c4b5fd|rgba\(167, 139, 250|rgba\(196, 181, 253/,
   "the personal-agent dock must not restore a fixed purple palette",
-);
-assert.match(
-  styles,
-  /\.member-agent-dock-launcher\.is-working:hover,[\s\S]*\.member-agent-dock-launcher\.is-working:focus-visible \{[\s\S]*animation: none;/,
-  "hover and keyboard focus must not freeze the working animation on an arbitrary frame",
-);
-const launcherMotion = ["member-agent-dock-working-pulse"]
-  .map((name) => styles.match(new RegExp(`@keyframes ${name} \\{[\\s\\S]*?\\n\\}`))?.[0] ?? "")
-  .join("\n");
-assert.doesNotMatch(
-  launcherMotion,
-  /transform|translate|rotate/,
-  "launcher presence must never bounce, lift, or spin",
-);
-assert.match(
-  styles,
-  /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.member-agent-dock-launcher,[\s\S]*animation: none;/,
-  "launcher presence animation must respect reduced-motion preferences",
-);
-const launcherHover = styles.match(/\.member-agent-dock-launcher:hover \{[\s\S]*?\n\}/)?.[0] ?? "";
-assert.doesNotMatch(
-  launcherHover,
-  /transform|translate|scale/,
-  "hover must not lift or scale the launcher",
 );
 assert.match(
   styles,
@@ -1100,7 +1007,7 @@ assert.match(
 );
 assert.match(
   component,
-  /Paperclip[\s\S]*type="file"[\s\S]*accept=\{MEMBER_AGENT_IMAGE_ACCEPT\}[\s\S]*VoiceInputButton[\s\S]*member-agent-dock-send/,
+  /type="file"[\s\S]*accept=\{MEMBER_AGENT_IMAGE_ACCEPT\}[\s\S]*CommunityComposerControls[\s\S]*VoiceInputButton[\s\S]*chat-send ask-send-btn/,
   "the dock composer must expose the canonical attachment, microphone, and send controls",
 );
 assert.doesNotMatch(

@@ -1,0 +1,5 @@
+.community-knowledge-page { min-width: 0; }
+.community-knowledge-graph { display: flex; height: max(360px, calc(100dvh - 200px)); margin: 20px 24px 24px; }
+.community-knowledge-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 64px 0 24px; }
+.community-knowledge-header h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--text-ink-secondary); }
+.community-knowledge-page .resources-header { display: none; }

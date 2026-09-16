@@ -6,7 +6,7 @@ export function WebCommunityInteractionBootstrap(props: {
 }) {
   return (
     <div
-      className="community-interaction-projection has-context-panel community-interaction-bootstrap"
+      className="community-interaction-projection community-interaction-bootstrap"
       aria-busy="true"
       aria-live="polite"
     >
@@ -40,18 +40,6 @@ export function WebCommunityInteractionBootstrap(props: {
           )}
         </div>
       </div>
-      <aside className="community-context-panel" aria-label="Community">
-        <div className="community-context-rail">
-          <div className="community-context-rail-head">
-            <div className="community-chat-page-loading-title">Community</div>
-          </div>
-          <div className="community-interaction-bootstrap-context" aria-hidden="true">
-            <div className="web-skeleton-pill" />
-            <div className="web-skeleton-pill" />
-            <div className="web-skeleton-pill" />
-          </div>
-        </div>
-      </aside>
     </div>
   );
 }

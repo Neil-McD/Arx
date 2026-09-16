@@ -12,6 +12,7 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityAdmin.ts",
+  "./communityMemberWorkflows.ts",
   "./communityPublic.ts",
   "./email.ts",
   "./_generated/**/*.*s",

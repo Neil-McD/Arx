@@ -11,7 +11,9 @@ import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
+import { WebCommunityKnowledgePanel } from "./WebCommunityKnowledgePanel";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
+import { WebCommunityWorkflowsSection } from "./WebCommunityWorkflowsSection";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
@@ -46,8 +48,10 @@ export type WebCommunitySecondaryPanelsProps = {
   };
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
   funnel: ComponentProps<typeof WebCommunityFunnelSection>;
+  workflows: ComponentProps<typeof WebCommunityWorkflowsSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resources: ComponentProps<typeof CommunityResourcesPanel>;
+  knowledge: ComponentProps<typeof WebCommunityKnowledgePanel>["context"];
   events: ComponentProps<typeof WebCommunityEventsSection>;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
@@ -115,12 +119,15 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "funnel" &&
         renderWorkspacePane(<WebCommunityFunnelSection {...props.funnel} />)}
 
+      {props.communityTab === "workflows" &&
+        renderWorkspacePane(<WebCommunityWorkflowsSection {...props.workflows} />)}
+
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
 
       {props.communityTab === "resources" ? (
         <>
-          {renderCenteredPane(<CommunityResourcesPanel {...props.resources} />)}
+          {renderCenteredPane(<WebCommunityKnowledgePanel key={props.knowledge.communityId} context={props.knowledge} resources={props.resources} />)}
           <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
           <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
         </>

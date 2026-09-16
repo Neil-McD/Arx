@@ -32,7 +32,7 @@ assert.match(
 );
 assert.match(
   interactions,
-  /!founderBootstrap && root\.contentSummary !== summary/,
+  /!founderBootstrap && root\.composerPayloadHash !== composerPayloadHash/,
   "recovery must preserve the first canonical welcome even if mutable labels later change",
 );
 

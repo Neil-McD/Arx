@@ -168,8 +168,8 @@ assert.match(
 
 assert.match(
   mentionBroadcasts,
-  /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.broadcast\.communityId[\s\S]*userId: args\.userId[\s\S]*\}\)[\s\S]*catch \{[\s\S]*return "skipped"/,
-  "@everybody fanout recipients must pass the same chat access gate as direct mentions",
+  /resolveNotificationRecipientSource\(\{[\s\S]*communityId: args\.broadcast\.communityId[\s\S]*userId: args\.userId[\s\S]*if \(!authorized\)[\s\S]*forceSuppressMentionRow[\s\S]*return "skipped"/,
+  "@everybody recipients including existing rows must pass canonical source and room access",
 );
 
 assert.match(

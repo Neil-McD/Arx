@@ -5,6 +5,9 @@ import { join } from "node:path";
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
 const channelCore = readFileSync(join(root, "convex/communityChannelCore.ts"), "utf8");
+const channelAccess = readFileSync(join(root, "convex/communityChannelAccess.ts"), "utf8");
+assert.match(channelAccess, /resolveCommunityChannelActor[\s\S]*await requireCommunityChatAccess\(args\)/,
+  "channel actors must retain the canonical community access gate");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
@@ -150,8 +153,8 @@ assert.match(
 );
 assert.match(
   mapRootBundle,
-  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
-  "root bundle mapper should prefer canonical attachments before legacy fallback",
+  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*hasCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
+  "root bundle mapper must let canonical tombstones prevent legacy fallback",
 );
 assert.doesNotMatch(
   mapRootBundle,
@@ -172,8 +175,8 @@ assert.match(
 );
 assert.match(
   mapReplyBundle,
-  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
-  "reply bundle mapper should prefer canonical attachments before legacy fallback",
+  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*hasCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
+  "reply bundle mapper must let canonical tombstones prevent legacy fallback",
 );
 
 const viewerReactionMap = functionBlock(interactions, "loadViewerReactionMapForTargets");
@@ -214,7 +217,7 @@ for (const [helper, pattern] of [
 const listRoots = exportedConstBlock(interactions, "listCommunityInteractionRoots");
 assert.match(
   listRoots,
-  /query\(\{[\s\S]*requireCommunityChatAccess/,
+  /query\(\{[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*resolveCommunityChannelActor/,
   "root list should be an access-gated query",
 );
 assert.match(
@@ -224,7 +227,7 @@ assert.match(
 );
 assert.match(
   listRoots,
-  /resolveRequestedCommunityChannel\([\s\S]*channelId: args\.channelId[\s\S]*const visibleRows = await listChannelReadableRows<InteractionRootRow>[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
+  /resolveAuthorizedCommunityChannel\([\s\S]*capability: "canRead"[\s\S]*channelId: args\.channelId[\s\S]*const visibleRows = await listChannelReadableRows<InteractionRootRow>[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
   "root list should load viewer reactions only for visible roots",
 );
 assert.match(
@@ -256,7 +259,7 @@ assert.doesNotMatch(
 const listReplies = exportedConstBlock(interactions, "listCommunityInteractionReplies");
 assert.match(
   listReplies,
-  /query\(\{[\s\S]*ctx\.db\.get\(args\.rootId\)[\s\S]*assertCommunityReadableRoot\(root\)[\s\S]*requireCommunityChatAccess/,
+  /query\(\{[\s\S]*ctx\.db\.get\(args\.rootId\)[\s\S]*assertCommunityReadableRoot\(root\)[\s\S]*resolveCommunityChannelActor[\s\S]*capability: "canRead"/,
   "reply list should validate a readable root and gate access through the root community",
 );
 assert.match(

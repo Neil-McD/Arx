@@ -104,7 +104,7 @@ async function mapCommunityDirectoryOwnerRow(args: {
   ctx: any;
   community: CommunityLike;
   userIdCache: Map<string, string | null>;
-  lastSeenAt: number;
+  lastSeenAt: number | null;
 }) {
   return {
     id: `owner:${String(args.community._id)}`,
@@ -115,7 +115,7 @@ async function mapCommunityDirectoryOwnerRow(args: {
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.community.ownerId)),
     role: "owner",
     created_at: toIsoString(args.community.createdAt),
-    last_active_at: toIsoString(args.lastSeenAt),
+    last_active_at: args.lastSeenAt === null ? "" : toIsoString(args.lastSeenAt),
   };
 }
 
@@ -123,7 +123,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
   ctx: any;
   row: CommunityMembershipLike;
   userIdCache: Map<string, string | null>;
-  lastSeenAt: number;
+  lastSeenAt: number | null;
 }) {
   return {
     id: String(args.row._id),
@@ -134,7 +134,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.row.userId)),
     role: normalizeCommunityRoleForOutput(args.row.role) || "member",
     created_at: toIsoString(args.row.createdAt),
-    last_active_at: toIsoString(args.lastSeenAt),
+    last_active_at: args.lastSeenAt === null ? "" : toIsoString(args.lastSeenAt),
   };
 }
 
@@ -308,53 +308,56 @@ export const listCommunityDirectoryPage = query({
       communityId: args.communityId,
     });
     const pageSize = normalizeDirectoryPageSize(args.pageSize);
+    // Version the changed pagination source. Cached presence cursors restart
+    // safely; clients already deduplicate directory rows by identity.
+    const prefix = `members-v1:${args.communityId}:`;
+    const cursor = args.cursor?.startsWith(prefix) ? args.cursor.slice(prefix.length) : null;
     const rawPage = await ctx.db
-      .query("communityPresence")
-      .withIndex("by_community_lastSeenAt", (q) =>
+      .query("communityMemberships")
+      .withIndex("by_community_createdAt", (q) =>
         q.eq("communityId", args.communityId),
       )
-      .order("desc")
+      .order("asc")
       .paginate({
-        cursor: args.cursor ?? null,
-        numItems: pageSize,
+        cursor,
+        numItems: cursor === null ? pageSize - 1 : pageSize,
         maximumRowsRead: Math.max(pageSize * 3, pageSize),
       });
     const userIdCache = new Map<string, string | null>();
     const seenUserIds = new Set<string>();
     const memberRows: any[] = [];
-    for (const presence of rawPage.page as Array<{ userId: any; lastSeenAt: number }>) {
-      const userIdKey = String(presence.userId ?? "").trim();
+    const readActivity = async (userId: any) => {
+      const presence = await ctx.db.query("communityPresence").withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", userId)).first();
+      return presence?.lastSeenAt ?? null;
+    };
+    if (cursor === null) {
+      memberRows.push(await mapCommunityDirectoryOwnerRow({ ctx, community, userIdCache, lastSeenAt: await readActivity(community.ownerId) }));
+    }
+    for (const membership of rawPage.page) {
+      if (!communityMembershipRowIsActive(membership) || String(membership.userId) === String(community.ownerId)) continue;
+      const userIdKey = String(membership.userId ?? "").trim();
       if (!userIdKey || seenUserIds.has(userIdKey)) continue;
-      seenUserIds.add(userIdKey);
       const authorization = await resolveCommunityPresenceAuthorization({
         ctx,
         community,
-        userId: presence.userId,
+        userId: membership.userId,
       });
       if (!authorization.authorized) continue;
-      if (String(presence.userId) === String(community.ownerId)) {
-        memberRows.push(await mapCommunityDirectoryOwnerRow({
-          ctx,
-          community,
-          userIdCache,
-          lastSeenAt: presence.lastSeenAt,
-        }));
+      if (!authorization.membership || String(authorization.membership._id) !== String(membership._id)) {
         continue;
       }
-      if (!authorization.membership || !communityMembershipRowIsActive(authorization.membership)) {
-        continue;
-      }
+      seenUserIds.add(userIdKey);
       memberRows.push(await mapCommunityDirectoryMembershipRow({
         ctx,
         row: authorization.membership,
         userIdCache,
-        lastSeenAt: presence.lastSeenAt,
+        lastSeenAt: await readActivity(membership.userId),
       }));
     }
     return {
       page: memberRows,
       totalCount: readCommunityActiveMemberCount(community),
-      continueCursor: rawPage.isDone ? null : rawPage.continueCursor,
+      continueCursor: rawPage.isDone ? null : prefix + rawPage.continueCursor,
       isDone: rawPage.isDone,
     };
   },

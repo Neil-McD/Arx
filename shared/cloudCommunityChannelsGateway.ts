@@ -1,4 +1,6 @@
 import { api } from "../convex/_generated/api";
+import { subscribeCommunityPages } from "./subscribeCommunityPages";
+import { MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
 
@@ -14,16 +16,19 @@ export type CloudCommunityChannel = {
   slug: string;
   name: string;
   position: number;
+  access_mode?: "all_members" | "restricted";
+  capabilities?: { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
 };
 
 export type CloudCommunityChannelsResult = {
   channels: CloudCommunityChannel[];
   max_active_channels: number;
+  isComplete?: boolean;
 };
 
 function coerceCommunityChannelsResult(payload: unknown): CloudCommunityChannelsResult {
   if (!payload || typeof payload !== "object") {
-    return { channels: [], max_active_channels: 10 };
+    return { channels: [], max_active_channels: MAX_TOTAL_COMMUNITY_CHANNELS };
   }
   const result = payload as Partial<CloudCommunityChannelsResult>;
   return {
@@ -31,7 +36,7 @@ function coerceCommunityChannelsResult(payload: unknown): CloudCommunityChannels
     max_active_channels:
       typeof result.max_active_channels === "number" && Number.isFinite(result.max_active_channels)
         ? Math.max(1, Math.floor(result.max_active_channels))
-        : 10,
+        : MAX_TOTAL_COMMUNITY_CHANNELS,
   };
 }
 
@@ -39,6 +44,7 @@ export async function createCloudCommunityChannel<SessionT>(
   params: CloudCommunityChannelsGatewayParams<SessionT> & {
     communityId: string;
     name: string;
+    accessMode?: "all_members" | "restricted";
   },
 ): Promise<CloudCommunityChannel> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -46,6 +52,7 @@ export async function createCloudCommunityChannel<SessionT>(
     authSubject,
     communityId: params.communityId,
     name: params.name,
+    ...(params.accessMode ? { accessMode: params.accessMode } : {}),
   }) as CloudCommunityChannel;
 }
 
@@ -79,19 +86,24 @@ export async function deleteCloudCommunityChannel<SessionT>(
   }) as { deleted_channel_id: string; deleted_channel_slug: string };
 }
 
-export async function reorderCloudCommunityChannels<SessionT>(
+export async function moveCloudCommunityChannel<SessionT>(
   params: CloudCommunityChannelsGatewayParams<SessionT> & {
     communityId: string;
-    orderedChannelIds: string[];
+    channelId: string;
+    afterChannelId: string | null;
+    beforeChannelId: string | null;
+    expectedPosition: number;
   },
-): Promise<CloudCommunityChannel[]> {
+): Promise<CloudCommunityChannel> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const result = await client.mutation("communityChannels:reorderCommunityChannels" as any, {
+  return await client.mutation("communityChannels:moveCommunityChannel" as any, {
     authSubject,
     communityId: params.communityId,
-    orderedChannelIds: params.orderedChannelIds,
-  }) as { channels?: CloudCommunityChannel[] };
-  return Array.isArray(result?.channels) ? result.channels : [];
+    channelId: params.channelId,
+    afterChannelId: params.afterChannelId,
+    beforeChannelId: params.beforeChannelId,
+    expectedPosition: params.expectedPosition,
+  }) as CloudCommunityChannel;
 }
 
 export async function setCloudCommunityChannelPinnedRoot<SessionT>(
@@ -117,22 +129,32 @@ export function subscribeCloudCommunityChannels(params: {
   onUpdate: (result: CloudCommunityChannelsResult) => void;
   onError?: (error: unknown) => void;
 }): () => void {
-  const watch = params.liveClient.client.watchQuery(
-    (api as any).communityChannels.listCommunityChannels,
-    {
-      authSubject: params.liveClient.authSubject,
-      communityId: params.communityId as any,
-    } as any,
-  );
-  const publish = () => {
-    try {
-      const result = watch.localQueryResult();
-      if (typeof result === "undefined") return;
-      params.onUpdate(coerceCommunityChannelsResult(result));
-    } catch (error) {
-      params.onError?.(error);
-    }
+  return subscribeChannelDirectoryPages({
+    watch: (section, cursor) => params.liveClient.client.watchQuery(
+      (api as any).communityChannels.listCommunityChannelPage,
+      { authSubject: params.liveClient.authSubject, communityId: params.communityId as any,
+        section, paginationOpts: { cursor, numItems: 50 } } as any,
+    ),
+    onUpdate: params.onUpdate, onError: params.onError,
+  });
+}
+
+// Each page stays reactive. An earlier page change invalidates its descendants
+// before publishing, so stale grants cannot linger in an assembled directory.
+export function subscribeChannelDirectoryPages(params: {
+  watch: (section: "shared" | "private", cursor: string | null) => {
+    localQueryResult: () => any; onUpdate: (callback: () => void) => () => void;
   };
-  publish();
-  return watch.onUpdate(publish);
+  onUpdate: (result: CloudCommunityChannelsResult) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  return subscribeCommunityPages<any>({
+    watch: params.watch,
+    onUpdate: (pages, isComplete) => {
+      const unique = new Map<string, CloudCommunityChannel>(pages.flatMap(page => page.page).map(channel => [channel.id || channel.slug, channel]));
+      params.onUpdate({ ...coerceCommunityChannelsResult({ channels: [...unique.values()].sort((a, b) =>
+        a.position - b.position || a.id.localeCompare(b.id)), max_active_channels: pages.at(-1)?.max_active_channels ?? MAX_TOTAL_COMMUNITY_CHANNELS }), isComplete });
+    },
+    onError: params.onError,
+  });
 }

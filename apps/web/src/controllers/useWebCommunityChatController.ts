@@ -33,14 +33,17 @@ import type { ChatLightboxImage } from "../../../../shared/communityTypes";
 import { useCommunityChatLightbox } from "../../../../shared/useCommunityChatLightbox";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 
-const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
-const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024;
-const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
-const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
+import {
+  COMMUNITY_ATTACHMENT_MAX_COUNT as MAX_WEB_ATTACHMENTS_PER_MESSAGE,
+  COMMUNITY_ATTACHMENT_IMAGE_BYTES as MAX_WEB_IMAGE_UPLOAD_BYTES,
+  COMMUNITY_ATTACHMENT_MEDIA_BYTES as MAX_WEB_MEDIA_UPLOAD_BYTES,
+  COMMUNITY_ATTACHMENT_FILE_BYTES as MAX_WEB_FILE_UPLOAD_BYTES,
+} from "../../../../shared/communityAttachmentPolicy";
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000;
 export type WebCommunityMessageAttachment = CommunityMessageAttachment & {
   file?: File | null;
+  attachmentId?: string;
 };
 
 type EnsureAuthSession = (
@@ -61,6 +64,7 @@ type CommunityInteractionComposerBoundary = {
     text: string;
     attachments: WebCommunityMessageAttachment[];
     serializedAttachments: unknown[];
+    serializedMentions: { userId?: string; agentKey?: string; roleKey?: string }[];
     createdAt: string;
     senderId: string;
   }) => void;
@@ -265,21 +269,20 @@ async function prepareAttachmentsForSend(
   attachments: WebCommunityMessageAttachment[],
   session: AuthSession,
   communityId: string,
+  channelId: string | null,
+  rootId: string | null,
+  messageKey: string,
 ): Promise<WebCommunityMessageAttachment[]> {
   const prepared: WebCommunityMessageAttachment[] = [];
   for (const attachment of attachments) {
-    const currentStorageId = String(attachment.storage_id ?? "").trim();
-    let nextStorageId = currentStorageId || null;
-    if (!nextStorageId && attachment.file instanceof File) {
-      nextStorageId = await uploadCloudCommunityChatAttachmentFile({
-        session,
-        communityId,
-        file: attachment.file,
-      });
-    }
+    if (!(attachment.file instanceof File)) throw new Error("Please reattach the file before sending.");
+    const uploaded = await uploadCloudCommunityChatAttachmentFile({
+      session, communityId, channelId, rootId, messageKey, file: attachment.file,
+    });
     prepared.push({
       ...attachment,
-      storage_id: nextStorageId,
+      ...uploaded,
+      type: uploaded.type === "image" ? "image" : "file",
       file: null,
     });
   }
@@ -291,25 +294,8 @@ function serializeAttachmentsForWrite(
 ): unknown[] {
   const serialized: unknown[] = [];
   for (const attachment of attachments) {
-    const storageId = String(attachment.storage_id ?? "").trim();
-    const dataUrl =
-      typeof attachment.data_url === "string" && attachment.data_url.trim().startsWith("data:")
-        ? attachment.data_url.trim()
-        : "";
-    if (!storageId && !dataUrl) continue;
-    serialized.push({
-      id: attachment.id,
-      name: attachment.name,
-      type: attachment.type,
-      mime: attachment.mime ?? null,
-      size: attachment.size,
-      ...(storageId ? { storageId } : null),
-      ...(dataUrl ? { data_url: dataUrl } : null),
-      ...(attachment.text ? { text: attachment.text } : null),
-      ...(typeof attachment.truncated === "boolean"
-        ? { truncated: attachment.truncated }
-        : null),
-    });
+    if (!attachment.attachmentId) throw new Error("Attachment upload is incomplete.");
+    serialized.push({ attachmentId: attachment.attachmentId });
   }
   return serialized;
 }
@@ -480,6 +466,7 @@ export function useWebCommunityChatController(
         return;
       }
       setMessageInput(rawText);
+      setMessageMentions(mentionDraft);
       setAttachments(attachmentsToSend);
       setReplyingToMessage(replySnapshot);
     };
@@ -508,6 +495,9 @@ export function useWebCommunityChatController(
         attachmentsToSend,
         activeSession,
         activeCommunityId,
+        current.activeChannelId,
+        replyRootId,
+        idempotencyKey,
       );
       const serializedAttachments =
         serializeAttachmentsForWrite(preparedAttachments);
@@ -521,6 +511,7 @@ export function useWebCommunityChatController(
         text: rawText,
         attachments: preparedAttachments,
         serializedAttachments,
+        serializedMentions: mentionsToSend,
         createdAt,
         senderId: sessionUserId,
       });
@@ -548,9 +539,10 @@ export function useWebCommunityChatController(
           idempotencyKey,
           status: "failed",
         });
+      } else {
+        restoreDraft();
       }
       setError(mapCommunityComposerErrorMessage(sendError));
-      restoreDraft();
     } finally {
       setIsSendingMessage(false);
     }

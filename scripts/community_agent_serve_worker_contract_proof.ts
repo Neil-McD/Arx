@@ -220,7 +220,7 @@ assert.doesNotMatch(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: "community_agent_mention"[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: isWorkflowAction \? "community_workflow_action" : "community_agent_mention"[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
   "serve action should admit model input before claiming canonical hosted funding and starting the provider",
 );
 assert.doesNotMatch(

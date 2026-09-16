@@ -28,7 +28,6 @@ export type WebSettingsPanelsProps = {
   profile: {
     session: SessionLike;
     cloudProfile: unknown | null;
-    reloadProfile?: () => void;
     profileUi: ReturnType<typeof useWebProfileSettingsUiController>;
     handleProfileAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
     handleProfileAvatarUpload: (file: File | null) => Promise<void> | void;
@@ -50,8 +49,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   const profileSectionProps = {
     session: props.profile.session,
     cloudProfile: props.profile.cloudProfile,
-    profileLoadStatus: props.profile.profileUi.profileLoadStatus,
-    reloadProfile: props.profile.reloadProfile,
     profileAvatarUrl: props.profile.profileUi.profileAvatarUrl,
     profileAvatarFocusX: props.profile.profileUi.profileAvatarFocusX,
     profileAvatarFocusY: props.profile.profileUi.profileAvatarFocusY,
@@ -65,6 +62,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isSavingProfile: props.profile.profileUi.isSavingProfile,
     isProfileDirty: props.profile.profileUi.isProfileDirty,
     profileSaveError: props.profile.profileUi.profileSaveError,
+    profileSaveSuccess: props.profile.profileUi.profileSaveSuccess,
     isProfileAvatarFocusModalOpen:
       props.profile.profileUi.isProfileAvatarFocusModalOpen,
     setIsProfileAvatarDragOver:

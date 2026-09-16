@@ -1,6 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
-import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   communityEventDateTimeInputToIso,
   getCommunityEventViewerTimeZone,
@@ -196,7 +194,7 @@ function buildGoogleCalendarUrl(event: CommunityEvent): string {
   const start = new Date(event.starts_at);
   const end = event.ends_at
     ? new Date(event.ends_at)
-    : new Date(start.getTime() + DEFAULT_COMMUNITY_EVENT_DURATION_MS);
+    : new Date(start.getTime() + 60 * 60 * 1000);
   const formatGoogleDate = (date: Date) =>
     date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   const details = [event.description_md, event.url].filter(Boolean).join("\n\n");
@@ -377,9 +375,8 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
-  // Do not move/remove the focused row or interrupt an open event editor.
-  const now = useCommunityEventClock(state.events, Boolean(draft) || hasFocusedEvent);
+  const wasLoadingEventsRef = useRef(false);
+  const hasCompletedEventsLoadRef = useRef(false);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const visibleMonthEvents = useMemo(
@@ -387,13 +384,10 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       state.events
         .filter((event) => {
           const startsAt = new Date(event.starts_at);
-          const endsAt = communityEventDisplayEnd(event);
-          return event.status !== "cancelled" && Number.isFinite(endsAt) &&
-            (isSameLocalMonth(startsAt, monthDate) ||
-              (startsAt < monthDate && endsAt > monthDate.getTime()));
+          return Number.isFinite(startsAt.getTime()) && isSameLocalMonth(startsAt, monthDate);
         })
         .slice()
-        .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id)),
+        .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at)),
     [monthDate, state.events],
   );
   const eventDayGroups = useMemo(() => {
@@ -423,9 +417,14 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       : "Edit event"
     : "New event";
   const currentRange = actions.getVisibleRange(state.visibleMonthIso);
+  useEffect(() => {
+    if (!state.isLoadingEvents && wasLoadingEventsRef.current) {
+      hasCompletedEventsLoadRef.current = true;
+    }
+    wasLoadingEventsRef.current = state.isLoadingEvents;
+  }, [state.isLoadingEvents]);
   const showInitialEventsLoading =
-    !state.eventsError && state.events.length === 0 &&
-    (state.isLoadingEvents || state.hasLoadedVisibleRange === false);
+    state.isLoadingEvents && state.events.length === 0 && !hasCompletedEventsLoadRef.current;
 
   const openNewEvent = (dayKey: string | null) => {
     setLocalError(null);
@@ -563,12 +562,10 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </div>
       ) : null}
 
-      <div className="community-events-content" aria-busy={state.isLoadingEvents}
-        onFocusCapture={(event) => { if ((event.target as HTMLElement).closest(".community-events-item")) setHasFocusedEvent(true); }}
-        onBlurCapture={(event) => { if (!(event.relatedTarget as HTMLElement | null)?.closest?.(".community-events-item")) setHasFocusedEvent(false); }}>
+      <div className="community-events-content" aria-busy={state.isLoadingEvents}>
         {showInitialEventsLoading ? (
           <div className="community-events-state" role="status">Loading events…</div>
-        ) : eventDayGroups.length === 0 && state.eventsError ? null : eventDayGroups.length === 0 ? (
+        ) : eventDayGroups.length === 0 ? (
           <div className="community-events-state">
             <div>No events in {formatMonthLabel(monthDate)}.</div>
             {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
@@ -585,15 +582,13 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
             {eventDayGroups.map((group) => {
               const dayLabel = formatEventDay(group.date);
               return (
-                <section key={group.key} className={`community-events-day-group${group.events.every((event) => communityEventPhase(event, now) === "past") ? " is-past" : ""}`} aria-label={dayLabel.full}>
-                  <time className="community-events-date" dateTime={toLocalDateKey(group.date)}>
+                <section key={group.key} className="community-events-day-group" aria-label={dayLabel.full}>
+                  <time className="community-events-date" dateTime={group.key}>
                     <span>{dayLabel.weekday}</span>
                     <strong>{dayLabel.day}</strong>
                   </time>
                   <div className="community-events-day-list">
                     {group.events.map((event) => {
-                      const phase = communityEventPhase(event, now);
-                      const isPast = phase === "past";
                       const isRecurring = isRecurringCommunityEvent(event);
                       const editLabel = isRecurring ? "Edit series" : "Edit event";
                       const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
@@ -601,10 +596,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                       const recurrenceLabel = formatRecurrenceLabel(event);
                       const eventLinkLabel = event.location_type === "online" ? "Join" : "Open event";
                       return (
-                        <article key={event.id} id={`community-event-${event.id}`} className={`community-events-item${isPast ? " is-past" : ""}`} aria-label={isPast ? `${event.title}, past event` : undefined}>
+                        <article key={event.id} id={`community-event-${event.id}`} className="community-events-item">
                           <div className="community-events-item-copy">
                             <h3>{event.title}</h3>
-                            {phase === "ongoing" ? <span className="community-events-phase">Happening now</span> : phase === "started" ? <span className="community-events-phase" title="No end time supplied; shown here for one hour after the start.">Started · end time not set</span> : null}
                             <div className="community-events-time">
                               <span>{eventTimeLabel.primary}</span>
                               {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}
@@ -620,7 +614,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                             ) : null}
                           </div>
                           <div className="community-events-actions">
-                            {event.url && !isPast ? (
+                            {event.url ? (
                               <a
                                 className="community-events-primary-link"
                                 href={event.url}
@@ -630,7 +624,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                                 {eventLinkLabel}
                               </a>
                             ) : null}
-                            {!isPast ? <a
+                            <a
                               className="community-events-calendar-link"
                               href={buildGoogleCalendarUrl(event)}
                               target="_blank"
@@ -643,7 +637,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                                 aria-hidden="true"
                               />
                               <span>Add to calendar</span>
-                            </a> : null}
+                            </a>
                             {capabilities.canManageEvents ? (
                               <>
                                 <button

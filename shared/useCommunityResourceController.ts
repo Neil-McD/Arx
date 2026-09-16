@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
-import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 
 import {
   deleteCloudCommunityResource,
@@ -19,10 +18,6 @@ import {
 } from "./cloudCommunityAdminGateway";
 
 type SessionLike = unknown;
-export type ResourceReadState = { status: "idle" | "pending" | "ready" | "error"; error: string | null; hasData: boolean };
-type ResourceCollection = "resources" | "modules";
-const emptyRead = (): ResourceReadState => ({ status: "idle", error: null, hasData: false });
-const RESOURCE_DISPLAY_LIMIT = 200;
 
 type ResourceLike = {
   id: string;
@@ -167,6 +162,8 @@ type UseCommunityResourceControllerArgs<
   communityResources: ResourceT[];
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
+  setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
+  setIsLoadingResourceModules: Dispatch<SetStateAction<boolean>>;
   setIsSavingResource: Dispatch<SetStateAction<boolean>>;
   setIsSavingResourceModule: Dispatch<SetStateAction<boolean>>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
@@ -200,20 +197,6 @@ export function useCommunityResourceController<
   argsRef.current = args;
   const resourceLoadGenerationRef = useRef(0);
   const moduleLoadGenerationRef = useRef(0);
-  const scope = JSON.stringify([resolveAuthSubject(args.session as AuthSessionLike), args.activeCommunityId]);
-  const scopeRef = useRef(scope);
-  if (scopeRef.current !== scope) {
-    scopeRef.current = scope;
-    resourceLoadGenerationRef.current += 1;
-    moduleLoadGenerationRef.current += 1;
-  }
-  const [reads, setReads] = useState(() => ({ scope, resources: emptyRead(), modules: emptyRead() }));
-  const scopedReads = reads.scope === scope ? reads : { scope, resources: emptyRead(), modules: emptyRead() };
-  if (scopedReads !== reads) setReads(scopedReads);
-  useEffect(() => () => {
-    resourceLoadGenerationRef.current += 1;
-    moduleLoadGenerationRef.current += 1;
-  }, []);
   const sourceIntakeInFlightRef = useRef(false);
 
   const resetResourceEditor = useCallback((clearError: boolean) => {
@@ -247,63 +230,58 @@ export function useCommunityResourceController<
     }
   }, []);
 
-  const refreshCommunityResources = useCallback(async (
-    communityId: string, session: SessionT, collections: ResourceCollection[] = ["modules", "resources"],
-  ): Promise<void> => {
+  const loadCommunityResourceModules = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    const account = resolveAuthSubject(session as AuthSessionLike);
-    if (!account || communityId !== current.activeCommunityId || account !== resolveAuthSubject(current.session as AuthSessionLike)) return;
-    const requestScope = scopeRef.current;
-    const requests = [...new Set(collections)].map((collection) => {
-      const ref = collection === "resources" ? resourceLoadGenerationRef : moduleLoadGenerationRef;
-      const generation = ++ref.current;
-      const isCurrent = () => scopeRef.current === requestScope && ref.current === generation;
-      const update = (next: Partial<ResourceReadState>) => {
-        if (!isCurrent()) return;
-        setReads((previous) => {
-          if (!isCurrent()) return previous;
-          const owned = previous.scope === requestScope ? previous : { scope: requestScope, resources: emptyRead(), modules: emptyRead() };
-          return { ...owned, [collection]: { ...owned[collection], ...next } };
-        });
-      };
-      update({ status: "pending", error: null });
-      return { collection, isCurrent, update };
-    });
-    let usableSession: SessionT | null;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
+    const generation = (moduleLoadGenerationRef.current += 1);
+    current.setIsLoadingResourceModules(true);
     try {
-      usableSession = await resolveUsableSession(session, current.ensureSession);
-      if (resolveAuthSubject(usableSession as AuthSessionLike) !== account) {
-        throw new Error("Your session could not be verified. Try again, or sign in again.");
-      }
-    } catch (error) {
-      for (const request of requests) request.update({ status: "error", error: (error instanceof Error && error.message.trim()) || "Could not verify your session. Try again." });
-      return;
-    }
-    await Promise.all(requests.map(async ({ collection, isCurrent, update }) => {
-      if (!isCurrent()) return;
       try {
-        const params = { session: usableSession, communityId, limit: RESOURCE_DISPLAY_LIMIT + 1 };
-        if (collection === "modules") {
-          const rows = await listCloudCommunityResourceModuleRows<SessionT | null, ResourceModuleT>(params);
-          if (!isCurrent()) return;
-          if (rows.length > RESOURCE_DISPLAY_LIMIT) throw new Error("This community exceeds the 200-course display limit. Contact the community team.");
-          current.setCommunityResourceModules(rows);
-        } else {
-          const rows = await listCloudCommunityResourceRows<SessionT | null, ResourceT>(params);
-          if (!isCurrent()) return;
-          if (rows.length > RESOURCE_DISPLAY_LIMIT) throw new Error("This community exceeds the 200-resource display limit. Contact the community team.");
-          current.setCommunityResources(rows);
-        }
-        update({ status: "ready", error: null, hasData: true });
-      } catch (error) {
-        update({ status: "error", error: (error instanceof Error && error.message.trim()) || "Could not refresh community resources. Try again." });
+        const rows = await listCloudCommunityResourceModuleRows<SessionT, ResourceModuleT>({
+          session: usableSession,
+          communityId,
+          limit: 200,
+        });
+        if (moduleLoadGenerationRef.current !== generation) return;
+        if (argsRef.current.activeCommunityId !== communityId) return;
+        current.setCommunityResourceModules(rows);
+      } catch {
+        return;
       }
-    }));
+    } finally {
+      if (moduleLoadGenerationRef.current === generation) {
+        current.setIsLoadingResourceModules(false);
+      }
+    }
   }, []);
-  const loadCommunityResourceModules = useCallback((communityId: string, session: SessionT) =>
-    refreshCommunityResources(communityId, session, ["modules"]), [refreshCommunityResources]);
-  const loadCommunityResources = useCallback((communityId: string, session: SessionT) =>
-    refreshCommunityResources(communityId, session), [refreshCommunityResources]);
+
+  const loadCommunityResources = useCallback(async (communityId: string, session: SessionT) => {
+    const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
+    const generation = (resourceLoadGenerationRef.current += 1);
+    current.setIsLoadingResources(true);
+    try {
+      try {
+        const rows = await listCloudCommunityResourceRows<SessionT, ResourceT>({
+          session: usableSession,
+          communityId,
+          limit: 200,
+        });
+        if (resourceLoadGenerationRef.current !== generation) return;
+        if (argsRef.current.activeCommunityId !== communityId) return;
+        current.setCommunityResources(rows);
+        await loadCommunityResourceModules(communityId, usableSession);
+      } catch {
+        return;
+      }
+    } finally {
+      if (resourceLoadGenerationRef.current === generation) {
+        current.setIsLoadingResources(false);
+      }
+    }
+  }, [loadCommunityResourceModules]);
 
   const handleSaveCommunityResource = useCallback(async () => {
     const current = argsRef.current;
@@ -464,9 +442,10 @@ export function useCommunityResourceController<
       current.setShowResourceModuleModal(false);
       resetModuleEditor(true);
     }
+    await loadCommunityResourceModules(current.activeCommunityId, session);
     await loadCommunityResources(current.activeCommunityId, session);
     return true;
-  }, [loadCommunityResources, resetModuleEditor]);
+  }, [loadCommunityResourceModules, loadCommunityResources, resetModuleEditor]);
 
   const handleSetCommunityResourceModuleStatus = useCallback(
     async (module: ResourceModuleT, status: "draft" | "live") => {
@@ -489,6 +468,7 @@ export function useCommunityResourceController<
           isPatch: true,
           payload: { module_status: status },
         });
+        await loadCommunityResourceModules(current.activeCommunityId, session);
         await loadCommunityResources(current.activeCommunityId, session);
         return true;
       } catch (error) {
@@ -502,7 +482,7 @@ export function useCommunityResourceController<
         return false;
       }
     },
-    [loadCommunityResources],
+    [loadCommunityResourceModules, loadCommunityResources],
   );
 
   const handleReorderCommunityResourceModules = useCallback(async (moduleIds: string[]) => {
@@ -579,7 +559,7 @@ export function useCommunityResourceController<
         moduleId,
         resourceIds,
       });
-      await refreshCommunityResources(current.activeCommunityId, session, ["resources"]);
+      await loadCommunityResources(current.activeCommunityId, session);
       return true;
     } catch (error) {
       current.setCommunityResources(previousResources);
@@ -591,7 +571,7 @@ export function useCommunityResourceController<
       current.setResourceError(message);
       return false;
     }
-  }, [refreshCommunityResources]);
+  }, [loadCommunityResources]);
 
   const handleMoveCommunityResourceToModule = useCallback(
     async (resourceId: string, targetModuleId: string | null, beforeResourceId?: string | null) => {
@@ -608,7 +588,7 @@ export function useCommunityResourceController<
           targetModuleId,
           beforeResourceId: beforeResourceId ?? null,
         });
-        await refreshCommunityResources(current.activeCommunityId, session, ["resources"]);
+        await loadCommunityResources(current.activeCommunityId, session);
         return true;
       } catch (error) {
         const message = typeof error === "string"
@@ -620,7 +600,7 @@ export function useCommunityResourceController<
         return false;
       }
     },
-    [refreshCommunityResources],
+    [loadCommunityResources],
   );
 
   const handleDeleteResource = useCallback(async (resourceId: string) => {
@@ -844,9 +824,6 @@ export function useCommunityResourceController<
   }, [loadCommunityResources]);
 
   return {
-    resourceRead: scopedReads.resources,
-    moduleRead: scopedReads.modules,
-    refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
     handleSaveCommunityResourceModule,

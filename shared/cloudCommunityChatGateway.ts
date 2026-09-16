@@ -6,13 +6,12 @@ import {
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
 import type { CommunityActivityEventType } from "./communityTypes";
+import { resolveConvexRuntimeToken, type AuthSessionLike } from "./authSession";
+import { readConvexRuntimeUrl } from "./convexRuntime";
+import { COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, COMMUNITY_ATTACHMENT_UPLOAD_PATH } from "./communityAttachmentPolicy";
 
 type CloudCommunityChatGatewayParams<SessionT> = {
   session: SessionT;
-};
-
-type CommunityChatUploadableFile = {
-  type?: string;
 };
 
 export type CloudCommunityChatLiveClient = {
@@ -175,56 +174,55 @@ export async function createCloudThreadUserMessageRows<SessionT, TRow = unknown>
   return coerceObjectRows<TRow>(payload);
 }
 
-async function requestCloudCommunityChatAttachmentUploadUrl<SessionT>(
-  params: CloudCommunityChatGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<string> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityChat:generateCommunityChatAttachmentUploadUrl" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  const uploadUrl =
-    payload && typeof payload === "object" && !Array.isArray(payload)
-      ? String((payload as Record<string, unknown>).uploadUrl ?? "").trim()
-      : "";
-  if (!uploadUrl) {
-    throw new Error("Failed to start community attachment upload.");
-  }
-  return uploadUrl;
-}
-
 export async function uploadCloudCommunityChatAttachmentFile<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
-    file: File | Blob | CommunityChatUploadableFile;
+    channelId?: string | null;
+    rootId?: string | null;
+    messageKey: string;
+    file: File;
   },
-): Promise<string> {
-  const uploadUrl = await requestCloudCommunityChatAttachmentUploadUrl({
-    session: params.session,
-    communityId: params.communityId,
-  });
-  const contentType =
-    params.file && typeof params.file === "object" && "type" in params.file
-      ? String((params.file as CommunityChatUploadableFile).type ?? "").trim() || "application/octet-stream"
-      : "application/octet-stream";
-  const response = await fetch(uploadUrl, {
+): Promise<{ attachmentId: string; name: string; mime: string; size: number; type: "image" | "video" | "file" }> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("Failed to start community attachment upload.");
+  const response = await fetch(`${baseUrl}${COMMUNITY_ATTACHMENT_UPLOAD_PATH}`, {
     method: "POST",
     headers: {
-      "Content-Type": contentType,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": params.file.type || "application/octet-stream",
+      "X-Polynet-Community-Id": params.communityId,
+      ...(params.channelId ? { "X-Polynet-Channel-Id": params.channelId } : {}),
+      ...(params.rootId ? { "X-Polynet-Root-Id": params.rootId } : {}),
+      "X-Polynet-Message-Key": params.messageKey,
+      "X-Polynet-File-Name": encodeURIComponent(params.file.name),
     },
-    body: params.file as BodyInit,
+    body: params.file,
   });
   if (!response.ok) {
     throw new Error("Failed to upload attachment.");
   }
-  const payload = (await response.json()) as { storageId?: string | null };
-  const storageId = String(payload?.storageId ?? "").trim();
-  if (!storageId) {
+  const payload = await response.json();
+  if (!payload?.attachment?.attachmentId) {
     throw new Error("Failed to upload attachment.");
   }
-  return storageId;
+  return payload.attachment;
+}
+
+export async function downloadCloudCommunityChatAttachment<SessionT>(params: {
+  session: SessionT; attachmentId: string; signal?: AbortSignal;
+}): Promise<Blob> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("Sign in to open this attachment.");
+  const response = await fetch(`${baseUrl}${COMMUNITY_ATTACHMENT_DOWNLOAD_PATH}`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Polynet-Attachment-Id": params.attachmentId },
+    signal: params.signal,
+  });
+  if (!response.ok) throw new Error("This attachment is unavailable or you no longer have access.");
+  return response.blob();
 }
 
 export async function listCloudThreadMessages<SessionT, TRow = unknown>(
