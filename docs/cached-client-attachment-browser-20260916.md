@@ -72,3 +72,5 @@ Evidence: production-client-live-attachment-20260916.json. Root IDs: j97z3s1myzm
 Restoration commit 00a405ab968f9cbccc92662ff7fdeb27dbf19c9b was pushed normally to staging. Its entire tree equals the initial staging a7a26dfe8 (aad8cac3ff457529f7c7c7a8cb8fdfff7ccca416). No production ref, deployment, or auth configuration was changed.
 
 Scope: live builder small-file success and upload-rejection/remove/reattach recovery passed. Old pre-receipt upload rejection, post-upload send failure, response-loss replay/idempotency, narrow viewport, member revocation, large media, and session renewal were not exercised live here; prior local tests are separate evidence. Final candidate reconciliation and release review remain required.
+
+Restoration verified: staging version returned 00a405ab968f9cbccc92662ff7fdeb27dbf19c9b. Chrome reload rendered Agent, Knowledge, Workflows, restored online/offline roster, and both persisted test attachments. origin/main and production version remained 496e06f42. Unused preview and unsaved WorkOS tabs were closed.
