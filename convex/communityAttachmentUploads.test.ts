@@ -449,3 +449,100 @@ test("an unauthorized HTTP upload never reaches storage and removes its reservat
   expect(await t.run(ctx => ctx.db.query("communityInteractionAttachments").collect())).toEqual([]);
   expect(await t.run(ctx => ctx.storage.get(storageId))).toBeNull();
 });
+
+async function legacySetup() {
+  vi.stubEnv("CONVEX_SITE_URL", "https://example.convex.site");
+  const base = await setup(), { t, f } = base;
+  const ticket = async () => {
+    const result = await t.withIdentity({ subject: "member" }).mutation(api.communityChat.generateCommunityChatAttachmentUploadUrl,
+      { authSubject: "member", communityId: f.communityId });
+    return new URL(result.uploadUrl);
+  };
+  const routes: any[] = [];
+  registerCommunityAttachmentRoutes({ http: { route: config => routes.push(config) }, httpAction: ((fn: any) => fn) as any,
+    jsonResponse: (_req, status, payload) => Response.json(payload, { status }), optionsResponse: () => new Response(),
+    requireAuthenticatedActor: async () => { throw new Error("old upload has no auth header"); },
+  });
+  const provider = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    const blob = await new Response(init?.body, { headers: init?.headers }).blob();
+    const storageId = await t.run(async ctx => {
+      const id = await ctx.storage.store(blob);
+      await ctx.db.patch(id as any, { contentType: blob.type } as any); return id;
+    });
+    return Response.json({ storageId });
+  });
+  const post = (url: URL) => routes.find(r => r.method === "POST" && r.path.endsWith("legacy_upload")).handler(
+    { runMutation: t.mutation }, new Request(url, { method: "POST", headers: { "Content-Type": "image/png" }, body: PNG }));
+  return { ...base, ticket, post, provider };
+}
+afterEach(() => vi.unstubAllEnvs());
+
+test("cached client ticket -> byte upload -> old composer payload is canonical and retry-safe", async () => {
+  const { t, f, ticket, post, provider } = await legacySetup();
+  const url = await ticket();
+  const response = await post(url); expect(response.status).toBe(200);
+  const { storageId } = await response.json();
+  expect((await post(url)).status).toBe(400); expect(provider).toHaveBeenCalledTimes(1);
+  const args = { communityId: f.communityId, channelId: f.channelId, authSubject: "member", idempotencyKey: "old-send", text: "",
+    attachments: [{ storageId, name: "old.png", size: 999999, mime: "text/html", type: "file" }] };
+  const client = t.withIdentity({ subject: "member" });
+  await client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, args);
+  await client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, args);
+  const rows = await t.run(ctx => ctx.db.query("communityInteractionAttachments").collect());
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ status: "uploaded", name: "old.png", mimeType: "image/png", sizeBytes: PNG.length,
+    channelId: f.channelId, uploadMessageKey: "old-send" });
+  expect(rows[0].rootId).toBeTruthy(); expect(rows[0].legacyUploadToken).toBeUndefined();
+  await expect(client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage,
+    { ...args, channelId: f.otherChannelId, idempotencyKey: "another-send" })).rejects.toThrow();
+});
+
+test("legacy ticket rejects forged tokens, expiration and revocation before storage", async () => {
+  const { t, f, ticket, post, provider } = await legacySetup();
+  const url = await ticket(), forged = new URL(url); forged.searchParams.set("token", "wrong");
+  expect((await post(forged)).status).toBe(400);
+  await t.run(ctx => ctx.db.patch(url.searchParams.get("attachmentId") as any, { uploadExpiresAt: Date.now() - 1 }));
+  expect((await post(url)).status).toBe(400);
+  const second = await ticket(); await t.run(ctx => ctx.db.patch(f.membershipId, { active: false }));
+  expect((await post(second)).status).toBe(400); expect(provider).not.toHaveBeenCalled();
+});
+
+test("legacy send rejects stolen and unrecorded storage, cross-community and private-channel claims", async () => {
+  const { t, f, ticket, post, store } = await legacySetup();
+  const { storageId } = await (await post(await ticket())).json();
+  const args = { communityId: f.communityId, channelId: f.channelId, idempotencyKey: "old-send", text: "",
+    attachments: [{ storageId, name: "old.png", size: PNG.length, type: "image" }] };
+  const send = (subject: string, overrides = {}) => t.withIdentity({ subject }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage, { ...args, ...overrides });
+  await expect(send("other")).rejects.toThrow("reattach");
+  await expect(send("member", { attachments: [{ ...args.attachments[0], storageId: await store() }] })).rejects.toThrow("reattach");
+  await expect(send("member", { communityId: f.otherCommunityId })).rejects.toThrow();
+  await t.run(ctx => ctx.db.patch(f.channelId, { accessMode: "restricted" }));
+  await expect(send("member")).rejects.toThrow();
+  const row = (await t.run(ctx => ctx.db.query("communityInteractionAttachments").collect()))[0];
+  expect(row.channelId).toBeUndefined(); expect(row.status).toBe("pending");
+  // Authorized reply binds to the root's channel and remains owner-scoped.
+  await send("member", { channelId: f.otherChannelId, rootId: f.otherRootId });
+  expect((await t.run(ctx => ctx.db.get(row._id)))?.replyId).toBeTruthy();
+});
+
+test("legacy upload revoked while storage completes is cleaned up", async () => {
+  const { t, f, ticket, post, store, provider } = await legacySetup();
+  let storageId: any;
+  provider.mockImplementation(async (_url, init) => {
+    await new Response(init?.body).arrayBuffer(); storageId = await store();
+    await t.run(ctx => ctx.db.patch(f.membershipId, { active: false }));
+    return Response.json({ storageId });
+  });
+  expect((await post(await ticket())).status).toBe(400);
+  expect(await t.run(ctx => ctx.storage.get(storageId))).toBeNull();
+  expect(await t.run(ctx => ctx.db.query("communityInteractionAttachments").collect())).toEqual([]);
+});
+
+test("legacy ticket issuance is authenticated, community-scoped and bounded", async () => {
+  const { t, f, ticket } = await legacySetup();
+  await expect(t.mutation(api.communityChat.generateCommunityChatAttachmentUploadUrl, { communityId: f.communityId })).rejects.toThrow();
+  await expect(t.withIdentity({ subject: "member" }).mutation(api.communityChat.generateCommunityChatAttachmentUploadUrl,
+    { communityId: f.otherCommunityId })).rejects.toThrow();
+  for (let i = 0; i < 16; i++) await ticket();
+  await expect(ticket()).rejects.toThrow("pending_limit");
+});

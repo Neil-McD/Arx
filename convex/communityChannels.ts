@@ -209,6 +209,23 @@ export const moveCommunityChannel = mutation({
   },
 });
 
+// Read-only preparation. The operator must aggregate ALL pages to detect
+// duplicate normalized names across page boundaries before running the backfill.
+export const inspectChannelNamesInternal = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const result = await ctx.db.query("communityChannels").paginate({
+      ...args.paginationOpts, numItems: Math.max(1, Math.min(100, args.paginationOpts.numItems)),
+    });
+    return { ...result, page: result.page.map(channel => {
+      let normalizedName: string | null = null;
+      try { normalizedName = normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US"); } catch { /* report invalid; never rename */ }
+      return { channelId: String(channel._id), communityId: String(channel.communityId), status: channel.status,
+        normalizedName, needsBackfill: normalizedName !== channel.normalizedName };
+    }) };
+  },
+});
+
 // Bounded, resumable deployment migration. No public identity can invoke it.
 export const backfillChannelNamesInternal = internalMutation({
   args: { paginationOpts: paginationOptsValidator },

@@ -1,3 +1,4 @@
+import { resolveLegacyComposerAttachments } from "./communityLegacyAttachmentUploads";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
@@ -231,6 +232,18 @@ const rootKindValidator = v.union(
   v.literal("resource_share"),
   v.literal("agent_signal"),
 );
+
+const legacyInteractionAttachmentInputValidator = v.object({
+  id: v.optional(v.string()),
+  name: v.string(),
+  type: v.string(),
+  mime: v.optional(v.union(v.string(), v.null())),
+  size: v.number(),
+  storageId: v.optional(v.id("_storage")),
+  data_url: v.optional(v.string()),
+  text: v.optional(v.string()),
+  truncated: v.optional(v.boolean()),
+});
 
 const interactionAttachmentInputValidator = v.object({
   attachmentId: v.id("communityInteractionAttachments"),
@@ -1662,7 +1675,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         }),
       ),
     ),
-    attachments: v.optional(v.array(interactionAttachmentInputValidator)),
+    attachments: v.optional(v.array(v.union(interactionAttachmentInputValidator, legacyInteractionAttachmentInputValidator))),
     asPersonalAgent: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -1678,9 +1691,13 @@ export const createCommunityInteractionComposerMessage = mutation({
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
+    const attachmentInputs = await resolveLegacyComposerAttachments(ctx, {
+      ownerId: userId, communityId: args.communityId, channelId: args.channelId, rootId: args.rootId,
+      messageKey: args.idempotencyKey, attachments: args.attachments ?? [],
+    });
     const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
       actorUserId: userId, messageKey: args.idempotencyKey, rootId: args.rootId,
-      attachments: args.attachments ?? [] });
+      attachments: attachmentInputs });
     if (!text && attachments.length === 0) throw new Error("interaction_content_required");
     if (args.rootId && textContainsEverybodyMentionToken(text)) {
       throw new Error("interaction_mention_everybody_reply_not_allowed");

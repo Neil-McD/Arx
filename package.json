@@ -263,7 +263,7 @@
     "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts",
     "check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_harness_isolation_contract_proof.ts",
     "check:no-third-party-mcp-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/no_third_party_mcp_surface_contract_proof.ts",
-    "check:cached-production-client-compatibility-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/cached_production_client_compatibility_contract_proof.ts",
+    "check:cached-production-client-compatibility-proof": "tsx scripts/cached_production_client_compatibility_contract_proof.ts",
     "preflight:cached-production-client-compatibility:stage": "node scripts/cached_production_client_compatibility_preflight.mjs",
     "check:community-mention-rendering-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_rendering_contract_proof.ts && vitest run scripts/community_mention_attention.test.ts",
     "check:community-mention-search-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_search_contract_proof.ts",

@@ -1815,6 +1815,8 @@ export default defineSchema({
     .index("by_actorAgent", ["actorAgentKey"]),
 
   communityInteractionAttachments: defineTable({
+    legacyUpload: v.optional(v.boolean()),
+    legacyUploadToken: v.optional(v.string()),
     communityId: v.id("communities"),
     channelId: v.optional(v.id("communityChannels")),
     uploadRootId: v.optional(v.id("communityInteractionRoots")),
@@ -2980,6 +2982,7 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_startsAt", ["communityId", "startsAt"])
     .index("by_community_status_startsAt", ["communityId", "status", "startsAt"])
+    .index("by_community_status_endsAt", ["communityId", "status", "endsAt"])
     .index("by_community_status_recurrenceFrequency_startsAt", ["communityId", "status", "recurrenceFrequency", "startsAt"])
     .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"])
     .index("by_status_startsAt", ["status", "startsAt"])

@@ -158,7 +158,7 @@ assert.doesNotMatch(
 );
 
 const eventsStylesStart = styles.indexOf(".community-events-panel {");
-const eventsStylesEnd = styles.indexOf("/* Community onboarding workflow settings. */", eventsStylesStart);
+const eventsStylesEnd = styles.indexOf("/*\n * Light component adapters.", eventsStylesStart);
 assert.ok(eventsStylesStart >= 0 && eventsStylesEnd > eventsStylesStart, "events styles must have a bounded canonical section");
 const eventsStyles = styles.slice(eventsStylesStart, eventsStylesEnd);
 

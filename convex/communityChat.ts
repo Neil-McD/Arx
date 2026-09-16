@@ -1,3 +1,4 @@
+import { issueLegacyAttachmentTicket } from "./communityLegacyAttachmentUploads";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -717,5 +718,13 @@ export const listMessageReactions = query({
     }
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(out.map((row) => mapCommunityMessageReactionRow(ctx, row, userIdCache)));
+  },
+});
+
+export const generateCommunityChatAttachmentUploadUrl = mutation({
+  args: { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    return issueLegacyAttachmentTicket(ctx, userId, args.communityId);
   },
 });

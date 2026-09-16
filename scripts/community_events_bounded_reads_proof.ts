@@ -31,7 +31,7 @@ assert.match(
 
 assert.match(
   eventsSource,
-  /async function listCommunityEventExpansionCandidates[\s\S]*\.withIndex\("by_community_status_startsAt"[\s\S]*\.take\(MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS\)[\s\S]*\.withIndex\("by_community_status_recurrenceFrequency_startsAt"[\s\S]*\.take\(MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY\)/,
+  /async function listCommunityEventExpansionCandidates[\s\S]*\.withIndex\("by_community_status_startsAt"[\s\S]*\.take\(MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS \+ \(params\.overlap \? 1 : 0\)\)[\s\S]*\.withIndex\("by_community_status_recurrenceFrequency_startsAt"[\s\S]*\.take\(MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY \+ \(params\.overlap \? 1 : 0\)\)/,
   "listCommunityEvents should fetch bounded direct and recurring expansion candidates",
 );
 
@@ -54,7 +54,7 @@ assert.match(
 
 assert.match(
   listCommunityEventsBody,
-  /return expandCommunityEventRows\(\{ rows, startMs, endMs, includeCancelled, limit \}\);/,
+  /return expandCommunityEventRows\(\{ rows, startMs, endMs, includeCancelled, limit, overlap \}\);/,
   "listCommunityEvents should keep the canonical expansion mapper",
 );
 
