@@ -14,6 +14,7 @@ import { createCloudCommunityChatLiveClient, type CloudCommunityChatLiveClient }
 import { subscribeCommunityPages } from "../../../../shared/subscribeCommunityPages";
 import { communityPresenceLeaseIsActive, COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
@@ -269,8 +270,11 @@ function RosterSurface(props: RosterProps & {
               </div> : heading}
               {rows.map(member => {
                 const name = member.profile.display_name || "Member";
+                const lastActive = group === "online" ? "Last active: now"
+                  : member.last_seen_at === null ? "Last active: unavailable"
+                  : `Last active: ${formatRelativeTimeFromIso(new Date(member.last_seen_at).toISOString())}`;
                 return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
-                  <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} onClick={() => props.onOpenProfile?.(member.user_id)}>
+                  <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} title={lastActive} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
                     <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}>
                       <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
                         name={name} imageUrl={member.profile.avatar_url}
