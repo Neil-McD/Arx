@@ -12121,7 +12121,6 @@ button.chat-reply-quote:hover {
   position: relative;
   z-index: 2;
   width: 100%;
-  color: transparent;
   caret-color: var(--text-primary);
 }
 
@@ -12130,7 +12129,8 @@ button.chat-reply-quote:hover {
   -webkit-text-fill-color: var(--text-muted);
 }
 
-.mention-composer-field .chat-input:disabled {
+/* Only hide native text when a separate mention layer renders it. */
+.mention-composer-field:has(.mention-composer-highlight) .chat-input {
   color: transparent;
 }
 

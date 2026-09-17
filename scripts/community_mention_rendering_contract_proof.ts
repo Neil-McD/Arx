@@ -437,9 +437,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     baseCss,
-    /\.mention-composer-field \.chat-input \{[\s\S]*?color: transparent;[\s\S]*?caret-color: var\(--text-primary\);[\s\S]*?\}/,
-    "textarea text must be visually delegated to the mirror while preserving a native caret",
+    /\.mention-composer-field:has\(\.mention-composer-highlight\) \.chat-input \{\s*color: transparent;\s*\}/,
+    "textarea text must be visually delegated only when the mention mirror exists",
   );
+  const plainFieldRule = baseCss.match(/\.mention-composer-field \.chat-input \{([^}]+)\}/)?.[1] ?? "";
+  assert.ok(plainFieldRule.includes("caret-color: var(--text-primary)"));
+  assert.doesNotMatch(plainFieldRule, /color:\s*transparent/,
+    "plain agent fields without a mention mirror must retain visible native text");
   assert.match(
     baseCss,
     /\.mention-composer-highlight \{[\s\S]*?pointer-events: none;[\s\S]*?white-space: pre-wrap;[\s\S]*?\}/,

@@ -788,3 +788,9 @@ Rules:
 - private, admin-only, hidden, deleted, missing, or parent-hidden evidence is excluded or redacted and fails closed at read time even if a derived index is stale
 - interaction writes do not wait for compiler work; idempotent derived synchronization is scheduled after canonical mutation success
 - legacy chat tables and links remain migration substrate for unrelated compatibility consumers, but they are no longer memory/evidence search authority
+
+### Composer text visibility
+
+Native textarea text is transparent only when its field contains a mention
+highlight layer. Plain agent composers retain the theme text color, including
+while disabled, so drafts remain visible without an overlay.
