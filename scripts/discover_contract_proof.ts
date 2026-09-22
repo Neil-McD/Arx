@@ -97,7 +97,22 @@ function main() {
   assert.match(
     discoverActivationController,
     /openPublicCommunityFunnel\(slug, \{\s*pushSnapshot: true,\s*\}\)/,
-    "Discover cards must enter the canonical community funnel",
+    "Discover cards without an external website must enter the canonical community gate",
+  );
+  assert.match(
+    discoverActivationController,
+    /resolveDiscoverCommunityDestination\(community, knownCommunityId\)[\s\S]*destination\.kind === "joined"[\s\S]*destination\.kind === "external"[\s\S]*openPublicCommunityFunnel\(slug/,
+    "joined members must enter the community before visitors can leave for an external website",
+  );
+  assert.match(
+    discoverActivationController,
+    /recordCloudExternalFunnelClick\(\{ communitySlug: slug \}\)/,
+    "external website clicks must be recorded separately from native funnel visits",
+  );
+  assert.match(
+    listDiscover,
+    /external_funnel_url: readCommunityExternalFunnelUrl\(community\.externalFunnelUrl\)/,
+    "Discover must project only a validated external website URL",
   );
   assert.doesNotMatch(
     discoverActivationController,

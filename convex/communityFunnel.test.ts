@@ -139,6 +139,50 @@ test("default is immutable and public until an exact published custom slot is ac
   });
 });
 
+test("manager website link is revisioned, public, and never a join or checkout authority", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const input = { communityId: fixture.communityId, expectedSettingsRevision: 0 };
+
+  await expect(asMember.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
+    ...input, url: "https://example.com/community",
+  })).rejects.toThrow();
+  await expect(asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
+    ...input, url: "javascript:alert(1)",
+  })).rejects.toThrow("community_external_funnel_url_invalid");
+
+  const saved = await asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
+    ...input, url: " https://example.com/community ",
+  });
+  expect(saved).toMatchObject({
+    external_funnel_url: "https://example.com/community",
+    settings_revision: 1,
+    active_slot: "default",
+  });
+  const publicFunnel = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+    communitySlug: "funnel-authority",
+  });
+  expect(publicFunnel.community).toMatchObject({
+    external_funnel_url: "https://example.com/community",
+    entry_policy: "open",
+    funnel: { active_slot: "default" },
+  });
+  const discover = await t.query(api.communityPublic.listPublicDiscoverCommunities, {});
+  expect(discover.communities[0]).toMatchObject({
+    slug: "funnel-authority",
+    external_funnel_url: "https://example.com/community",
+  });
+  await expect(asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
+    ...input, url: "https://second.example.com",
+  })).rejects.toThrow("community_settings_conflict");
+  const cleared = await asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
+    communityId: fixture.communityId, expectedSettingsRevision: 1, url: null,
+  });
+  expect(cleared).toMatchObject({ external_funnel_url: null, settings_revision: 2 });
+});
+
 test("custom drafts, revisions, VSLs, and agent-facing selection are isolated by slot", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);

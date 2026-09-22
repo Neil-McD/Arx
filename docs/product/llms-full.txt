@@ -505,18 +505,25 @@ Builders need one reliable link they can share from YouTube, social posts, email
 
 ## User Mental Model
 
-For builders, the funnel is the shareable front door.
+For builders, their own website may be the marketing front door. The Polynet
+`/c/:slug` link remains the shareable route for joining or paying.
 
-For members, the funnel is where they understand what the community is and what they need to do to join.
+For members, a Discover card may open the builder's website; the Polynet gate
+explains what they need to do to join.
 
 ## System Mental Model
 
-The funnel is a public-facing surface. It can show community profile information, but it is not the same thing as access to the real community surface.
+The builder may save one public HTTPS website URL in Community Settings. Discover sends visitors to
+that website when configured, while existing members still enter the community.
+The website must link back to `/c/:slug` for sign-in, approval, or checkout.
+The website itself does not create membership or payment authority. The
+Polynet route remains directly accessible and uses the existing deterministic
+fallback when no custom funnel is active.
 
 Every community has one deterministic fallback assembled from canonical
 community identity, public profile, pricing, and member-proof data. A builder
 may also maintain one custom funnel through the bounded AI-assisted composer.
-Custom work remains private until explicitly published, and publishing does not
+Existing custom work remains private until explicitly published, and publishing does not
 change which funnel is live. One explicit active-funnel selector determines
 whether the fallback or published custom funnel is served publicly.
 
@@ -530,7 +537,8 @@ language, and both actions.
 
 ## Rules
 
-1. The funnel is the canonical public entry surface for join and gate flows.
+1. The Polynet funnel is the canonical public entry surface for join and gate
+   flows. An external website is only a marketing destination.
 2. Funnel visibility does not imply community access.
 3. Published communities can still be gated.
 4. Unlisted communities can still be shared by direct funnel link.
@@ -546,6 +554,8 @@ language, and both actions.
     access, or CTA authority.
 12. Long-form copy is bounded Markdown; raw HTML, links, images, code, and
     executable content are not rendered.
+13. An external website link is manager-controlled and never changes join,
+    checkout, membership, pricing, or the currently published Polynet funnel.
 
 ## Non-Goals
 

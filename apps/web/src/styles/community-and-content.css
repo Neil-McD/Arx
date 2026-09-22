@@ -938,6 +938,15 @@
   overflow: hidden;
 }
 
+.discover-card-website {
+  margin-top: auto;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .discover-card-stats {
   display: flex;
   align-items: center;
@@ -1596,6 +1605,62 @@
   overflow: hidden;
   gap: 0;
   container: funnel-workspace / inline-size;
+}
+
+.external-funnel-settings {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+}
+
+.external-funnel-settings p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.external-funnel-settings p a {
+  color: var(--text-primary);
+}
+
+.external-funnel-join-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.external-funnel-join-link a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.external-funnel-settings-form {
+  display: grid;
+  gap: 6px;
+}
+
+.external-funnel-settings-form label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.external-funnel-settings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.external-funnel-settings-controls input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.community-funnel-panel .funnel-builder {
+  flex: 1 1 auto;
+  height: auto;
 }
 
 .funnel-builder {

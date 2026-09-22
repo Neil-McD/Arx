@@ -7,6 +7,7 @@ import type {
   CommunityFunnelSlot,
   CommunityFunnelVariantConfig,
 } from "./communityTypes";
+import { readCommunityExternalFunnelUrl } from "./communityExternalFunnel";
 
 export const COMMUNITY_CUSTOM_FUNNEL_SLOTS = [
   "custom_1",
@@ -37,6 +38,8 @@ export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
 
 export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConfig = {
   ...DEFAULT_COMMUNITY_FUNNEL_CONFIG,
+  external_funnel_url: null,
+  settings_revision: 0,
   custom_funnels: {
     custom_1: null,
     custom_2: null,
@@ -242,6 +245,8 @@ export function normalizeCommunityFunnelManagerConfig(
       : {};
   return {
     ...publicConfig,
+    external_funnel_url: readCommunityExternalFunnelUrl(value.external_funnel_url),
+    settings_revision: normalizeRevision(value.settings_revision),
     custom_funnels: {
       custom_1:
         normalizeVariantCandidate(rawCustomFunnels.custom_1, "custom_1") ?? legacyVariant,

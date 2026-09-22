@@ -2188,6 +2188,8 @@ export default function App() {
         markCommunityAgentConfigDirty,
       },
       isLoadingCommunityFunnel,
+      isCommunityFunnelReady: Boolean(activeCommunity?.id) &&
+        communityFunnelLoadedCommunityIdRef.current === activeCommunity?.id,
       communityFunnelError,
       funnelEditorProps: {
         session,

@@ -101,10 +101,10 @@ export function useWebCommunityAgentAndFunnelController(params: {
   });
 
   useEffect(() => {
-    if (
-      params.activePage !== "community"
-      || params.communityTab !== "funnel"
-    ) {
+    const showingEntrySettings = params.communityTab === "settings"
+      && params.communitySettingsPane === "community";
+    if (params.activePage !== "community" ||
+      (params.communityTab !== "funnel" && !showingEntrySettings)) {
       return;
     }
     if (
@@ -132,6 +132,7 @@ export function useWebCommunityAgentAndFunnelController(params: {
     params.adminUi.communityFunnelLoadedCommunityIdRef,
     params.adminUi.resetCommunityFunnelState,
     params.canManageMembers,
+    params.communitySettingsPane,
     params.communityTab,
     params.session,
   ]);
