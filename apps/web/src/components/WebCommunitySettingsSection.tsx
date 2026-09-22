@@ -894,7 +894,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : externalWebsite.isLoading ? (
                     <div className="settings-section">Loading website settings…</div>
                   ) : (
-                    <WebCommunityExternalFunnelLink {...externalWebsite.controls} />
+                    <WebCommunityExternalFunnelLink
+                      key={externalWebsite.controls.communityId}
+                      {...externalWebsite.controls}
+                    />
                   )
                 ) : null}
                 {state.communitySettingsError ? (

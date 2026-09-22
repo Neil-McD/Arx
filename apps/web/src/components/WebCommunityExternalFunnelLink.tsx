@@ -27,11 +27,6 @@ export function WebCommunityExternalFunnelLink(props: Props) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
-    setInput(props.config.external_funnel_url ?? "");
-    setError(null);
-  }, [props.communityId, props.config.external_funnel_url]);
-
-  useEffect(() => {
     setCopyState("idle");
   }, [props.communitySlug]);
 
@@ -70,7 +65,9 @@ export function WebCommunityExternalFunnelLink(props: Props) {
         url,
       });
       if (!result) throw new Error("community_external_funnel_save_failed");
-      props.hydrate(normalizeCommunityFunnelManagerConfig(result));
+      const saved = normalizeCommunityFunnelManagerConfig(result);
+      props.hydrate(saved);
+      setInput(saved.external_funnel_url ?? "");
     } catch (cause) {
       if (String(cause).includes("community_settings_conflict")) {
         try {
@@ -85,7 +82,7 @@ export function WebCommunityExternalFunnelLink(props: Props) {
         } catch {
           // The next panel load can refresh the snapshot.
         }
-        setError("Community settings changed elsewhere. Review the latest link and try again.");
+        setError("Community settings changed. Your website URL is still here; review the currently saved link and try again.");
       } else {
         setError("The website link could not be saved. Try again.");
       }
@@ -126,6 +123,7 @@ export function WebCommunityExternalFunnelLink(props: Props) {
           {savedUrl ? <button type="button" className="secondary" onClick={() => void save(null)} disabled={isSaving}>Remove</button> : null}
         </div>
       </form>
+      {error && savedUrl ? <p>Currently saved website: <a href={savedUrl} target="_blank" rel="noopener noreferrer">{savedUrl}</a></p> : null}
       {error ? <div id="external-funnel-url-error" role="alert" className="auth-error">{error}</div> : null}
     </section>
   );
