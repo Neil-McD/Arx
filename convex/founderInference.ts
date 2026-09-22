@@ -24,6 +24,8 @@ function selectNewReceiptModel(communityId: unknown, surface: string): string {
     ? process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID?.trim()
     : surface === "member_agent_dock"
       ? process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID?.trim()
+      : surface === "community_agent_mention"
+        ? process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID?.trim()
       : undefined;
   return canaryCommunity && canaryCommunity === String(communityId)
     ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;

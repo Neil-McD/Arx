@@ -2473,6 +2473,42 @@ test("member canary selects Luna 6 only for that surface and keeps receipt model
   }
 });
 
+test("community-agent conversation canary covers mentions and direct replies in one community", async () => {
+  const prior = process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID;
+  delete process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID;
+  try {
+    const t = convexTest(schema, modules);
+    const target = await createActiveFundingFixture(t, "concierge-luna-canary", 5_000_000);
+    const other = await createActiveFundingFixture(t, "concierge-other", 5_000_000);
+    const claim = (fixture: typeof target, key: string, token: string, now: number, surface = "community_agent_mention") =>
+      t.mutation((internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+        { ...claimArgs(fixture, key, token, now), surface });
+    const old = await claim(target, "community_agent_mention:old", "old", 5_001_000);
+    expect(old).toMatchObject({ modelId: "gpt-5.6-luna" });
+    process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID = String(target.communityId);
+    expect(await claim(target, "community_agent_mention:mention", "mention", 5_001_001))
+      .toMatchObject({ modelId: "gpt-6-luna", reservedCostMicros: 1_000_000 });
+    const reply = await claim(target, "community_agent_mention:direct_reply", "reply", 5_001_002);
+    expect(reply).toMatchObject({ modelId: "gpt-6-luna" });
+    expect(await claim(other, "community_agent_mention:other", "other", 5_001_003))
+      .toMatchObject({ modelId: "gpt-5.6-luna" });
+    expect(await claim(target, "community_workflow_action:workflow", "workflow", 5_001_004, "community_workflow_action"))
+      .toMatchObject({ modelId: "gpt-5.6-luna" });
+    delete process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID;
+    expect(await t.query((internal as any).founderInference.resolveCommunityInferenceModelInternal,
+      { communityId: target.communityId, surface: "community_agent_mention", receiptKey: "community_agent_mention:fresh" }))
+      .toBe("gpt-5.6-luna");
+    expect(await t.query((internal as any).founderInference.resolveCommunityInferenceModelInternal,
+      { communityId: target.communityId, surface: "community_agent_mention", receiptKey: "community_agent_mention:direct_reply" }))
+      .toBe("gpt-6-luna");
+    expect(await claim(target, "community_agent_mention:old", "old-reclaim", 5_602_000))
+      .toMatchObject({ modelId: "gpt-5.6-luna", reclaimed: true });
+  } finally {
+    if (prior === undefined) delete process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID;
+    else process.env.POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID = prior;
+  }
+});
+
 test("paid Luna 6 budget stop settles known provider spend and releases unused reservation", async () => {
   const prior = process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID;
   try {
