@@ -767,3 +767,153 @@ test.each(["revision", "reactivation", "blocked", "manager_removed"])("form join
   expect(result.status).toBe(change === "revision" || change === "reactivation" ? "stale" : "action_failed");
   expect(await f.t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(0);
 });
+
+async function sequenceFixture() {
+  vi.useFakeTimers();
+  const f = await fixture("both");
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New", requireHumanApproval: true,
+    automations: [
+      { key: "join", trigger: { type: "member_joined" }, action: { key: "room", type: "create_service_channel" } },
+      { key: "intake", trigger: { type: "member_joined" }, action: { key: "intake", type: "request_form", formKey: "intake" } },
+      { trigger: { type: "previous_action_completed", predecessorActionKey: "intake" }, action: { key: "draft-review", type: "prompt_agent", prompt: "Review the submitted answers." } },
+      { trigger: { type: "previous_action_completed", predecessorActionKey: "draft-review" }, action: { key: "draft-followup", type: "request_form", formKey: "intake" } },
+    ],
+  });
+  await f.t.mutation(joinHandler, { ...f.job, workflowRevision: 2 });
+  const form = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  const reconcile = (workflowRunId = form.workflowRunId!) => f.t.mutation(reconcileCompletion, { workflowRunId });
+  const submit = () => f.t.withIdentity({ subject: "join-member" }).mutation(api.communityFormRequests.saveMyAnswers,
+    { communityId: f.communityId, requestId: form._id, expectedRevision: 0, answers: {}, submit: true });
+  return { ...f, form, reconcile, submit };
+}
+
+test("sequence saves draft references, waits for actual outcomes, and runs form -> agent -> form exactly once", async () => {
+  const f = await sequenceFixture();
+  const workflow = (await f.t.run(ctx => ctx.db.get(f.workflowId)))!;
+  const rules = workflow.milestones[0].automations;
+  expect(rules[3].trigger).toEqual({ type: "previous_action_completed", predecessorActionKey: rules[2].action.key });
+  expect(rules[2].action.key).not.toContain("draft-");
+  await f.reconcile();
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+  expect((await progress(f)).actions.slice(2).map(a => a.status)).toEqual(["waiting", "waiting"]);
+  await f.submit();
+  await f.reconcile(); await f.reconcile();
+  const requests = await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  const request = requests[0];
+  expect(request).toMatchObject({ status: "queued", workflowPreviousRunId: f.form.workflowRunId });
+  expect(request.workflowFormRequestId).toBeUndefined();
+  await f.reconcile(request.workflowRunId!);
+  expect(await f.t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(1);
+  const claim = await f.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  const args = { requestId: request._id, expectedAttempt: claim.attempt! };
+  const context = await f.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
+  expect(context.delivery).toBe("service_channel");
+  expect(await f.t.query(internal.communityAgentChannelAccess.authorizeServeToolsInternal, args)).toEqual({ restricted: true, timed: true });
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  expect((await f.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args,
+    snapshotJson: JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+      prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext }) })).ok).toBe(true);
+  const finish = () => f.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: "Here is your next step." });
+  expect((await finish()).ok).toBe(true); await finish();
+  await f.reconcile(request.workflowRunId!); await f.reconcile(request.workflowRunId!);
+  const forms = await f.t.run(ctx => ctx.db.query("communityFormRequests").collect());
+  expect(forms).toHaveLength(2);
+  const next = forms.find(form => form._id !== f.form._id)!;
+  expect(next.status).toBe("pending");
+  await f.t.withIdentity({ subject: "join-member" }).mutation(api.communityFormRequests.saveMyAnswers,
+    { communityId: f.communityId, requestId: next._id, expectedRevision: 0, answers: {}, submit: true });
+  await f.reconcile(next.workflowRunId!);
+  expect((await progress(f)).all_actions_complete).toBe(true);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test.each(["failed", "membership", "visit", "edited", "backfill"])("sequence rejects %s predecessor events", async change => {
+  const f = await sequenceFixture();
+  await f.submit();
+  await f.t.run(async ctx => {
+    if (change === "failed") await ctx.db.patch(f.form.workflowRunId!, { status: "failed" });
+    if (change === "membership") await ctx.db.patch(f.membershipId, { active: false });
+    if (change === "visit") await ctx.db.patch(f.membershipId, { activationSequence: 2 });
+    if (change === "edited" || change === "backfill") {
+      const workflow = (await ctx.db.get(f.workflowId))!;
+      const milestone = workflow.milestones[0];
+      if (change === "edited") milestone.instructions = "Different instructions";
+      else milestone.automations[2].sequenceEnabledAt = Date.now() + 1;
+      await ctx.db.patch(workflow._id, { milestones: [milestone], revision: workflow.revision + 1 });
+    }
+  });
+  await f.reconcile();
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+});
+
+test.each(["missing", "self", "forward"])("sequence rejects %s dependency at the server boundary", async kind => {
+  const f = await fixture("both");
+  await expect(f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New",
+    automations: [
+      { key: "join", trigger: { type: "member_joined" }, action: { key: "room", type: "create_service_channel" } },
+      { key: "intake", trigger: { type: "previous_action_completed", predecessorActionKey: kind === "missing" ? "gone" : kind === "self" ? "intake" : "draft-next" }, action: { key: "intake", type: "request_form", formKey: "intake" } },
+      { trigger: { type: "member_joined" }, action: { key: "draft-next", type: "request_form", formKey: "intake" } },
+    ],
+  })).rejects.toThrow("workflow_previous_action_invalid");
+});
+
+test.each(["membership", "predecessor", "dependency", "destination"])("queued sequence response revalidates %s before delivery", async change => {
+  const f = await sequenceFixture(); await f.submit(); await f.reconcile();
+  const request = (await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  const claim = await f.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  await f.t.run(async ctx => {
+    if (change === "membership") await ctx.db.patch(f.membershipId, { active: false });
+    if (change === "predecessor") await ctx.db.patch(f.form._id, { status: "pending" });
+    if (change === "destination") await ctx.db.patch(f.membershipId, { serviceChannelRevision: 100 });
+    if (change === "dependency") {
+      const workflow = (await ctx.db.get(f.workflowId))!;
+      const milestone = workflow.milestones[0];
+      milestone.automations[2].trigger = { type: "previous_action_completed", predecessorActionKey: "room" };
+      await ctx.db.patch(workflow._id, { milestones: [milestone] });
+    }
+  });
+  const args = { requestId: request._id, expectedAttempt: claim.attempt! };
+  expect((await f.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args)).ok).toBe(false);
+  expect((await f.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: "Must not be delivered." })).ok).toBe(false);
+  expect(await f.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(0);
+  await f.reconcile(request.workflowRunId!);
+  expect(await f.t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(1);
+});
+
+test.each([0, 100])("saving a sequence %sms after completion does not backfill a delayed event", async elapsed => {
+  vi.useFakeTimers();
+  const f = await fixture("both"); await f.t.mutation(joinHandler, f.job);
+  const form = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  await f.t.withIdentity({ subject: "join-member" }).mutation(api.communityFormRequests.saveMyAnswers,
+    { communityId: f.communityId, requestId: form._id, expectedRevision: 0, answers: {}, submit: true });
+  vi.setSystemTime(Date.now() + elapsed);
+  const workflow = (await f.t.run(ctx => ctx.db.get(f.workflowId)))!;
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New",
+    automations: [...workflow.milestones[0].automations, { trigger: { type: "previous_action_completed", predecessorActionKey: "intake" },
+      sequenceEnabledAt: 0, action: { type: "request_form", formKey: "intake" } }],
+  });
+  await f.t.mutation(reconcileCompletion, { workflowRunId: form.workflowRunId! });
+  expect(await f.t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(1);
+});
+
+test("unrelated edits preserve sequence activation and do not lose a delayed completion", async () => {
+  const f = await sequenceFixture(); await f.submit();
+  const before = (await f.t.run(ctx => ctx.db.get(f.workflowId)))!;
+  vi.setSystemTime(Date.now() + 100);
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: before.revision, milestoneKey: "new", name: "Renamed",
+    automations: before.milestones[0].automations,
+  });
+  const after = (await f.t.run(ctx => ctx.db.get(f.workflowId)))!;
+  expect(after.milestones[0].automations[2].sequenceEnabledAt).toBe(before.milestones[0].automations[2].sequenceEnabledAt);
+  expect(after.milestones[0].automations[2].sequenceEnabledRevision).toBe(before.revision);
+  await f.reconcile();
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(1);
+});

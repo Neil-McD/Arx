@@ -1,3 +1,4 @@
+import { workflowSequenceIssue } from "../../../../shared/communityMemberWorkflow";
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
@@ -137,7 +138,10 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const duplicateJoinAction = new Set(joinLanes).size !== joinLanes.length;
   const formActions = automations.filter(a => a.trigger.type === "form_submitted" && a.action.type !== "move_member");
   const duplicateFormAction = new Set(formActions.map(a => a.trigger.type === "form_submitted" ? `${a.action.type}:${a.trigger.formKey}` : "")).size !== formActions.length;
+  const sequenceIssue = workflowSequenceIssue(automations);
+  const previousAction = (before: number) => automations.slice(0, before).filter(a => a.action.type !== "move_member" && a.action.type !== "evaluate_goal").at(-1);
   const canSave = name.trim().length > 0
+    && !sequenceIssue
     && !approvalConflict
     && !pendingAutomation
     && (!automations.some(a => a.action.type === "evaluate_goal") || !!goal.trim())
@@ -163,7 +167,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
         key: automation.key.startsWith("draft-") ? "" : automation.key,
         action: {
           ...automation.action,
-          key: automation.action.key.startsWith("draft-") ? "" : automation.action.key,
+          key: automation.action.key,
         },
       })) as CommunityMemberWorkflowAutomation[],
     });
@@ -262,9 +266,10 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             </> : <>
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}
             {!props.milestone.key ? <p className="workflow-field-hint">Save this milestone first, then add automations.</p> : null}
+            {sequenceIssue ? <p role="alert">{sequenceIssue}</p> : null}
             {pendingAutomation ? <>
               <WebCommunityWorkflowAutomationEditor automation={pendingAutomation} index={automations.length}
-                canAddJoin={props.milestoneNumber === 1} forms={props.forms} expanded hideHeading
+                previousAction={previousAction(automations.length)} canAddJoin={props.milestoneNumber === 1} forms={props.forms} expanded hideHeading
                 channels={props.channels} channelsUnavailable={props.channelsUnavailable} disabled={props.isSaving}
                 onToggle={() => {}} onRemove={() => setPendingAutomation(null)} onChange={setPendingAutomation}
                 creation={{ ...selection,
@@ -277,7 +282,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             {props.milestone.key ? [false, true].filter(requirement => !expandedAutomationKey || automations.some(a => a.key === expandedAutomationKey && (a.action.type === "move_member") === requirement)).map(requirement => (
               <section key={String(requirement)} className="workflow-milestone-automations" aria-label={requirement ? "Automatic advancement" : "Automations"}>
                 {!editingAutomation ? <div className="workflow-milestone-automations-header">
-                  <div><span id={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>{requirement ? "Automatic advancement (existing system)" : "Automations"}</span><small>{requirement ? "All conditions must be met, in any order." : "Each automation runs independently when its trigger occurs."}</small></div>
+                  <div><span id={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>{requirement ? "Automatic advancement (existing system)" : "Automations"}</span><small>{requirement ? "All conditions must be met, in any order." : "Actions run when their trigger occurs; dependent actions wait for the preceding action to complete."}</small></div>
                   <div className="resource-modal-actions">
                     <button ref={requirement ? undefined : addAutomationRef} type="button" className="secondary" onClick={() => {
                       const automation = newAutomation(requirement);
@@ -301,6 +306,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                   <div className="workflow-milestone-automation-list">
                     {automations.filter(a => (a.action.type === "move_member") === requirement && (!expandedAutomationKey || a.key === expandedAutomationKey)).map((automation, index) => (
                       <WebCommunityWorkflowAutomationEditor key={automation.key} automation={automation} index={index}
+                        previousAction={previousAction(automations.indexOf(automation))}
                         canAddJoin={props.milestoneNumber === 1}
                         forms={props.forms}
                         hideHeading={editingAutomation}

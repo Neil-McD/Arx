@@ -15,6 +15,7 @@ export type CommunityMemberWorkflowMemberContributedTrigger = {
 };
 
 export type CommunityMemberWorkflowTrigger =
+  | { type: "previous_action_completed"; predecessorActionKey: string }
   | { type: "member_joined" }
   | CommunityMemberWorkflowMemberContributedTrigger
   | { type: "form_submitted"; formKey: string }
@@ -50,6 +51,9 @@ export type CommunityMemberWorkflowAutomation = {
   key: string;
   /** Server-owned identity: preserved for duration edits, renewed on trigger conversion. */
   timerGeneration?: string;
+  /** Server-owned activation time; edits never backfill already completed work. */
+  sequenceEnabledAt?: number;
+  sequenceEnabledRevision?: number;
   /** Invalidates completion evidence when this requirement changes meaning. */
   completionGeneration?: string;
   trigger: CommunityMemberWorkflowTrigger;
@@ -98,6 +102,7 @@ export function workflowRequirementGeneration(rule: CommunityMemberWorkflowAutom
 export function workflowTriggerIdentity(trigger: CommunityMemberWorkflowTrigger): string {
   return JSON.stringify(trigger.type === "member_contributed" ? [trigger.type, trigger.channelId ?? null]
     : trigger.type === "form_submitted" ? [trigger.type, trigger.formKey]
+    : trigger.type === "previous_action_completed" ? [trigger.type, trigger.predecessorActionKey]
     : trigger.type === "member_joined" ? [trigger.type] : [trigger.type, trigger.delayMinutes]);
 }
 
@@ -216,4 +221,31 @@ export function normalizeCommunityMemberWorkflowSourceRef(
     throw new Error("community_member_workflow_source_ref_required");
   }
   return sourceRef;
+}
+
+export function workflowSequenceIssue(rules: CommunityMemberWorkflowAutomation[]): string | null {
+  let previous: CommunityMemberWorkflowAutomation | undefined;
+  for (const rule of rules) {
+    if (rule.trigger.type === "previous_action_completed") {
+      if (rule.action.type !== "request_form" && rule.action.type !== "prompt_agent") return "Previous action completed requires Request form or Ask agent";
+      if (!previous || previous.action.key !== rule.trigger.predecessorActionKey)
+        return "Choose the action immediately before this action, or change its trigger";
+    }
+    if (rule.action.type !== "move_member" && rule.action.type !== "evaluate_goal") previous = rule;
+  }
+  return null;
+}
+
+export function workflowSequenceReceipt(run: { membershipId: unknown; activationSequence?: number; transitionSeq?: number;
+  milestoneKey: string; milestoneEnteredAt: number; actionSnapshot: { key: string } }): string {
+  return `action_completion:${run.membershipId}:${run.activationSequence ?? 0}:${run.transitionSeq ?? 0}:${run.milestoneKey}:${run.milestoneEnteredAt}:${run.actionSnapshot.key}`;
+}
+
+/** Equal wall-clock timestamps cannot establish that an older run completed after
+ * a definition edit. Fail closed in that case; a run admitted under the activation
+ * revision is known to have started after the dependency was saved. */
+export function workflowSequenceCompletionIsNew(rule: CommunityMemberWorkflowAutomation, completedAt: number,
+  sourceRevision: number): boolean {
+  return rule.sequenceEnabledAt !== undefined && (completedAt > rule.sequenceEnabledAt
+    || (completedAt === rule.sequenceEnabledAt && sourceRevision >= (rule.sequenceEnabledRevision ?? Infinity)));
 }

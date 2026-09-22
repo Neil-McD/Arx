@@ -10,7 +10,7 @@ import { internal } from "./_generated/api";
 export async function requireWorkflowAssessment(ctx: any, request: any) {
   if (request.workflowCompletionReview) return requireCompletionReview(ctx, request);
   if (!request.workflowAssessment || request.triggerKind !== "workflow" || !request.workflowFormRequestId
-    || request.workflowTimerId || request.sourceRootId || request.sourceReplyId || request.serviceChannelId) throw new Error("workflow_assessment_source_invalid");
+    || request.workflowPreviousRunId || request.workflowTimerId || request.sourceRootId || request.sourceReplyId || request.serviceChannelId) throw new Error("workflow_assessment_source_invalid");
   if (request._id && (request.status !== "running" || (request.leaseExpiresAt ?? 0) <= Date.now())) throw new Error("workflow_assessment_lease_expired");
   const run = request.workflowRunId ? await ctx.db.get(request.workflowRunId) : null;
   const form = await ctx.db.get(request.workflowFormRequestId);

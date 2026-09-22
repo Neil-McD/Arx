@@ -1,3 +1,4 @@
+import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { communityMembershipRowIsActive } from "./communityCore";
@@ -85,8 +86,9 @@ export async function readWorkflowActionProgress(ctx: QueryCtx, args: {
             && request.triggerKind === "workflow" && !request.workflowAssessment
             && request.requesterUserId === membership.userId && request.sponsorUserId === membership.userId
             && request.workflowActionKey === rule.action.key && request.workflowPromptSnapshot === rule.action.prompt
-            && Boolean(request.workflowTimerId ?? request.workflowFormRequestId ?? request.sourceReplyId ?? request.sourceRootId)
-            && run.triggerReceiptRef === (request.workflowTimerId ? `workflow-timer:${request.workflowTimerId}`
+            && Boolean(request.workflowPreviousRunId ?? request.workflowTimerId ?? request.workflowFormRequestId ?? request.sourceReplyId ?? request.sourceRootId)
+            && (!request.workflowPreviousRunId || request.workflowPreviousRunId === run.predecessorRunId)
+            && run.triggerReceiptRef === (request.workflowPreviousRunId ? workflowSequenceReceipt(run) : request.workflowTimerId ? `workflow-timer:${request.workflowTimerId}`
               : request.workflowFormRequestId ? `form_submission:${request.workflowFormRequestId}`
               : buildCommunityInteractionEvidenceRef({ objectType: request.sourceReplyId ? "reply" : "root",
                 objectId: String(request.sourceReplyId ?? request.sourceRootId) }))) {
@@ -112,6 +114,12 @@ export async function readWorkflowActionProgress(ctx: QueryCtx, args: {
         item.status = status;
         seen = true;
       }
+    }
+    if (!seen && !item.evidence && rule.trigger.type === "previous_action_completed") {
+      const predecessorKey = rule.trigger.predecessorActionKey;
+      const predecessor = actions.find(a => a.action_key === predecessorKey);
+      item.status = "waiting";
+      item.waiting_for = predecessor?.label ?? "previous action";
     }
     actions.push(item);
   }

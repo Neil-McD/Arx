@@ -21,7 +21,7 @@ export const authorizeServeToolsInternal = internalQuery({
     if (!request || request.status !== "running" || request.attempt !== args.expectedAttempt || !request.requesterUserId) {
       throw new Error("community_agent_serve_request_unavailable");
     }
-    if (request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
+    if (request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
       // Revalidate the explicit review origin before funding/provider dispatch.
       // Keep the existing prompt-only restriction (also used by form actions).
       await requireServiceWorkflowDestination(ctx, request);

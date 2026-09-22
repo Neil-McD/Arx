@@ -1,3 +1,5 @@
+import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
+import { workflowSequenceCompletionIsNew, workflowSequenceReceipt, workflowSequenceIssue } from "../shared/communityMemberWorkflow";
 import { resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import { resolveMemberServiceChannel, requireMemberFormServiceAudience } from "./communityMemberServiceChannelCore";
 import { getUniqueCommunityMembershipByPair, communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
@@ -20,7 +22,9 @@ export async function readServiceMemberContext(ctx: QueryCtx, request: any) {
   const member = await getUniqueCommunityMembershipByPair({ ctx, communityId: request.communityId, userId: request.requesterUserId });
   const membership = member ? await ctx.db.get(member._id as Id<"communityMemberships">) : null;
   if (!membership) throw new Error("workflow_member_context_unavailable");
-  const evidence = projectSubmittedFormEvidence(await readSubmittedFormRecords(ctx, membership, request.workflowFormRequestId));
+  const predecessor = request.workflowPreviousRunId ? await ctx.db.get(request.workflowPreviousRunId as Id<"communityMemberWorkflowRuns">) : null;
+  const formSourceId = request.workflowFormRequestId ?? predecessor?.actionResult?.formRequestId;
+  const evidence = projectSubmittedFormEvidence(await readSubmittedFormRecords(ctx, membership, formSourceId));
   const audience = evidence.submissions.length
     ? await requireMemberFormServiceAudience({ ctx, membership }) : null;
   const { facts, truncated } = await readBoundedMemberOrientationFacts(ctx, {
@@ -42,7 +46,7 @@ export async function readServiceMemberContext(ctx: QueryCtx, request: any) {
  */
 export async function requireServiceWorkflowDestination(ctx: any, request: any) {
   if (request.workflowAssessment) return requireWorkflowAssessment(ctx, request);
-  if (request.triggerKind !== "workflow" || Boolean(request.workflowTimerId) === Boolean(request.workflowFormRequestId) || request.sourceRootId || request.sourceReplyId) {
+  if (request.triggerKind !== "workflow" || [request.workflowTimerId, request.workflowFormRequestId, request.workflowPreviousRunId].filter(Boolean).length !== 1 || request.sourceRootId || request.sourceReplyId) {
     throw new Error("workflow_timer_source_invalid");
   }
   if (request._id && (request.status !== "running" || (request.leaseExpiresAt ?? 0) <= Date.now())) {
@@ -56,7 +60,40 @@ export async function requireServiceWorkflowDestination(ctx: any, request: any) 
   if (configs.sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0]?.agentEnabled === false) {
     throw new Error("workflow_agent_disabled");
   }
-  if (request.workflowFormRequestId) {
+  if (request.workflowPreviousRunId) {
+    const predecessor = await ctx.db.get(request.workflowPreviousRunId);
+    const workflow = run ? await ctx.db.get(run.workflowId) : null;
+    const membership = run ? await ctx.db.get(run.membershipId) : null;
+    const state = run ? await ctx.db.query("communityMemberWorkflowMemberMilestones")
+      .withIndex("by_workflow_membership", (q: any) => q.eq("workflowId", run.workflowId).eq("membershipId", run.membershipId)).unique() : null;
+    const milestone = workflow?.milestones.find((m: any) => m.key === (state?.currentMilestoneKey ?? workflow.milestones[0]?.key));
+    const automation = milestone?.automations.find((a: any) => a.key === run?.automationKey);
+    if (!run || !predecessor || !workflow || !membership || !communityMembershipRowIsActive(membership)
+      || membership.communityId !== request.communityId || workflow.communityId !== request.communityId
+      || membership.userId !== request.requesterUserId || request.sponsorUserId !== request.requesterUserId
+      || state?.completedAt || !milestone || workflowSequenceIssue(milestone.automations)
+      || run.milestoneKey !== milestone.key || run.milestoneEnteredAt !== (state?.milestoneEnteredAt ?? membership.activatedAt ?? membership.createdAt)
+      || run.transitionSeq !== (state?.transitionSeq ?? 0) || run.activationSequence !== (membership.activationSequence ?? 0)
+      || run.communityId !== request.communityId || run.predecessorRunId !== predecessor._id
+      || !automation || automation.trigger.type !== "previous_action_completed"
+      || automation.trigger.predecessorActionKey !== predecessor.actionSnapshot.key
+      || run.triggerReceiptRef !== workflowSequenceReceipt(run)
+      || !["running", "finished"].includes(run.status)
+      || (request._id && (run.status !== "finished" || run.actionResult?.serveRequestId !== request._id || run.actionResult?.status !== "complete"))
+      || run.actionSnapshot.type !== "prompt_agent" || run.actionSnapshot.key !== request.workflowActionKey
+      || run.actionSnapshot.prompt !== request.workflowPromptSnapshot
+      || JSON.stringify(automation.action) !== JSON.stringify(run.actionSnapshot)
+      || JSON.stringify(automation.trigger) !== JSON.stringify(run.triggerSnapshot)
+      || (milestone.instructions ?? "") !== (run.milestoneContextSnapshot?.instructions ?? "")
+      || (milestone.goal ?? "") !== (run.milestoneContextSnapshot?.goal ?? "")) throw new Error("workflow_sequence_authority_stale");
+    const progress = await readWorkflowActionProgress(ctx, { workflow, membership, milestone,
+      milestoneEnteredAt: run.milestoneEnteredAt, transitionSeq: run.transitionSeq });
+    const source = progress.actions.find(a => a.evidence?.run_id === String(predecessor._id));
+    if (progress.scan_truncated || !source || !workflowSequenceCompletionIsNew(automation, source.evidence!.completed_at, predecessor.workflowRevision))
+      throw new Error("workflow_sequence_source_stale");
+    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId });
+    resolved = { membership, workflow, automation };
+  } else if (request.workflowFormRequestId) {
     const formRequest = await ctx.db.get(request.workflowFormRequestId);
     if (!formRequest || formRequest.status !== "submitted") throw new Error("workflow_form_source_stale");
     const membership = await ctx.db.get(formRequest.membershipId);

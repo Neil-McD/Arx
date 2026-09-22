@@ -269,6 +269,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                       <div><strong>{action.label}</strong>
                         <span>{action.status === "complete" ? action.action_type === "request_form" ? "Form submitted" : action.action_type === "prompt_agent" ? "Response delivered" : "Channel ready"
                           : action.status === "pending" ? action.action_type === "request_form" ? "Awaiting submission" : "Queued"
+                          : action.status === "waiting" ? `Waiting for ${action.waiting_for ?? "previous action"}`
                           : action.status === "unavailable" ? "Completion unavailable" : readableLabel(action.status)}</span></div>
                       {action.evidence ? <small>Verified <ActivityTime value={new Date(action.evidence.completed_at).toISOString()} /></small> : null}
                     </li>)}

@@ -7,6 +7,7 @@ import { replaceWorkflowDraftAction, workflowAutomationIssue, workflowTriggerIss
 
 type Props = {
   canAddJoin?: boolean;
+  previousAction?: WorkflowAutomationDraft;
   forms?: Array<{ key: string; name: string }>;
   automation: WorkflowAutomationDraft;
   index: number;
@@ -29,6 +30,10 @@ type Props = {
 export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const id = useId();
   const { automation } = props;
+  const isSequence = automation.trigger.type === "previous_action_completed";
+  const previousLabel = props.previousAction?.action.type === "request_form"
+    ? `Request ${props.forms?.find(f => props.previousAction?.action.type === "request_form" && f.key === props.previousAction.action.formKey)?.name ?? "form"}`
+    : props.previousAction?.action.type === "prompt_agent" ? `Ask agent: ${props.previousAction.action.prompt.slice(0, 80)}` : "Create private channel";
   const isTimed = automation.trigger.type === "milestone_elapsed";
   const isForm = automation.trigger.type === "form_submitted";
   const isJoin = automation.trigger.type === "member_joined";
@@ -44,7 +49,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const actionSelected = !props.creation || props.creation.actionSelected;
   const triggerIssue = triggerSelected ? workflowTriggerIssue(automation, props.channels, props.channelsUnavailable) : null;
   const triggerReady = triggerSelected && !triggerIssue;
-  const triggerLabel = isJoin ? "Member joins for the first time" : automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`;
+  const triggerLabel = isSequence ? "Previous action completed" : isJoin ? "Member joins for the first time" : automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`;
   const actionLabel = automation.action.type === "evaluate_goal" ? "Evaluate goal" : automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : triggerLabel;
 
   return (
@@ -69,6 +74,8 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
               const type = event.target.value;
               if (type === "member_joined") {
                 props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "request_form" ? "request_form" : "create_service_channel"), trigger: { type } });
+              } else if (type === "previous_action_completed" && props.previousAction) {
+                props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "request_form" ? "request_form" : "prompt_agent"), trigger: { type, predecessorActionKey: props.previousAction.action.key } });
               } else if (type === "form_submitted") {
                 props.onChange({ ...replaceWorkflowDraftAction(automation, isRequirement ? "move_member" : "prompt_agent"), trigger: { type, formKey: "" } });
               } else if (type === "member_contributed" || type === "milestone_elapsed") {
@@ -79,6 +86,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
               props.creation?.onTriggerSelected();
             }}>
               <option value="" disabled>Choose a trigger</option>
+              {!isRequirement ? <option value="previous_action_completed" disabled={!props.previousAction}>Previous action completed</option> : null}
               <option value="member_contributed">Member posts or replies</option>
               <option value="milestone_elapsed">Time in milestone</option>
               {!isRequirement && (props.canAddJoin || isJoin) ? <option value="member_joined">Member joins</option> : null}
@@ -86,7 +94,9 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
             </select>
           </label>
           {triggerSelected ? <>
-          {isJoin ? null : automation.trigger.type === "form_submitted" ? <label>Form<select value={automation.trigger.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, trigger: { type: "form_submitted", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select></label> : isTimed ? <div className="workflow-automation-field">
+          {isSequence ? <div className="workflow-field-hint">{props.previousAction && automation.trigger.type === "previous_action_completed" && automation.trigger.predecessorActionKey === props.previousAction.action.key
+            ? `After: ${previousLabel}. Starts after verified completion.`
+            : <>The preceding action changed. Choose a different trigger, then select Previous action completed again to reconnect.</>}</div> : isJoin ? null : automation.trigger.type === "form_submitted" ? <label>Form<select value={automation.trigger.formKey} disabled={props.disabled} onChange={e => props.onChange({ ...automation, trigger: { type: "form_submitted", formKey: e.target.value } })}><option value="">Choose a published form</option>{props.forms?.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}</select></label> : isTimed ? <div className="workflow-automation-field">
             <label htmlFor={`${id}-duration`}>After</label>
             <div className="workflow-action-choice-row">
               <input id={`${id}-duration`} type="number" min={1} max={Math.floor(525600 / timeUnit)} step={1}
@@ -137,9 +147,10 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
               <p className="workflow-field-hint" id={`${id}-prompt-help`}>
                 {automation.action.prompt.trim() ? "" : "Add instructions to save. "}
                 {isForm ? "Uses the submitted answers and responds once in the member’s assigned private service channel. Only the member and community managers may have access. Submission stays saved if delivery is unavailable."
+                  : isSequence ? "Starts after the preceding action completes and responds in the member’s assigned private service channel. The next action waits until this response is delivered. No additional tool actions."
                   : isTimed ? "Delivered once to the member’s assigned service channel. Uses these instructions and community context, without private dossier data or additional tool actions. No delivery if the channel is unavailable."
                   : "The community agent uses this member’s community context and replies in the triggering thread."}
-                {!isTimed && !isForm && (isPrivate || channelId === undefined) ? " In private channels, the agent must be invited." : ""}
+                {!isSequence && !isTimed && !isForm && (isPrivate || channelId === undefined) ? " In private channels, the agent must be invited." : ""}
               </p>
             </>
           ) : automation.action.type === "evaluate_goal" ? <p className="workflow-field-hint">Privately evaluates the goal from Overview using this submitted form. Records a judgment only; no message or milestone movement.</p> : null}

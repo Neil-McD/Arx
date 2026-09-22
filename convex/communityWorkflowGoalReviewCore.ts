@@ -70,7 +70,7 @@ export async function readCompletionReviewSnapshot(ctx: any, workflow: any, memb
 /** Admission and delivery both recheck the identical current visit/evidence. */
 export async function requireCompletionReview(ctx: any, request: any, completed = false) {
   if (!request.workflowCompletionReview || !request.workflowAssessment || request.triggerKind !== "workflow"
-    || request.workflowFormRequestId || request.workflowTimerId || request.sourceRootId || request.sourceReplyId || request.serviceChannelId)
+    || request.workflowFormRequestId || request.workflowPreviousRunId || request.workflowTimerId || request.sourceRootId || request.sourceReplyId || request.serviceChannelId)
     throw new Error("workflow_assessment_source_invalid");
   const run = request.workflowRunId ? await ctx.db.get(request.workflowRunId) : null;
   const workflow = run ? await ctx.db.get(run.workflowId) : null;

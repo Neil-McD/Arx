@@ -1,3 +1,4 @@
+import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import type { Doc, Id } from "./_generated/dataModel";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
@@ -149,7 +150,7 @@ export async function resolveWorkflowExecutionMembershipContext(args: {
   const configs = await ctx.db.query("communityAgentConfigs")
     .withIndex("by_community", q => q.eq("communityId", request.communityId)).take(5);
   if (configs.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.agentEnabled === false) throw new Error("workflow_context_forbidden");
-  if (request.workflowTimerId || request.workflowFormRequestId) {
+  if (request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId) {
     await requireServiceWorkflowDestination(ctx, request);
   } else {
     const root = request.sourceRootId ? await ctx.db.get(request.sourceRootId) : null;
@@ -295,9 +296,10 @@ async function readMembershipContextRecords(args: {
           serveRequest.workflowRunId === run._id &&
           serveRequest.workflowActionKey === run.actionSnapshot.key &&
           serveRequest.workflowPromptSnapshot === run.actionSnapshot.prompt &&
-          Boolean(serveRequest.workflowTimerId ?? serveRequest.workflowFormRequestId ?? serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
+          Boolean(serveRequest.workflowPreviousRunId ?? serveRequest.workflowTimerId ?? serveRequest.workflowFormRequestId ?? serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
+          (!serveRequest.workflowPreviousRunId || serveRequest.workflowPreviousRunId === run.predecessorRunId) &&
           run.triggerReceiptRef ===
-            (serveRequest.workflowTimerId ? `workflow-timer:${serveRequest.workflowTimerId}` : serveRequest.workflowFormRequestId ? `form_submission:${serveRequest.workflowFormRequestId}` : buildCommunityInteractionEvidenceRef({
+            (serveRequest.workflowPreviousRunId ? workflowSequenceReceipt(run) : serveRequest.workflowTimerId ? `workflow-timer:${serveRequest.workflowTimerId}` : serveRequest.workflowFormRequestId ? `form_submission:${serveRequest.workflowFormRequestId}` : buildCommunityInteractionEvidenceRef({
               objectType: serveRequest.sourceReplyId ? "reply" : "root",
               objectId: String(
                 serveRequest.sourceReplyId ?? serveRequest.sourceRootId ?? "",
@@ -313,7 +315,7 @@ async function readMembershipContextRecords(args: {
                 ? ("failed" as const)
                 : serveRequest.status;
         let deliveryChannelUrl: string | null = null;
-        if (validRequest && status === "responded" && (serveRequest.workflowTimerId || serveRequest.workflowFormRequestId) && serveRequest.responseRootId) {
+        if (validRequest && status === "responded" && (serveRequest.workflowPreviousRunId || serveRequest.workflowTimerId || serveRequest.workflowFormRequestId) && serveRequest.responseRootId) {
           const root = await args.ctx.db.get(serveRequest.responseRootId);
           if (root?.status === "live" && root.communityId === args.communityId
             && root.channelId === serveRequest.serviceChannelId
@@ -442,6 +444,7 @@ async function readMembershipContextRecords(args: {
                 label: rule.trigger.type === "form_submitted" ? `Submit ${form?.name ?? "the selected form"}`
                   : rule.trigger.type === "milestone_elapsed" ? `${rule.trigger.delayMinutes} minutes in milestone`
                   : rule.trigger.type === "member_joined" ? "Member joins"
+                  : rule.trigger.type === "previous_action_completed" ? "Previous action completed"
                   : rule.trigger.channelId ? channel?.communityId === args.communityId ? `Post or reply in #${channel.name}` : "Post or reply in the selected channel" : "Post or reply in any channel",
                 satisfied: Boolean(evidence), satisfied_at: evidence ? toIsoString(evidence.satisfiedAt) : null };
             })),

@@ -46,7 +46,8 @@ test("milestone views share the draft and progressive creation does not preselec
   expect(editor).toContain('&& !pendingAutomation');
   expect(editor).toContain('setSelection({ triggerSelected: false, actionSelected: false })');
   expect(editor).toContain('>Done</button>');
-  expect(editor).toContain('Each automation runs independently');
+  expect(editor).toContain('dependent actions wait for the preceding action to complete');
+  expect(automation).toContain('Previous action completed');
   expect(automation).toContain('value={triggerSelected ? automation.trigger.type : ""}');
   expect(automation).toContain('value={actionSelected ? automation.action.type : ""}');
   expect(automation).toContain('triggerReady && !isRequirement');

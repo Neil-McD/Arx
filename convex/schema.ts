@@ -1245,8 +1245,11 @@ export default defineSchema({
           key: v.string(),
           timerGeneration: v.optional(v.string()),
           completionGeneration: v.optional(v.string()),
+          sequenceEnabledAt: v.optional(v.number()),
+          sequenceEnabledRevision: v.optional(v.number()),
           trigger: v.union(
             v.object({ type: v.literal("member_joined") }),
+      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
             v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
             v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
             v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
@@ -1326,15 +1329,17 @@ export default defineSchema({
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
-    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted"), v.literal("all_actions_complete")),
+    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted"), v.literal("all_actions_complete"), v.literal("previous_action_completed")),
     // Optional for historical runs. New runs capture the condition that matched.
     triggerSnapshot: v.optional(v.union(
       v.object({ type: v.literal("member_joined") }),
+      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
       v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
       v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
       v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
     )),
     triggerReceiptRef: v.string(),
+    predecessorRunId: v.optional(v.id("communityMemberWorkflowRuns")),
     actionSnapshot: v.union(
       v.object({ key: v.string(), type: v.literal("evaluate_goal") }),
       v.object({ key: v.string(), type: v.literal("create_service_channel") }),
@@ -2086,6 +2091,7 @@ export default defineSchema({
     workflowRunId: v.optional(v.id("communityMemberWorkflowRuns")),
     workflowActionKey: v.optional(v.string()),
     workflowPromptSnapshot: v.optional(v.string()),
+    workflowPreviousRunId: v.optional(v.id("communityMemberWorkflowRuns")),
     workflowTimerId: v.optional(v.id("communityMemberWorkflowTimers")),
     workflowFormRequestId: v.optional(v.id("communityFormRequests")),
     workflowAssessment: v.optional(v.boolean()),

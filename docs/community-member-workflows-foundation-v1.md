@@ -709,3 +709,33 @@ Proof is bound to community, membership activation, stage visit, stable automati
 The reader checks at most 256 recent runs using the existing workflow/member index (plus one truncation sentinel). Unproven or out-of-window work is unavailable, never implicitly pending or completed. No configured work does not count as all actions completed. Movement and goal-assessment actions are excluded from work completion.
 
 Release requires the additive Convex schema/receipt writer and web reader to be deployed together through their approved release paths. Local tests and synthetic browser rendering do not constitute staging acceptance.
+
+### Sequential actions within a milestone
+
+`previous_action_completed` starts a Request form or Ask community agent action
+when the immediately preceding work action has a verified product outcome.
+The trigger stores `predecessorActionKey`; movement conditions and goal assessments
+are not work predecessors. The server rejects missing, self, forward, reordered,
+and cross-milestone dependencies. New editor draft keys are mapped to permanent
+server-owned action keys together in one save.
+
+Completion means a valid pinned form submission, a live delivered agent response,
+or a provisioned private channel. Dispatch/queue success is not completion.
+The existing completion reconciler starts the dependent action; no polling or
+new workflow engine is introduced. A visit-scoped receipt deduplicates execution,
+and `predecessorRunId` records its evidence source. Sequential agent requests
+carry `workflowPreviousRunId`, use the assigned private service channel, and
+retain prompt-only tools and live membership/destination/evidence checks.
+
+`sequenceEnabledAt` and its workflow revision are server-owned and reset when the dependency or action changes. Revision ordering disambiguates
+outcomes and edits that share a millisecond.
+Saving never starts work, and source outcomes older than activation do not backfill
+new actions. Existing independent triggers and milestone completion/goal/approval
+rules remain in force. The first action still needs an existing event trigger.
+The progress view distinguishes waiting dependencies from failed executions.
+
+Local acceptance covers form -> agent response -> form, duplicate notifications,
+draft reference resolution, invalid dependencies, stale visits, revoked access,
+changed destinations, edited evidence, delayed pre-edit events, and human approval.
+Release requires both schema/backend and web changes; deploy the compatible backend
+before exposing the new trigger in the web application.

@@ -1,3 +1,4 @@
+import { workflowSequenceCompletionIsNew, workflowSequenceIssue, workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
@@ -90,8 +91,11 @@ const automationInputValidator = v.object({
   key: v.optional(v.string()),
   // Accepted from cached clients, but never trusted or persisted from input.
   completionGeneration: v.optional(v.string()),
+  sequenceEnabledAt: v.optional(v.number()),
+  sequenceEnabledRevision: v.optional(v.number()),
   trigger: v.union(
     v.object({ type: v.literal("member_joined") }),
+    v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
     v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
     v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
     v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
@@ -164,6 +168,7 @@ function requireWorkflowRevision(
 function normalizeAutomations(
   inputs: Array<any>,
   existingAutomations: CommunityMemberWorkflowAutomation[],
+  revision: number,
 ): CommunityMemberWorkflowAutomation[] {
   if (inputs.length > COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE) {
     throw new Error("community_member_workflow_automation_count_invalid");
@@ -174,6 +179,7 @@ function normalizeAutomations(
   const usedAutomationKeys = new Set<string>();
   const usedActionKeys = new Set<string>();
   const submittedForms = new Set<string>();
+  const draftActionKeys = new Map<string, string>();
   const automations: CommunityMemberWorkflowAutomation[] = inputs.map((input) => {
     const suppliedAutomationKey = input.key
       ? normalizeCommunityMemberWorkflowAutomationKey(input.key)
@@ -192,7 +198,8 @@ function normalizeAutomations(
       throw new Error("community_member_workflow_automation_duplicate");
     }
     usedAutomationKeys.add(automationKey);
-    const suppliedActionKey = input.action?.key
+    const draftKey = !existing && String(input.action?.key ?? "").startsWith("draft-") ? input.action.key : null;
+    const suppliedActionKey = input.action?.key && !draftKey
       ? normalizeCommunityMemberWorkflowActionKey(input.action.key)
       : null;
     if (
@@ -212,6 +219,10 @@ function normalizeAutomations(
       throw new Error("community_member_workflow_action_duplicate");
     }
     usedActionKeys.add(actionKey);
+    if (draftKey) {
+      if (draftActionKeys.has(draftKey)) throw new Error("community_member_workflow_action_duplicate");
+      draftActionKeys.set(draftKey, actionKey);
+    }
     const action: CommunityMemberWorkflowAction =
       input.action.type === "evaluate_goal" ? { key: actionKey, type: "evaluate_goal" } : input.action.type === "prompt_agent"
         ? {
@@ -235,8 +246,16 @@ function normalizeAutomations(
       if (submittedForms.has(submissionLane)) throw new Error("form_submission_trigger_duplicate");
       submittedForms.add(submissionLane);
     }
+    const sameSequence = existing?.trigger.type === "previous_action_completed"
+      && workflowTriggerIdentity(existing.trigger) === workflowTriggerIdentity(input.trigger)
+      && existing.action.key === action.key && existing.action.type === action.type
+      && (action.type !== "prompt_agent" || (existing.action.type === "prompt_agent" && existing.action.prompt === action.prompt))
+      && (action.type !== "request_form" || (existing.action.type === "request_form" && existing.action.formKey === action.formKey));
     return {
       key: automationKey,
+      ...(input.trigger.type === "previous_action_completed" ? { sequenceEnabledAt:
+        sameSequence ? existing.sequenceEnabledAt ?? Date.now() : Date.now(),
+        sequenceEnabledRevision: sameSequence ? existing.sequenceEnabledRevision ?? revision : revision } : {}),
       ...(action.type === "move_member" ? { completionGeneration:
         existing?.action.type === "move_member" && workflowTriggerIdentity(existing.trigger) === workflowTriggerIdentity(input.trigger)
           ? workflowRequirementGeneration(existing) : crypto.randomUUID(),
@@ -245,7 +264,8 @@ function normalizeAutomations(
         timerGeneration: existing?.trigger.type === "milestone_elapsed"
           ? existing.timerGeneration ?? crypto.randomUUID() : crypto.randomUUID(),
       } : {}),
-      trigger: input.trigger.type === "member_joined" ? { type: "member_joined" }
+      trigger: input.trigger.type === "previous_action_completed" ? { type: "previous_action_completed", predecessorActionKey: input.trigger.predecessorActionKey }
+        : input.trigger.type === "member_joined" ? { type: "member_joined" }
         : input.trigger.type === "form_submitted" ? { type: "form_submitted", formKey: input.trigger.formKey }
         : input.trigger.type === "milestone_elapsed"
         ? { type: "milestone_elapsed", delayMinutes: normalizeWorkflowDelayMinutes(input.trigger.delayMinutes) }
@@ -253,6 +273,10 @@ function normalizeAutomations(
       action,
     };
   });
+  for (const rule of automations) {
+    if (rule.trigger.type === "previous_action_completed") rule.trigger.predecessorActionKey = draftActionKeys.get(rule.trigger.predecessorActionKey) ?? rule.trigger.predecessorActionKey;
+  }
+  if (workflowSequenceIssue(automations)) throw new Error("workflow_previous_action_invalid");
   const requirements = automations.filter(a => a.action.type === "move_member");
   if (new Set(requirements.map(a => workflowTriggerIdentity(a.trigger))).size !== requirements.length) {
     throw new Error("community_member_workflow_requirement_duplicate");
@@ -368,7 +392,7 @@ export const updateBuilderWorkflowMilestone = mutation({
       instructions: normalizeWorkflowMilestoneContext(args.instructions ?? current.instructions),
       goal: normalizeWorkflowMilestoneContext(args.goal ?? current.goal),
       requireHumanApproval: args.requireHumanApproval ?? current.requireHumanApproval ?? false,
-      automations: normalizeAutomations(args.automations, current.automations ?? []),
+      automations: normalizeAutomations(args.automations, current.automations ?? [], workflow.revision + 1),
     };
     if (milestone.requireHumanApproval && milestone.automations.some(a => a.action.type === "move_member" || a.action.type === "evaluate_goal"))
       throw new Error("Remove automatic movement and goal-evaluation rules before requiring human approval.");
@@ -878,6 +902,19 @@ export const reconcileCompletedWorkflowActionsInternal = internalMutation({
       || run.milestoneEnteredAt !== current.milestoneEnteredAt
       || run.activationSequence !== Number(membership.activationSequence ?? 0)
       || run.transitionSeq !== Number(state?.transitionSeq ?? 0)) return { status: "stale" };
+    const progress = await readWorkflowActionProgress(ctx, { workflow, membership, milestone: current.milestone,
+      milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: state?.transitionSeq ?? 0 });
+    if (progress.scan_truncated) return { status: "completion_scan_truncated" };
+    const completed = progress.actions.find(a => a.evidence?.run_id === String(run._id));
+    if (!completed) return { status: "incomplete" };
+    for (const automation of current.milestone.automations) {
+      if (automation.trigger.type !== "previous_action_completed"
+        || automation.trigger.predecessorActionKey !== completed.action_key
+        || !workflowSequenceCompletionIsNew(automation, completed.evidence!.completed_at, run.workflowRevision)) continue;
+      await executeWorkflowAutomation({ ctx, workflow, membership, current, automation,
+        workflowPreviousRunId: run._id,
+        timerReceiptRef: workflowSequenceReceipt({ ...run, actionSnapshot: automation.action }) });
+    }
     if (current.milestone.goal?.trim() && !current.milestone.requireHumanApproval) {
       const review = await readCompletionReviewSnapshot(ctx, workflow, membership);
       if (!review || !review.progress.actions.some(a => a.evidence?.run_id === String(run._id))) return { status: "not_eligible" };
@@ -974,6 +1011,7 @@ async function executeWorkflowAutomation(args: {
   objectType?: "root" | "reply";
   row?: ChannelContributionRow;
   timerReceiptRef?: string;
+  workflowPreviousRunId?: any;
   workflowTimerId?: any;
   workflowFormRequestId?: any;
   workflowJoin?: any;
@@ -1019,6 +1057,7 @@ async function executeWorkflowAutomation(args: {
     triggerType: args.automation.trigger.type,
     triggerSnapshot: args.automation.trigger,
     triggerReceiptRef,
+    ...(args.workflowPreviousRunId ? { predecessorRunId: args.workflowPreviousRunId } : {}),
     actionSnapshot: args.automation.action,
     status: "running",
     createdAt: nowMs,
@@ -1054,12 +1093,13 @@ async function executeWorkflowAutomation(args: {
       return { status: "form_requested" as const, workflow_run_id: String(workflowRunId), replayed: false };
     }
     if (args.automation.action.type === "prompt_agent" || args.automation.action.type === "evaluate_goal") {
-      if (!args.workflowTimerId && !args.workflowFormRequestId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
+      if (!args.workflowPreviousRunId && !args.workflowTimerId && !args.workflowFormRequestId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
         throw new Error("community_member_workflow_timer_action_invalid");
       }
       const intake = await intakeCommunityAgentWorkflowAction({
         ctx: args.ctx,
         communityId: args.workflow.communityId,
+        workflowPreviousRunId: args.workflowPreviousRunId,
         workflowTimerId: args.workflowTimerId,
         workflowFormRequestId: args.workflowFormRequestId,
         rootId: args.row ? (args.objectType === "root" ? args.row._id : (args.row as any).rootId) : undefined,

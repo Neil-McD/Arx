@@ -159,3 +159,14 @@ describe("workflow milestone editor drafts", () => {
     expect(isWorkflowMilestoneDraftDirty(null, "", [])).toBe(false);
   });
 });
+
+it("sequential dependencies remain explicit when actions are deleted or reordered", async () => {
+  const { workflowSequenceIssue } = await import("../shared/communityMemberWorkflow");
+  const next: CommunityMemberWorkflowAutomation = { key: "next", trigger: { type: "previous_action_completed", predecessorActionKey: automation.action.key },
+    action: { key: "next-action", type: "request_form", formKey: "intake" } };
+  expect(workflowSequenceIssue([automation, next])).toBeNull();
+  expect(workflowSequenceIssue([next])).toContain("immediately before");
+  expect(workflowSequenceIssue([next, automation])).toContain("immediately before");
+  expect(workflowTriggerIssue({ ...next, trigger: { type: "previous_action_completed", predecessorActionKey: "" } }, [], false)).toContain("preceding action");
+  expect(workflowAutomationIssue(next, [], false)).toBeNull();
+});

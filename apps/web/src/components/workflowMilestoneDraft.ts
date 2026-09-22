@@ -29,6 +29,7 @@ export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutom
 }
 
 export function workflowTriggerIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
+  if (automation.trigger.type === "previous_action_completed" && !automation.trigger.predecessorActionKey) return "Choose a preceding action";
   if (automation.trigger.type === "form_submitted" && !automation.trigger.formKey) return "Choose a published form";
   if (automation.trigger.type === "milestone_elapsed") {
     try { normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes); }

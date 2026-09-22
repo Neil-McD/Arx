@@ -178,6 +178,7 @@ async function insertServeRequest(args: {
   workflowRunId?: any;
   workflowActionKey?: string;
   workflowPromptSnapshot?: string;
+  workflowPreviousRunId?: any;
   workflowTimerId?: any;
   workflowFormRequestId?: any;
   serviceChannelId?: any;
@@ -208,7 +209,7 @@ async function insertServeRequest(args: {
     ...(args.sourceReplyId ? { sourceReplyId: args.sourceReplyId } : {}),
     ...(args.requesterUserId ? { requesterUserId: args.requesterUserId, sponsorUserId } : {}),
     ...(args.workflowRunId ? { workflowRunId: args.workflowRunId } : {}),
-    ...((args.workflowTimerId || args.workflowFormRequestId) ? { workflowTimerId: args.workflowTimerId, workflowFormRequestId: args.workflowFormRequestId,
+    ...((args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId) ? { workflowPreviousRunId: args.workflowPreviousRunId, workflowTimerId: args.workflowTimerId, workflowFormRequestId: args.workflowFormRequestId,
       serviceChannelId: args.serviceChannelId, serviceChannelRevision: args.serviceChannelRevision } : {}),
     ...(args.workflowActionKey ? { workflowActionKey: args.workflowActionKey } : {}),
     ...(args.workflowPromptSnapshot
@@ -237,6 +238,7 @@ async function skipInvocation(args: {
   workflowRunId?: any;
   workflowActionKey?: string;
   workflowPromptSnapshot?: string;
+  workflowPreviousRunId?: any;
   workflowTimerId?: any;
   workflowFormRequestId?: any;
   serviceChannelId?: any;
@@ -260,7 +262,7 @@ async function skipInvocation(args: {
     workflowRunId: args.workflowRunId,
     workflowActionKey: args.workflowActionKey,
     workflowPromptSnapshot: args.workflowPromptSnapshot,
-    workflowTimerId: args.workflowTimerId,
+    workflowPreviousRunId: args.workflowPreviousRunId, workflowTimerId: args.workflowTimerId,
     workflowFormRequestId: args.workflowFormRequestId,
     serviceChannelId: args.serviceChannelId,
     serviceChannelRevision: args.serviceChannelRevision,
@@ -681,6 +683,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
   ctx: any;
   communityId: any;
   rootId?: any;
+  workflowPreviousRunId?: any;
   workflowTimerId?: any;
   workflowFormRequestId?: any;
   replyId?: any;
@@ -725,11 +728,11 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       request_id: normalizeIdValue(existing._id),
     };
   }
-  const timedMembership = (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? await args.ctx.db.get(workflowRun.membershipId) : null;
-  const timedDestination = (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? {
+  const timedMembership = (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? await args.ctx.db.get(workflowRun.membershipId) : null;
+  const timedDestination = (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) ? {
     ...(args.workflowCompletionReview ? { workflowCompletionReview: true } : {}),
     ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
-    workflowTimerId: args.workflowTimerId,
+    workflowPreviousRunId: args.workflowPreviousRunId, workflowTimerId: args.workflowTimerId,
     workflowFormRequestId: args.workflowFormRequestId,
     serviceChannelId: args.workflowAssessment ? undefined : timedMembership?.serviceChannelId,
     serviceChannelRevision: timedMembership?.serviceChannelRevision ?? 0,
@@ -766,7 +769,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       nowMs: args.nowMs,
     })),
   });
-  if (args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) {
+  if (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) {
     try {
       await requireServiceWorkflowDestination(args.ctx, {
         ...args, ...timedDestination, triggerKind: "workflow", sponsorUserId: args.requesterUserId,
@@ -796,7 +799,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       communityId: args.communityId,
       userId: args.requesterUserId,
     });
-    if (!args.workflowTimerId && !args.workflowFormRequestId && !args.workflowCompletionReview) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
+    if (!args.workflowPreviousRunId && !args.workflowTimerId && !args.workflowFormRequestId && !args.workflowCompletionReview) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
   } catch {
     return await skip(
       "requester_access_missing",
@@ -838,8 +841,8 @@ export async function intakeCommunityAgentWorkflowAction(args: {
     workflowActionKey,
     workflowPromptSnapshot,
     ...timedDestination,
-    sourceVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
-    responseVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    sourceVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    responseVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
     nowMs: args.nowMs,
   });
   await scheduleImmediateServeWorker({ ctx: args.ctx, requestId });
