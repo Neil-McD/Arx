@@ -14,18 +14,30 @@ export function createFounderInferenceUsageTotals(modelId: string): FounderInfer
 
 export function recordFounderProviderSuccess(
   totals: FounderInferenceUsageTotals,
-  result: { promptTokens: number | null; completionTokens: number | null; providerRequestUsage?: FounderProviderRequestUsage },
+  result: { promptTokens?: number | null; completionTokens?: number | null; providerRequestUsage?: FounderProviderRequestUsage },
 ): void {
-  if (result.promptTokens === null || result.completionTokens === null) {
+  if (result.promptTokens == null || result.completionTokens == null) {
     totals.complete = false;
     return;
   }
   if (totals.modelId === "gpt-6-luna") {
-    if (result.providerRequestUsage) totals.providerRequests.push(result.providerRequestUsage);
+    if (result.providerRequestUsage?.modelId === totals.modelId) totals.providerRequests.push(result.providerRequestUsage);
     else totals.complete = false;
   }
   totals.promptTokens += Math.max(0, Math.floor(Number(result.promptTokens)));
   totals.completionTokens += Math.max(0, Math.floor(Number(result.completionTokens)));
+}
+
+export function observeFounderProviderResult(
+  totals: FounderInferenceUsageTotals,
+  result: { ok: boolean; promptTokens?: number | null; completionTokens?: number | null; providerRequestUsage?: FounderProviderRequestUsage },
+  knownPreSpend: boolean,
+): void {
+  if (result.ok || result.promptTokens != null || result.completionTokens != null || result.providerRequestUsage) {
+    recordFounderProviderSuccess(totals, result);
+  } else if (!knownPreSpend) {
+    totals.complete = false;
+  }
 }
 
 export function founderProviderRequests(totals: FounderInferenceUsageTotals): FounderProviderRequestUsage[] | undefined {

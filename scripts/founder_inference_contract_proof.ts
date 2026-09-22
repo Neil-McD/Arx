@@ -28,6 +28,7 @@ const memberRuntime = read("convex/runtimeAgentLoop.ts");
 const memberTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const wikiArchitect = read("convex/communityWikiArchitect.ts");
 const fundedGateway = read("convex/fundedInferenceGateway.ts");
+const usageCollector = read("convex/founderInferenceUsage.ts");
 const communityAdminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const modelCatalog = read("shared/modelCatalog.ts");
 const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -293,7 +294,8 @@ assert.match(worker, /const isWorkflowAction = context\.request\.triggerKind ===
 assert.match(worker, /const receiptKey = isWorkflowAction[\s\S]*communityWorkflowActionReceiptKey\(requestId\)[\s\S]*communityAgentMentionReceiptKey\(requestId\)/);
 assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
 assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
-assert.match(worker, /recordFounderProviderSuccess\(usage, toolCompletion\)/);
+assert.match(worker, /observeFounderProviderResult\(usage, toolCompletion/);
+assert.match(usageCollector, /recordFounderProviderSuccess\(totals, result\)/);
 assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
 assert.match(worker, /claimCommunityInferenceFundingSession/);
 assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action"[\s\S]*"community_agent_mention"/);
@@ -303,7 +305,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*usage\.complete = false/,
+  /if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*observeFounderProviderResult\(usage, toolCompletion,[\s\S]*providerFailureIsKnownPreSpend\(toolCompletion\.code\)/,
 );
 assert.match(
   worker,
@@ -356,7 +358,7 @@ assert.match(
 );
 assert.match(
   memberTurnHandlers,
-  /recordFounderProviderSuccess\(communityFundingUsage, result\)[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingUsage\.promptTokens[\s\S]*completionTokens: communityFundingUsage\.completionTokens/,
+  /observeFounderProviderResult\(communityFundingUsage, result,[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingUsage\.promptTokens[\s\S]*completionTokens: communityFundingUsage\.completionTokens/,
 );
 assert.match(
   autonomousRuntime,

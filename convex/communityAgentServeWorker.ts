@@ -1,5 +1,5 @@
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
-import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
+import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import { internal } from "./_generated/api";
@@ -2092,11 +2092,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
               if (providerStarted && !founderInferenceBudgetFailureCode(error)) usage.complete = false;
               throw error;
             }
-            if (toolCompletion.ok !== false) {
-              recordFounderProviderSuccess(usage, toolCompletion);
-            } else if (!providerFailureIsKnownPreSpend(toolCompletion.code)) {
-              usage.complete = false;
-            }
+            observeFounderProviderResult(usage, toolCompletion,
+              toolCompletion.ok === false && providerFailureIsKnownPreSpend(toolCompletion.code));
             return coerceConciergeCompletion(toolCompletion);
           },
             normalizeToolArguments:

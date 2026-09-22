@@ -83,6 +83,33 @@ test("missing Luna 6 request breakdown cannot settle a paid setup run", async ()
   }));
 });
 
+test("malformed billed output fails the run while preserving exact provider cost", async () => {
+  vi.mocked(runOpenAiNativeToolCompletion).mockResolvedValue({
+    ok: false, status: 502, code: "invalid_model_output", message: "Malformed tool arguments",
+    promptTokens: 1200, completionTokens: 80, providerRequestUsage,
+  });
+  const run = await startFundedInferenceRun(claim as any);
+  expect(await run.request(request)).toMatchObject({ ok: false, code: "invalid_model_output" });
+  await run.fail("invalid_model_output");
+  expect(failCommunityInferenceFundingSession).toHaveBeenCalledWith(expect.objectContaining({
+    promptTokens: 1200, completionTokens: 80, providerRequests: [providerRequestUsage],
+    usageComplete: true, failureCode: "invalid_model_output",
+  }));
+});
+
+test("malformed output without a request breakdown keeps the paid reservation indeterminate", async () => {
+  vi.mocked(runOpenAiNativeToolCompletion).mockResolvedValue({
+    ok: false, status: 502, code: "invalid_model_output", message: "Malformed tool arguments",
+    promptTokens: 1200, completionTokens: 80,
+  });
+  const run = await startFundedInferenceRun(claim as any);
+  await run.request(request);
+  await run.fail("invalid_model_output");
+  expect(failCommunityInferenceFundingSession).toHaveBeenCalledWith(expect.objectContaining({
+    usageComplete: false, providerRequests: undefined, disposition: "indeterminate",
+  }));
+});
+
 test("insufficient paid headroom prevents provider start", async () => {
   vi.mocked(claimCommunityInferenceFundingSession).mockResolvedValue({ ...session, reservedCostMicros: 1 });
   const run = await startFundedInferenceRun(claim as any);

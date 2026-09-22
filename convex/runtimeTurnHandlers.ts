@@ -23,7 +23,7 @@ import {
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import type { CommunityInferenceSurface, FounderProviderRequestUsage } from "../shared/founderInference";
-import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
+import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import {
   communityFunnelTurnPostconditionPassed,
@@ -1035,13 +1035,8 @@ export async function handleRuntimeTurnRequest(args: {
         communityFundingUsage.complete = false;
         return;
       }
-      if (!result.ok) {
-        if (!providerFailureIsKnownPreSpend(result.code ?? "provider_error")) {
-          communityFundingUsage.complete = false;
-        }
-        return;
-      }
-      recordFounderProviderSuccess(communityFundingUsage, result);
+      observeFounderProviderResult(communityFundingUsage, result,
+        !result.ok && providerFailureIsKnownPreSpend(result.code ?? "provider_error"));
     };
     const failUnhandledCommunityFundingSession = async (
       session: CommunityInferenceFundingSession | null,

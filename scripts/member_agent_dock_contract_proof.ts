@@ -967,7 +967,7 @@ assert.match(memberFundingBlock, /claimCommunityInferenceFundingSession/);
 assert.match(memberFundingBlock, /markCommunityInferenceFundingSessionProviderStarted/);
 assert.match(
   memberFundingBlock,
-  /recordFounderProviderSuccess\(communityFundingUsage, result\)/,
+  /observeFounderProviderResult\(communityFundingUsage, result/,
   "member funding must aggregate every completed provider call instead of trusting the loop's final call only",
 );
 assert.match(

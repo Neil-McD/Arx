@@ -2,7 +2,7 @@ import { assertPaidLuna6ProviderHeadroom } from "./founderInferenceBudget";
 import {
   createFounderInferenceUsageTotals,
   founderProviderRequests,
-  recordFounderProviderSuccess,
+  observeFounderProviderResult,
 } from "./founderInferenceUsage";
 import {
   claimCommunityInferenceFundingSession,
@@ -47,14 +47,8 @@ export async function startFundedInferenceRun(args: Claim) {
       }
       try {
         const result = await runOpenAiNativeToolCompletion({ ...input, modelId: session.modelId });
-        if (result.ok) {
-          recordFounderProviderSuccess(usage, result);
-          if (session.modelId === "gpt-6-luna" && result.providerRequestUsage?.modelId !== session.modelId) {
-            usage.complete = false;
-          }
-        } else if (!providerFailureIsKnownPreSpend(result.code)) {
-          usage.complete = false;
-        }
+        observeFounderProviderResult(usage, result,
+          !result.ok && providerFailureIsKnownPreSpend(result.code));
         return result;
       } catch (error) {
         usage.complete = false;

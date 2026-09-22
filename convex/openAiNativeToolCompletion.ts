@@ -250,6 +250,9 @@ export async function runOpenAiNativeToolCompletion(params: {
       status: number;
       code: string;
       message: string;
+      promptTokens?: number | null;
+      completionTokens?: number | null;
+      providerRequestUsage?: FounderProviderRequestUsage;
       pendingToolCallId?: string;
       pendingToolName?: string;
     }
@@ -365,6 +368,12 @@ export async function runOpenAiNativeToolCompletion(params: {
     };
   }
 
+  // Provider usage is independent of whether the model output can be used.
+  // A 200 response with malformed tool arguments may still be billable.
+  const failedResponseUsage = {
+    ...parseTokenUsage(parsed),
+    providerRequestUsage: parseFounderProviderRequestUsage(parsed),
+  };
   try {
     const result = parseOpenAiResponsesPayload(parsed);
     if (result.functionCalls.length > 0) {
@@ -388,6 +397,7 @@ export async function runOpenAiNativeToolCompletion(params: {
             status: 502,
             code: "invalid_model_output",
             message,
+            ...failedResponseUsage,
           };
         }
         parsedToolCalls.push({
@@ -456,6 +466,7 @@ export async function runOpenAiNativeToolCompletion(params: {
           ? "invalid_model_output"
           : "provider_inference_error",
       message,
+      ...failedResponseUsage,
     };
   }
 }

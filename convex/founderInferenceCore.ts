@@ -317,6 +317,21 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     : undefined;
   const missingRequestUsage = receipt.modelId === "gpt-6-luna" && !args.providerRequests?.length;
   if (args.usageComplete === false || missingRequestUsage) {
+    if (args.providerRequests?.length) {
+      if (!receipt.pricingSnapshot) throw new Error("founder_inference_pricing_version_mismatch");
+      const knownPromptTokens = args.providerRequests.reduce((sum, request) => sum + request.promptTokens, 0);
+      const knownCompletionTokens = args.providerRequests.reduce((sum, request) => sum + request.completionTokens, 0);
+      if (knownPromptTokens > promptTokens || knownCompletionTokens > completionTokens) {
+        throw new Error("founder_inference_request_usage_invalid");
+      }
+      // Validate the known subset without treating it as the cost of the unknown request.
+      calculateFounderRequestCosts({
+        requests: args.providerRequests,
+        pricing: receipt.pricingSnapshot,
+        promptTokens: knownPromptTokens,
+        completionTokens: knownCompletionTokens,
+      });
+    }
     if (cycle) {
       settledCostMicros = Number(receipt.reservedCostMicros);
       await settleFounderUsageReservation({
@@ -335,6 +350,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       status: "indeterminate",
       promptTokens,
       completionTokens,
+      providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       settledCostMicros,
       failureCode,
       failedAt: args.nowMs,
@@ -345,6 +363,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       status: "indeterminate",
       promptTokens,
       completionTokens,
+      providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       settledCostMicros,
       failureCode,
       failedAt: args.nowMs,

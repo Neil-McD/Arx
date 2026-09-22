@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: workflow, member-agent, paid member-agent, and community-agent conversation canaries verified on staging on 2026-09-22. All canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
+Status: workflow, member-agent, community-agent conversation, setup, resource writer, and autonomous steward canaries verified on staging on 2026-09-22, including paid founder receipts. All canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
 
 ## Authority
 
@@ -109,6 +109,8 @@ Two synthetic source-linked scaffold pages in the existing paid staging communit
 The community memory steward keeps its existing compiler digest, bounded search/write tools, and retain/carry/dismiss decisions. Run creation now pins the exact `community_autonomous_cognition` receipt model atomically in the run ledger before input budgeting. After shared-kernel input admission, the funding gateway claims that receipt and checks that its model matches before any provider-capable work. A canary change between these steps fails closed without sending a provider request.
 
 Every steward completion uses the funded gateway for the admitted model, per-request usage, paid Luna 6 headroom, and settlement. A response with unverified usage cannot reach the steward's write tool. Complete usage from earlier requests is retained when a later request or tool step fails; retry still relies on the compiler's exact work-key idempotency. Pre-provider failures release the reservation. The global default remains 5.6 and the community memory product behavior is unchanged.
+
+A successful HTTP response can carry verified usage even if its tool arguments are malformed. The Responses adapter keeps that usage on the error result, and each funded caller records it before failing the turn; malformed tools never execute. A response without verifiable Luna 6 request usage remains indeterminate. When a later request is unknown, the receipt now retains earlier verified request records for reconciliation while conservatively settling the full reservation. This does not infer the unknown request's cost or retroactively recover old receipts.
 
 ### Staging acceptance — 2026-09-22
 

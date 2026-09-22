@@ -2391,6 +2391,40 @@ test("Luna 6 settles in an existing allowance cycle without resetting its balanc
   });
 });
 
+test("indeterminate Luna 6 receipt retains known requests without estimating the unknown cost", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "luna-six-partial-usage", 710_000);
+  const receiptKey = "community_agent_mention:luna-six-partial-usage";
+  const claimToken = "luna-six-partial-claim";
+  const claimed = await t.mutation((internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 711_000));
+  const pricingSnapshot = snapshotFounderRunPricing("gpt-6-luna", {
+    pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+    inputCostMicrosPerMillionTokens: 1_000_000,
+    outputCostMicrosPerMillionTokens: 2_000_000,
+  });
+  await t.run(async ctx => {
+    await ctx.db.patch(claimed.receiptId, {
+      modelId: "gpt-6-luna", pricingVersion: pricingSnapshot.pricingVersion, pricingSnapshot,
+    });
+  });
+  const knownRequest = { requestId: "resp_known", modelId: "gpt-6-luna", serviceTier: "default",
+    promptTokens: 1000, completionTokens: 20, cachedInputTokens: 0, cacheWriteTokens: 200 };
+  await expect(t.mutation((internal as any).founderInference.finalizeCommunityInferenceFailureInternal, {
+    receiptKey, claimToken, promptTokens: 1500, completionTokens: 30,
+    providerRequests: [knownRequest], usageComplete: false,
+    failureCode: "provider_token_usage_missing", disposition: "indeterminate", nowMs: 711_001,
+  })).resolves.toEqual({ ok: true, status: "indeterminate" });
+  await t.run(async ctx => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({ status: "indeterminate", promptTokens: 1500,
+      completionTokens: 30, providerRequests: [knownRequest], settledCostMicros: 1_000_000 });
+    expect(await ctx.db.get(receipt.usageCycleId)).toMatchObject({
+      reservedCostMicros: 0, settledCostMicros: 1_000_000,
+    });
+  });
+});
+
 test("workflow canary selects Luna 6 only for new receipts and preserves Luna 5.6 on reclaim", async () => {
   const prior = process.env.POLYNET_LUNA6_CANARY_COMMUNITY_ID;
   const priorSurface = process.env.POLYNET_LUNA6_CANARY_SURFACE;

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
+import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult, recordFounderProviderSuccess } from "./founderInferenceUsage";
 
 const request = (id: string) => ({ requestId: id, modelId: "gpt-6-luna", serviceTier: "default",
   promptTokens: 1000, completionTokens: 20, cachedInputTokens: 0, cacheWriteTokens: 1000 });
@@ -26,4 +26,23 @@ test("legacy Luna retains aggregate usage without a request breakdown", () => {
   recordFounderProviderSuccess(usage, { promptTokens: 100, completionTokens: 5 });
   expect(usage).toMatchObject({ promptTokens: 100, completionTokens: 5, complete: true });
   expect(founderProviderRequests(usage)).toBeUndefined();
+});
+
+test("a malformed billed response retains usage without making its output usable", () => {
+  const usage = createFounderInferenceUsageTotals("gpt-6-luna");
+  observeFounderProviderResult(usage, { ok: false, promptTokens: 1000, completionTokens: 20,
+    providerRequestUsage: request("resp_malformed") }, false);
+  expect(usage).toMatchObject({ promptTokens: 1000, completionTokens: 20, complete: true });
+  expect(founderProviderRequests(usage)).toEqual([request("resp_malformed")]);
+});
+
+test("unverified or wrong-model error usage cannot make a Luna 6 receipt complete", () => {
+  const missing = createFounderInferenceUsageTotals("gpt-6-luna");
+  observeFounderProviderResult(missing, { ok: false, promptTokens: 1000, completionTokens: 20 }, false);
+  expect(missing.complete).toBe(false);
+  const wrongModel = createFounderInferenceUsageTotals("gpt-6-luna");
+  observeFounderProviderResult(wrongModel, { ok: false, promptTokens: 1000, completionTokens: 20,
+    providerRequestUsage: { ...request("resp_wrong"), modelId: "gpt-5.6-luna" } }, false);
+  expect(wrongModel.complete).toBe(false);
+  expect(founderProviderRequests(wrongModel)).toBeUndefined();
 });
