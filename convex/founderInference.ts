@@ -20,8 +20,12 @@ import { reserveFounderUsage } from "./founderPlanCore";
 import { founderProviderRequestUsageValidator, requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
 
 function selectNewReceiptModel(communityId: unknown, surface: string): string {
-  const canaryCommunity = process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID?.trim();
-  return surface === "community_workflow_action" && canaryCommunity === String(communityId)
+  const canaryCommunity = surface === "community_workflow_action"
+    ? process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID?.trim()
+    : surface === "member_agent_dock"
+      ? process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID?.trim()
+      : undefined;
+  return canaryCommunity && canaryCommunity === String(communityId)
     ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;
 }
 
@@ -276,7 +280,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_community_rate_limited" };
     }
 
-    // Operator-controlled, community-scoped workflow canary; never client selected.
+    // Operator-controlled, community-scoped canary; never client selected.
     const modelId = selectNewReceiptModel(args.communityId, args.surface);
     let usageCycleId: any | undefined;
     let reservedCostMicros: number | undefined;

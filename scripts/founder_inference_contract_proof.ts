@@ -292,7 +292,7 @@ assert.match(worker, /const isWorkflowAction = context\.request\.triggerKind ===
 assert.match(worker, /const receiptKey = isWorkflowAction[\s\S]*communityWorkflowActionReceiptKey\(requestId\)[\s\S]*communityAgentMentionReceiptKey\(requestId\)/);
 assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
 assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
-assert.match(worker, /aggregatePromptTokens \+=/);
+assert.match(worker, /recordFounderProviderSuccess\(usage, toolCompletion\)/);
 assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
 assert.match(worker, /claimCommunityInferenceFundingSession/);
 assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action"[\s\S]*"community_agent_mention"/);
@@ -302,7 +302,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /if \(providerStarted\) aggregateUsageComplete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*aggregateUsageComplete = false/,
+  /if \(providerStarted\) usage\.complete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*usage\.complete = false/,
 );
 assert.match(
   worker,
@@ -355,7 +355,7 @@ assert.match(
 );
 assert.match(
   memberTurnHandlers,
-  /communityFundingPromptTokens \+=[\s\S]*communityFundingCompletionTokens \+=[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingPromptTokens[\s\S]*completionTokens: communityFundingCompletionTokens/,
+  /recordFounderProviderSuccess\(communityFundingUsage, result\)[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingUsage\.promptTokens[\s\S]*completionTokens: communityFundingUsage\.completionTokens/,
 );
 assert.match(
   autonomousRuntime,

@@ -49,3 +49,7 @@ One Standard provider request settled: 1,590 input tokens (3 ordinary, 0 cache r
 The canary environment selector was removed after the proof. Readback selected 5.6 for a new admission and retained 6 for the existing receipt. Automated validation: 1,604 tests across 178 files, Convex typecheck, founder inference contract proof, and community serve-worker contract proof passed.
 
 See `artifacts/luna6-workflow-staging-20260922/acceptance.md` and `receipt.json`. This proves a small text workflow on operator-grant funding, not all modalities, subscription-funded live settlement, or all agent surfaces. Remaining work is representative member/community/setup compatibility, reservation and input-limit review, and a separately authorized production release.
+
+## Member-agent canary slice
+
+`POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID` is a separate server-only selector for new `member_agent_dock` receipts in one exact community. The member runtime resolves the model before recording the run and before input budgeting. It refuses to resume a persisted run under a different model, and it checks the later funding claim against the admitted model before provider start. Streaming and nonstreaming turns send each successful provider response through the same usage collector used by workflow replies. A missing Luna 6 request breakdown remains indeterminate; existing 5.6 aggregate settlement is unchanged. No global default changes in this slice.

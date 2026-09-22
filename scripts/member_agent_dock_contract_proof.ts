@@ -967,12 +967,12 @@ assert.match(memberFundingBlock, /claimCommunityInferenceFundingSession/);
 assert.match(memberFundingBlock, /markCommunityInferenceFundingSessionProviderStarted/);
 assert.match(
   memberFundingBlock,
-  /communityFundingPromptTokens \+= [\s\S]*communityFundingCompletionTokens \+=/,
+  /recordFounderProviderSuccess\(communityFundingUsage, result\)/,
   "member funding must aggregate every completed provider call instead of trusting the loop's final call only",
 );
 assert.match(
   memberFundingBlock,
-  /usageComplete: communityFundingProviderStarted[\s\S]*communityFundingUsageComplete[\s\S]*: true/,
+  /usageComplete: communityFundingProviderStarted[\s\S]*communityFundingUsage\.complete[\s\S]*: true/,
   "member funding should release pre-provider failures and preserve post-provider usage certainty",
 );
 assert.match(

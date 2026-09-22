@@ -22,7 +22,8 @@ import {
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
-import type { CommunityInferenceSurface } from "../shared/founderInference";
+import type { CommunityInferenceSurface, FounderProviderRequestUsage } from "../shared/founderInference";
+import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
 import {
   communityFunnelTurnPostconditionPassed,
   isCommunityFunnelDraftWriteReceiptEvent,
@@ -374,9 +375,9 @@ export async function handleRuntimeTurnRequest(args: {
       ownedThread,
       conversationMessages,
       persistedConversationHistory,
-      requestedModelId,
+      requestedModelId: resolvedRequestedModelId,
       lane,
-      modelRef,
+      modelRef: resolvedModelRef,
       maxTokens,
       stream,
       inferenceSource,
@@ -400,6 +401,25 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
+    let requestedModelId = resolvedRequestedModelId;
+    let modelRef = resolvedModelRef;
+    if (invocationSurface === "member_agent_dock" && runtimeCommunityId && communityInferenceAdmission?.ok) {
+      const existingRun = await ctx.runQuery(
+        (internal as any).threads.getRuntimeRunByOwnerRunIdInternal,
+        { ownerId: actor.dbUserId, runId },
+      ) as { threadId?: unknown; modelId?: string } | null;
+      requestedModelId = await ctx.runQuery(
+        (internal as any).founderInference.resolveCommunityInferenceModelInternal,
+        { communityId: runtimeCommunityId, surface: "member_agent_dock", receiptKey: `member_agent_dock:${runId}` },
+      ) as string;
+      if (existingRun && (String(existingRun.threadId) !== String(ownedThread._id)
+        || existingRun.modelId !== requestedModelId)) {
+        return runtimeJsonResponse(409, { ok: false, code: "runtime_run_model_changed",
+          error: "runtime_run_model_changed",
+          message: "This run cannot resume with a different model. Start a new turn." });
+      }
+      modelRef = `openai/${requestedModelId}`;
+    }
     startedRunId = runId;
     runtimeTurnStage = "run_start";
     const explicitUserMessageKey = String(input.user_message_key ?? "").trim();
@@ -975,9 +995,7 @@ export async function handleRuntimeTurnRequest(args: {
         ? invocationSurface
         : null;
     let communityFundingProviderStarted = false;
-    let communityFundingUsageComplete = true;
-    let communityFundingPromptTokens = 0;
-    let communityFundingCompletionTokens = 0;
+    const communityFundingUsage = createFounderInferenceUsageTotals(requestedModelId);
     const claimCommunityFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
       if (!communityInferenceSurface) return null;
       if (!runtimeCommunityId || !communityInferenceAdmission?.ok) {
@@ -997,6 +1015,9 @@ export async function handleRuntimeTurnRequest(args: {
       session: CommunityInferenceFundingSession | null,
     ): Promise<void> => {
       if (!session || communityFundingProviderStarted) return;
+      if (session.modelId !== requestedModelId) {
+        throw new Error("founder_inference_model_changed_before_start");
+      }
       await markCommunityInferenceFundingSessionProviderStarted({ ctx, session });
       communityFundingProviderStarted = true;
     };
@@ -1005,24 +1026,20 @@ export async function handleRuntimeTurnRequest(args: {
       code: string | null;
       promptTokens: number | null;
       completionTokens: number | null;
+      providerRequestUsage?: FounderProviderRequestUsage;
     }): void => {
       if (!communityInferenceSurface) return;
       if (!communityFundingProviderStarted) {
-        communityFundingUsageComplete = false;
+        communityFundingUsage.complete = false;
         return;
       }
       if (!result.ok) {
         if (!providerFailureIsKnownPreSpend(result.code ?? "provider_error")) {
-          communityFundingUsageComplete = false;
+          communityFundingUsage.complete = false;
         }
         return;
       }
-      if (result.promptTokens === null || result.completionTokens === null) {
-        communityFundingUsageComplete = false;
-        return;
-      }
-      communityFundingPromptTokens += Math.max(0, Math.floor(result.promptTokens));
-      communityFundingCompletionTokens += Math.max(0, Math.floor(result.completionTokens));
+      recordFounderProviderSuccess(communityFundingUsage, result);
     };
     const failUnhandledCommunityFundingSession = async (
       session: CommunityInferenceFundingSession | null,
@@ -1032,10 +1049,11 @@ export async function handleRuntimeTurnRequest(args: {
       await failCommunityInferenceFundingSession({
         ctx,
         session,
-        promptTokens: communityFundingPromptTokens,
-        completionTokens: communityFundingCompletionTokens,
+        promptTokens: communityFundingUsage.promptTokens,
+        completionTokens: communityFundingUsage.completionTokens,
+        providerRequests: founderProviderRequests(communityFundingUsage),
         usageComplete: communityFundingProviderStarted
-          ? communityFundingUsageComplete
+          ? communityFundingUsage.complete
           : true,
         failureCode,
         disposition: communityFundingProviderStarted ? "indeterminate" : "failed",
@@ -1069,9 +1087,10 @@ export async function handleRuntimeTurnRequest(args: {
         await settleCommunityInferenceFundingSession({
           ctx,
           session: params.session,
-          promptTokens: communityFundingPromptTokens,
-          completionTokens: communityFundingCompletionTokens,
-          usageComplete: communityFundingUsageComplete,
+          promptTokens: communityFundingUsage.promptTokens,
+          completionTokens: communityFundingUsage.completionTokens,
+          providerRequests: founderProviderRequests(communityFundingUsage),
+          usageComplete: communityFundingUsage.complete,
           outcomeCode:
             params.outcomeCode ?? `${communityInferenceSurface}_completed`,
         });
@@ -1083,10 +1102,11 @@ export async function handleRuntimeTurnRequest(args: {
       await failCommunityInferenceFundingSession({
         ctx,
         session: params.session,
-        promptTokens: communityFundingPromptTokens,
-        completionTokens: communityFundingCompletionTokens,
+        promptTokens: communityFundingUsage.promptTokens,
+        completionTokens: communityFundingUsage.completionTokens,
+        providerRequests: founderProviderRequests(communityFundingUsage),
         usageComplete: communityFundingProviderStarted
-          ? communityFundingUsageComplete
+          ? communityFundingUsage.complete
           : true,
         failureCode,
         disposition: !communityFundingProviderStarted || providerFailureIsKnownPreSpend(failureCode)

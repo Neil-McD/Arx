@@ -1,5 +1,5 @@
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
-import type { FounderProviderRequestUsage } from "../shared/founderInference";
+import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
 import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import { internal } from "./_generated/api";
 import { composeWorkflowAgentPrompt } from "../shared/communityMemberWorkflow";
@@ -2000,10 +2000,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       const receiptKey = isWorkflowAction
         ? communityWorkflowActionReceiptKey(requestId)
         : communityAgentMentionReceiptKey(requestId);
-      const providerRequests: FounderProviderRequestUsage[] = [];
-      let aggregatePromptTokens = 0;
-      let aggregateCompletionTokens = 0;
-      let aggregateUsageComplete = true;
+      let usage = createFounderInferenceUsageTotals("gpt-5.6-luna");
       let providerStarted = false;
 
       let fundingSession: CommunityInferenceFundingSession | null = null;
@@ -2017,6 +2014,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           communityId: context.request.communityId, receiptKey,
           surface: isWorkflowAction ? "community_workflow_action" : "community_agent_mention",
         });
+        usage = createFounderInferenceUsageTotals(admittedModelId);
         completion =
           await runNativeRuntimeKernel<CommunityAgentConciergeToolName>({
           messages: initialMessages,
@@ -2087,31 +2085,13 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                 parallelToolCalls: false,
               });
             } catch (error) {
-              if (providerStarted) aggregateUsageComplete = false;
+              if (providerStarted) usage.complete = false;
               throw error;
             }
             if (toolCompletion.ok !== false) {
-              if (fundingSession.modelId === "gpt-6-luna") {
-                if (toolCompletion.providerRequestUsage) providerRequests.push(toolCompletion.providerRequestUsage);
-                else aggregateUsageComplete = false;
-              }
-                if (
-                  toolCompletion.promptTokens === null ||
-                  toolCompletion.completionTokens === null
-                ) {
-                aggregateUsageComplete = false;
-              } else {
-                  aggregatePromptTokens += Math.max(
-                    0,
-                    Math.floor(Number(toolCompletion.promptTokens)),
-                  );
-                  aggregateCompletionTokens += Math.max(
-                    0,
-                    Math.floor(Number(toolCompletion.completionTokens)),
-                  );
-              }
+              recordFounderProviderSuccess(usage, toolCompletion);
             } else if (!providerFailureIsKnownPreSpend(toolCompletion.code)) {
-              aggregateUsageComplete = false;
+              usage.complete = false;
             }
             return coerceConciergeCompletion(toolCompletion);
           },
@@ -2156,10 +2136,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           await failCommunityInferenceFundingSession({
             ctx,
             session: fundingSession,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            providerRequests: providerRequests.length ? providerRequests : undefined,
-            usageComplete: providerStarted ? aggregateUsageComplete : true,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            providerRequests: founderProviderRequests(usage),
+            usageComplete: providerStarted ? usage.complete : true,
             failureCode,
             disposition: providerStarted ? "indeterminate" : "failed",
           });
@@ -2195,10 +2175,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           await failCommunityInferenceFundingSession({
             ctx,
             session: fundingSession,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            providerRequests: providerRequests.length ? providerRequests : undefined,
-            usageComplete: providerStarted ? aggregateUsageComplete : true,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            providerRequests: founderProviderRequests(usage),
+            usageComplete: providerStarted ? usage.complete : true,
             failureCode: errorCode,
             disposition:
               !providerStarted || providerFailureIsKnownPreSpend(errorCode)
@@ -2251,10 +2231,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             content: String((completion as any).assistantText ?? ""),
             receiptKey: finalizedFundingSession.receiptKey,
             receiptClaimToken: finalizedFundingSession.claimToken,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            providerRequests: providerRequests.length ? providerRequests : undefined,
-            usageComplete: aggregateUsageComplete,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            providerRequests: founderProviderRequests(usage),
+            usageComplete: usage.complete,
             nowMs: Date.now(),
           },
         );
@@ -2263,10 +2243,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           await failCommunityInferenceFundingSession({
             ctx,
             session: finalizedFundingSession,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            providerRequests: providerRequests.length ? providerRequests : undefined,
-            usageComplete: providerStarted ? aggregateUsageComplete : true,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            providerRequests: founderProviderRequests(usage),
+            usageComplete: providerStarted ? usage.complete : true,
             failureCode: "serve_finalize_exception",
             disposition: providerStarted ? "indeterminate" : "failed",
           });

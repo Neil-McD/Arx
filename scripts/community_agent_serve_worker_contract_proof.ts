@@ -235,7 +235,7 @@ assert.match(
 );
 assert.match(
   actionBlock,
-  /catch \(error\) \{[\s\S]*if \(providerStarted\) aggregateUsageComplete = false[\s\S]*else if \(!providerFailureIsKnownPreSpend\(toolCompletion\.code\)\)[\s\S]*aggregateUsageComplete = false/,
+  /catch \(error\) \{[\s\S]*if \(providerStarted\) usage\.complete = false[\s\S]*else if \(!providerFailureIsKnownPreSpend\(toolCompletion\.code\)\)[\s\S]*usage\.complete = false/,
   "unknown provider crashes and returned failures should settle conservatively",
 );
 assert.doesNotMatch(actionBlock, /owner_api_key|ownerApiKey|runChatgptNativeToolCompletion|apiKeyOverride/);

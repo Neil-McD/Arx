@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
   runChatgptNativeToolCompletion,
   type ChatgptCodexRequestMetadata,
@@ -163,6 +164,7 @@ type RuntimeProviderLifecycleHooks = {
     code: string | null;
     promptTokens: number | null;
     completionTokens: number | null;
+    providerRequestUsage?: FounderProviderRequestUsage;
   }) => void;
 };
 
@@ -1686,6 +1688,7 @@ async function executeRetrievalAgentLoop(
             code: completion.ok === false ? completion.code : null,
             promptTokens: completion.ok === false ? null : completion.promptTokens,
             completionTokens: completion.ok === false ? null : completion.completionTokens,
+            providerRequestUsage: completion.ok === false ? undefined : completion.providerRequestUsage,
           });
           await throwIfRunCannotContinue();
         } catch (error) {
