@@ -125,7 +125,8 @@ assert.match(
   "the deterministic landing page must omit long-form copy and media",
 );
 assert.match(memberProofCss, /\.community-funnel-member-proof-avatars[\s\S]*--member-avatar-stack-face-size/);
-assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
+assert.match(rendererCss, /--community-funnel-page:\s*var\(--surface-workspace\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
+assert.match(rendererCss, /\.community-funnel-loading\s*\{[^}]*background:\s*var\(--surface-workspace\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);
 assert.match(rendererCss, /container-type: inline-size[\s\S]*font-size: clamp\([^;]*cqi/);
 assert.match(
