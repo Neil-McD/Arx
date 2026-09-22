@@ -1,3 +1,4 @@
+import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { defineSchema, defineTable } from "convex/server";
 import { integrationReceiptIntentValidator } from "./communityIntegrationReceiptIntent";
 import { communityFormQuestionValidator } from "./communityFormValidators";
@@ -311,6 +312,7 @@ export default defineSchema({
     cachedInputTokens: v.optional(v.number()),
     cacheWriteTokens: v.optional(v.number()),
     pricingVersion: v.optional(v.string()),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
     pricingSnapshot: v.optional(v.object({
       modelId: v.string(),
       pricingVersion: v.string(),

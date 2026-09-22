@@ -1,3 +1,5 @@
+import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
+import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import { internal } from "./_generated/api";
 import { composeWorkflowAgentPrompt } from "../shared/communityMemberWorkflow";
@@ -67,7 +69,6 @@ import {
 } from "./founderInferenceRuntime";
 import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
 import { buildRuntimeContextProjectionEvidence } from "../shared/providerContextWindow.ts";
-import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import {
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CANDIDATE_REPLIES,
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS,
@@ -1615,6 +1616,7 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
     receiptClaimToken: v.optional(v.string()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
     usageComplete: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
@@ -1631,6 +1633,7 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
         claimToken: args.receiptClaimToken,
         promptTokens: args.promptTokens ?? 0,
         completionTokens: args.completionTokens ?? 0,
+        providerRequests: args.providerRequests,
         usageComplete: args.usageComplete !== false,
         outcomeCode: "provider_completed",
         nowMs,
@@ -1997,6 +2000,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       const receiptKey = isWorkflowAction
         ? communityWorkflowActionReceiptKey(requestId)
         : communityAgentMentionReceiptKey(requestId);
+      const providerRequests: FounderProviderRequestUsage[] = [];
       let aggregatePromptTokens = 0;
       let aggregateCompletionTokens = 0;
       let aggregateUsageComplete = true;
@@ -2006,6 +2010,13 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
 
       let completion: any;
       try {
+        await ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
+          requestId, expectedAttempt,
+        });
+        const admittedModelId = await ctx.runQuery(internalRefs.founderInference.resolveCommunityInferenceModelInternal, {
+          communityId: context.request.communityId, receiptKey,
+          surface: isWorkflowAction ? "community_workflow_action" : "community_agent_mention",
+        });
         completion =
           await runNativeRuntimeKernel<CommunityAgentConciergeToolName>({
           messages: initialMessages,
@@ -2017,7 +2028,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           },
           inputBudget: {
             transport: "openai_responses",
-            modelRef: `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`,
+            modelRef: `openai/${admittedModelId}`,
             reservedOutputTokens: SERVE_REPLY_MAX_TOKENS,
             toolSchemas: conciergeProviderTools,
             recordPlan: async (budgetPlan) => {
@@ -2060,6 +2071,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                   admission: context.funding,
                 });
               }
+              if (fundingSession.modelId !== admittedModelId) throw new Error("founder_inference_model_changed_before_start");
               if (!providerStarted) {
                 await markCommunityInferenceFundingSessionProviderStarted({
                   ctx,
@@ -2079,6 +2091,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
               throw error;
             }
             if (toolCompletion.ok !== false) {
+              if (fundingSession.modelId === "gpt-6-luna") {
+                if (toolCompletion.providerRequestUsage) providerRequests.push(toolCompletion.providerRequestUsage);
+                else aggregateUsageComplete = false;
+              }
                 if (
                   toolCompletion.promptTokens === null ||
                   toolCompletion.completionTokens === null
@@ -2142,6 +2158,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             session: fundingSession,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
+            providerRequests: providerRequests.length ? providerRequests : undefined,
             usageComplete: providerStarted ? aggregateUsageComplete : true,
             failureCode,
             disposition: providerStarted ? "indeterminate" : "failed",
@@ -2180,6 +2197,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             session: fundingSession,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
+            providerRequests: providerRequests.length ? providerRequests : undefined,
             usageComplete: providerStarted ? aggregateUsageComplete : true,
             failureCode: errorCode,
             disposition:
@@ -2235,6 +2253,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             receiptClaimToken: finalizedFundingSession.claimToken,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
+            providerRequests: providerRequests.length ? providerRequests : undefined,
             usageComplete: aggregateUsageComplete,
             nowMs: Date.now(),
           },
@@ -2246,6 +2265,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             session: finalizedFundingSession,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
+            providerRequests: providerRequests.length ? providerRequests : undefined,
             usageComplete: providerStarted ? aggregateUsageComplete : true,
             failureCode: "serve_finalize_exception",
             disposition: providerStarted ? "indeterminate" : "failed",

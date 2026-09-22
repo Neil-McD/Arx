@@ -17,7 +17,24 @@ import {
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
 import { reserveFounderUsage } from "./founderPlanCore";
-import { requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
+import { founderProviderRequestUsageValidator, requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
+
+function selectNewReceiptModel(communityId: unknown, surface: string): string {
+  const canaryCommunity = process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID?.trim();
+  return surface === "community_workflow_action" && canaryCommunity === String(communityId)
+    ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;
+}
+
+export const resolveCommunityInferenceModelInternal = internalQuery({
+  args: { communityId: v.id("communities"), surface: v.string(), receiptKey: v.string() },
+  handler: async (ctx, args) => {
+    const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, args.receiptKey);
+    if (receipt && (String(receipt.communityId) !== String(args.communityId) || receipt.surface !== args.surface)) {
+      throw new Error("founder_inference_receipt_conflict");
+    }
+    return receipt?.modelId ?? selectNewReceiptModel(args.communityId, args.surface);
+  },
+});
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -229,7 +246,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
         receiptKey,
         claimToken,
       });
-      return { ok: true, receiptId: existing._id, reclaimed: true };
+      return { ok: true, receiptId: existing._id, modelId: existing.modelId, reclaimed: true };
     }
 
     const sinceMs = args.nowMs - RATE_LIMIT_WINDOW_MS;
@@ -259,6 +276,8 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_community_rate_limited" };
     }
 
+    // Operator-controlled, community-scoped workflow canary; never client selected.
+    const modelId = selectNewReceiptModel(args.communityId, args.surface);
     let usageCycleId: any | undefined;
     let reservedCostMicros: number | undefined;
     let pricingSnapshot: FounderRunPricing | undefined;
@@ -275,14 +294,14 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       if (!reservation.ok) return { ok: false, errorCode: reservation.code };
       usageCycleId = reservation.cycle._id;
       reservedCostMicros = reservation.reservationCostMicros;
-      pricingSnapshot = snapshotFounderRunPricing(COMMUNITY_OWNER_FUNDED_MODEL_ID, {
+      pricingSnapshot = snapshotFounderRunPricing(modelId, {
         pricingVersion: reservation.cycle.pricingVersion,
         inputCostMicrosPerMillionTokens: reservation.cycle.inputCostMicrosPerMillionTokens,
         outputCostMicrosPerMillionTokens: reservation.cycle.outputCostMicrosPerMillionTokens,
       });
     } else if (args.expectedFundingMode === "platform_operator_grant") {
       const pricing = requireFounderInferencePricingFromEnv();
-      pricingSnapshot = snapshotFounderRunPricing(COMMUNITY_OWNER_FUNDED_MODEL_ID, {
+      pricingSnapshot = snapshotFounderRunPricing(modelId, {
         pricingVersion: pricing.pricingVersion,
         inputCostMicrosPerMillionTokens: pricing.inputCostMicrosPerMillionTokens,
         outputCostMicrosPerMillionTokens: pricing.outputCostMicrosPerMillionTokens,
@@ -301,7 +320,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       usageCycleId,
       surface: args.surface,
       provider: "openai",
-      modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+      modelId,
       status: "authorized",
       claimToken,
       leaseExpiresAt: args.nowMs + RECEIPT_LEASE_MS,
@@ -317,7 +336,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       receiptKey,
       claimToken,
     });
-    return { ok: true, receiptId, reclaimed: false };
+    return { ok: true, receiptId, modelId, reclaimed: false };
   },
 });
 
@@ -376,6 +395,7 @@ export const settleCommunityInferenceReceiptInternal = internalMutation({
     claimToken: v.string(),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
     cachedInputTokens: v.optional(v.number()),
     cacheWriteTokens: v.optional(v.number()),
     usageComplete: v.boolean(),
@@ -389,6 +409,7 @@ export const settleCommunityInferenceReceiptInternal = internalMutation({
       claimToken: args.claimToken,
       promptTokens: args.promptTokens,
       completionTokens: args.completionTokens,
+      providerRequests: args.providerRequests,
       cachedInputTokens: args.cachedInputTokens,
       cacheWriteTokens: args.cacheWriteTokens,
       usageComplete: args.usageComplete,
@@ -458,6 +479,7 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
     claimToken: v.string(),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
     cachedInputTokens: v.optional(v.number()),
     cacheWriteTokens: v.optional(v.number()),
     failureCode: v.string(),
@@ -497,7 +519,8 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
         claimToken: args.claimToken,
         promptTokens,
         completionTokens,
-        cachedInputTokens: args.cachedInputTokens,
+        providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
         cacheWriteTokens: args.cacheWriteTokens,
         usageComplete: true,
         outcomeCode: failureCode,

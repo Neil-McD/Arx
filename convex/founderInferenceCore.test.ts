@@ -2374,7 +2374,10 @@ test("Luna 6 settles in an existing allowance cycle without resetting its balanc
   });
   await expect(t.mutation((internal as any).founderInference.settleCommunityInferenceReceiptInternal, {
     receiptKey, claimToken: "luna-six-claim", promptTokens: 100_000, completionTokens: 10_000,
-    cachedInputTokens: 20_000, cacheWriteTokens: 10_000, usageComplete: true, outcomeCode: "completed", nowMs: 702_000,
+    cachedInputTokens: 20_000, cacheWriteTokens: 10_000,
+    providerRequests: [{ requestId: "resp_test", modelId: "gpt-6-luna", serviceTier: "default",
+      promptTokens: 100_000, completionTokens: 10_000, cachedInputTokens: 20_000, cacheWriteTokens: 10_000 }],
+    usageComplete: true, outcomeCode: "completed", nowMs: 702_000,
   })).resolves.toMatchObject({ status: "settled", settledCostMicros: 13_450 });
   await t.run(async ctx => {
     const receipt = await ctx.db.get(claimed.receiptId) as any;
@@ -2384,4 +2387,36 @@ test("Luna 6 settles in an existing allowance cycle without resetting its balanc
       pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
     });
   });
+});
+
+test("workflow canary selects Luna 6 only for new receipts and preserves Luna 5.6 on reclaim", async () => {
+  const prior = process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID;
+  delete process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID;
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createActiveFundingFixture(t, "luna-canary", 800_000);
+    const claim = (key: string, token: string, now: number, surface = "community_workflow_action") => t.mutation(
+      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      { ...claimArgs(fixture, key, token, now), surface });
+    expect(await claim("old-run", "old-claim", 801_000)).toMatchObject({ modelId: "gpt-5.6-luna" });
+    process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID = String(fixture.communityId);
+    expect(await claim("old-run", "new-claim", 1_402_000)).toMatchObject({ modelId: "gpt-5.6-luna", reclaimed: true });
+    expect(await claim("mention", "mention-claim", 1_402_001, "community_agent_mention")).toMatchObject({ modelId: "gpt-5.6-luna" });
+    const current = await claim("new-run", "six-claim", 1_402_002);
+    expect(current).toMatchObject({ modelId: "gpt-6-luna" });
+    delete process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID;
+    expect(await claim("new-run", "six-reclaim", 2_003_000)).toMatchObject({ modelId: "gpt-6-luna", reclaimed: true });
+    const result = await t.mutation((internal as any).founderInference.settleCommunityInferenceReceiptInternal, {
+      receiptKey: "new-run", claimToken: "six-reclaim", promptTokens: 100, completionTokens: 10,
+      usageComplete: true, outcomeCode: "completed", nowMs: 2_003_001,
+    });
+    expect(result).toMatchObject({ status: "indeterminate", settledCostMicros: 1_000_000 });
+    await expect(t.mutation((internal as any).founderInference.settleCommunityInferenceReceiptInternal, {
+      receiptKey: "new-run", claimToken: "six-reclaim", promptTokens: 100, completionTokens: 10,
+      usageComplete: true, outcomeCode: "completed", nowMs: 2_003_002,
+    })).rejects.toThrow("claim_invalid");
+  } finally {
+    if (prior === undefined) delete process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID;
+    else process.env.POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID = prior;
+  }
 });

@@ -313,7 +313,8 @@ assert.doesNotMatch(worker, /executeRetrievalHarnessTool\(\{[\s\S]{0,300}userId:
 assert.match(fundingRuntime, /resolveCommunityInferenceFundingAdmissionInternal/);
 assert.doesNotMatch(fundingRuntime, /beginCommunityInferenceFundingSession/);
 assert.match(fundingRuntime, /surface: args\.surface/);
-assert.match(fundingRuntime, /COMMUNITY_OWNER_FUNDED_MODEL_ID/);
+assert.match(fundingRuntime, /modelId: claim\.modelId/);
+assert.doesNotMatch(fundingRuntime, /modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/);
 assert.match(fundingRuntime, /markCommunityInferenceProviderStartedInternal/);
 assert.match(fundingRuntime, /settleCommunityInferenceReceiptInternal/);
 assert.doesNotMatch(fundingRuntime, /owner_api_key|userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/);

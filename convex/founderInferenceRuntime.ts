@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import {
-  COMMUNITY_OWNER_FUNDED_MODEL_ID,
+  type FounderProviderRequestUsage,
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
@@ -11,7 +11,7 @@ export type CommunityInferenceFundingSession = {
   receiptKey: string;
   claimToken: string;
   fundingMode: "platform_subscription" | "platform_operator_grant";
-  modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
+  modelId: string;
 };
 
 function boundedCode(value: unknown, fallback: string): string {
@@ -72,11 +72,14 @@ export async function claimCommunityInferenceFundingSession(args: {
     throw new Error(boundedCode(claim?.errorCode, "founder_inference_receipt_unavailable"));
   }
 
+  if (claim.modelId !== "gpt-5.6-luna" && claim.modelId !== "gpt-6-luna") {
+    throw new Error("founder_inference_model_unsupported");
+  }
   return {
     receiptKey,
     claimToken,
     fundingMode: args.admission.mode,
-    modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+    modelId: claim.modelId,
   };
 }
 
@@ -102,6 +105,7 @@ export async function settleCommunityInferenceFundingSession(args: {
   session: CommunityInferenceFundingSession;
   promptTokens: number;
   completionTokens: number;
+  providerRequests?: FounderProviderRequestUsage[];
   usageComplete: boolean;
   outcomeCode: string;
 }): Promise<void> {
@@ -112,6 +116,7 @@ export async function settleCommunityInferenceFundingSession(args: {
       claimToken: args.session.claimToken,
       promptTokens: Math.max(0, Math.floor(args.promptTokens)),
       completionTokens: Math.max(0, Math.floor(args.completionTokens)),
+      providerRequests: args.providerRequests,
       usageComplete: args.usageComplete,
       outcomeCode: boundedCode(args.outcomeCode, "provider_completed"),
       nowMs: Date.now(),
@@ -127,6 +132,7 @@ export async function failCommunityInferenceFundingSession(args: {
   session: CommunityInferenceFundingSession;
   promptTokens: number;
   completionTokens: number;
+  providerRequests?: FounderProviderRequestUsage[];
   usageComplete: boolean;
   failureCode: string;
   disposition: "failed" | "indeterminate";
@@ -138,6 +144,7 @@ export async function failCommunityInferenceFundingSession(args: {
       claimToken: args.session.claimToken,
       promptTokens: Math.max(0, Math.floor(args.promptTokens)),
       completionTokens: Math.max(0, Math.floor(args.completionTokens)),
+      providerRequests: args.providerRequests,
       usageComplete: args.usageComplete,
       failureCode: boundedCode(args.failureCode, "provider_error"),
       disposition: args.disposition,

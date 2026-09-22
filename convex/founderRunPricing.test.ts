@@ -68,3 +68,15 @@ test("legacy Luna pricing retains its original arithmetic", () => {
     }),
   ).toBe(800);
 });
+
+test("long-context thresholds apply to each provider request, never accumulated run input", async () => {
+  const { calculateFounderRequestCosts } = await import("./founderPlanPricing");
+  const requests = ["resp_a", "resp_b"].map(requestId => ({ requestId, modelId: "gpt-6-luna", serviceTier: "default",
+    promptTokens: 150_000, completionTokens: 1000, cachedInputTokens: 0, cacheWriteTokens: 0 }));
+  expect(calculateFounderRequestCosts({ requests, pricing, promptTokens: 300_000, completionTokens: 2000 })).toBe(31_000);
+  for (const bad of [
+    [requests[0], requests[0]],
+    [{ ...requests[0], serviceTier: "priority" }, requests[1]],
+    [{ ...requests[0], modelId: "gpt-5.6-luna" }, requests[1]],
+  ]) expect(() => calculateFounderRequestCosts({ requests: bad, pricing, promptTokens: 300_000, completionTokens: 2000 })).toThrow("request_usage_invalid");
+});

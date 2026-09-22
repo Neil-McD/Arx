@@ -31,3 +31,11 @@ Accounting accepts disjoint ordinary/cached/cache-write input counts, with promp
 ## Verification
 
 Behavior tests cover frozen subscription/operator pricing, pre-snapshot settlement, new model settlement in the same existing allowance cycle, cached and cache-write usage, the long-context threshold, missing/invalid usage, and invalid price profiles. Existing receipt lifecycle tests continue to cover replay, expiration, funding authority, and incomplete usage.
+
+## Workflow canary slice
+
+The server-only `POLYNET_LUNA6_WORKFLOW_CANARY_COMMUNITY_ID` selects Luna 6 only for new workflow receipts in one exact community. Other surfaces and communities retain 5.6. Unsetting the selector stops new Luna 6 admissions; reclaimed receipts keep their recorded model. The worker resolves that model before input budgeting, then verifies its funding claim has the same model before provider start.
+
+The Responses adapter requests Standard processing and low reasoning for Luna 6. It reads `usage.input_tokens_details.cached_tokens` and `cache_write_tokens` explicitly; missing values remain unknown. Each provider response ID, returned model, tier, and usage breakdown is retained on the receipt. Settlement validates unique response IDs and token totals, applies long-context pricing separately to each request, and sums the resulting microdollar costs. Missing request usage follows the existing indeterminate path. No runtime changes are made to member-agent or setup model selection in this slice.
+
+Reference: https://developers.openai.com/api/docs/guides/prompt-caching#monitor-cache-performance

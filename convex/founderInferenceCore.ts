@@ -1,5 +1,6 @@
 import {
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
+  type FounderProviderRequestUsage,
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
@@ -16,6 +17,7 @@ import {
 import {
   calculateFounderInferenceCostMicros,
   calculateFounderRunCostMicros,
+  calculateFounderRequestCosts,
   validateFounderRunPricing,
   type FounderRunPricing,
   requireFounderInferencePricingFromEnv,
@@ -42,6 +44,7 @@ export type FounderInferenceReceiptRow = {
   providerStartedAt?: number;
   promptTokens?: number;
   completionTokens?: number;
+  providerRequests?: FounderProviderRequestUsage[];
   cachedInputTokens?: number;
   cacheWriteTokens?: number;
   pricingVersion?: string;
@@ -273,6 +276,7 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   claimToken: string;
   promptTokens: number;
   completionTokens: number;
+  providerRequests?: FounderProviderRequestUsage[];
   cachedInputTokens?: number;
   cacheWriteTokens?: number;
   usageComplete?: boolean;
@@ -294,7 +298,8 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   const cycle = receipt.fundingMode === "platform_subscription"
     ? await requireFounderInferenceSettlementCycle({ ctx: args.ctx, receipt })
     : undefined;
-  if (args.usageComplete === false) {
+  const missingRequestUsage = receipt.modelId === "gpt-6-luna" && !args.providerRequests?.length;
+  if (args.usageComplete === false || missingRequestUsage) {
     if (cycle) {
       settledCostMicros = Number(receipt.reservedCostMicros);
       await settleFounderUsageReservation({
@@ -332,7 +337,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   if (receipt.fundingMode === "platform_subscription") {
     if (!cycle) throw new Error("founder_usage_cycle_missing");
     settledCostMicros = receipt.pricingSnapshot
-      ? calculateFounderRunCostMicros({ promptTokens, completionTokens, cachedInputTokens: args.cachedInputTokens, cacheWriteTokens: args.cacheWriteTokens, pricing: receipt.pricingSnapshot })
+      ? (receipt.modelId === "gpt-6-luna"
+        ? calculateFounderRequestCosts({ requests: args.providerRequests!, pricing: receipt.pricingSnapshot, promptTokens, completionTokens })
+        : calculateFounderRunCostMicros({ promptTokens, completionTokens, pricing: receipt.pricingSnapshot }))
       : calculateFounderInferenceCostMicros({
       promptTokens,
       completionTokens,
@@ -354,7 +361,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   } else if (receipt.fundingMode === "platform_operator_grant") {
     if (receipt.pricingSnapshot) {
       validateFounderRunPricing(receipt.pricingSnapshot, receipt.modelId, receipt.pricingVersion);
-      settledCostMicros = calculateFounderRunCostMicros({ promptTokens, completionTokens, cachedInputTokens: args.cachedInputTokens, cacheWriteTokens: args.cacheWriteTokens, pricing: receipt.pricingSnapshot });
+      settledCostMicros = (receipt.modelId === "gpt-6-luna"
+        ? calculateFounderRequestCosts({ requests: args.providerRequests!, pricing: receipt.pricingSnapshot, promptTokens, completionTokens })
+        : calculateFounderRunCostMicros({ promptTokens, completionTokens, pricing: receipt.pricingSnapshot }));
     } else {
     const pricing = requireFounderInferencePricingFromEnv();
     if (receipt.modelId !== "gpt-5.6-luna" || receipt.pricingVersion !== "founder_plan_luna_v1" || receipt.pricingVersion !== pricing.pricingVersion) {
@@ -371,6 +380,7 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     status: "settled",
     promptTokens,
     completionTokens,
+    providerRequests: args.providerRequests,
     cachedInputTokens: args.cachedInputTokens,
     cacheWriteTokens: args.cacheWriteTokens,
     settledCostMicros,
@@ -384,6 +394,7 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     status: "settled",
     promptTokens,
     completionTokens,
+    providerRequests: args.providerRequests,
     cachedInputTokens: args.cachedInputTokens,
     cacheWriteTokens: args.cacheWriteTokens,
     settledCostMicros,

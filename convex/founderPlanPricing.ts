@@ -1,3 +1,5 @@
+import { v } from "convex/values";
+import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
   POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
@@ -224,4 +226,35 @@ export function calculateFounderRunCostMicros(args: {
   if (!Number.isSafeInteger(numerator))
     throw new Error("founder_inference_cost_overflow");
   return Math.ceil(numerator / 2_000_000);
+}
+
+export const founderProviderRequestUsageValidator = v.object({
+  requestId: v.string(), modelId: v.string(), serviceTier: v.string(),
+  promptTokens: v.number(), completionTokens: v.number(),
+  cachedInputTokens: v.number(), cacheWriteTokens: v.number(),
+});
+
+export function calculateFounderRequestCosts(args: {
+  requests: FounderProviderRequestUsage[];
+  pricing: FounderRunPricing;
+  promptTokens: number;
+  completionTokens: number;
+}): number {
+  if (args.requests.length === 0 || args.requests.length > 64) throw new Error("founder_inference_request_usage_invalid");
+  const ids = new Set<string>();
+  let prompt = 0, completion = 0, cost = 0;
+  for (const request of args.requests) {
+    if (!request.requestId || ids.has(request.requestId) || request.serviceTier !== "default"
+        || (request.modelId !== args.pricing.modelId && !request.modelId.startsWith(`${args.pricing.modelId}-`))) {
+      throw new Error("founder_inference_request_usage_invalid");
+    }
+    ids.add(request.requestId);
+    cost += calculateFounderRunCostMicros({ ...request, pricing: args.pricing });
+    prompt += request.promptTokens;
+    completion += request.completionTokens;
+  }
+  if (prompt !== args.promptTokens || completion !== args.completionTokens || !Number.isSafeInteger(cost)) {
+    throw new Error("founder_inference_request_usage_invalid");
+  }
+  return cost;
 }

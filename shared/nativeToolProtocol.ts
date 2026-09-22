@@ -1,3 +1,4 @@
+import type { FounderProviderRequestUsage } from "./founderInference";
 import type { RetrievalToolName } from "./retrievalTools";
 
 export type NativeToolChoice<TToolName extends string = string> =
@@ -82,6 +83,7 @@ export type NativeToolAwareCompletionSuccess<TToolName extends string = Retrieva
       promptTokens: number | null;
       completionTokens: number | null;
       resolvedModelId: string | null;
+      providerRequestUsage?: FounderProviderRequestUsage;
     }
   | {
       ok: true;
@@ -93,6 +95,7 @@ export type NativeToolAwareCompletionSuccess<TToolName extends string = Retrieva
       promptTokens: number | null;
       completionTokens: number | null;
       resolvedModelId: string | null;
+      providerRequestUsage?: FounderProviderRequestUsage;
     }
   | {
       ok: true;
@@ -102,6 +105,7 @@ export type NativeToolAwareCompletionSuccess<TToolName extends string = Retrieva
       promptTokens: number | null;
       completionTokens: number | null;
       resolvedModelId: string | null;
+      providerRequestUsage?: FounderProviderRequestUsage;
     };
 
 export function buildAssistantToolCallsMessage(params: {
