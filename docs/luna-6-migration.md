@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: workflow canary implemented and verified on staging on 2026-09-22. Canary selector is now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
+Status: workflow and member-agent canaries implemented and verified on staging on 2026-09-22. Both canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
 
 ## Authority
 
@@ -53,3 +53,11 @@ See `artifacts/luna6-workflow-staging-20260922/acceptance.md` and `receipt.json`
 ## Member-agent canary slice
 
 `POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID` is a separate server-only selector for new `member_agent_dock` receipts in one exact community. The member runtime resolves the model before recording the run and before input budgeting. It refuses to resume a persisted run under a different model, and it checks the later funding claim against the admitted model before provider start. Streaming and nonstreaming turns send each successful provider response through the same usage collector used by workflow replies. A missing Luna 6 request breakdown remains indeterminate; existing 5.6 aggregate settlement is unchanged. No global default changes in this slice.
+
+### Staging acceptance — 2026-09-22
+
+Backend commit `0616ad260` was deployed to `quick-porcupine-949`. In the synthetic `workflow-sequence-acceptance-20260922` community, the member-agent browser returned a simple text answer and a read-only `polynet_list` answer. The tool turn recorded `polynet_list` started/finished, an `ok` runtime run on `gpt-6-luna`, a Luna 6 input-budget profile and provider attestation, and two distinct Standard provider requests on one settled receipt. The first turn settled at 665 microdollars; the tool turn settled at 843 microdollars. Both responses were visible in the browser.
+
+The member selector was removed after the proof. A fresh admission now resolves to `gpt-5.6-luna`, while the existing receipt still resolves to `gpt-6-luna`. Production was untouched. Automated validation: 1,608 tests across 179 files, Convex typecheck, and founder inference, member dock, and community serve-worker contract proofs passed. See `artifacts/luna6-member-staging-20260922/acceptance.md` and `receipt.json`.
+
+This proves text and one read-only tool loop on the synthetic, operator-funded staging community. Image input, nonstreaming live transport, subscription-funded settlement, other agent surfaces, provider failures, and reservation adequacy remain to be accepted before a global default switch.
