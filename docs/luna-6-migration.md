@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: workflow, member-agent, and paid member-agent canaries verified on staging on 2026-09-22. Both canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
+Status: workflow, member-agent, paid member-agent, and community-agent conversation canaries verified on staging on 2026-09-22. All canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
 
 ## Authority
 
@@ -77,3 +77,11 @@ The member selector was removed after the proof. A fresh admission resolves to `
 ## Community-agent conversation canary
 
 `POLYNET_LUNA6_CONCIERGE_CANARY_COMMUNITY_ID` selects Luna 6 only for new `community_agent_mention` receipts in one exact community. This canonical funding surface covers explicit agent mentions and direct replies to the agent; both must be tested before treating it as accepted. The existing serve worker already resolves the model before input budgeting, binds provider dispatch to the claimed receipt, records each Standard provider response, and applies the paid-run reservation guard. Other agent surfaces and communities remain on 5.6. Unsetting the selector stops new Luna 6 admissions while old receipts retain their immutable model.
+
+### Staging acceptance — 2026-09-22
+
+Backend commit `833b115f4` was deployed to `quick-porcupine-949`. In the existing paid synthetic `founder-e2e-783091` community, a browser @mention, a direct reply to the agent's welcome message, and a direct reply to the agent's answer with an @mention each produced one persisted agent response. The third source turn qualified as both a mention and a direct reply; it produced one serve request and one receipt, with `direct_reply` as the recorded trigger. The scoped `polynet_list` call succeeded and its answer named `community.md`, `members/`, and `resources/`. An earlier request to list `/` was correctly denied with `community_path_required`, and the agent explained that boundary in the thread.
+
+All three receipts used `gpt-6-luna`, Standard provider requests, and the existing paid founder cycle. They settled at 381, 84, and 234 microdollars; the cycle moved from 1,730 to 2,429 settled microdollars and ended with zero reserved. The canary selector was removed. A fresh admission then resolved to `gpt-5.6-luna`, while the existing tool-turn receipt still resolved to `gpt-6-luna`. Production was untouched. Validation: 1,613 tests across 180 files, Convex project typecheck, and founder inference and community serve-worker contract proofs passed. See `artifacts/luna6-concierge-staging-20260922/acceptance.md` and `receipt.json`.
+
+This proves staged text mentions, direct replies, scope enforcement, one read-only tool loop, and paid settlement. It does not accept autonomous cognition, timed service-channel messages, setup generation, image input, or global default activation.
