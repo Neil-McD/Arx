@@ -48,6 +48,7 @@ import {
   resolveCommunityInferenceFundingForAction,
   settleCommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
+import { startFundedInferenceRun } from "./fundedInferenceGateway";
 
 const COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES = 500;
 const COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS = 3600;
@@ -981,134 +982,6 @@ function parseResourceContentWriterBody(raw: string): string {
   return body;
 }
 
-async function runWikiArchitectModel(params: {
-  input: Record<string, unknown>;
-  apiKeyOverride?: string | null;
-  modelIdOverride?: string | null;
-}): Promise<
-  | {
-      ok: true;
-      outputText: string;
-      modelId: string;
-      resolvedModelId: string | null;
-      promptTokens: number | null;
-      completionTokens: number | null;
-    }
-  | {
-      ok: false;
-      status: number;
-      code: string;
-      message: string;
-      outputPreview?: string;
-    }
-> {
-  const apiKey = String(params.apiKeyOverride ?? "").trim() ||
-    readEnv("OPENAI_API_KEY") ||
-    readEnv("ARX_OPENAI_API_KEY");
-  if (!apiKey) {
-    return {
-      ok: false,
-      status: 503,
-      code: "provider_inference_misconfigured",
-      message: "OPENAI_API_KEY is not configured.",
-    };
-  }
-  const overrideModelId = normalizeOpenAiResponsesModelId(String(params.modelIdOverride ?? ""));
-  const modelResolution = overrideModelId
-    ? { ok: true as const, modelId: overrideModelId }
-    : resolveWikiArchitectModelId();
-  if (!modelResolution.ok) {
-    return {
-      ok: false,
-      status: 503,
-      code: modelResolution.code,
-      message: modelResolution.message,
-    };
-  }
-  const { modelId } = modelResolution;
-
-  let response: Response;
-  try {
-    response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        store: false,
-        instructions: COMMUNITY_WIKI_ARCHITECT_PROMPT,
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: JSON.stringify(params.input, null, 2),
-              },
-            ],
-          },
-        ],
-        max_output_tokens: COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS,
-      }),
-    });
-  } catch {
-    return {
-      ok: false,
-      status: 503,
-      code: "provider_inference_unavailable",
-      message: "OpenAI inference is temporarily unavailable.",
-    };
-  }
-
-  const raw = await response.text();
-  let parsed: Record<string, any> | null = null;
-  try {
-    parsed = raw ? (JSON.parse(raw) as Record<string, any>) : null;
-  } catch {
-    parsed = null;
-  }
-  if (!response.ok) {
-    const message =
-      (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) ||
-      `OpenAI error (${response.status})`;
-    return {
-      ok: false,
-      status: response.status,
-      code:
-        response.status === 401 || response.status === 403
-          ? "provider_inference_misconfigured"
-          : response.status === 429
-            ? "rate_limited"
-            : "provider_inference_error",
-      message,
-      outputPreview: raw.slice(0, 1200),
-    };
-  }
-  if (!parsed) {
-    return {
-      ok: false,
-      status: 502,
-      code: "provider_inference_error",
-      message: "OpenAI returned invalid JSON.",
-      outputPreview: raw.slice(0, 1200),
-    };
-  }
-  const usage = parseTokenUsage(parsed);
-  return {
-    ok: true,
-    outputText: extractResponseText(parsed),
-    modelId,
-    resolvedModelId:
-      (typeof parsed.model === "string" && parsed.model.trim()) ||
-      (typeof parsed.response?.model === "string" && parsed.response.model.trim()) ||
-      null,
-    promptTokens: usage.promptTokens,
-    completionTokens: usage.completionTokens,
-  };
-}
-
 async function runResourceContentWriterModel(params: {
   input: Record<string, unknown>;
   apiKeyOverride?: string | null;
@@ -1429,7 +1302,7 @@ export const runCommunityWikiArchitectProposal: any = action({
     if (!actorUserId) throw new Error("community_wiki_architect_actor_required");
     const requestId = String(args.requestId ?? "").trim().slice(0, 160) || crypto.randomUUID();
     const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
-    const fundingSession = await claimCommunityInferenceFundingSession({
+    const fundedRun = await startFundedInferenceRun({
       ctx,
       communityId: args.communityId,
       actorUserId,
@@ -1438,44 +1311,39 @@ export const runCommunityWikiArchitectProposal: any = action({
       sourceRunId: `community-wiki-architect:${requestId}`,
       admission: funding,
     });
-
-    await markCommunityInferenceFundingSessionProviderStarted({
-      ctx,
-      session: fundingSession,
-    });
-    const completion = await runWikiArchitectModel({
-      input: context as Record<string, unknown>,
-      modelIdOverride: fundingSession.modelId,
-    });
-    if (!completion.ok) {
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens: 0,
-        completionTokens: 0,
-        usageComplete: true,
-        failureCode: completion.code,
-        disposition: providerFailureIsKnownPreSpend(completion.code) ? "failed" : "indeterminate",
+    let response: Awaited<ReturnType<typeof fundedRun.request>>;
+    try {
+      response = await fundedRun.request({
+        messages: [
+          { role: "system", content: COMMUNITY_WIKI_ARCHITECT_PROMPT },
+          { role: "user", content: JSON.stringify(context, null, 2) },
+        ],
+        maxTokens: COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS,
+        tools: [],
+        apiKeyOverride: readEnv("OPENAI_API_KEY") || readEnv("ARX_OPENAI_API_KEY") || undefined,
       });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "community_wiki_architect_provider_failed";
+      await fundedRun.fail(code);
       return {
         ok: false,
         kind: "community_wiki_architect_proposal",
-        code: completion.code,
-        message: completion.message,
-        output_preview: completion.outputPreview ?? null,
+        code,
+        message: "Wiki Architect inference could not complete.",
       };
     }
-    const usageComplete = completion.promptTokens !== null && completion.completionTokens !== null;
-    if (!usageComplete) {
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens: completion.promptTokens ?? 0,
-        completionTokens: completion.completionTokens ?? 0,
-        usageComplete: false,
-        failureCode: "provider_token_usage_missing",
-        disposition: "indeterminate",
-      });
+    if (!response.ok) {
+      await fundedRun.fail(response.code);
+      return {
+        ok: false,
+        kind: "community_wiki_architect_proposal",
+        code: response.code,
+        message: response.message,
+      };
+    }
+    const settled = await fundedRun.settle(response.type === "assistant"
+      ? "provider_completed" : "invalid_model_output");
+    if (!settled) {
       return {
         ok: false,
         kind: "community_wiki_architect_proposal",
@@ -1483,14 +1351,21 @@ export const runCommunityWikiArchitectProposal: any = action({
         message: "Wiki Architect usage could not be settled safely.",
       };
     }
-    await settleCommunityInferenceFundingSession({
-      ctx,
-      session: fundingSession,
-      promptTokens: completion.promptTokens ?? 0,
-      completionTokens: completion.completionTokens ?? 0,
-      usageComplete: true,
-      outcomeCode: "provider_completed",
-    });
+    if (response.type !== "assistant") {
+      return {
+        ok: false,
+        kind: "community_wiki_architect_proposal",
+        code: "invalid_model_output",
+        message: "Wiki Architect returned an unexpected tool call.",
+      };
+    }
+    const completion = {
+      outputText: response.assistantText,
+      modelId: fundedRun.modelId,
+      resolvedModelId: response.resolvedModelId,
+      promptTokens: response.promptTokens,
+      completionTokens: response.completionTokens,
+    };
 
     let parsedProposal: unknown;
     try {

@@ -47,10 +47,11 @@ assert.match(
   "architect action should use the shared prompt",
 );
 assert.match(
-  architect,
-  /resolveWikiArchitectModelId/,
-  "architect action should resolve an explicit OpenAI Responses model id",
+  runBody,
+  /startFundedInferenceRun\([\s\S]*surface: "community_setup_generation"[\s\S]*fundedRun\.request\([\s\S]*fundedRun\.settle\(/,
+  "architect proposal should use the canonical funded provider step and settle its receipt",
 );
+assert.doesNotMatch(runBody, /fetch\(/, "architect proposal must not dispatch a separate provider request");
 assert.doesNotMatch(
   architect,
   /COMMUNITY_WIKI_ARCHITECT_DEFAULT_MODEL\s*=\s*"gpt-5\.5"/,
