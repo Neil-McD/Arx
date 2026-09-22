@@ -1083,6 +1083,8 @@ export default defineSchema({
     builderKnowledgeBuildLeaseExpiresAt: v.optional(v.number()),
     oneLiner: v.optional(v.string()),
     about: v.optional(v.string()),
+    externalFunnelUrl: v.optional(v.string()),
+    externalFunnelActive: v.optional(v.boolean()),
     avatarUrl: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     avatarFocusX: v.optional(v.number()),

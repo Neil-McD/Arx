@@ -28,7 +28,7 @@ describe("buildCommunityFunnelRenderModel", () => {
       headline: "The operating room for builders.",
       subheadline: null,
       pillars: [],
-      longFormMarkdown: "Work through real problems together.",
+      longFormMarkdown: null,
       vslUrl: null,
     });
   });
@@ -39,7 +39,7 @@ describe("buildCommunityFunnelRenderModel", () => {
     ).toMatchObject({ mode: "default", headline: "Operators", subheadline: null });
   });
 
-  it("projects an optional profile video into the deterministic default funnel", () => {
+  it("keeps the deterministic default short even when the profile has long copy and video", () => {
     expect(
       buildCommunityFunnelRenderModel({
         communityName: "Operators",
@@ -56,8 +56,8 @@ describe("buildCommunityFunnelRenderModel", () => {
       headline: "The operating room for builders.",
       subheadline: null,
       pillars: [],
-      longFormMarkdown: "Work through real problems together.",
-      vslUrl: "https://youtube.com/watch?v=default-vsl",
+      longFormMarkdown: null,
+      vslUrl: null,
     });
   });
 

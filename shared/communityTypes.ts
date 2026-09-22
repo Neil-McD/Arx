@@ -127,6 +127,9 @@ export type CommunityFunnelVariantConfig = {
 };
 
 export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
+  external_funnel_url: string | null;
+  external_funnel_active: boolean;
+  settings_revision: number;
   custom_funnels: Record<
     CommunityCustomFunnelSlot,
     CommunityFunnelVariantConfig | null
@@ -149,6 +152,7 @@ export type DiscoverCommunitySnapshot = {
   banner_zoom?: number | null;
   visibility: "published" | "unlisted";
   entry_policy?: CommunityEntryPolicy | null;
+  external_funnel_url?: string | null;
   created_at: string;
   updated_at: string;
   active_plan?: PublicPlanSummary | null;

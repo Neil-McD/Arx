@@ -137,11 +137,8 @@ export function buildCommunityFunnelRenderModel(
     headline: cleanOptionalCopy(input.oneLiner) ?? input.communityName.trim(),
     subheadline: null,
     pillars: [],
-    longFormMarkdown: cleanOptionalCopy(input.about),
-    vslUrl:
-      input.funnel?.hero_media_kind === "video"
-        ? cleanOptionalCopy(input.funnel?.hero_media_url)
-        : null,
+    longFormMarkdown: null,
+    vslUrl: null,
   };
 }
 

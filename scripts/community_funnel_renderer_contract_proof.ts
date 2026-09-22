@@ -46,10 +46,9 @@ const identity = renderer.indexOf('className="community-funnel-identity');
 const hero = renderer.indexOf('className="community-funnel-hero');
 const vsl = renderer.indexOf("{media ? (");
 const defaultPrimaryAction = renderer.indexOf('props.renderModel.mode === "default"', vsl);
-const defaultMemberProof = renderer.indexOf("{memberProof}", defaultPrimaryAction);
 const defaultPrimaryCta = renderer.indexOf(
   '<FunnelAction action={props.action} position="primary" />',
-  defaultMemberProof,
+  defaultPrimaryAction,
 );
 const customPrimaryAction = renderer.indexOf('props.renderModel.mode === "custom"', defaultPrimaryCta);
 const customMemberProof = renderer.indexOf("{memberProof}", customPrimaryAction);
@@ -65,21 +64,19 @@ assert.ok(
     identity < hero &&
     hero < vsl &&
     vsl < defaultPrimaryAction &&
-    defaultPrimaryAction < defaultMemberProof &&
-    defaultMemberProof < defaultPrimaryCta &&
+    defaultPrimaryAction < defaultPrimaryCta &&
     defaultPrimaryCta < customPrimaryAction &&
     customPrimaryAction < customMemberProof &&
     customMemberProof < pillars &&
     pillars < longForm &&
     longForm < conversion &&
     conversion < finalCta,
-  "the canonical renderer must keep identity, hero, optional VSL, member proof, primary CTA, long-form copy, and final CTA in conversion order",
+  "the canonical renderer must keep the simple default action and the custom funnel content in conversion order",
 );
-assert.match(
-  renderer,
-  /props\.renderModel\.mode === "custom" \|\|[\s\S]*props\.renderModel\.mode === "default" && props\.renderModel\.longFormMarkdown[\s\S]*className="community-funnel-conversion"/,
-  "default funnels with About copy must close with a second join action",
-);
+assert.doesNotMatch(renderer.slice(defaultPrimaryAction, customPrimaryAction), /\{memberProof\}/,
+  "the default landing page must not render member proof");
+assert.match(renderer, /props\.renderModel\.mode === "custom" \? \([\s\S]*className="community-funnel-conversion"/,
+  "only custom funnels may render a second join action");
 assert.doesNotMatch(
   renderer.slice(conversion),
   /\{memberProof\}/,
@@ -124,11 +121,12 @@ assert.doesNotMatch(
 );
 assert.match(
   renderProjection,
-  /mode:\s*"default"[\s\S]*subheadline:\s*null[\s\S]*longFormMarkdown:\s*cleanOptionalCopy\(input\.about\)/,
-  "the deterministic funnel must keep the one-liner in the hero and move About below conversion proof",
+  /mode:\s*"default"[\s\S]*subheadline:\s*null[\s\S]*longFormMarkdown:\s*null[\s\S]*vslUrl:\s*null/,
+  "the deterministic landing page must omit long-form copy and media",
 );
 assert.match(memberProofCss, /\.community-funnel-member-proof-avatars[\s\S]*--member-avatar-stack-face-size/);
-assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
+assert.match(rendererCss, /--community-funnel-page:\s*var\(--surface-workspace\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
+assert.match(rendererCss, /\.community-funnel-loading\s*\{[^}]*background:\s*var\(--surface-workspace\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);
 assert.match(rendererCss, /container-type: inline-size[\s\S]*font-size: clamp\([^;]*cqi/);
 assert.match(

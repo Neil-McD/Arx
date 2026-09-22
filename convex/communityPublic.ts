@@ -38,6 +38,7 @@ import {
 } from "./communityJoinRequestCore";
 import { findAuthenticatedActorState } from "./authActor";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
+import { readCommunityExternalFunnelUrl } from "../shared/communityExternalFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   communityMembershipRequiresManagerReapproval,
@@ -336,6 +337,9 @@ export const resolvePublicFunnelBySlug = query({
         banner_zoom: branding.banner_zoom,
         visibility: community.visibility,
         entry_policy: entryPolicy,
+        external_funnel_url: community.externalFunnelActive === true
+          ? readCommunityExternalFunnelUrl(community.externalFunnelUrl)
+          : null,
         funnel,
       },
       active_plan: activePlan,
@@ -566,6 +570,9 @@ export const listPublicDiscoverCommunities = query({
           banner_zoom: branding.banner_zoom,
           visibility: community.visibility,
           entry_policy: entryPolicy,
+          external_funnel_url: community.externalFunnelActive === true
+            ? readCommunityExternalFunnelUrl(community.externalFunnelUrl)
+            : null,
           created_at: toIsoString(community.createdAt),
           updated_at: toIsoString(community.updatedAt),
           branding_revision: community.brandingRevision ?? community.updatedAt,

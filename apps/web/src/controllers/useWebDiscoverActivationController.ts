@@ -10,6 +10,7 @@ import type {
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
 import type { WebPublicCommunityRecord } from "../webAppContracts";
+import { readCommunityExternalFunnelUrl } from "../../../../shared/communityExternalFunnel";
 
 type PublicCommunityUiActions = {
   setPublicCommunity: Dispatch<
@@ -25,6 +26,15 @@ type PublicCommunityUiActions = {
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
   setIsLoadingPublicCommunity: Dispatch<SetStateAction<boolean>>;
 };
+
+export function resolveDiscoverCommunityDestination(
+  community: DiscoverCommunitySnapshot,
+  knownCommunityId: string | null,
+): { kind: "joined"; communityId: string } | { kind: "external"; url: string } | { kind: "native" } {
+  if (knownCommunityId) return { kind: "joined", communityId: knownCommunityId };
+  const url = readCommunityExternalFunnelUrl(community.external_funnel_url);
+  return url ? { kind: "external", url } : { kind: "native" };
+}
 
 export function useWebDiscoverActivationController(params: {
   publicCommunityUi: PublicCommunityUiActions;
@@ -60,11 +70,17 @@ export function useWebDiscoverActivationController(params: {
 
       const knownCommunityId =
         params.resolveKnownCommunityIdBySlug(slug);
-      if (knownCommunityId) {
+      const destination = resolveDiscoverCommunityDestination(community, knownCommunityId);
+      if (destination.kind === "joined") {
         params.enterJoinedCommunity({
-          communityId: knownCommunityId,
+          communityId: destination.communityId,
           communitySlug: slug,
         });
+        return;
+      }
+
+      if (destination.kind === "external") {
+        window.open(destination.url, "_blank", "noopener,noreferrer");
         return;
       }
 

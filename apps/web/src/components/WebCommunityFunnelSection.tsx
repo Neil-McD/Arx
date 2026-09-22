@@ -5,6 +5,7 @@ type WebCommunityFunnelSectionProps = {
   hasSession: boolean;
   canManageMembersActiveCommunity: boolean;
   isLoadingCommunityFunnel: boolean;
+  isCommunityFunnelReady: boolean;
   communityFunnelError: string | null;
   onRequireSignIn: () => void;
   editorProps: WebCommunityFunnelEditorProps;
@@ -16,6 +17,7 @@ export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps)
     hasSession,
     canManageMembersActiveCommunity,
     isLoadingCommunityFunnel,
+    isCommunityFunnelReady,
     communityFunnelError,
     onRequireSignIn,
     editorProps,
@@ -39,10 +41,10 @@ export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps)
         </div>
       ) : !canManageMembersActiveCommunity ? (
         <div className="chat-empty">Only owners and admins can configure the public funnel.</div>
-      ) : isLoadingCommunityFunnel ? (
-        <div className="chat-empty">Loading…</div>
       ) : communityFunnelError ? (
         <div className="auth-error">{communityFunnelError}</div>
+      ) : isLoadingCommunityFunnel || !isCommunityFunnelReady ? (
+        <div className="chat-empty">Loading…</div>
       ) : (
         <WebCommunityFunnelEditor {...editorProps} />
       )}

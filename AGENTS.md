@@ -32,9 +32,10 @@ This file is the execution contract for agents working in this repository.
 - Community visibility model simplified to `Published` and `Unlisted`.
 - Discover is a communities-only surface using simplified visibility semantics.
 - Gated community access model (including for `Published` communities).
-- Public community funnels for founder-shared links (YouTube/social/direct),
-  including one deterministic fallback and one AI-assisted custom lifecycle
-  with explicit draft, publish, and active-selection boundaries.
+- One canonical Polynet join/checkout gate per community, with an optional
+  builder-owned HTTPS marketing website linked from Discover. The existing
+  published custom-funnel lifecycle remains available during migration;
+  do not delete live content without a production usage review.
 - Core member UX: join, navigate, post/chat, and voice.
 - One founder plan: $79 monthly for one specific managed community, including
   up to $20 of raw GPT 5.6 Luna model cost per billing cycle.
@@ -65,8 +66,9 @@ This file is the execution contract for agents working in this repository.
 - Affiliate system as a launch requirement.
 - Automated affiliate payouts.
 - Advanced automations/workflow depth beyond minimal alpha.
-- General-purpose landing-page or funnel builders beyond the bounded
-  community-funnel composer.
+- New investment in the AI-assisted community-funnel composer or a
+  general-purpose landing-page builder. Existing published funnels remain
+  readable until their use and migration path are verified.
 - Standalone general-purpose personal-agent Workspace or multi-agent canvas.
 - Public Apps and Skills catalogs inside Discover.
 - Third-party MCP server catalogs, connections, mounts, credentials, and
@@ -110,7 +112,8 @@ If a cleanup touches any of the above, require explicit human confirmation.
 ### Community Access + Visibility
 - Visibility has only two states: `Published` and `Unlisted`.
 - `Published` does not mean ungated access; entitlement and membership checks still apply.
-- Community funnel is a single canonical entry surface for join/gate.
+- `/c/:slug` is the single canonical Polynet join/gate surface. An external
+  marketing website may link back to it but cannot grant access.
 
 ### Member Agent, Community Agent + External Harness Context
 - One community-provided Agent page uses private member-and-community-bound

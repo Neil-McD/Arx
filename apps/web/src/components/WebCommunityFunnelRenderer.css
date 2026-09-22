@@ -1,5 +1,5 @@
 .community-funnel-renderer {
-  --community-funnel-page: var(--surface-app);
+  --community-funnel-page: var(--surface-workspace);
   --community-funnel-ink: var(--text-ink-primary);
   --community-funnel-muted: var(--text-ink-muted);
   --community-funnel-line: var(--stroke-divider-accent);
@@ -313,7 +313,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--surface-app);
+  background: var(--surface-workspace);
 }
 
 .community-funnel-loading-inner {
