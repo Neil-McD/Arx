@@ -1283,7 +1283,7 @@ export const runCommunityWikiArchitectProposal: any = action({
       (internal as any).communityWikiArchitect.buildCommunityWikiArchitectRunContextInternal,
       {
         userId: args.userId,
-        authSubject: args.authSubject ?? null,
+        authSubject: args.authSubject,
         communityId: args.communityId,
         builderIntent: args.builderIntent ?? null,
       },

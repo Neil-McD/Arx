@@ -1,0 +1,30 @@
+{
+  "communityId": "jx7ds4a2wp2tzt20wjfbhjhw958cgxj0",
+  "surface": "community_setup_generation",
+  "receiptKey": "community_setup_generation:wiki_architect:setup-gateway-canary-20260922-1559",
+  "modelId": "gpt-6-luna",
+  "status": "settled",
+  "outcomeCode": "provider_completed",
+  "usageCycleId": "qs7xq7grvg954pff1m1b2h6h5n8eeqwa",
+  "reservedCostMicros": 1000000,
+  "settledCostMicros": 632,
+  "promptTokens": 3718,
+  "completionTokens": 334,
+  "providerRequests": [
+    {
+      "requestId": "resp_01b43b100e45dacc016ab2ddc6447087d2ba4b7465d18a5af0",
+      "modelId": "gpt-6-luna",
+      "serviceTier": "default",
+      "promptTokens": 3718,
+      "cachedInputTokens": 0,
+      "cacheWriteTokens": 3715,
+      "completionTokens": 334
+    }
+  ],
+  "cycleBefore": { "settledCostMicros": 2429, "reservedCostMicros": 0 },
+  "cycleAfter": { "settledCostMicros": 3061, "reservedCostMicros": 0 },
+  "modelReadbackAfterRollback": {
+    "freshSetupReceipt": "gpt-5.6-luna",
+    "existingCanaryReceipt": "gpt-6-luna"
+  }
+}
