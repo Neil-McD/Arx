@@ -1,0 +1,44 @@
+{
+  "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+  "authSubject": "user_01KM4GDWGG4H9B4154SFKQKEBE",
+  "communityId": "jx7ds4a2wp2tzt20wjfbhjhw958cgxj0",
+  "proposal": {
+    "run_type": "rerun",
+    "modules_created": [],
+    "modules_existing": ["Founder Journey"],
+    "drafts_created": [
+      {
+        "title": "Goal Intake Checklist - Writer Canary",
+        "module": "Founder Journey",
+        "purpose": "Help a member state a concrete goal and identify the next action for human review.",
+        "source_resource_id": "m97aew967j2zes1yptca5p8fxn8cgsfw"
+      },
+      {
+        "title": "Verified Next Action Checklist - Writer Canary",
+        "module": "Founder Journey",
+        "purpose": "Help a member verify completion of the next action using the same founder source.",
+        "source_resource_id": "m97aew967j2zes1yptca5p8fxn8cgsfw"
+      }
+    ],
+    "drafts_updated": [],
+    "pages_left_unchanged": [
+      {
+        "title": "From Goal to Verified Next Action",
+        "module": "Founder Journey",
+        "reason": "The existing review page is outside this synthetic writer canary."
+      }
+    ],
+    "proposed_changes_to_existing": [],
+    "sources_assigned": ["m97aew967j2zes1yptca5p8fxn8cgsfw"],
+    "sources_unassigned": [
+      {
+        "id": "m97509ccd7yvfxyg4t14mqhx1s8ch21z",
+        "reason": "The example.com fixture is not useful for the founder journey."
+      }
+    ],
+    "gaps": [],
+    "deferred": [],
+    "recommended_next_uploads": [],
+    "needs_from_builder": []
+  }
+}
