@@ -106,6 +106,23 @@ export async function getUniqueFounderInferenceReceiptByKey(
   return rows[0] ?? null;
 }
 
+export async function resolveCommunityInferenceModelForReceipt(
+  ctx: any,
+  args: { communityId: unknown; surface: CommunityInferenceSurface; receiptKey: string },
+): Promise<string> {
+  const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, args.receiptKey);
+  if (receipt) {
+    if (normalizedId(receipt.communityId) !== normalizedId(args.communityId) || receipt.surface !== args.surface) {
+      throw new Error("founder_inference_receipt_conflict");
+    }
+    return receipt.modelId;
+  }
+  const canaryCommunity = process.env.POLYNET_LUNA6_CANARY_COMMUNITY_ID?.trim();
+  const canarySurface = process.env.POLYNET_LUNA6_CANARY_SURFACE?.trim();
+  return canaryCommunity === normalizedId(args.communityId) && canarySurface === args.surface
+    ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;
+}
+
 export function founderInferenceReceiptIdentityMatches(
   receipt: FounderInferenceReceiptRow,
   expected: FounderInferenceReceiptIdentity,

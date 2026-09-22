@@ -6,12 +6,14 @@ import {
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
   type CommunityInferenceFundingAdmission,
+  type CommunityInferenceSurface,
 } from "../shared/founderInference";
 import {
   finalizeKnownNoSpendFounderInferenceReceipt,
   founderInferenceReceiptIdentityMatches,
   getUniqueFounderInferenceReceiptByKey,
   requireBoundedFounderInferenceIdentifier,
+  resolveCommunityInferenceModelForReceipt,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
@@ -19,23 +21,13 @@ import {
 import { reserveFounderUsage } from "./founderPlanCore";
 import { founderProviderRequestUsageValidator, requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
 
-function selectNewReceiptModel(communityId: unknown, surface: string): string {
-  const canaryCommunity = process.env.POLYNET_LUNA6_CANARY_COMMUNITY_ID?.trim();
-  const canarySurface = process.env.POLYNET_LUNA6_CANARY_SURFACE?.trim();
-  return canaryCommunity && canarySurface &&
-      canaryCommunity === String(communityId) && canarySurface === surface
-    ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;
-}
-
 export const resolveCommunityInferenceModelInternal = internalQuery({
   args: { communityId: v.id("communities"), surface: v.string(), receiptKey: v.string() },
-  handler: async (ctx, args) => {
-    const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, args.receiptKey);
-    if (receipt && (String(receipt.communityId) !== String(args.communityId) || receipt.surface !== args.surface)) {
-      throw new Error("founder_inference_receipt_conflict");
-    }
-    return receipt?.modelId ?? selectNewReceiptModel(args.communityId, args.surface);
-  },
+  handler: async (ctx, args) => await resolveCommunityInferenceModelForReceipt(ctx, {
+    communityId: args.communityId,
+    surface: args.surface as CommunityInferenceSurface,
+    receiptKey: args.receiptKey,
+  }),
 });
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
@@ -280,7 +272,11 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     }
 
     // Operator-controlled, community-scoped canary; never client selected.
-    const modelId = selectNewReceiptModel(args.communityId, args.surface);
+    const modelId = await resolveCommunityInferenceModelForReceipt(ctx, {
+      communityId: args.communityId,
+      surface: args.surface,
+      receiptKey,
+    });
     let usageCycleId: any | undefined;
     let reservedCostMicros: number | undefined;
     let pricingSnapshot: FounderRunPricing | undefined;

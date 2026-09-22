@@ -90,12 +90,16 @@ assert.match(
 assert.match(runtime, /runNativeRuntimeKernel<CommunityAgentToolName>/);
 assert.match(runtime, /parallelToolCalls: false/);
 assert.doesNotMatch(runtime, /beginCommunityInferenceFundingSession/);
-assert.match(runtime, /claimCommunityInferenceFundingSession/);
+assert.match(runtime, /resolveCommunityInferenceModelForReceipt[\s\S]*community_autonomous_cognition:\$\{normalizeIdValue\(id\)\}/);
+assert.match(runtime, /const modelId = createdRun\.run\.model_id[\s\S]*startFundedInferenceRun\([\s\S]*fundingState\.run\.modelId !== modelId/);
+assert.match(runtime, /modelRef: `openai\/\$\{modelId\}`/);
 assert.match(
   runtime,
-  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
-  "community cognition should mark provider start once at the exact first provider request",
+  /runCompletion: async[\s\S]*fundingState\.run\.request\([\s\S]*parallelToolCalls: false/,
+  "community cognition should use the funded gateway for every provider request",
 );
+assert.match(runtime, /fundingState\.run\.usage\(\)\.complete[\s\S]*provider_token_usage_missing[\s\S]*coerceCommunityAgentCompletion\(completion\)/,
+  "unmetered provider output must not reach the steward's write tool");
 assert.match(
   runtime,
   /fundingClaimAttempted = true[\s\S]*preProviderFundingErrorCode[\s\S]*runtimeErrorCode[\s\S]*errorCode: runtimeErrorCode/,
@@ -103,9 +107,10 @@ assert.match(
 );
 assert.match(
   runtime,
-  /usageComplete: !providerStarted[\s\S]*disposition: providerStarted \? "indeterminate" : "failed"/,
-  "runtime exceptions should release pre-provider reservations and conservatively settle post-provider uncertainty",
+  /fundingState\.run\.usage\(\)[\s\S]*fundingState\.run\.settle\("provider_completed"\)[\s\S]*fundingState\.run\.fail\(runtimeErrorCode\)/,
+  "runtime exceptions should finalize the same funded run with its recorded request usage",
 );
+assert.doesNotMatch(runtime, /runOpenAiNativeToolCompletion|claimCommunityInferenceFundingSession|aggregatePromptTokens|aggregateCompletionTokens/);
 assert.doesNotMatch(
   runtime,
   /runChatgptNativeToolCompletion|apiKeyOverride|carryReasoningItems/,

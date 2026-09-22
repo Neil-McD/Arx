@@ -156,3 +156,22 @@ test("a later unmetered response makes the whole multi-step run indeterminate", 
     usageComplete: false, disposition: "indeterminate",
   }));
 });
+
+test("a steward failure after a metered tool response preserves exact usage", async () => {
+  vi.mocked(runOpenAiNativeToolCompletion).mockResolvedValue({
+    ok: true, type: "tool_call", toolName: "write", arguments: "{}",
+    toolCallId: "call_steward", resolvedModelId: "gpt-6-luna",
+    promptTokens: 1200, completionTokens: 80, providerRequestUsage,
+  } as any);
+  const run = await startFundedInferenceRun({ ...claim, surface: "community_autonomous_cognition" } as any);
+  await run.request(request);
+  await run.fail("community_agent_runtime_exception");
+  expect(failCommunityInferenceFundingSession).toHaveBeenCalledWith(expect.objectContaining({
+    promptTokens: 1200,
+    completionTokens: 80,
+    providerRequests: [providerRequestUsage],
+    usageComplete: true,
+    failureCode: "community_agent_runtime_exception",
+  }));
+  await expect(run.request(request)).rejects.toThrow("founder_inference_run_finalized");
+});

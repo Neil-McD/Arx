@@ -365,10 +365,10 @@ assert.match(
 assert.match(autonomousRuntime, /surface: "community_autonomous_cognition"/);
 assert.match(autonomousRuntime, /receiptKey: `community_autonomous_cognition:\$\{runId\}`/);
 assert.doesNotMatch(autonomousRuntime, /beginCommunityInferenceFundingSession/);
-assert.match(autonomousRuntime, /claimCommunityInferenceFundingSession/);
+assert.match(autonomousRuntime, /resolveCommunityInferenceModelForReceipt[\s\S]*startFundedInferenceRun\([\s\S]*fundingState\.run\.modelId !== modelId/);
 assert.match(
   autonomousRuntime,
-  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+  /runCompletion: async[\s\S]*fundingState\.run\.request\([\s\S]*fundingState\.run\.usage\(\)\.complete/,
 );
 assert.match(
   autonomousRuntime,
@@ -377,11 +377,10 @@ assert.match(
 );
 assert.match(
   autonomousRuntime,
-  /usageComplete: !providerStarted[\s\S]*disposition: providerStarted \? "indeterminate" : "failed"/,
+  /fundingState\.run\.usage\(\)[\s\S]*fundingState\.run\.settle\("provider_completed"\)[\s\S]*fundingState\.run\.fail\(runtimeErrorCode\)/,
 );
-assert.match(autonomousRuntime, /modelId: fundingSession\.modelId/);
-assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|fundingSession\.apiKeyOverride/);
-assert.match(autonomousRuntime, /settleCommunityInferenceFundingSession/);
+assert.match(autonomousRuntime, /modelRef: `openai\/\$\{modelId\}`/);
+assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|claimCommunityInferenceFundingSession|fundingSession\.apiKeyOverride/);
 assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);

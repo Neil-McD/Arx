@@ -5,7 +5,6 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { v } from "convex/values";
-import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import {
   buildCommunityAgentFunctionTools,
   CANONICAL_COMMUNITY_AGENT_KEY,
@@ -33,15 +32,10 @@ import { normalizeIdValue, toIsoString } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
-import {
-  claimCommunityInferenceFundingSession,
-  failCommunityInferenceFundingSession,
-  markCommunityInferenceFundingSessionProviderStarted,
-  providerFailureIsKnownPreSpend,
-  resolveCommunityInferenceFundingForAction,
-  settleCommunityInferenceFundingSession,
-  type CommunityInferenceFundingSession,
-} from "./founderInferenceRuntime";
+import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
+import { resolveCommunityInferenceModelForReceipt } from "./founderInferenceCore";
+import { startFundedInferenceRun } from "./fundedInferenceGateway";
+import { founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
 import { buildRuntimeContextProjectionEvidence } from "../shared/providerContextWindow.ts";
 
@@ -426,7 +420,6 @@ export const createCommunityAgentRunInternal = internalMutation({
       v.literal("event"),
     ),
     sponsorUserId: v.id("users"),
-    modelId: v.string(),
     heartbeatId: v.optional(v.string()),
     role: v.optional(v.string()),
     wakeReason: v.optional(v.string()),
@@ -486,7 +479,7 @@ export const createCommunityAgentRunInternal = internalMutation({
       triggerType: args.triggerType,
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
       sponsorUserId: args.sponsorUserId,
-      modelId: normalizeModelId(args.modelId),
+      modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
       wakeReason: boundedText(args.wakeReason, 120) || undefined,
       wakeEvidence: args.wakeEvidence,
       status: "running",
@@ -496,6 +489,17 @@ export const createCommunityAgentRunInternal = internalMutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    // The insert and model pin commit atomically. The funding claim must match
+    // this model before any provider-capable work begins.
+    const modelId = await resolveCommunityInferenceModelForReceipt(ctx, {
+      communityId: args.communityId,
+      surface: "community_autonomous_cognition",
+      receiptKey: `community_autonomous_cognition:${normalizeIdValue(id)}`,
+    });
+    if (modelId !== "gpt-5.6-luna" && modelId !== "gpt-6-luna") {
+      throw new Error("community_agent_runtime_model_unsupported");
+    }
+    await ctx.db.patch(id as any, { modelId });
     const row = (await ctx.db.get(id as any)) as Record<string, any> | null;
     if (!row) throw new Error("community_agent_runtime_create_failed");
     return {
@@ -916,7 +920,6 @@ export const runCommunityAgentLoopInternal = internalAction({
         applied_change_request_ids: [],
       };
     }
-    const modelId = COMMUNITY_OWNER_FUNDED_MODEL_ID;
     const exactDigestId = boundedText(args.compilerDigestId, 128) || undefined;
     const exactDigestVersionKey =
       boundedText(args.compilerDigestVersionKey, 128) || undefined;
@@ -955,7 +958,6 @@ export const runCommunityAgentLoopInternal = internalAction({
       communityId: args.communityId,
       triggerType,
       sponsorUserId: resolved.sponsorUserId,
-      modelId,
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
       role: roleDefinition?.roleKey,
       wakeReason: boundedText(args.wakeReason, 120) || undefined,
@@ -973,12 +975,12 @@ export const runCommunityAgentLoopInternal = internalAction({
       };
     }
     const runId = createdRun.run.id;
-    let fundingSession: CommunityInferenceFundingSession | null = null;
-    let aggregatePromptTokens = 0;
-    let aggregateCompletionTokens = 0;
-    let aggregateUsageComplete = true;
+    const modelId = createdRun.run.model_id;
+    if (modelId !== "gpt-5.6-luna" && modelId !== "gpt-6-luna") {
+      throw new Error("community_agent_runtime_model_unsupported");
+    }
+    const fundingState: { run: Awaited<ReturnType<typeof startFundedInferenceRun>> | null } = { run: null };
     let fundingFinalized = false;
-    let providerStarted = false;
     let fundingClaimAttempted = false;
     const filesystemContext: CommunityAgentFilesystemContext = {
       communityId: args.communityId,
@@ -1044,6 +1046,21 @@ export const runCommunityAgentLoopInternal = internalAction({
       );
     };
     try {
+    fundingClaimAttempted = true;
+    fundingState.run = await startFundedInferenceRun({
+      ctx,
+      communityId: args.communityId,
+      actorUserId: resolved.sponsorUserId,
+      surface: "community_autonomous_cognition",
+      receiptKey: `community_autonomous_cognition:${runId}`,
+      sourceRunId: `community-agent-runtime:${runId}`,
+      admission: funding,
+    });
+    if (fundingState.run.modelId !== modelId) {
+      await fundingState.run.fail("founder_inference_model_changed_before_start");
+      fundingFinalized = true;
+      throw new Error("founder_inference_model_changed_before_start");
+    }
     // Front-load the exact claimed digest. Legacy/manual callers without an
     // explicit digest identity retain the best-effort latest-window fallback.
     // The single steward receives the exact bounded evidence packet.
@@ -1135,7 +1152,7 @@ export const runCommunityAgentLoopInternal = internalAction({
         },
         inputBudget: {
           transport: "openai_responses",
-          modelRef: `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`,
+          modelRef: `openai/${modelId}`,
           reservedOutputTokens: 1_600,
           toolSchemas: stewardProviderTools,
           recordPlan: async (budgetPlan) => {
@@ -1163,49 +1180,22 @@ export const runCommunityAgentLoopInternal = internalAction({
           },
         },
         runCompletion: async (kernelMessages) => {
-          if (!fundingSession) {
-            fundingClaimAttempted = true;
-            fundingSession = await claimCommunityInferenceFundingSession({
-              ctx,
-              communityId: args.communityId,
-              actorUserId: resolved.sponsorUserId,
-              surface: "community_autonomous_cognition",
-              receiptKey: `community_autonomous_cognition:${runId}`,
-              sourceRunId: `community-agent-runtime:${runId}`,
-              admission: funding,
-            });
-          }
-          if (!providerStarted) {
-            await markCommunityInferenceFundingSessionProviderStarted({
-              ctx,
-              session: fundingSession,
-            });
-            providerStarted = true;
-          }
-          const completion = await runOpenAiNativeToolCompletion({
-            modelId: fundingSession.modelId,
+          if (!fundingState.run) throw new Error("founder_inference_receipt_unavailable");
+          const completion = await fundingState.run.request({
             messages: kernelMessages,
             maxTokens: 1600,
             // Authority by absence: only this role's tool schemas are sent.
             tools: stewardProviderTools,
             parallelToolCalls: false,
           });
-          if (completion.ok !== false) {
-            if (
-              completion.promptTokens === null ||
-              completion.completionTokens === null
-            ) {
-              aggregateUsageComplete = false;
-            } else {
-              aggregatePromptTokens += Math.max(
-                0,
-                Math.floor(Number(completion.promptTokens)),
-              );
-              aggregateCompletionTokens += Math.max(
-                0,
-                Math.floor(Number(completion.completionTokens)),
-              );
-            }
+          if (!fundingState.run.usage().complete) {
+            return {
+              ok: false,
+              status: 502,
+              code: "provider_token_usage_missing",
+              stopReason: "model_error",
+              message: "Community inference usage could not be verified.",
+            };
           }
           return coerceCommunityAgentCompletion(completion);
         },
@@ -1272,46 +1262,22 @@ export const runCommunityAgentLoopInternal = internalAction({
       }
 
       let fundingErrorCode: string | null = null;
-      if (fundingSession) {
+      if (fundingState.run) {
         try {
-          if (!aggregateUsageComplete) {
+          const usage = fundingState.run.usage();
+          if (!usage.complete) {
             fundingErrorCode = "provider_token_usage_missing";
-            await failCommunityInferenceFundingSession({
-              ctx,
-              session: fundingSession,
-              promptTokens: aggregatePromptTokens,
-              completionTokens: aggregateCompletionTokens,
-              usageComplete: false,
-              failureCode: fundingErrorCode,
-              disposition: "indeterminate",
-            });
-          } else if (
-            result.ok ||
-            aggregatePromptTokens > 0 ||
-            aggregateCompletionTokens > 0
-          ) {
-            await settleCommunityInferenceFundingSession({
-              ctx,
-              session: fundingSession,
-              promptTokens: aggregatePromptTokens,
-              completionTokens: aggregateCompletionTokens,
-              usageComplete: true,
-              outcomeCode: result.ok ? "provider_completed" : result.code,
-            });
+            await fundingState.run.fail(fundingErrorCode);
+          } else if (result.ok && usage.providerRequestCount > 0) {
+            if (!await fundingState.run.settle("provider_completed")) {
+              fundingErrorCode = "provider_token_usage_missing";
+            }
           } else {
-            const failureCode = result.code || "provider_error";
-            await failCommunityInferenceFundingSession({
-              ctx,
-              session: fundingSession,
-              promptTokens: 0,
-              completionTokens: 0,
-              usageComplete: true,
-              failureCode,
-              disposition:
-                !providerStarted || providerFailureIsKnownPreSpend(failureCode)
-                  ? "failed"
-                  : "indeterminate",
-            });
+            const failureCode = result.ok
+              ? "community_agent_provider_not_started"
+              : result.code || "provider_error";
+            await fundingState.run.fail(failureCode);
+            if (result.ok) fundingErrorCode = failureCode;
           }
           fundingFinalized = true;
         } catch {
@@ -1347,25 +1313,20 @@ export const runCommunityAgentLoopInternal = internalAction({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const preProviderFundingErrorCode =
-        fundingClaimAttempted && !fundingSession && !providerStarted
+        fundingClaimAttempted && !fundingState.run
           ? boundedText(message, 120) || "founder_inference_receipt_unavailable"
           : null;
+      const boundedFundingErrorCode = preProviderFundingErrorCode ??
+        founderInferenceBudgetFailureCode(error) ??
+        (message === "founder_inference_model_changed_before_start" ? message : null);
       const runtimeErrorCode =
-        preProviderFundingErrorCode ?? "community_agent_runtime_exception";
-      const runtimeStopReason = preProviderFundingErrorCode
+        boundedFundingErrorCode ?? "community_agent_runtime_exception";
+      const runtimeStopReason = boundedFundingErrorCode
         ? runtimeErrorCode
         : "runtime_exception";
-      if (fundingSession && !fundingFinalized) {
+      if (fundingState.run && !fundingFinalized) {
         try {
-          await failCommunityInferenceFundingSession({
-            ctx,
-            session: fundingSession,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            usageComplete: !providerStarted,
-            failureCode: "community_agent_runtime_exception",
-            disposition: providerStarted ? "indeterminate" : "failed",
-          });
+          await fundingState.run.fail(runtimeErrorCode);
           fundingFinalized = true;
         } catch {
           // The original runtime error remains authoritative; the receipt stays fail-closed.
@@ -1374,7 +1335,7 @@ export const runCommunityAgentLoopInternal = internalAction({
       await emitRunEvents([
         {
           kind: "error",
-          status: preProviderFundingErrorCode
+          status: boundedFundingErrorCode
             ? "funding_unavailable"
             : "runtime_exception",
           errorCode: runtimeErrorCode,

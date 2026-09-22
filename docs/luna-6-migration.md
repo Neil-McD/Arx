@@ -103,3 +103,9 @@ The bounded content writer now uses the same funded provider gateway for its bat
 ### Staging acceptance — 2026-09-22
 
 Two synthetic source-linked scaffold pages in the existing paid staging community were drafted into review in one writer action. One `gpt-6-luna` receipt held two Standard request breakdowns and settled 305 microdollars, matching the paid cycle increase from 3,061 to 3,366 with zero reserved. Both bodies retained source attribution and an explicit human-review marker; the existing review page was unchanged. The exact canary pair was removed afterward, and fresh setup admissions again resolve to 5.6. See `artifacts/luna6-writer-staging-20260922/acceptance.md`, `fixture-proposal.json`, and `receipt.json`. Production remained at build `824fffa309a2db09f6183990700ee822f978da47`.
+
+## Autonomous steward gateway slice
+
+The community memory steward keeps its existing compiler digest, bounded search/write tools, and retain/carry/dismiss decisions. Run creation now pins the exact `community_autonomous_cognition` receipt model atomically in the run ledger before input budgeting. The funding gateway claims that receipt immediately after run creation and checks that its model matches before any provider-capable work. A canary change between these steps fails closed without sending a provider request.
+
+Every steward completion uses the funded gateway for the admitted model, per-request usage, paid Luna 6 headroom, and settlement. A response with unverified usage cannot reach the steward's write tool. Complete usage from earlier requests is retained when a later request or tool step fails; retry still relies on the compiler's exact work-key idempotency. Pre-provider failures release the reservation. The global default remains 5.6 and the community memory product behavior is unchanged.
