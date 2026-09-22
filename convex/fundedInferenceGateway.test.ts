@@ -122,6 +122,9 @@ test("a multi-step run settles each provider request exactly once", async () => 
   const run = await startFundedInferenceRun(claim as any);
   await run.request(request);
   await run.request(request);
+  expect(run.usage()).toMatchObject({
+    promptTokens: 2000, completionTokens: 120, providerRequestCount: 2, complete: true,
+  });
   expect(await run.settle("provider_completed")).toBe(true);
   expect(markCommunityInferenceFundingSessionProviderStarted).toHaveBeenCalledTimes(1);
   expect(settleCommunityInferenceFundingSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -144,6 +147,9 @@ test("a later unmetered response makes the whole multi-step run indeterminate", 
   const run = await startFundedInferenceRun(claim as any);
   await run.request(request);
   await run.request(request);
+  expect(run.usage().complete).toBe(false);
+  await expect(run.request(request)).rejects.toThrow("founder_inference_usage_incomplete");
+  expect(runOpenAiNativeToolCompletion).toHaveBeenCalledTimes(2);
   expect(await run.settle("provider_completed")).toBe(false);
   expect(settleCommunityInferenceFundingSession).not.toHaveBeenCalled();
   expect(failCommunityInferenceFundingSession).toHaveBeenCalledWith(expect.objectContaining({

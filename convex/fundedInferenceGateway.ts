@@ -26,6 +26,14 @@ export async function startFundedInferenceRun(args: Claim) {
 
   return {
     modelId: session.modelId,
+    usage() {
+      return {
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        providerRequestCount: usage.providerRequests.length,
+        complete: usage.complete,
+      };
+    },
     async request(input: Omit<ResponseRequest, "modelId">) {
       if (finalized) throw new Error("founder_inference_run_finalized");
       assertPaidLuna6ProviderHeadroom({

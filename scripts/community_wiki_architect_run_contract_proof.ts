@@ -255,9 +255,10 @@ assert.match(
 );
 assert.match(
   architect,
-  /export const draftCommunityResourceContentFromSources(?:: any)? = action\([\s\S]*sourceInput:[\s\S]*runResourceContentWriterModel[\s\S]*source: sourceInput[\s\S]*parseResourceContentWriterBody[\s\S]*patchCommunityResourceContentDraftInternal[\s\S]*expectedSourceRevisionHash:[\s\S]*const ok = failed === 0/,
-  "content writer action should send and guard the same source input, then surface partial failures",
+  /export const draftCommunityResourceContentFromSources(?:: any)? = action\([\s\S]*startFundedInferenceRun\([\s\S]*sourceInput:[\s\S]*fundedRun\.request\([\s\S]*source: sourceInput[\s\S]*parseResourceContentWriterBody[\s\S]*fundedRun\.settle\([\s\S]*if \(settled\)[\s\S]*patchCommunityResourceContentDraftInternal[\s\S]*expectedSourceRevisionHash:[\s\S]*const ok = failed === 0/,
+  "content writer should settle the canonical funded run before applying source-guarded drafts",
 );
+assert.doesNotMatch(architect, /fetch\("https:\/\/api\.openai\.com\/v1\/responses"/, "setup generation must not dispatch outside the funded gateway");
 assert.match(
   architect,
   /buildCommunityWikiArchitectSourceRevision[\s\S]*visible_source_revisions[\s\S]*source_revisions:/,
