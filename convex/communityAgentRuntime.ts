@@ -1046,21 +1046,6 @@ export const runCommunityAgentLoopInternal = internalAction({
       );
     };
     try {
-    fundingClaimAttempted = true;
-    fundingState.run = await startFundedInferenceRun({
-      ctx,
-      communityId: args.communityId,
-      actorUserId: resolved.sponsorUserId,
-      surface: "community_autonomous_cognition",
-      receiptKey: `community_autonomous_cognition:${runId}`,
-      sourceRunId: `community-agent-runtime:${runId}`,
-      admission: funding,
-    });
-    if (fundingState.run.modelId !== modelId) {
-      await fundingState.run.fail("founder_inference_model_changed_before_start");
-      fundingFinalized = true;
-      throw new Error("founder_inference_model_changed_before_start");
-    }
     // Front-load the exact claimed digest. Legacy/manual callers without an
     // explicit digest identity retain the best-effort latest-window fallback.
     // The single steward receives the exact bounded evidence packet.
@@ -1180,7 +1165,23 @@ export const runCommunityAgentLoopInternal = internalAction({
           },
         },
         runCompletion: async (kernelMessages) => {
-          if (!fundingState.run) throw new Error("founder_inference_receipt_unavailable");
+          if (!fundingState.run) {
+            fundingClaimAttempted = true;
+            fundingState.run = await startFundedInferenceRun({
+              ctx,
+              communityId: args.communityId,
+              actorUserId: resolved.sponsorUserId,
+              surface: "community_autonomous_cognition",
+              receiptKey: `community_autonomous_cognition:${runId}`,
+              sourceRunId: `community-agent-runtime:${runId}`,
+              admission: funding,
+            });
+            if (fundingState.run.modelId !== modelId) {
+              await fundingState.run.fail("founder_inference_model_changed_before_start");
+              fundingFinalized = true;
+              throw new Error("founder_inference_model_changed_before_start");
+            }
+          }
           const completion = await fundingState.run.request({
             messages: kernelMessages,
             maxTokens: 1600,

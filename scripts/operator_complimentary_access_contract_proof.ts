@@ -40,7 +40,7 @@ assert.match(
 );
 assert.match(
   receipts,
-  /COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE[\s\S]*COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE[\s\S]*expectedFundingMode === "platform_operator_grant"[\s\S]*requireFounderInferencePricingFromEnv\(\)\.pricingVersion/,
+  /COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE[\s\S]*COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE[\s\S]*expectedFundingMode === "platform_operator_grant"[\s\S]*requireFounderInferencePricingFromEnv\(\)[\s\S]*snapshotFounderRunPricing\(modelId,[\s\S]*pricingVersion: pricing\.pricingVersion[\s\S]*pricingSnapshot,/,
   "operator-funded inference must preserve rate limits and pricing evidence",
 );
 assert.match(

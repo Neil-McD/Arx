@@ -198,13 +198,14 @@ assert.match(
 );
 const runtimeLoop = exportedFunctionBlock(runtime, "runCommunityAgentLoopInternal");
 const fundingAdmissionIndex = runtimeLoop.indexOf("resolveCommunityInferenceFundingForAction");
-const fundingClaimIndex = runtimeLoop.indexOf("startFundedInferenceRun");
+const fundingClaimIndex = runtimeLoop.indexOf("fundingState.run = await startFundedInferenceRun");
 const runCompletionIndex = runtimeLoop.indexOf("runCompletion: async");
 const providerRequestIndex = runtimeLoop.indexOf("fundingState.run.request");
 assert.ok(fundingAdmissionIndex >= 0, "community runtime should resolve canonical founder funding");
 assert.ok(
-  fundingClaimIndex > fundingAdmissionIndex && fundingClaimIndex < runCompletionIndex,
-  "community runtime should admit canonical founder funding before claiming provider spend",
+  fundingClaimIndex > runCompletionIndex && fundingClaimIndex < providerRequestIndex &&
+    fundingAdmissionIndex < runCompletionIndex,
+  "community runtime should claim funding after kernel admission and before provider spend",
 );
 assert.ok(
   providerRequestIndex > runCompletionIndex &&

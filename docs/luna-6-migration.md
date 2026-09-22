@@ -106,7 +106,7 @@ Two synthetic source-linked scaffold pages in the existing paid staging communit
 
 ## Autonomous steward gateway slice
 
-The community memory steward keeps its existing compiler digest, bounded search/write tools, and retain/carry/dismiss decisions. Run creation now pins the exact `community_autonomous_cognition` receipt model atomically in the run ledger before input budgeting. The funding gateway claims that receipt immediately after run creation and checks that its model matches before any provider-capable work. A canary change between these steps fails closed without sending a provider request.
+The community memory steward keeps its existing compiler digest, bounded search/write tools, and retain/carry/dismiss decisions. Run creation now pins the exact `community_autonomous_cognition` receipt model atomically in the run ledger before input budgeting. After shared-kernel input admission, the funding gateway claims that receipt and checks that its model matches before any provider-capable work. A canary change between these steps fails closed without sending a provider request.
 
 Every steward completion uses the funded gateway for the admitted model, per-request usage, paid Luna 6 headroom, and settlement. A response with unverified usage cannot reach the steward's write tool. Complete usage from earlier requests is retained when a later request or tool step fails; retry still relies on the compiler's exact work-key idempotency. Pre-provider failures release the reservation. The global default remains 5.6 and the community memory product behavior is unchanged.
 
