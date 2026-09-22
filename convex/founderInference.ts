@@ -17,7 +17,7 @@ import {
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
 import { reserveFounderUsage } from "./founderPlanCore";
-import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
+import { requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -261,7 +261,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
 
     let usageCycleId: any | undefined;
     let reservedCostMicros: number | undefined;
-    let pricingVersion: string | undefined;
+    let pricingSnapshot: FounderRunPricing | undefined;
     if (args.expectedFundingMode === "platform_subscription") {
       if (!args.expectedFounderSubscriptionId) {
         return { ok: false, errorCode: "funding_authority_changed" };
@@ -275,11 +275,21 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       if (!reservation.ok) return { ok: false, errorCode: reservation.code };
       usageCycleId = reservation.cycle._id;
       reservedCostMicros = reservation.reservationCostMicros;
-      pricingVersion = reservation.cycle.pricingVersion;
+      pricingSnapshot = snapshotFounderRunPricing(COMMUNITY_OWNER_FUNDED_MODEL_ID, {
+        pricingVersion: reservation.cycle.pricingVersion,
+        inputCostMicrosPerMillionTokens: reservation.cycle.inputCostMicrosPerMillionTokens,
+        outputCostMicrosPerMillionTokens: reservation.cycle.outputCostMicrosPerMillionTokens,
+      });
     } else if (args.expectedFundingMode === "platform_operator_grant") {
-      pricingVersion = requireFounderInferencePricingFromEnv().pricingVersion;
+      const pricing = requireFounderInferencePricingFromEnv();
+      pricingSnapshot = snapshotFounderRunPricing(COMMUNITY_OWNER_FUNDED_MODEL_ID, {
+        pricingVersion: pricing.pricingVersion,
+        inputCostMicrosPerMillionTokens: pricing.inputCostMicrosPerMillionTokens,
+        outputCostMicrosPerMillionTokens: pricing.outputCostMicrosPerMillionTokens,
+      });
     }
 
+    if (!pricingSnapshot) throw new Error("founder_inference_pricing_misconfigured");
     const receiptId = await ctx.db.insert("communityInferenceReceipts" as any, {
       receiptKey,
       sourceRunId,
@@ -295,7 +305,8 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       status: "authorized",
       claimToken,
       leaseExpiresAt: args.nowMs + RECEIPT_LEASE_MS,
-      pricingVersion,
+      pricingVersion: pricingSnapshot.pricingVersion,
+      pricingSnapshot,
       reservedCostMicros,
       authorizedAt: args.nowMs,
       createdAt: args.nowMs,
@@ -365,6 +376,8 @@ export const settleCommunityInferenceReceiptInternal = internalMutation({
     claimToken: v.string(),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    cachedInputTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     usageComplete: v.boolean(),
     outcomeCode: v.string(),
     nowMs: v.number(),
@@ -376,6 +389,8 @@ export const settleCommunityInferenceReceiptInternal = internalMutation({
       claimToken: args.claimToken,
       promptTokens: args.promptTokens,
       completionTokens: args.completionTokens,
+      cachedInputTokens: args.cachedInputTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       usageComplete: args.usageComplete,
       outcomeCode: args.outcomeCode,
       nowMs: args.nowMs,
@@ -443,6 +458,8 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
     claimToken: v.string(),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    cachedInputTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     failureCode: v.string(),
     usageComplete: v.optional(v.boolean()),
     disposition: v.union(v.literal("failed"), v.literal("indeterminate")),
@@ -480,6 +497,8 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
         claimToken: args.claimToken,
         promptTokens,
         completionTokens,
+        cachedInputTokens: args.cachedInputTokens,
+        cacheWriteTokens: args.cacheWriteTokens,
         usageComplete: true,
         outcomeCode: failureCode,
         nowMs: args.nowMs,

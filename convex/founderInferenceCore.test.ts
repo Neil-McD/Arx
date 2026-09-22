@@ -16,7 +16,7 @@ import {
   syncFounderUsageCycle,
 } from "./founderPlanCore";
 import { POLYNET_FOUNDER_PLAN_PRICING_VERSION } from "../shared/founderPlan";
-import type { FounderInferencePricing } from "./founderPlanPricing";
+import { snapshotFounderRunPricing, type FounderInferencePricing } from "./founderPlanPricing";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
 const modules = import.meta.glob([
@@ -316,6 +316,8 @@ test("one active platform owner receives metered operator-funded Luna without a 
         { receiptKey, claimToken: "operator-funded-claim", nowMs: nowMs + 2_000 },
       ),
     ).resolves.toEqual({ ok: true });
+    // Pricing edits after provider start must not reprice this run.
+    process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "9000000";
     await t.run(async (ctx) => {
       await settleAuthorizedFounderInferenceReceipt({
         ctx,
@@ -334,6 +336,7 @@ test("one active platform owner receives metered operator-funded Luna without a 
       });
     });
 
+    process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "1000000";
     const revokedReceiptKey = "community_agent_mention:operator-revoked";
     await expect(
       t.mutation(
@@ -2326,4 +2329,59 @@ test("Stripe founder subscription sync rejects ownership changes before entitlem
     if (priorPriceId === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
     else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorPriceId;
   }
+});
+
+test("receipt prices survive monthly cycle price changes; legacy receipts still settle", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "price-snapshot", 600_000);
+  for (const legacy of [false, true]) {
+    const receiptKey = `community_agent_mention:snapshot-${legacy}`;
+    const claimed = await t.mutation((internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      claimArgs(fixture, receiptKey, "snapshot-claim", 601_000));
+    await t.run(async ctx => {
+      const receipt = await ctx.db.get(claimed.receiptId) as any;
+      expect(receipt.pricingSnapshot).toMatchObject({ modelId: "gpt-5.6-luna", inputCostMicrosPerMillionTokens: 1_000_000 });
+      if (legacy) await ctx.db.patch(receipt._id, { pricingSnapshot: undefined });
+      else await ctx.db.patch(receipt.usageCycleId, { inputCostMicrosPerMillionTokens: 9_000_000 });
+      const settled = await settleAuthorizedFounderInferenceReceipt({ ctx, receiptKey, claimToken: "snapshot-claim", promptTokens: 100, completionTokens: 50, outcomeCode: "completed", nowMs: 602_000 });
+      expect(settled.settledCostMicros).toBe(200);
+      await ctx.db.patch(receipt.usageCycleId, { inputCostMicrosPerMillionTokens: 1_000_000 });
+    });
+  }
+  await t.run(async ctx => {
+    const cycles = await ctx.db.query("founderUsageCycles").collect();
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0]).toMatchObject({ includedCostMicros: 20_000_000, reservedCostMicros: 0, settledCostMicros: 400 });
+  });
+});
+
+test("Luna 6 settles in an existing allowance cycle without resetting its balance", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "luna-six-cycle", 700_000);
+  const receiptKey = "community_agent_mention:luna-six";
+  const claimed = await t.mutation((internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, "luna-six-claim", 701_000));
+  const pricingSnapshot = snapshotFounderRunPricing("gpt-6-luna", {
+    pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+    inputCostMicrosPerMillionTokens: 1_000_000,
+    outputCostMicrosPerMillionTokens: 2_000_000,
+  });
+  await t.run(async ctx => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    // Simulate admission by the next runtime slice; live default is still 5.6.
+    await ctx.db.patch(receipt._id, { modelId: "gpt-6-luna", pricingVersion: pricingSnapshot.pricingVersion, pricingSnapshot });
+    await ctx.db.patch(receipt.usageCycleId, { settledCostMicros: 5_000_000 });
+  });
+  await expect(t.mutation((internal as any).founderInference.settleCommunityInferenceReceiptInternal, {
+    receiptKey, claimToken: "luna-six-claim", promptTokens: 100_000, completionTokens: 10_000,
+    cachedInputTokens: 20_000, cacheWriteTokens: 10_000, usageComplete: true, outcomeCode: "completed", nowMs: 702_000,
+  })).resolves.toMatchObject({ status: "settled", settledCostMicros: 13_450 });
+  await t.run(async ctx => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({ cachedInputTokens: 20_000, cacheWriteTokens: 10_000 });
+    expect(await ctx.db.get(receipt.usageCycleId)).toMatchObject({
+      includedCostMicros: 20_000_000, settledCostMicros: 5_013_450, reservedCostMicros: 0,
+      pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+    });
+  });
 });
