@@ -4,6 +4,7 @@ import {
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
+import type { FounderRunPricing } from "./founderPlanPricing";
 
 const internalRefs = internal as any;
 
@@ -12,6 +13,8 @@ export type CommunityInferenceFundingSession = {
   claimToken: string;
   fundingMode: "platform_subscription" | "platform_operator_grant";
   modelId: string;
+  reservedCostMicros?: number;
+  pricingSnapshot?: FounderRunPricing;
 };
 
 function boundedCode(value: unknown, fallback: string): string {
@@ -80,6 +83,8 @@ export async function claimCommunityInferenceFundingSession(args: {
     claimToken,
     fundingMode: args.admission.mode,
     modelId: claim.modelId,
+    reservedCostMicros: claim.reservedCostMicros,
+    pricingSnapshot: claim.pricingSnapshot,
   };
 }
 

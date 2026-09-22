@@ -250,7 +250,8 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
         receiptKey,
         claimToken,
       });
-      return { ok: true, receiptId: existing._id, modelId: existing.modelId, reclaimed: true };
+      return { ok: true, receiptId: existing._id, modelId: existing.modelId,
+        reservedCostMicros: existing.reservedCostMicros, pricingSnapshot: existing.pricingSnapshot, reclaimed: true };
     }
 
     const sinceMs = args.nowMs - RATE_LIMIT_WINDOW_MS;
@@ -340,7 +341,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       receiptKey,
       claimToken,
     });
-    return { ok: true, receiptId, modelId, reclaimed: false };
+    return { ok: true, receiptId, modelId, reservedCostMicros, pricingSnapshot, reclaimed: false };
   },
 });
 

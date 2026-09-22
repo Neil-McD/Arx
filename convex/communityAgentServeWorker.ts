@@ -1,5 +1,6 @@
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
+import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import { internal } from "./_generated/api";
 import { composeWorkflowAgentPrompt } from "../shared/communityMemberWorkflow";
@@ -2070,6 +2071,9 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                 });
               }
               if (fundingSession.modelId !== admittedModelId) throw new Error("founder_inference_model_changed_before_start");
+              assertPaidLuna6ProviderHeadroom({
+                session: fundingSession, usage, maxOutputTokens: SERVE_REPLY_MAX_TOKENS,
+              });
               if (!providerStarted) {
                 await markCommunityInferenceFundingSessionProviderStarted({
                   ctx,
@@ -2085,7 +2089,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                 parallelToolCalls: false,
               });
             } catch (error) {
-              if (providerStarted) usage.complete = false;
+              if (providerStarted && !founderInferenceBudgetFailureCode(error)) usage.complete = false;
               throw error;
             }
             if (toolCompletion.ok !== false) {
@@ -2126,12 +2130,12 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             }),
         });
       } catch (error) {
-        const failureCode = providerStarted
+        const failureCode = founderInferenceBudgetFailureCode(error) ?? (providerStarted
           ? "provider_exception"
           : boundedText(
               error instanceof Error ? error.message : String(error),
               ERROR_CODE_MAX_CHARS,
-            ) || "funding_authority_changed";
+            ) || "funding_authority_changed");
         if (fundingSession) {
           await failCommunityInferenceFundingSession({
             ctx,

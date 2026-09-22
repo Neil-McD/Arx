@@ -302,7 +302,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /if \(providerStarted\) usage\.complete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*usage\.complete = false/,
+  /if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*usage\.complete = false/,
 );
 assert.match(
   worker,

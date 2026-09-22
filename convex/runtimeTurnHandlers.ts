@@ -24,6 +24,7 @@ import {
 } from "./runtimeCancellation";
 import type { CommunityInferenceSurface, FounderProviderRequestUsage } from "../shared/founderInference";
 import { createFounderInferenceUsageTotals, founderProviderRequests, recordFounderProviderSuccess } from "./founderInferenceUsage";
+import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import {
   communityFunnelTurnPostconditionPassed,
   isCommunityFunnelDraftWriteReceiptEvent,
@@ -895,7 +896,8 @@ export async function handleRuntimeTurnRequest(args: {
           },
         });
         failureContextPacket = loadedFailureContext.packet;
-        if (params.status === "error") {
+        // A paid community run cannot issue an unmetered follow-up provider call.
+        if (params.status === "error" && !(communityInferenceAdmission?.ok && requestedModelId === "gpt-6-luna")) {
           try {
             const finalizationMessages = buildAdaptiveFailureFinalizationMessages({
               runtimeTurnContext: failureContextPacket,
@@ -1259,6 +1261,9 @@ export async function handleRuntimeTurnRequest(args: {
               if (!communityFundingSession) {
                 communityFundingSession = await claimCommunityFundingSession();
               }
+              if (communityFundingSession) assertPaidLuna6ProviderHeadroom({
+                session: communityFundingSession, usage: communityFundingUsage, maxOutputTokens: maxTokens,
+              });
               await markCommunityFundingProviderStarted(communityFundingSession);
             },
             observeProviderResult: observeCommunityFundingProviderResult,
@@ -1269,7 +1274,7 @@ export async function handleRuntimeTurnRequest(args: {
             try {
               await failUnhandledCommunityFundingSession(
                 communityFundingSession,
-                "community_inference_loop_unhandled",
+                founderInferenceBudgetFailureCode(error) ?? "community_inference_loop_unhandled",
               );
             } catch {
               // Preserve the original runtime failure; the receipt remains fail-closed.
@@ -1639,6 +1644,9 @@ export async function handleRuntimeTurnRequest(args: {
           if (!communityFundingSession) {
             communityFundingSession = await claimCommunityFundingSession();
           }
+          if (communityFundingSession) assertPaidLuna6ProviderHeadroom({
+            session: communityFundingSession, usage: communityFundingUsage, maxOutputTokens: maxTokens,
+          });
           await markCommunityFundingProviderStarted(communityFundingSession);
         },
         observeProviderResult: observeCommunityFundingProviderResult,
@@ -1649,7 +1657,7 @@ export async function handleRuntimeTurnRequest(args: {
         try {
           await failUnhandledCommunityFundingSession(
             communityFundingSession,
-            "community_inference_loop_unhandled",
+            founderInferenceBudgetFailureCode(error) ?? "community_inference_loop_unhandled",
           );
         } catch {
           // Preserve the original runtime failure; the receipt remains fail-closed.

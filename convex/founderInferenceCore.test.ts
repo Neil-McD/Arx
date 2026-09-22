@@ -18,6 +18,8 @@ import {
 import { POLYNET_FOUNDER_PLAN_PRICING_VERSION } from "../shared/founderPlan";
 import { snapshotFounderRunPricing, type FounderInferencePricing } from "./founderPlanPricing";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
+import { assertPaidLuna6ProviderHeadroom, FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED } from "./founderInferenceBudget";
+import { createFounderInferenceUsageTotals, recordFounderProviderSuccess } from "./founderInferenceUsage";
 
 const modules = import.meta.glob([
   "./founderInference.ts",
@@ -2465,6 +2467,50 @@ test("member canary selects Luna 6 only for that surface and keeps receipt model
       receiptKey: "member_agent_dock:new", claimToken: "reclaim", promptTokens: 2_000, completionTokens: 40,
       usageComplete: true, outcomeCode: "completed", nowMs: 3_602_002,
     })).rejects.toThrow("claim_invalid");
+  } finally {
+    if (prior === undefined) delete process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID;
+    else process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID = prior;
+  }
+});
+
+test("paid Luna 6 budget stop settles known provider spend and releases unused reservation", async () => {
+  const prior = process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID;
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createActiveFundingFixture(t, "paid-luna-budget", 4_000_000);
+    process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID = String(fixture.communityId);
+    const receiptKey = "member_agent_dock:paid-budget";
+    const claimToken = "paid-budget-claim";
+    const claimed = await t.mutation((internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      { ...claimArgs(fixture, receiptKey, claimToken, 4_001_000), surface: "member_agent_dock" });
+    expect(claimed).toMatchObject({ ok: true, modelId: "gpt-6-luna", reservedCostMicros: 1_000_000 });
+    await t.mutation((internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 4_001_001 });
+    const usage = createFounderInferenceUsageTotals("gpt-6-luna");
+    for (let index = 0; index < 4; index += 1) {
+      const providerRequestUsage = { requestId: `resp_paid_${index}`, modelId: "gpt-6-luna",
+        serviceTier: "default", promptTokens: 1_047_952, completionTokens: 2048,
+        cachedInputTokens: 0, cacheWriteTokens: 0 };
+      recordFounderProviderSuccess(usage, { promptTokens: providerRequestUsage.promptTokens,
+        completionTokens: providerRequestUsage.completionTokens, providerRequestUsage });
+    }
+    expect(() => assertPaidLuna6ProviderHeadroom({ session: { receiptKey, claimToken,
+      fundingMode: "platform_subscription", modelId: claimed.modelId,
+      reservedCostMicros: claimed.reservedCostMicros, pricingSnapshot: claimed.pricingSnapshot },
+      usage, maxOutputTokens: 2048 })).toThrow(FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED);
+    expect(await t.mutation((internal as any).founderInference.finalizeCommunityInferenceFailureInternal, {
+      receiptKey, claimToken, promptTokens: usage.promptTokens, completionTokens: usage.completionTokens,
+      providerRequests: usage.providerRequests, usageComplete: true,
+      failureCode: FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED, disposition: "indeterminate", nowMs: 4_001_002,
+    })).toMatchObject({ ok: true, status: "settled" });
+    await t.run(async (ctx) => {
+      const receipt = await ctx.db.get(claimed.receiptId) as any;
+      const cycle = await ctx.db.get(receipt.usageCycleId) as any;
+      expect(receipt).toMatchObject({ status: "settled", outcomeCode: FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED });
+      expect(receipt.settledCostMicros).toBeGreaterThan(0);
+      expect(receipt.settledCostMicros).toBeLessThan(1_000_000);
+      expect(cycle).toMatchObject({ reservedCostMicros: 0, settledCostMicros: receipt.settledCostMicros });
+    });
   } finally {
     if (prior === undefined) delete process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID;
     else process.env.POLYNET_LUNA6_MEMBER_CANARY_COMMUNITY_ID = prior;
