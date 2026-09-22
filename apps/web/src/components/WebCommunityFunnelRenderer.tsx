@@ -128,7 +128,6 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
 
         {props.renderModel.mode === "default" ? (
           <>
-            {memberProof}
             <FunnelAction action={props.action} position="primary" />
             <ActionStatusCards action={props.action} />
           </>
@@ -159,8 +158,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           </section>
         ) : null}
 
-        {props.renderModel.mode === "custom" ||
-        (props.renderModel.mode === "default" && props.renderModel.longFormMarkdown) ? (
+        {props.renderModel.mode === "custom" ? (
           <section className="community-funnel-conversion">
             <FunnelAction action={props.action} position="final" />
             {props.renderModel.mode === "custom" ? <ActionStatusCards action={props.action} /> : null}

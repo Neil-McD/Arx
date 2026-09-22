@@ -64,6 +64,25 @@ export async function setCloudCommunityExternalFunnelUrl<SessionT, TConfig = unk
   return firstObjectRow(payload) as TConfig | null;
 }
 
+export async function setCloudCommunityExternalFunnelActive<SessionT, TConfig = unknown>(
+  params: CloudCommunityFunnelGatewayParams<SessionT> & {
+    communityId: string;
+    expectedSettingsRevision: number;
+    expectedUrl: string;
+    active: boolean;
+  },
+): Promise<TConfig | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("communityFunnel:setCommunityExternalFunnelActive" as any, {
+    authSubject,
+    communityId: params.communityId,
+    expectedSettingsRevision: params.expectedSettingsRevision,
+    expectedUrl: params.expectedUrl,
+    active: params.active,
+  });
+  return firstObjectRow(payload) as TConfig | null;
+}
+
 export async function fetchCloudCommunityFunnelDraftPreview<SessionT, TConfig = unknown>(
   params: CloudCommunityFunnelGatewayParams<SessionT> & { communitySlug: string },
 ): Promise<TConfig | null> {

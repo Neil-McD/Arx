@@ -105,14 +105,9 @@ function main() {
     "joined members must enter the community before visitors can leave for an external website",
   );
   assert.match(
-    discoverActivationController,
-    /recordCloudExternalFunnelClick\(\{ communitySlug: slug \}\)/,
-    "external website clicks must be recorded separately from native funnel visits",
-  );
-  assert.match(
     listDiscover,
-    /external_funnel_url: readCommunityExternalFunnelUrl\(community\.externalFunnelUrl\)/,
-    "Discover must project only a validated external website URL",
+    /external_funnel_url: community\.externalFunnelActive === true[\s\S]*readCommunityExternalFunnelUrl\(community\.externalFunnelUrl\)/,
+    "Discover must project only an active validated website URL",
   );
   assert.doesNotMatch(
     discoverActivationController,

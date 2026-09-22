@@ -158,6 +158,7 @@ test("manager website link is revisioned, public, and never a join or checkout a
   });
   expect(saved).toMatchObject({
     external_funnel_url: "https://example.com/community",
+    external_funnel_active: false,
     settings_revision: 1,
     active_slot: "default",
   });
@@ -165,22 +166,59 @@ test("manager website link is revisioned, public, and never a join or checkout a
     communitySlug: "funnel-authority",
   });
   expect(publicFunnel.community).toMatchObject({
-    external_funnel_url: "https://example.com/community",
+    external_funnel_url: null,
     entry_policy: "open",
     funnel: { active_slot: "default" },
   });
   const discover = await t.query(api.communityPublic.listPublicDiscoverCommunities, {});
   expect(discover.communities[0]).toMatchObject({
     slug: "funnel-authority",
+    external_funnel_url: null,
+  });
+  await expect(asMember.mutation(api.communityFunnel.setCommunityExternalFunnelActive, {
+    communityId: fixture.communityId,
+    expectedSettingsRevision: 1,
+    expectedUrl: "https://example.com/community",
+    active: true,
+  })).rejects.toThrow();
+  await expect(asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelActive, {
+    communityId: fixture.communityId,
+    expectedSettingsRevision: 1,
+    expectedUrl: "https://different.example.com",
+    active: true,
+  })).rejects.toThrow("community_external_funnel_url_changed");
+  const activated = await asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelActive, {
+    communityId: fixture.communityId,
+    expectedSettingsRevision: 1,
+    expectedUrl: "https://example.com/community",
+    active: true,
+  });
+  expect(activated).toMatchObject({ external_funnel_active: true, settings_revision: 2 });
+  const activeDiscover = await t.query(api.communityPublic.listPublicDiscoverCommunities, {});
+  expect(activeDiscover.communities[0]).toMatchObject({
     external_funnel_url: "https://example.com/community",
   });
+  const activePublicFunnel = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+    communitySlug: "funnel-authority",
+  });
+  expect(activePublicFunnel.community).toMatchObject({
+    external_funnel_url: "https://example.com/community",
+  });
+  const changed = await asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
+    communityId: fixture.communityId,
+    expectedSettingsRevision: 2,
+    url: "https://example.com/new",
+  });
+  expect(changed).toMatchObject({ external_funnel_active: false, settings_revision: 3 });
+  const changedDiscover = await t.query(api.communityPublic.listPublicDiscoverCommunities, {});
+  expect(changedDiscover.communities[0]).toMatchObject({ external_funnel_url: null });
   await expect(asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
     ...input, url: "https://second.example.com",
   })).rejects.toThrow("community_settings_conflict");
   const cleared = await asOwner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
-    communityId: fixture.communityId, expectedSettingsRevision: 1, url: null,
+    communityId: fixture.communityId, expectedSettingsRevision: 3, url: null,
   });
-  expect(cleared).toMatchObject({ external_funnel_url: null, settings_revision: 2 });
+  expect(cleared).toMatchObject({ external_funnel_url: null, external_funnel_active: false, settings_revision: 4 });
 });
 
 test("custom drafts, revisions, VSLs, and agent-facing selection are isolated by slot", async () => {

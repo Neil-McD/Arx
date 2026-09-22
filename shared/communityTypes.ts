@@ -128,6 +128,7 @@ export type CommunityFunnelVariantConfig = {
 
 export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
   external_funnel_url: string | null;
+  external_funnel_active: boolean;
   settings_revision: number;
   custom_funnels: Record<
     CommunityCustomFunnelSlot,

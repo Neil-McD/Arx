@@ -39,6 +39,7 @@ export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
 export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConfig = {
   ...DEFAULT_COMMUNITY_FUNNEL_CONFIG,
   external_funnel_url: null,
+  external_funnel_active: false,
   settings_revision: 0,
   custom_funnels: {
     custom_1: null,
@@ -246,6 +247,7 @@ export function normalizeCommunityFunnelManagerConfig(
   return {
     ...publicConfig,
     external_funnel_url: readCommunityExternalFunnelUrl(value.external_funnel_url),
+    external_funnel_active: value.external_funnel_active === true && Boolean(readCommunityExternalFunnelUrl(value.external_funnel_url)),
     settings_revision: normalizeRevision(value.settings_revision),
     custom_funnels: {
       custom_1:

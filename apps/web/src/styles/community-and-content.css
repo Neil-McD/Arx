@@ -1658,6 +1658,27 @@
   min-width: 0;
 }
 
+.external-funnel-test {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.external-funnel-test-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.external-funnel-test-confirm input {
+  margin-top: 2px;
+}
+
 .community-funnel-panel .funnel-builder {
   flex: 1 1 auto;
   height: auto;

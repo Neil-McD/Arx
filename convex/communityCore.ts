@@ -38,6 +38,7 @@ export type CommunityLike = {
   oneLiner?: string;
   about?: string;
   externalFunnelUrl?: string;
+  externalFunnelActive?: boolean;
   avatarUrl?: string;
   avatarStorageId?: any;
   avatarFocusX?: number;
