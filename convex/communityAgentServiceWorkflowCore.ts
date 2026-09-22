@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
 import { workflowSequenceCompletionIsNew, workflowSequenceReceipt, workflowSequenceIssue } from "../shared/communityMemberWorkflow";
 import { resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
@@ -189,5 +190,7 @@ export async function publishServiceWorkflowPost(ctx: any, request: any, content
   }
   await ctx.db.patch(request._id, { status: "responded", responseRootId: rootId,
     respondedAt: nowMs, leaseExpiresAt: undefined, updatedAt: nowMs });
+  await ctx.scheduler.runAfter(0, internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal,
+    { workflowRunId: request.workflowRunId });
   return { ok: true, duplicate: Boolean(existing), responseRootId: rootId };
 }

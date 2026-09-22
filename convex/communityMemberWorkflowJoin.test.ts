@@ -819,6 +819,9 @@ test("sequence saves draft references, waits for actual outcomes, and runs form 
   const finish = () => f.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
     { ...args, content: "Here is your next step." });
   expect((await finish()).ok).toBe(true); await finish();
+  const callbacks = await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+  expect(callbacks.some(job => job.name.includes("reconcileCompletedWorkflowActionsInternal")
+    && job.args[0]?.workflowRunId === request.workflowRunId)).toBe(true);
   await f.reconcile(request.workflowRunId!); await f.reconcile(request.workflowRunId!);
   const forms = await f.t.run(ctx => ctx.db.query("communityFormRequests").collect());
   expect(forms).toHaveLength(2);
