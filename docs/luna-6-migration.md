@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: workflow and member-agent canaries implemented and verified on staging on 2026-09-22. Both canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
+Status: workflow, member-agent, and paid member-agent canaries verified on staging on 2026-09-22. Both canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
 
 ## Authority
 
@@ -60,10 +60,16 @@ Backend commit `0616ad260` was deployed to `quick-porcupine-949`. In the synthet
 
 The member selector was removed after the proof. A fresh admission now resolves to `gpt-5.6-luna`, while the existing receipt still resolves to `gpt-6-luna`. Production was untouched. Automated validation: 1,608 tests across 179 files, Convex typecheck, and founder inference, member dock, and community serve-worker contract proofs passed. See `artifacts/luna6-member-staging-20260922/acceptance.md` and `receipt.json`.
 
-This proves text and one read-only tool loop on the synthetic, operator-funded staging community. Image input, nonstreaming live transport, subscription-funded settlement, other agent surfaces, provider failures, and reservation adequacy remain to be accepted before a global default switch.
+This proves text and one read-only tool loop on the synthetic, operator-funded staging community. Image input, nonstreaming live transport, other agent surfaces, and provider failures remain to be accepted before a global default switch.
 
 ## Paid-run reservation guard
 
 The founder usage cycle reserves a fixed maximum per run. A model/tool loop can make multiple provider requests, so an input estimate or a one-time reservation check does not bound the whole turn. For paid Luna 6 member-agent and workflow runs, each provider call now checks the cost of all completed requests plus a conservative maximum for the next one against the receipt's immutable reservation. The maximum uses the admitted 1,050,000-token model context, requested output cap, receipt-local Standard rates, and no cache discount. This check happens before provider start for each call. Operator grants and legacy Luna 5.6 execution retain their existing behavior.
 
 If the next call cannot fit, the turn stops without sending it. Complete usage from prior calls settles at its actual cost and releases the unused reservation. Missing provider usage remains indeterminate and consumes the reserved amount. Failure finalization for funded Luna 6 member turns does not make an unmetered provider call.
+
+### Paid staging acceptance — 2026-09-22
+
+Backend commit `792691fca` was deployed to `quick-porcupine-949`. The existing staging `founder-e2e-783091` community had an active paid founder cycle with zero prior settled/reserved cost and a 1,000,000-microdollar maximum run reservation. In its member-agent browser, a simple Luna 6 turn returned `paid canary received.` and settled one Standard request for 777 microdollars. A read-only `polynet_list` turn then returned the community's top-level entries and settled two distinct Standard requests for 953 microdollars. The runtime recorded a Luna 6 model, input-budget profile, provider attestation, and successful tool event. The cycle ended at 1,730 microdollars settled and zero reserved. No new subscription or payment was created for this proof.
+
+The member selector was removed after the proof. A fresh admission resolves to `gpt-5.6-luna`; the tool-turn receipt remains `gpt-6-luna`. Local proof covers the deterministic stop before an unaffordable next provider call and exact settlement of already-known usage. The live paid turns exercised positive headroom and reservation release; they did not force a budget stop. See `artifacts/luna6-paid-staging-20260922/acceptance.md` and `receipt.json`.

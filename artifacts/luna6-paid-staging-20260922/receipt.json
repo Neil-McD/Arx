@@ -1,0 +1,67 @@
+{
+  "deployment": "quick-porcupine-949",
+  "backendCommit": "792691fca",
+  "communityId": "jx7ds4a2wp2tzt20wjfbhjhw958cgxj0",
+  "cycle": {
+    "id": "qs7xq7grvg954pff1m1b2h6h5n8eeqwa",
+    "maxRunReservationCostMicros": 1000000,
+    "before": { "reservedCostMicros": 0, "settledCostMicros": 0 },
+    "after": { "reservedCostMicros": 0, "settledCostMicros": 1730 }
+  },
+  "simpleTurn": {
+    "runId": "member_agent_dock:9957fdf4-c335-4bed-b7f8-2187781cf8e7",
+    "receiptId": "q97gdnecf4t32sj6tvhpbqky2x8ew2ew",
+    "fundingMode": "platform_subscription",
+    "modelId": "gpt-6-luna",
+    "status": "settled",
+    "reservedCostMicros": 1000000,
+    "settledCostMicros": 777,
+    "providerRequests": [
+      {
+        "requestId": "resp_0cb769496333964d016ab2d47be87887d2b14242fb634261cd",
+        "serviceTier": "default",
+        "promptTokens": 6179,
+        "cachedInputTokens": 0,
+        "cacheWriteTokens": 6176,
+        "completionTokens": 9
+      }
+    ]
+  },
+  "toolTurn": {
+    "runId": "member_agent_dock:2d72c078-71a3-45a0-bd44-a61954c25d9e",
+    "receiptId": "q97kz982gb75hrw695sb2faq298ewm45",
+    "fundingMode": "platform_subscription",
+    "modelId": "gpt-6-luna",
+    "runStatus": "ok",
+    "receiptStatus": "settled",
+    "inputBudgetModelRef": "openai/gpt-6-luna",
+    "providerAttestedModelId": "gpt-6-luna",
+    "tool": "polynet_list",
+    "toolStatus": "ok",
+    "reservedCostMicros": 1000000,
+    "settledCostMicros": 953,
+    "providerRequests": [
+      {
+        "requestId": "resp_0a626111dacb6ec3016ab2d4957d7487d2915f22ed7faf2221",
+        "serviceTier": "default",
+        "promptTokens": 6394,
+        "cachedInputTokens": 0,
+        "cacheWriteTokens": 6391,
+        "completionTokens": 27
+      },
+      {
+        "requestId": "resp_0d0eb539bfcf1553016ab2d498a91487d2aa57c05c37516b89",
+        "serviceTier": "default",
+        "promptTokens": 6912,
+        "cachedInputTokens": 6391,
+        "cacheWriteTokens": 518,
+        "completionTokens": 22
+      }
+    ]
+  },
+  "rollback": {
+    "selectorRemoved": true,
+    "newAdmissionModel": "gpt-5.6-luna",
+    "existingReceiptModel": "gpt-6-luna"
+  }
+}
