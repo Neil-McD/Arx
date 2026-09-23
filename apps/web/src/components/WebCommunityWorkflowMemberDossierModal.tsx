@@ -284,6 +284,16 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   <p>{(dossier.workflow.action_progress?.all_actions_complete || dossier.workflow.action_progress?.actions.length === 0) && !dossier.workflow.action_progress?.scan_truncated
                     ? "Awaiting human approval. Review the actions and goal before advancing."
                     : "Configured actions must be verified complete before approval."}</p>
+                  {dossier.workflow.goal?.trim() && dossier.workflow.action_progress?.actions.length ? <>
+                    <p>{dossier.workflow.goal_review?.status === "achieved" ? "Agent assessment: goal appears met. Human approval is still required."
+                      : dossier.workflow.goal_review?.status === "not_yet" ? "Agent assessment: goal not yet met. Review the evidence before deciding."
+                      : dossier.workflow.goal_review?.status === "insufficient_evidence" ? "Agent assessment: evidence is insufficient. Review the evidence before deciding."
+                      : dossier.workflow.goal_review?.status === "reviewing" ? "The agent is reviewing the goal. You can still decide from the verified actions."
+                      : dossier.workflow.goal_review?.status === "failed" ? "Agent assessment unavailable. You can still review and decide."
+                      : dossier.workflow.goal_review?.status === "not_started" ? "No agent assessment has started for this evidence. You can still review and decide."
+                      : "The agent will review the goal after all actions are verified complete."}</p>
+                    {dossier.workflow.goal_review?.reason ? <p>{dossier.workflow.goal_review.reason}</p> : null}
+                  </> : null}
                   <button type="button" className="workflow-secondary-button" disabled={approving || !props.onApproveMilestone
                     || (dossier.workflow.action_progress?.actions.length ?? 0) > 0 && !dossier.workflow.action_progress?.all_actions_complete || !!dossier.workflow.action_progress?.scan_truncated}
                     onClick={async () => {

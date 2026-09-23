@@ -207,6 +207,26 @@ test("normal human approval is separate from force move and fails closed on inco
   expect(render()).toContain('disabled="">Approve and advance</button>');
 });
 
+test.each([
+  ["achieved", "goal appears met"],
+  ["not_yet", "goal not yet met"],
+  ["insufficient_evidence", "evidence is insufficient"],
+  ["failed", "Agent assessment unavailable"],
+] as const)("human approval shows advisory %s without removing the approval gate", (status, message) => {
+  const html = renderDossier({ onApproveMilestone: async () => {}, dossier: { ...source, markdown: "", workflow: {
+    ...source.workflow!, goal: "Member is ready", require_human_approval: true,
+    action_progress: { actions: [{ automation_key: "a", action_key: "b", label: "Ask agent", action_type: "prompt_agent",
+      status: "complete", evidence: { run_id: "run", source_id: "reply", completed_at: 1 } }],
+      all_actions_complete: true, scan_truncated: false },
+    goal_review: { status, reason: "Current bounded evidence" },
+    override_state: { activation_sequence: 1, transition_seq: 0, next_milestone_name: "Review" },
+  } } });
+  expect(html).toContain(message);
+  expect(html).toContain("Current bounded evidence");
+  expect(html).toContain('class="workflow-secondary-button">Approve and advance</button>');
+  expect(html).not.toContain("Advancement is being validated");
+});
+
 test("progress distinguishes verified work, empty configuration, and unavailable proof", () => {
   const dossier = { ...source, markdown: "", workflow: { ...source.workflow!, action_progress: {
     actions: [{ automation_key: "a", action_key: "b", label: "Ask agent: Introduce yourself",

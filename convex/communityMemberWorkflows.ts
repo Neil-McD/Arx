@@ -875,7 +875,7 @@ export const reconcileCompletedWorkflowActionsInternal = internalMutation({
         workflowPreviousRunId: run._id,
         timerReceiptRef: workflowSequenceReceipt({ ...run, actionSnapshot: automation.action }) });
     }
-    if (current.milestone.goal?.trim() && !current.milestone.requireHumanApproval) {
+    if (current.milestone.goal?.trim()) {
       const review = await readCompletionReviewSnapshot(ctx, workflow, membership);
       if (!review || !review.progress.actions.some(a => a.evidence?.run_id === String(run._id))) return { status: "not_eligible" };
       const existing = await ctx.db.query("communityMemberWorkflowRuns")
@@ -920,7 +920,8 @@ export const applyCompletedGoalReviewInternal = internalMutation({
       if (replay) return { transitionId: replay._id, completedWorkflow: replay.completedWorkflow, replayed: true };
       const request = run.actionResult?.serveRequestId ? await ctx.db.get(run.actionResult.serveRequestId) : null;
       if (!request) throw new Error("workflow_assessment_stale");
-      await requireCompletionReview(ctx, request, true);
+      const { review } = await requireCompletionReview(ctx, request, true);
+      if (review.current.milestone.requireHumanApproval) return { status: "awaiting_human_approval" as const };
     } catch (error) {
       if (!(error instanceof Error) || !/^(workflow_|community_member_workflow_)/.test(error.message)) throw error;
       await ctx.db.patch(run._id, { errorCode: error.message, updatedAt: Date.now() });

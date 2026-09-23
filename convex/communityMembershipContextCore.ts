@@ -417,7 +417,7 @@ async function readMembershipContextRecords(args: {
               instructions: current.milestone.instructions ?? "",
               ...(actionProgress ? { action_progress: actionProgress } : {}),
               require_human_approval: current.milestone.requireHumanApproval ?? false,
-              ...(!current.completedAt && !current.milestone.requireHumanApproval && current.milestone.goal?.trim()
+              ...(!current.completedAt && current.milestone.goal?.trim()
                 ? { goal_review: await readCompletionReviewStatus(args.ctx, workflow, membership, actionProgress) } : {}),
               goal: current.milestone.goal ?? "", override_state: {
               activation_sequence: Number(membership?.activationSequence ?? 0), transition_seq: Number(state?.transitionSeq ?? 0),
