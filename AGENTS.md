@@ -38,7 +38,7 @@ This file is the execution contract for agents working in this repository.
   do not delete live content without a production usage review.
 - Core member UX: join, navigate, post/chat, and voice.
 - One founder plan: $79 monthly for one specific managed community, including
-  up to $20 of raw GPT 5.6 Luna model cost per billing cycle.
+  up to $20 of raw GPT 6 Luna model cost per billing cycle.
 - A paying founder may own an unlimited number of communities. There is no
   account-level numeric cap; each additional community requires its own current
   funding, and a founder cannot stack multiple unfunded drafts.

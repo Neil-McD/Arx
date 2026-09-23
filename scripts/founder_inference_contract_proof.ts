@@ -69,7 +69,7 @@ const providerStart = backend.slice(
 );
 
 assert.match(packageJson, /"check:founder-inference-proof"/);
-assert.match(shared, /COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-5\.6-luna"/);
+assert.match(shared, /COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-6-luna"/);
 assert.doesNotMatch(shared, /LEGACY_BYOK|OWNER_INFERENCE_TERMS|FounderInferenceGrantStatus/);
 assert.match(
   shared,

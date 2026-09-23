@@ -117,10 +117,7 @@ export async function resolveCommunityInferenceModelForReceipt(
     }
     return receipt.modelId;
   }
-  const canaryCommunity = process.env.POLYNET_LUNA6_CANARY_COMMUNITY_ID?.trim();
-  const canarySurface = process.env.POLYNET_LUNA6_CANARY_SURFACE?.trim();
-  return canaryCommunity === normalizedId(args.communityId) && canarySurface === args.surface
-    ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;
+  return COMMUNITY_OWNER_FUNDED_MODEL_ID;
 }
 
 export function founderInferenceReceiptIdentityMatches(
