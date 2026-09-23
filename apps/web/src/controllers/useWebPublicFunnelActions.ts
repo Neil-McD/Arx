@@ -40,6 +40,7 @@ type UseWebPublicFunnelActionsArgs<
 > = {
   getSession: () => AuthSession | null;
   getCurrentPublicCommunitySlug: () => string | null;
+  getCurrentPublicCommunityAccess: () => CommunityAccessT | null;
   session: AuthSession | null;
   ensureSession?: (session: AuthSession | null) => Promise<AuthSession | null>;
   resolveAccountSetupStatus: (
@@ -379,6 +380,40 @@ export function useWebPublicFunnelActions<
     [],
   );
 
+  const refreshPendingPublicCommunityAccess = useCallback(
+    async (communitySlug: string): Promise<void> => {
+      const slug = communitySlug.trim();
+      const current = argsRef.current;
+      if (!slug || current.getCurrentPublicCommunitySlug() !== slug
+        || current.getCurrentPublicCommunityAccess()?.join_request_status !== "pending") return;
+
+      try {
+        const rawSession = current.getSession();
+        const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
+        const subject = session ? resolveAuthSubject(session) : null;
+        if (!session || !subject) return;
+        const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
+          session,
+          communitySlug: slug,
+        });
+        const latest = argsRef.current;
+        if (!access || latest.getCurrentPublicCommunitySlug() !== slug
+          || resolveAuthSubject(latest.getSession()) !== subject) return;
+        // A canceled request, account switch, or route change must not be
+        // reverted by a response that started while the request was pending.
+        latest.setPublicCommunityAccess((previous) =>
+          previous?.join_request_status === "pending" && previous.community_id === access.community_id
+            ? access
+            : previous,
+        );
+      } catch {
+        // Keep the last verified state on transient failures; the next poll or
+        // return to the tab will retry without clearing the funnel UI.
+      }
+    },
+    [],
+  );
+
   const loadPublicCommunity = useCallback(
     async (slug: string, opts?: { recordVisit?: boolean }): Promise<void> => {
       const requestedSlug = slug.trim();
@@ -589,6 +624,7 @@ export function useWebPublicFunnelActions<
     cancelMyPendingJoinRequest,
     joinPublicCommunity,
     loadPublicCommunity,
+    refreshPendingPublicCommunityAccess,
     startCheckoutForPlan,
   };
 }

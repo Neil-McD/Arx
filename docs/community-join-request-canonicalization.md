@@ -54,3 +54,26 @@ pairs. The online cutover therefore stops new drift before repairing old data.
 The cached `community:getMyJoinRequestBySlug` compatibility operation remains
 temporarily callable for pinned older clients. Current web code does not use
 it; remove it only when the cached-client compatibility contract advances.
+
+## Public funnel display freshness
+
+While an authenticated visitor's request is pending, the open funnel checks
+their server-verified access every 30 seconds and when the tab becomes visible
+or focused. It refreshes only the access projection, leaving the funnel and
+images mounted. An approved request changes the CTA to enter the community;
+a denied request shows the server's decision. Failed checks retain the last
+verified display and retry. Responses are ignored after a route or account
+change, or after the visitor cancels the request. The server remains the sole
+admission authority; the polling result never grants access by itself.
+
+### Staging acceptance, September 23, 2026
+
+Web build `f146f648178ce70eafe0de56c8210d77438125a3` served the isolated
+`join-refresh-qa-sep23` community (`jx776byemb14q9wt1yjm9nb46d8ezt7g`).
+The separate `test1` account requested access and left the funnel open at
+**Request pending**. The owner approved the request from the members panel.
+Within the next 35 seconds, the same member tab and URL showed **Enter
+community** without a reload; the button opened the member chat. A read-only
+database check found one active test membership and zero remaining requests.
+The visual pass did not measure network-call volume or exercise denial,
+cancellation, and account-switch races in a hosted browser.

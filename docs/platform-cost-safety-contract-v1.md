@@ -108,6 +108,7 @@ Grounded on 2026-08-13 against production and `origin/main` commit
 | --- | --- | --- | --- |
 | Community attention subscription | one pooled realtime transport with one community and at most 10 stored channel/grant rows per reactive page | no fixed poll, no manual post-mutation refresh, and every execution is scope-bounded; total subscriptions scale with authorized pages | incomplete/failed assemblies are unknown, never fabricated all-read results; measure reads before adding a stored head projection |
 | Active-community presence | mount, resume, and every 30 seconds while visible | one in-flight call; 90-second lease; scan limit 64 | `keep, verify`: behavior is bounded; prove one effective lease per actor/community across multiple tabs |
+| Pending public join access | every 30 seconds while a signed-in visitor's approval request is pending on a visible funnel; also on focus or visibility return | one in-flight actor/community access read per tab; no call for anonymous, approved, denied, hidden, or departed routes; timer stops when pending ends or route unmounts | `keep, verified on staging`: approval changed the open funnel CTA without a reload; retain this bounded read until an existing realtime access path can replace it |
 | Founder checkout reconciliation | 1.5-second polling after checkout | canceled on teardown; route-specific | `keep, prove`: bounded commercial recovery must have an explicit attempt/time cap on every branch |
 | Checkout finalization | delayed retries after provider redirect | centralized timeout ref and terminal attempt rules | `keep, prove`: idempotent finalization is required; no indefinite retry |
 | Public Builder purchase attachment | 750-ms bounded post-auth checks | finite loop | `keep, prove`: commercial recovery only |
@@ -118,7 +119,7 @@ One-second elapsed-time and typing-expiry display timers do not call a backend
 and are excluded. Focus/animation/toast/image-cleanup timers are also excluded.
 #### Fixed-interval source inventory
 
-CI admits exactly these six first-party `setInterval` call sites:
+CI admits exactly these seven first-party `setInterval` call sites:
 
 | Canonical call site | Classification | Required lifetime bound |
 | --- | --- | --- |
@@ -127,6 +128,7 @@ CI admits exactly these six first-party `setInterval` call sites:
 | `shared/useCommunityTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
+| `apps/web/src/controllers/useWebPublicCommunityRouteController.ts` | backend pending-join access check | authenticated pending public funnel only; visible tab, 30-second minimum interval, one in-flight call; cleared when pending ends or route unmounts |
 | `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
 
 The executable contract scans the first-party source corpus. A new interval or

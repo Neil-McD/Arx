@@ -1346,6 +1346,7 @@ export default function App() {
     cancelMyPendingJoinRequest,
     joinPublicCommunity,
     loadPublicCommunity,
+    refreshPendingPublicCommunityAccess,
     startCheckoutForPlan,
   } = useWebPublicFunnelActions<
     PublicCommunityRecord,
@@ -1354,6 +1355,7 @@ export default function App() {
   >({
     getSession: () => sessionRef.current,
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
+    getCurrentPublicCommunityAccess: () => publicCommunityUi.publicCommunityAccess,
     ensureSession: ensureUsableAuthSession,
     resolveAccountSetupStatus: refreshAccountSetupStatus,
     onAccountSetupRequired: () => navigateTo("/onboarding"),
@@ -1589,6 +1591,7 @@ export default function App() {
        and the expensive public stats query remains stable. */
     sessionDependency: resolveAuthSubject(session),
     loadPublicCommunity,
+    refreshPendingPublicCommunityAccess,
   });
   const funnelDraftPreview = useWebCommunityFunnelDraftPreviewController({
     enabled: isPublicFunnelPreviewRoute,
