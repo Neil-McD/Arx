@@ -47,7 +47,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT>(params: {
   useEffect(() => {
     const needsSettingsSnapshot =
       params.activePage === "community" &&
-      (params.communityTab === "settings" || params.communityTab === "funnel");
+      params.communityTab === "settings";
     if (!needsSettingsSnapshot) return;
     if (!session || !params.activeCommunityId) return;
     if (!params.activeCommunityAccess?.can_manage_members) return;

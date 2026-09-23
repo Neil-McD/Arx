@@ -6,11 +6,9 @@ import {
   normalizeCommunityFunnelSlot,
   normalizeCommunityFunnelVslUrl as normalizeSharedCommunityFunnelVslUrl,
   normalizeCommunityFunnelContentV2,
-  validateCommunityFunnelContentV2,
 } from "../shared/communityFunnel";
 import type {
   CommunityCustomFunnelSlot,
-  CommunityFunnelContentV2,
   CommunityFunnelSlot,
 } from "../shared/communityTypes";
 import {
@@ -90,13 +88,6 @@ function normalizeStoredVslUrl(raw: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function sameContent(
-  left: CommunityFunnelContentV2 | null,
-  right: CommunityFunnelContentV2,
-): boolean {
-  return left !== null && JSON.stringify(left) === JSON.stringify(right);
 }
 
 function storedPublishedContent(row: CommunityFunnelRowLike | null) {
@@ -476,48 +467,12 @@ export const getCommunityFunnelDraftInternal = internalQuery({
   },
 });
 
-async function saveCommunityFunnelDraftForManager(args: {
-  ctx: any;
-  userId: any;
-  communityId: any;
-  slot: CommunityCustomFunnelSlot;
-  expectedDraftRevision: number;
-  content: unknown;
-}) {
-  await requireCommunityManager({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    userId: args.userId,
-  });
-  const content = validateCommunityFunnelContentV2(args.content);
-  const existing = await getCommunityFunnelRow(args.ctx, args.communityId, args.slot);
-  const currentRevision = normalizeRevision(existing?.draftRevision);
-  if (normalizeRevision(args.expectedDraftRevision) !== currentRevision) {
-    throw new ConvexError({
-      code: "community_funnel_draft_conflict",
-      expected_revision: args.expectedDraftRevision,
-      current_revision: currentRevision,
-    });
-  }
-  const nowMs = Date.now();
-  const fields = {
-    slot: args.slot,
-    draftContentV2: content,
-    draftRevision: currentRevision + 1,
-    draftUpdatedAt: nowMs,
-    draftUpdatedByUserId: args.userId,
-    updatedAt: nowMs,
-  };
-  if (existing) await args.ctx.db.patch(existing._id as any, fields);
-  else await args.ctx.db.insert("communityFunnels", {
-    communityId: args.communityId,
-    ...fields,
-    createdAt: nowMs,
-  });
-  const state = await resolveCommunityFunnelAuthorityState(args.ctx, args.communityId);
-  return buildCommunityFunnelManagerConfig(state);
+function retiredCommunityFunnelBuilder(): never {
+  throw new ConvexError({ code: "community_funnel_builder_retired" });
 }
 
+// Keep the old mutation signatures so existing clients receive a deterministic
+// rejection. Historical drafts and receipts remain readable for audit.
 export const saveCommunityFunnelDraftInternal = internalMutation({
   args: {
     userId: v.id("users"),
@@ -527,16 +482,8 @@ export const saveCommunityFunnelDraftInternal = internalMutation({
     content: communityFunnelContentV2Validator,
   },
   handler: async (ctx, args) => {
-    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
-    const manager = await saveCommunityFunnelDraftForManager({
-      ctx,
-      userId: args.userId,
-      communityId: args.communityId,
-      slot,
-      expectedDraftRevision: args.expectedDraftRevision,
-      content: args.content,
-    });
-    return { ...manager, selected_slot: slot, selected_funnel: manager.custom_funnels[slot] };
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    return retiredCommunityFunnelBuilder();
   },
 });
 
@@ -550,57 +497,8 @@ export const saveCommunityFunnelDraft = mutation({
     content: communityFunnelContentV2Validator,
   },
   handler: async (ctx, args) => {
-    const userId = await requireManager({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject,
-      communityId: args.communityId,
-    });
-    const content = validateCommunityFunnelContentV2(args.content);
-    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
-    const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
-    const currentRevision = normalizeRevision(existing?.draftRevision);
-    const expectedRevision = normalizeRevision(args.expectedDraftRevision);
-    if (args.expectedDraftRevision !== expectedRevision) {
-      throw new ConvexError({ code: "community_funnel_draft_revision_invalid" });
-    }
-    if (expectedRevision !== currentRevision) {
-      const currentContent = normalizeCommunityFunnelContentV2(
-        existing?.draftContentV2,
-      );
-      if (
-        currentRevision === expectedRevision + 1 &&
-        sameContent(currentContent, content)
-      ) {
-        const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-        return buildCommunityFunnelManagerConfig(state);
-      }
-      throw new ConvexError({
-        code: "community_funnel_draft_conflict",
-        expected_revision: expectedRevision,
-        current_revision: currentRevision,
-      });
-    }
-    const nowMs = Date.now();
-    const fields = {
-      slot,
-      draftContentV2: content,
-      draftRevision: currentRevision + 1,
-      draftUpdatedAt: nowMs,
-      draftUpdatedByUserId: userId,
-      updatedAt: nowMs,
-    };
-    if (existing) {
-      await ctx.db.patch(existing._id as any, fields);
-    } else {
-      await ctx.db.insert("communityFunnels", {
-        communityId: args.communityId,
-        ...fields,
-        createdAt: nowMs,
-      });
-    }
-    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-    return buildCommunityFunnelManagerConfig(state);
+    await requireManager({ ctx, userId: args.userId, authSubject: args.authSubject, communityId: args.communityId });
+    return retiredCommunityFunnelBuilder();
   },
 });
 
@@ -614,51 +512,8 @@ export const setCommunityFunnelDraftVsl = mutation({
     url: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireManager({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject,
-      communityId: args.communityId,
-    });
-    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
-    const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
-    const currentRevision = normalizeRevision(existing?.draftRevision);
-    const expectedRevision = normalizeRevision(args.expectedDraftRevision);
-    if (
-      args.expectedDraftRevision !== expectedRevision ||
-      expectedRevision !== currentRevision
-    ) {
-      throw new ConvexError({
-        code: "community_funnel_draft_conflict",
-        expected_revision: args.expectedDraftRevision,
-        current_revision: currentRevision,
-      });
-    }
-    const draftVslUrl = normalizeCommunityFunnelVslUrl(args.url);
-    if (normalizeStoredVslUrl(existing?.draftVslUrl) === draftVslUrl) {
-      const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-      return buildCommunityFunnelManagerConfig(state);
-    }
-    const nowMs = Date.now();
-    const fields = {
-      slot,
-      draftVslUrl,
-      draftRevision: currentRevision + 1,
-      draftUpdatedAt: nowMs,
-      draftUpdatedByUserId: userId,
-      updatedAt: nowMs,
-    };
-    if (existing) {
-      await ctx.db.patch(existing._id as any, fields);
-    } else {
-      await ctx.db.insert("communityFunnels", {
-        communityId: args.communityId,
-        ...fields,
-        createdAt: nowMs,
-      });
-    }
-    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-    return buildCommunityFunnelManagerConfig(state);
+    await requireManager({ ctx, userId: args.userId, authSubject: args.authSubject, communityId: args.communityId });
+    return retiredCommunityFunnelBuilder();
   },
 });
 
@@ -671,49 +526,8 @@ export const publishCommunityFunnelDraft = mutation({
     expectedDraftRevision: v.number(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireManager({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject,
-      communityId: args.communityId,
-    });
-    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
-    const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
-    const draftContent = normalizeCommunityFunnelContentV2(
-      existing?.draftContentV2,
-    );
-    if (!existing || !draftContent) {
-      throw new ConvexError({ code: "community_funnel_draft_missing" });
-    }
-    const currentRevision = normalizeRevision(existing.draftRevision);
-    if (
-      args.expectedDraftRevision !== normalizeRevision(args.expectedDraftRevision) ||
-      args.expectedDraftRevision !== currentRevision
-    ) {
-      throw new ConvexError({
-        code: "community_funnel_publish_conflict",
-        expected_revision: args.expectedDraftRevision,
-        current_revision: currentRevision,
-      });
-    }
-    if (
-      normalizeRevision(existing.publishedDraftRevision) === currentRevision &&
-      sameContent(storedPublishedContent(existing), draftContent)
-    ) {
-      const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-      return buildCommunityFunnelManagerConfig(state);
-    }
-    const nowMs = Date.now();
-    await ctx.db.patch(existing._id as any, {
-      publishedContentV2: draftContent,
-      publishedVslUrl: normalizeStoredVslUrl(existing.draftVslUrl),
-      publishedDraftRevision: currentRevision,
-      publishedAt: nowMs,
-      publishedByUserId: userId,
-      updatedAt: nowMs,
-    });
-    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-    return buildCommunityFunnelManagerConfig(state);
+    await requireManager({ ctx, userId: args.userId, authSubject: args.authSubject, communityId: args.communityId });
+    return retiredCommunityFunnelBuilder();
   },
 });
 
@@ -725,43 +539,7 @@ export const setActiveCommunityFunnel = mutation({
     target: communityFunnelActivationTargetValidator,
   },
   handler: async (ctx, args) => {
-    await requireManager({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject,
-      communityId: args.communityId,
-    });
-    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
-    const target = args.target;
-    const slot = normalizeCommunityFunnelSlot(target.slot);
-    if (target.slot !== "default") {
-      const existing = state.rows[target.slot];
-      if (!existing || !storedPublishedContent(existing)) {
-        throw new ConvexError({
-          code: "community_funnel_activation_requires_published",
-          slot,
-        });
-      }
-      const currentRevision = normalizeRevision(existing.publishedDraftRevision);
-      if (
-        target.expectedPublishedDraftRevision !== currentRevision ||
-        target.expectedPublishedDraftRevision !==
-          normalizeRevision(target.expectedPublishedDraftRevision)
-      ) {
-        throw new ConvexError({
-          code: "community_funnel_activation_conflict",
-          slot,
-          expected_revision: target.expectedPublishedDraftRevision,
-          current_revision: currentRevision,
-        });
-      }
-    }
-    if (state.community?.activeFunnelSlot !== slot) {
-      await ctx.db.patch(args.communityId, {
-        activeFunnelSlot: slot,
-        updatedAt: Date.now(),
-      });
-    }
-    return buildCommunityFunnelManagerConfig({ ...state, activeSlot: slot });
+    await requireManager({ ctx, userId: args.userId, authSubject: args.authSubject, communityId: args.communityId });
+    return retiredCommunityFunnelBuilder();
   },
 });

@@ -135,16 +135,16 @@ describe("community channel routes", () => {
     });
   });
 
-  it("round-trips the canonical Funnel route", () => {
+  it("routes retired Funnel links to community Settings", () => {
     expect(parseAppRouteFromPathname("/c/polynet/funnel")).toMatchObject({
       page: "community",
       communitySlug: "polynet",
-      communityTab: "funnel",
-      communitySettingsPane: null,
+      communityTab: "settings",
+      communitySettingsPane: "community",
     });
   });
 
-  it("uses one canonical full-preview route with an explicit slot", () => {
+  it("routes retired draft previews to the public landing page", () => {
     expect(buildCommunityFunnelPreviewPath("polynet")).toBe(
       "/c/polynet/preview?slot=default",
     );
@@ -155,21 +155,20 @@ describe("community channel routes", () => {
       },
     });
     expect(readPublicRouteFromLocation()).toEqual({
-      kind: "community_funnel_preview",
+      kind: "community_funnel",
       slug: "polynet",
-      slot: "custom_2",
     });
   });
 
-  it("canonicalizes the former Settings Funnel route", () => {
+  it("routes the former Settings Funnel route to community Settings", () => {
     const parsed = parseAppRouteFromPathname("/c/polynet/settings/funnel");
     expect(parsed).toMatchObject({
       page: "community",
       communitySlug: "polynet",
-      communityTab: "funnel",
-      communitySettingsPane: null,
+      communityTab: "settings",
+      communitySettingsPane: "community",
     });
-    expect(buildAppRoutePath(parsed!)).toBe("/c/polynet/funnel");
+    expect(buildAppRoutePath(parsed!)).toBe("/c/polynet/settings/community");
   });
 
   it("does not let channel state bleed into another community surface", () => {
@@ -203,7 +202,7 @@ describe("canonical web destinations", () => {
     ["/m/settings/profile", { kind: "global_settings", page: "profile", index: false }],
     ["/c/polynet", { kind: "community_funnel", slug: "polynet" }],
     ["/m/c/polynet", { kind: "community_funnel", slug: "polynet" }],
-    ["/c/polynet/preview", { kind: "community_funnel_preview", slug: "polynet" }],
+    ["/c/polynet/preview", { kind: "community_funnel", slug: "polynet" }],
     ["/m/c/polynet/onboarding/preview", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/home", { kind: "community_home", slug: "polynet" }],
     ["/m/c/polynet/members", { kind: "community_chat", slug: "polynet", channelSlug: null }],
@@ -213,7 +212,7 @@ describe("canonical web destinations", () => {
     ["/m/c/polynet/events", { kind: "community_events", slug: "polynet" }],
     ["/m/c/polynet/settings/agent", { kind: "community_settings", slug: "polynet", pane: "agent" }],
     ["/m/c/polynet/workflows", { kind: "community_workflows", slug: "polynet" }],
-    ["/m/c/polynet/funnel", { kind: "community_funnel_editor", slug: "polynet" }],
+    ["/m/c/polynet/funnel", { kind: "community_settings", slug: "polynet", pane: "community" }],
     ["/m/c/polynet/analytics", { kind: "community_analytics", slug: "polynet" }],
   ] as const)("derives %s without changing desktop/mobile semantics", (path, expected) => {
     expect(deriveWebDestinationFromPath(path)).toMatchObject(expected);

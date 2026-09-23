@@ -15,7 +15,6 @@ const modules = import.meta.glob([
 
 const OWNER_SUBJECT = "funnel-authority-owner";
 const MEMBER_SUBJECT = "funnel-authority-member";
-const VSL_URL = "https://www.youtube.com/watch?v=abcdefghijk";
 
 function content(headline = "Build a community that compounds") {
   return {
@@ -71,72 +70,53 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
-test("default is immutable and public until an exact published custom slot is activated", async () => {
+test("retired builder rejects old writes while preserving a historical private draft", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-
-  const initial = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
-    communitySlug: "funnel-authority",
-  });
-  expect(initial.community?.funnel).toMatchObject({
-    active_slot: "default",
-    published_content_v2: null,
-  });
-
-  const saved = await asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
-    communityId: fixture.communityId,
-    slot: "custom_1",
-    expectedDraftRevision: 0,
-    content: content("Custom one"),
-  });
-  expect(saved.active_slot).toBe("default");
-  expect(saved.custom_funnels.custom_1).toMatchObject({
-    slot: "custom_1",
-    draft_revision: 1,
-    draft_content_v2: { headline: "Custom one" },
-  });
-
-  const published = await asOwner.mutation(
-    api.communityFunnel.publishCommunityFunnelDraft,
-    {
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityFunnels", {
       communityId: fixture.communityId,
       slot: "custom_1",
-      expectedDraftRevision: 1,
-    },
-  );
-  expect(published.active_slot).toBe("default");
-  expect(published.custom_funnels.custom_1?.published_draft_revision).toBe(1);
-
-  const activated = await asOwner.mutation(
-    api.communityFunnel.setActiveCommunityFunnel,
-    {
-      communityId: fixture.communityId,
-      target: { slot: "custom_1", expectedPublishedDraftRevision: 1 },
-    },
-  );
-  expect(activated.active_slot).toBe("custom_1");
-  const liveCustom = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
-    communitySlug: "funnel-authority",
+      draftContentV2: content("Historical private draft"),
+      draftRevision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    });
   });
-  expect(liveCustom.community?.funnel).toMatchObject({
-    active_slot: "custom_1",
-    published_content_v2: { headline: "Custom one" },
-  });
-  expect(liveCustom.community?.funnel).not.toHaveProperty("draft_content_v2");
-  expect(liveCustom.community?.funnel).not.toHaveProperty("custom_funnels");
-
-  await asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+  const draftBefore = await t.query(internal.communityFunnel.getCommunityFunnelDraftInternal, {
     communityId: fixture.communityId,
-    target: { slot: "default" },
+    slot: "custom_1",
   });
-  const restored = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+  expect(draftBefore.selected_funnel?.draft_content_v2).toMatchObject({ headline: "Historical private draft" });
+  await expect(asMember.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
+    communityId: fixture.communityId, slot: "custom_1", expectedDraftRevision: 1, content: content(),
+  })).rejects.toThrow("community_forbidden");
+  await expect(asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
+    communityId: fixture.communityId, slot: "custom_1", expectedDraftRevision: 1, content: content(),
+  })).rejects.toThrow("community_funnel_builder_retired");
+  await expect(t.mutation(internal.communityFunnel.saveCommunityFunnelDraftInternal, {
+    userId: fixture.ownerId, communityId: fixture.communityId, slot: "custom_1", expectedDraftRevision: 1, content: content(),
+  })).rejects.toThrow("community_funnel_builder_retired");
+  await expect(asOwner.mutation(api.communityFunnel.setCommunityFunnelDraftVsl, {
+    communityId: fixture.communityId, slot: "custom_1", expectedDraftRevision: 1, url: "https://www.youtube.com/watch?v=abcdefghijk",
+  })).rejects.toThrow("community_funnel_builder_retired");
+  await expect(asOwner.mutation(api.communityFunnel.publishCommunityFunnelDraft, {
+    communityId: fixture.communityId, slot: "custom_1", expectedDraftRevision: 1,
+  })).rejects.toThrow("community_funnel_builder_retired");
+  await expect(asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+    communityId: fixture.communityId, target: { slot: "custom_1", expectedPublishedDraftRevision: 1 },
+  })).rejects.toThrow("community_funnel_builder_retired");
+  const draftAfter = await t.query(internal.communityFunnel.getCommunityFunnelDraftInternal, {
+    communityId: fixture.communityId, slot: "custom_1",
+  });
+  expect(draftAfter.selected_funnel).toEqual(draftBefore.selected_funnel);
+  const publicFunnel = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
     communitySlug: "funnel-authority",
   });
-  expect(restored.community?.funnel).toMatchObject({
-    active_slot: "default",
-    published_content_v2: null,
-  });
+  expect(publicFunnel.community?.funnel).toMatchObject({ active_slot: "default", published_content_v2: null });
+  expect(publicFunnel.community?.funnel).not.toHaveProperty("draft_content_v2");
 });
 
 test("manager website link is revisioned, public, and never a join or checkout authority", async () => {
@@ -219,129 +199,6 @@ test("manager website link is revisioned, public, and never a join or checkout a
     communityId: fixture.communityId, expectedSettingsRevision: 3, url: null,
   });
   expect(cleared).toMatchObject({ external_funnel_url: null, external_funnel_active: false, settings_revision: 4 });
-});
-
-test("custom drafts, revisions, VSLs, and agent-facing selection are isolated by slot", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-
-  await asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
-    communityId: fixture.communityId,
-    slot: "custom_1",
-    expectedDraftRevision: 0,
-    content: content("Custom one"),
-  });
-  await asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
-    communityId: fixture.communityId,
-    slot: "custom_2",
-    expectedDraftRevision: 0,
-    content: content("Custom two"),
-  });
-  const withVsl = await asOwner.mutation(
-    api.communityFunnel.setCommunityFunnelDraftVsl,
-    {
-      communityId: fixture.communityId,
-      slot: "custom_2",
-      expectedDraftRevision: 1,
-      url: VSL_URL,
-    },
-  );
-  expect(withVsl.custom_funnels.custom_1).toMatchObject({
-    draft_revision: 1,
-    draft_vsl_url: null,
-    draft_content_v2: { headline: "Custom one" },
-  });
-  expect(withVsl.custom_funnels.custom_2).toMatchObject({
-    draft_revision: 2,
-    draft_vsl_url: VSL_URL,
-    draft_content_v2: { headline: "Custom two" },
-  });
-
-  const selected = await t.query(internal.communityFunnel.getCommunityFunnelDraftInternal, {
-    communityId: fixture.communityId,
-    slot: "custom_2",
-  });
-  expect(selected).toMatchObject({
-    selected_slot: "custom_2",
-    selected_funnel: {
-      draft_revision: 2,
-      draft_vsl_url: VSL_URL,
-      draft_content_v2: { headline: "Custom two" },
-    },
-  });
-});
-
-test("manager authority and optimistic activation fail closed", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-
-  await expect(
-    asMember.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
-      communityId: fixture.communityId,
-      slot: "custom_1",
-      expectedDraftRevision: 0,
-      content: content(),
-    }),
-  ).rejects.toThrow("community_forbidden");
-  await expect(
-    asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
-      communityId: fixture.communityId,
-      target: { slot: "custom_2", expectedPublishedDraftRevision: 0 },
-    }),
-  ).rejects.toThrow("community_funnel_activation_requires_published");
-
-  await asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
-    communityId: fixture.communityId,
-    slot: "custom_1",
-    expectedDraftRevision: 0,
-    content: content(),
-  });
-  await asOwner.mutation(api.communityFunnel.publishCommunityFunnelDraft, {
-    communityId: fixture.communityId,
-    slot: "custom_1",
-    expectedDraftRevision: 1,
-  });
-  await expect(
-    asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
-      communityId: fixture.communityId,
-      target: { slot: "custom_1", expectedPublishedDraftRevision: 0 },
-    }),
-  ).rejects.toThrow("community_funnel_activation_conflict");
-  const community = await t.run(async (ctx) => ctx.db.get(fixture.communityId));
-  expect(community?.activeFunnelSlot).toBe("default");
-});
-
-test("manager preview exposes both private slots while public output exposes only the active snapshot", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-  await asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
-    communityId: fixture.communityId,
-    slot: "custom_2",
-    expectedDraftRevision: 0,
-    content: content("Private two"),
-  });
-
-  await expect(
-    asOwner.query(api.communityFunnel.getCommunityFunnelDraftPreview, {
-      slug: "FUNNEL-AUTHORITY",
-    }),
-  ).resolves.toMatchObject({
-    active_slot: "default",
-    custom_funnels: {
-      custom_1: null,
-      custom_2: { draft_content_v2: { headline: "Private two" } },
-    },
-  });
-  await expect(
-    asMember.query(api.communityFunnel.getCommunityFunnelDraftPreview, {
-      slug: "funnel-authority",
-    }),
-  ).rejects.toThrow("community_forbidden");
 });
 
 test("bounded content and duplicate rows fail closed", async () => {

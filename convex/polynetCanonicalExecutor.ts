@@ -581,6 +581,8 @@ function capabilityDocument(args: {
   evidenceSurface: CommunityEvidenceSurface;
   principalKind: PolynetPrincipalKind;
 }): Record<string, unknown> | null {
+  // Retained only for historical receipts; do not advertise or run new draft writes.
+  if (args.operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) return null;
   const isMemberCapability =
     args.evidenceSurface !== "community_funnel_builder" &&
     (MEMBER_CAPABILITIES as readonly string[]).includes(args.operation);
@@ -871,11 +873,6 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
-      ...(args.evidenceSurface === "community_funnel_builder" &&
-      args.principalKind === "personal_agent" &&
-      target.authority.canUseBuilderProjection
-        ? [COMMUNITY_FUNNEL_UPDATE_OPERATION]
-        : []),
     ];
     return {
       ok: true,

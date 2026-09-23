@@ -1120,294 +1120,40 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   });
 });
 
-test("funnel draft capability is visible and executable only on the manager funnel surface", async () => {
+test("retired funnel draft capability is absent and cannot write through the canonical executor", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  const ownerCtx = executionContext(
-    t.withIdentity({ subject: fixture.ownerSubject }),
-  );
-  const memberCtx = executionContext(
-    t.withIdentity({ subject: fixture.memberSubject }),
-  );
-  const capabilityPath =
-    "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
-  const capabilitiesPath = "/communities/canonical-community/capabilities/";
-
-  const ownerCapabilities = await executePolynetCanonicalTool({
+  const ownerCtx = executionContext(t.withIdentity({ subject: fixture.ownerSubject }));
+  const capabilityPath = "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
+  const common = {
     ctx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    principalKind: "personal_agent",
-    evidenceSurface: "community_funnel_builder",
-    toolName: "polynet_list",
-    input: { path: capabilitiesPath },
-  });
-  expect(ownerCapabilities).toMatchObject({
-    ok: true,
-    value: {
-      entries: expect.arrayContaining([
-        expect.objectContaining({
-          operation: "community.funnel.update_draft",
-        }),
-      ]),
-    },
-  });
-  if (!ownerCapabilities.ok)
-    throw new Error("owner funnel capabilities unavailable");
-  expect(ownerCapabilities.value.entries).toHaveLength(1);
-
-  const initialCapability = await executePolynetCanonicalTool({
-    ctx: ownerCtx,
-    authSubject: fixture.ownerSubject,
-    userId: fixture.ownerId,
-    principalKind: "personal_agent",
-    evidenceSurface: "community_funnel_builder",
-    toolName: "polynet_read",
-    input: { path: capabilityPath },
-  });
-  expect(initialCapability).toMatchObject({ ok: true });
-  if (!initialCapability.ok) throw new Error("owner funnel capability unavailable");
-  expect(JSON.parse(String(initialCapability.value.body))).toMatchObject({
-    operation: "community.funnel.update_draft",
-    current_state: { draft_revision: 0, draft_content_v2: null },
-  });
-  await expect(
-    executePolynetCanonicalTool({
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "personal_agent",
-      mountedCommunityId: "different-community",
-      evidenceSurface: "community_funnel_builder",
-      toolName: "polynet_read",
-      input: { path: capabilityPath },
-    }),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "community_context_mismatch",
-  });
-
-  for (const denied of [
-    {
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "personal_agent" as const,
-      evidenceSurface: "member_agent_dock" as const,
-    },
-    {
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "external_mcp" as const,
-      evidenceSurface: "community_funnel_builder" as const,
-    },
-    {
-      ctx: memberCtx,
-      authSubject: fixture.memberSubject,
-      userId: fixture.memberId,
-      principalKind: "personal_agent" as const,
-      evidenceSurface: "community_funnel_builder" as const,
-    },
-  ]) {
-    await expect(
-      executePolynetCanonicalTool({
-        ...denied,
-        toolName: "polynet_read",
-        input: { path: capabilityPath },
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      code: "semantic_not_found",
-    });
-  }
-
-  const content = buildCommunityFunnelContentTestFixture({
-    headline: "Build together with a shared operating memory.",
-  });
-  const creatorVslUrl = "https://www.youtube.com/watch?v=abcdefghijk";
-  await t.run(async (ctx) => {
-    await ctx.db.insert("communityFunnels", {
-      communityId: fixture.communityId,
-      draftVslUrl: creatorVslUrl,
-      draftRevision: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  });
-  const callInput = {
-    operation: "community.funnel.update_draft",
-    version: 1,
-    target: capabilityPath,
-    input: {
-      expected_revision: 0,
-      content,
-    },
-    idempotency_key: "funnel-draft-update-1",
+    principalKind: "personal_agent" as const,
+    evidenceSurface: "community_funnel_builder" as const,
   };
-  const saved = await executePolynetCanonicalTool({
-    ctx: ownerCtx,
-    authSubject: fixture.ownerSubject,
-    userId: fixture.ownerId,
-    principalKind: "personal_agent",
-    evidenceSurface: "community_funnel_builder",
+  await expect(executePolynetCanonicalTool({
+    ...common, toolName: "polynet_list",
+    input: { path: "/communities/canonical-community/capabilities/" },
+  })).resolves.toMatchObject({ ok: true, value: { entries: [] } });
+  await expect(executePolynetCanonicalTool({
+    ...common, toolName: "polynet_read", input: { path: capabilityPath },
+  })).resolves.toMatchObject({ ok: false, code: "semantic_not_found" });
+  const update = () => executePolynetCanonicalTool({
+    ...common,
     toolName: "polynet_call",
-    input: callInput,
-  });
-  expect(saved).toMatchObject({
-    ok: true,
-    value: {
+    input: {
       operation: "community.funnel.update_draft",
-      result: { draft_revision: 1 },
-      receipt: { authority_lane: "builder", deduped: false },
+      version: 1,
+      target: capabilityPath,
+      input: { expected_revision: 0, content: buildCommunityFunnelContentTestFixture() },
+      idempotency_key: "retired-builder-retry",
     },
   });
-  await expect(
-    executePolynetCanonicalTool({
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "personal_agent",
-      evidenceSurface: "community_funnel_builder",
-      toolName: "polynet_call",
-      input: callInput,
-    }),
-  ).resolves.toMatchObject({
-    ok: true,
-    value: { deduped: true, receipt: { deduped: true } },
-  });
-  const updatedCapability = await executePolynetCanonicalTool({
-    ctx: ownerCtx,
-    authSubject: fixture.ownerSubject,
-    userId: fixture.ownerId,
-    principalKind: "personal_agent",
-    evidenceSurface: "community_funnel_builder",
-    toolName: "polynet_read",
-    input: { path: capabilityPath },
-  });
-  if (!updatedCapability.ok) throw new Error("updated funnel capability unavailable");
-  expect(JSON.parse(String(updatedCapability.value.body))).toMatchObject({
-    current_state: {
-      draft_revision: 1,
-      draft_vsl_url: creatorVslUrl,
-      draft_content_v2: content,
-    },
-  });
-  await t.run(async (ctx) => {
-    const rows = await ctx.db.query("communityFunnels").collect();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      communityId: fixture.communityId,
-      draftVslUrl: creatorVslUrl,
-      draftRevision: 1,
-      draftContentV2: content,
-    });
-  });
-});
-
-test("funnel composer keeps one canonical draft and dedupes model retries", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const ownerCtx = executionContext(
-    t.withIdentity({ subject: fixture.ownerSubject }),
-  );
-  const capabilityPath =
-    "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
-  const content = buildCommunityFunnelContentTestFixture({
-    headline: "One canonical community funnel draft.",
-  });
-  const sharedModelIdempotencyKey = "same-model-retry-key";
-  const update = async () =>
-    await executePolynetCanonicalTool({
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "personal_agent",
-      evidenceSurface: "community_funnel_builder",
-      toolName: "polynet_call",
-      input: {
-        operation: "community.funnel.update_draft",
-        version: 1,
-        target: capabilityPath,
-        input: { expected_revision: 0, content },
-        idempotency_key: sharedModelIdempotencyKey,
-      },
-    });
-
-  await expect(update()).resolves.toMatchObject({
-    ok: true,
-    value: { result: { draft_revision: 1 }, deduped: false },
-  });
-  await expect(update()).resolves.toMatchObject({
-    ok: true,
-    value: { result: { draft_revision: 1 }, deduped: true },
-  });
-
-  const readResult = await executePolynetCanonicalTool({
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "personal_agent",
-      evidenceSurface: "community_funnel_builder",
-      toolName: "polynet_read",
-      input: { path: capabilityPath },
-    });
-  if (!readResult.ok) throw new Error("could not read canonical draft");
-  const state = JSON.parse(String(readResult.value.body));
-  expect(state.current_state).toMatchObject({
-    selected_slot: "custom_1",
-    active_slot: "default",
-    draft_revision: 1,
-    draft_content_v2: content,
-  });
-
-  const rows = await t.run(async (ctx) =>
-    ctx.db.query("communityFunnels").collect(),
-  );
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({
-    slot: "custom_1",
-    draftRevision: 1,
-    draftContentV2: content,
-  });
-
-  const customTwoContent = buildCommunityFunnelContentTestFixture({
-    headline: "A separately isolated second funnel.",
-  });
-  await expect(
-    executePolynetCanonicalTool({
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "personal_agent",
-      evidenceSurface: "community_funnel_builder",
-      funnelDraftSlot: "custom_2",
-      toolName: "polynet_call",
-      input: {
-        operation: "community.funnel.update_draft",
-        version: 1,
-        target: capabilityPath,
-        input: { expected_revision: 0, content: customTwoContent },
-        idempotency_key: "custom-two-model-key",
-      },
-    }),
-  ).resolves.toMatchObject({
-    ok: true,
-    value: { result: { selected_slot: "custom_2" } },
-  });
-  const isolatedRows = await t.run(async (ctx) =>
-    ctx.db.query("communityFunnels").collect(),
-  );
-  expect(isolatedRows).toHaveLength(2);
-  expect(isolatedRows).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ slot: "custom_1", draftContentV2: content }),
-      expect.objectContaining({
-        slot: "custom_2",
-        draftContentV2: customTwoContent,
-      }),
-    ]),
-  );
+  await expect(update()).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
+  await expect(update()).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
+  const rows = await t.run(async (ctx) => ctx.db.query("communityFunnels").collect());
+  expect(rows).toHaveLength(0);
 });
 
 test("retired AI Feed paths are uniformly absent across canonical operations", async () => {

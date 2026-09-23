@@ -172,8 +172,8 @@ assert.match(
 );
 assert.match(
   routeState,
-  /tabSegment === "settings" && String\(segments\[3\] \?\? ""\)\.trim\(\) === "funnel"[\s\S]*tabSegment === "funnel" \|\| isLegacyFunnelSettingsRoute[\s\S]*\? "funnel"/,
-  "canonical and legacy Funnel URLs must resolve to the top-level Funnel tab",
+  /tabSegment === "settings" && String\(segments\[3\] \?\? ""\)\.trim\(\) === "funnel"[\s\S]*tabSegment === "funnel" \|\| isLegacyFunnelSettingsRoute[\s\S]*\? "settings"/,
+  "retired Funnel URLs must resolve to community Settings",
 );
 assert.match(
   routeState,
@@ -259,10 +259,10 @@ assert.doesNotMatch(
   /WebCommunityFunnelSection|selectedSettingsPane === "funnel"/,
   "Funnel must not remain embedded in Settings",
 );
-assert.match(
+assert.doesNotMatch(
   secondaryPanels,
-  /communityTab === "funnel"[\s\S]*WebCommunityFunnelSection/,
-  "Funnel must render as a top-level community surface",
+  /communityTab === "funnel"[\s\S]*<WebCommunityFunnelSection/,
+  "retired Funnel must not render as a community surface",
 );
 assert.match(
   settingsSection,

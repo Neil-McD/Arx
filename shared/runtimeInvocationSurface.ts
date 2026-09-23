@@ -39,8 +39,7 @@ export function normalizeRuntimeInvocationSurface(
   raw: unknown,
 ): RuntimeInvocationSurface | null {
   const value = String(raw ?? "").trim();
-  if (value === "member_agent_dock" || value === "community_funnel_builder")
-    return value;
+  if (value === "member_agent_dock") return value;
   return null;
 }
 

@@ -138,7 +138,7 @@ export function WebCommunityExternalFunnelLink(props: Props) {
 
   return (
     <section className="settings-section external-funnel-settings" aria-labelledby="external-funnel-settings-title">
-      <div className="settings-section-title" id="external-funnel-settings-title">Your website</div>
+      <div className="settings-section-title" id="external-funnel-settings-title">Product website</div>
       <p>Polynet provides a landing page by default. To send Discover visitors to your website, link its Join button back to Polynet and test that journey before activating it.</p>
       <div className="external-funnel-join-link">
         <a href={joinUrl} target="_blank" rel="noopener noreferrer">{joinUrl}</a>

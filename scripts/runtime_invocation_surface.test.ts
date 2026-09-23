@@ -48,7 +48,7 @@ describe("community funnel runtime surface", () => {
         requestedSurface: "community_funnel_builder",
         threadKey,
       }),
-    ).toBe("community_funnel_builder");
+    ).toBeNull();
     expect(
       resolveRuntimeInvocationSurfaceForThread({
         requestedSurface: "member_agent_dock",

@@ -44,8 +44,8 @@ assert.equal(
 );
 assert.match(
   lifecycle,
-  /resetCommunitySettingsSelection\(params\.activeCommunityId\)[\s\S]*communityTab === "settings" \|\| params\.communityTab === "funnel"[\s\S]*loadCommunitySettings\(\{/,
-  "settings and the surviving Funnel About editor must hydrate from the aggregate authority",
+  /resetCommunitySettingsSelection\(params\.activeCommunityId\)[\s\S]*params\.communityTab === "settings"[\s\S]*loadCommunitySettings\(\{/,
+  "community Settings must hydrate from the aggregate authority",
 );
 assert.doesNotMatch(
   lifecycle,
