@@ -85,9 +85,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     setInstructions(props.milestone.instructions ?? "");
     setGoal(props.milestone.goal ?? "");
     setRequireHumanApproval(props.milestone.requireHumanApproval ?? false);
-    setAutomations(props.milestone.automations
-      .filter(automation => automation.action.type !== "move_member" && automation.action.type !== "evaluate_goal")
-      .map(toWorkflowAutomationDraft));
+    setAutomations(props.milestone.automations.map(toWorkflowAutomationDraft));
   }, [props.isOpen, props.milestone]);
 
   useEffect(() => {

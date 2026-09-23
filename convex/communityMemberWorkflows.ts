@@ -87,8 +87,6 @@ type ChannelContributionRow =
 
 const automationInputValidator = v.object({
   key: v.optional(v.string()),
-  // Legacy clients may send these fields; retired actions are rejected below.
-  completionGeneration: v.optional(v.string()),
   sequenceEnabledAt: v.optional(v.number()),
   sequenceEnabledRevision: v.optional(v.number()),
   trigger: v.union(
@@ -99,7 +97,6 @@ const automationInputValidator = v.object({
     v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
   ),
   action: v.union(
-    v.object({ key: v.optional(v.string()), type: v.literal("evaluate_goal") }),
     v.object({ key: v.optional(v.string()), type: v.literal("create_service_channel") }),
     v.object({ key: v.optional(v.string()), type: v.literal("request_form"), formKey: v.string() }),
     v.object({
@@ -107,7 +104,6 @@ const automationInputValidator = v.object({
       type: v.literal("prompt_agent"),
       prompt: v.string(),
     }),
-    v.object({ key: v.optional(v.string()), type: v.literal("move_member"), destination: v.literal("next_or_complete") }),
   ),
 });
 
@@ -175,8 +171,6 @@ function normalizeAutomations(
   const submittedForms = new Set<string>();
   const draftActionKeys = new Map<string, string>();
   const automations: CommunityMemberWorkflowAutomation[] = inputs.map((input) => {
-    if (input.action?.type === "move_member" || input.action?.type === "evaluate_goal")
-      throw new Error("workflow_action_retired");
     const suppliedAutomationKey = input.key
       ? normalizeCommunityMemberWorkflowAutomationKey(input.key)
       : null;
@@ -859,9 +853,6 @@ export const reconcileCompletedWorkflowActionsInternal = internalMutation({
       || run.milestoneEnteredAt !== current.milestoneEnteredAt
       || run.activationSequence !== Number(membership.activationSequence ?? 0)
       || run.transitionSeq !== Number(state?.transitionSeq ?? 0)) return { status: "stale" };
-    // An old definition must be edited before the remaining actions can advance it.
-    if (current.milestone.automations.some(a => a.action.type === "move_member" || a.action.type === "evaluate_goal"))
-      return { status: "retired_rule_configuration" };
     const progress = await readWorkflowActionProgress(ctx, { workflow, membership, milestone: current.milestone,
       milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: state?.transitionSeq ?? 0 });
     if (progress.scan_truncated) return { status: "completion_scan_truncated" };
@@ -981,8 +972,6 @@ async function executeWorkflowAutomation(args: {
   current: ReturnType<typeof resolveCurrentMilestone>;
   automation: CommunityMemberWorkflowAutomation;
 }) {
-  if (args.automation.action.type === "move_member" || args.automation.action.type === "evaluate_goal")
-    return { status: "action_retired" as const };
   const triggerReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
     args.timerReceiptRef ?? buildCommunityInteractionEvidenceRef({
       objectType: args.objectType!,

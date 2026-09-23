@@ -34,19 +34,10 @@ export type CommunityMemberWorkflowPromptAgentAction = {
   prompt: string;
 };
 
-/** Historical action shape retained for older snapshots; new authoring rejects it. */
-export type CommunityMemberWorkflowMoveMemberAction = {
-  key: string;
-  type: "move_member";
-  destination: "next_or_complete";
-};
-
 export type CommunityMemberWorkflowAction =
-  | { key: string; type: "evaluate_goal" }
   | { key: string; type: "create_service_channel" }
   | { key: string; type: "request_form"; formKey: string }
-  | CommunityMemberWorkflowPromptAgentAction
-  | CommunityMemberWorkflowMoveMemberAction;
+  | CommunityMemberWorkflowPromptAgentAction;
 
 export type CommunityMemberWorkflowAutomation = {
   key: string;
@@ -55,8 +46,6 @@ export type CommunityMemberWorkflowAutomation = {
   /** Server-owned activation time; edits never backfill already completed work. */
   sequenceEnabledAt?: number;
   sequenceEnabledRevision?: number;
-  /** Historical field retained until old persisted definitions have been retired. */
-  completionGeneration?: string;
   trigger: CommunityMemberWorkflowTrigger;
   action: CommunityMemberWorkflowAction;
 };
@@ -207,7 +196,7 @@ export function workflowSequenceIssue(rules: CommunityMemberWorkflowAutomation[]
       if (!previous || previous.action.key !== rule.trigger.predecessorActionKey)
         return "Choose the action immediately before this action, or change its trigger";
     }
-    if (rule.action.type !== "move_member" && rule.action.type !== "evaluate_goal") previous = rule;
+    previous = rule;
   }
   return null;
 }

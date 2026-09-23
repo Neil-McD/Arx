@@ -1259,7 +1259,6 @@ export default defineSchema({
         automations: v.array(v.object({
           key: v.string(),
           timerGeneration: v.optional(v.string()),
-          completionGeneration: v.optional(v.string()),
           sequenceEnabledAt: v.optional(v.number()),
           sequenceEnabledRevision: v.optional(v.number()),
           trigger: v.union(
@@ -1270,18 +1269,12 @@ export default defineSchema({
             v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
           ),
           action: v.union(
-            v.object({ key: v.string(), type: v.literal("evaluate_goal") }),
             v.object({ key: v.string(), type: v.literal("create_service_channel") }),
             v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
             v.object({
               key: v.string(),
               type: v.literal("prompt_agent"),
               prompt: v.string(),
-            }),
-            v.object({
-              key: v.string(),
-              type: v.literal("move_member"),
-              destination: v.literal("next_or_complete"),
             }),
           ),
         })),
