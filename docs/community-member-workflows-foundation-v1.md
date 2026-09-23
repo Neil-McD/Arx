@@ -10,7 +10,7 @@ The completion reader verifies an outcome for every configured action in the cur
 
 After the last verified action, a stage without a goal can advance automatically unless human approval is required. A stage with a written goal starts a bounded, private assessment when approval is not required. Only an achieved verdict with current evidence may advance it. Not-yet, insufficient evidence, failure, or changed authority leaves the member in place. The assessment does not post a member message or run tools.
 
-For stages requiring human approval, the owner or an admin approves the current visit. All configured actions must be verified first. A zero-action manual stage can be approved deliberately. Approval records the actor and goal snapshot; it is separate from Force move. At present, the agent does not run a goal assessment on the human-approval path. Adding that review is a separate behavior change.
+For stages requiring human approval, the owner or an admin approves the current visit. All configured actions must be verified first. A written goal starts the same bounded agent assessment after action completion, but its verdict is advisory and never advances the member. A failed, unavailable, or negative assessment does not block human approval. A zero-action manual stage can be approved deliberately without running an assessment. Approval records the actor and goal snapshot; it is separate from Force move and does not assert goal achievement.
 
 Force move is an owner/admin override that may bypass unfinished actions or an unmet goal. It records the actor, rejects stale or repeated confirmations, closes pending stage forms, and does not imply goal achievement.
 

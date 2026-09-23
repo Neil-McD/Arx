@@ -28,7 +28,7 @@ export async function readCompletionReviewSnapshot(ctx: any, workflow: any, memb
   const current = resolveCurrentMilestone({ workflow, membership, state });
   const milestone = current.milestone;
   if (!communityMembershipRowIsActive(membership) || membership.communityId !== workflow.communityId
-    || current.completedAt || milestone.requireHumanApproval || !milestone.goal?.trim()
+    || current.completedAt || !milestone.goal?.trim()
     || milestone.automations.some((a: any) => ["move_member", "evaluate_goal"].includes(a.action.type))) return null;
   // The read-only dossier can reuse its projection. Authority callers always
   // omit this argument and resolve proof from canonical records again.
@@ -59,7 +59,8 @@ export async function readCompletionReviewSnapshot(ctx: any, workflow: any, memb
   const snapshot = JSON.stringify({ workflowId: workflow._id, workflowRevision: workflow.revision,
     membershipId: membership._id, activationSequence: membership.activationSequence ?? 0,
     transitionSeq: state?.transitionSeq ?? 0, milestoneKey: milestone.key, milestoneEnteredAt: current.milestoneEnteredAt,
-    goal: milestone.goal, instructions: milestone.instructions ?? "", automations: milestone.automations,
+    goal: milestone.goal, instructions: milestone.instructions ?? "", requireHumanApproval: milestone.requireHumanApproval ?? false,
+    automations: milestone.automations,
     evidence, facts, evidenceRefs });
   if (snapshot.length > 14000) return null;
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(snapshot));

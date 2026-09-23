@@ -234,7 +234,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             </label>
             <label><span className="resource-field-label">Goal</span>
               <textarea rows={2} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
-              <small className="workflow-field-hint">{requireHumanApproval ? "The approver reviews this goal after actions finish." : "After actions finish, the agent reviews this goal before advancement."}</small>
+              <small className="workflow-field-hint">After actions finish, the agent reviews this goal. Its assessment is advisory when human approval is required.</small>
             </label>
             <label className="community-channel-participant"><input type="checkbox" checked={requireHumanApproval} disabled={props.isSaving}
               onChange={event => setRequireHumanApproval(event.target.checked)} /> Require human approval</label>

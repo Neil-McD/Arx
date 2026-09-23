@@ -14,17 +14,18 @@ import { createActiveCommunityChannel } from "./communityChannelCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { bindMemberServiceChannel } from "./communityMemberServiceChannelCore";
 import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
+import { resolveSelfCommunityMembershipContext } from "./communityMembershipContextCore";
 const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
 const reconcileCompletion = internal.communityMemberWorkflows.reconcileCompletedWorkflowActionsInternal;
 afterEach(() => vi.useRealTimers());
 
-async function completionReviewFixture(mode: "room" | "both" = "room") {
+async function completionReviewFixture(mode: "room" | "both" = "room", requireHumanApproval = false) {
   vi.useFakeTimers();
   const f = await fixture(mode);
   await f.t.run(async ctx => {
     const workflow = (await ctx.db.get(f.workflowId))!;
-    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], goal: "The member has a private channel." }] });
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], goal: "The member has a private channel.", requireHumanApproval }] });
   });
   await f.t.mutation(joinHandler, f.job);
   const work = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).filter(r => r.actionSnapshot.type !== "evaluate_goal");
@@ -32,8 +33,8 @@ async function completionReviewFixture(mode: "room" | "both" = "room") {
   return { ...f, work, reconcile };
 }
 
-async function claimedCompletionReview() {
-  const f = await completionReviewFixture();
+async function claimedCompletionReview(requireHumanApproval = false) {
+  const f = await completionReviewFixture("room", requireHumanApproval);
   expect((await f.reconcile()).status).toBe("review_queued");
   const request = (await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
   expect(request).toMatchObject({ workflowCompletionReview: true, workflowAssessment: true, status: "queued", sourceVisibilityScope: "admin", responseVisibilityScope: "admin" });
@@ -76,6 +77,43 @@ test("completion review is private, deduplicated, and advances exactly once thro
   expect(transitions[0].workflowRunId).toBe(f.request.workflowRunId);
   expect(transitions[0].forcedByUserId).toBeUndefined();
   expect(await f.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(0);
+});
+
+test.each(["achieved", "not_yet", "insufficient_evidence"] as const)("human-gated goal review %s is advisory and approval remains human-owned", async verdict => {
+  const f = await claimedCompletionReview(true);
+  await f.reconcile();
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(1);
+  expect((await f.finish(verdict)).ok).toBe(true);
+  expect((await f.apply()).status).toBe(verdict === "achieved" ? "awaiting_human_approval" : "not_eligible");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const dossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(dossier.workflow?.goal_review).toMatchObject({ status: verdict });
+  const memberContext = await f.t.run(ctx => resolveSelfCommunityMembershipContext({
+    ctx, actorUserId: f.memberId, communityId: f.communityId,
+  }));
+  expect(memberContext.workflow).not.toHaveProperty("goal_review");
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  await owner.mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, approvalArgs(f));
+  const transitions = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(transitions).toHaveLength(1);
+  expect(transitions[0].approval).toMatchObject({ actorUserId: f.ownerId, goal: "The member has a private channel." });
+  expect(transitions[0].workflowRunId).toBeUndefined();
+});
+
+test("unavailable advisory assessment does not trap human approval", async () => {
+  const f = await completionReviewFixture("room", true);
+  await f.t.run(async ctx => {
+    const role = (await ctx.db.query("operatorRoles").first())!;
+    await ctx.db.patch(role._id, { active: false });
+  });
+  expect((await f.reconcile()).status).toBe("review_unavailable");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const dossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(dossier.workflow?.goal_review?.status).toBe("failed");
+  await owner.mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, approvalArgs(f));
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(1);
 });
 
 test.each(["not_yet", "insufficient_evidence"])("completion review %s holds without rescheduling inference", async verdict => {
@@ -261,9 +299,10 @@ test("an empty stage stays put automatically but can be approved by an owner", a
   const f = await fixture();
   await f.t.run(async ctx => {
     const workflow = (await ctx.db.get(f.workflowId))!;
-    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], automations: [], requireHumanApproval: true }] });
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], automations: [], goal: "Human-reviewed plan", requireHumanApproval: true }] });
   });
   expect(await progress(f)).toMatchObject({ actions: [], all_actions_complete: false });
+  expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
   expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
   const args = approvalArgs(f);
   await expect(f.t.withIdentity({ subject: "join-member" }).mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)).rejects.toThrow();
