@@ -30,7 +30,6 @@ export type CommunityMemberSuccessFact = {
 
 export type CommunityMemberSuccessMilestoneHistoryEntry = {
   forced_by_user_id?: string;
-  bypassed_requirements?: { key: string; label: string; definition: string }[];
   id: string;
   sequence: number;
   milestone_key: string;
@@ -115,7 +114,6 @@ export type CommunityMembershipContext = {
     current_milestone_name: string;
     current_milestone_entered_at: string;
     completed_at: string | null;
-    requirements?: { key: string; label: string; satisfied: boolean; satisfied_at: string | null }[];
   } | null;
   approved_community_context: CommunityMemberSuccessFact[];
   submitted_form_evidence: CommunitySubmittedFormEvidence;

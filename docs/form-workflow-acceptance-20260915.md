@@ -1,5 +1,9 @@
 # Forms and workflow acceptance — September 15, 2026
 
+Historical acceptance receipt. The `move_member` condition and user-configured
+`evaluate_goal` action described below were retired on September 23. See
+`community-member-workflows-foundation-v1.md` for the current contract.
+
 Current status: fresh member submission, progression, saved-answer recovery and
 live owner response acceptance passed after the freshness fix below. Remaining
 release gates include actual credential renewal and member-side access revocation.

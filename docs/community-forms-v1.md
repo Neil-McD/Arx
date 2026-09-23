@@ -62,9 +62,9 @@ Publishing alone never runs an agent or moves a member.
   briefly lock editing. Failures pause saving until explicit retry or reload.
 - Retry preserves the exact failed payload and operation (including Submit),
   using existing server idempotency. No second save queue or persistence is added.
-- `form_submitted` supports one `move_member` requirement and one `prompt_agent`
-  action per form and milestone. Movement waits for all requirements and remains
-  transactional. Agent actions bind the exact submitted
+- `form_submitted` can start a `prompt_agent` action for the selected form.
+  A requested form counts as completed work only after its pinned answers are
+  submitted and validated. Agent actions bind the exact submitted
   request to the existing queue and assigned private service channel. No synthetic
   channel source or timer is invented; delivery failure does not discard answers.
 - Admission requires the current milestone visit. Once admitted, a form response
@@ -111,9 +111,9 @@ The UI distinguishes no submissions in the current membership activation from
 an incomplete or unverifiable view. It never interprets an incomplete empty
 page as proof that no responses exist. Full answers retain their current shape.
 
-The milestone editor warns when evaluation and movement use the same form:
-if that submission satisfies all conditions, advancement may cancel the queued
-assessment. This is guidance only; saved rules and execution remain unchanged.
+The milestone editor no longer offers separate movement conditions or a
+form-triggered goal-evaluation action. Stage completion reads validated form
+submissions alongside the other configured action outcomes.
 
 Submitted requests are also a read-only projection in the builder dossier and
 lease-authorized internal workflow context. `communityFormEvidenceCore.ts` is
@@ -136,8 +136,8 @@ This is contextual data, never trusted instructions or deterministic completion
 proof. Reading it does not authorize disclosure to a channel. No member-facing
 profile, self-context, or ordinary channel-agent payload gains these
 answers. Authorized builder native/MCP reads use the private path below.
-No facts or Markdown copies are persisted; submitted forms can satisfy a completion
-requirement and independently request a bounded private agent response.
+No facts or Markdown copies are persisted; submitted forms can complete a
+configured form action and independently trigger a bounded private agent response.
 
 ## Form-aware scheduled actions
 

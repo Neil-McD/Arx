@@ -3,12 +3,10 @@ import { readFileSync } from "node:fs";
 import type { CommunityMemberWorkflowAutomation, CommunityMemberWorkflowMilestone } from "../shared/communityMemberWorkflow";
 import {
   isWorkflowMilestoneDraftDirty,
-  hasAssessmentMovementOverlap,
   replaceWorkflowDraftAction,
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
   workflowChannelLabel,
-  workflowMoveLabel,
   workflowAutomationIssue,
   workflowTriggerIssue,
 } from "../apps/web/src/components/workflowMilestoneDraft";
@@ -38,15 +36,6 @@ describe("workflow milestone editor drafts", () => {
     expect(workflowTriggerIssue({ ...draft, trigger: { type: "member_joined" } }, [], false)).toBeNull();
     expect(workflowTriggerIssue(automation, [], true)).toBe("Waiting for channels");
   });
-  it("warns only when assessment and movement use the same form", () => {
-    const assessment: CommunityMemberWorkflowAutomation = { key: "assess", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "assess-action", type: "evaluate_goal" } };
-    const move: CommunityMemberWorkflowAutomation = { key: "move", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "move-action", type: "move_member", destination: "next_or_complete" } };
-    expect(hasAssessmentMovementOverlap([assessment, move])).toBe(true);
-    expect(hasAssessmentMovementOverlap([assessment])).toBe(false);
-    expect(hasAssessmentMovementOverlap([move])).toBe(false);
-    expect(hasAssessmentMovementOverlap([assessment, { ...move, trigger: { type: "form_submitted", formKey: "other" } }])).toBe(false);
-    expect(hasAssessmentMovementOverlap([assessment, { ...move, trigger: { type: "milestone_elapsed", delayMinutes: 5 } }])).toBe(false);
-  });
   it("defers the conflict warning during saves without removing conflict or failure protection", () => {
     const source = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx", import.meta.url), "utf8");
     expect(source).toContain('{hasConflict && !props.isSaving ? <p className="workflow-error"');
@@ -73,18 +62,13 @@ describe("workflow milestone editor drafts", () => {
     expect(workflowChannelLabel("missing", [], true)).toBe("Channels unavailable");
   });
 
-  it("distinguishes next milestone movement from final completion", () => {
-    expect(workflowMoveLabel("Activated")).toBe("Move to Activated");
-    expect(workflowMoveLabel(null)).toBe("Complete workflow");
-  });
-
   it("surfaces incomplete collapsed rules without changing their scope", () => {
     expect(workflowAutomationIssue(automation, [], true)).toBe("Waiting for channels");
     expect(workflowAutomationIssue(automation, [], false)).toBe("Choose an available channel");
     const anyChannel = { ...automation, trigger: { type: "member_contributed" as const } };
     expect(workflowAutomationIssue(anyChannel, [], false)).toBeNull();
     expect(workflowAutomationIssue({ ...anyChannel, action: { key: "a", type: "prompt_agent", prompt: "  " } }, [], false)).toBe("Add agent instructions");
-    expect(workflowAutomationIssue(replaceWorkflowDraftAction(toWorkflowAutomationDraft(anyChannel), "move_member"), [], false)).toBeNull();
+    expect(workflowAutomationIssue(replaceWorkflowDraftAction(toWorkflowAutomationDraft(anyChannel), "request_form"), [], false)).toBe("Choose a published form");
     expect(automation.trigger.channelId).toBe("private-channel");
   });
 
@@ -100,14 +84,14 @@ describe("workflow milestone editor drafts", () => {
       ...toWorkflowAutomationDraft(automation),
       action: { ...automation.action, type: "prompt_agent" as const, prompt: "Unsaved revised instructions" },
     };
-    const moved = replaceWorkflowDraftAction(typed, "move_member");
-    expect(moved.action).toEqual({ key: "action-1", type: "move_member", destination: "next_or_complete" });
+    const moved = replaceWorkflowDraftAction(typed, "request_form");
+    expect(moved.action).toEqual({ key: "action-1", type: "request_form", formKey: "" });
     expect(replaceWorkflowDraftAction(moved, "prompt_agent").action).toEqual(typed.action);
     expect(automation.action).toEqual({ key: "action-1", type: "prompt_agent", prompt: "Help the member prepare." });
   });
 
   it("keeps trigger scope and action identity stable while switching", () => {
-    const moved = replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "move_member");
+    const moved = replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "request_form");
     expect(moved.key).toBe(automation.key);
     expect(moved.trigger).toEqual(automation.trigger);
     expect(moved.action.key).toBe(automation.action.key);
@@ -119,14 +103,14 @@ describe("workflow milestone editor drafts", () => {
     expect(replaceWorkflowDraftAction(draft, "prompt_agent")).toBe(draft);
   });
 
-  it("initializes a move action with an empty prompt draft", () => {
-    const draft = toWorkflowAutomationDraft({ ...automation, action: { key: "action-1", type: "move_member", destination: "next_or_complete" } });
+  it("initializes a non-prompt action with an empty prompt draft", () => {
+    const draft = toWorkflowAutomationDraft({ ...automation, action: { key: "action-1", type: "request_form", formKey: "intake" } });
     expect(replaceWorkflowDraftAction(draft, "prompt_agent").action).toEqual({ key: "action-1", type: "prompt_agent", prompt: "" });
   });
 
   it("keeps prompt drafts isolated between rules", () => {
-    const first = replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "move_member");
-    const second = replaceWorkflowDraftAction(toWorkflowAutomationDraft({ ...automation, key: "rule-2", action: { key: "action-2", type: "prompt_agent", prompt: "Different instructions" } }), "move_member");
+    const first = replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "request_form");
+    const second = replaceWorkflowDraftAction(toWorkflowAutomationDraft({ ...automation, key: "rule-2", action: { key: "action-2", type: "prompt_agent", prompt: "Different instructions" } }), "request_form");
     expect(replaceWorkflowDraftAction(first, "prompt_agent").action).toEqual(automation.action);
     expect(replaceWorkflowDraftAction(second, "prompt_agent").action).toMatchObject({ prompt: "Different instructions" });
   });
@@ -134,21 +118,21 @@ describe("workflow milestone editor drafts", () => {
   it("detects name, action, and rule changes against the opening snapshot", () => {
     const draft = toWorkflowAutomationDraft(automation);
     expect(isWorkflowMilestoneDraftDirty(snapshot, "Renamed", [draft])).toBe(true);
-    expect(isWorkflowMilestoneDraftDirty(snapshot, "New", [replaceWorkflowDraftAction(draft, "move_member")])).toBe(true);
+    expect(isWorkflowMilestoneDraftDirty(snapshot, "New", [replaceWorkflowDraftAction(draft, "request_form")])).toBe(true);
     expect(isWorkflowMilestoneDraftDirty(snapshot, "New", [])).toBe(true);
     expect(isWorkflowMilestoneDraftDirty(snapshot, "New", [draft, { ...draft, key: "new-rule" }])).toBe(true);
   });
 
   it("recognizes reverted changes as clean", () => {
     const draft = toWorkflowAutomationDraft(automation);
-    const restored = replaceWorkflowDraftAction(replaceWorkflowDraftAction(draft, "move_member"), "prompt_agent");
+    const restored = replaceWorkflowDraftAction(replaceWorkflowDraftAction(draft, "request_form"), "prompt_agent");
     expect(isWorkflowMilestoneDraftDirty(snapshot, "New", [restored])).toBe(false);
   });
 
   it("does not leak drafts between editor sessions", () => {
-    const oldDraft = replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "move_member");
+    const oldDraft = replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "request_form");
     expect(oldDraft.promptDraft).not.toBe("");
-    const reopened = toWorkflowAutomationDraft({ ...automation, action: { key: "action-1", type: "move_member", destination: "next_or_complete" } });
+    const reopened = toWorkflowAutomationDraft({ ...automation, action: { key: "action-1", type: "request_form", formKey: "intake" } });
     expect(reopened.promptDraft).toBe("");
   });
 

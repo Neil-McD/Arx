@@ -77,10 +77,6 @@ export function renderCommunityMemberSuccessDossierMarkdown(
       if (progress.scan_truncated) lines.push("_Action scan truncated; evidence is incomplete._");
     }
   }
-  if (source.workflow?.requirements?.length && !source.workflow.completed_at) {
-    lines.push("", "## Configured legacy requirements", "Requirement status alone does not authorize movement.");
-    for (const requirement of source.workflow.requirements) lines.push(`- [${requirement.satisfied ? "x" : " "}] ${markdownInline(requirement.label)}`);
-  }
   lines.push("", `Service channel: ${service.status === "available" ? `${markdownInline(service.name)} (${service.channel_id})` : service.status}. A destination reference does not grant access or authorize posting.`);
   lines.push("", "## Approved community context");
   if (source.approved_community_context.length === 0) {
@@ -145,7 +141,6 @@ export function renderCommunityMemberSuccessDossierMarkdown(
   } else {
     for (const entry of source.milestone_history) {
       if (entry.forced_by_user_id) lines.push(`- Builder forced override by ${markdownInline(entry.forced_by_user_id)}; not evidence that the goal was achieved.`);
-      if (entry.forced_by_user_id) lines.push(`  - Bypassed requirements: ${entry.bypassed_requirements ? entry.bypassed_requirements.map(item => `${markdownInline(item.label)} (${markdownInline(item.definition)})`).join("; ") || "none" : "historical definitions unavailable"}.`);
       lines.push(
         entry.completed_workflow
           ? `- ${entry.occurred_at}: ${markdownInline(entry.milestone_name)} → Workflow complete`

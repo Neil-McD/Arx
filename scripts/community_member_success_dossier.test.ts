@@ -192,7 +192,8 @@ const serviceProps = {
 test("normal human approval is separate from force move and fails closed on incomplete proof", () => {
   const workflow = { ...source.workflow!, require_human_approval: true,
     override_state: { activation_sequence: 1, transition_seq: 0, next_milestone_name: "Review" },
-    action_progress: { actions: [], all_actions_complete: true, scan_truncated: false } };
+    action_progress: { actions: [{ automation_key: "a", action_key: "b", label: "Ask agent", action_type: "prompt_agent" as const,
+      status: "complete" as "complete" | "pending", evidence: { run_id: "run", source_id: "reply", completed_at: 1 } }], all_actions_complete: true, scan_truncated: false } };
   const render = () => renderDossier({ onApproveMilestone: async () => {}, dossier: { ...source, markdown: "", workflow } });
   expect(render()).toContain("Awaiting human approval");
   expect(render()).toContain('class="workflow-secondary-button">Approve and advance</button>');
@@ -201,7 +202,8 @@ test("normal human approval is separate from force move and fails closed on inco
   expect(render()).toContain('disabled="">Approve and advance</button>');
   workflow.action_progress.scan_truncated = false;
   workflow.action_progress.all_actions_complete = false;
-  expect(render()).toContain("All actions must be verified complete before approval");
+  workflow.action_progress.actions[0].status = "pending";
+  expect(render()).toContain("Configured actions must be verified complete before approval");
   expect(render()).toContain('disabled="">Approve and advance</button>');
 });
 
@@ -222,14 +224,12 @@ test("progress distinguishes verified work, empty configuration, and unavailable
   expect(renderDossier({ dossier })).toContain("No actions configured.");
 });
 
-test("progress is the default and missing conditions are not an empty list", () => {
-  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: undefined } } });
+test("progress is the default without a movement-condition section", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: source.workflow } });
   expect(html).toContain('id="member-workflow-tab-progress"');
   expect(html).toContain('aria-labelledby="member-workflow-tab-progress"');
-  expect(html).toContain('Movement conditions unavailable.');
-  expect(html).not.toContain('No automatic movement conditions configured.');
-  const empty = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: [] } } });
-  expect(empty).toContain('Action completion information unavailable.');
+  expect(html).not.toContain('Movement conditions');
+  expect(html).toContain('Action completion information unavailable.');
 });
 
 test.each([
@@ -238,7 +238,7 @@ test.each([
   ["insufficient_evidence", "More proof is needed"],
   ["failed", "Goal review could not complete"],
 ] as const)("progress renders current goal review %s in the existing popup", (status, text) => {
-  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, requirements: [],
+  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!,
     goal: "Member is ready", goal_review: { status, reason: "Bounded evidence explanation" } } } });
   expect(html).toContain(text);
   expect(html).toContain("Bounded evidence explanation");

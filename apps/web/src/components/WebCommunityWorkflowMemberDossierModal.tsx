@@ -220,7 +220,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
           {confirmation ? <section className="workflow-member-dossier-section" role="alertdialog" aria-labelledby="force-move-title" aria-describedby="force-move-warning">
             <h3 id="force-move-title">Force {confirmation.workflow?.override_state?.next_milestone_name ? "move to next milestone" : "workflow completion"}?</h3>
             <p><strong>{confirmation.display_name}</strong>: {confirmation.workflow?.current_milestone_name} → {confirmation.workflow?.override_state?.next_milestone_name ?? "Workflow complete"}</p>
-            <p id="force-move-warning">This bypasses unmet requirements and does not mean the goal was achieved. Pending forms for this milestone will close. Your override will be recorded.</p>
+            <p id="force-move-warning">This bypasses unfinished actions or an unmet goal. Pending forms for this milestone will close. Your override will be recorded.</p>
             {forceError ? <p role="alert" className="workflow-error">{forceError}</p> : null}
             <div className="resource-modal-actions">
               <button type="button" className="secondary" data-override-cancel disabled={forcing} onClick={() => setConfirmation(null)}>Cancel</button>
@@ -281,11 +281,11 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
                 <h3>{dossier.workflow.require_human_approval ? "Human approval" : "Automatic advancement"}</h3>
                 {dossier.workflow.require_human_approval ? <>
-                  <p>{dossier.workflow.action_progress?.all_actions_complete && !dossier.workflow.action_progress.scan_truncated
+                  <p>{(dossier.workflow.action_progress?.all_actions_complete || dossier.workflow.action_progress?.actions.length === 0) && !dossier.workflow.action_progress?.scan_truncated
                     ? "Awaiting human approval. Review the actions and goal before advancing."
-                    : "All actions must be verified complete before approval."}</p>
+                    : "Configured actions must be verified complete before approval."}</p>
                   <button type="button" className="workflow-secondary-button" disabled={approving || !props.onApproveMilestone
-                    || !dossier.workflow.action_progress?.all_actions_complete || dossier.workflow.action_progress.scan_truncated}
+                    || (dossier.workflow.action_progress?.actions.length ?? 0) > 0 && !dossier.workflow.action_progress?.all_actions_complete || !!dossier.workflow.action_progress?.scan_truncated}
                     onClick={async () => {
                       if (approvalPending.current || !props.onApproveMilestone) return;
                       const generation = approvalGeneration.current;
@@ -295,12 +295,8 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                       finally { if (generation === approvalGeneration.current) { approvalPending.current = false; setApproving(false); } }
                     }}>{approving ? "Approving…" : dossier.workflow.override_state?.next_milestone_name ? "Approve and advance" : "Approve and complete"}</button>
                   {approvalError ? <p role="alert">{approvalError}</p> : null}
-                </> : dossier.workflow.requirements === undefined ? <p>Movement conditions unavailable.</p> : dossier.workflow.requirements.length ? <>
-                  <ul>{dossier.workflow.requirements.map(requirement => <li key={requirement.key}>{requirement.satisfied ? "✓" : "○"} {requirement.label}</li>)}</ul>
-                  <p>All conditions must be met. These do not wait for agent actions or goal achievement.</p>
                 </> : dossier.workflow.goal?.trim() ? <>
                   <p>{dossier.workflow.goal_review?.status === "reviewing" ? "The agent is reviewing the goal against verified action evidence."
-                    : dossier.workflow.goal_review?.status === "configured" ? "This milestone uses a configured assessment rule. Its judgment does not automatically advance the member."
                     : dossier.workflow.goal_review?.status === "achieved" ? "Goal met. Advancement is being validated."
                     : dossier.workflow.goal_review?.status === "not_yet" ? "Goal not met. The member remains in this milestone."
                     : dossier.workflow.goal_review?.status === "insufficient_evidence" ? "More proof is needed. The member remains in this milestone."
@@ -393,7 +389,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                             : `${entry.milestone_name} → ${entry.next_milestone_name}`}
                           {entry.forced_by_user_id ? " · Builder override" : ""}
                         </strong>
-                        {entry.forced_by_user_id ? <p>{entry.bypassed_requirements ? entry.bypassed_requirements.length ? `Bypassed: ${entry.bypassed_requirements.map(item => item.label).join("; ")}` : "No outstanding requirements." : "Original requirement details unavailable."}</p> : null}
+                        {entry.forced_by_user_id ? <p>Advanced by a human override.</p> : null}
                       </li>
                     ))}
                   </ol>
@@ -403,7 +399,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               </details>
               {dossier.workflow && !dossier.workflow.completed_at && dossier.workflow.override_state ? <section className="workflow-member-dossier-section">
                 <h3>Manual override</h3>
-                <p>Bypass unmet requirements without marking the goal achieved.</p>
+                <p>Bypass unfinished actions or an unmet goal without marking the goal achieved.</p>
                 <button type="button" className="workflow-secondary-button" data-override-open onClick={() => { setForceError(null); setConfirmation(dossier); }}>Force move…</button>
               </section> : null}
               </div>

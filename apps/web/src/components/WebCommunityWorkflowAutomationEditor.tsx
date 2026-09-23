@@ -42,7 +42,6 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const channelId = automation.trigger.type === "member_contributed" ? automation.trigger.channelId : undefined;
   const durationLabel = `${delayMinutes / timeUnit} ${timeUnit === 1440 ? "day" : timeUnit === 60 ? "hour" : "minute"}${delayMinutes === timeUnit ? "" : "s"}`;
   const isPrompt = automation.action.type === "prompt_agent";
-  const isRequirement = automation.action.type === "move_member";
   const issue = workflowAutomationIssue(automation, props.channels, props.channelsUnavailable);
   const isPrivate = props.channels.some((channel) => channel.id === channelId && channel.access_mode === "restricted");
   const triggerSelected = !props.creation || props.creation.triggerSelected;
@@ -50,7 +49,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
   const triggerIssue = triggerSelected ? workflowTriggerIssue(automation, props.channels, props.channelsUnavailable) : null;
   const triggerReady = triggerSelected && !triggerIssue;
   const triggerLabel = isSequence ? "Previous action completed" : isJoin ? "Member joins for the first time" : automation.trigger.type === "form_submitted" ? `Form submitted · ${props.forms?.find(form => form.key === (automation.trigger.type === "form_submitted" ? automation.trigger.formKey : ""))?.name ?? "Choose a form"}` : isTimed ? `After ${durationLabel} in this milestone` : `Posts or replies · ${workflowChannelLabel(channelId, props.channels, props.channelsUnavailable)}`;
-  const actionLabel = automation.action.type === "evaluate_goal" ? "Evaluate goal" : automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : triggerLabel;
+  const actionLabel = automation.action.type === "create_service_channel" ? "Create private channel" : isPrompt ? "Ask community agent" : automation.action.type === "request_form" ? "Request form" : triggerLabel;
 
   return (
     <div className="workflow-milestone-automation-row" data-automation-key={automation.key}>
@@ -59,11 +58,11 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
           aria-controls={props.expanded ? `${id}-fields` : undefined} disabled={props.disabled} onClick={props.onToggle}>
           <span>
             <strong>{triggerLabel}</strong>
-            {!isRequirement ? <small>→ {actionLabel}</small> : null}
+            <small>→ {actionLabel}</small>
             {issue ? <small className="workflow-automation-issue">{issue}</small> : null}
           </span>
         </button>
-        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove ${isRequirement ? "condition" : "action"} ${props.index + 1}`}
+        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove action ${props.index + 1}`}
           disabled={props.disabled} onClick={props.onRemove}><X size={16} aria-hidden="true" /></button>
       </div> : null}
 
@@ -77,19 +76,19 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
               } else if (type === "previous_action_completed" && props.previousAction) {
                 props.onChange({ ...replaceWorkflowDraftAction(automation, automation.action.type === "request_form" ? "request_form" : "prompt_agent"), trigger: { type, predecessorActionKey: props.previousAction.action.key } });
               } else if (type === "form_submitted") {
-                props.onChange({ ...replaceWorkflowDraftAction(automation, isRequirement ? "move_member" : "prompt_agent"), trigger: { type, formKey: "" } });
+                props.onChange({ ...replaceWorkflowDraftAction(automation, "prompt_agent"), trigger: { type, formKey: "" } });
               } else if (type === "member_contributed" || type === "milestone_elapsed") {
                 setTimeUnit(1440);
-                const action = automation.action.type === "create_service_channel" || automation.action.type === "evaluate_goal" ? "prompt_agent" : automation.action.type;
+                const action = automation.action.type === "request_form" ? "request_form" : "prompt_agent";
                 props.onChange({ ...replaceWorkflowDraftAction(automation, action), trigger: type === "member_contributed" ? { type } : { type, delayMinutes: 1440 } });
               } else return;
               props.creation?.onTriggerSelected();
             }}>
               <option value="" disabled>Choose a trigger</option>
-              {!isRequirement ? <option value="previous_action_completed" disabled={!props.previousAction}>Previous action completed</option> : null}
+              <option value="previous_action_completed" disabled={!props.previousAction}>Previous action completed</option>
               <option value="member_contributed">Member posts or replies</option>
               <option value="milestone_elapsed">Time in milestone</option>
-              {!isRequirement && (props.canAddJoin || isJoin) ? <option value="member_joined">Member joins</option> : null}
+              {(props.canAddJoin || isJoin) ? <option value="member_joined">Member joins</option> : null}
               <option value="form_submitted">Form submitted</option>
             </select>
           </label>
@@ -108,7 +107,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 props.onChange({ ...automation, trigger: { type: "milestone_elapsed", delayMinutes: delayMinutes / timeUnit * unit } });
               }}><option value={1}>minutes</option><option value={60}>hours</option><option value={1440}>days</option></select>
             </div>
-            <small className="workflow-field-hint">Applies to future milestone entries. Runs once, at or after the due time. Activity does not reset the timer. Duration edits update pending timers.{isRequirement ? " Changing a satisfied time requirement clears its credit; consumed timers do not restart. Configure these before members enter." : ""}</small>
+            <small className="workflow-field-hint">Applies to future milestone entries. Runs once, at or after the due time. Activity does not reset the timer. Duration edits update pending timers.</small>
           </div> : (
           <div className="workflow-automation-field">
             <span>When a member posts or replies in</span>
@@ -120,16 +119,16 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
           )}
 
           </> : null}
-          {triggerReady && !isRequirement ? <label>Then
+          {triggerReady ? <label>Then
             <select value={actionSelected ? automation.action.type : ""} disabled={props.disabled} onChange={event => {
               const type = event.target.value;
-              if (type !== "create_service_channel" && type !== "prompt_agent" && type !== "request_form" && type !== "evaluate_goal") return;
+              if (type !== "create_service_channel" && type !== "prompt_agent" && type !== "request_form") return;
               props.onChange(replaceWorkflowDraftAction(automation, type));
               props.creation?.onActionSelected();
             }}>
               <option value="" disabled>Choose an action</option>
               {isJoin ? <option value="create_service_channel">Create private channel</option> : <option value="prompt_agent">Ask community agent</option>}
-              {!isForm ? <option value="request_form">Request form</option> : <option value="evaluate_goal">Evaluate goal</option>}
+              {!isForm ? <option value="request_form">Request form</option> : null}
             </select>
           </label> : null}
 
@@ -153,7 +152,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
                 {!isSequence && !isTimed && !isForm && (isPrivate || channelId === undefined) ? " In private channels, the agent must be invited." : ""}
               </p>
             </>
-          ) : automation.action.type === "evaluate_goal" ? <p className="workflow-field-hint">Privately evaluates the goal from Overview using this submitted form. Records a judgment only; no message or milestone movement.</p> : null}
+          ) : null}
           </> : null}
           {props.hideHeading && (triggerIssue || (actionSelected && issue)) ? <p role="status" className="workflow-automation-issue">{triggerIssue || issue}</p> : null}
         </div>

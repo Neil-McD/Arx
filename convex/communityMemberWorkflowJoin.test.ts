@@ -257,6 +257,35 @@ function approvalArgs(f: Awaited<ReturnType<typeof fixture>>) {
     expectedActivationSequence: 1, expectedTransitionSeq: 0 };
 }
 
+test("an empty stage stays put automatically but can be approved by an owner", async () => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], automations: [], requireHumanApproval: true }] });
+  });
+  expect(await progress(f)).toMatchObject({ actions: [], all_actions_complete: false });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  const args = approvalArgs(f);
+  await expect(f.t.withIdentity({ subject: "join-member" }).mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)).rejects.toThrow();
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args);
+  const transitions = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(transitions).toHaveLength(1);
+  expect(transitions[0].approval?.actorUserId).toBe(f.ownerId);
+  expect(transitions[0].completionEvidence).toEqual([]);
+});
+
+test("Force move remains an audited owner override after condition removal", async () => {
+  const f = await fixture();
+  const args = approvalArgs(f);
+  await expect(f.t.withIdentity({ subject: "join-member" }).mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, args)).rejects.toThrow();
+  await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, args);
+  await expect(f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, args)).rejects.toThrow();
+  const transitions = await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect());
+  expect(transitions).toHaveLength(1);
+  expect(transitions[0].forcedByUserId).toBe(f.ownerId);
+  expect(transitions[0].approval).toBeUndefined();
+});
+
 test("enabling human approval preserves completed work without scheduling movement", async () => {
   const f = await fixture();
   await f.t.mutation(joinHandler, f.job);
@@ -271,12 +300,16 @@ test("enabling human approval preserves completed work without scheduling moveme
   expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
 });
 
-test("human approval rejects legacy automatic movement configuration", async () => {
+test("new workflow definitions reject both retired action types", async () => {
   const f = await fixture();
-  await expect(f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
-    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New", requireHumanApproval: true,
-    automations: [{ key: "join", trigger: { type: "member_contributed" }, action: { key: "room", type: "move_member", destination: "next_or_complete" } }],
-  })).rejects.toThrow("Remove automatic movement");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  for (const action of [{ type: "move_member" as const, destination: "next_or_complete" as const }, { type: "evaluate_goal" as const }]) {
+    await expect(owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+      communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New", requireHumanApproval: true,
+      automations: [{ trigger: { type: "member_contributed" }, action }],
+    })).rejects.toThrow("workflow_action_retired");
+  }
+  expect((await f.t.run(ctx => ctx.db.get(f.workflowId)))?.revision).toBe(1);
 });
 
 test("last proven action advances once and never skips the empty next stage", async () => {
