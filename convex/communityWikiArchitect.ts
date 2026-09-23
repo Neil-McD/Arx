@@ -41,13 +41,10 @@ import {
 } from "./communityResourceContent";
 import { sha256HexText } from "./providerConnections";
 import {
-  claimCommunityInferenceFundingSession,
-  failCommunityInferenceFundingSession,
-  markCommunityInferenceFundingSessionProviderStarted,
-  providerFailureIsKnownPreSpend,
   resolveCommunityInferenceFundingForAction,
-  settleCommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
+import { startFundedInferenceRun } from "./fundedInferenceGateway";
+import { FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED } from "./founderInferenceBudget";
 
 const COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES = 500;
 const COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS = 3600;
@@ -850,98 +847,10 @@ function readEnv(name: string): string {
   return "";
 }
 
-function normalizeOpenAiResponsesModelId(raw: string): string | null {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-  if (value.startsWith("openai/")) {
-    const stripped = value.slice("openai/".length).trim();
-    return stripped || null;
-  }
-  if (value.includes("/")) return null;
-  return value;
-}
-
-function resolveWikiArchitectModelId(): { ok: true; modelId: string } | {
-  ok: false;
-  code: string;
-  message: string;
-} {
-  const explicit = readEnv("ARX_COMMUNITY_WIKI_ARCHITECT_MODEL");
-  if (explicit) {
-    const modelId = normalizeOpenAiResponsesModelId(explicit);
-    if (modelId) return { ok: true, modelId };
-    return {
-      ok: false,
-      code: "provider_inference_misconfigured",
-      message: "ARX_COMMUNITY_WIKI_ARCHITECT_MODEL must be an OpenAI Responses model id.",
-    };
-  }
-
-  const shared = readEnv("ARX_OPENAI_MODEL");
-  if (shared) {
-    const modelId = normalizeOpenAiResponsesModelId(shared);
-    if (modelId) return { ok: true, modelId };
-  }
-
-  return {
-    ok: false,
-    code: "provider_inference_misconfigured",
-    message: "Set ARX_COMMUNITY_WIKI_ARCHITECT_MODEL to an OpenAI Responses model id.",
-  };
-}
-
-function resolveResourceContentWriterModelId(): { ok: true; modelId: string } | {
-  ok: false;
-  code: string;
-  message: string;
-} {
-  const explicit = readEnv("ARX_COMMUNITY_RESOURCE_CONTENT_WRITER_MODEL");
-  if (explicit) {
-    const modelId = normalizeOpenAiResponsesModelId(explicit);
-    if (modelId) return { ok: true, modelId };
-    return {
-      ok: false,
-      code: "provider_inference_misconfigured",
-      message: "ARX_COMMUNITY_RESOURCE_CONTENT_WRITER_MODEL must be an OpenAI Responses model id.",
-    };
-  }
-
-  return resolveWikiArchitectModelId();
-}
-
 function normalizeBuilderIntent(raw: unknown): string | null {
   const value = String(raw ?? "").trim();
   if (!value) return null;
   return value.slice(0, 2_000);
-}
-
-function extractResponseText(payload: Record<string, any>): string {
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text.trim();
-  }
-  const outputItems = Array.isArray(payload.output) ? payload.output : [];
-  let text = "";
-  for (const item of outputItems) {
-    if (!item || typeof item !== "object" || !Array.isArray(item.content)) continue;
-    for (const part of item.content) {
-      if (!part || typeof part !== "object") continue;
-      if (part.type === "output_text" && typeof part.text === "string") text += part.text;
-    }
-  }
-  return text.trim();
-}
-
-function parseTokenUsage(payload: Record<string, any>): {
-  promptTokens: number | null;
-  completionTokens: number | null;
-} {
-  const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage : null;
-  const promptTokens = Number(usage?.input_tokens ?? usage?.prompt_tokens);
-  const completionTokens = Number(usage?.output_tokens ?? usage?.completion_tokens);
-  return {
-    promptTokens: Number.isFinite(promptTokens) ? Math.floor(promptTokens) : null,
-    completionTokens: Number.isFinite(completionTokens) ? Math.floor(completionTokens) : null,
-  };
 }
 
 function extractJsonObject(raw: string): unknown {
@@ -979,262 +888,6 @@ function parseResourceContentWriterBody(raw: string): string {
   if (!body || body.length < 40) throw new Error("content_writer_body_too_short");
   if (isResourceDraftScaffoldBody(body)) throw new Error("content_writer_returned_scaffold");
   return body;
-}
-
-async function runWikiArchitectModel(params: {
-  input: Record<string, unknown>;
-  apiKeyOverride?: string | null;
-  modelIdOverride?: string | null;
-}): Promise<
-  | {
-      ok: true;
-      outputText: string;
-      modelId: string;
-      resolvedModelId: string | null;
-      promptTokens: number | null;
-      completionTokens: number | null;
-    }
-  | {
-      ok: false;
-      status: number;
-      code: string;
-      message: string;
-      outputPreview?: string;
-    }
-> {
-  const apiKey = String(params.apiKeyOverride ?? "").trim() ||
-    readEnv("OPENAI_API_KEY") ||
-    readEnv("ARX_OPENAI_API_KEY");
-  if (!apiKey) {
-    return {
-      ok: false,
-      status: 503,
-      code: "provider_inference_misconfigured",
-      message: "OPENAI_API_KEY is not configured.",
-    };
-  }
-  const overrideModelId = normalizeOpenAiResponsesModelId(String(params.modelIdOverride ?? ""));
-  const modelResolution = overrideModelId
-    ? { ok: true as const, modelId: overrideModelId }
-    : resolveWikiArchitectModelId();
-  if (!modelResolution.ok) {
-    return {
-      ok: false,
-      status: 503,
-      code: modelResolution.code,
-      message: modelResolution.message,
-    };
-  }
-  const { modelId } = modelResolution;
-
-  let response: Response;
-  try {
-    response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        store: false,
-        instructions: COMMUNITY_WIKI_ARCHITECT_PROMPT,
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: JSON.stringify(params.input, null, 2),
-              },
-            ],
-          },
-        ],
-        max_output_tokens: COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS,
-      }),
-    });
-  } catch {
-    return {
-      ok: false,
-      status: 503,
-      code: "provider_inference_unavailable",
-      message: "OpenAI inference is temporarily unavailable.",
-    };
-  }
-
-  const raw = await response.text();
-  let parsed: Record<string, any> | null = null;
-  try {
-    parsed = raw ? (JSON.parse(raw) as Record<string, any>) : null;
-  } catch {
-    parsed = null;
-  }
-  if (!response.ok) {
-    const message =
-      (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) ||
-      `OpenAI error (${response.status})`;
-    return {
-      ok: false,
-      status: response.status,
-      code:
-        response.status === 401 || response.status === 403
-          ? "provider_inference_misconfigured"
-          : response.status === 429
-            ? "rate_limited"
-            : "provider_inference_error",
-      message,
-      outputPreview: raw.slice(0, 1200),
-    };
-  }
-  if (!parsed) {
-    return {
-      ok: false,
-      status: 502,
-      code: "provider_inference_error",
-      message: "OpenAI returned invalid JSON.",
-      outputPreview: raw.slice(0, 1200),
-    };
-  }
-  const usage = parseTokenUsage(parsed);
-  return {
-    ok: true,
-    outputText: extractResponseText(parsed),
-    modelId,
-    resolvedModelId:
-      (typeof parsed.model === "string" && parsed.model.trim()) ||
-      (typeof parsed.response?.model === "string" && parsed.response.model.trim()) ||
-      null,
-    promptTokens: usage.promptTokens,
-    completionTokens: usage.completionTokens,
-  };
-}
-
-async function runResourceContentWriterModel(params: {
-  input: Record<string, unknown>;
-  apiKeyOverride?: string | null;
-  modelIdOverride?: string | null;
-}): Promise<
-  | {
-      ok: true;
-      outputText: string;
-      modelId: string;
-      resolvedModelId: string | null;
-      promptTokens: number | null;
-      completionTokens: number | null;
-    }
-  | {
-      ok: false;
-      status: number;
-      code: string;
-      message: string;
-      outputPreview?: string;
-    }
-> {
-  const apiKey = String(params.apiKeyOverride ?? "").trim() ||
-    readEnv("OPENAI_API_KEY") ||
-    readEnv("ARX_OPENAI_API_KEY");
-  if (!apiKey) {
-    return {
-      ok: false,
-      status: 503,
-      code: "provider_inference_misconfigured",
-      message: "OPENAI_API_KEY is not configured.",
-    };
-  }
-  const overrideModelId = normalizeOpenAiResponsesModelId(String(params.modelIdOverride ?? ""));
-  const modelResolution = overrideModelId
-    ? { ok: true as const, modelId: overrideModelId }
-    : resolveResourceContentWriterModelId();
-  if (!modelResolution.ok) {
-    return {
-      ok: false,
-      status: 503,
-      code: modelResolution.code,
-      message: modelResolution.message,
-    };
-  }
-  const { modelId } = modelResolution;
-
-  let response: Response;
-  try {
-    response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        store: false,
-        instructions: COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT,
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: JSON.stringify(params.input, null, 2),
-              },
-            ],
-          },
-        ],
-        max_output_tokens: COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_OUTPUT_TOKENS,
-      }),
-    });
-  } catch {
-    return {
-      ok: false,
-      status: 503,
-      code: "provider_inference_unavailable",
-      message: "OpenAI inference is temporarily unavailable.",
-    };
-  }
-
-  const raw = await response.text();
-  let parsed: Record<string, any> | null = null;
-  try {
-    parsed = raw ? (JSON.parse(raw) as Record<string, any>) : null;
-  } catch {
-    parsed = null;
-  }
-  if (!response.ok) {
-    const message =
-      (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) ||
-      `OpenAI error (${response.status})`;
-    return {
-      ok: false,
-      status: response.status,
-      code:
-        response.status === 401 || response.status === 403
-          ? "provider_inference_misconfigured"
-          : response.status === 429
-            ? "rate_limited"
-            : "provider_inference_error",
-      message,
-      outputPreview: raw.slice(0, 1200),
-    };
-  }
-  if (!parsed) {
-    return {
-      ok: false,
-      status: 502,
-      code: "provider_inference_error",
-      message: "OpenAI returned invalid JSON.",
-      outputPreview: raw.slice(0, 1200),
-    };
-  }
-  const usage = parseTokenUsage(parsed);
-  return {
-    ok: true,
-    outputText: extractResponseText(parsed),
-    modelId,
-    resolvedModelId:
-      (typeof parsed.model === "string" && parsed.model.trim()) ||
-      (typeof parsed.response?.model === "string" && parsed.response.model.trim()) ||
-      null,
-    promptTokens: usage.promptTokens,
-    completionTokens: usage.completionTokens,
-  };
 }
 
 export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
@@ -1410,7 +1063,7 @@ export const runCommunityWikiArchitectProposal: any = action({
       (internal as any).communityWikiArchitect.buildCommunityWikiArchitectRunContextInternal,
       {
         userId: args.userId,
-        authSubject: args.authSubject ?? null,
+        authSubject: args.authSubject,
         communityId: args.communityId,
         builderIntent: args.builderIntent ?? null,
       },
@@ -1429,7 +1082,7 @@ export const runCommunityWikiArchitectProposal: any = action({
     if (!actorUserId) throw new Error("community_wiki_architect_actor_required");
     const requestId = String(args.requestId ?? "").trim().slice(0, 160) || crypto.randomUUID();
     const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
-    const fundingSession = await claimCommunityInferenceFundingSession({
+    const fundedRun = await startFundedInferenceRun({
       ctx,
       communityId: args.communityId,
       actorUserId,
@@ -1438,44 +1091,39 @@ export const runCommunityWikiArchitectProposal: any = action({
       sourceRunId: `community-wiki-architect:${requestId}`,
       admission: funding,
     });
-
-    await markCommunityInferenceFundingSessionProviderStarted({
-      ctx,
-      session: fundingSession,
-    });
-    const completion = await runWikiArchitectModel({
-      input: context as Record<string, unknown>,
-      modelIdOverride: fundingSession.modelId,
-    });
-    if (!completion.ok) {
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens: 0,
-        completionTokens: 0,
-        usageComplete: true,
-        failureCode: completion.code,
-        disposition: providerFailureIsKnownPreSpend(completion.code) ? "failed" : "indeterminate",
+    let response: Awaited<ReturnType<typeof fundedRun.request>>;
+    try {
+      response = await fundedRun.request({
+        messages: [
+          { role: "system", content: COMMUNITY_WIKI_ARCHITECT_PROMPT },
+          { role: "user", content: JSON.stringify(context, null, 2) },
+        ],
+        maxTokens: COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS,
+        tools: [],
+        apiKeyOverride: readEnv("OPENAI_API_KEY") || readEnv("ARX_OPENAI_API_KEY") || undefined,
       });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "community_wiki_architect_provider_failed";
+      await fundedRun.fail(code);
       return {
         ok: false,
         kind: "community_wiki_architect_proposal",
-        code: completion.code,
-        message: completion.message,
-        output_preview: completion.outputPreview ?? null,
+        code,
+        message: "Wiki Architect inference could not complete.",
       };
     }
-    const usageComplete = completion.promptTokens !== null && completion.completionTokens !== null;
-    if (!usageComplete) {
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens: completion.promptTokens ?? 0,
-        completionTokens: completion.completionTokens ?? 0,
-        usageComplete: false,
-        failureCode: "provider_token_usage_missing",
-        disposition: "indeterminate",
-      });
+    if (!response.ok) {
+      await fundedRun.fail(response.code);
+      return {
+        ok: false,
+        kind: "community_wiki_architect_proposal",
+        code: response.code,
+        message: response.message,
+      };
+    }
+    const settled = await fundedRun.settle(response.type === "assistant"
+      ? "provider_completed" : "invalid_model_output");
+    if (!settled) {
       return {
         ok: false,
         kind: "community_wiki_architect_proposal",
@@ -1483,14 +1131,21 @@ export const runCommunityWikiArchitectProposal: any = action({
         message: "Wiki Architect usage could not be settled safely.",
       };
     }
-    await settleCommunityInferenceFundingSession({
-      ctx,
-      session: fundingSession,
-      promptTokens: completion.promptTokens ?? 0,
-      completionTokens: completion.completionTokens ?? 0,
-      usageComplete: true,
-      outcomeCode: "provider_completed",
-    });
+    if (response.type !== "assistant") {
+      return {
+        ok: false,
+        kind: "community_wiki_architect_proposal",
+        code: "invalid_model_output",
+        message: "Wiki Architect returned an unexpected tool call.",
+      };
+    }
+    const completion = {
+      outputText: response.assistantText,
+      modelId: fundedRun.modelId,
+      resolvedModelId: response.resolvedModelId,
+      promptTokens: response.promptTokens,
+      completionTokens: response.completionTokens,
+    };
 
     let parsedProposal: unknown;
     try {
@@ -2145,7 +1800,7 @@ export const draftCommunityResourceContentFromSources: any = action({
       (internal as any).communityWikiArchitect.buildCommunityResourceContentWriterRunContextInternal,
       {
         userId: args.userId,
-        authSubject: args.authSubject ?? null,
+        authSubject: args.authSubject,
         communityId: args.communityId,
         limit: args.limit,
       },
@@ -2169,7 +1824,7 @@ export const draftCommunityResourceContentFromSources: any = action({
     if (!userId) throw new Error("community_resource_content_writer_actor_required");
     const requestId = String(args.requestId ?? "").trim().slice(0, 160) || crypto.randomUUID();
     const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
-    const fundingSession = await claimCommunityInferenceFundingSession({
+    const fundedRun = await startFundedInferenceRun({
       ctx,
       communityId: args.communityId,
       actorUserId: userId,
@@ -2180,14 +1835,18 @@ export const draftCommunityResourceContentFromSources: any = action({
     });
     let drafted = 0;
     let failed = 0;
-    let providerStarted = false;
     const pages: Array<{ id: string; title: string; status: string; source_resource_id: string | null }> = [];
     const failures: Array<{ resource_id: string; title: string; message: string }> = [];
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let providerSucceeded = false;
-    let providerFailureCode = "provider_error";
-    let usageComplete = true;
+    const pendingDrafts: Array<{
+      pageId: string;
+      sourceId: string;
+      title: string;
+      expectedUpdatedAt: number;
+      expectedSourceRevisionHash: string;
+      bodyMd: string;
+    }> = [];
+    let providerCompleted = false;
+    let providerFailureCode = "community_resource_content_writer_candidate_invalid";
 
     for (const candidate of candidates) {
       const pageId = String(candidate.page_id ?? "").trim();
@@ -2203,36 +1862,27 @@ export const draftCommunityResourceContentFromSources: any = action({
           url: candidate.source_url ?? null,
           body_md: String(candidate.source_body_md ?? ""),
         };
-        if (!providerStarted) {
-          await markCommunityInferenceFundingSessionProviderStarted({
-            ctx,
-            session: fundingSession,
-          });
-          providerStarted = true;
-        }
-        const completion = await runResourceContentWriterModel({
-          input: {
-            community: context.community,
-            page: {
-              id: pageId,
-              title,
-              module: candidate.page_module ?? null,
-            },
-            source: sourceInput,
-          },
-          modelIdOverride: fundingSession.modelId,
+        const completion = await fundedRun.request({
+          messages: [
+            { role: "system", content: COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT },
+            { role: "user", content: JSON.stringify({
+              community: context.community,
+              page: { id: pageId, title, module: candidate.page_module ?? null },
+              source: sourceInput,
+            }, null, 2) },
+          ],
+          maxTokens: COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_OUTPUT_TOKENS,
+          tools: [],
+          apiKeyOverride: readEnv("OPENAI_API_KEY") || readEnv("ARX_OPENAI_API_KEY") || undefined,
         });
         if (!completion.ok) {
           providerFailureCode = completion.code;
-          if (!providerFailureIsKnownPreSpend(completion.code)) usageComplete = false;
           throw new Error(completion.message);
         }
-        providerSucceeded = true;
-        if (typeof completion.promptTokens === "number") promptTokens += completion.promptTokens;
-        else usageComplete = false;
-        if (typeof completion.completionTokens === "number") completionTokens += completion.completionTokens;
-        else usageComplete = false;
-        const generatedBody = parseResourceContentWriterBody(completion.outputText);
+        providerCompleted = true;
+        if (completion.type !== "assistant") throw new Error("content_writer_unexpected_tool_call");
+        if (!fundedRun.usage().complete) throw new Error("provider_token_usage_missing");
+        const generatedBody = parseResourceContentWriterBody(completion.assistantText);
         const bodyMd = buildReviewReadyResourceBody({
           pageTitle: title,
           generatedBody,
@@ -2242,69 +1892,72 @@ export const draftCommunityResourceContentFromSources: any = action({
             url: candidate.source_url ?? null,
           } as unknown as CommunityResourceLike,
         });
-        const updated = await ctx.runMutation(
-          (internal as any).communityWikiArchitect.patchCommunityResourceContentDraftInternal,
-          {
-            userId,
-            communityId: args.communityId,
-            pageId,
-            sourceResourceId: sourceId,
-            expectedUpdatedAt: Number(candidate.expected_updated_at),
-            expectedSourceRevisionHash: String(candidate.expected_source_revision_hash ?? ""),
-            bodyMd,
-          },
-        ) as { id?: string; title?: string; status?: string; source_resource_id?: string | null };
-        drafted += 1;
-        pages.push({
-          id: String(updated?.id ?? pageId),
-          title: String(updated?.title ?? title),
-          status: String(updated?.status ?? "review"),
-          source_resource_id: String(updated?.source_resource_id ?? sourceId),
+        pendingDrafts.push({
+          pageId,
+          sourceId,
+          title,
+          expectedUpdatedAt: Number(candidate.expected_updated_at),
+          expectedSourceRevisionHash: String(candidate.expected_source_revision_hash ?? ""),
+          bodyMd,
         });
       } catch (error) {
-        if (providerStarted) usageComplete = false;
         failed += 1;
         failures.push({
           resource_id: pageId,
           title,
           message: error instanceof Error ? error.message : "community_resource_content_writer_failed",
         });
+        if (!fundedRun.usage().complete ||
+            (error instanceof Error && error.message === FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED)) break;
       }
     }
 
     let fundingSettlementError: string | null = null;
-    if (!usageComplete) {
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens,
-        completionTokens,
-        usageComplete: false,
-        failureCode: "provider_token_usage_missing",
-        disposition: "indeterminate",
-      });
-      fundingSettlementError = "provider_token_usage_missing";
-    } else if (providerSucceeded) {
-      await settleCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens,
-        completionTokens,
-        usageComplete: true,
-        outcomeCode: failed === 0 ? "provider_completed" : "resource_content_writer_partial_failure",
-      });
+    let settled = false;
+    if (!fundedRun.usage().complete || providerCompleted) {
+      settled = await fundedRun.settle(failed === 0
+        ? "provider_completed" : "resource_content_writer_partial_failure");
+      if (!settled) fundingSettlementError = "provider_token_usage_missing";
     } else {
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: fundingSession,
-        promptTokens: 0,
-        completionTokens: 0,
-        usageComplete: true,
-        failureCode: providerFailureCode,
-        disposition: providerFailureIsKnownPreSpend(providerFailureCode) ? "failed" : "indeterminate",
-      });
+      await fundedRun.fail(providerFailureCode);
     }
 
+    // Never apply generated content until all provider calls have known,
+    // settled usage. The mutation still guards the current source revision.
+    if (settled) {
+      for (const draft of pendingDrafts) {
+        try {
+          const updated = await ctx.runMutation(
+            (internal as any).communityWikiArchitect.patchCommunityResourceContentDraftInternal,
+            {
+              userId,
+              communityId: args.communityId,
+              pageId: draft.pageId,
+              sourceResourceId: draft.sourceId,
+              expectedUpdatedAt: draft.expectedUpdatedAt,
+              expectedSourceRevisionHash: draft.expectedSourceRevisionHash,
+              bodyMd: draft.bodyMd,
+            },
+          ) as { id?: string; title?: string; status?: string; source_resource_id?: string | null };
+          drafted += 1;
+          pages.push({
+            id: String(updated?.id ?? draft.pageId),
+            title: String(updated?.title ?? draft.title),
+            status: String(updated?.status ?? "review"),
+            source_resource_id: String(updated?.source_resource_id ?? draft.sourceId),
+          });
+        } catch (error) {
+          failed += 1;
+          failures.push({
+            resource_id: draft.pageId,
+            title: draft.title,
+            message: error instanceof Error ? error.message : "community_resource_content_writer_failed",
+          });
+        }
+      }
+    }
+
+    const usage = fundedRun.usage();
     const ok = failed === 0 && !fundingSettlementError;
     return {
       ok,
@@ -2315,8 +1968,8 @@ export const draftCommunityResourceContentFromSources: any = action({
       pages,
       failures,
       usage: {
-        prompt_tokens: promptTokens || null,
-        completion_tokens: completionTokens || null,
+        prompt_tokens: usage.promptTokens || null,
+        completion_tokens: usage.completionTokens || null,
       },
       code: fundingSettlementError ?? (ok ? null : "resource_content_writer_failed"),
       message: ok

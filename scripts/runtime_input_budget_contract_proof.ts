@@ -138,7 +138,9 @@ for (const path of [
   const source = read(path);
   const completionAt = source.indexOf("runCompletion:");
   const claimAt = source.indexOf(
-    "fundingSession = await claimCommunityInferenceFundingSession",
+    path.endsWith("communityAgentRuntime.ts")
+      ? "fundingState.run = await startFundedInferenceRun"
+      : "fundingSession = await claimCommunityInferenceFundingSession",
     completionAt,
   );
   assert.ok(

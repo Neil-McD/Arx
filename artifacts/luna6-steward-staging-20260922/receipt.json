@@ -1,0 +1,126 @@
+{
+  "candidateCommit": "fef56f5a0",
+  "communityId": "jx7ds4a2wp2tzt20wjfbhjhw958cgxj0",
+  "cycleAfter": {
+    "reservedCostMicros": 0,
+    "settledCostMicros": 3953
+  },
+  "cycleBefore": {
+    "reservedCostMicros": 0,
+    "settledCostMicros": 3366
+  },
+  "deployment": "quick-porcupine-949",
+  "digest": {
+    "id": "xd73f4wm59n3zsj2ebct70j2es8exy69",
+    "itemCount": 3,
+    "state": "handled"
+  },
+  "heartbeatId": "luna6-steward-gateway-20260922-2048",
+  "receipt": {
+    "completionTokens": 396,
+    "modelId": "gpt-6-luna",
+    "outcomeCode": "provider_completed",
+    "promptTokens": 5065,
+    "providerRequests": [
+      {
+        "cacheWriteTokens": 2128,
+        "cachedInputTokens": 0,
+        "completionTokens": 376,
+        "modelId": "gpt-6-luna",
+        "promptTokens": 2131,
+        "requestId": "resp_0a444f50886b2378016ab2e9656be487d298e33da7446dc85c",
+        "serviceTier": "default"
+      },
+      {
+        "cacheWriteTokens": 803,
+        "cachedInputTokens": 2128,
+        "completionTokens": 20,
+        "modelId": "gpt-6-luna",
+        "promptTokens": 2934,
+        "requestId": "resp_051dfd9cdb9239e4016ab2e969bd9c87d2a39c78867c303045",
+        "serviceTier": "default"
+      }
+    ],
+    "receiptKey": "community_autonomous_cognition:xx76vrjtdabx8fqvpr758r49818ewws3",
+    "reservedCostMicros": 1000000,
+    "settledCostMicros": 587,
+    "status": "settled"
+  },
+  "receiptCountForRun": 1,
+  "replay": {
+    "receiptCountForRun": 1,
+    "skippedRuns": 1
+  },
+  "run": {
+    "appliedChangeRequestIds": [],
+    "id": "xx76vrjtdabx8fqvpr758r49818ewws3",
+    "modelId": "gpt-6-luna",
+    "status": "ok",
+    "toolStepCount": 1
+  },
+  "runEventKinds": [
+    {
+      "kind": "context_snapshot",
+      "status": "captured"
+    },
+    {
+      "kind": "input_budget",
+      "status": "fits"
+    },
+    {
+      "kind": "tool_call",
+      "toolName": "write"
+    },
+    {
+      "kind": "tool_result",
+      "status": "ok",
+      "toolName": "write"
+    },
+    {
+      "kind": "input_budget",
+      "status": "fits"
+    },
+    {
+      "kind": "final",
+      "status": "assistant_final"
+    }
+  ],
+  "traces": [
+    {
+      "decision": {
+        "decidedAt": 1790110057433,
+        "disposition": "dismiss_low_signal",
+        "reason": "One-off instruction to inspect directory entries; operational interaction, not durable reusable community knowledge.",
+        "runId": "xx76vrjtdabx8fqvpr758r49818ewws3",
+        "version": 1,
+        "workKey": "community_memory_work:v1:0d80276d04376fd3768a2a263d19ee93bf8bca20a5c07ac4a67ba44c4acc7a08"
+      },
+      "id": "wn7dhffcra25k60tt9x330yc4n8ewd22",
+      "state": "dismissed_low_signal"
+    },
+    {
+      "decision": {
+        "decidedAt": 1790110057433,
+        "disposition": "dismiss_low_signal",
+        "reason": "Requested a fixed acknowledgement in a single interaction; no reusable insight or playbook.",
+        "runId": "xx76vrjtdabx8fqvpr758r49818ewws3",
+        "version": 1,
+        "workKey": "community_memory_work:v1:ef140fd1881aa463c6b52c3151386809faa159935078c79b6548c1ec599947f9"
+      },
+      "id": "wn70m6h8p1gh8nwx7q4jd4g3758exm2b",
+      "state": "dismissed_low_signal"
+    },
+    {
+      "decision": {
+        "decidedAt": 1790110057433,
+        "disposition": "dismiss_low_signal",
+        "reason": "One-off read-only directory lookup request; not durable knowledge.",
+        "runId": "xx76vrjtdabx8fqvpr758r49818ewws3",
+        "version": 1,
+        "workKey": "community_memory_work:v1:b6888806a2a21ebd9457d46dfd427e8cc63e6909b00ebbc9f78964a684ecdddd"
+      },
+      "id": "wn7f7gatfp3vm9712ckh2a83vx8ex662",
+      "state": "dismissed_low_signal"
+    }
+  ]
+}

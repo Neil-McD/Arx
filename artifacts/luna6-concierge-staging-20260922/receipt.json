@@ -1,0 +1,146 @@
+{
+  "communityId": "jx7ds4a2wp2tzt20wjfbhjhw958cgxj0",
+  "cycle": {
+    "maxRunReservationCostMicros": 1000000,
+    "reservedCostMicros": 0,
+    "settledCostMicros": 2429
+  },
+  "receipts": [
+    {
+      "fundingMode": "platform_subscription",
+      "id": "q97rvqqmw6vxa3z9ep4bysyv818ewj83",
+      "modelId": "gpt-6-luna",
+      "providerRequests": [
+        {
+          "cacheWriteTokens": 729,
+          "cachedInputTokens": 2132,
+          "completionTokens": 39,
+          "modelId": "gpt-6-luna",
+          "promptTokens": 2864,
+          "requestId": "resp_06b8b51e64c0691b016ab2d7f8fe4c87d2bf4b587c6b9984bf",
+          "serviceTier": "default"
+        },
+        {
+          "cacheWriteTokens": 485,
+          "cachedInputTokens": 2861,
+          "completionTokens": 22,
+          "modelId": "gpt-6-luna",
+          "promptTokens": 3349,
+          "requestId": "resp_077eee9683d51b52016ab2d7fb0f7c87d2a93efcf0dccc61b6",
+          "serviceTier": "default"
+        }
+      ],
+      "receiptKey": "community_agent_mention:kx7wtdevvdabdhsef8ahk7t72d8ex14e",
+      "settledCostMicros": 234,
+      "status": "settled"
+    },
+    {
+      "fundingMode": "platform_subscription",
+      "id": "q97yx5dpjcmxnz3knmvyzckw3x8ex9ay",
+      "modelId": "gpt-6-luna",
+      "providerRequests": [
+        {
+          "cacheWriteTokens": 465,
+          "cachedInputTokens": 2132,
+          "completionTokens": 8,
+          "modelId": "gpt-6-luna",
+          "promptTokens": 2600,
+          "requestId": "resp_073d641ae21eaa67016ab2d7c94ad887d2aac0ebca6c209ca8",
+          "serviceTier": "default"
+        }
+      ],
+      "receiptKey": "community_agent_mention:kx7wggm25fj4qkgavktfz9h5b18exq2k",
+      "settledCostMicros": 84,
+      "status": "settled"
+    },
+    {
+      "fundingMode": "platform_subscription",
+      "id": "q97rj1svjhszzs4f39r8b0nhzx8exk19",
+      "modelId": "gpt-6-luna",
+      "providerRequests": [
+        {
+          "cacheWriteTokens": 2488,
+          "cachedInputTokens": 0,
+          "completionTokens": 27,
+          "modelId": "gpt-6-luna",
+          "promptTokens": 2491,
+          "requestId": "resp_096a9eaa49936fe1016ab2d7750fb087d29411dab2c2de379e",
+          "serviceTier": "default"
+        },
+        {
+          "cacheWriteTokens": 85,
+          "cachedInputTokens": 2488,
+          "completionTokens": 40,
+          "modelId": "gpt-6-luna",
+          "promptTokens": 2576,
+          "requestId": "resp_083a084c51bd3aeb016ab2d77719dc87d2b4cc01caf4953772",
+          "serviceTier": "default"
+        }
+      ],
+      "receiptKey": "community_agent_mention:kx7j9gm3d3k7hm0nf30xtn39ch8ewxw1",
+      "settledCostMicros": 381,
+      "status": "settled"
+    }
+  ],
+  "serve": [
+    {
+      "id": "kx7wtdevvdabdhsef8ahk7t72d8ex14e",
+      "responseReplyId": "j57k81ej1y4rv5b7m4a0vps3fn8ex1z1",
+      "responseRootId": "j97pd1774bkh0gaefwhqzt7f5s8ch674",
+      "sourceMentionId": "hn7zts33gg5fy15atce8hk5yr98exq6p",
+      "sourceReplyId": "j57kt56zfwbq5e7ee0f7r82gth8ewjny",
+      "sourceRootId": "j97pd1774bkh0gaefwhqzt7f5s8ch674",
+      "status": "responded",
+      "triggerKind": "direct_reply"
+    },
+    {
+      "id": "kx7wggm25fj4qkgavktfz9h5b18exq2k",
+      "responseReplyId": "j57rcjm4pc8bjxhgcs1gp5s6d98exvwk",
+      "responseRootId": "j97pd1774bkh0gaefwhqzt7f5s8ch674",
+      "sourceReplyId": "j57kv1mh0zhbk4m9tfg49a40g18exkgt",
+      "sourceRootId": "j97pd1774bkh0gaefwhqzt7f5s8ch674",
+      "status": "responded",
+      "triggerKind": "direct_reply"
+    },
+    {
+      "id": "kx7j9gm3d3k7hm0nf30xtn39ch8ewxw1",
+      "responseReplyId": "j57svmxgmxrgp566pqda52r5058exz82",
+      "responseRootId": "j97svbh9ymaqrdsbnykfdxr5j58ewmrv",
+      "sourceMentionId": "hn7tqhgm0mtecx156655j3412n8ew3b4",
+      "sourceRootId": "j97svbh9ymaqrdsbnykfdxr5j58ewmrv",
+      "status": "responded",
+      "triggerKind": "mention"
+    }
+  ],
+  "toolEvents": [
+    {
+      "kind": "tool_result",
+      "runId": "community-agent-serve:kx7wtdevvdabdhsef8ahk7t72d8ex14e:attempt:1",
+      "seq": 3,
+      "status": "ok",
+      "toolName": "polynet_list"
+    },
+    {
+      "kind": "tool_call",
+      "runId": "community-agent-serve:kx7wtdevvdabdhsef8ahk7t72d8ex14e:attempt:1",
+      "seq": 2,
+      "status": "running",
+      "toolName": "polynet_list"
+    },
+    {
+      "errorCode": "community_path_required",
+      "kind": "tool_result",
+      "runId": "community-agent-serve:kx7j9gm3d3k7hm0nf30xtn39ch8ewxw1:attempt:1",
+      "seq": 3,
+      "status": "error",
+      "toolName": "polynet_list"
+    },
+    {
+      "kind": "tool_call",
+      "runId": "community-agent-serve:kx7j9gm3d3k7hm0nf30xtn39ch8ewxw1:attempt:1",
+      "seq": 2,
+      "status": "running",
+      "toolName": "polynet_list"
+    }
+  ]
+}

@@ -6,18 +6,29 @@ import {
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
   type CommunityInferenceFundingAdmission,
+  type CommunityInferenceSurface,
 } from "../shared/founderInference";
 import {
   finalizeKnownNoSpendFounderInferenceReceipt,
   founderInferenceReceiptIdentityMatches,
   getUniqueFounderInferenceReceiptByKey,
   requireBoundedFounderInferenceIdentifier,
+  resolveCommunityInferenceModelForReceipt,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
 import { reserveFounderUsage } from "./founderPlanCore";
-import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
+import { founderProviderRequestUsageValidator, requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
+
+export const resolveCommunityInferenceModelInternal = internalQuery({
+  args: { communityId: v.id("communities"), surface: v.string(), receiptKey: v.string() },
+  handler: async (ctx, args) => await resolveCommunityInferenceModelForReceipt(ctx, {
+    communityId: args.communityId,
+    surface: args.surface as CommunityInferenceSurface,
+    receiptKey: args.receiptKey,
+  }),
+});
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -229,7 +240,8 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
         receiptKey,
         claimToken,
       });
-      return { ok: true, receiptId: existing._id, reclaimed: true };
+      return { ok: true, receiptId: existing._id, modelId: existing.modelId,
+        reservedCostMicros: existing.reservedCostMicros, pricingSnapshot: existing.pricingSnapshot, reclaimed: true };
     }
 
     const sinceMs = args.nowMs - RATE_LIMIT_WINDOW_MS;
@@ -259,9 +271,15 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_community_rate_limited" };
     }
 
+    // Operator-controlled, community-scoped canary; never client selected.
+    const modelId = await resolveCommunityInferenceModelForReceipt(ctx, {
+      communityId: args.communityId,
+      surface: args.surface,
+      receiptKey,
+    });
     let usageCycleId: any | undefined;
     let reservedCostMicros: number | undefined;
-    let pricingVersion: string | undefined;
+    let pricingSnapshot: FounderRunPricing | undefined;
     if (args.expectedFundingMode === "platform_subscription") {
       if (!args.expectedFounderSubscriptionId) {
         return { ok: false, errorCode: "funding_authority_changed" };
@@ -275,11 +293,21 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       if (!reservation.ok) return { ok: false, errorCode: reservation.code };
       usageCycleId = reservation.cycle._id;
       reservedCostMicros = reservation.reservationCostMicros;
-      pricingVersion = reservation.cycle.pricingVersion;
+      pricingSnapshot = snapshotFounderRunPricing(modelId, {
+        pricingVersion: reservation.cycle.pricingVersion,
+        inputCostMicrosPerMillionTokens: reservation.cycle.inputCostMicrosPerMillionTokens,
+        outputCostMicrosPerMillionTokens: reservation.cycle.outputCostMicrosPerMillionTokens,
+      });
     } else if (args.expectedFundingMode === "platform_operator_grant") {
-      pricingVersion = requireFounderInferencePricingFromEnv().pricingVersion;
+      const pricing = requireFounderInferencePricingFromEnv();
+      pricingSnapshot = snapshotFounderRunPricing(modelId, {
+        pricingVersion: pricing.pricingVersion,
+        inputCostMicrosPerMillionTokens: pricing.inputCostMicrosPerMillionTokens,
+        outputCostMicrosPerMillionTokens: pricing.outputCostMicrosPerMillionTokens,
+      });
     }
 
+    if (!pricingSnapshot) throw new Error("founder_inference_pricing_misconfigured");
     const receiptId = await ctx.db.insert("communityInferenceReceipts" as any, {
       receiptKey,
       sourceRunId,
@@ -291,11 +319,12 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       usageCycleId,
       surface: args.surface,
       provider: "openai",
-      modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+      modelId,
       status: "authorized",
       claimToken,
       leaseExpiresAt: args.nowMs + RECEIPT_LEASE_MS,
-      pricingVersion,
+      pricingVersion: pricingSnapshot.pricingVersion,
+      pricingSnapshot,
       reservedCostMicros,
       authorizedAt: args.nowMs,
       createdAt: args.nowMs,
@@ -306,7 +335,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       receiptKey,
       claimToken,
     });
-    return { ok: true, receiptId, reclaimed: false };
+    return { ok: true, receiptId, modelId, reservedCostMicros, pricingSnapshot, reclaimed: false };
   },
 });
 
@@ -365,6 +394,9 @@ export const settleCommunityInferenceReceiptInternal = internalMutation({
     claimToken: v.string(),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
+    cachedInputTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     usageComplete: v.boolean(),
     outcomeCode: v.string(),
     nowMs: v.number(),
@@ -376,6 +408,9 @@ export const settleCommunityInferenceReceiptInternal = internalMutation({
       claimToken: args.claimToken,
       promptTokens: args.promptTokens,
       completionTokens: args.completionTokens,
+      providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       usageComplete: args.usageComplete,
       outcomeCode: args.outcomeCode,
       nowMs: args.nowMs,
@@ -443,6 +478,9 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
     claimToken: v.string(),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
+    cachedInputTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     failureCode: v.string(),
     usageComplete: v.optional(v.boolean()),
     disposition: v.union(v.literal("failed"), v.literal("indeterminate")),
@@ -466,6 +504,9 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
         claimToken: args.claimToken,
         promptTokens,
         completionTokens,
+        providerRequests: args.providerRequests,
+        cachedInputTokens: args.cachedInputTokens,
+        cacheWriteTokens: args.cacheWriteTokens,
         usageComplete: false,
         outcomeCode: failureCode,
         failureCode: "provider_token_usage_missing",
@@ -480,6 +521,9 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
         claimToken: args.claimToken,
         promptTokens,
         completionTokens,
+        providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
+        cacheWriteTokens: args.cacheWriteTokens,
         usageComplete: true,
         outcomeCode: failureCode,
         nowMs: args.nowMs,

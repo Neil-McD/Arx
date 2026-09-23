@@ -1,5 +1,6 @@
 import {
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
+  type FounderProviderRequestUsage,
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
@@ -15,6 +16,10 @@ import {
 } from "./founderPlanCore";
 import {
   calculateFounderInferenceCostMicros,
+  calculateFounderRunCostMicros,
+  calculateFounderRequestCosts,
+  validateFounderRunPricing,
+  type FounderRunPricing,
   requireFounderInferencePricingFromEnv,
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
@@ -39,7 +44,11 @@ export type FounderInferenceReceiptRow = {
   providerStartedAt?: number;
   promptTokens?: number;
   completionTokens?: number;
+  providerRequests?: FounderProviderRequestUsage[];
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
   pricingVersion?: string;
+  pricingSnapshot?: FounderRunPricing;
   reservedCostMicros?: number;
   settledCostMicros?: number;
   outcomeCode?: string;
@@ -97,6 +106,23 @@ export async function getUniqueFounderInferenceReceiptByKey(
   return rows[0] ?? null;
 }
 
+export async function resolveCommunityInferenceModelForReceipt(
+  ctx: any,
+  args: { communityId: unknown; surface: CommunityInferenceSurface; receiptKey: string },
+): Promise<string> {
+  const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, args.receiptKey);
+  if (receipt) {
+    if (normalizedId(receipt.communityId) !== normalizedId(args.communityId) || receipt.surface !== args.surface) {
+      throw new Error("founder_inference_receipt_conflict");
+    }
+    return receipt.modelId;
+  }
+  const canaryCommunity = process.env.POLYNET_LUNA6_CANARY_COMMUNITY_ID?.trim();
+  const canarySurface = process.env.POLYNET_LUNA6_CANARY_SURFACE?.trim();
+  return canaryCommunity === normalizedId(args.communityId) && canarySurface === args.surface
+    ? "gpt-6-luna" : COMMUNITY_OWNER_FUNDED_MODEL_ID;
+}
+
 export function founderInferenceReceiptIdentityMatches(
   receipt: FounderInferenceReceiptRow,
   expected: FounderInferenceReceiptIdentity,
@@ -140,9 +166,12 @@ async function requireFounderInferenceSettlementCycle(args: {
   ) {
     throw new Error("founder_usage_cycle_community_mismatch");
   }
-  if (
+  if (receipt.pricingSnapshot) {
+    validateFounderRunPricing(receipt.pricingSnapshot, receipt.modelId, receipt.pricingVersion);
+  } else if (
+    receipt.modelId !== "gpt-5.6-luna" ||
     receipt.pricingVersion !== cycle.pricingVersion ||
-    cycle.pricingVersion !== POLYNET_FOUNDER_PLAN_PRICING_VERSION
+    cycle.pricingVersion !== "founder_plan_luna_v1"
   ) {
     throw new Error("founder_inference_pricing_version_mismatch");
   }
@@ -264,6 +293,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   claimToken: string;
   promptTokens: number;
   completionTokens: number;
+  providerRequests?: FounderProviderRequestUsage[];
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
   usageComplete?: boolean;
   outcomeCode: string;
   failureCode?: string;
@@ -283,7 +315,23 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   const cycle = receipt.fundingMode === "platform_subscription"
     ? await requireFounderInferenceSettlementCycle({ ctx: args.ctx, receipt })
     : undefined;
-  if (args.usageComplete === false) {
+  const missingRequestUsage = receipt.modelId === "gpt-6-luna" && !args.providerRequests?.length;
+  if (args.usageComplete === false || missingRequestUsage) {
+    if (args.providerRequests?.length) {
+      if (!receipt.pricingSnapshot) throw new Error("founder_inference_pricing_version_mismatch");
+      const knownPromptTokens = args.providerRequests.reduce((sum, request) => sum + request.promptTokens, 0);
+      const knownCompletionTokens = args.providerRequests.reduce((sum, request) => sum + request.completionTokens, 0);
+      if (knownPromptTokens > promptTokens || knownCompletionTokens > completionTokens) {
+        throw new Error("founder_inference_request_usage_invalid");
+      }
+      // Validate the known subset without treating it as the cost of the unknown request.
+      calculateFounderRequestCosts({
+        requests: args.providerRequests,
+        pricing: receipt.pricingSnapshot,
+        promptTokens: knownPromptTokens,
+        completionTokens: knownCompletionTokens,
+      });
+    }
     if (cycle) {
       settledCostMicros = Number(receipt.reservedCostMicros);
       await settleFounderUsageReservation({
@@ -302,6 +350,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       status: "indeterminate",
       promptTokens,
       completionTokens,
+      providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       settledCostMicros,
       failureCode,
       failedAt: args.nowMs,
@@ -312,6 +363,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       status: "indeterminate",
       promptTokens,
       completionTokens,
+      providerRequests: args.providerRequests,
+      cachedInputTokens: args.cachedInputTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       settledCostMicros,
       failureCode,
       failedAt: args.nowMs,
@@ -320,7 +374,11 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   }
   if (receipt.fundingMode === "platform_subscription") {
     if (!cycle) throw new Error("founder_usage_cycle_missing");
-    settledCostMicros = calculateFounderInferenceCostMicros({
+    settledCostMicros = receipt.pricingSnapshot
+      ? (receipt.modelId === "gpt-6-luna"
+        ? calculateFounderRequestCosts({ requests: args.providerRequests!, pricing: receipt.pricingSnapshot, promptTokens, completionTokens })
+        : calculateFounderRunCostMicros({ promptTokens, completionTokens, pricing: receipt.pricingSnapshot }))
+      : calculateFounderInferenceCostMicros({
       promptTokens,
       completionTokens,
       pricing: {
@@ -339,8 +397,14 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       nowMs: args.nowMs,
     });
   } else if (receipt.fundingMode === "platform_operator_grant") {
+    if (receipt.pricingSnapshot) {
+      validateFounderRunPricing(receipt.pricingSnapshot, receipt.modelId, receipt.pricingVersion);
+      settledCostMicros = (receipt.modelId === "gpt-6-luna"
+        ? calculateFounderRequestCosts({ requests: args.providerRequests!, pricing: receipt.pricingSnapshot, promptTokens, completionTokens })
+        : calculateFounderRunCostMicros({ promptTokens, completionTokens, pricing: receipt.pricingSnapshot }));
+    } else {
     const pricing = requireFounderInferencePricingFromEnv();
-    if (receipt.pricingVersion !== pricing.pricingVersion) {
+    if (receipt.modelId !== "gpt-5.6-luna" || receipt.pricingVersion !== "founder_plan_luna_v1" || receipt.pricingVersion !== pricing.pricingVersion) {
       throw new Error("founder_inference_pricing_version_mismatch");
     }
     settledCostMicros = calculateFounderInferenceCostMicros({
@@ -348,11 +412,15 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       completionTokens,
       pricing,
     });
+    }
   }
   await args.ctx.db.patch(receipt._id as any, {
     status: "settled",
     promptTokens,
     completionTokens,
+    providerRequests: args.providerRequests,
+    cachedInputTokens: args.cachedInputTokens,
+    cacheWriteTokens: args.cacheWriteTokens,
     settledCostMicros,
     outcomeCode: String(args.outcomeCode ?? "completed").trim().slice(0, 120) || "completed",
     failureCode: undefined,
@@ -364,6 +432,9 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     status: "settled",
     promptTokens,
     completionTokens,
+    providerRequests: args.providerRequests,
+    cachedInputTokens: args.cachedInputTokens,
+    cacheWriteTokens: args.cacheWriteTokens,
     settledCostMicros,
     outcomeCode: args.outcomeCode,
     settledAt: args.nowMs,

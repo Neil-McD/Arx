@@ -6,6 +6,7 @@ const root = process.cwd();
 const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
 const runtime = readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8");
 const fundingRuntime = readFileSync(join(root, "convex/founderInferenceRuntime.ts"), "utf8");
+const fundedGateway = readFileSync(join(root, "convex/fundedInferenceGateway.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -197,20 +198,20 @@ assert.match(
 );
 const runtimeLoop = exportedFunctionBlock(runtime, "runCommunityAgentLoopInternal");
 const fundingAdmissionIndex = runtimeLoop.indexOf("resolveCommunityInferenceFundingForAction");
-const fundingClaimIndex = runtimeLoop.indexOf("claimCommunityInferenceFundingSession");
+const fundingClaimIndex = runtimeLoop.indexOf("fundingState.run = await startFundedInferenceRun");
 const runCompletionIndex = runtimeLoop.indexOf("runCompletion: async");
-const providerStartIndex = runtimeLoop.indexOf(
-  "markCommunityInferenceFundingSessionProviderStarted",
-);
-const providerRequestIndex = runtimeLoop.indexOf("runOpenAiNativeToolCompletion");
+const providerRequestIndex = runtimeLoop.indexOf("fundingState.run.request");
 assert.ok(fundingAdmissionIndex >= 0, "community runtime should resolve canonical founder funding");
 assert.ok(
-  fundingClaimIndex > fundingAdmissionIndex,
-  "community runtime should admit canonical founder funding before claiming provider spend",
+  fundingClaimIndex > runCompletionIndex && fundingClaimIndex < providerRequestIndex &&
+    fundingAdmissionIndex < runCompletionIndex,
+  "community runtime should claim funding after kernel admission and before provider spend",
 );
 assert.ok(
-  providerStartIndex > runCompletionIndex && providerRequestIndex > providerStartIndex,
-  "community runtime should mark provider start inside the completion boundary immediately before the provider request",
+  providerRequestIndex > runCompletionIndex &&
+    fundedGateway.includes("markCommunityInferenceFundingSessionProviderStarted") &&
+    fundedGateway.includes("runOpenAiNativeToolCompletion"),
+  "the funded gateway should mark provider start immediately before each steward request",
 );
 assert.doesNotMatch(
   fundingRuntime,

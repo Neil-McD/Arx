@@ -27,6 +27,8 @@ const autonomousRuntime = read("convex/communityAgentRuntime.ts");
 const memberRuntime = read("convex/runtimeAgentLoop.ts");
 const memberTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const wikiArchitect = read("convex/communityWikiArchitect.ts");
+const fundedGateway = read("convex/fundedInferenceGateway.ts");
+const usageCollector = read("convex/founderInferenceUsage.ts");
 const communityAdminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const modelCatalog = read("shared/modelCatalog.ts");
 const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -292,7 +294,8 @@ assert.match(worker, /const isWorkflowAction = context\.request\.triggerKind ===
 assert.match(worker, /const receiptKey = isWorkflowAction[\s\S]*communityWorkflowActionReceiptKey\(requestId\)[\s\S]*communityAgentMentionReceiptKey\(requestId\)/);
 assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
 assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
-assert.match(worker, /aggregatePromptTokens \+=/);
+assert.match(worker, /observeFounderProviderResult\(usage, toolCompletion/);
+assert.match(usageCollector, /recordFounderProviderSuccess\(totals, result\)/);
 assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
 assert.match(worker, /claimCommunityInferenceFundingSession/);
 assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action"[\s\S]*"community_agent_mention"/);
@@ -302,7 +305,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /if \(providerStarted\) aggregateUsageComplete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*aggregateUsageComplete = false/,
+  /if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*observeFounderProviderResult\(usage, toolCompletion,[\s\S]*providerFailureIsKnownPreSpend\(toolCompletion\.code\)/,
 );
 assert.match(
   worker,
@@ -313,7 +316,8 @@ assert.doesNotMatch(worker, /executeRetrievalHarnessTool\(\{[\s\S]{0,300}userId:
 assert.match(fundingRuntime, /resolveCommunityInferenceFundingAdmissionInternal/);
 assert.doesNotMatch(fundingRuntime, /beginCommunityInferenceFundingSession/);
 assert.match(fundingRuntime, /surface: args\.surface/);
-assert.match(fundingRuntime, /COMMUNITY_OWNER_FUNDED_MODEL_ID/);
+assert.match(fundingRuntime, /modelId: claim\.modelId/);
+assert.doesNotMatch(fundingRuntime, /modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/);
 assert.match(fundingRuntime, /markCommunityInferenceProviderStartedInternal/);
 assert.match(fundingRuntime, /settleCommunityInferenceReceiptInternal/);
 assert.doesNotMatch(fundingRuntime, /owner_api_key|userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/);
@@ -354,7 +358,7 @@ assert.match(
 );
 assert.match(
   memberTurnHandlers,
-  /communityFundingPromptTokens \+=[\s\S]*communityFundingCompletionTokens \+=[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingPromptTokens[\s\S]*completionTokens: communityFundingCompletionTokens/,
+  /observeFounderProviderResult\(communityFundingUsage, result,[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingUsage\.promptTokens[\s\S]*completionTokens: communityFundingUsage\.completionTokens/,
 );
 assert.match(
   autonomousRuntime,
@@ -363,10 +367,10 @@ assert.match(
 assert.match(autonomousRuntime, /surface: "community_autonomous_cognition"/);
 assert.match(autonomousRuntime, /receiptKey: `community_autonomous_cognition:\$\{runId\}`/);
 assert.doesNotMatch(autonomousRuntime, /beginCommunityInferenceFundingSession/);
-assert.match(autonomousRuntime, /claimCommunityInferenceFundingSession/);
+assert.match(autonomousRuntime, /resolveCommunityInferenceModelForReceipt[\s\S]*startFundedInferenceRun\([\s\S]*fundingState\.run\.modelId !== modelId/);
 assert.match(
   autonomousRuntime,
-  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+  /runCompletion: async[\s\S]*fundingState\.run\.request\([\s\S]*fundingState\.run\.usage\(\)\.complete/,
 );
 assert.match(
   autonomousRuntime,
@@ -375,17 +379,18 @@ assert.match(
 );
 assert.match(
   autonomousRuntime,
-  /usageComplete: !providerStarted[\s\S]*disposition: providerStarted \? "indeterminate" : "failed"/,
+  /fundingState\.run\.usage\(\)[\s\S]*fundingState\.run\.settle\("provider_completed"\)[\s\S]*fundingState\.run\.fail\(runtimeErrorCode\)/,
 );
-assert.match(autonomousRuntime, /modelId: fundingSession\.modelId/);
-assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|fundingSession\.apiKeyOverride/);
-assert.match(autonomousRuntime, /settleCommunityInferenceFundingSession/);
+assert.match(autonomousRuntime, /modelRef: `openai\/\$\{modelId\}`/);
+assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|claimCommunityInferenceFundingSession|fundingSession\.apiKeyOverride/);
 assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);
-assert.match(wikiArchitect, /claimCommunityInferenceFundingSession/g);
-assert.match(wikiArchitect, /markCommunityInferenceFundingSessionProviderStarted/g);
-assert.match(wikiArchitect, /modelIdOverride: fundingSession\.modelId/g);
+assert.equal((wikiArchitect.match(/startFundedInferenceRun\(/g) ?? []).length, 2);
+assert.match(fundedGateway, /claimCommunityInferenceFundingSession/);
+assert.match(fundedGateway, /markCommunityInferenceFundingSessionProviderStarted/);
+assert.match(fundedGateway, /modelId: session\.modelId/);
+assert.match(fundedGateway, /settleCommunityInferenceFundingSession/);
 assert.doesNotMatch(wikiArchitect, /fundingSession\.apiKeyOverride/);
 assert.doesNotMatch(communityAdminGateway, /runCommunityWikiArchitectProposal/);
 assert.doesNotMatch(communityAdminGateway, /draftCommunityResourceContentFromSources/);

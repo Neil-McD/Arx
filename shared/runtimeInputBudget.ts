@@ -96,6 +96,7 @@ function capacityProfile(
 const RUNTIME_MODEL_CAPACITY_PROFILES: readonly RuntimeModelCapacityProfile[] = [
   capacityProfile("openai_responses", "openai/gpt-5.6-sol", 1_050_000),
   capacityProfile("openai_responses", "openai/gpt-5.6-luna", 1_050_000),
+  capacityProfile("openai_responses", "openai/gpt-6-luna", 1_050_000),
   capacityProfile("openai_responses", "openai/gpt-5.5", 1_050_000),
   capacityProfile("chatgpt_responses", "openai/gpt-5.6-sol", 1_050_000),
   capacityProfile("chatgpt_responses", "openai/gpt-5.5", 1_050_000),

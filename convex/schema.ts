@@ -1,3 +1,4 @@
+import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { defineSchema, defineTable } from "convex/server";
 import { integrationReceiptIntentValidator } from "./communityIntegrationReceiptIntent";
 import { communityFormQuestionValidator } from "./communityFormValidators";
@@ -308,7 +309,19 @@ export default defineSchema({
     providerStartedAt: v.optional(v.number()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    cachedInputTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     pricingVersion: v.optional(v.string()),
+    providerRequests: v.optional(v.array(founderProviderRequestUsageValidator)),
+    pricingSnapshot: v.optional(v.object({
+      modelId: v.string(),
+      pricingVersion: v.string(),
+      inputCostMicrosPerMillionTokens: v.number(),
+      outputCostMicrosPerMillionTokens: v.number(),
+      cachedInputCostMicrosPerMillionTokens: v.optional(v.number()),
+      cacheWriteCostMicrosPerMillionTokens: v.optional(v.number()),
+      longContextThresholdTokens: v.optional(v.number()),
+    })),
     reservedCostMicros: v.optional(v.number()),
     settledCostMicros: v.optional(v.number()),
     outcomeCode: v.optional(v.string()),

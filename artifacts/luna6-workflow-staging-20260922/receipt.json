@@ -1,0 +1,658 @@
+{
+  "deployment": "quick-porcupine-949",
+  "outcomes": {
+    "communityFormRequests": [
+      {
+        "_creationTime": 1790097802229.7107,
+        "_id": "tx7k9m3cjprd4h0p8tj2atvwt18ew2w9",
+        "activationSequence": 1,
+        "answers": {
+          "answer": "SEQUENCE_ACCEPTANCE_20260922: ready for the next action."
+        },
+        "automationKey": "automation-ba3055ab-fd08-4ece-a672-d58d0e440ad8",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790097802229,
+        "formKey": "sequence-intake",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "revision": 1,
+        "status": "submitted",
+        "submittedAt": 1790098105335,
+        "updatedAt": 1790098105335,
+        "versionId": "tn7nc173j2bespcmqp6msh2bp58ewx4n",
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRunId": "t57s2gbrdv321qbqxt9nbq6knn8ex0gf"
+      },
+      {
+        "_creationTime": 1790098238225.2605,
+        "_id": "tx7xmdap9vxzjsghdhcp7bnhrn8exkqp",
+        "activationSequence": 1,
+        "answers": {
+          "answer": "SEQUENCE_AUTOMATIC_RETEST_20260922: proceed after this answer."
+        },
+        "automationKey": "automation-3110c5a5-cda3-4d4d-9bfe-f2283bd3b11f",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790098238225,
+        "formKey": "sequence-next",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "revision": 1,
+        "status": "submitted",
+        "submittedAt": 1790098269546,
+        "updatedAt": 1790098269546,
+        "versionId": "tn7x73f28sgk3m153xp0htff2s8exwpz",
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRunId": "t57xs5915z75b91xvwdc3sm2fx8exh1y"
+      },
+      {
+        "_creationTime": 1790098272577.6013,
+        "_id": "tx7vned7sp82psew7v7vg9bsx58ex4vn",
+        "activationSequence": 1,
+        "answers": {
+          "answer": "SEQUENCE_FINAL_20260922: all test actions complete; await approval."
+        },
+        "automationKey": "automation-60f4acc3-5b54-467a-aba9-1c97fc284f27",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790098272577,
+        "formKey": "sequence-intake",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "revision": 1,
+        "status": "submitted",
+        "submittedAt": 1790098317421,
+        "updatedAt": 1790098317421,
+        "versionId": "tn7nc173j2bespcmqp6msh2bp58ewx4n",
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRunId": "t57thn75zssnbwv6zjhexbqzn18exfsj"
+      },
+      {
+        "_creationTime": 1790102207752.5754,
+        "_id": "tx7qb64y25ra1bv4bp306cxnq58exjp0",
+        "activationSequence": 1,
+        "answers": {
+          "answer": "LUNA6_ACCEPTANCE_20260922: ready for the next action."
+        },
+        "automationKey": "automation-e50a10f0-8366-4672-b847-1d3b9fd9b71a",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790102207752,
+        "formKey": "sequence-intake",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790102110246,
+        "milestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "revision": 1,
+        "status": "submitted",
+        "submittedAt": 1790102269236,
+        "updatedAt": 1790102269236,
+        "versionId": "tn7nc173j2bespcmqp6msh2bp58ewx4n",
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRunId": "t57jmxaz2scyczkw73s8qppn7n8ewk4d"
+      },
+      {
+        "_creationTime": 1790102272329.0662,
+        "_id": "tx7s5h5k2b7wxegx0d9mb3n68d8ew19m",
+        "activationSequence": 1,
+        "answers": {
+          "answer": "LUNA6_ACCEPTANCE_20260922: finished; awaiting human approval."
+        },
+        "automationKey": "automation-36613f77-ff96-4336-a0ab-f33fde5c902c",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790102272329,
+        "formKey": "sequence-next",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790102110246,
+        "milestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "revision": 1,
+        "status": "submitted",
+        "submittedAt": 1790102311838,
+        "updatedAt": 1790102311838,
+        "versionId": "tn7x73f28sgk3m153xp0htff2s8exwpz",
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRunId": "t57x96k1bgm693fhc6c7hmxw0n8ex604"
+      }
+    ],
+    "communityInferenceReceipts": [
+      {
+        "_creationTime": 1790098105827.116,
+        "_id": "q97zhskgyz06bvwv16snfxgwy98ewmqh",
+        "actorUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+        "authorizedAt": 1790098105825,
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "completionTokens": 23,
+        "createdAt": 1790098105825,
+        "fundingMode": "platform_operator_grant",
+        "leaseExpiresAt": 1790098705825,
+        "modelId": "gpt-5.6-luna",
+        "outcomeCode": "provider_completed",
+        "payerUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+        "pricingVersion": "founder_plan_luna_v1",
+        "promptTokens": 946,
+        "provider": "openai",
+        "providerStartedAt": 1790098105870,
+        "receiptKey": "community_workflow_action:kx7t25qgrf96n0d90cvs53mv118exy8c",
+        "settledAt": 1790098108597,
+        "settledCostMicros": 217,
+        "sourceRunId": "community-agent-serve:kx7t25qgrf96n0d90cvs53mv118exy8c",
+        "status": "settled",
+        "surface": "community_workflow_action",
+        "updatedAt": 1790098108597
+      },
+      {
+        "_creationTime": 1790098270161.309,
+        "_id": "q97x476zktpszvx2r12z2mz5s58ex1qd",
+        "actorUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+        "authorizedAt": 1790098270159,
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "completionTokens": 29,
+        "createdAt": 1790098270159,
+        "fundingMode": "platform_operator_grant",
+        "leaseExpiresAt": 1790098870159,
+        "modelId": "gpt-5.6-luna",
+        "outcomeCode": "provider_completed",
+        "payerUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+        "pricingVersion": "founder_plan_luna_v1",
+        "promptTokens": 1163,
+        "provider": "openai",
+        "providerStartedAt": 1790098270190,
+        "receiptKey": "community_workflow_action:kx7xpqxcv1gfz2gjz89apcg9a98ewabv",
+        "settledAt": 1790098272445,
+        "settledCostMicros": 268,
+        "sourceRunId": "community-agent-serve:kx7xpqxcv1gfz2gjz89apcg9a98ewabv",
+        "status": "settled",
+        "surface": "community_workflow_action",
+        "updatedAt": 1790098272445
+      },
+      {
+        "_creationTime": 1790102269820.2078,
+        "_id": "q97kd3xm35am0h21tjtvp6yhjs8exefe",
+        "actorUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+        "authorizedAt": 1790102269818,
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "completionTokens": 23,
+        "createdAt": 1790102269818,
+        "fundingMode": "platform_operator_grant",
+        "leaseExpiresAt": 1790102869818,
+        "modelId": "gpt-6-luna",
+        "outcomeCode": "provider_completed",
+        "payerUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+        "pricingSnapshot": {
+          "cacheWriteCostMicrosPerMillionTokens": 125000,
+          "cachedInputCostMicrosPerMillionTokens": 10000,
+          "inputCostMicrosPerMillionTokens": 100000,
+          "longContextThresholdTokens": 272000,
+          "modelId": "gpt-6-luna",
+          "outputCostMicrosPerMillionTokens": 500000,
+          "pricingVersion": "gpt_6_luna_standard_v1"
+        },
+        "pricingVersion": "gpt_6_luna_standard_v1",
+        "promptTokens": 1590,
+        "provider": "openai",
+        "providerRequests": [
+          {
+            "cacheWriteTokens": 1587,
+            "cachedInputTokens": 0,
+            "completionTokens": 23,
+            "modelId": "gpt-6-luna",
+            "promptTokens": 1590,
+            "requestId": "resp_09f132e998249112016ab2caff1a4487d29d9947bafb5bfb80",
+            "serviceTier": "default"
+          }
+        ],
+        "providerStartedAt": 1790102269854,
+        "receiptKey": "community_workflow_action:kx7matf06depgqyf424jvjm57n8ewgn4",
+        "settledAt": 1790102272195,
+        "settledCostMicros": 211,
+        "sourceRunId": "community-agent-serve:kx7matf06depgqyf424jvjm57n8ewgn4",
+        "status": "settled",
+        "surface": "community_workflow_action",
+        "updatedAt": 1790102272195
+      }
+    ],
+    "communityMemberWorkflowMemberMilestones": [
+      {
+        "_creationTime": 1790102110246.0427,
+        "_id": "sx7vh5s48pmnnqz62b0ex93dxh8ex6ek",
+        "createdAt": 1790102110246,
+        "currentMilestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790102110246,
+        "transitionSeq": 1,
+        "updatedAt": 1790102110246,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt"
+      }
+    ],
+    "communityMemberWorkflowRuns": [
+      {
+        "_creationTime": 1790097802229.709,
+        "_id": "t57n0nmrz5ng34bbq990jj8hf58exsat",
+        "actionResult": {
+          "actionKey": "action-9287993d-1999-4a08-bd19-24e2a274ee18",
+          "resultCode": "service_channel_created",
+          "serviceChannelId": "qh7twjxtnk7gg0avqef0k1zm6s8exvqg",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "key": "action-9287993d-1999-4a08-bd19-24e2a274ee18",
+          "type": "create_service_channel"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-e0a226c1-c686-4c03-9ca5-f2d1684e3837",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790097802229,
+        "finishedAt": 1790097802229,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "milestoneName": "Sequential onboarding",
+        "status": "finished",
+        "transitionSeq": 0,
+        "triggerReceiptRef": "member_joined:ks713xny70n6fgc0w2yenqj5658exmwt:1",
+        "triggerSnapshot": {
+          "type": "member_joined"
+        },
+        "triggerType": "member_joined",
+        "updatedAt": 1790097802229,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 2
+      },
+      {
+        "_creationTime": 1790097802229.7104,
+        "_id": "t57s2gbrdv321qbqxt9nbq6knn8ex0gf",
+        "actionResult": {
+          "actionKey": "action-38785227-b426-4c4a-9065-8be8cdf0bbe2",
+          "formRequestId": "tx7k9m3cjprd4h0p8tj2atvwt18ew2w9",
+          "resultCode": "form_requested",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "formKey": "sequence-intake",
+          "key": "action-38785227-b426-4c4a-9065-8be8cdf0bbe2",
+          "type": "request_form"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-ba3055ab-fd08-4ece-a672-d58d0e440ad8",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790097802229,
+        "finishedAt": 1790097802229,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "milestoneName": "Sequential onboarding",
+        "status": "finished",
+        "transitionSeq": 0,
+        "triggerReceiptRef": "member_joined:ks713xny70n6fgc0w2yenqj5658exmwt:1",
+        "triggerSnapshot": {
+          "type": "member_joined"
+        },
+        "triggerType": "member_joined",
+        "updatedAt": 1790097802229,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 2
+      },
+      {
+        "_creationTime": 1790098105381.813,
+        "_id": "t57tw2zhn4qewbmx2fcqwrezg18exgpp",
+        "actionResult": {
+          "actionKey": "action-ae27b21e-0433-4a65-bd6d-c4ce0341a263",
+          "resultCode": "agent_queued",
+          "serveRequestId": "kx7t25qgrf96n0d90cvs53mv118exy8c",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "key": "action-ae27b21e-0433-4a65-bd6d-c4ce0341a263",
+          "prompt": "This is a synthetic staging acceptance check. Briefly acknowledge the submitted sequence intake answer in one sentence. Do not use tools or contact anyone.",
+          "type": "prompt_agent"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-3a413aa1-f462-465d-90b1-279511f3f3a6",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790098105381,
+        "finishedAt": 1790098105381,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "milestoneName": "Sequential onboarding",
+        "predecessorRunId": "t57s2gbrdv321qbqxt9nbq6knn8ex0gf",
+        "status": "finished",
+        "transitionSeq": 0,
+        "triggerReceiptRef": "action_completion:ks713xny70n6fgc0w2yenqj5658exmwt:1:0:milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c:1790097802056:action-ae27b21e-0433-4a65-bd6d-c4ce0341a263",
+        "triggerSnapshot": {
+          "predecessorActionKey": "action-38785227-b426-4c4a-9065-8be8cdf0bbe2",
+          "type": "previous_action_completed"
+        },
+        "triggerType": "previous_action_completed",
+        "updatedAt": 1790098105381,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 2
+      },
+      {
+        "_creationTime": 1790098238225.2603,
+        "_id": "t57xs5915z75b91xvwdc3sm2fx8exh1y",
+        "actionResult": {
+          "actionKey": "action-d0a7f918-e222-4b9e-8d6f-6f0f3e524255",
+          "formRequestId": "tx7xmdap9vxzjsghdhcp7bnhrn8exkqp",
+          "resultCode": "form_requested",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "formKey": "sequence-next",
+          "key": "action-d0a7f918-e222-4b9e-8d6f-6f0f3e524255",
+          "type": "request_form"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-3110c5a5-cda3-4d4d-9bfe-f2283bd3b11f",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790098238225,
+        "finishedAt": 1790098238225,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "milestoneName": "Sequential onboarding",
+        "predecessorRunId": "t57tw2zhn4qewbmx2fcqwrezg18exgpp",
+        "status": "finished",
+        "transitionSeq": 0,
+        "triggerReceiptRef": "action_completion:ks713xny70n6fgc0w2yenqj5658exmwt:1:0:milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c:1790097802056:action-d0a7f918-e222-4b9e-8d6f-6f0f3e524255",
+        "triggerSnapshot": {
+          "predecessorActionKey": "action-ae27b21e-0433-4a65-bd6d-c4ce0341a263",
+          "type": "previous_action_completed"
+        },
+        "triggerType": "previous_action_completed",
+        "updatedAt": 1790098238225,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 3
+      },
+      {
+        "_creationTime": 1790098269600.4766,
+        "_id": "t57qyg3n0xsnr9qb1aea5xvk598ewnc4",
+        "actionResult": {
+          "actionKey": "action-ab124f0e-21fb-45c7-9c3c-c6446f9fd12c",
+          "resultCode": "agent_queued",
+          "serveRequestId": "kx7xpqxcv1gfz2gjz89apcg9a98ewabv",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "key": "action-ab124f0e-21fb-45c7-9c3c-c6446f9fd12c",
+          "prompt": "Synthetic staging acceptance. Acknowledge the latest submitted form answer in one short sentence. No tools or other actions.",
+          "type": "prompt_agent"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-cda55e50-ba02-4d14-935c-e29f11eb1eb5",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790098269600,
+        "finishedAt": 1790098269600,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "milestoneName": "Sequential onboarding",
+        "predecessorRunId": "t57xs5915z75b91xvwdc3sm2fx8exh1y",
+        "status": "finished",
+        "transitionSeq": 0,
+        "triggerReceiptRef": "action_completion:ks713xny70n6fgc0w2yenqj5658exmwt:1:0:milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c:1790097802056:action-ab124f0e-21fb-45c7-9c3c-c6446f9fd12c",
+        "triggerSnapshot": {
+          "predecessorActionKey": "action-d0a7f918-e222-4b9e-8d6f-6f0f3e524255",
+          "type": "previous_action_completed"
+        },
+        "triggerType": "previous_action_completed",
+        "updatedAt": 1790098269600,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 3
+      },
+      {
+        "_creationTime": 1790098272577.601,
+        "_id": "t57thn75zssnbwv6zjhexbqzn18exfsj",
+        "actionResult": {
+          "actionKey": "action-5f6f478a-6c4a-482a-a7cc-91c420be16e2",
+          "formRequestId": "tx7vned7sp82psew7v7vg9bsx58ex4vn",
+          "resultCode": "form_requested",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "formKey": "sequence-intake",
+          "key": "action-5f6f478a-6c4a-482a-a7cc-91c420be16e2",
+          "type": "request_form"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-60f4acc3-5b54-467a-aba9-1c97fc284f27",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790098272577,
+        "finishedAt": 1790098272577,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790097802056,
+        "milestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "milestoneName": "Sequential onboarding",
+        "predecessorRunId": "t57qyg3n0xsnr9qb1aea5xvk598ewnc4",
+        "status": "finished",
+        "transitionSeq": 0,
+        "triggerReceiptRef": "action_completion:ks713xny70n6fgc0w2yenqj5658exmwt:1:0:milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c:1790097802056:action-5f6f478a-6c4a-482a-a7cc-91c420be16e2",
+        "triggerSnapshot": {
+          "predecessorActionKey": "action-ab124f0e-21fb-45c7-9c3c-c6446f9fd12c",
+          "type": "previous_action_completed"
+        },
+        "triggerType": "previous_action_completed",
+        "updatedAt": 1790098272577,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 3
+      },
+      {
+        "_creationTime": 1790102207752.5752,
+        "_id": "t57jmxaz2scyczkw73s8qppn7n8ewk4d",
+        "actionResult": {
+          "actionKey": "action-26115248-69f5-4d97-983f-912374100244",
+          "formRequestId": "tx7qb64y25ra1bv4bp306cxnq58exjp0",
+          "resultCode": "form_requested",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "formKey": "sequence-intake",
+          "key": "action-26115248-69f5-4d97-983f-912374100244",
+          "type": "request_form"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-e50a10f0-8366-4672-b847-1d3b9fd9b71a",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790102207752,
+        "finishedAt": 1790102207752,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790102110246,
+        "milestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "milestoneName": "Luna 6 acceptance",
+        "status": "finished",
+        "transitionSeq": 1,
+        "triggerReceiptRef": "workflow-timer:th7x3esdeer2zdzw426bhyc7qd8exfmw",
+        "triggerSnapshot": {
+          "delayMinutes": 1,
+          "type": "milestone_elapsed"
+        },
+        "triggerType": "milestone_elapsed",
+        "updatedAt": 1790102207752,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 5
+      },
+      {
+        "_creationTime": 1790102269299.3313,
+        "_id": "t57gd9wcd7372m9b6etxe4kes18exekm",
+        "actionResult": {
+          "actionKey": "action-060e81e7-eed5-4f5f-8e8d-a66a840a896a",
+          "resultCode": "agent_queued",
+          "serveRequestId": "kx7matf06depgqyf424jvjm57n8ewgn4",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "key": "action-060e81e7-eed5-4f5f-8e8d-a66a840a896a",
+          "prompt": "Synthetic staging acceptance. Acknowledge the submitted answer in one short sentence. No tools or additional actions.",
+          "type": "prompt_agent"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-e0ed04d4-b4de-4129-969f-21ae7c0b873e",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790102269299,
+        "finishedAt": 1790102269299,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790102110246,
+        "milestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "milestoneName": "Luna 6 acceptance",
+        "predecessorRunId": "t57jmxaz2scyczkw73s8qppn7n8ewk4d",
+        "status": "finished",
+        "transitionSeq": 1,
+        "triggerReceiptRef": "action_completion:ks713xny70n6fgc0w2yenqj5658exmwt:1:1:milestone-1bdcae4a-713f-4271-ac02-3d71945cc231:1790102110246:action-060e81e7-eed5-4f5f-8e8d-a66a840a896a",
+        "triggerSnapshot": {
+          "predecessorActionKey": "action-26115248-69f5-4d97-983f-912374100244",
+          "type": "previous_action_completed"
+        },
+        "triggerType": "previous_action_completed",
+        "updatedAt": 1790102269299,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 5
+      },
+      {
+        "_creationTime": 1790102272329.066,
+        "_id": "t57x96k1bgm693fhc6c7hmxw0n8ex604",
+        "actionResult": {
+          "actionKey": "action-06aa14d2-f670-4053-ab88-e5cd3366b6de",
+          "formRequestId": "tx7s5h5k2b7wxegx0d9mb3n68d8ew19m",
+          "resultCode": "form_requested",
+          "status": "complete"
+        },
+        "actionSnapshot": {
+          "formKey": "sequence-next",
+          "key": "action-06aa14d2-f670-4053-ab88-e5cd3366b6de",
+          "type": "request_form"
+        },
+        "activationSequence": 1,
+        "automationKey": "automation-36613f77-ff96-4336-a0ab-f33fde5c902c",
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "createdAt": 1790102272329,
+        "finishedAt": 1790102272329,
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneContextSnapshot": {
+          "goal": "",
+          "instructions": ""
+        },
+        "milestoneEnteredAt": 1790102110246,
+        "milestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "milestoneName": "Luna 6 acceptance",
+        "predecessorRunId": "t57gd9wcd7372m9b6etxe4kes18exekm",
+        "status": "finished",
+        "transitionSeq": 1,
+        "triggerReceiptRef": "action_completion:ks713xny70n6fgc0w2yenqj5658exmwt:1:1:milestone-1bdcae4a-713f-4271-ac02-3d71945cc231:1790102110246:action-06aa14d2-f670-4053-ab88-e5cd3366b6de",
+        "triggerSnapshot": {
+          "predecessorActionKey": "action-060e81e7-eed5-4f5f-8e8d-a66a840a896a",
+          "type": "previous_action_completed"
+        },
+        "triggerType": "previous_action_completed",
+        "updatedAt": 1790102272329,
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 5
+      }
+    ],
+    "communityMemberWorkflowTransitions": [
+      {
+        "_creationTime": 1790102110246.043,
+        "_id": "t97s47tgz3b60wgad0ks32t3fx8ewxv7",
+        "actionKey": "human_approved",
+        "approval": {
+          "activationSequence": 1,
+          "actorUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+          "goal": ""
+        },
+        "communityId": "jx7ategdbt0tpjz6hfhd80m7r18ewq2s",
+        "completedWorkflow": false,
+        "completionEvidence": [
+          {
+            "actionKey": "action-9287993d-1999-4a08-bd19-24e2a274ee18",
+            "automationKey": "automation-e0a226c1-c686-4c03-9ca5-f2d1684e3837",
+            "completed_at": 1790097802229,
+            "run_id": "t57n0nmrz5ng34bbq990jj8hf58exsat",
+            "source_id": "qh7twjxtnk7gg0avqef0k1zm6s8exvqg"
+          },
+          {
+            "actionKey": "action-38785227-b426-4c4a-9065-8be8cdf0bbe2",
+            "automationKey": "automation-ba3055ab-fd08-4ece-a672-d58d0e440ad8",
+            "completed_at": 1790098105335,
+            "run_id": "t57s2gbrdv321qbqxt9nbq6knn8ex0gf",
+            "source_id": "tx7k9m3cjprd4h0p8tj2atvwt18ew2w9"
+          },
+          {
+            "actionKey": "action-ae27b21e-0433-4a65-bd6d-c4ce0341a263",
+            "automationKey": "automation-3a413aa1-f462-465d-90b1-279511f3f3a6",
+            "completed_at": 1790098108597,
+            "run_id": "t57tw2zhn4qewbmx2fcqwrezg18exgpp",
+            "source_id": "j97jw13czj6nfb07r9wrzvnbex8ewan1"
+          },
+          {
+            "actionKey": "action-d0a7f918-e222-4b9e-8d6f-6f0f3e524255",
+            "automationKey": "automation-3110c5a5-cda3-4d4d-9bfe-f2283bd3b11f",
+            "completed_at": 1790098269546,
+            "run_id": "t57xs5915z75b91xvwdc3sm2fx8exh1y",
+            "source_id": "tx7xmdap9vxzjsghdhcp7bnhrn8exkqp"
+          },
+          {
+            "actionKey": "action-ab124f0e-21fb-45c7-9c3c-c6446f9fd12c",
+            "automationKey": "automation-cda55e50-ba02-4d14-935c-e29f11eb1eb5",
+            "completed_at": 1790098272445,
+            "run_id": "t57qyg3n0xsnr9qb1aea5xvk598ewnc4",
+            "source_id": "j97k4jfjhhj3y91s1f80kawdr58exxda"
+          },
+          {
+            "actionKey": "action-5f6f478a-6c4a-482a-a7cc-91c420be16e2",
+            "automationKey": "automation-60f4acc3-5b54-467a-aba9-1c97fc284f27",
+            "completed_at": 1790098317421,
+            "run_id": "t57thn75zssnbwv6zjhexbqzn18exfsj",
+            "source_id": "tx7vned7sp82psew7v7vg9bsx58ex4vn"
+          }
+        ],
+        "createdAt": 1790102110246,
+        "fromMilestoneKey": "milestone-7f856ccf-9d3b-4eca-b05b-3dc87062143c",
+        "fromMilestoneName": "Sequential onboarding",
+        "membershipId": "ks713xny70n6fgc0w2yenqj5658exmwt",
+        "milestoneEnteredAt": 1790097802056,
+        "occurredAt": 1790102110246,
+        "requirementEvidence": [],
+        "seq": 1,
+        "toMilestoneKey": "milestone-1bdcae4a-713f-4271-ac02-3d71945cc231",
+        "toMilestoneName": "Luna 6 acceptance",
+        "workflowId": "sh7n7n3w24hx4ezm2g4g70gx2d8ew0rt",
+        "workflowRevision": 5
+      }
+    ]
+  },
+  "rollback": {
+    "existingReceiptModel": "gpt-6-luna",
+    "newAdmissionModel": "gpt-5.6-luna",
+    "reconcilerReplays": 2
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "communityId": "jx7ds4a2wp2tzt20wjfbhjhw958cgxj0",
+  "surface": "community_setup_generation",
+  "receiptKey": "community_setup_generation:resource_writer:writer-gateway-canary-20260922-1620",
+  "modelId": "gpt-6-luna",
+  "status": "settled",
+  "outcomeCode": "provider_completed",
+  "usageCycleId": "qs7xq7grvg954pff1m1b2h6h5n8eeqwa",
+  "reservedCostMicros": 1000000,
+  "settledCostMicros": 305,
+  "promptTokens": 1191,
+  "completionTokens": 370,
+  "providerRequests": [
+    {
+      "requestId": "resp_0379e64a586ec752016ab2e2fd35d487d2be57d5a5568e0866",
+      "modelId": "gpt-6-luna",
+      "serviceTier": "default",
+      "promptTokens": 594,
+      "cachedInputTokens": 0,
+      "cacheWriteTokens": 0,
+      "completionTokens": 222
+    },
+    {
+      "requestId": "resp_04e3cbf6a08d3c8d016ab2e300165887d2ad0d7b603b58265f",
+      "modelId": "gpt-6-luna",
+      "serviceTier": "default",
+      "promptTokens": 597,
+      "cachedInputTokens": 0,
+      "cacheWriteTokens": 0,
+      "completionTokens": 148
+    }
+  ],
+  "cycleBefore": { "settledCostMicros": 3061, "reservedCostMicros": 0 },
+  "cycleAfter": { "settledCostMicros": 3366, "reservedCostMicros": 0 },
+  "pages": [
+    {
+      "id": "m97b260692bg81zsz64psx58298ewz44",
+      "title": "Goal Intake Checklist - Writer Canary",
+      "status": "review",
+      "sourceResourceId": "m97aew967j2zes1yptca5p8fxn8cgsfw",
+      "bodyChars": 783,
+      "hasSourceAttribution": true,
+      "hasHumanReviewMarker": true,
+      "hasScaffold": false
+    },
+    {
+      "id": "m976zmn0dp9gtnj4408mexvfjn8exae9",
+      "title": "Verified Next Action Checklist - Writer Canary",
+      "status": "review",
+      "sourceResourceId": "m97aew967j2zes1yptca5p8fxn8cgsfw",
+      "bodyChars": 708,
+      "hasSourceAttribution": true,
+      "hasHumanReviewMarker": true,
+      "hasScaffold": false
+    }
+  ],
+  "modelReadbackAfterRollback": {
+    "freshSetupReceipt": "gpt-5.6-luna",
+    "existingCanaryReceipt": "gpt-6-luna"
+  }
+}

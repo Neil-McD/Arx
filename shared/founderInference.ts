@@ -43,3 +43,14 @@ export type CommunityInferenceFundingAdmission =
         | "founder_subscription_ambiguous"
         | "founder_subscription_owner_mismatch";
     };
+
+// One provider response, not the sum of an agent's tool loop.
+export type FounderProviderRequestUsage = {
+  requestId: string;
+  modelId: string;
+  serviceTier: string;
+  promptTokens: number;
+  completionTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+};

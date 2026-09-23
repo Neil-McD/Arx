@@ -171,3 +171,63 @@ test("settlement rechecks queued sources and does not roll back unrelated decisi
     expect(await ctx.db.query("communityIntelligenceChangeRequests").collect()).toEqual([]);
   });
 });
+
+test("retained learning is reused when the same digest is settled again", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const f = await fixture(ctx);
+    const traceId = await trace(ctx, f, f.sharedRoot, f.shared);
+    const row = (await ctx.db.get(traceId))!;
+    const item = {
+      category: "chat_activity" as const,
+      title: "Shared learning",
+      summary: "Shared learning",
+      priority: 1,
+      confidence: 1,
+      sourceTypes: ["interaction"],
+      sourceIds: [row.sourceId!],
+      sourceTraceIds: [traceId],
+      sourceRevisions: [await buildCommunitySourceTraceRevision(row)],
+    };
+    const workKey = await buildCommunityMemoryWorkKey({
+      communityId: f.communityId,
+      ...item,
+      contentRevisions: item.sourceRevisions,
+    });
+    const digestId = await ctx.db.insert("communityCompilerDigests", {
+      communityId: f.communityId,
+      dedupeKey: "retained-retry-digest",
+      windowStartedAt: ACTIVITY,
+      windowEndedAt: NOW,
+      summary: "Queued",
+      itemCount: 1,
+      items: [{ ...item, workKey }],
+      createdByActorType: "compiler",
+      createdAt: NOW,
+      updatedAt: NOW,
+      signalCounts: { chat: 1, aiFeed: 0, resources: 0, events: 0, sourceTraces: 1, outcomes: 0, newMembers: 0, activeMembers: 0, postingMembers: 0, aiFeedReactingMembers: 0 },
+    });
+    const decision = normalizeCommunityMemoryDecision({
+      workKey,
+      disposition: "retain",
+      reason: "Observed shared learning",
+      nodeType: "insight",
+      title: "Shared learning",
+      bodyMd: "A useful shared learning.",
+      confidence: 1,
+    });
+    const args = { ctx, communityId: f.communityId, digestId, decisions: [decision], nowMs: NOW };
+    const first = await settleCommunityIntelligenceFromDigestItemsCore(args);
+    expect(first.decisions[0]).toMatchObject({ disposition: "retain", reused_existing: false });
+    expect(await ctx.db.query("communityIntelligenceNodes").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityIntelligenceChangeRequests").collect()).toHaveLength(1);
+
+    // Model a retry after the write committed but a later steward step failed.
+    const retry = await settleCommunityIntelligenceFromDigestItemsCore(args);
+    expect(retry.decisions[0]).toMatchObject({ disposition: "retain", reused_existing: true });
+    expect(retry.decisions[0].target_node_id).toBe(first.decisions[0].target_node_id);
+    expect(retry.applied_change_request_ids).toEqual([]);
+    expect(await ctx.db.query("communityIntelligenceNodes").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityIntelligenceChangeRequests").collect()).toHaveLength(1);
+  });
+});

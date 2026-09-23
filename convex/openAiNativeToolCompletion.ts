@@ -1,3 +1,4 @@
+import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
   buildAssistantToolCallsMessage,
   parseNativeToolArguments,
@@ -27,6 +28,7 @@ type OpenAiResponsesFunctionTool = {
 type OpenAiResponsesParseResult = {
   text: string;
   modelId: string | null;
+  providerRequestUsage?: FounderProviderRequestUsage;
   functionCalls: Array<{
     callId: string;
     name: string;
@@ -174,16 +176,25 @@ function parseTokenUsage(payload: Record<string, any>): {
   completionTokens: number | null;
 } {
   const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage : null;
-  const promptTokens = Number(
-    usage?.input_tokens ?? usage?.prompt_tokens ?? usage?.inputTokens ?? usage?.promptTokens,
-  );
-  const completionTokens = Number(
-    usage?.output_tokens ?? usage?.completion_tokens ?? usage?.outputTokens ?? usage?.completionTokens,
-  );
+  const promptTokens = usage?.input_tokens ?? usage?.prompt_tokens ?? usage?.inputTokens ?? usage?.promptTokens;
+  const completionTokens = usage?.output_tokens ?? usage?.completion_tokens ?? usage?.outputTokens ?? usage?.completionTokens;
   return {
-    promptTokens: Number.isFinite(promptTokens) ? Math.floor(promptTokens) : null,
-    completionTokens: Number.isFinite(completionTokens) ? Math.floor(completionTokens) : null,
+    promptTokens: Number.isSafeInteger(promptTokens) && promptTokens >= 0 ? promptTokens : null,
+    completionTokens: Number.isSafeInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
   };
+}
+
+export function parseFounderProviderRequestUsage(payload: Record<string, any>): FounderProviderRequestUsage | undefined {
+  const usage = parseTokenUsage(payload);
+  const cached = payload.usage?.input_tokens_details?.cached_tokens;
+  const writes = payload.usage?.input_tokens_details?.cache_write_tokens;
+  if (usage.promptTokens === null || usage.completionTokens === null
+      || !Number.isSafeInteger(cached) || cached < 0 || !Number.isSafeInteger(writes) || writes < 0
+      || cached + writes > usage.promptTokens || typeof payload.id !== "string" || !payload.id
+      || typeof payload.model !== "string" || payload.service_tier !== "default") return undefined;
+  return { requestId: payload.id, modelId: payload.model, serviceTier: payload.service_tier,
+    promptTokens: usage.promptTokens, completionTokens: usage.completionTokens,
+    cachedInputTokens: cached, cacheWriteTokens: writes };
 }
 
 function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiResponsesParseResult {
@@ -216,6 +227,7 @@ function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiRespon
   return {
     text,
     modelId,
+    providerRequestUsage: parseFounderProviderRequestUsage(payload),
     functionCalls,
     promptTokens: tokenUsage.promptTokens,
     completionTokens: tokenUsage.completionTokens,
@@ -238,6 +250,9 @@ export async function runOpenAiNativeToolCompletion(params: {
       status: number;
       code: string;
       message: string;
+      promptTokens?: number | null;
+      completionTokens?: number | null;
+      providerRequestUsage?: FounderProviderRequestUsage;
       pendingToolCallId?: string;
       pendingToolName?: string;
     }
@@ -264,6 +279,10 @@ export async function runOpenAiNativeToolCompletion(params: {
       tool_choice: params.toolChoice ?? "auto",
       parallel_tool_calls: params.parallelToolCalls === true,
     };
+    if (params.modelId === "gpt-6-luna") {
+      requestBody.service_tier = "default";
+      requestBody.reasoning = { effort: "low" };
+    }
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -349,6 +368,12 @@ export async function runOpenAiNativeToolCompletion(params: {
     };
   }
 
+  // Provider usage is independent of whether the model output can be used.
+  // A 200 response with malformed tool arguments may still be billable.
+  const failedResponseUsage = {
+    ...parseTokenUsage(parsed),
+    providerRequestUsage: parseFounderProviderRequestUsage(parsed),
+  };
   try {
     const result = parseOpenAiResponsesPayload(parsed);
     if (result.functionCalls.length > 0) {
@@ -372,6 +397,7 @@ export async function runOpenAiNativeToolCompletion(params: {
             status: 502,
             code: "invalid_model_output",
             message,
+            ...failedResponseUsage,
           };
         }
         parsedToolCalls.push({
@@ -403,6 +429,7 @@ export async function runOpenAiNativeToolCompletion(params: {
           promptTokens: result.promptTokens,
           completionTokens: result.completionTokens,
           resolvedModelId: result.modelId,
+          providerRequestUsage: result.providerRequestUsage,
         };
       }
       const toolCall = parsedToolCalls[0]!;
@@ -416,6 +443,7 @@ export async function runOpenAiNativeToolCompletion(params: {
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         resolvedModelId: result.modelId,
+          providerRequestUsage: result.providerRequestUsage,
       };
     }
 
@@ -426,6 +454,7 @@ export async function runOpenAiNativeToolCompletion(params: {
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       resolvedModelId: result.modelId,
+          providerRequestUsage: result.providerRequestUsage,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "OpenAI returned an invalid response.";
@@ -437,6 +466,7 @@ export async function runOpenAiNativeToolCompletion(params: {
           ? "invalid_model_output"
           : "provider_inference_error",
       message,
+      ...failedResponseUsage,
     };
   }
 }
