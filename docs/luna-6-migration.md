@@ -18,15 +18,15 @@ This profile admits Standard processing only. Regional premiums, Fast, Batch, an
 
 Accounting accepts disjoint ordinary/cached/cache-write input counts, with promptTokens representing their sum. The provider adapter must normalize the actual provider usage schema to that contract; absent fields must not be assumed to mean zero without provider evidence. Luna 6 settlement rejects missing breakdowns, invalid counts, and altered versioned rates. Reasoning output must be included in completionTokens according to provider usage semantics.
 
-## Remaining activation gates
+## Activation checklist
 
-1. Verify access to this exact model with Polynet's provider account.
-2. Pin runtime dispatch to the admitted receipt model; ensure retries cannot select a new default for an old receipt.
-3. Propagate verified usage breakdowns through all success and failure paths. Handle incomplete usage through the existing indeterminate/reservation path.
-4. Confirm reasoning settings, tools, streaming, images, structured outputs, latency, and per-run reservation adequacy.
-5. Compare representative member-agent, community-agent, workflow, and setup tasks on staging. Prove form -> delivered agent response -> next form and human approval holds.
-6. Review active model-specific product terms/documentation, retaining historical versions.
-7. Switch the shared active model only after these checks; release through main and explicit Convex deployment. Retain both pricing profiles for settling in-flight receipts during rollback.
+1. **Verified:** Polynet's provider account can run the exact model on staging and in a scoped production canary.
+2. **Verified for exercised paths:** admissions and provider dispatch pin the receipt model; rollback readback selects 5.6 for new runs and retains 6 for the settled canary receipt. Retry identity remains covered by contract tests.
+3. **Partial:** successful requests carry verified usage breakdowns and a paid second-call budget stop settled only known usage. Missing or ambiguous usage fails closed in tests, but no real ambiguous provider outcome was induced.
+4. **Partial:** text, read-only tools, streaming member turns, and image transport ran live. The six-node image was miscounted, and structured outputs, latency, other relevant modes, and broader visual quality remain to be accepted.
+5. **Verified for staged text cases:** member agent, community agent, workflow, setup, writer, and steward produced persisted receipts. The workflow advanced form -> agent response -> next form and held at human approval.
+6. **Pending:** review active model-specific product terms and documentation, retaining historical versions.
+7. **Pending:** switch the shared active model only after the remaining checks; release through main and explicit Convex deployment. Retain both pricing profiles for settling in-flight receipts during rollback.
 
 ## Verification
 
