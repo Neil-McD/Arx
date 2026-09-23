@@ -2,6 +2,7 @@ import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
+import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import { internal } from "./_generated/api";
 import { composeWorkflowAgentPrompt } from "../shared/communityMemberWorkflow";
 import { finalizeWorkflowAssessment } from "./communityWorkflowAssessmentCore";
@@ -2001,7 +2002,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       const receiptKey = isWorkflowAction
         ? communityWorkflowActionReceiptKey(requestId)
         : communityAgentMentionReceiptKey(requestId);
-      let usage = createFounderInferenceUsageTotals("gpt-5.6-luna");
+      let usage = createFounderInferenceUsageTotals(COMMUNITY_OWNER_FUNDED_MODEL_ID);
       let providerStarted = false;
 
       let fundingSession: CommunityInferenceFundingSession | null = null;

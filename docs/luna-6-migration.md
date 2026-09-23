@@ -1,6 +1,15 @@
 # Luna 6 migration: accounting foundation
 
-Status: the accounting foundation shipped to production from `bc6e455d1a8efea22ecfee973ec2ce487eeda880` on 2026-09-22. Workflow, member-agent, community-agent conversation, setup, resource writer, and autonomous steward canaries were verified on staging, including paid founder receipts. A controlled production member-agent canary also settled successfully. All canary selectors are disabled; new production admissions remain GPT-5.6 Luna. Broader runtime and quality acceptance is still required before switching the default. No production data migration was required for this foundation.
+Status: GPT-6 Luna is the code default for new community-funded inference admissions. Staging and production rollout status must be verified separately against deployed build and Convex state. The prior canary selectors no longer affect new admissions. Historical GPT-5.6 Luna receipts, pricing snapshots, and in-flight runs remain supported for exact settlement; they are not a path for new admissions. The earlier rollout evidence below records its state at the time of each canary.
+
+
+## Global default cutover — 2026-09-22
+
+The shared community-funded model identity and label now select `gpt-6-luna`. For a fresh receipt, model resolution returns that one default across communities and funding surfaces. For an existing receipt, it returns the receipt's persisted model, including `gpt-5.6-luna` on reclaim. The serve worker initializes usage accounting with the same shared default before loading a receipt-specific model. Luna 6 requests retain Standard-tier request-level usage and the existing paid-run headroom guard.
+
+The old exact-match canary environment variables are inert after this change and should be removed from deployment configuration. The historical 5.6 pricing profile, receipt validator, and runtime handling must remain until old receipts and runs are drained. Legacy pricing environment variables also remain needed for pre-snapshot 5.6 operator receipts; changing them requires the census and reconciliation described under Authority. The founder plan's monthly allowance and checkout price do not change.
+
+The full local release gate passed with 1,636 tests. On staging (`quick-porcupine-949`), a fresh setup admission resolved to GPT-6 Luna. A paid Wiki Architect proposal completed without applying resource changes. Its new receipt `community_setup_generation:wiki_architect:luna6-global-default-cutover-20260922` settled one Standard provider request for 417 microdollars; its allowance cycle retained zero reserved balance. Production deployment and readback are separate acceptance gates, recorded in the release evidence.
 
 ## Authority
 
