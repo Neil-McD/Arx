@@ -41,6 +41,7 @@ test.each(["expired", "disabled"])("pilot %s and community disablement do not pr
   const ctx = executionContext(t.withIdentity({subject: f.memberSubject}));
   const adapter = {authConfigId: "config", initiate: vi.fn(async () => ({connectedAccountId: "account", authorizationUrl: "https://connect.composio.dev/link"})), verify: vi.fn(), revoke: vi.fn(async () => {})};
   const attempt = await connectWithAdapter(ctx, f.communityId, adapter);
+  if (!attempt.available) throw new Error("expected available integration connection");
   expect(attempt.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
   vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue(mode === "disabled" ? null : {...policy, expiresAt: 1});
   await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: false}));
@@ -192,6 +193,7 @@ test("connection descriptors are atomic and failed callbacks cannot replay", asy
   const adapter = {authConfigId:"config",initiate:vi.fn(async()=>({connectedAccountId:"account",authorizationUrl:"https://connect.composio.dev/link"})),
     verify:vi.fn(async()=>{throw new Error("provider failure");}),revoke:vi.fn(async()=>{})};
   const first=await connectWithAdapter(ctx,f.communityId,adapter);
+  if (!first.available) throw new Error("expected available integration connection");
   const [a,b]=await Promise.all([connectWithAdapter(ctx,f.communityId,adapter),connectWithAdapter(ctx,f.communityId,adapter)]);
   expect(a).toEqual(first);expect(b).toEqual(first);
   const row=await member.query(refs.ownBindingInternal,who);

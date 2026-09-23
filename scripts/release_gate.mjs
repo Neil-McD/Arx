@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
@@ -309,6 +310,9 @@ async function main() {
         if (moduleMatches.length === 0) {
           throw new Error("Convex generated API contains no source module imports");
         }
+        const generatedModules = new Set(
+          moduleMatches.map((match) => String(match[1] ?? "")),
+        );
         for (const match of moduleMatches) {
           const sourceModule = String(match[1] ?? "");
           const hasSource =
@@ -317,6 +321,22 @@ async function main() {
           if (!hasSource) {
             throw new Error(
               `Convex generated API references missing source module: ${sourceModule}`,
+            );
+          }
+        }
+        for (const entry of readdirSync(resolve(ROOT_DIR, "convex"), { withFileTypes: true })) {
+          if (
+            !entry.isFile() ||
+            !entry.name.endsWith(".ts") ||
+            entry.name.endsWith(".test.ts") ||
+            entry.name.endsWith(".d.ts") ||
+            entry.name === "auth.config.ts" ||
+            entry.name === "schema.ts"
+          ) continue;
+          const sourceModule = entry.name.slice(0, -3);
+          if (!generatedModules.has(sourceModule)) {
+            throw new Error(
+              `Convex generated API is missing source module: ${sourceModule}`,
             );
           }
         }
