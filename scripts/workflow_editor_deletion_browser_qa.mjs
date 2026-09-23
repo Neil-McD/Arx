@@ -25,14 +25,28 @@ const server = await createServer({ root: resolve(root, 'apps/web'), configFile:
 let browser;
 try {
  await server.listen(); browser = await chromium.launch({ headless: true });
- for (const width of [1100, 390]) {
+ for (const width of [1100, 820, 390]) {
    const page = await browser.newPage({ viewport: { width, height: 850 } });
    const errors = []; page.on('pageerror', error => errors.push(error.message));
    await page.goto('http://127.0.0.1:5196/qa');
    await page.getByRole('tab', { name: 'Automations' }).click();
    assert.equal(await page.getByRole('button', { name: 'Add condition' }).count(), 0);
    assert.equal(await page.getByText('Automatic advancement (existing system)').count(), 0);
-   await page.getByRole('button', { name: 'Add new automation' }).click();
+   const addNew = page.getByRole('button', { name: 'Add new automation' });
+   const addNewLayout = await addNew.evaluate((button) => {
+     const label = Array.from(button.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+     const range = document.createRange();
+     range.selectNodeContents(label);
+     const textRects = Array.from(range.getClientRects());
+     const icon = button.querySelector('svg').getBoundingClientRect();
+     return {
+       textLines: textRects.length,
+       aligned: Math.abs(icon.top + icon.height / 2 - textRects[0].top - textRects[0].height / 2) < 5,
+       fits: button.scrollWidth <= button.clientWidth + 1,
+     };
+   });
+   assert.deepEqual(addNewLayout, { textLines: 1, aligned: true, fits: true });
+   await addNew.click();
    await page.getByRole('combobox', { name: 'When' }).selectOption('form_submitted');
    await page.getByRole('combobox', { name: 'Form' }).selectOption('intake');
    const action = page.getByRole('combobox', { name: 'Then' });
@@ -47,5 +61,5 @@ try {
    assert.deepEqual(errors, []);
    await page.close();
  }
- console.log('Workflow editor deletion browser QA passed at desktop and narrow widths.');
+ console.log('Workflow editor deletion browser QA passed at desktop, compact, and narrow widths.');
 } finally { await browser?.close(); await server.close(); }

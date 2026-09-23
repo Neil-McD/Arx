@@ -694,6 +694,14 @@
   gap: 3px;
 }
 
+.workflow-milestone-automations-header > .resource-modal-actions {
+  flex: 0 0 auto;
+}
+
+.workflow-milestone-automations-header .secondary {
+  white-space: nowrap;
+}
+
 .workflow-milestone-automations-header span {
   color: var(--text-muted);
   font-size: 14px;
