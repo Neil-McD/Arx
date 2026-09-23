@@ -32,7 +32,7 @@ try {
    await page.getByRole('tab', { name: 'Automations' }).click();
    assert.equal(await page.getByRole('button', { name: 'Add condition' }).count(), 0);
    assert.equal(await page.getByText('Automatic advancement (existing system)').count(), 0);
-   await page.getByRole('button', { name: 'Add automation' }).click();
+   await page.getByRole('button', { name: 'Add new automation' }).click();
    await page.getByRole('combobox', { name: 'When' }).selectOption('form_submitted');
    await page.getByRole('combobox', { name: 'Form' }).selectOption('intake');
    const action = page.getByRole('combobox', { name: 'Then' });
