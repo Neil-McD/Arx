@@ -1,6 +1,6 @@
 # Community Funnel V2 Authority Kernel
 
-Status: implemented with the canonical renderer and existing agent harness.
+Status: historical custom-funnel contract. New writes retired 2026-09-23; see `docs/product/primitives/funnel.md` for the current entry path. Historical rows and receipts are preserved for audit.
 
 ## Irreducible model
 

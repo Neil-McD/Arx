@@ -54,14 +54,11 @@ assert.equal(
 assert.equal(isCommunityTabAllowedForAccess("analytics", memberAccess), false);
 assert.equal(normalizeCommunityTabForAccess("analytics", memberAccess), "chat");
 assert.equal(normalizeCommunityTabForAccess("analytics", builderAccess), "analytics");
-assert.equal(isCommunityTabAllowedForAccess("funnel", memberAccess), false);
-assert.equal(normalizeCommunityTabForAccess("funnel", memberAccess), "chat");
-assert.equal(normalizeCommunityTabForAccess("funnel", builderAccess), "funnel");
 assert.equal(isCommunityTabAllowedForAccess("workflows", memberAccess), false);
 assert.equal(normalizeCommunityTabForAccess("workflows", memberAccess), "chat");
 assert.equal(normalizeCommunityTabForAccess("workflows", builderAccess), "workflows");
 assert.equal(parseCommunityTab("ai_agent"), "settings");
-assert.equal(parseCommunityTab("funnel"), "funnel");
+assert.equal(parseCommunityTab("funnel"), "settings");
 assert.equal(parseCommunityTab("workflows"), "workflows");
 assert.deepEqual(
   listCommunitySettingsPanesForAccess({
@@ -93,13 +90,10 @@ assert.doesNotMatch(
   /"ai_agent"/,
   "Agent must not remain a first-class community tab",
 );
-assert.match(
-  navigation.slice(
-    navigation.indexOf("export const COMMUNITY_TABS"),
-    navigation.indexOf("export type CommunityTab"),
-  ),
-  /"workflows"[\s\S]*"funnel"[\s\S]*"analytics"/,
-  "Workflows, Funnel, and Analytics must be ordered builder surfaces",
+assert.doesNotMatch(
+  navigation.slice(navigation.indexOf("export const COMMUNITY_TABS"), navigation.indexOf("export type CommunityTab")),
+  /"funnel"/,
+  "retired Funnel must not remain a community tab",
 );
 assert.doesNotMatch(
   navigation,
@@ -113,24 +107,15 @@ assert.doesNotMatch(
 );
 assert.match(
   navigation,
-  /case "workflows":[\s\S]*case "funnel":[\s\S]*return access\.canManageMembers;/,
+  /case "workflows":[\s\S]*return access\.canManageMembers;/,
   "Workflows must remain builder-only",
-);
-assert.match(
-  navigation,
-  /case "funnel":[\s\S]*return access\.canManageMembers;/,
-  "Funnel must remain builder-only",
 );
 assert.match(
   navigation,
   /case "agent":[\s\S]*return access\.canManageMembers;/,
   "Agent settings must remain builder-only",
 );
-assert.match(
-  communityNav,
-  /onSelectTab\("workflows"\)[\s\S]*Workflows[\s\S]*onSelectTab\("funnel"\)[\s\S]*Funnel[\s\S]*onSelectTab\("analytics"\)/,
-  "the shared community nav must render Workflows directly above Funnel and Analytics",
-);
+assert.doesNotMatch(communityNav, /onSelectTab\("funnel"\)/, "retired Funnel navigation must be absent");
 assert.match(
   tabAccessGuard,
   /params\.isLoadingCommunityAccess[\s\S]*params\.activeCommunityAccessId !== params\.activeCommunityId/,

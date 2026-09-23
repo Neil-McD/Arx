@@ -103,7 +103,7 @@
     "check:community-settings-keyboard-accessibility-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_settings_keyboard_accessibility_contract_proof.ts",
     "check:community-settings-client-version-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_settings_client_version_contract_proof.ts",
     "check:community-member-entry-retirement": "tsx scripts/community_member_entry_retirement_contract_proof.ts && vitest run convex/communityOnboardingRetirement.test.ts",
-    "check:community-funnel-editor-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_funnel_editor_contract_proof.ts",
+    "check:community-funnel-retirement-contract-proof": "tsx scripts/community_funnel_retirement_contract_proof.ts",
     "check:community-funnel-authority-kernel": "vitest run convex/communityFunnel.test.ts",
     "check:community-funnel-render-model": "vitest run scripts/community_funnel_render_model.test.ts",
     "check:community-funnel-renderer-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_funnel_renderer_contract_proof.ts",

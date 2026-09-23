@@ -33,7 +33,7 @@ assert.equal(
     requestedSurface: "community_funnel_builder",
     threadKey: "community-funnel:community_1",
   }),
-  "community_funnel_builder",
+  null,
 );
 assert.equal(
   resolveRuntimeInvocationSurfaceForThread({

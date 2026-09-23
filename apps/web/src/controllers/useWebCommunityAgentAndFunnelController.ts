@@ -103,8 +103,7 @@ export function useWebCommunityAgentAndFunnelController(params: {
   useEffect(() => {
     const showingEntrySettings = params.communityTab === "settings"
       && params.communitySettingsPane === "community";
-    if (params.activePage !== "community" ||
-      (params.communityTab !== "funnel" && !showingEntrySettings)) {
+    if (params.activePage !== "community" || !showingEntrySettings) {
       return;
     }
     if (

@@ -50,7 +50,6 @@ export const COMMUNITY_TABS = [
   "events",
   "settings",
   "workflows",
-  "funnel",
   "analytics",
 ] as const;
 
@@ -67,7 +66,6 @@ export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
   "workflows",
-  "funnel",
   "analytics",
 ]);
 
@@ -89,7 +87,6 @@ export function isCommunityTabAllowedForAccess(
     case "settings":
       return access.canViewSettings;
     case "workflows":
-    case "funnel":
       return access.canManageMembers;
     case "analytics":
       return access.canViewAnalytics;
@@ -137,7 +134,7 @@ export function parseCommunityTab(
     case "ai_agent":
       return "settings";
     case "funnel":
-      return "funnel";
+      return "settings";
     case "analytics":
       return "analytics";
     default:

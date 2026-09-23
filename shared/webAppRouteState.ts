@@ -76,7 +76,6 @@ export type WebDestination =
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_workflows"; slug: string }
-  | { kind: "community_funnel_editor"; slug: string }
   | { kind: "community_analytics"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
@@ -513,7 +512,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       tabSegment === "settings" && String(segments[3] ?? "").trim() === "funnel";
     const communityTab =
       tabSegment === "funnel" || isLegacyFunnelSettingsRoute
-        ? "funnel"
+        ? "settings"
         : legacyAgentSettingsPane
           ? "settings"
           : parseCommunityTabSegment(tabSegment);
@@ -591,8 +590,6 @@ export function deriveWebDestinationFromAppRoute(
           };
         case "workflows":
           return { kind: "community_workflows", slug };
-        case "funnel":
-          return { kind: "community_funnel_editor", slug };
         case "analytics":
           return { kind: "community_analytics", slug };
       }
@@ -646,7 +643,6 @@ export function isWebCommunityDetailDestination(
     case "community_agent":
     case "community_settings":
     case "community_workflows":
-    case "community_funnel_editor":
     case "community_analytics":
       return true;
     default:
@@ -675,7 +671,6 @@ export function webDestinationHasCommunityNavSelection(
     case "community_agent":
     case "community_settings":
     case "community_workflows":
-    case "community_funnel_editor":
     case "community_analytics":
       return true;
     default:
@@ -706,15 +701,8 @@ export function parsePublicRouteFromPath(pathWithSearch: string): PublicRoute {
   if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
     const slug = String(segments[1] ?? "").trim();
     if (slug) {
-      return {
-        kind: "community_funnel_preview",
-        slug,
-        slot:
-          normalized.searchParams.get("slot") === "custom_1" ||
-          normalized.searchParams.get("slot") === "custom_2"
-            ? (normalized.searchParams.get("slot") as CommunityFunnelSlot)
-            : "default",
-      };
+      // Retired draft preview URLs resolve to the canonical public entry.
+      return { kind: "community_funnel", slug };
     }
   }
   if (segments[0] === "c" && segments.length === 2) {

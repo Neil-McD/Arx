@@ -6,7 +6,7 @@ import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
-import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
+import type { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
@@ -127,9 +127,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
           <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
         </>
       ) : null}
-
-      {props.communityTab === "funnel" &&
-        renderWorkspacePane(<WebCommunityFunnelSection {...props.funnel} />)}
 
       {props.communityTab === "workflows" &&
         renderWorkspacePane(<WebCommunityWorkflowsSection {...props.workflows} />)}

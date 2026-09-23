@@ -631,23 +631,6 @@ export const CommunityNav = memo(function CommunityNav({
               Workflows
             </button>
           )}
-          {canManageMembersActiveCommunity && (
-            <button
-              className={showActiveSelection && communityTab === "funnel" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("funnel")}
-              title="Funnel"
-            >
-              <span className="nav-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 6h16" />
-                  <path d="M7 11h10" />
-                  <path d="M10 16h4" />
-                </svg>
-              </span>
-              Funnel
-            </button>
-          )}
           {canViewActiveCommunityAnalytics && (
             <button
               className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}

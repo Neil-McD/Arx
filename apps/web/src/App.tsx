@@ -2724,7 +2724,7 @@ export default function App() {
       isPreviewMode: isPublicFunnelPreviewRoute,
       previewExitPath:
         publicRoute.kind === "community_funnel_preview"
-          ? buildCommunityTabPath(publicRoute.slug, "funnel")
+          ? buildCommunityTabPath(publicRoute.slug, "settings")
           : null,
       previewSlot: publicFunnelPreviewSlot,
       previewDocument: funnelDraftPreview.document,
@@ -3042,8 +3042,7 @@ export default function App() {
         pageMode: !showMobileShell,
         pageActive: activePage === "community" && communityTab === "agent",
         isVisible: isMemberAgentDockVisible,
-        isSuppressed:
-          activePage === "community" && communityTab === "funnel",
+        isSuppressed: false,
         canManageResources: canManageResourcesActiveCommunity,
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
