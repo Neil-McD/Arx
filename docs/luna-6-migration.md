@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: workflow, member-agent, community-agent conversation, setup, resource writer, and autonomous steward canaries verified on staging on 2026-09-22, including paid founder receipts. All canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
+Status: the accounting foundation shipped to production from `bc6e455d1a8efea22ecfee973ec2ce487eeda880` on 2026-09-22. Workflow, member-agent, community-agent conversation, setup, resource writer, and autonomous steward canaries were verified on staging, including paid founder receipts. A controlled production member-agent canary also settled successfully. All canary selectors are disabled; new production admissions remain GPT-5.6 Luna. Broader runtime and quality acceptance is still required before switching the default. No production data migration was required for this foundation.
 
 ## Authority
 
@@ -115,3 +115,11 @@ A successful HTTP response can carry verified usage even if its tool arguments a
 ### Staging acceptance — 2026-09-22
 
 Backend commit `fef56f5a0` was deployed to `quick-porcupine-949`. In the existing paid synthetic community, one three-item compiler digest was handled by a real Luna 6 steward pass. All three one-off interaction prompts were dismissed as low signal in one write step. One receipt settled two Standard provider requests for 587 microdollars, exactly matching the paid-cycle increase from 3,366 to 3,953 with zero reserved. A heartbeat replay skipped without another receipt. The canary pair was removed; fresh autonomous admissions again resolve to 5.6 while the settled receipt retains 6. See `artifacts/luna6-steward-staging-20260922/acceptance.md` and `receipt.json`. The test did not exercise a live failure, budget stop, or retain/carry decision; production remained untouched.
+
+## Boundary and production canary acceptance — 2026-09-22
+
+On staging, two browser image turns reached GPT-6 Luna and settled request-level usage. The agent identified the image's black background, but counted five rather than six visible pink circular nodes; visual accuracy remains an open quality finding. A separate paid staging probe completed one real Standard provider request, refused an unaffordable second request before dispatch, settled the first request's exact 4-microdollar cost, and released the unused reservation. Its temporary internal probe function was removed from staging after the test.
+
+On production, a canary selected only `member_agent_dock` in the unlisted `test` community. A private browser turn returned the requested answer and settled one GPT-6 Luna Standard request. Another community continued selecting GPT-5.6 Luna. The two production selectors were removed immediately afterward; a new admission selects 5.6 while the settled canary receipt remains pinned to 6. The production accounting smoke passed with zero critical findings.
+
+See `artifacts/luna6-boundary-canary-20260922/acceptance.md` for exact receipt and rollback evidence. A real ambiguous provider outcome was not induced; deterministic gateway and receipt tests cover the fail-closed reservation path. This single operator-funded production canary does not establish paid production settlement or support a global default switch.

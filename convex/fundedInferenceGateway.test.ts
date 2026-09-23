@@ -118,6 +118,25 @@ test("insufficient paid headroom prevents provider start", async () => {
   expect(runOpenAiNativeToolCompletion).not.toHaveBeenCalled();
 });
 
+test("a second-call budget refusal keeps the first request's exact usage", async () => {
+  vi.mocked(runOpenAiNativeToolCompletion).mockResolvedValue({
+    ok: true, type: "assistant", assistantText: "OK", resolvedModelId: "gpt-6-luna",
+    promptTokens: 1200, completionTokens: 80, providerRequestUsage,
+  });
+  const run = await startFundedInferenceRun(claim as any);
+  expect((await run.request(request)).ok).toBe(true);
+  await expect(run.request({ ...request, maxTokens: 2_000_000 }))
+    .rejects.toThrow("founder_inference_run_budget_exhausted");
+  expect(runOpenAiNativeToolCompletion).toHaveBeenCalledTimes(1);
+  await run.fail("founder_inference_run_budget_exhausted");
+  expect(failCommunityInferenceFundingSession).toHaveBeenCalledWith(expect.objectContaining({
+    promptTokens: 1200,
+    completionTokens: 80,
+    providerRequests: [providerRequestUsage],
+    usageComplete: true,
+  }));
+});
+
 test("legacy 5.6 setup still settles from aggregate usage", async () => {
   vi.mocked(claimCommunityInferenceFundingSession).mockResolvedValue({
     ...session, modelId: "gpt-5.6-luna", pricingSnapshot: undefined,
