@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: GPT-6 Luna is the code default for new community-funded inference admissions in this cutover candidate. Staging and production rollout status must be verified separately against deployed build and Convex state. The prior canary selectors no longer affect new admissions. Historical GPT-5.6 Luna receipts, pricing snapshots, and in-flight runs remain supported for exact settlement; they are not a path for new admissions. The earlier rollout evidence below records its state at the time of each canary.
+Status: GPT-6 Luna is the code default for new community-funded inference admissions. Staging and production rollout status must be verified separately against deployed build and Convex state. The prior canary selectors no longer affect new admissions. Historical GPT-5.6 Luna receipts, pricing snapshots, and in-flight runs remain supported for exact settlement; they are not a path for new admissions. The earlier rollout evidence below records its state at the time of each canary.
 
 
 ## Global default cutover — 2026-09-22
@@ -9,7 +9,7 @@ The shared community-funded model identity and label now select `gpt-6-luna`. Fo
 
 The old exact-match canary environment variables are inert after this change and should be removed from deployment configuration. The historical 5.6 pricing profile, receipt validator, and runtime handling must remain until old receipts and runs are drained. Legacy pricing environment variables also remain needed for pre-snapshot 5.6 operator receipts; changing them requires the census and reconciliation described under Authority. The founder plan's monthly allowance and checkout price do not change.
 
-The full local release gate passed with 1,636 tests. On staging (`quick-porcupine-949`), a fresh setup admission resolved to GPT-6 Luna. A paid Wiki Architect proposal completed without applying resource changes. Its new receipt `community_setup_generation:wiki_architect:luna6-global-default-cutover-20260922` settled one Standard provider request for 417 microdollars; its allowance cycle retained zero reserved balance. Production deployment and readback remain separate acceptance gates.
+The full local release gate passed with 1,636 tests. On staging (`quick-porcupine-949`), a fresh setup admission resolved to GPT-6 Luna. A paid Wiki Architect proposal completed without applying resource changes. Its new receipt `community_setup_generation:wiki_architect:luna6-global-default-cutover-20260922` settled one Standard provider request for 417 microdollars; its allowance cycle retained zero reserved balance. Production deployment and readback are separate acceptance gates, recorded in the release evidence.
 
 ## Authority
 
