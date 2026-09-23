@@ -28,15 +28,13 @@ test("milestone editor reuses resource styles while retaining bounded scrolling"
   expect(editor).toContain('"New milestone"');
 });
 
-test("creation and advancement explain actual behavior without repeated condition labels", () => {
-  expect(editor).toContain("Save this milestone to configure actions and movement.");
-  expect(editor).toContain("All conditions must be met, in any order.");
-  expect(editor).toContain("Does not wait for agent actions to finish.");
-  expect(editor).toContain("workflowMoveLabel(props.nextMilestoneName)");
-  expect(editor).not.toContain("conditions below");
-  expect(automation).not.toContain("Required for completion");
+test("creation presents one trigger-to-action path", () => {
+  expect(editor).toContain("Save this milestone to configure actions.");
+  expect(editor).not.toContain("Automatic advancement (existing system)");
+  expect(editor).not.toContain("Add condition");
+  expect(automation).not.toContain("Evaluate goal</option>");
   expect(automation).toContain("<strong>{triggerLabel}</strong>");
-  expect(automation).toContain("!isRequirement ? <small>→ {actionLabel}</small>");
+  expect(automation).toContain("<small>→ {actionLabel}</small>");
 });
 
 test("milestone views share the draft and progressive creation does not preselect choices", () => {
@@ -50,8 +48,8 @@ test("milestone views share the draft and progressive creation does not preselec
   expect(automation).toContain('Previous action completed');
   expect(automation).toContain('value={triggerSelected ? automation.trigger.type : ""}');
   expect(automation).toContain('value={actionSelected ? automation.action.type : ""}');
-  expect(automation).toContain('triggerReady && !isRequirement');
-  expect(editor).toContain('Automatic advancement (existing system)');
+  expect(automation).toContain('triggerReady ? <label>Then');
+  expect(editor).not.toContain('Automatic advancement (existing system)');
 });
 
 test("board keeps fixed lanes and uses defined canonical surfaces", () => {

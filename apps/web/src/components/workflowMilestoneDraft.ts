@@ -1,5 +1,4 @@
 import type {
-  CommunityMemberWorkflowAction,
   CommunityMemberWorkflowAutomation,
   CommunityMemberWorkflowMilestone,
 } from "../../../../shared/communityMemberWorkflow";
@@ -13,16 +12,11 @@ export function workflowChannelLabel(channelId: string | undefined, channels: Cl
   return unavailable ? "Channels unavailable" : "Unavailable channel";
 }
 
-export function workflowMoveLabel(nextMilestoneName: string | null): string {
-  return nextMilestoneName === null ? "Complete workflow" : `Move to ${nextMilestoneName}`;
-}
-
 export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
-  if (automation.action.type === "evaluate_goal" && automation.trigger.type !== "form_submitted") return "Goal evaluation requires Form submitted";
   if ((automation.action.type === "create_service_channel" && automation.trigger.type !== "member_joined")
     || (automation.trigger.type === "member_joined" && automation.action.type !== "create_service_channel" && automation.action.type !== "request_form")) return "Member joins requires Create private channel or Request form";
   if ((automation.action.type === "request_form" && !automation.action.formKey) || (automation.trigger.type === "form_submitted" && !automation.trigger.formKey)) return "Choose a published form";
-  if (automation.trigger.type === "form_submitted" && automation.action.type === "request_form") return "Choose Ask agent or Move member";
+  if (automation.trigger.type === "form_submitted" && automation.action.type === "request_form") return "Choose Ask agent";
   const triggerIssue = workflowTriggerIssue(automation, channels, unavailable);
   if (triggerIssue) return triggerIssue;
   return automation.action.type === "prompt_agent" && !automation.action.prompt.trim() ? "Add agent instructions" : null;
@@ -55,7 +49,7 @@ export function toWorkflowAutomationDraft(automation: CommunityMemberWorkflowAut
 
 export function replaceWorkflowDraftAction(
   automation: WorkflowAutomationDraft,
-  type: CommunityMemberWorkflowAction["type"],
+  type: "prompt_agent" | "request_form" | "create_service_channel",
 ): WorkflowAutomationDraft {
   if (automation.action.type === type) return automation;
   const promptDraft = automation.action.type === "prompt_agent" ? automation.action.prompt : automation.promptDraft;
@@ -64,10 +58,8 @@ export function replaceWorkflowDraftAction(
     promptDraft,
     action: type === "prompt_agent"
       ? { key: automation.action.key, type, prompt: promptDraft }
-      : type === "evaluate_goal" ? { key: automation.action.key, type }
       : type === "request_form" ? { key: automation.action.key, type, formKey: "" }
-      : type === "create_service_channel" ? { key: automation.action.key, type }
-      : { key: automation.action.key, type, destination: "next_or_complete" },
+      : { key: automation.action.key, type: "create_service_channel" },
   };
 }
 
@@ -90,9 +82,4 @@ export function isWorkflowMilestoneDraftDirty(
     || requireHumanApproval !== (snapshot.requireHumanApproval ?? false)
     || JSON.stringify(workflowDraftAutomations(automations)) !== JSON.stringify(snapshot.automations)
   );
-}
-export function hasAssessmentMovementOverlap(automations: CommunityMemberWorkflowAutomation[]): boolean {
-  return automations.some(rule => rule.action.type === "evaluate_goal" && rule.trigger.type === "form_submitted" && Boolean(rule.trigger.formKey.trim())
-    && automations.some(other => other.action.type === "move_member" && other.trigger.type === "form_submitted"
-      && rule.trigger.type === "form_submitted" && other.trigger.formKey === rule.trigger.formKey));
 }

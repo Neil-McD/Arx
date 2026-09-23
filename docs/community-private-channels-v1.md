@@ -115,7 +115,8 @@ Revocation prevents new downloads; bytes already delivered cannot be recalled.
 ## Agent and workflow boundary
 
 Private contributions use the same workflow receipt and idempotency path.
-`move_member` is deterministic and does not require a model or agent grant.
+Stage movement follows verified action outcomes and the stage's goal/approval
+policy; a private contribution alone does not move the member.
 `prompt_agent` requires both the triggering member and community agent to retain
 source access. Intake, context assembly, snapshot, every model step/tool call,
 and final response check current authority and the current request attempt.
