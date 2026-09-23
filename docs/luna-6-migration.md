@@ -1,6 +1,6 @@
 # Luna 6 migration: accounting foundation
 
-Status: workflow, member-agent, community-agent conversation, setup, resource writer, and autonomous steward canaries verified on staging on 2026-09-22, including paid founder receipts. All canary selectors are now disabled. Production and new admissions remain GPT-5.6 Luna; broader runtime acceptance is still required before switching the default. No production data migration is required for this foundation.
+Status: the accounting foundation shipped to production from `bc6e455d1a8efea22ecfee973ec2ce487eeda880` on 2026-09-22. Workflow, member-agent, community-agent conversation, setup, resource writer, and autonomous steward canaries were verified on staging, including paid founder receipts. A controlled production member-agent canary also settled successfully. All canary selectors are disabled; new production admissions remain GPT-5.6 Luna. Broader runtime and quality acceptance is still required before switching the default. No production data migration was required for this foundation.
 
 ## Authority
 
@@ -18,15 +18,15 @@ This profile admits Standard processing only. Regional premiums, Fast, Batch, an
 
 Accounting accepts disjoint ordinary/cached/cache-write input counts, with promptTokens representing their sum. The provider adapter must normalize the actual provider usage schema to that contract; absent fields must not be assumed to mean zero without provider evidence. Luna 6 settlement rejects missing breakdowns, invalid counts, and altered versioned rates. Reasoning output must be included in completionTokens according to provider usage semantics.
 
-## Remaining activation gates
+## Activation checklist
 
-1. Verify access to this exact model with Polynet's provider account.
-2. Pin runtime dispatch to the admitted receipt model; ensure retries cannot select a new default for an old receipt.
-3. Propagate verified usage breakdowns through all success and failure paths. Handle incomplete usage through the existing indeterminate/reservation path.
-4. Confirm reasoning settings, tools, streaming, images, structured outputs, latency, and per-run reservation adequacy.
-5. Compare representative member-agent, community-agent, workflow, and setup tasks on staging. Prove form -> delivered agent response -> next form and human approval holds.
-6. Review active model-specific product terms/documentation, retaining historical versions.
-7. Switch the shared active model only after these checks; release through main and explicit Convex deployment. Retain both pricing profiles for settling in-flight receipts during rollback.
+1. **Verified:** Polynet's provider account can run the exact model on staging and in a scoped production canary.
+2. **Verified for exercised paths:** admissions and provider dispatch pin the receipt model; rollback readback selects 5.6 for new runs and retains 6 for the settled canary receipt. Retry identity remains covered by contract tests.
+3. **Partial:** successful requests carry verified usage breakdowns and a paid second-call budget stop settled only known usage. Missing or ambiguous usage fails closed in tests, but no real ambiguous provider outcome was induced.
+4. **Partial:** text, read-only tools, streaming member turns, and image transport ran live. Luna 6 miscounted a six-node image once, then counted it correctly with the same prompt used by a correct Luna 5.6 control turn. Broader visual quality, structured outputs, latency, and other relevant modes remain to be accepted.
+5. **Verified for staged text cases:** member agent, community agent, workflow, setup, writer, and steward produced persisted receipts. The workflow advanced form -> agent response -> next form and held at human approval.
+6. **Pending:** review active model-specific product terms and documentation, retaining historical versions.
+7. **Pending:** switch the shared active model only after the remaining checks; release through main and explicit Convex deployment. Retain both pricing profiles for settling in-flight receipts during rollback.
 
 ## Verification
 
@@ -115,3 +115,11 @@ A successful HTTP response can carry verified usage even if its tool arguments a
 ### Staging acceptance — 2026-09-22
 
 Backend commit `fef56f5a0` was deployed to `quick-porcupine-949`. In the existing paid synthetic community, one three-item compiler digest was handled by a real Luna 6 steward pass. All three one-off interaction prompts were dismissed as low signal in one write step. One receipt settled two Standard provider requests for 587 microdollars, exactly matching the paid-cycle increase from 3,366 to 3,953 with zero reserved. A heartbeat replay skipped without another receipt. The canary pair was removed; fresh autonomous admissions again resolve to 5.6 while the settled receipt retains 6. See `artifacts/luna6-steward-staging-20260922/acceptance.md` and `receipt.json`. The test did not exercise a live failure, budget stop, or retain/carry decision; production remained untouched.
+
+## Boundary and production canary acceptance — 2026-09-22
+
+On staging, three browser image turns reached GPT-6 Luna and settled request-level usage. The agent identified the image's black background, miscounted its six pink nodes once, then counted them correctly in a fresh conversation using the exact prompt from a correct GPT-5.6 Luna control turn. The small sample keeps broader visual quality open without establishing a consistent regression. A separate paid staging probe completed one real Standard provider request, refused an unaffordable second request before dispatch, settled the first request's exact 4-microdollar cost, and released the unused reservation. Its temporary internal probe function was removed from staging after the test.
+
+On production, a canary selected only `member_agent_dock` in the unlisted `test` community. A private browser turn returned the requested answer and settled one GPT-6 Luna Standard request. Another community continued selecting GPT-5.6 Luna. The two production selectors were removed immediately afterward; a new admission selects 5.6 while the settled canary receipt remains pinned to 6. The production accounting smoke passed with zero critical findings.
+
+See `artifacts/luna6-boundary-canary-20260922/acceptance.md` for exact receipt and rollback evidence. A real ambiguous provider outcome was not induced; deterministic gateway and receipt tests cover the fail-closed reservation path. This single operator-funded production canary does not establish paid production settlement or support a global default switch.
