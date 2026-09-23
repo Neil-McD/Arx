@@ -7,7 +7,8 @@ Date: 2026-09-22. Web/production Convex foundation: merged `bc6e455d1a8efea22ecf
 - Deployment: `quick-porcupine-949`; synthetic community `workflow-sequence-acceptance-20260922` (`jx7ategdbt0tpjz6hfhd80m7r18ewq2s`); member-agent canary selected only this community and surface.
 - The browser attached the repository's `apps/web/public/icon-512.png` and asked for the number of bright pink circular nodes. The visible answer was **5**; visual inspection of the fixture shows **6**. Receipt `member_agent_dock:member_agent_dock:d68a1ca4-7226-44ae-803f-aa9fd6f1fece` settled one GPT-6 Luna Standard request for 827 microdollars (6,594 input, 5 output tokens).
 - A second browser turn attached the same image and asked for its background color. The visible answer was **Black**, matching the fixture. Receipt `member_agent_dock:member_agent_dock:21ae891c-5408-46e5-ac8e-45e501b2e443` settled one GPT-6 Luna Standard request for 845 microdollars (6,739 input, 5 output tokens).
-- The attachment, provider response, and receipt accounting path worked. The incorrect count is a model-quality finding; this probe does not claim reliable visual reasoning. The selector pair was removed, and a fresh model-resolution query returned `gpt-5.6-luna`.
+- After removing the selector pair and starting a fresh conversation, the same browser attached the same fixture and asked the same count question under GPT-5.6 Luna. The visible answer was **6**, matching the fixture. Receipt `member_agent_dock:member_agent_dock:e800cfca-2dce-41fa-b7d0-0b9c33a87fe9` settled on `gpt-5.6-luna` for 1,322 microdollars (6,578 input, 5 output tokens).
+- The attachment, provider response, and receipt accounting path worked under both models. This single paired comparison suggests a visual-quality regression on this task, but is not a statistical evaluation. A fresh model-resolution query after rollback returned `gpt-5.6-luna`.
 
 ## Staging paid second-call budget stop
 
