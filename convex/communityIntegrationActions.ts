@@ -33,7 +33,9 @@ export function admittedConnectionMetadata(ctx: any, who: {communityId: string; 
 
 // Deliberately no env switch: deployment cannot activate external effects in this slice.
 const liveAdapter: ConnectionAdapter | null = null;
-const refs = (internal as any).communityIntegrationConnections;
+// This module is included in the generated API, so its own references need a
+// fixed type boundary rather than inferring back through ApiFromModules.
+const refs: any = (internal as any).communityIntegrationConnections;
 // Correlation only: never an authorization credential or an idempotency key.
 export async function integrationAttemptAlias(bindingId: string, generation: number): Promise<string> {
   if (!bindingId || !Number.isSafeInteger(generation) || generation < 1)
@@ -43,8 +45,10 @@ export async function integrationAttemptAlias(bindingId: string, generation: num
   ));
   return `pn_${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
 }
-async function identity(ctx: any, communityId: string) {
-  const actor = await ctx.runQuery(
+type ConnectionIdentity = { authSubject: string; userId: string; communityId: string };
+
+async function identity(ctx: any, communityId: string): Promise<ConnectionIdentity> {
+  const actor: { authSubject: string; dbUserId: string } = await ctx.runQuery(
     internal.authActor.resolveAuthenticatedActorInternal,
     {},
   );
@@ -58,7 +62,10 @@ export async function connectWithAdapter(
   ctx: any,
   communityId: string,
   adapter: ConnectionAdapter | null,
-) {
+): Promise<
+  | { available: false }
+  | { available: true; authorizationUrl: string | null; generation: number; expiresAt: number }
+> {
   const who = await identity(ctx, communityId);
   const access = await ctx.runQuery(refs.readPilotBindingInternal, who);
   if (!access.enabled) throw new Error("integration_disabled");
