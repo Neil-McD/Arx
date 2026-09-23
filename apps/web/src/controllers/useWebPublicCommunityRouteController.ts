@@ -33,6 +33,7 @@ export function useWebPublicCommunityRouteController<
   isSignedIn: boolean;
   sessionDependency: unknown;
   loadPublicCommunity: (slug: string, opts?: { recordVisit?: boolean }) => Promise<void> | void;
+  refreshPendingPublicCommunityAccess: (slug: string) => Promise<void>;
 }) {
   const publicFunnelSlug =
     params.publicRoute.kind === "community_funnel" || params.publicRoute.kind === "community_funnel_preview"
@@ -76,6 +77,31 @@ export function useWebPublicCommunityRouteController<
     access: params.publicCommunityAccess,
     isPreviewMode: isPublicFunnelPreviewRoute,
   });
+  useEffect(() => {
+    if (!publicFunnelSlug || isPublicFunnelPreviewRoute || !params.isSignedIn || !admission.approvalPending) return;
+    let active = true;
+    let inFlight = false;
+    const refresh = async () => {
+      if (!active || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        await params.refreshPendingPublicCommunityAccess(publicFunnelSlug);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const onResume = () => { void refresh(); };
+    const timer = window.setInterval(onResume, 30_000);
+    window.addEventListener("focus", onResume);
+    document.addEventListener("visibilitychange", onResume);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onResume);
+      document.removeEventListener("visibilitychange", onResume);
+    };
+  }, [publicFunnelSlug, isPublicFunnelPreviewRoute, params.isSignedIn,
+    admission.approvalPending, params.refreshPendingPublicCommunityAccess]);
   const canEnterPublicCommunity = admission.canEnterCommunity;
   const approvalPending = admission.approvalPending;
   const approvalDenied = admission.approvalDenied;

@@ -54,3 +54,14 @@ pairs. The online cutover therefore stops new drift before repairing old data.
 The cached `community:getMyJoinRequestBySlug` compatibility operation remains
 temporarily callable for pinned older clients. Current web code does not use
 it; remove it only when the cached-client compatibility contract advances.
+
+## Public funnel display freshness
+
+While an authenticated visitor's request is pending, the open funnel checks
+their server-verified access every 30 seconds and when the tab becomes visible
+or focused. It refreshes only the access projection, leaving the funnel and
+images mounted. An approved request changes the CTA to enter the community;
+a denied request shows the server's decision. Failed checks retain the last
+verified display and retry. Responses are ignored after a route or account
+change, or after the visitor cancels the request. The server remains the sole
+admission authority; the polling result never grants access by itself.
