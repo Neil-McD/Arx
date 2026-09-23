@@ -8,9 +8,13 @@ const goalReview = read("convex/communityWorkflowGoalReviewCore.ts");
 const modal = read("apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx");
 const editor = read("apps/web/src/components/WebCommunityWorkflowAutomationEditor.tsx");
 const dossier = read("apps/web/src/components/WebCommunityWorkflowMemberDossierModal.tsx");
+const schema = read("convex/schema.ts");
+const definitionSchema = schema.slice(schema.indexOf("communityMemberWorkflows: defineTable"), schema.indexOf("communityMemberWorkflowMemberMilestones: defineTable"));
+const inputValidator = backend.slice(backend.indexOf("const automationInputValidator"), backend.indexOf("function normalizeExpectedRevision"));
 
-assert.match(backend, /workflow_action_retired/);
-assert.match(backend, /retired_rule_configuration/);
+assert.ok(definitionSchema.length > 0 && inputValidator.length > 0);
+assert.doesNotMatch(definitionSchema, /move_member|evaluate_goal|completionGeneration/);
+assert.doesNotMatch(inputValidator, /move_member|evaluate_goal|completionGeneration/);
 assert.match(backend, /reconcileCompletedWorkflowActionsInternal/);
 assert.match(backend, /approveBuilderMemberMilestone/);
 assert.match(backend, /forceBuilderMemberMilestone/);

@@ -330,39 +330,6 @@ async function fixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
-async function completionFixture() {
-  const t = convexTest(schema, modules), f = await fixture(t);
-  const secondChannel = await t.run(async ctx => {
-    const { _id, _creationTime, ...channel } = (await ctx.db.get(f.channelId))!;
-    return ctx.db.insert("communityChannels", { ...channel, systemRole: undefined, slug: "planning", name: "Planning", position: 1 });
-  });
-  const configured = await configureAutomations(t, f.communityId, [{ key: "", type: "move_member", destination: "next_or_complete" }], f.channelId);
-  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
-  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
-    communityId: f.communityId, milestoneKey: configured.firstKey, expectedRevision: 3, name: "New",
-    automations: [...configured.firstMilestone.automations, { trigger: { type: "member_contributed", channelId: secondChannel }, action: { type: "move_member", destination: "next_or_complete" } }],
-  });
-  const fire = async (channelId: typeof f.channelId, suffix: string) => {
-    const rootId = await addRoot(t, { ...f, channelId }, suffix);
-    await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
-    return rootId;
-  };
-  const snapshot = () => t.run(async ctx => ({ state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
-    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(), agents: await ctx.db.query("communityAgentServeRequests").collect() }));
-  return { t, f, owner, secondChannel, configured, fire, snapshot };
-}
-
-async function overrideFixture() {
-  const s = await completionFixture();
-  const dossier = await s.owner.query(dossierQuery, { communityId: s.f.communityId, membershipId: s.f.membershipId });
-  const w = dossier.workflow!;
-  const args = { communityId: s.f.communityId, membershipId: s.f.membershipId, expectedWorkflowRevision: w.revision,
-    expectedWorkflowId: w.id as import("./_generated/dataModel").Id<"communityMemberWorkflows">,
-    expectedMilestoneKey: w.current_milestone_key, expectedMilestoneEnteredAt: Date.parse(w.current_milestone_entered_at),
-    expectedActivationSequence: w.override_state!.activation_sequence, expectedTransitionSeq: w.override_state!.transition_seq };
-  return { ...s, args };
-}
-
 async function addRoot(t: ReturnType<typeof convexTest>, f: Awaited<ReturnType<typeof fixture>>, suffix: string) {
   return await t.run(async (ctx) => await ctx.db.insert("communityInteractionRoots", {
     communityId: f.communityId,
@@ -462,36 +429,6 @@ async function formAgentFixture(assigned = true) {
     communityId: s.f.communityId, requestId: s.request._id, expectedRevision: 0, answers: { q: "EXACT_SUBMITTED_GOAL" }, submit: true,
   });
   return { ...s, submit };
-}
-
-async function goalAssessmentFixture() {
-  vi.useFakeTimers();
-  const s = await formAgentFixture(false);
-  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
-    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: 5, name: "New",
-    instructions: "Assess the clarity of the written offer.", goal: "The member has written an offer.",
-    automations: [{ trigger: { type: "form_submitted", formKey: "intake" }, action: { type: "evaluate_goal" } }],
-  });
-  await Promise.all([s.submit(), s.submit()]);
-  const requests = await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
-  expect(requests).toHaveLength(1);
-  expect(requests[0].status).toBe("queued");
-  expect(requests[0].serviceChannelId).toBeUndefined();
-  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: requests[0]._id });
-  const args = { requestId: requests[0]._id, expectedAttempt: claim.attempt! };
-  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
-  expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
-  expect(context.privateAssessment).toBe(true);
-  expect(await s.t.query(internal.communityAgentChannelAccess.authorizeServeToolsInternal, args))
-    .toEqual({ restricted: true, timed: true });
-  const bundle = buildCommunityAgentServePromptBundle(context);
-  expect(bundle.messages[bundle.messages.length - 1]?.content).toContain("assessment JSON only");
-  expect(bundle.messages[bundle.messages.length - 1]?.content).not.toContain("Write the scheduled check-in");
-  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages, prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
-  expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
-  const refs = JSON.parse(context.timedMemberContext!).evidenceRefs;
-  const finish = (content = JSON.stringify({ verdict: "achieved", reason: "The submitted answer describes the offer.", evidenceRefs: refs })) => s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, { ...args, content });
-  return { ...s, args, finish, refs };
 }
 
 test("form submission queues one exact-source agent action and publishes once without moving", async () => {
@@ -755,7 +692,7 @@ test.each(["root", "reply"] as const)("channel filter selects only its source, s
   const requests = await t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
   expect(requests).toHaveLength(1);
   expect((await t.run(ctx => ctx.db.get(requests[0].sourceRootId!)))?.channelId).toBe(selectedId);
-  // Edits do not rewrite the occurrence-time condition, nor replay an old action.
+  // Edits do not rewrite the occurrence-time trigger, nor replay an old action.
   await t.withIdentity({ subject: OWNER_SUBJECT }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
     communityId: f.communityId, expectedRevision: 3, milestoneKey: configured.firstKey, name: "New",
     automations: configured.firstMilestone.automations.map(a => ({ ...a, trigger: { type: "member_contributed" as const } })),
@@ -764,13 +701,12 @@ test.each(["root", "reply"] as const)("channel filter selects only its source, s
   expect((await t.run(ctx => ctx.db.get(runs[0]._id)))?.triggerSnapshot).toMatchObject({ channelId: selectedId });
 });
 
-async function workflowServeFixture(t: ReturnType<typeof convexTest>, move = true) {
+async function workflowServeFixture(t: ReturnType<typeof convexTest>) {
   // Drive admission/claims explicitly; do not race the scheduled live worker.
   vi.useFakeTimers();
   const f = await fixture(t);
   const configured = await configureAutomations(t, f.communityId, [
     { key: "", type: "prompt_agent", prompt: "Help with the original New milestone task." },
-    ...(move ? [{ key: "", type: "move_member", destination: "next_or_complete" }] : []),
   ]);
   const rootId = await addRoot(t, f, "context");
   await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
@@ -829,7 +765,7 @@ test("milestone context saves, snapshots at admission, and never changes advance
 
 test("contribution execution context is bound to the live requester and source", async () => {
   const t = convexTest(schema, modules);
-  const f = await workflowServeFixture(t, false);
+  const f = await workflowServeFixture(t);
   vi.setSystemTime(f.nowMs + 100);
   const args = { requestId: f.request._id, expectedAttempt: f.claim.attempt };
   await t.run(async ctx => {
@@ -873,7 +809,7 @@ function contextSnapshot(context: any) {
 
 test("workflow context uses read-only defaults, preserves completion, and allows absent current workflow", async () => {
   const t = convexTest(schema, modules);
-  const f = await workflowServeFixture(t, false);
+  const f = await workflowServeFixture(t);
   expect(workflowOrientation(await f.read()).current_at_context_read).toMatchObject({
     milestone_key: f.firstKey, entered_at: f.nowMs, completed_at: null,
   });

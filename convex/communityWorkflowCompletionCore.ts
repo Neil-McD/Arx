@@ -23,13 +23,13 @@ export async function readWorkflowActionProgress(ctx: QueryCtx, args: {
   const { workflow, membership, milestone } = args;
   if (!communityMembershipRowIsActive(membership) || membership.communityId !== workflow.communityId)
     throw new Error("workflow_completion_scope_invalid");
-  const work = milestone.automations.filter(a => a.action.type !== "move_member" && a.action.type !== "evaluate_goal");
+  const work = milestone.automations;
   if (!work.length) return { actions: [], all_actions_complete: false, scan_truncated: false };
   const runs = await ctx.db.query("communityMemberWorkflowRuns")
     .withIndex("by_workflow_membership_createdAt", q => q.eq("workflowId", workflow._id).eq("membershipId", membership._id))
     .order("desc").take(257);
   const actions: WorkflowActionProgress["actions"] = [];
-  // Assessment is the separate goal judgment; legacy movement is not work.
+  // Assessment is a separate goal judgment, not a configured action.
   for (const rule of work) {
     const formKey = rule.action.type === "request_form" ? rule.action.formKey : null;
     const form = formKey ? await ctx.db.query("communityForms")

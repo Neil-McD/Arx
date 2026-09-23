@@ -28,8 +28,7 @@ export async function readCompletionReviewSnapshot(ctx: any, workflow: any, memb
   const current = resolveCurrentMilestone({ workflow, membership, state });
   const milestone = current.milestone;
   if (!communityMembershipRowIsActive(membership) || membership.communityId !== workflow.communityId
-    || current.completedAt || !milestone.goal?.trim()
-    || milestone.automations.some((a: any) => ["move_member", "evaluate_goal"].includes(a.action.type))) return null;
+    || current.completedAt || !milestone.goal?.trim()) return null;
   // The read-only dossier can reuse its projection. Authority callers always
   // omit this argument and resolve proof from canonical records again.
   const progress = projectedProgress ?? await readWorkflowActionProgress(ctx, { workflow, membership, milestone,
