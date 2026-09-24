@@ -55,6 +55,17 @@ const params = {
 };
 
 const bundle = buildPlatformHarnessRuntimePromptBundle(params);
+const readOnlyBuilder = buildPlatformHarnessRuntimePromptBundle({ ...params,
+  allowedToolNames: ["polynet_list", "polynet_read"],
+  runtimeTurnContext: buildRuntimeTurnContextPacket({ latestUserText: "Tell me about Rashid." }),
+});
+assert.match(readOnlyBuilder.text, /For a question about a specific member of this community/);
+assert.match(readOnlyBuilder.text, /builder\/workflow-members\//);
+const memberLane = buildPlatformHarnessRuntimePromptBundle({ ...params,
+  allowedToolNames: ["polynet_list", "polynet_read"],
+  communityResourceLane: { lane: "member", can_read_live_resources: true, can_use_resource_builder: false },
+});
+assert.doesNotMatch(memberLane.text, /authorized owner\/admin dossier/);
 assert.match(bundle.text, /first list \/communities\/bundle-community\/members\/, follow the returned me\/ directory, and read its returned context\.md document/);
 assert.match(bundle.text, /global profile, not their community workflow progress/);
 assert.match(bundle.text, /on-demand retrieval, not a required read for unrelated turns/);

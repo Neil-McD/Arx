@@ -378,18 +378,20 @@ function buildCommunityResourceLanePrompt(params: {
     params.communityResourceLane,
   );
   const hasLiveTools = hasLiveCommunityResourceTools(params.allowedToolNames);
-  const hasBuilderTools = hasCommunityResourceBuilderTools(
-    params.allowedToolNames,
-  );
+  // Builder dossiers are read-only. They remain discoverable when write tools
+  // are absent from a constrained conversation.
+  const hasBuilderTools =
+    params.allowedToolNames.includes("polynet_list") &&
+    params.allowedToolNames.includes("polynet_read");
   if (lane.lane === "builder" && hasBuilderTools) {
     const canStageChangesets =
       params.allowedToolNames.includes("polynet_write");
     return [
       "COMMUNITY_RESOURCE_BUILDER_LANE",
       "The active user can build Resources for this exact community lens.",
-      "For questions about a member's workflow position or submitted forms, use polynet_list on /communities/<active-community-slug>/builder/workflow-members/ and polynet_read on the exact returned member document. For form answers alone, read the returned forms_path (forms.md), also linked from the member document. This private evidence is not in shared-content search. Follow next_cursor when needed; clarify duplicate names. Cite the submitted form/version, distinguish statements from inference, and respect truncation. Never publish private answers to shared channels without explicit authority.",
+      "For a question about a specific member of this community, including their channels, workflow position, approved community facts, or visible profile, first use polynet_list on /communities/<active-community-slug>/builder/workflow-members/ and polynet_read on the exact returned member document. It is the authorized owner/admin dossier and includes current channel access, workflow position, and profile-visible relationships. For form answers alone, read the returned forms_path (forms.md). This private evidence is not in shared-content search. Follow next_cursor when needed; match the handle or clarify duplicate names. Cite the submitted form/version, distinguish statements from inference, and respect truncation. Do not claim a profile is inaccessible before trying this authorized path. Do not describe visible communities as every private community, or disclose dossier content to shared channels without explicit authority.",
       "Use builder-only resource state only for this community: drafts, review items, source inbox, imported source references, provenance, and health.",
-      "For read-only member-style questions, follow the live Resources read workflow before using builder-only state.",
+      "For questions about live Resources visible to members, follow the live Resources read workflow before using builder-only resource state.",
       "Broad requests like improve resources, clean this up, refactor knowledge, or organize references are discovery requests first.",
       canStageChangesets
         ? "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before staging any changeset."

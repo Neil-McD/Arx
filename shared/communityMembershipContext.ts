@@ -100,6 +100,11 @@ export type CommunityMembershipContext = {
   avatar_zoom: number | null;
   joined_at: string;
   membership_status?: "active";
+  /** Builder-only projection of current channel access; absent from self/workflow reads. */
+  channel_access?: { status: "available" | "unavailable"; channels: { name: string; slug: string; access_mode: "all_members" | "restricted" }[]; truncated: boolean };
+  /** The same bio, links and community relationships visible in the member's profile. */
+  visible_profile?: { bio: string | null; social_links: { youtube: string; x: string; instagram: string };
+    owned_communities: { name: string; slug: string }[]; mutual_communities: { name: string; slug: string }[] };
   service_channel: CommunityMemberServiceChannel;
   workflow: {
     action_progress?: WorkflowActionProgress;
