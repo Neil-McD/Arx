@@ -325,6 +325,13 @@ after the cached-client compatibility window is explicitly closed.
 
 Use when the change is ready and not urgent.
 
+If the new web calls a Convex function that production does not yet expose,
+deploy the backward-compatible Convex change from the exact validated candidate
+first and verify that function is available. Then land the web change on `main`
+and let `polynet` deploy through GitHub. Keep the existing web compatible with
+the new backend during this interval. If the backend change is not backward
+compatible, split it into a compatibility release before the web release.
+
 1. Make the change in `/Users/neilmcdevitt/code/arx`.
 2. Run the relevant local checks.
 3. Land the intended changes on `main`.
