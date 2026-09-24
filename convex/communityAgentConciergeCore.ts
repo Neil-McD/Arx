@@ -226,6 +226,8 @@ async function insertServeRequest(args: {
 }
 
 async function skipInvocation(args: {
+  workflowCompletionReview?: boolean;
+  workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
   invocationKey: string;
@@ -249,6 +251,8 @@ async function skipInvocation(args: {
   nowMs: number;
 }): Promise<{ status: "skipped"; intake_reason: ServeRequestIntakeReason; request_id: string }> {
   const requestId = await insertServeRequest({
+    workflowCompletionReview: args.workflowCompletionReview,
+    workflowAssessment: args.workflowAssessment,
     ctx: args.ctx,
     communityId: args.communityId,
     invocationKey: args.invocationKey,
@@ -680,6 +684,7 @@ export async function intakeCommunityAgentTurn(args: {
 export async function intakeCommunityAgentWorkflowAction(args: {
   workflowCompletionReview?: boolean;
   workflowAssessment?: boolean;
+  retrySkippedRequestId?: any;
   ctx: any;
   communityId: any;
   rootId?: any;
@@ -718,7 +723,16 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       q.eq("communityId", args.communityId).eq("invocationKey", invocationKey),
     )
     .first()) as Record<string, any> | null;
-  if (existing) {
+  const retryRequest = args.retrySkippedRequestId && existing
+    && normalizeIdValue(existing._id) === normalizeIdValue(args.retrySkippedRequestId)
+    && existing.status === "skipped" && existing.attempt === undefined
+    && existing.workflowCompletionReview !== false && existing.workflowAssessment !== false
+    && normalizeIdValue(existing.workflowRunId) === normalizeIdValue(args.workflowRunId)
+    ? existing : null;
+  if (args.retrySkippedRequestId && !retryRequest) {
+    throw new Error("community_agent_workflow_review_retry_unavailable");
+  }
+  if (existing && !retryRequest) {
     return {
       mention_id: null,
       invocation_key: invocationKey,
@@ -746,11 +760,17 @@ export async function intakeCommunityAgentWorkflowAction(args: {
   const skip = async (
     intakeReason: Exclude<ServeRequestIntakeReason, "accepted">,
     skipReason: string,
-  ): Promise<ConciergeIntakeResult> => ({
-    mention_id: null,
-    invocation_key: invocationKey,
-    trigger_kind: "workflow",
-    ...(await skipInvocation({
+  ): Promise<ConciergeIntakeResult> => {
+    if (retryRequest) {
+      await args.ctx.db.patch(retryRequest._id, { intakeReason, skipReason: boundedText(skipReason, 240), updatedAt: args.nowMs });
+      return { mention_id: null, invocation_key: invocationKey, trigger_kind: "workflow",
+        status: "skipped", intake_reason: intakeReason, request_id: normalizeIdValue(retryRequest._id) };
+    }
+    return {
+      mention_id: null,
+      invocation_key: invocationKey,
+      trigger_kind: "workflow",
+      ...(await skipInvocation({
       ctx: args.ctx,
       communityId: args.communityId,
       invocationKey,
@@ -767,8 +787,9 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       responseVisibilityScope: source.visibilityScope,
       skipReason,
       nowMs: args.nowMs,
-    })),
-  });
+      })),
+    };
+  };
   if (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId || args.workflowCompletionReview) {
     try {
       await requireServiceWorkflowDestination(args.ctx, {
@@ -776,7 +797,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       });
     } catch (error) {
       if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
-      return await skip("requester_access_missing", error instanceof Error ? error.message : "workflow_timer_unavailable");
+      return await skip(error.message === "workflow_agent_disabled" ? "agent_disabled" : "requester_access_missing", error.message);
     }
   } else {
   if (!source.root && !source.reply) {
@@ -827,7 +848,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
           : "Community inference funding could not be resolved.",
     );
   }
-  const requestId = await insertServeRequest({
+  const requestId = retryRequest ? retryRequest._id : await insertServeRequest({
     ctx: args.ctx,
     communityId: args.communityId,
     invocationKey,
@@ -845,6 +866,11 @@ export async function intakeCommunityAgentWorkflowAction(args: {
     responseVisibilityScope: args.workflowAssessment ? "admin" : (args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
     nowMs: args.nowMs,
   });
+  if (retryRequest) {
+    await args.ctx.db.patch(requestId, { status: "queued", intakeReason: "accepted",
+      workflowCompletionReview: true, workflowAssessment: true,
+      sourceVisibilityScope: "admin", responseVisibilityScope: "admin", skipReason: undefined, updatedAt: args.nowMs });
+  }
   await scheduleImmediateServeWorker({ ctx: args.ctx, requestId });
   return {
     mention_id: null,

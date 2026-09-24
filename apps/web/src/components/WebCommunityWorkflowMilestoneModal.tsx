@@ -54,7 +54,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
   const [goal, setGoal] = useState("");
-  const [requireHumanApproval, setRequireHumanApproval] = useState(false);
+  const [fullyAuto, setFullyAuto] = useState(true);
   const [automations, setAutomations] = useState<WorkflowAutomationDraft[]>([]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [expandedAutomationKey, setExpandedAutomationKey] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     setName(props.milestone.name);
     setInstructions(props.milestone.instructions ?? "");
     setGoal(props.milestone.goal ?? "");
-    setRequireHumanApproval(props.milestone.requireHumanApproval ?? false);
+    setFullyAuto(!(props.milestone.requireHumanApproval ?? false));
     setAutomations(props.milestone.automations.map(toWorkflowAutomationDraft));
   }, [props.isOpen, props.milestone]);
 
@@ -111,7 +111,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   if (!props.isOpen || !props.milestone) return null;
   const hasConflict = editingSnapshot.current !== null
     && JSON.stringify(editingSnapshot.current) !== JSON.stringify(props.milestone);
-  const isDirty = !!pendingAutomation || isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations, instructions, goal, requireHumanApproval);
+  const isDirty = !!pendingAutomation || isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations, instructions, goal, !fullyAuto);
   const editingAutomation = !!pendingAutomation || !!expandedAutomationKey;
   const joinLanes = automations.filter(a => a.trigger.type === "member_joined").map(a => a.action.type === "request_form" ? `form:${a.action.formKey}` : a.action.type);
   const duplicateJoinAction = new Set(joinLanes).size !== joinLanes.length;
@@ -138,7 +138,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
       name,
       instructions,
       goal,
-      requireHumanApproval,
+      requireHumanApproval: !fullyAuto,
       automations: workflowDraftAutomations(automations).map((automation) => ({
         ...automation,
         key: automation.key.startsWith("draft-") ? "" : automation.key,
@@ -232,11 +232,29 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             </label>
             <label><span className="resource-field-label">Goal</span>
               <textarea rows={2} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
-              <small className="workflow-field-hint">After actions finish, the agent reviews this goal. Its assessment is advisory when human approval is required.</small>
+              <small className="workflow-field-hint">{goal.trim()
+                ? fullyAuto
+                  ? "After all actions finish, the agent checks this goal against verified results. If it is not met, the member stays here; the agent does not start more work."
+                  : "After all actions finish, the agent reviews this goal to inform the owner's decision."
+                : "Optional. Add a goal when advancement needs an agent assessment."}</small>
             </label>
-            <label className="community-channel-participant"><input type="checkbox" checked={requireHumanApproval} disabled={props.isSaving}
-              onChange={event => setRequireHumanApproval(event.target.checked)} /> Require human approval</label>
-            <p className="workflow-field-hint">An owner or admin must approve advancement after configured actions are complete.</p>
+            <button type="button" role="switch" aria-checked={fullyAuto} aria-describedby="workflow-fully-auto-hint"
+              className={`workflow-fully-auto-toggle${fullyAuto ? " is-on" : ""}`}
+              disabled={props.isSaving} onClick={() => setFullyAuto((current) => !current)}>
+              <span>Fully Auto</span>
+              <span className="workflow-fully-auto-state" aria-hidden="true">{fullyAuto ? "On" : "Off"}</span>
+              <span className="workflow-fully-auto-track" aria-hidden="true"><span className="workflow-fully-auto-thumb" /></span>
+            </button>
+            <p id="workflow-fully-auto-hint" className="workflow-field-hint">{automations.length === 0
+              ? fullyAuto
+                ? "No actions configured. This stage will not advance automatically until you add an action."
+                : "No actions configured. An owner or admin can approve this stage manually."
+              : fullyAuto
+                ? "Automatically advances after every action is verified complete and any written goal is met. Fully Auto does not start follow-up work."
+                : "An owner or admin approves advancement after the actions finish; the goal review is advisory."}</p>
+            {editingSnapshot.current?.key && fullyAuto !== !(editingSnapshot.current.requireHumanApproval ?? false)
+              ? <p className="workflow-field-hint">Changing this setting will not recheck or move members whose actions were already complete.</p>
+              : null}
             {!props.milestone.key ? <p className="workflow-field-hint">Save this milestone to configure actions.</p> : null}
             </> : <>
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}

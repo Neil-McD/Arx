@@ -69,6 +69,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
   onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onApproveMilestone?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
+  onRetryGoalReview?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onOpenServiceChannel: (channelId: string) => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -76,12 +77,21 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const approvalPending = useRef(false);
   const approvalGeneration = useRef(0);
+  const [retryingGoalReview, setRetryingGoalReview] = useState(false);
+  const [goalReviewRetryError, setGoalReviewRetryError] = useState<string | null>(null);
+  const [submittedGoalReviewReceipt, setSubmittedGoalReviewReceipt] = useState<string | null>(null);
+  const goalReviewRetryPending = useRef(false);
   useEffect(() => {
     approvalGeneration.current += 1;
     approvalPending.current = false;
     setApproving(false);
     setApprovalError(null);
-  }, [props.isOpen, props.dossier?.membership_id, props.dossier?.workflow?.current_milestone_entered_at]);
+    goalReviewRetryPending.current = false;
+    setRetryingGoalReview(false);
+    setGoalReviewRetryError(null);
+    setSubmittedGoalReviewReceipt(null);
+  }, [props.isOpen, props.dossier?.membership_id, props.dossier?.workflow?.current_milestone_entered_at,
+    props.dossier?.workflow?.goal_review?.receipt_ref]);
   const [view, setView] = useState("progress");
   useEffect(() => { setView("progress"); }, [props.isOpen, props.dossier?.membership_id]);
   useEffect(() => {
@@ -318,6 +328,28 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   : !dossier.workflow.action_progress ? <p>Action completion information unavailable.</p>
                   : dossier.workflow.action_progress?.actions.length ? <p>Advances when all actions are verified complete. Existing completed work is not automatically backfilled.</p>
                   : <p>No actions configured. This milestone will not advance automatically.</p>}
+                {dossier.workflow.goal_review?.retryable && props.onRetryGoalReview
+                  && dossier.workflow.goal_review.receipt_ref !== submittedGoalReviewReceipt ? <>
+                  <button type="button" className="workflow-secondary-button" disabled={retryingGoalReview} onClick={async () => {
+                    if (goalReviewRetryPending.current || !props.onRetryGoalReview) return;
+                    const generation = approvalGeneration.current;
+                    goalReviewRetryPending.current = true; setRetryingGoalReview(true); setGoalReviewRetryError(null);
+                    try {
+                      await props.onRetryGoalReview(dossier);
+                      if (generation === approvalGeneration.current) setSubmittedGoalReviewReceipt(dossier.workflow!.goal_review!.receipt_ref!);
+                    }
+                    catch (error) {
+                      if (generation === approvalGeneration.current) {
+                        const stale = String(error instanceof Error ? error.message : error).includes("evidence_changed");
+                        setGoalReviewRetryError(stale ? "The member’s evidence changed. Refresh and review it before retrying."
+                          : "Review could not restart. Check the community agent, funding, and member access, then try again.");
+                      }
+                    } finally {
+                      if (generation === approvalGeneration.current) { goalReviewRetryPending.current = false; setRetryingGoalReview(false); }
+                    }
+                  }}>{retryingGoalReview ? "Retrying review…" : "Retry goal review"}</button>
+                  {goalReviewRetryError ? <p role="alert" className="workflow-error">{goalReviewRetryError}</p> : null}
+                </> : null}
               </section> : null}
               </div>
               <div hidden={view !== "responses"}>{props.formResponses ?? <p>Form responses unavailable.</p>}</div>

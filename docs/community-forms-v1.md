@@ -8,11 +8,11 @@ The editor switches to compact question navigation at the workflow container's
 width, not the monitor width. Question text retains its centered readable measure;
 the surrounding workspace fills the panel. No shell breakpoints are changed.
 
-Workflows uses one persistent Workflows / Integrations / Forms selector built on
-the canonical platform tab primitive. The `section` query parameter selects Forms
-or Integrations; absence selects the board. Integrations is explicitly unavailable,
-not a connection catalog. Form-editor tab changes flush pending edits and remain
-in Forms on failure. Published-form loading failures are visible and retryable.
+Workflows uses one persistent Workflows / Forms selector built on the canonical
+platform tab primitive. The `section=forms` query parameter selects Forms;
+absence selects the workflow board. Form-editor tab changes flush pending edits
+and remain in Forms on failure. Published-form loading failures are visible and
+retryable.
 
 ## Contract
 
@@ -50,8 +50,8 @@ Publishing alone never runs an agent or moves a member.
   requests are untouched; cancelled drafts retain their saved answers.
   This is not a global historical-row purge or a new worker system.
 
-- `request_form` assigns the current published version to a member. Existing
-  contribution/time triggers can invoke it; it is not an automatic entry action.
+- `request_form` assigns the current published version to a member. Join,
+  contribution, time-in-stage, and previous-action-completed triggers can invoke it.
 - Identity is workflow + membership activation + milestone visit + automation.
   Repeated contributions/retries reuse the request, even after submission.
 - One private sidebar entry, below community identity/banner and above channels,

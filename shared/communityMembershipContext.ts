@@ -104,7 +104,7 @@ export type CommunityMembershipContext = {
   workflow: {
     action_progress?: WorkflowActionProgress;
     require_human_approval?: boolean;
-    goal_review?: { status: "waiting" | "not_started" | "reviewing" | "failed" | "achieved" | "not_yet" | "insufficient_evidence" | "configured"; reason?: string };
+    goal_review?: { status: "waiting" | "not_started" | "reviewing" | "failed" | "achieved" | "not_yet" | "insufficient_evidence" | "configured"; reason?: string; retryable?: boolean; receipt_ref?: string };
     goal?: string;
     instructions?: string;
     override_state?: { activation_sequence: number; transition_seq: number; next_milestone_name: string | null };

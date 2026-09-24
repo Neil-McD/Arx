@@ -924,6 +924,57 @@ export const applyCompletedGoalReviewInternal = internalMutation({
   },
 });
 
+export const retryBuilderMemberGoalReview = mutation({
+  args: { ...managerIdentityArgs, communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
+    expectedWorkflowId: v.id("communityMemberWorkflows"), expectedWorkflowRevision: v.number(),
+    expectedMilestoneKey: v.string(), expectedMilestoneEnteredAt: v.number(),
+    expectedActivationSequence: v.number(), expectedTransitionSeq: v.number(), expectedReceiptRef: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requireWorkflowManager({ ctx, ...args });
+    const workflow = await getCommunityMemberWorkflowByCommunity({ ctx, communityId: args.communityId });
+    const membership = await ctx.db.get(args.membershipId);
+    if (!workflow || workflow._id !== args.expectedWorkflowId || workflow.revision !== args.expectedWorkflowRevision
+      || !membership || membership.communityId !== args.communityId || !communityMembershipRowIsActive(membership))
+      throw new Error("community_member_workflow_goal_review_authority_changed");
+    const review = await readCompletionReviewSnapshot(ctx, workflow, membership);
+    if (!review || review.receiptRef !== args.expectedReceiptRef
+      || review.current.milestone.key !== args.expectedMilestoneKey
+      || review.current.milestoneEnteredAt !== args.expectedMilestoneEnteredAt
+      || Number(membership.activationSequence ?? 0) !== args.expectedActivationSequence
+      || Number(review.state?.transitionSeq ?? 0) !== args.expectedTransitionSeq)
+      throw new Error("community_member_workflow_goal_review_evidence_changed");
+    const run = await getWorkflowRunByTrigger({ ctx, workflowId: workflow._id, membershipId: membership._id,
+      triggerReceiptRef: review.receiptRef, automationKey: COMPLETION_REVIEW_KEY });
+    const request = run?.actionResult?.serveRequestId ? await ctx.db.get(run.actionResult.serveRequestId) : null;
+    if (!run || run.status !== "failed" || run.actionResult?.status !== "failed" || run.goalAssessment
+      || run.completionReviewRetry || run.completionReviewSnapshot !== review.snapshot
+      || run.workflowRevision !== workflow.revision || run.milestoneKey !== review.current.milestone.key
+      || run.milestoneEnteredAt !== review.current.milestoneEnteredAt
+      || run.activationSequence !== Number(membership.activationSequence ?? 0)
+      || run.transitionSeq !== Number(review.state?.transitionSeq ?? 0)
+      || !request || request.status !== "skipped" || request.attempt !== undefined || request.runId
+      || request.workflowRunId !== run._id || request.workflowAssessment === false
+      || request.workflowCompletionReview === false || request.communityId !== args.communityId
+      || request.requesterUserId !== membership.userId || request.sponsorUserId !== membership.userId)
+      throw new Error("community_member_workflow_goal_review_retry_unavailable");
+    const nowMs = Date.now();
+    await ctx.db.patch(run._id, { status: "running", errorCode: undefined, updatedAt: nowMs });
+    const intake = await intakeCommunityAgentWorkflowAction({ ctx, communityId: args.communityId,
+      requesterUserId: membership.userId, workflowRunId: run._id, workflowActionKey: COMPLETION_REVIEW_KEY,
+      workflowPromptSnapshot: WORKFLOW_ASSESSMENT_PROMPT, workflowAssessment: true,
+      workflowCompletionReview: true, retrySkippedRequestId: request._id, nowMs });
+    if (intake.status !== "queued" || intake.request_id !== String(request._id)) {
+      // A failed re-admission changes nothing, including the one allowed retry.
+      throw new Error(`community_member_workflow_goal_review_still_unavailable:${intake.intake_reason}`);
+    }
+    await ctx.db.patch(run._id, { status: "finished", finishedAt: nowMs, updatedAt: nowMs,
+      completionReviewRetry: { requestedAt: nowMs, requestedByUserId: actor.userId,
+        originalIntakeReason: request.intakeReason },
+      actionResult: { actionKey: COMPLETION_REVIEW_KEY, status: "complete", serveRequestId: request._id } });
+    return { status: "review_queued" as const };
+  },
+});
+
 export const forceBuilderMemberMilestone = mutation({
   args: { ...managerIdentityArgs, communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
     expectedWorkflowId: v.id("communityMemberWorkflows"),

@@ -63,6 +63,7 @@ export type WebCommunityWorkflowsSectionProps = {
   onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
   onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onApproveMilestone?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
+  onRetryGoalReview?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onOpenServiceChannel: (channelId: string) => void;
 };
 
@@ -360,6 +361,7 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
         onSetServiceChannel={props.onSetServiceChannel}
         onForceMove={props.onForceMove}
         onApproveMilestone={props.onApproveMilestone}
+        onRetryGoalReview={props.onRetryGoalReview}
         onOpenServiceChannel={props.onOpenServiceChannel}
       />
     </div>
