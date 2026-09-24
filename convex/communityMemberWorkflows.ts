@@ -44,6 +44,10 @@ import {
   resolveCurrentMilestone,
 } from "./communityMemberWorkflowReadCore";
 import { resolveBuilderCommunityMembershipContext, resolveWorkflowExecutionMembershipContext } from "./communityMembershipContextCore";
+import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import { normalizeSocialProfileLinks } from "../shared/socialProfileLinks";
+import { validateProfileHandle } from "../shared/profileHandle";
 import { intakeCommunityAgentWorkflowAction } from "./communityAgentConciergeCore";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
 import { bindMemberServiceChannel } from "./communityMemberServiceChannelCore";
@@ -626,8 +630,10 @@ export const listBuilderWorkflowContextMembers = query({
       .withIndex("by_community", q => q.eq("communityId", args.communityId))
       .paginate({ numItems: 50, cursor: args.cursor ?? null });
     const members = await Promise.all(page.page.filter(communityMembershipRowIsActive).map(async membership => {
-      const profile = await resolveUserProfileDisplayProjection(ctx, membership.userId);
-      return { membership_id: String(membership._id), user_id: String(membership.userId), name: profile.display_name };
+      const [profile, user] = await Promise.all([resolveUserProfileDisplayProjection(ctx, membership.userId), ctx.db.get(membership.userId)]);
+      const handle = validateProfileHandle(user?.normalizedHandle ?? user?.handle);
+      return { membership_id: String(membership._id), user_id: String(membership.userId), name: profile.display_name,
+        handle: handle.ok ? handle.normalizedHandle : null };
     }));
     return { members, next_cursor: page.isDone ? null : page.continueCursor };
   },
@@ -651,9 +657,24 @@ export const getBuilderWorkflowMemberSuccessDossier = query({
       communityId: args.communityId,
       membershipId: args.membershipId,
     });
+    const [detail, relationship] = await Promise.all([
+      getUniqueUserProfileDetailByUserId<{ bio?: string; socialLinks?: { youtube?: string; x?: string; instagram?: string } }>(ctx, source.user_id),
+      resolveViewerProfileRelationship({ ctx, viewerUserId: actorUserId, targetUserId: source.user_id,
+        preferredCommunityId: args.communityId }),
+    ]);
+    // Match the platform profile gate: an active dossier membership alone does
+    // not grant access to someone's global bio or cross-community projection.
+    const canReadProfile = relationship.is_self || relationship.mutual_communities
+      .some(row => String(row.id) === String(args.communityId));
+    const context = { ...source, ...(canReadProfile ? { visible_profile: {
+      bio: detail?.bio ?? null,
+      social_links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
+      owned_communities: relationship.owned_communities.map(row => ({ name: row.name, slug: row.slug })),
+      mutual_communities: relationship.mutual_communities.map(row => ({ name: row.name, slug: row.slug })),
+    } } : {}) };
     return {
-      ...source,
-      markdown: renderCommunityMemberSuccessDossierMarkdown(source),
+      ...context,
+      markdown: renderCommunityMemberSuccessDossierMarkdown(context),
     };
   },
 });

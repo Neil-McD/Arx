@@ -171,12 +171,23 @@ not live model quality. A controlled staging canary remains a separate release g
 
 Authorized personal agents and official MCP clients discover private member workflow
 context through `polynet_list` at `/communities/<slug>/builder/workflow-members/`.
-Pages contain at most 50 membership identities and an explicit `next_cursor`.
+Pages contain at most 50 membership identities, handles when available, and an explicit `next_cursor`.
 Names are not unique selectors: use the returned membership document path, and
 clarify ambiguous names. `polynet_read` reuses the UI dossier resolver and checks
 current owner/admin authority and active subject membership on each read.
 
-The generated document includes canonical form/version evidence and explicit
+The generated document also projects current channel access from activation-bound
+grants, the current workflow milestone, approved facts for this community, and
+the bio, social links, and community relationships visible under the existing
+profile policy. It does not expose account secrets, unrelated private communities,
+or unapproved ontology facts. Channel results are bounded and say when truncated.
+Member channel access and service readiness are independent: revoking the agent's
+grant or making a room shared can make the service destination unavailable while
+the member can still read that room. The owner dossier retains that authorized
+channel listing, but the unavailable service destination exposes no identity and
+cannot authorize workflow delivery. Revoked member grants, old activation grants,
+archived rooms, and deleted rooms do not appear in the member's channel listing.
+It includes canonical form/version evidence and explicit
 truncation/unavailable-record indicators. No new persisted context, form-answer
 copies, or response-management page exists. Community agents cannot access this
 private subtree even when sponsored by an owner. Submitted answers are untrusted

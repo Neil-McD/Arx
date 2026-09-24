@@ -57,6 +57,26 @@ export function renderCommunityMemberSuccessDossierMarkdown(
   ];
 
   const service = source.service_channel;
+  lines.push("", "## Current channel access");
+  if (source.channel_access?.status !== "available") lines.push("_Channel access could not be verified._");
+  else {
+    if (!source.channel_access.channels.length) lines.push("_No active channels are currently accessible._");
+    for (const channel of source.channel_access.channels) {
+      lines.push(`- ${markdownInline(channel.name)} (${channel.access_mode === "restricted" ? "private" : "shared"})`);
+    }
+    if (source.channel_access.truncated) lines.push("_The channel list is bounded; additional channels may exist._");
+  }
+  if (source.visible_profile) {
+    const profile = source.visible_profile;
+    lines.push("", "## Visible profile", `- Bio: ${profile.bio ? markdownInline(profile.bio) : "Not provided"}`);
+    for (const [label, link] of Object.entries(profile.social_links)) {
+      if (link) lines.push(`- ${label}: ${markdownInline(link)}`);
+    }
+    lines.push("", "## Visible community relationships");
+    lines.push(`- Communities owned: ${profile.owned_communities.length ? profile.owned_communities.map(item => markdownInline(item.name)).join(", ") : "None visible"}`);
+    lines.push(`- Mutual communities: ${profile.mutual_communities.length ? profile.mutual_communities.map(item => markdownInline(item.name)).join(", ") : "None visible"}`);
+    lines.push("_These are profile-visible relationships, not an exhaustive list of private communities._");
+  }
   if (source.workflow) {
     const workflow = source.workflow;
     lines.push("", "## Current stage definition",

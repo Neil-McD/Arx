@@ -49,7 +49,7 @@ test("assignment is membership-owned, idempotent, and visible in authorized cont
   });
 });
 
-test.each(["member_grant", "agent_grant", "archived", "shared", "deleted", "activation"])("%s invalidation hides identity and allows clearing", async kind => {
+test.each(["member_grant", "agent_grant", "archived", "shared", "deleted", "activation"])("%s invalidation clears service identity while preserving independently authorized channel access", async kind => {
   const s = await fixture(); await s.set(s.f.channelId);
   await s.t.run(async ctx => {
     if (kind === "member_grant") await ctx.db.patch(s.f.memberGrant, { status: "revoked" });
@@ -61,7 +61,18 @@ test.each(["member_grant", "agent_grant", "archived", "shared", "deleted", "acti
   });
   const source = await s.read();
   expect(source.service_channel).toEqual({ status: "unavailable", revision: 1, channel_id: null, name: null });
-  expect(source.markdown).not.toContain("Private client room");
+  expect(source.channel_access).toMatchObject({ status: "available", truncated: false });
+  // Losing service readiness does not revoke a member's independent read access.
+  const memberCanStillRead = kind === "agent_grant" || kind === "shared";
+  expect(source.channel_access?.channels).toEqual(memberCanStillRead
+    ? [{ name: "Private client room", slug: "client", access_mode: kind === "shared" ? "all_members" : "restricted" }]
+    : []);
+  if (memberCanStillRead) {
+    expect(source.markdown).toContain(`Private client room (${kind === "shared" ? "shared" : "private"})`);
+  } else {
+    expect(source.markdown).not.toContain("Private client room");
+  }
+  expect(source.markdown).toContain("Service channel: unavailable.");
   const self = await s.t.run(ctx => resolveSelfCommunityMembershipContext({ ctx, actorUserId: s.f.userId, communityId: s.f.communityId }));
   expect(self.service_channel).toEqual(source.service_channel);
   await s.set(null, 1);

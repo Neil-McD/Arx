@@ -418,7 +418,6 @@ for (const [file, expectedCount] of [
   ["../convex/communityIntelligenceDirectory.ts", 3],
   ["../convex/communityCompilerDigest.ts", 1],
   ["../convex/communityAgentRuntime.ts", 1],
-  ["../convex/communityArchiveDocuments.ts", 1],
   ["../convex/communityEvidenceAudit.ts", 1],
 ] as const) {
   const source = readFileSync(new URL(file, import.meta.url), "utf8");

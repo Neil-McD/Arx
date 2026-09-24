@@ -68,8 +68,9 @@ assert.equal(
   "the retired AI Feed callable module must stay deleted",
 );
 
-const recentContext = read("convex/communityRecentContext.ts");
-assert.doesNotMatch(recentContext, /query\("communityAiFeedPosts"/);
+for (const file of ["convex/communityInteractionEvidence.ts", "convex/communityResourceEvidence.ts", "convex/communityRepositorySearch.ts"]) {
+  assert.doesNotMatch(read(file), /query\("communityAiFeedPosts"/);
+}
 
 const compiler = read("convex/communityCompilerEvidenceCore.ts");
 assert.match(compiler, /row\.sourceType !== "ai_feed"/);

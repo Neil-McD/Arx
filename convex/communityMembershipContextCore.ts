@@ -25,6 +25,7 @@ import {
 } from "./memberOntologyCore";
 import type { CommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
 import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
+import { evaluateCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
   getCommunityMemberWorkflowByCommunity,
   getMemberMilestone,
@@ -67,10 +68,37 @@ export async function resolveBuilderCommunityMembershipContext(args: {
     });
   return {
     ...context,
+    channel_access: await readBuilderMemberChannelAccess(args.ctx, args.communityId, membership),
     membership_status: "active",
     membership_id: String(membership._id),
     joined_at: toIsoString(membership.activatedAt ?? membership.createdAt),
   };
+}
+
+// Project current access from canonical channels and activation-bound grants.
+// This is a bounded read, never a copied member/channel index.
+async function readBuilderMemberChannelAccess(ctx: QueryCtx, communityId: Id<"communities">, membership: Doc<"communityMemberships">) {
+  let actor: Awaited<ReturnType<typeof resolveCommunityChannelActor>>;
+  try {
+    actor = await resolveCommunityChannelActor({ ctx, communityId, userId: membership.userId });
+  } catch {
+    return { status: "unavailable" as const, channels: [], truncated: false };
+  }
+  const rows = await ctx.db.query("communityChannels")
+    .withIndex("by_community_status_position", q => q.eq("communityId", communityId).eq("status", "active"))
+    .take(101);
+  const grants = actor.isManager ? [] : await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_community_principal_status", q => q.eq("communityId", communityId)
+      .eq("principalKey", `user:${membership.userId}`).eq("status", "active"))
+    .take(101);
+  const grantIds = new Set(grants.filter(grant =>
+    grant.membershipId === membership._id &&
+    grant.membershipActivationSequence === Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))),
+  ).map(grant => String(grant.channelId)));
+  const channels = rows.slice(0, 100).filter(channel =>
+    evaluateCommunityChannelCapabilities({ channel, actor, hasGrant: grantIds.has(String(channel._id)) }).canRead,
+  ).map(channel => ({ name: channel.name, slug: channel.slug, access_mode: channel.accessMode }));
+  return { status: "available" as const, channels, truncated: rows.length > 100 || grants.length > 100 };
 }
 
 export async function resolveSelfCommunityMembershipContext(args: {

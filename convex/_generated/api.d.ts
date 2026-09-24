@@ -41,7 +41,6 @@ import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCor
 import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
-import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttachmentDownloads from "../communityAttachmentDownloads.js";
 import type * as communityAttachmentUploads from "../communityAttachmentUploads.js";
 import type * as communityAttention from "../communityAttention.js";
@@ -118,7 +117,6 @@ import type * as communityPresenceCore from "../communityPresenceCore.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityReadCursorCore from "../communityReadCursorCore.js";
 import type * as communityReadKernel from "../communityReadKernel.js";
-import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
 import type * as communityRepositorySearch from "../communityRepositorySearch.js";
 import type * as communityResourceContent from "../communityResourceContent.js";
@@ -288,7 +286,6 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedRetirement: typeof communityAiFeedRetirement;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
-  communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttachmentDownloads: typeof communityAttachmentDownloads;
   communityAttachmentUploads: typeof communityAttachmentUploads;
   communityAttention: typeof communityAttention;
@@ -365,7 +362,6 @@ declare const fullApi: ApiFromModules<{
   communityPublic: typeof communityPublic;
   communityReadCursorCore: typeof communityReadCursorCore;
   communityReadKernel: typeof communityReadKernel;
-  communityRecentContext: typeof communityRecentContext;
   communityRecipientCore: typeof communityRecipientCore;
   communityRepositorySearch: typeof communityRepositorySearch;
   communityResourceContent: typeof communityResourceContent;

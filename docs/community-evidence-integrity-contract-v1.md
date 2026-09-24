@@ -10,8 +10,10 @@ applied.
 
 1. Interactions, Resources, and operational source traces are canonical sources
    for new evidence. Retired AI Feed posts remain historical source records only.
-2. Archive/vector rows are rebuildable search candidates only. They never grant
-   visibility or admissibility.
+2. Archive/vector retrieval and its synchronization/backfill implementation are
+   retired. Stored archive rows and indexes remain only for historical-data
+   retirement and cleanup; active retrieval reads canonical evidence and accepted
+   memory. Archive rows never grant visibility or admissibility.
 3. `communityEvidenceCitations` records an immutable source ref, opaque source
    version, content hash, provenance hash, visibility snapshot, and capture
    time. It stores no raw source content.
@@ -19,6 +21,13 @@ applied.
    ledger. It is not a routine approval gate for compiler memory.
 5. Retained nodes and edges carry the exact citation ids validated during their
    atomic apply.
+
+## Active retrieval
+
+The retired `communityRecentContext` public/internal queries are removed. Native
+agents and official MCP use the canonical repository search and domain evidence
+readers. Channel provenance, community isolation, and live resource visibility
+are verified on those active paths. Historical data is unchanged.
 
 ## Resolution
 
