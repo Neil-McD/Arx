@@ -288,6 +288,21 @@ test("funding refusal is durable and repeated completion callbacks do not retry"
   expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
 });
 
+test("disabled agent names the actual pre-inference blocker in the builder dossier", async () => {
+  const f = await completionReviewFixture();
+  await f.t.run(ctx => ctx.db.insert("communityAgentConfigs", {
+    communityId: f.communityId, agentEnabled: false, systemPrompt: "", createdAt: f.now, updatedAt: f.now,
+  }));
+  expect((await f.reconcile()).status).toBe("review_unavailable");
+  const request = (await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  expect(request).toMatchObject({ status: "skipped", intakeReason: "agent_disabled" });
+  const dossier = await f.t.withIdentity({ subject: "join-owner" }).query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(dossier.workflow?.goal_review).toMatchObject({ status: "failed", retryable: true });
+  expect(dossier.workflow?.goal_review?.reason).toContain("agent is disabled");
+});
+
 test("manager can retry one skipped pre-inference review after funding is restored, using the same request", async () => {
   const f = await completionReviewFixture();
   await f.t.run(async ctx => {

@@ -797,7 +797,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       });
     } catch (error) {
       if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
-      return await skip("requester_access_missing", error instanceof Error ? error.message : "workflow_timer_unavailable");
+      return await skip(error.message === "workflow_agent_disabled" ? "agent_disabled" : "requester_access_missing", error.message);
     }
   } else {
   if (!source.root && !source.reply) {
