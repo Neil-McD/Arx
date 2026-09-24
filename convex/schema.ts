@@ -1324,6 +1324,7 @@ export default defineSchema({
 
   communityMemberWorkflowRuns: defineTable({
     completionReviewSnapshot: v.optional(v.string()),
+    completionReviewRetry: v.optional(v.object({ requestedAt: v.number(), requestedByUserId: v.id("users"), originalIntakeReason: v.string() })),
     // Old receipts remain history, not proof for a current activation/visit.
     activationSequence: v.optional(v.number()),
     transitionSeq: v.optional(v.number()),

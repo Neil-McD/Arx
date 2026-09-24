@@ -265,18 +265,29 @@ export async function approveCloudCommunityMemberMilestone<SessionT>(params: Wor
   return submitCloudCommunityMemberDecision(params, true);
 }
 
-async function submitCloudCommunityMemberDecision<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }, approval: boolean) {
-  const { dossier } = params;
+function currentWorkflowAuthorityArgs(dossier: CloudCommunityMemberSuccessDossier) {
   const workflow = dossier.workflow;
   if (!workflow?.override_state || workflow.completed_at) throw new Error("workflow_override_unavailable");
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const args = {
-    authSubject, communityId: dossier.community_id as Id<"communities">, membershipId: dossier.membership_id as Id<"communityMemberships">,
+  return {
+    communityId: dossier.community_id as Id<"communities">, membershipId: dossier.membership_id as Id<"communityMemberships">,
     expectedWorkflowRevision: workflow.revision, expectedMilestoneKey: workflow.current_milestone_key,
     expectedWorkflowId: workflow.id as Id<"communityMemberWorkflows">,
     expectedMilestoneEnteredAt: Date.parse(workflow.current_milestone_entered_at),
     expectedActivationSequence: workflow.override_state.activation_sequence, expectedTransitionSeq: workflow.override_state.transition_seq,
   };
+}
+
+export async function retryCloudCommunityMemberGoalReview<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }) {
+  const receiptRef = params.dossier.workflow?.goal_review?.receipt_ref;
+  if (!params.dossier.workflow?.goal_review?.retryable || !receiptRef) throw new Error("workflow_goal_review_retry_unavailable");
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return client.mutation(api.communityMemberWorkflows.retryBuilderMemberGoalReview,
+    { authSubject, ...currentWorkflowAuthorityArgs(params.dossier), expectedReceiptRef: receiptRef });
+}
+
+async function submitCloudCommunityMemberDecision<SessionT>(params: WorkflowGatewayParams<SessionT> & { dossier: CloudCommunityMemberSuccessDossier }, approval: boolean) {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const args = { authSubject, ...currentWorkflowAuthorityArgs(params.dossier) };
   return approval
     ? client.mutation(api.communityMemberWorkflows.approveBuilderMemberMilestone, args)
     : client.mutation(api.communityMemberWorkflows.forceBuilderMemberMilestone, args);

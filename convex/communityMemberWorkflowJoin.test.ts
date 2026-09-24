@@ -89,6 +89,9 @@ test.each(["achieved", "not_yet", "insufficient_evidence"] as const)("human-gate
   const dossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
     { communityId: f.communityId, membershipId: f.membershipId });
   expect(dossier.workflow?.goal_review).toMatchObject({ status: verdict });
+  const reviewRun = (await f.t.run(ctx => ctx.db.get(f.request.workflowRunId!)))!;
+  await expect(owner.mutation(api.communityMemberWorkflows.retryBuilderMemberGoalReview,
+    { ...approvalArgs(f), expectedReceiptRef: reviewRun.triggerReceiptRef })).rejects.toThrow("retry_unavailable");
   const memberContext = await f.t.run(ctx => resolveSelfCommunityMembershipContext({
     ctx, actorUserId: f.memberId, communityId: f.communityId,
   }));
@@ -281,7 +284,100 @@ test("funding refusal is durable and repeated completion callbacks do not retry"
   const requests = await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
   expect(requests).toHaveLength(1);
   expect(requests[0].status).toBe("skipped");
+  expect(requests[0]).toMatchObject({ workflowAssessment: true, workflowCompletionReview: true });
   expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test("manager can retry one skipped pre-inference review after funding is restored, using the same request", async () => {
+  const f = await completionReviewFixture();
+  await f.t.run(async ctx => {
+    const role = (await ctx.db.query("operatorRoles").first())!;
+    await ctx.db.patch(role._id, { active: false });
+  });
+  expect((await f.reconcile()).status).toBe("review_unavailable");
+  // Older skipped reviews did not persist these flags; re-admission restores them.
+  await f.t.run(async ctx => {
+    const request = (await ctx.db.query("communityAgentServeRequests").first())!;
+    await ctx.db.patch(request._id, { workflowAssessment: undefined, workflowCompletionReview: undefined });
+  });
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const before = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(before.workflow?.goal_review).toMatchObject({ status: "failed", retryable: true });
+  expect(before.workflow?.goal_review?.reason).toContain("funding");
+  const retryArgs = { ...approvalArgs(f), expectedReceiptRef: before.workflow!.goal_review!.receipt_ref! };
+  await expect(f.t.withIdentity({ subject: "join-member" }).mutation(
+    api.communityMemberWorkflows.retryBuilderMemberGoalReview, retryArgs)).rejects.toThrow();
+  await expect(owner.mutation(api.communityMemberWorkflows.retryBuilderMemberGoalReview, retryArgs))
+    .rejects.toThrow("still_unavailable");
+  expect((await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!.status).toBe("skipped");
+  await f.t.run(async ctx => {
+    const role = (await ctx.db.query("operatorRoles").first())!;
+    await ctx.db.patch(role._id, { active: true });
+  });
+  expect((await owner.mutation(api.communityMemberWorkflows.retryBuilderMemberGoalReview, retryArgs)).status).toBe("review_queued");
+  await expect(owner.mutation(api.communityMemberWorkflows.retryBuilderMemberGoalReview, retryArgs)).rejects.toThrow("retry_unavailable");
+  const requests = await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ status: "queued", intakeReason: "accepted", sourceVisibilityScope: "admin", responseVisibilityScope: "admin" });
+  const run = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).find(r => r.triggerType === "all_actions_complete")!;
+  expect(run.completionReviewRetry).toMatchObject({ requestedByUserId: f.ownerId, originalIntakeReason: "founder_plan_required" });
+  expect(run.actionResult?.serveRequestId).toBe(requests[0]._id);
+  const after = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  expect(after.workflow?.goal_review).toMatchObject({ status: "reviewing" });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  const claim = await f.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: requests[0]._id });
+  expect(claim.attempt).toBe(1);
+  const context = await f.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal,
+    { requestId: requests[0]._id, expectedAttempt: claim.attempt! });
+  expect(context.ok).toBe(true);
+  if (!context.ok) throw new Error(context.errorCode);
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  expect((await f.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+    { requestId: requests[0]._id, expectedAttempt: claim.attempt!, snapshotJson })).ok).toBe(true);
+  expect((await f.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { requestId: requests[0]._id, expectedAttempt: claim.attempt!,
+      content: JSON.stringify({ verdict: "achieved", reason: "The private channel was created.",
+        evidenceRefs: JSON.parse(context.timedMemberContext!).evidenceRefs }) })).ok).toBe(true);
+  expect(await f.t.mutation(internal.communityMemberWorkflows.applyCompletedGoalReviewInternal,
+    { workflowRunId: run._id })).toMatchObject({ completedWorkflow: true });
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(1);
+});
+
+test("review retry rejects changed evidence and never retries a claimed worker failure", async () => {
+  const f = await completionReviewFixture();
+  await f.t.run(async ctx => {
+    const role = (await ctx.db.query("operatorRoles").first())!;
+    await ctx.db.patch(role._id, { active: false });
+  });
+  await f.reconcile();
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const dossier = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  const retryArgs = { ...approvalArgs(f), expectedReceiptRef: dossier.workflow!.goal_review!.receipt_ref! };
+  await f.t.run(async ctx => {
+    const workflow = (await ctx.db.get(f.workflowId))!;
+    await ctx.db.patch(workflow._id, { milestones: [{ ...workflow.milestones[0], goal: "A different goal." }] });
+  });
+  await expect(owner.mutation(api.communityMemberWorkflows.retryBuilderMemberGoalReview, retryArgs))
+    .rejects.toThrow("evidence_changed");
+
+  const claimed = await claimedCompletionReview();
+  await claimed.t.mutation(internal.communityAgentServeWorker.failCommunityAgentServeRequestInternal,
+    { requestId: claimed.request._id, expectedAttempt: claimed.args.expectedAttempt,
+      errorCode: "provider_error", errorMessage: "Provider unavailable" });
+  const failed = await claimed.t.withIdentity({ subject: "join-owner" }).query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: claimed.communityId, membershipId: claimed.membershipId });
+  expect(failed.workflow?.goal_review).toMatchObject({ status: "failed" });
+  expect(failed.workflow?.goal_review?.retryable).toBeUndefined();
+  const claimedRun = (await claimed.t.run(ctx => ctx.db.get(claimed.request.workflowRunId!)))!;
+  await expect(claimed.t.withIdentity({ subject: "join-owner" }).mutation(
+    api.communityMemberWorkflows.retryBuilderMemberGoalReview,
+    { ...approvalArgs(claimed), expectedReceiptRef: claimedRun.triggerReceiptRef })).rejects.toThrow("retry_unavailable");
 });
 
 test("truncated submitted answers hold without inference and explain the evidence limit", async () => {

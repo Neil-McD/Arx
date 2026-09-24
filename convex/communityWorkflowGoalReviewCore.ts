@@ -7,6 +7,20 @@ import type { WorkflowActionProgress } from "../shared/communityMembershipContex
 
 export const COMPLETION_REVIEW_KEY = "all_actions_complete_goal_review";
 
+function reviewFailureReason(request: any): string {
+  if (!request) return "The agent review is unavailable. No advancement was made; review the member's evidence manually.";
+  if (request?.status !== "skipped") return "The agent review failed after it started. No advancement was made; review the member's evidence manually.";
+  switch (request.intakeReason) {
+    case "agent_disabled": return "The community agent is disabled. Enable it before retrying.";
+    case "founder_plan_required":
+    case "founder_subscription_inactive": return "Community AI funding is unavailable. Restore the founder plan before retrying.";
+    case "founder_subscription_ambiguous":
+    case "founder_subscription_owner_mismatch": return "Community AI funding needs attention before retrying.";
+    case "requester_access_missing": return "The member or workflow no longer has the required access. Restore access before retrying.";
+    default: return "The review could not start. Check the community agent and member access before retrying.";
+  }
+}
+
 export async function readCompletionReviewStatus(ctx: any, workflow: any, membership: any, progress?: WorkflowActionProgress) {
   const review = await readCompletionReviewSnapshot(ctx, workflow, membership, progress);
   if (!review) return progress?.all_actions_complete
@@ -17,7 +31,15 @@ export async function readCompletionReviewStatus(ctx: any, workflow: any, member
       .eq("membershipId", membership._id).eq("triggerReceiptRef", review.receiptRef).eq("automationKey", COMPLETION_REVIEW_KEY)).first();
   if (!run) return { status: "not_started" as const };
   const request = run.actionResult?.serveRequestId ? await ctx.db.get(run.actionResult.serveRequestId) : null;
-  if (run.status === "failed" || run.errorCode || !request || ["error", "skipped"].includes(request.status)) return { status: "failed" as const };
+  if (run.status === "failed" || run.errorCode || !request || ["error", "skipped"].includes(request.status)) {
+    const retryable = run.status === "failed" && run.actionResult?.status === "failed"
+      && !run.completionReviewRetry && request?.status === "skipped"
+      && request.attempt === undefined && !request.runId
+      && request.workflowRunId === run._id && request.workflowAssessment !== false
+      && request.workflowCompletionReview !== false;
+    return { status: "failed" as const, reason: reviewFailureReason(request),
+      ...(retryable ? { retryable: true, receipt_ref: review.receiptRef } : {}) };
+  }
   if (request.status === "responded" && run.goalAssessment) return { status: run.goalAssessment.verdict as "achieved" | "not_yet" | "insufficient_evidence", reason: run.goalAssessment.reason as string };
   return { status: "reviewing" as const };
 }
