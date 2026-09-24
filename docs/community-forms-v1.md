@@ -181,6 +181,12 @@ grants, the current workflow milestone, approved facts for this community, and
 the bio, social links, and community relationships visible under the existing
 profile policy. It does not expose account secrets, unrelated private communities,
 or unapproved ontology facts. Channel results are bounded and say when truncated.
+Member channel access and service readiness are independent: revoking the agent's
+grant or making a room shared can make the service destination unavailable while
+the member can still read that room. The owner dossier retains that authorized
+channel listing, but the unavailable service destination exposes no identity and
+cannot authorize workflow delivery. Revoked member grants, old activation grants,
+archived rooms, and deleted rooms do not appear in the member's channel listing.
 It includes canonical form/version evidence and explicit
 truncation/unavailable-record indicators. No new persisted context, form-answer
 copies, or response-management page exists. Community agents cannot access this
