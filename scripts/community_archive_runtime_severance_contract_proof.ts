@@ -5,13 +5,11 @@ import { join } from "node:path";
 const root = process.cwd();
 const read = (relativePath: string) => readFileSync(join(root, relativePath), "utf8");
 
-const retainedArchiveModule = "convex/communityArchiveDocuments.ts";
-assert.equal(existsSync(join(root, retainedArchiveModule)), true);
+assert.equal(existsSync(join(root, "convex/communityArchiveDocuments.ts")), false);
 assert.equal(existsSync(join(root, "convex/communityArchive.ts")), false);
 assert.equal(existsSync(join(root, "convex/communityArchiveRetrieval.ts")), false);
 
 const excludedRuntimeFiles = new Set([
-  "communityArchiveDocuments.ts",
   "communityCognitionCleanupCore.ts",
   "schema.ts",
 ]);
@@ -37,6 +35,7 @@ const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 const mcp = read("shared/polynetMcp.ts");
+assert.doesNotMatch(read("convex/_generated/api.d.ts"), /communityArchiveDocuments/);
 
 for (const source of [communityMaintenance, adminGateway]) {
   assert.doesNotMatch(source, /requestCommunityArchiveBackfill|backfillCommunityArchiveInternal/);

@@ -41,7 +41,6 @@ import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCor
 import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
-import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttachmentDownloads from "../communityAttachmentDownloads.js";
 import type * as communityAttachmentUploads from "../communityAttachmentUploads.js";
 import type * as communityAttention from "../communityAttention.js";
@@ -288,7 +287,6 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedRetirement: typeof communityAiFeedRetirement;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
-  communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttachmentDownloads: typeof communityAttachmentDownloads;
   communityAttachmentUploads: typeof communityAttachmentUploads;
   communityAttention: typeof communityAttention;
