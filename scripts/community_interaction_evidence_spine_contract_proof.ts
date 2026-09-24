@@ -22,7 +22,6 @@ const [
   schema,
   evidence,
   audit,
-  recent,
   communityChat,
   interactions,
   runtimeLoop,
@@ -40,7 +39,6 @@ const [
   read("convex/schema.ts"),
   read("convex/communityInteractionEvidence.ts"),
   read("convex/communityEvidenceAudit.ts"),
-  read("convex/communityRecentContext.ts"),
   read("convex/communityChat.ts"),
   read("convex/communityInteractions.ts"),
   read("convex/runtimeAgentLoop.ts"),
@@ -108,25 +106,24 @@ assert.match(evidence, /strategy: "bounded_lexical"/);
 assert.doesNotMatch(evidence, /vectorSearch|embedGemini|archiveAvailable|archiveError|archive_error/);
 
 assert.match(
-  recent,
-  /listSharedChannelReadableRows<InteractionContextRow>[\s\S]*tableName: "communityInteractionRoots"[\s\S]*tableName: "communityInteractionReplies"/,
+  evidence,
+  /listSharedChannelReadableRows<InteractionRow>[\s\S]*tableName: "communityInteractionRoots"[\s\S]*tableName: "communityInteractionReplies"/,
 );
 assert.match(
-  recent,
-  /requireSharedChannelForAddressableRow[\s\S]*channel_slug: channel\.slug/,
-  "recent context should aggregate active channels and retain channel provenance",
+  evidence,
+  /channel_slug: args\.channel\.slug/,
+  "interaction evidence should aggregate active channels and retain channel provenance",
 );
 assert.match(
   channelCore,
   /listReadableRowsForChannelIds[\s\S]*by_community_channel_visibility_status_createdAt/,
 );
 assert.match(
-  recent,
+  evidence,
   /normalizeIdValue\(root\.communityId\) === normalizeIdValue\(args\.communityId\)/,
-  "recent context must reject a reply parent from another community",
+  "interaction evidence must reject a reply parent from another community",
 );
-assert.doesNotMatch(recent, /query\("communityChatMessages"/);
-assert.match(recent, /recent_context_v2/);
+assert.doesNotMatch(evidence, /query\("communityChatMessages"/);
 
 assert.match(evidence, /"communityInteractionRoots" as any/);
 assert.match(evidence, /"communityInteractionReplies" as any/);

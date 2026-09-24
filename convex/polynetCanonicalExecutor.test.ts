@@ -631,7 +631,6 @@ const modules = import.meta.glob([
   "./communityInteractions.ts",
   "./communityMentionLifecycle.ts",
   "./communityOnboarding.ts",
-  "./communityRecentContext.ts",
   "./communityRepositorySearch.ts",
   "./communityResourceEvidence.ts",
   "./communityResources.ts",

@@ -529,8 +529,8 @@ async function main() {
     new URL("../convex/communityIntelligenceDirectory.ts", import.meta.url),
     "utf8",
   );
-  const recentContext = await readFile(
-    new URL("../convex/communityRecentContext.ts", import.meta.url),
+  const resourceEvidence = await readFile(
+    new URL("../convex/communityResourceEvidence.ts", import.meta.url),
     "utf8",
   );
   const compilerCandidates = await readFile(
@@ -543,8 +543,8 @@ async function main() {
   assert.match(directory, /community_evidence_citation_review_required/);
   assert.match(directory, /requestRecapturesAllExistingTraces\s*\? evidenceCitationIds/);
   assert.match(directory, /citationIds: effectiveEvidenceCitationIds/);
-  assert.doesNotMatch(recentContext, /query\("communityAiFeedPosts"/);
-  assert.match(recentContext, /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/);
+  assert.doesNotMatch(resourceEvidence, /query\("communityAiFeedPosts"/);
+  assert.match(resourceEvidence, /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/);
   assert.match(legacyChat, /syncLegacyChatMessageDeleteToInteractionCore/);
   assert.match(
     compilerCandidates,

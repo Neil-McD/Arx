@@ -13,7 +13,7 @@ const schema = read("convex/schema.ts");
 const communityCore = read("convex/communityCore.ts");
 const resources = read("convex/communityResources.ts");
 const communityMaintenance = read("convex/communityMaintenance.ts");
-const recentContext = read("convex/communityRecentContext.ts");
+const resourceEvidence = read("convex/communityResourceEvidence.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const attention = read("convex/communityAttention.ts");
@@ -379,7 +379,7 @@ assert.match(
 
 assert.equal(existsSync("convex/communityArchive.ts"), false, "archive-named runtime wrapper must stay deleted");
 assert.equal(existsSync("convex/communityArchiveRetrieval.ts"), false, "archive retrieval wrapper must stay deleted");
-assert.match(recentContext, /retrieval_version: "recent_context_v2"/);
+assert.equal(existsSync("convex/communityRecentContext.ts"), false);
 assert.match(
   runtimeAgentLoop,
   /executePolynetCanonicalTool/,
@@ -418,14 +418,14 @@ for (const surface of [communityMaintenance, resourceGateway]) {
   );
 }
 assert.match(
-  recentContext,
+  resourceEvidence,
   /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/,
-  "recent context must filter resources through live modules",
+  "resource evidence must filter resources through live modules",
 );
 assert.match(
-  recentContext,
-  /communityResourceIsLiveModulePage\(row, liveModuleIds\)/,
-  "recent context must exclude draft modules and unusable resources",
+  resourceEvidence,
+  /communityResourceIsLiveModulePage\(row, new Set\(moduleById.keys\(\)\)\)/,
+  "resource evidence must exclude draft modules and unusable resources",
 );
 assert.match(
   attention,

@@ -30,7 +30,7 @@ const communityMaintenance = read("convex/communityMaintenance.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const schema = read("convex/schema.ts");
 const cleanup = read("convex/communityCognitionCleanupCore.ts");
-const recentContext = read("convex/communityRecentContext.ts");
+assert.equal(existsSync(join(root, "convex/communityRecentContext.ts")), false);
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
@@ -44,7 +44,7 @@ assert.match(schema, /communityArchiveDocuments: defineTable/);
 assert.match(schema, /\.vectorIndex\("by_embedding"/);
 assert.match(cleanup, /table: "communityArchiveDocuments"/);
 assert.match(communityMaintenance, /purgeOrphanedCommunityUserArtifactsInternal/);
-assert.match(recentContext, /readCommunityRecentContextInternal = internalQuery/);
+assert.doesNotMatch(read("convex/_generated/api.d.ts"), /communityRecentContext/);
 assert.match(runtimeAgentLoop, /executePolynetCanonicalTool/);
 assert.doesNotMatch(
   runtimeAgentLoop,

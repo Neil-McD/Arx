@@ -22,6 +22,13 @@ applied.
 5. Retained nodes and edges carry the exact citation ids validated during their
    atomic apply.
 
+## Active retrieval
+
+The retired `communityRecentContext` public/internal queries are removed. Native
+agents and official MCP use the canonical repository search and domain evidence
+readers. Channel provenance, community isolation, and live resource visibility
+are verified on those active paths. Historical data is unchanged.
+
 ## Resolution
 
 All current platform evidence uses one typed ref namespace:

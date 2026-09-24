@@ -10,7 +10,6 @@ import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 const modules = import.meta.glob([
   "./communityInteractions.ts",
   "./communityInteractionEvidence.ts",
-  "./communityRecentContext.ts",
   "./communityMentionBroadcasts.ts",
   "./communityMentionLifecycle.ts",
   "./communityOnboarding.ts",
@@ -55,7 +54,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       return userId;
     };
     const ownerId = await createUser(OWNER_SUBJECT);
-    await createUser(OUTSIDER_SUBJECT);
+    const outsiderId = await createUser(OUTSIDER_SUBJECT);
     const createCommunity = async (slug: string) =>
       await ctx.db.insert("communities", {
         ownerId,
@@ -112,6 +111,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       position: 1,
     });
     return {
+      outsiderId,
       communityId,
       otherCommunityId,
       ownerId,
@@ -241,21 +241,11 @@ test("composer, feeds, idempotency, and replies preserve exact channel ownership
     channel_id: String(fixture.customChannelId),
     channel_slug: "custom",
   });
-  const recentContext = await t.query(
-    internal.communityRecentContext.readCommunityRecentContextInternal,
-    {
-      userId: fixture.ownerId,
-      communityId: fixture.communityId,
-      query: "Custom channel root",
-    },
-  );
-  expect(
-    recentContext.recent_context.some(
-      (item: any) =>
-        item.channel_id === String(fixture.customChannelId) &&
-        item.channel_slug === "custom",
-    ),
-  ).toBe(true);
+  await expect(t.query(
+    internal.communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
+    { userId: fixture.outsiderId, communityId: fixture.communityId, query: "Custom channel root", limit: 10 },
+  )).rejects.toThrow("community_entitlement_required");
+
 });
 
 test("reply targets fail closed and idempotency binds exact addressing", async () => {
