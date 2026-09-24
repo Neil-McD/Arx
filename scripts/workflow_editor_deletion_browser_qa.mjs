@@ -78,6 +78,9 @@ try {
    await action.selectOption('prompt_agent');
    await page.getByRole('textbox', { name: 'Agent instructions' }).fill('Help the member with their submitted answers.');
    await page.getByRole('button', { name: 'Add automation' }).last().click();
+   await page.getByRole('tab', { name: 'Overview' }).click();
+   await page.locator('textarea').nth(1).fill('The member can complete the next step.');
+   assert.equal(await page.getByText('Automatically advances after every action is verified complete and any written goal is met. Fully Auto does not start follow-up work.').count(), 1);
    await page.getByRole('button', { name: 'Save milestone' }).click();
    const saved = await page.evaluate(() => window.qa.saved);
    assert.deepEqual(saved.automations.map(a => a.action.type), ['prompt_agent']);
@@ -100,6 +103,7 @@ try {
    assert.equal(await fullyAuto.getAttribute('aria-checked'), storedApproval === 'true' ? 'false' : 'true');
    await fullyAuto.click();
    assert.equal(await fullyAuto.getAttribute('aria-checked'), storedApproval === 'true' ? 'true' : 'false');
+   assert.equal(await page.getByText('Changing this setting will not recheck or move members whose actions were already complete.').count(), 1);
    assert.equal(await page.getByText('No actions configured. An owner or admin can approve this stage manually.').count(), storedApproval === 'true' ? 0 : 1);
    await page.getByRole('button', { name: 'Save milestone' }).click();
    const flipped = await page.evaluate(() => window.qa.saved);

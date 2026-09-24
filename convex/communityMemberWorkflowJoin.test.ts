@@ -125,6 +125,78 @@ test.each(["not_yet", "insufficient_evidence"])("completion review %s holds with
   expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
 });
 
+test("a new delivered action result can be reviewed after an unmet goal without replaying the old evidence", async () => {
+  vi.useFakeTimers();
+  const f = await fixture("room");
+  const updated = await f.t.withIdentity({ subject: "join-owner" }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: "new", name: "New",
+    goal: "The member can independently complete the next step.",
+    automations: [
+      { key: "join", trigger: { type: "member_joined" }, action: { key: "room", type: "create_service_channel" } },
+      { trigger: { type: "member_contributed" }, action: { type: "prompt_agent", prompt: "Help with the next step." } },
+    ],
+  });
+  await f.t.mutation(joinHandler, { ...f.job, workflowRevision: updated.revision });
+  const channelId = (await f.t.run(ctx => ctx.db.get(f.membershipId)))!.serviceChannelId!;
+
+  const finishServe = async (requestId: Id<"communityAgentServeRequests">, assessment = false) => {
+    const claim = await f.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId });
+    const args = { requestId, expectedAttempt: claim.attempt! };
+    const context = await f.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+    expect(context.ok).toBe(true); if (!context.ok) throw new Error(context.errorCode);
+    const bundle = buildCommunityAgentServePromptBundle(context);
+    const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+      prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+    expect((await f.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+      { ...args, snapshotJson })).ok).toBe(true);
+    const content = assessment
+      ? JSON.stringify({ verdict: "not_yet", reason: "The next step is still unproven.",
+          evidenceRefs: JSON.parse(context.timedMemberContext!).evidenceRefs })
+      : "Here is a concrete next step.";
+    expect((await f.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+      { ...args, content })).ok).toBe(true);
+  };
+
+  const completeAction = async (suffix: string) => {
+    const rootId = await f.t.run(ctx => ctx.db.insert("communityInteractionRoots", {
+      communityId: f.communityId, channelId, actorType: "human", actorUserId: f.memberId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: `Step ${suffix}`,
+      replyCount: 0, reactionSummary: [], idempotencyKey: `goal-review-${suffix}`,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+    expect((await f.t.mutation(internal.communityMemberWorkflows.handleChannelContributionRootInternal,
+      { rootId })).status).toBe("handled");
+    const request = (await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect()))
+      .find(row => row.sourceRootId === rootId)!;
+    expect(request).toBeDefined();
+    await finishServe(request._id);
+    return request.workflowRunId!;
+  };
+
+  vi.setSystemTime(f.now + 100);
+  const firstRunId = await completeAction("first");
+  expect((await f.t.mutation(reconcileCompletion, { workflowRunId: firstRunId })).status).toBe("review_queued");
+  const firstReview = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect()))
+    .find(row => row.triggerType === "all_actions_complete")!;
+  const firstRequest = (await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect()))
+    .find(row => row.workflowRunId === firstReview._id)!;
+  await finishServe(firstRequest._id, true);
+  expect((await f.t.mutation(internal.communityMemberWorkflows.applyCompletedGoalReviewInternal,
+    { workflowRunId: firstReview._id })).status).toBe("not_eligible");
+  expect((await f.t.mutation(reconcileCompletion, { workflowRunId: firstRunId })).status).toBe("already_reviewed");
+
+  vi.setSystemTime(f.now + 200);
+  const secondRunId = await completeAction("second");
+  expect((await f.t.mutation(reconcileCompletion, { workflowRunId: secondRunId })).status).toBe("review_queued");
+  const reviews = (await f.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect()))
+    .filter(row => row.triggerType === "all_actions_complete");
+  expect(reviews).toHaveLength(2);
+  expect(new Set(reviews.map(row => row.triggerReceiptRef)).size).toBe(2);
+  expect(JSON.parse(reviews.find(row => row._id !== firstReview._id)!.completionReviewSnapshot!).facts
+    .some((fact: { ref: string }) => fact.ref.startsWith(`action:${secondRunId}:`))).toBe(true);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
 test.each(["goal", "human", "membership", "revision", "proof", "invented"])("completion review rejects %s changed during inference", async change => {
   const f = await claimedCompletionReview();
   await f.t.run(async ctx => {

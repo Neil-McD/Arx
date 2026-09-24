@@ -234,7 +234,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
               <textarea rows={2} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
               <small className="workflow-field-hint">{goal.trim()
                 ? fullyAuto
-                  ? "After all actions finish, the agent checks this goal. Only an achieved result advances the member."
+                  ? "After all actions finish, the agent checks this goal against verified results. If it is not met, the member stays here; the agent does not start more work."
                   : "After all actions finish, the agent reviews this goal to inform the owner's decision."
                 : "Optional. Add a goal when advancement needs an agent assessment."}</small>
             </label>
@@ -250,8 +250,11 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                 ? "No actions configured. This stage will not advance automatically until you add an action."
                 : "No actions configured. An owner or admin can approve this stage manually."
               : fullyAuto
-                ? "Advances after every action is verified complete and any written goal is met."
+                ? "Automatically advances after every action is verified complete and any written goal is met. Fully Auto does not start follow-up work."
                 : "An owner or admin approves advancement after the actions finish; the goal review is advisory."}</p>
+            {editingSnapshot.current?.key && fullyAuto !== !(editingSnapshot.current.requireHumanApproval ?? false)
+              ? <p className="workflow-field-hint">Changing this setting will not recheck or move members whose actions were already complete.</p>
+              : null}
             {!props.milestone.key ? <p className="workflow-field-hint">Save this milestone to configure actions.</p> : null}
             </> : <>
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}
