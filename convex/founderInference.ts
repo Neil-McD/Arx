@@ -5,6 +5,10 @@ import {
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
+  PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED,
+  PLATFORM_HOME_MEMBER_LIMITED_SURFACES,
+  PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS,
+  utcMonthWindow,
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
@@ -19,6 +23,8 @@ import {
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
 import { reserveFounderUsage } from "./founderPlanCore";
+import { reserveOperatorGrantUsage } from "./operatorGrantUsageCore";
+import { isPlatformHomeCommunity } from "./platformHomeCommunity";
 import { founderProviderRequestUsageValidator, requireFounderInferencePricingFromEnv, snapshotFounderRunPricing, type FounderRunPricing } from "./founderPlanPricing";
 
 export const resolveCommunityInferenceModelInternal = internalQuery({
@@ -32,6 +38,46 @@ export const resolveCommunityInferenceModelInternal = internalQuery({
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+// Bounded scan: failed receipts are skipped, so allow headroom for them. A
+// saturated scan fails closed rather than reading an unbounded history.
+const PLATFORM_HOME_MEMBER_LIMIT_SCAN = 100;
+
+// Member-initiated turns in the platform-home community draw on a monthly
+// per-member allowance. Retries of an existing receipt never reach this.
+async function platformHomeMemberLimitReached(args: {
+  ctx: any;
+  communityId: any;
+  actorUserId: any;
+  surface: string;
+  nowMs: number;
+}): Promise<boolean> {
+  if (!(PLATFORM_HOME_MEMBER_LIMITED_SURFACES as readonly string[]).includes(args.surface)) {
+    return false;
+  }
+  const community = (await args.ctx.db.get(args.communityId)) as
+    | { slug?: string; ownerId?: unknown }
+    | null;
+  if (!community || !isPlatformHomeCommunity({ communitySlug: community.slug })) return false;
+  if (normalizedId(community.ownerId) === normalizedId(args.actorUserId)) return false;
+  const rows = (await args.ctx.db
+    .query("communityInferenceReceipts" as any)
+    .withIndex("by_actor_community_createdAt", (q: any) =>
+      q
+        .eq("actorUserId", args.actorUserId)
+        .eq("communityId", args.communityId)
+        .gte("createdAt", utcMonthWindow(args.nowMs).startAt),
+    )
+    .take(PLATFORM_HOME_MEMBER_LIMIT_SCAN)) as FounderInferenceReceiptRow[];
+  const counted = rows.filter(
+    (row) =>
+      row.status !== "failed" &&
+      (PLATFORM_HOME_MEMBER_LIMITED_SURFACES as readonly string[]).includes(row.surface),
+  ).length;
+  return (
+    counted >= PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS ||
+    rows.length >= PLATFORM_HOME_MEMBER_LIMIT_SCAN
+  );
+}
 const communityInferenceSurfaceValidator = v.union(
   v.literal("member_agent_dock"),
   v.literal("community_funnel_builder"),
@@ -270,6 +316,15 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     if (communitySpendAttempts >= COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE) {
       return { ok: false, errorCode: "founder_inference_community_rate_limited" };
     }
+    if (await platformHomeMemberLimitReached({
+      ctx,
+      communityId: args.communityId,
+      actorUserId: args.actorUserId,
+      surface: args.surface,
+      nowMs: args.nowMs,
+    })) {
+      return { ok: false, errorCode: PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED };
+    }
 
     // Operator-controlled, community-scoped canary; never client selected.
     const modelId = await resolveCommunityInferenceModelForReceipt(ctx, {
@@ -278,6 +333,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       receiptKey,
     });
     let usageCycleId: any | undefined;
+    let operatorUsageCycleId: any | undefined;
     let reservedCostMicros: number | undefined;
     let pricingSnapshot: FounderRunPricing | undefined;
     if (args.expectedFundingMode === "platform_subscription") {
@@ -300,6 +356,15 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       });
     } else if (args.expectedFundingMode === "platform_operator_grant") {
       const pricing = requireFounderInferencePricingFromEnv();
+      const reservation = await reserveOperatorGrantUsage({
+        ctx,
+        communityId: args.communityId,
+        reservationCostMicros: pricing.maxRunReservationCostMicros,
+        nowMs: args.nowMs,
+      });
+      if (!reservation.ok) return { ok: false, errorCode: reservation.code };
+      operatorUsageCycleId = reservation.cycle._id;
+      reservedCostMicros = reservation.reservationCostMicros;
       pricingSnapshot = snapshotFounderRunPricing(modelId, {
         pricingVersion: pricing.pricingVersion,
         inputCostMicrosPerMillionTokens: pricing.inputCostMicrosPerMillionTokens,
@@ -317,6 +382,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       fundingMode: args.expectedFundingMode,
       founderSubscriptionId: args.expectedFounderSubscriptionId,
       usageCycleId,
+      operatorUsageCycleId,
       surface: args.surface,
       provider: "openai",
       modelId,

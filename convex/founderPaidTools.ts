@@ -22,6 +22,10 @@ import {
   settleFounderUsageReservation,
 } from "./founderPlanCore";
 import { recordProviderCostEntry } from "./providerCostCore";
+import {
+  reserveOperatorGrantUsage,
+  settleOperatorGrantUsageReservation,
+} from "./operatorGrantUsageCore";
 import { integrationReceiptIntentValidator, validIntegrationReceiptIntent,
   type IntegrationReceiptIntent } from "./communityIntegrationReceiptIntent";
 import { requireCommunityChatAccess } from "./communityCore";
@@ -43,6 +47,7 @@ type MonetaryToolReceiptRow = {
   fundingMode: "platform_subscription" | "platform_operator_grant";
   founderSubscriptionId?: any;
   usageCycleId?: any;
+  operatorUsageCycleId?: any;
   toolName: FounderPaidToolName;
   action: FounderPaidToolAction;
   status: "authorized" | "settled" | "failed" | "indeterminate";
@@ -194,6 +199,19 @@ async function settleReceiptReservation(args: {
   settledCostMicros: number;
   nowMs: number;
 }): Promise<void> {
+  if (args.receipt.fundingMode === "platform_operator_grant") {
+    // Receipts created before the operator ledger existed carry no cycle.
+    if (!args.receipt.operatorUsageCycleId) return;
+    await settleOperatorGrantUsageReservation({
+      ctx: args.ctx,
+      operatorUsageCycleId: args.receipt.operatorUsageCycleId,
+      communityId: args.receipt.communityId,
+      reservedCostMicros: args.receipt.reservedCostMicros,
+      settledCostMicros: args.settledCostMicros,
+      nowMs: args.nowMs,
+    });
+    return;
+  }
   if (args.receipt.fundingMode !== "platform_subscription") return;
   if (!args.receipt.usageCycleId || !args.receipt.founderSubscriptionId) {
     throw new Error("founder_paid_tool_receipt_authority_missing");
@@ -376,9 +394,19 @@ export const claimFounderPaidToolReceiptInternal = internalMutation({
     }
 
     let usageCycleId: any | undefined;
-    let reservedCostMicros = admission.mode === "platform_operator_grant"
-      ? reservationCostMicros
-      : 0;
+    let operatorUsageCycleId: any | undefined;
+    let reservedCostMicros = 0;
+    if (admission.mode === "platform_operator_grant") {
+      const reservation = await reserveOperatorGrantUsage({
+        ctx,
+        communityId: args.communityId,
+        reservationCostMicros,
+        nowMs: args.nowMs,
+      });
+      if (!reservation.ok) return { ok: false, errorCode: reservation.code };
+      operatorUsageCycleId = reservation.cycle._id;
+      reservedCostMicros = reservation.reservationCostMicros;
+    }
     if (admission.mode === "platform_subscription") {
       const reservation = await reserveFounderUsage({
         ctx,
@@ -404,6 +432,7 @@ export const claimFounderPaidToolReceiptInternal = internalMutation({
         ? { founderSubscriptionId: admission.subscriptionId }
         : {}),
       usageCycleId,
+      operatorUsageCycleId,
       toolName: args.toolName,
       action: args.action,
       status: "authorized",

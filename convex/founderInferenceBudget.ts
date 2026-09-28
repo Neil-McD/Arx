@@ -16,7 +16,7 @@ export function assertPaidLuna6ProviderHeadroom(args: {
   usage: FounderInferenceUsageTotals;
   maxOutputTokens: number;
 }): void {
-  if (args.session.fundingMode !== "platform_subscription" || args.session.modelId !== "gpt-6-luna") return;
+  if (args.session.modelId !== "gpt-6-luna") return;
   if (!args.usage.complete) throw new Error(FOUNDER_INFERENCE_USAGE_INCOMPLETE);
   const { reservedCostMicros, pricingSnapshot } = args.session;
   if (!Number.isSafeInteger(reservedCostMicros) || (reservedCostMicros ?? 0) <= 0 || !pricingSnapshot) {

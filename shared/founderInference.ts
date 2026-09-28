@@ -7,6 +7,30 @@ export const COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE = 60;
 
 export const COMMUNITY_FUNDING_POLICY_MANAGED = "managed_required" as const;
 
+// Free members of the platform-home community get a small monthly agent
+// allowance; the owner is exempt. Only member-initiated surfaces count.
+export const PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS = 25;
+export const PLATFORM_HOME_MEMBER_LIMITED_SURFACES = [
+  "member_agent_dock",
+  "community_agent_mention",
+] as const;
+export const PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED =
+  "platform_home_member_agent_limit_reached";
+// Client-facing code carried on the runtime turn error.
+export const COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE =
+  "community_member_agent_limit_reached";
+
+export function utcMonthWindow(nowMs: number): { startAt: number; endAt: number; key: string } {
+  const now = new Date(nowMs);
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  return {
+    startAt: Date.UTC(year, month, 1),
+    endAt: Date.UTC(year, month + 1, 1),
+    key: `${year}-${String(month + 1).padStart(2, "0")}`,
+  };
+}
+
 export const COMMUNITY_INFERENCE_SURFACES = [
   "member_agent_dock",
   "community_funnel_builder",

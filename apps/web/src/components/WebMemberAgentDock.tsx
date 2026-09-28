@@ -46,6 +46,7 @@ import {
   type CloudMessageTransportRow,
 } from "../../../../shared/cloudThreadsRead";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
+import { COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE } from "../../../../shared/founderInference";
 import { uploadCloudMemberAgentImageFile } from "../../../../shared/cloudThreadsGateway";
 import {
   buildMemberAgentSurfacePresentation,
@@ -129,7 +130,10 @@ export type WebMemberAgentDockProps = {
   ) => Promise<Response>;
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   finalizeVoiceInputForSubmit?: () => Promise<string>;
+  onStartBuilder?: () => void;
 };
+
+const MEMBER_AGENT_LIMIT_CODE = COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE;
 
 function buildDraftSignature(text: string, attachments: readonly MemberAgentImageDraft[]): string {
   return `${text}\u0000${attachments.map((attachment) => attachment.id).join(",")}`;
@@ -603,7 +607,11 @@ function WebMemberAgentDock(props, ref) {
   const turnIsActive = isSending || Boolean(streamingState);
   const composerIsBusy = turnIsActive || isUploadingAttachments || isSubmitting;
   const visibleMessages = messages.filter((message) => message.role !== "system");
-  const dockError = localError ?? formatInferenceIssue(inferenceIssue);
+  const memberLimitNotice =
+    !localError && inferenceIssue?.code === MEMBER_AGENT_LIMIT_CODE
+      ? formatInferenceIssue(inferenceIssue)
+      : null;
+  const dockError = memberLimitNotice ? null : localError ?? formatInferenceIssue(inferenceIssue);
   useEffect(() => {
     const request = pendingResourceBuildRef.current;
     if (
@@ -1227,6 +1235,16 @@ function WebMemberAgentDock(props, ref) {
           ) : null}
 
           {dockError ? <p className="member-agent-dock-error">{dockError}</p> : null}
+          {memberLimitNotice ? (
+            <div className="member-agent-dock-limit" role="status">
+              <p>{memberLimitNotice}</p>
+              {props.onStartBuilder ? (
+                <button type="button" onClick={props.onStartBuilder}>
+                  Build your own community — $79/mo
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="member-agent-dock-composer-shell">

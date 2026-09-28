@@ -6,7 +6,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
-import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
@@ -155,12 +154,11 @@ test("incomplete accounts cannot join or resolve a community destination", async
     }),
   ).rejects.toThrow("account_setup_required");
   await expect(
-    t.mutation(
+    t.query(
       (internal as any).memberEntryDestination.resolveMemberEntryDestinationInternal,
       {
         userId: incompleteUserId,
         communityId: fixture.openCommunityId,
-        nowMs: 1_750_000_000_100,
       },
     ),
   ).rejects.toThrow("account_setup_required");
@@ -670,43 +668,6 @@ test("archived communities are frozen across ordinary access and public projecti
       communitySlug: "access-lifecycle-open",
     }),
   ).rejects.toThrow("community_archived");
-});
-
-test("archived platform home cannot autojoin or reactivate a membership", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const result = await t.run(async (ctx) => {
-    const communityId = await ctx.db.insert("communities", {
-      ownerId: fixture.ownerId,
-      slug: "polynet",
-      name: "Archived platform home",
-      visibility: "published",
-      inferenceFundingPolicy: "managed_required",
-      entryPolicy: "open",
-      lifecycleStatus: "archived",
-      lifecycleGeneration: 1,
-      activeMemberCount: 1,
-      createdAt: 1_750_000_000_100,
-      updatedAt: 1_750_000_000_100,
-    });
-    const outcome = await ensurePlatformHomeCommunityMembership({
-      ctx,
-      userId: fixture.memberId,
-      nowMs: 1_750_000_000_200,
-    });
-    const memberships = await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q) =>
-        q.eq("communityId", communityId).eq("userId", fixture.memberId),
-      )
-      .collect();
-    return { outcome, memberships };
-  });
-
-  expect(result).toEqual({
-    outcome: { status: "disabled", communityId: null },
-    memberships: [],
-  });
 });
 
 test("approval join fails closed until manager approval and closes again after revocation", async () => {

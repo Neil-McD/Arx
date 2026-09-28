@@ -887,3 +887,58 @@ test.each([{version: "latest"}, {generation: 0}, {tool: "HUBSPOT_LIST_GRANTED_SC
       {...f.args, integrationIntent: {...f.args.integrationIntent, ...patch}})).rejects.toThrow("founder_paid_tool_action_invalid");
     await f.t.run(async ctx => { expect(await ctx.db.query("communityPaidToolReceipts").collect()).toHaveLength(0); });
 });
+
+test("operator-funded paid tools reserve and settle against the operator monthly ledger", async () => {
+  const { t, fixture } = await createFixture("operator-ledger");
+  await t.run(async (ctx) => {
+    // Operator funding takes precedence over any attached subscription.
+    await ctx.db.insert("operatorRoles", {
+      userId: fixture.ownerId,
+      role: "owner",
+      active: true,
+      createdAt: 100_000,
+      updatedAt: 100_000,
+    });
+  });
+  const claim = await t.mutation(
+    (internal as any).founderPaidTools.claimFounderPaidToolReceiptInternal,
+    claimArgs(fixture, "operator-ledger"),
+  );
+  expect(claim).toMatchObject({
+    ok: true,
+    fundingMode: "platform_operator_grant",
+    reservationCostMicros: 50_000,
+  });
+  await t.run(async (ctx) => {
+    const [cycle] = await ctx.db.query("operatorGrantUsageCycles").collect();
+    expect(cycle).toMatchObject({ reservedCostMicros: 50_000, settledCostMicros: 0 });
+    expect(await ctx.db.get(claim.receiptId)).toMatchObject({
+      operatorUsageCycleId: cycle!._id,
+    });
+  });
+  await t.mutation(
+    (internal as any).founderPaidTools.markFounderPaidToolProviderStartedInternal,
+    { receiptKey: "paid_tool:operator-ledger", claimToken: "claim:operator-ledger", nowMs: 101_002 },
+  );
+  await t.mutation(
+    (internal as any).founderPaidTools.settleFounderPaidToolReceiptInternal,
+    {
+      receiptKey: "paid_tool:operator-ledger",
+      claimToken: "claim:operator-ledger",
+      rawVendorCostUsd: 0.012345,
+      provider: "openai",
+      evidence: "exact",
+      outcomeCode: "completed",
+      nowMs: 101_003,
+    },
+  );
+  await t.run(async (ctx) => {
+    const [cycle] = await ctx.db.query("operatorGrantUsageCycles").collect();
+    expect(cycle).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 12_345 });
+    await ctx.db.patch(cycle!._id, { settledCostMicros: 20_000_000 });
+  });
+  await expect(t.mutation(
+    (internal as any).founderPaidTools.claimFounderPaidToolReceiptInternal,
+    claimArgs(fixture, "operator-ledger-exhausted", 101_010),
+  )).resolves.toEqual({ ok: false, errorCode: "founder_usage_exhausted" });
+});

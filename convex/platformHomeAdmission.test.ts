@@ -3,10 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS } from "./communityJoinRequestCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
-import {
-  ensurePlatformHomeCommunityMembership,
-  PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
-} from "./platformHomeCommunity";
+import { PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON } from "./platformHomeCommunity";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
@@ -122,24 +119,7 @@ async function revoke(
 }
 
 describe("platform-home admission authority", () => {
-  test("bootstrap converges on one active membership", async () => {
-    const t = convexTest(schema, modules);
-    const f = await fixture(t, "bootstrap");
-    const run = () => t.run(async (ctx) => ensurePlatformHomeCommunityMembership({
-      ctx,
-      userId: f.userId,
-      nowMs: f.nowMs + 1,
-    }));
-    const results = await Promise.all([run(), run()]);
-    expect(results.every((result) => ["joined", "already_member"].includes(result.status)))
-      .toBe(true);
-    const current = await state(t, f);
-    expect(current.memberships).toHaveLength(1);
-    expect(current.memberships[0]?.active).not.toBe(false);
-    expect(current.community?.activeMemberCount).toBe(2);
-  });
-
-  test("voluntary leave is membership state and bootstrap cannot undo it", async () => {
+  test("voluntary leave is recorded as membership state", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, "leave");
     const activated = await activate(t, f);
@@ -147,12 +127,6 @@ describe("platform-home admission authority", () => {
     await member.mutation(api.communityAdmin.leaveCommunity, {
       communityId: f.communityId,
     });
-    const bootstrap = await t.run(async (ctx) => ensurePlatformHomeCommunityMembership({
-      ctx,
-      userId: f.userId,
-      nowMs: f.nowMs + 3,
-    }));
-    expect(bootstrap.status).toBe("disabled");
     const current = await state(t, f);
     expect(current.memberships).toHaveLength(1);
     expect(current.memberships[0]?._id).toEqual(activated.membership._id);

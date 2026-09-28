@@ -27,7 +27,7 @@ archived-community admission create no event.
 
 ## Authority and failure behavior
 
-All open, approved, paid, manual, and platform-home grants continue to converge
+All open, approved, paid, and manual grants continue to converge
 through `activateCommunityMembershipCore`. That transition is the only writer
 allowed to project `member_joined`.
 

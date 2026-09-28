@@ -23,6 +23,7 @@ import {
   requireFounderInferencePricingFromEnv,
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
+import { settleOperatorGrantUsageReservation } from "./operatorGrantUsageCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 
 export type FounderInferenceReceiptRow = {
@@ -35,6 +36,7 @@ export type FounderInferenceReceiptRow = {
   fundingMode: "platform_subscription" | "platform_operator_grant";
   founderSubscriptionId?: any;
   usageCycleId?: any;
+  operatorUsageCycleId?: any;
   surface: CommunityInferenceSurface;
   provider: "openai";
   modelId: string;
@@ -338,6 +340,17 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
         settledCostMicros,
         nowMs: args.nowMs,
       });
+    } else if (receipt.operatorUsageCycleId) {
+      // Unknown provider usage consumes the whole reservation, as for Builder.
+      settledCostMicros = Number(receipt.reservedCostMicros);
+      await settleOperatorGrantUsageReservation({
+        ctx: args.ctx,
+        operatorUsageCycleId: receipt.operatorUsageCycleId,
+        communityId: receipt.communityId,
+        reservedCostMicros: settledCostMicros,
+        settledCostMicros,
+        nowMs: args.nowMs,
+      });
     }
     const failureCode = boundedCode(
       args.failureCode,
@@ -410,6 +423,16 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       pricing,
     });
     }
+    if (receipt.operatorUsageCycleId) {
+      await settleOperatorGrantUsageReservation({
+        ctx: args.ctx,
+        operatorUsageCycleId: receipt.operatorUsageCycleId,
+        communityId: receipt.communityId,
+        reservedCostMicros: Number(receipt.reservedCostMicros ?? 0),
+        settledCostMicros,
+        nowMs: args.nowMs,
+      });
+    }
   }
   await args.ctx.db.patch(receipt._id as any, {
     status: "settled",
@@ -460,6 +483,15 @@ export async function finalizeKnownNoSpendFounderInferenceReceipt(args: {
       ctx: args.ctx,
       usageCycleId: receipt.usageCycleId,
       reservedCostMicros,
+      settledCostMicros: 0,
+      nowMs: args.nowMs,
+    });
+  } else if (receipt.operatorUsageCycleId) {
+    await settleOperatorGrantUsageReservation({
+      ctx: args.ctx,
+      operatorUsageCycleId: receipt.operatorUsageCycleId,
+      communityId: receipt.communityId,
+      reservedCostMicros: Number(receipt.reservedCostMicros),
       settledCostMicros: 0,
       nowMs: args.nowMs,
     });
