@@ -7,19 +7,41 @@
 - Canonical Git remote: `origin` -> `Neil-McD/Arx`
 - Canonical release branch: `main`
 - Canonical production web target: Vercel project `polynet`
-- Canonical production Convex target: production deployment for this repo
+- Canonical production Convex target: `prod:wry-hawk-715`
 - Legacy Vercel project `arx` is not a live target
 
 ## Default Release Model
 
-Use one truth per layer:
+Production is released by one local command. Merging to `main` does not deploy:
+Vercel Git auto-deploy from `main` is disabled in `vercel.json`.
 
-1. Build and verify in the root `main` worktree at `/Users/neilmcdevitt/code/arx`.
-2. Land the intended Git delta on `main`.
-3. Push `main`.
-4. Let Vercel `polynet` production deploy from GitHub `main`.
-5. Deploy Convex production intentionally when backend/schema/env changes require it.
-6. Run the post-deploy smoke check.
+1. Land the reviewed change on `main`.
+2. From a clean checkout at exactly `origin/main`:
+
+```bash
+npm run release:verify   # guards, release gate, preflight; deploys nothing
+npm run release:prod     # the same, then Convex, then web, then live proof
+```
+
+3. Commit the receipt the command writes to `docs/receipts/` and complete its
+   post-release smoke checklist.
+
+`release:prod` (`scripts/release_production.mjs`) fails closed at every stage:
+
+| Stage | Proves |
+|---|---|
+| Guards | `vercel.json` keeps `main` auto-deploy off; the worktree is clean; `HEAD` equals freshly fetched `origin/main`. |
+| No-regress | The live `version.json` build is a known ancestor of `HEAD` and not `HEAD` itself, so a stale checkout can never release over newer production. |
+| Release gate | `npm run release:gate -- --mode=ci --sha=<HEAD>` passes on that exact commit. |
+| Preflight | The pinned Vercel project exists; `VITE_CONVEX_URL`, `VITE_PUBLIC_APP_URL`, and `ARX_AUTH_BRIDGE_SECRET` exist exactly once for production; the read-only production accounting smoke passes; the current production deployment is recorded as the rollback target. |
+| Convex | `convex deploy --typecheck enable` to `prod:wry-hawk-715`. |
+| Web | `vercel deploy --prod --archive=tgz` to project `polynet`, with the commit SHA as build identity. |
+| Live proof | `www.polynet.ai/version.json` reports `HEAD` (one explicit promote is attempted if Vercel does not assign the domain), and the live bundle embeds the production Convex URL. |
+| Receipt | `docs/receipts/<date>-production-<sha>.md` and `artifacts/release-production.json`. |
+
+Production authority (Convex deployment, Vercel team and project IDs, origin) is
+pinned in `scripts/lib/releaseProduction.mjs`. It is never read from local
+`.env` files or a `.vercel` link, which in this repository points at staging.
 
 For official Polynet MCP provider changes, treat Convex as required, not
 optional. If a change touches files like:
@@ -31,10 +53,9 @@ optional. If a change touches files like:
 
 then the release is not complete until:
 
-1. `main` is pushed and `polynet` is deploying from GitHub
-2. `npm run convex:deploy` has been run from the validated code state
-3. the metadata smoke passes against the canonical production URL
-4. one authenticated official Polynet MCP call has been re-tested on production
+1. `npm run release:prod` has released the change
+2. the metadata smoke passes against the canonical production URL
+3. one authenticated official Polynet MCP call has been re-tested on production
 
 This is the canonical path. Do not rely on branch names, preview URLs, or old Vercel projects as release truth.
 
@@ -304,9 +325,9 @@ account or entitlement surface.
 
 ## Web Production Rule
 
-- Web production deploys must come from GitHub `origin/main` through Vercel project `polynet`.
-- Do not run direct local Vercel production deploys from a worktree snapshot.
-- If the Git-based release path is blocked, fix the Git path instead of bypassing it.
+- Web production deploys come only from `npm run release:prod` at exact `origin/main`.
+- Do not run `vercel deploy --prod`, `vercel promote`, `vercel alias`, or `vercel rollback` by hand.
+- If the release command is blocked, fix the blocking guard instead of bypassing it.
 
 ## Release Types
 
@@ -325,26 +346,15 @@ after the cached-client compatibility window is explicitly closed.
 
 Use when the change is ready and not urgent.
 
-If the new web calls a Convex function that production does not yet expose,
-deploy the backward-compatible Convex change from the exact validated candidate
-first and verify that function is available. Then land the web change on `main`
-and let `polynet` deploy through GitHub. Keep the existing web compatible with
-the new backend during this interval. If the backend change is not backward
-compatible, split it into a compatibility release before the web release.
+The release command deploys Convex before the web app, so the previous web
+briefly runs against the new backend. Keep every backend change backward
+compatible with the currently live web. If it is not, split it into a
+compatibility release first.
 
-1. Make the change in `/Users/neilmcdevitt/code/arx`.
-2. Run the relevant local checks.
-3. Land the intended changes on `main`.
-4. Push `main`.
-5. If Convex changed, run:
-
-```bash
-cd /Users/neilmcdevitt/code/arx
-npm run convex:deploy
-```
-
-6. Confirm Vercel `polynet` production deploys from `main`.
-7. Run the smoke test checklist below.
+1. Make the change and run the relevant local checks.
+2. Land the intended changes on `main`.
+3. From a clean checkout at `origin/main`, run `npm run release:prod`.
+4. Commit the receipt and run the smoke test checklist below.
 
 ### Hotfix
 
@@ -352,9 +362,10 @@ Use when production is broken or trust is at risk.
 
 1. Minimize scope.
 2. Verify locally.
-3. Prefer landing on `main` immediately.
-4. Push `main` and let `polynet` deploy from GitHub.
-5. If backend/runtime changes are part of the hotfix, deploy Convex intentionally from the validated worktree.
+3. Land it on `main` immediately.
+4. Run `npm run release:prod`. For a web-only regression, first consider
+   `npm run release:rollback -- <deployment-id>` using the rollback target in the
+   last receipt.
 
 ## Local Verification
 
@@ -384,10 +395,11 @@ accepting source-marker assertions as behavioral proof.
 
 Local mode records dirty working-tree state so it is useful during development,
 marks its build identity as `<sha>-dirty`, and is not release-authoritative.
-The GitHub `Release Gate` job runs the same executable in `ci` mode, requires a
-clean checkout whose `HEAD` matches the requested full commit SHA, emits that
-exact SHA as the build identity, and uploads the evidence file. That single
-required status is the canonical pre-release decision.
+`ci` mode requires a clean checkout whose `HEAD` matches the requested full
+commit SHA and emits that exact SHA as the build identity. `npm run release:prod`
+runs it on the release candidate, which makes it the canonical pre-release
+decision. The GitHub `Release Gate` job runs the same executable and is advisory:
+a release never depends on GitHub Actions.
 
 The release gate is validation only. It must never push Git, deploy Convex,
 deploy or promote Vercel, mutate production, or roll back a release.
@@ -452,9 +464,13 @@ Before release, know:
 - what exact user problem this change solves
 - whether it changes behavior or only internals
 - what the likely failure mode is
-- how to revert quickly through Git and Vercel rollback, not a local worktree snapshot
+- the rollback target recorded in the previous receipt
 
-If the failure is web-only, prefer reverting the web change quickly.
+If the failure is web-only, roll back with `npm run release:rollback -- <deployment-id>`.
+It only accepts a ready production deployment of project `polynet`, never touches
+Convex, and waits until `version.json` changes. After a rollback, Vercel stops
+auto-assigning the production domain; the next `release:prod` promotes its
+deployment explicitly.
 If the failure is backend/data-contract related, stop and assess before compounding the issue with more deploys.
 
 ## Weekly Alpha Operating Loop

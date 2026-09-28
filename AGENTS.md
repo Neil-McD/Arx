@@ -192,13 +192,13 @@ Classification buckets for every candidate:
 - Active development worktree: `/Users/neilmcdevitt/code/arx`.
 - Legacy workspace-provider worktree snapshots are historical only and are not canonical or active.
 - Canonical Git release branch: `origin/main`.
-- Canonical production app: Vercel project `polynet`.
+- Canonical production app: Vercel project `polynet`; canonical production backend: Convex `prod:wry-hawk-715`.
 - Legacy Vercel project `arx` is not a production target.
-- For this repo, direct local Vercel release commands are forbidden.
-- Do not run `vercel deploy`, `vercel --prod`, `vercel promote`, `vercel alias`, or `vercel rollback` as a release path for `polynet`.
-- Normal web releases should land on `main` and let `polynet` deploy from GitHub.
-- Convex production releases are explicit and should be run intentionally from the validated code state.
-- Do not use direct local Vercel production deploys as a release path.
+- The only production release path is `npm run release:prod`, run locally from a clean checkout whose `HEAD` is exactly `origin/main`. It runs the release gate, deploys Convex first and the web app second with pinned production authority, proves the live build, and writes a receipt to `docs/receipts/`.
+- `npm run release:verify` runs the same guards, gate, and preflight without deploying. `npm run release:rollback -- <deployment-id>` is the only web rollback path.
+- Merging to `main` does not deploy: Vercel Git auto-deploy from `main` is disabled in `vercel.json`, and the release command refuses to run if it is re-enabled.
+- Do not run `vercel deploy`, `vercel --prod`, `vercel promote`, `vercel alias`, `vercel rollback`, or `npm run convex:deploy` directly against production; the release command owns them.
+- GitHub Actions is advisory and never required to release.
 - Follow [/Users/neilmcdevitt/code/arx/docs/alpha-release-workflow.md](/Users/neilmcdevitt/code/arx/docs/alpha-release-workflow.md) for the operational runbook.
 
 ---
