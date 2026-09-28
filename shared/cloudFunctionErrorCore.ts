@@ -1,3 +1,5 @@
+import { COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE } from "./founderInference";
+
 export type CloudFunctionErrorCategory =
   | "auth"
   | "rate_limited"
@@ -83,7 +85,8 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   if (
     code === "platform_inference_quota_exceeded" ||
     code === "provider_inference_quota_exceeded" ||
-    code === "community_ai_usage_exhausted"
+    code === "community_ai_usage_exhausted" ||
+    code === COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE
   )
     return "quota";
   if (

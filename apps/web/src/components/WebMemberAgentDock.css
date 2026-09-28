@@ -321,6 +321,39 @@
   border-left-color: var(--accent-error);
 }
 
+.member-agent-dock-limit {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 12px;
+  color: var(--text-ink-secondary);
+  background: var(--member-agent-accent-soft);
+  border: 1px solid var(--member-agent-accent-border);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.member-agent-dock-limit p {
+  margin: 0;
+}
+
+.member-agent-dock-limit button {
+  justify-self: start;
+  padding: 7px 12px;
+  color: var(--text-ink-primary);
+  background: transparent;
+  border: 1px solid var(--member-agent-accent);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.member-agent-dock-limit button:hover {
+  background: var(--member-agent-accent-soft);
+}
+
 .member-agent-dock-composer-shell {
   display: grid;
   gap: 8px;

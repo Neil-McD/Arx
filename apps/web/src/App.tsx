@@ -3066,6 +3066,7 @@ export default function App() {
         },
         finalizeVoiceInputForSubmit: () =>
           finishVoiceInputForSubmit("member_agent"),
+        onStartBuilder: () => openNewCommunityPurchaseFlow(),
       }}
       directMessagesHostProps={{
         isOpen: isDirectMessagesOpen,

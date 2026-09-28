@@ -276,6 +276,20 @@ export default defineSchema({
     .index("by_cycle_key", ["cycleKey"])
     .index("by_community_status", ["communityId", "status"]),
 
+  // Monthly (UTC) spend ledger for operator-funded communities. The operator
+  // grant waives payment but keeps the same bounded allowance as Builder.
+  operatorGrantUsageCycles: defineTable({
+    communityId: v.id("communities"),
+    cycleKey: v.string(),
+    cycleStartAt: v.number(),
+    cycleEndAt: v.number(),
+    includedCostMicros: v.number(),
+    reservedCostMicros: v.number(),
+    settledCostMicros: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_cycle_key", ["cycleKey"]),
+
   communityInferenceReceipts: defineTable({
     receiptKey: v.string(),
     sourceRunId: v.string(),
@@ -288,6 +302,7 @@ export default defineSchema({
     ),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     usageCycleId: v.optional(v.id("founderUsageCycles")),
+    operatorUsageCycleId: v.optional(v.id("operatorGrantUsageCycles")),
     surface: v.union(
       v.literal("member_agent_dock"),
       v.literal("community_funnel_builder"),
@@ -351,6 +366,7 @@ export default defineSchema({
     ),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     usageCycleId: v.optional(v.id("founderUsageCycles")),
+    operatorUsageCycleId: v.optional(v.id("operatorGrantUsageCycles")),
     toolName: v.union(v.literal("web_research"), v.literal("web_crawl")),
     action: v.union(
       v.literal("search"),

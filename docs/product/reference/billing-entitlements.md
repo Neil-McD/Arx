@@ -3,7 +3,7 @@ id: product.reference.billing_entitlements
 title: Billing and Entitlements
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-08-06
+last_verified: 2026-09-28
 ---
 
 # Billing and Entitlements
@@ -58,6 +58,12 @@ Each `$79` monthly cycle includes up to `$20` in combined raw provider cost for 
 The same funding kernel covers the member agent under a server-validated community lens, direct community-agent mentions, autonomous community cognition, and AI-assisted setup. Members never provide community inference credentials. Community BYOK and requester ChatGPT are retired as authority; historical rows remain audit or migration evidence only.
 
 The canonical operator grant derives only from one active `operatorRoles.owner` row. It creates no fake Stripe state and bypasses neither authorization, rate limits, usage receipts, nor provider-cost accounting.
+
+The operator grant waives payment, not cost bounds. Each operator-funded community has a UTC calendar-month ledger (`operatorGrantUsageCycles`) with the same `$20` raw-cost ceiling as Builder. Inference and paid tools reserve against it before provider start and settle actual cost afterwards; unknown provider usage consumes the full reservation. The same per-run headroom guard applies as for Builder, so a run cannot exceed its reservation. An exhausted month fails closed with `founder_usage_exhausted` until the next UTC month. Receipts created before this ledger existed carry no cycle and settle without one. `operatorGrantUsageCycles` deliberately parallels `founderUsageCycles` rather than sharing it: merging them would mean migrating live Builder billing rows, which is deferred until there is a concrete reason.
+
+### Polynet home member allowance
+
+In the platform-home community (`polynet`), each member other than the owner gets 25 agent turns per UTC calendar month. Agent-page turns and direct community-agent mentions count; failed receipts, workflow actions, autonomous cognition, and retries of an existing receipt do not. The 26th turn fails closed with `platform_home_member_agent_limit_reached`. The Agent page shows the reset date and offers the Builder plan: "Build your own community — $79/mo". The allowance and its upsell apply only to Polynet home; members of builder communities never see a Polynet upsell.
 
 ## Paid-Member Community Revenue
 

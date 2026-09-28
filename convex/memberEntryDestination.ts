@@ -1,9 +1,17 @@
-import { action, internalMutation } from "./_generated/server";
+import { action, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { normalizeSlug, requireCommunityChatAccess } from "./communityCore";
-import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
+import {
+  communityMembershipRowIsActive,
+  normalizeSlug,
+  requireCommunityChatAccess,
+} from "./communityCore";
 import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
+
+// Bounded candidate reads for the default destination. Entry never creates
+// membership: joining any community, including Polynet, is an explicit act.
+const OWNED_COMMUNITY_SCAN = 10;
+const MEMBERSHIP_SCAN = 25;
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -25,12 +33,40 @@ type MemberEntryDestination =
       community_name: null;
     };
 
-export const resolveMemberEntryDestinationInternal = internalMutation({
+async function resolveDefaultCommunityCandidates(ctx: any, userId: any): Promise<any[]> {
+  const [owned, memberships] = await Promise.all([
+    ctx.db
+      .query("communities")
+      .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", userId))
+      .order("desc")
+      .take(OWNED_COMMUNITY_SCAN),
+    ctx.db
+      .query("communityMemberships")
+      .withIndex("by_user_createdAt", (q: any) => q.eq("userId", userId))
+      .order("desc")
+      .take(MEMBERSHIP_SCAN),
+  ]);
+  const joined = (memberships as any[])
+    .filter((row) => communityMembershipRowIsActive(row))
+    .sort(
+      (a, b) =>
+        Number(b.activatedAt ?? b.createdAt ?? 0) - Number(a.activatedAt ?? a.createdAt ?? 0),
+    )
+    .map((row) => row.communityId);
+  const seen = new Set<string>();
+  return [...(owned as any[]).map((row) => row._id), ...joined].filter((id) => {
+    const key = String(id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export const resolveMemberEntryDestinationInternal = internalQuery({
   args: {
     userId: v.id("users"),
     communityId: v.optional(v.id("communities")),
     communitySlug: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<MemberEntryDestination> => {
     await requireAccountSetupCompleteForUser(ctx, args.userId);
@@ -49,26 +85,32 @@ export const resolveMemberEntryDestinationInternal = internalMutation({
     }
 
     if (!targetCommunityId) {
-      const home = await ensurePlatformHomeCommunityMembership({
-        ctx,
-        userId: args.userId,
-        nowMs: args.nowMs ?? Date.now(),
-      });
-      if (
-        !home.communityId ||
-        home.status === "disabled" ||
-        home.status === "missing" ||
-        home.status === "not_open"
-      ) {
-        return {
-          page: "discover" as const,
-          reason: `platform_home_${home.status}`,
-          community_id: null,
-          community_slug: null,
-          community_name: null,
-        };
+      // Owned communities first, then the most recently activated membership.
+      for (const candidateId of await resolveDefaultCommunityCandidates(ctx, args.userId)) {
+        try {
+          const { community } = await requireCommunityChatAccess({
+            ctx,
+            communityId: candidateId,
+            userId: args.userId,
+          });
+          return {
+            page: "community" as const,
+            reason: "default_community",
+            community_id: normalizeText(community._id),
+            community_slug: normalizeSlug(community.slug),
+            community_name: normalizeText(community.name) || null,
+          };
+        } catch {
+          // Archived, unfunded, blocked, or revoked: try the next candidate.
+        }
       }
-      targetCommunityId = home.communityId as any;
+      return {
+        page: "discover" as const,
+        reason: "no_default_community",
+        community_id: null,
+        community_slug: null,
+        community_name: null,
+      };
     }
 
     const { community } = await requireCommunityChatAccess({
@@ -83,7 +125,7 @@ export const resolveMemberEntryDestinationInternal = internalMutation({
 
     return {
       page: "community" as const,
-      reason: args.communityId || requestedSlug ? "requested_community" : "platform_home",
+      reason: "requested_community",
       community_id: normalizeText(community._id),
       community_slug: resolvedSlug,
       community_name: normalizeText(community.name) || null,
@@ -104,7 +146,7 @@ export const resolveMemberEntryDestination = action({
     )) as { dbUserId?: unknown } | null;
     if (!actor?.dbUserId) throw new Error("authenticated_user_required");
 
-    return (await ctx.runMutation(
+    return (await ctx.runQuery(
       (internal as any).memberEntryDestination.resolveMemberEntryDestinationInternal as any,
       {
         userId: actor.dbUserId,
@@ -112,7 +154,6 @@ export const resolveMemberEntryDestination = action({
         ...(normalizeText(args.communitySlug)
           ? { communitySlug: normalizeText(args.communitySlug) }
           : {}),
-        nowMs: Date.now(),
       },
     )) as MemberEntryDestination;
   },

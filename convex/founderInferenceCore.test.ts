@@ -2511,3 +2511,258 @@ test("paid Luna 6 budget stop settles known provider spend and releases unused r
     });
 
 });
+
+async function withOperatorPricingEnv(run: () => Promise<void>) {
+  const prior = {
+    input: process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS,
+    output: process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS,
+    reservation: process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS,
+  };
+  process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "1000000";
+  process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = "2000000";
+  process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
+  try {
+    await run();
+  } finally {
+    for (const [name, value] of [
+      ["POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS", prior.input],
+      ["POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS", prior.output],
+      ["POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS", prior.reservation],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+async function createOperatorCommunityFixture(
+  t: ReturnType<typeof convexTest>,
+  suffix: string,
+  slug?: string,
+) {
+  return await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, `${suffix}-owner`, 1_000);
+    const memberId = await insertUser(ctx, `${suffix}-member`, 1_000);
+    const communityId = await insertCommunity(ctx, ownerId, suffix, 1_000);
+    if (slug) await ctx.db.patch(communityId, { slug });
+    await ctx.db.insert("operatorRoles", {
+      userId: ownerId,
+      role: "owner",
+      active: true,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    return { ownerId, memberId, communityId };
+  });
+}
+
+function claimOperatorReceipt(
+  t: ReturnType<typeof convexTest>,
+  fixture: { ownerId: any; communityId: any },
+  args: { key: string; actorUserId: any; nowMs: number; surface?: string },
+) {
+  return t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    {
+      receiptKey: `${args.surface ?? "member_agent_dock"}:${args.key}`,
+      sourceRunId: `runtime:${args.key}`,
+      communityId: fixture.communityId,
+      actorUserId: args.actorUserId,
+      expectedPayerUserId: fixture.ownerId,
+      expectedFundingMode: "platform_operator_grant",
+      surface: args.surface ?? "member_agent_dock",
+      claimToken: `${args.key}-claim`,
+      nowMs: args.nowMs,
+    },
+  );
+}
+
+test("operator-funded communities reserve and settle against a bounded monthly ledger", async () => {
+  await withOperatorPricingEnv(async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperatorCommunityFixture(t, "operator-ledger");
+    const nowMs = Date.UTC(2026, 8, 15);
+    const claimed = await claimOperatorReceipt(t, fixture, {
+      key: "operator-ledger-a",
+      actorUserId: fixture.memberId,
+      nowMs,
+    });
+    expect(claimed).toMatchObject({ ok: true, reservedCostMicros: 1_000_000 });
+    await t.run(async (ctx) => {
+      const [cycle] = await ctx.db.query("operatorGrantUsageCycles").collect();
+      expect(cycle).toMatchObject({
+        cycleStartAt: Date.UTC(2026, 8, 1),
+        cycleEndAt: Date.UTC(2026, 9, 1),
+        includedCostMicros: 20_000_000,
+        reservedCostMicros: 1_000_000,
+        settledCostMicros: 0,
+      });
+      expect(await ctx.db.get(claimed.receiptId)).toMatchObject({
+        operatorUsageCycleId: cycle!._id,
+        reservedCostMicros: 1_000_000,
+      });
+      await settleAuthorizedFounderInferenceReceipt({
+        ctx,
+        receiptKey: "member_agent_dock:operator-ledger-a",
+        claimToken: "operator-ledger-a-claim",
+        promptTokens: 1_000,
+        completionTokens: 500,
+        providerRequests: [{ requestId: "resp_operator-ledger-a", modelId: "gpt-6-luna", serviceTier: "default", promptTokens: 1_000, completionTokens: 500, cachedInputTokens: 0, cacheWriteTokens: 0 }],
+        outcomeCode: "completed",
+        nowMs: nowMs + 1_000,
+      });
+      expect(await ctx.db.get(cycle!._id)).toMatchObject({
+        reservedCostMicros: 0,
+        settledCostMicros: 350,
+      });
+    });
+
+    // Known no-spend failure releases the whole reservation.
+    const failed = await claimOperatorReceipt(t, fixture, {
+      key: "operator-ledger-b",
+      actorUserId: fixture.memberId,
+      nowMs: nowMs + 2_000,
+    });
+    expect(failed).toMatchObject({ ok: true });
+    await expect(t.mutation(
+      (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+      {
+        receiptKey: "member_agent_dock:operator-ledger-b",
+        claimToken: "operator-ledger-b-claim",
+        promptTokens: 0,
+        completionTokens: 0,
+        failureCode: "provider_rejected_before_spend",
+        disposition: "failed",
+        nowMs: nowMs + 3_000,
+      },
+    )).resolves.toMatchObject({ ok: true, status: "failed" });
+    await t.run(async (ctx) => {
+      const [cycle] = await ctx.db.query("operatorGrantUsageCycles").collect();
+      expect(cycle).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 350 });
+      // Push the month to its ceiling: the next reservation no longer fits.
+      await ctx.db.patch(cycle!._id, { settledCostMicros: 19_500_000 });
+    });
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "operator-ledger-c",
+      actorUserId: fixture.memberId,
+      nowMs: nowMs + 4_000,
+    })).resolves.toEqual({ ok: false, errorCode: "founder_usage_exhausted" });
+
+    // A new UTC month opens a fresh ledger.
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "operator-ledger-d",
+      actorUserId: fixture.memberId,
+      nowMs: Date.UTC(2026, 9, 1, 0, 0, 1),
+    })).resolves.toMatchObject({ ok: true });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("operatorGrantUsageCycles").collect()).toHaveLength(2);
+    });
+  });
+});
+
+test("platform-home members get a monthly agent allowance; the owner and other surfaces are exempt", async () => {
+  await withOperatorPricingEnv(async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperatorCommunityFixture(t, "home-limit", "polynet");
+    const monthStart = Date.UTC(2026, 8, 1);
+    await t.run(async (ctx) => {
+      const base = {
+        communityId: fixture.communityId,
+        actorUserId: fixture.memberId,
+        payerUserId: fixture.ownerId,
+        fundingMode: "platform_operator_grant" as const,
+        provider: "openai" as const,
+        modelId: "gpt-6-luna",
+        claimToken: "seed",
+        leaseExpiresAt: 1,
+      };
+      // Last month's usage and failed receipts never count.
+      await ctx.db.insert("communityInferenceReceipts", {
+        ...base, receiptKey: "seed:last-month", sourceRunId: "seed:last-month",
+        surface: "member_agent_dock", status: "settled",
+        authorizedAt: monthStart - 10, createdAt: monthStart - 10, updatedAt: monthStart - 10,
+      });
+      await ctx.db.insert("communityInferenceReceipts", {
+        ...base, receiptKey: "seed:failed", sourceRunId: "seed:failed",
+        surface: "member_agent_dock", status: "failed",
+        authorizedAt: monthStart + 1, createdAt: monthStart + 1, updatedAt: monthStart + 1,
+      });
+      for (let index = 0; index < 24; index += 1) {
+        await ctx.db.insert("communityInferenceReceipts", {
+          ...base,
+          receiptKey: `seed:${index}`,
+          sourceRunId: `seed:${index}`,
+          surface: index % 2 === 0 ? "member_agent_dock" : "community_agent_mention",
+          status: "settled",
+          authorizedAt: monthStart + 10 + index,
+          createdAt: monthStart + 10 + index,
+          updatedAt: monthStart + 10 + index,
+        });
+      }
+    });
+    const nowMs = Date.UTC(2026, 8, 20);
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "home-limit-25th",
+      actorUserId: fixture.memberId,
+      nowMs,
+    })).resolves.toMatchObject({ ok: true });
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "home-limit-26th",
+      actorUserId: fixture.memberId,
+      nowMs: nowMs + 60_000,
+      surface: "community_agent_mention",
+    })).resolves.toEqual({ ok: false, errorCode: "platform_home_member_agent_limit_reached" });
+    // Workflow actions are community work, not member-initiated turns.
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "home-limit-workflow",
+      actorUserId: fixture.memberId,
+      nowMs: nowMs + 120_000,
+      surface: "community_workflow_action",
+    })).resolves.toMatchObject({ ok: true });
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "home-limit-owner",
+      actorUserId: fixture.ownerId,
+      nowMs: nowMs + 180_000,
+    })).resolves.toMatchObject({ ok: true });
+    // The allowance resets with the UTC month.
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "home-limit-next-month",
+      actorUserId: fixture.memberId,
+      nowMs: Date.UTC(2026, 9, 1, 0, 1),
+    })).resolves.toMatchObject({ ok: true });
+  });
+});
+
+test("the monthly member allowance applies only to the platform-home community", async () => {
+  await withOperatorPricingEnv(async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperatorCommunityFixture(t, "not-home-limit");
+    const monthStart = Date.UTC(2026, 8, 1);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 30; index += 1) {
+        await ctx.db.insert("communityInferenceReceipts", {
+          receiptKey: `seed-other:${index}`,
+          sourceRunId: `seed-other:${index}`,
+          communityId: fixture.communityId,
+          actorUserId: fixture.memberId,
+          payerUserId: fixture.ownerId,
+          fundingMode: "platform_operator_grant",
+          surface: "member_agent_dock",
+          provider: "openai",
+          modelId: "gpt-6-luna",
+          status: "settled",
+          claimToken: "seed",
+          leaseExpiresAt: 1,
+          authorizedAt: monthStart + index,
+          createdAt: monthStart + index,
+          updatedAt: monthStart + index,
+        });
+      }
+    });
+    await expect(claimOperatorReceipt(t, fixture, {
+      key: "not-home-31st",
+      actorUserId: fixture.memberId,
+      nowMs: Date.UTC(2026, 8, 20),
+    })).resolves.toMatchObject({ ok: true });
+  });
+});

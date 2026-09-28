@@ -36,12 +36,18 @@ test("unknown prior usage blocks another paid call and keeps the indeterminate p
     .toThrow(FOUNDER_INFERENCE_USAGE_INCOMPLETE);
 });
 
-test("paid Luna 6 fails closed on missing reservation; operator and legacy turns keep their path", () => {
+test("Luna 6 fails closed on missing reservation for both funding modes; legacy turns keep their path", () => {
   const usage = createFounderInferenceUsageTotals("gpt-6-luna");
   expect(() => assertPaidLuna6ProviderHeadroom({ session: { ...session, reservedCostMicros: undefined }, usage, maxOutputTokens: 2048 }))
     .toThrow("founder_usage_receipt_authority_missing");
-  expect(() => assertPaidLuna6ProviderHeadroom({ session: { ...session, fundingMode: "platform_operator_grant" }, usage, maxOutputTokens: 2048 }))
+  const operator = { ...session, fundingMode: "platform_operator_grant" as const };
+  expect(() => assertPaidLuna6ProviderHeadroom({ session: operator, usage, maxOutputTokens: 2048 }))
     .not.toThrow();
+  expect(() => assertPaidLuna6ProviderHeadroom({ session: { ...operator, reservedCostMicros: undefined }, usage, maxOutputTokens: 2048 }))
+    .toThrow("founder_usage_receipt_authority_missing");
+  // An operator run is held to its reservation exactly like a Builder run.
+  expect(() => assertPaidLuna6ProviderHeadroom({ session: { ...operator, reservedCostMicros: 1 }, usage, maxOutputTokens: 2048 }))
+    .toThrow(FOUNDER_INFERENCE_RUN_BUDGET_EXHAUSTED);
   expect(() => assertPaidLuna6ProviderHeadroom({ session: { ...session, modelId: "gpt-5.6-luna" }, usage, maxOutputTokens: 2048 }))
     .not.toThrow();
 });

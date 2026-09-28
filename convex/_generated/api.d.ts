@@ -199,6 +199,7 @@ import type * as openRouterNativeTransport from "../openRouterNativeTransport.js
 import type * as operatorAccess from "../operatorAccess.js";
 import type * as operatorDashboard from "../operatorDashboard.js";
 import type * as operatorEntitlementsCore from "../operatorEntitlementsCore.js";
+import type * as operatorGrantUsageCore from "../operatorGrantUsageCore.js";
 import type * as operatorIntelligence from "../operatorIntelligence.js";
 import type * as operatorSentryDiagnostics from "../operatorSentryDiagnostics.js";
 import type * as personalMemory from "../personalMemory.js";
@@ -444,6 +445,7 @@ declare const fullApi: ApiFromModules<{
   operatorAccess: typeof operatorAccess;
   operatorDashboard: typeof operatorDashboard;
   operatorEntitlementsCore: typeof operatorEntitlementsCore;
+  operatorGrantUsageCore: typeof operatorGrantUsageCore;
   operatorIntelligence: typeof operatorIntelligence;
   operatorSentryDiagnostics: typeof operatorSentryDiagnostics;
   personalMemory: typeof personalMemory;

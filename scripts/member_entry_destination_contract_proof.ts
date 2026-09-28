@@ -48,14 +48,25 @@ assert.match(
 );
 assert.match(
   backend,
-  /requireAccountSetupCompleteForUser\(ctx, args\.userId\)[\s\S]*ensurePlatformHomeCommunityMembership/,
-  "member entry must require completed account setup before creating platform-home membership",
+  /requireAccountSetupCompleteForUser\(ctx, args\.userId\)[\s\S]*resolveDefaultCommunityCandidates/,
+  "member entry must require completed account setup before resolving a default community",
 );
-assert.doesNotMatch(
-  auth,
-  /ensurePlatformHomeCommunityMembership/,
-  "authentication must establish identity without creating community membership",
+assert.match(
+  backend,
+  /resolveMemberEntryDestinationInternal = internalQuery/,
+  "member entry is a read: resolving a destination can never create membership",
 );
+for (const [label, source] of [
+  ["member entry", backend],
+  ["authentication", auth],
+  ["platform home", homeCommunity],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /ensurePlatformHomeCommunityMembership|platform_home_autojoin|activateCommunityMembershipCore\(/,
+    `${label} must not auto-join Polynet; joining is an explicit public-funnel action`,
+  );
+}
 assert.match(
   communityPublic,
   /joinPublicCommunityInternal[\s\S]*requireAccountSetupCompleteForUser\(args\.ctx, args\.userId\)[\s\S]*activateCommunityMembershipCore/,
@@ -63,18 +74,13 @@ assert.match(
 );
 assert.match(
   backend,
-  /ensurePlatformHomeCommunityMembership/,
-  "generic member entry must reuse canonical Polynet auto-membership",
-);
-assert.match(
-  homeCommunity,
-  /PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON[\s\S]*platformHomeMembershipDisablesAutojoin[\s\S]*existingMembership[\s\S]*status: "disabled"/,
-  "canonical Polynet auto-membership must preserve explicit member opt-out as membership state",
+  /by_owner_createdAt[\s\S]*by_user_createdAt[\s\S]*communityMembershipRowIsActive/,
+  "default entry must prefer owned communities, then active memberships, from bounded indexed reads",
 );
 assert.match(
   backend,
-  /home\.status === "disabled"[\s\S]*home\.status === "missing"[\s\S]*home\.status === "not_open"[\s\S]*page: "discover"/,
-  "unavailable or opted-out Polynet entry must fall back to Discover",
+  /for \(const candidateId of[\s\S]*requireCommunityChatAccess[\s\S]*catch[\s\S]*page: "discover"/,
+  "each default candidate must pass authoritative access, otherwise entry falls back to Discover",
 );
 assert.match(
   backend,

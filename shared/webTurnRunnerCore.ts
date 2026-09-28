@@ -13,6 +13,7 @@ export type InferenceIssueModalState = {
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
+  code?: string | null;
 };
 
 export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {

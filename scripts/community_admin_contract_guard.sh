@@ -343,9 +343,6 @@ require_multiline_match "$BILLING_CORE_FILE" \
 require_multiline_match "$COMMUNITY_COMMERCE_FILE" \
   'syncCommunitySubscriptionLifecycleInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
   "subscription status changes maintain active member count"
-require_multiline_match "$PLATFORM_HOME_COMMUNITY_FILE" \
-  'ensurePlatformHomeCommunityMembership[\s\S]*activateCommunityMembershipCore' \
-  "platform autojoin maintains active member count"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'revokeCommunityMemberInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
   "member removal and ban maintain active member count"

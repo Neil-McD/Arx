@@ -551,6 +551,7 @@ export function useWebTurnRunnerController<
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: failure.message.trim() || null,
+                code: failure.code ?? null,
               });
               return { cancelled: false, error: null };
             }
@@ -720,6 +721,7 @@ export function useWebTurnRunnerController<
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: msg.trim() || null,
+                code: code ?? null,
               });
               streamInferenceIssueHandled = true;
               seenDone = true;

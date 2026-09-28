@@ -3,7 +3,7 @@ id: product.funnel
 title: Community Funnel
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-09-23
+last_verified: 2026-09-28
 ---
 
 # Community Funnel
@@ -52,6 +52,16 @@ Polynet landing page. New builder model runs, draft edits, VSL edits,
 publication, and active-slot changes are rejected by the backend. Stored
 private drafts, published snapshots, and paid builder receipts remain for
 audit; this slice does not delete or migrate them.
+
+## Entry Paths
+
+Signing in establishes identity; it never creates community membership.
+
+- A signed-in user with no requested community lands on a community they own,
+  then their most recently activated active membership, then Discover.
+- Polynet home (`/c/polynet`) is joined like any other community, through its
+  public funnel and entry policy. There is no automatic platform-home
+  membership.
 
 ## Rules
 
