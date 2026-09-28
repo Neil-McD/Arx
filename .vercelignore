@@ -1,3 +1,17 @@
 /references
 /.worktrees
 /.npm-cache
+
+# Local secrets never enter a deployment upload. `.vercel/` can hold pulled,
+# decrypted environment files (for example .env.production.local).
+.env
+.env.*
+.vercel
+.claude
+
+# Vercel installs and builds remotely; local dependencies, build output, and
+# gate evidence are not deployment inputs.
+node_modules
+/dist
+/apps/web/dist
+/artifacts
