@@ -74,8 +74,8 @@ assert.match(
 );
 assert.match(
   backend,
-  /by_owner_createdAt[\s\S]*by_user_createdAt[\s\S]*communityMembershipRowIsActive/,
-  "default entry must prefer owned communities, then active memberships, from bounded indexed reads",
+  /by_user_activeUntil[\s\S]*by_owner_createdAt[\s\S]*by_user_createdAt[\s\S]*communityMembershipRowIsActive[\s\S]*\[\.\.\.visited, \.\.\.\(owned/,
+  "default entry must prefer the last visited community, then owned communities, then active memberships, from bounded indexed reads",
 );
 assert.match(
   backend,

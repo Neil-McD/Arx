@@ -25,8 +25,7 @@ import {
 import {
   COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE,
   PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED,
-  PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS,
-  utcMonthWindow,
+  formatPlatformHomeMemberLimitMessage,
   type CommunityInferenceSurface,
   type FounderProviderRequestUsage,
 } from "../shared/founderInference";
@@ -103,17 +102,10 @@ function resolveCommunityFundingClaimFailure(error: unknown): {
 } {
   const rawCode = error instanceof Error ? error.message : String(error ?? "");
   if (rawCode === PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED) {
-    const resetsOn = new Date(utcMonthWindow(Date.now()).endAt).toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      timeZone: "UTC",
-    });
     return {
       status: 429,
       code: COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE,
-      message:
-        `You've used your ${PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS} free agent messages in Polynet this month. ` +
-        `They reset on ${resetsOn}. Want an agent that works for you and your clients all month? Build your own community.`,
+      message: formatPlatformHomeMemberLimitMessage(Date.now()),
     };
   }
   if (rawCode === "founder_usage_exhausted") {

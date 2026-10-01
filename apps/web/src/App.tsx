@@ -2330,6 +2330,7 @@ export default function App() {
       setCommunityMessageMentions,
       communityAgentServeIssue,
       onDismissCommunityAgentServeIssue: handleDismissCommunityAgentServeIssue,
+      onStartBuilderFromServeIssue: () => openNewCommunityPurchaseFlow(),
       isSendingCommunityMessage,
       communityChatError,
       fileInputRef: communityFileInputRef,
