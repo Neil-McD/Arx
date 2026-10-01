@@ -54,13 +54,13 @@ for (const [packageName, expectedVersion] of Object.entries(exactRootResolutions
 
 assert.equal(
   webManifest.overrides?.["brace-expansion"],
-  "5.0.9",
+  "5.0.12",
   "web must pin the patched brace-expansion release",
 );
 assert.equal(
   webLock.packages?.["node_modules/brace-expansion"]?.version,
-  "5.0.9",
-  "web lock must resolve brace-expansion@5.0.9",
+  "5.0.12",
+  "web lock must resolve brace-expansion@5.0.12",
 );
 assert.equal(
   rootLock.packages?.["node_modules/postcss"]?.version,
@@ -74,7 +74,7 @@ assert.equal(
 );
 assert.equal(
   webLock.packages?.["node_modules/dompurify"]?.version,
-  "3.4.13",
+  "3.4.16",
   "web lock must resolve the patched DOMPurify release",
 );
 
