@@ -9,8 +9,8 @@ type CloudCommunityAgentConciergeGatewayParams<SessionT> = {
 export type CloudCommunityAgentServeIssue = {
   id: string;
   community_id: string;
-  reason: "community_owner_action_required";
-  cta: null;
+  reason: "community_owner_action_required" | "member_agent_limit_reached";
+  cta: "start_builder" | null;
   message: string;
   created_at: string;
 };
@@ -28,20 +28,18 @@ function coerceCommunityAgentServeIssue(payload: unknown): CloudCommunityAgentSe
   const reason = coerceNullableString(row.reason);
   const cta = coerceNullableString(row.cta);
   const createdAt = coerceNullableString(row.created_at);
-  if (
-    !id ||
-    !communityId ||
-    reason !== "community_owner_action_required" ||
-    cta !== null ||
-    !createdAt
-  ) {
+  // Only known reason/action pairs are rendered; anything else is ignored.
+  const known =
+    (reason === "community_owner_action_required" && cta === null) ||
+    (reason === "member_agent_limit_reached" && cta === "start_builder");
+  if (!id || !communityId || !known || !createdAt) {
     return null;
   }
   return {
     id,
     community_id: communityId,
-    reason,
-    cta: null,
+    reason: reason as CloudCommunityAgentServeIssue["reason"],
+    cta: cta as CloudCommunityAgentServeIssue["cta"],
     message: coerceNullableString(row.message) ?? "Community AI is temporarily unavailable.",
     created_at: createdAt,
   };

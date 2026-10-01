@@ -108,7 +108,12 @@ assert.match(
 assert.match(
   issueQuery,
   /reason: "community_owner_action_required"[\s\S]*cta: null[\s\S]*community owner needs to update inference settings/,
-  "serve issue lookup should return only a community-owner hosted-funding issue",
+  "serve issue lookup should return the community-owner hosted-funding issue",
+);
+assert.match(
+  issueQuery,
+  /issueCode === PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED\)[\s\S]*reason: "member_agent_limit_reached"[\s\S]*cta: "start_builder"[\s\S]*formatPlatformHomeMemberLimitMessage\(nowMs\)/,
+  "serve issue lookup should return the requester's own monthly allowance issue with the Builder action",
 );
 assert.doesNotMatch(
   issueQuery,
@@ -118,8 +123,13 @@ assert.doesNotMatch(
 
 assert.match(
   gateway,
-  /export type CloudCommunityAgentServeIssue[\s\S]*reason: "community_owner_action_required"[\s\S]*cta: null/,
-  "gateway should expose only the hosted-funding owner-action issue",
+  /export type CloudCommunityAgentServeIssue[\s\S]*reason: "community_owner_action_required" \| "member_agent_limit_reached"[\s\S]*cta: "start_builder" \| null/,
+  "gateway should expose only the hosted-funding and member-allowance issues",
+);
+assert.match(
+  gateway,
+  /reason === "community_owner_action_required" && cta === null[\s\S]*reason === "member_agent_limit_reached" && cta === "start_builder"/,
+  "gateway should accept only known reason and action pairs",
 );
 assert.match(
   gateway,
@@ -154,7 +164,7 @@ assert.match(
 );
 assert.match(
   app,
-  /isCommunityChatActive: activePage === "community" && communityTab === "chat"/,
+  /isCommunityChatActive:\s*activePage === "community" &&\s*activeView === "home" &&\s*communityTab === "chat"/,
   "App composition must pass an explicit active-community-chat scope into the interaction owner",
 );
 assert.match(
@@ -169,8 +179,8 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /community-agent-serve-notice[\s\S]*Community AI is temporarily unavailable[\s\S]*onDismissCommunityAgentServeIssue/,
-  "chat panel should render the hosted-funding owner-action notice without leaking owner details",
+  /community-agent-serve-notice[\s\S]*Community AI is temporarily unavailable[\s\S]*cta === "start_builder" && onStartBuilderFromServeIssue[\s\S]*onDismissCommunityAgentServeIssue/,
+  "chat panel should render the hosted-funding notice and the member-allowance Builder action",
 );
 assert.doesNotMatch(
   `${gateway}\n${projection}\n${chatPanel}`,

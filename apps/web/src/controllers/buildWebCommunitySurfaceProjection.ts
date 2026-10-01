@@ -102,6 +102,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   setCommunityMessageMentions: WebCommunityChatPanelProps["setCommunityMessageMentions"];
   communityAgentServeIssue: WebCommunityChatPanelProps["communityAgentServeIssue"];
   onDismissCommunityAgentServeIssue: WebCommunityChatPanelProps["onDismissCommunityAgentServeIssue"];
+  onStartBuilderFromServeIssue: WebCommunityChatPanelProps["onStartBuilderFromServeIssue"];
   isSendingCommunityMessage: WebCommunityChatPanelProps["isSendingCommunityMessage"];
   communityChatError: WebCommunityChatPanelProps["communityChatError"];
   fileInputRef: WebCommunityChatPanelProps["fileInputRef"];
@@ -299,6 +300,7 @@ export function buildWebCommunitySurfaceProjection(
     setCommunityMessageMentions: params.setCommunityMessageMentions,
     communityAgentServeIssue: params.communityAgentServeIssue,
     onDismissCommunityAgentServeIssue: params.onDismissCommunityAgentServeIssue,
+    onStartBuilderFromServeIssue: params.onStartBuilderFromServeIssue,
     isSendingCommunityMessage: params.isSendingCommunityMessage,
     communityChatError: params.communityChatError,
     fileInputRef: params.fileInputRef,

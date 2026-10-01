@@ -262,6 +262,7 @@ export type WebCommunityChatPanelProps = {
   ) => void;
   communityAgentServeIssue: CloudCommunityAgentServeIssue | null;
   onDismissCommunityAgentServeIssue: (issueId: string) => void;
+  onStartBuilderFromServeIssue?: () => void;
   isSendingCommunityMessage: boolean;
   communityChatError: string | null;
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
@@ -340,6 +341,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     setCommunityMessageMentions,
     communityAgentServeIssue,
     onDismissCommunityAgentServeIssue,
+    onStartBuilderFromServeIssue,
     isSendingCommunityMessage,
     communityChatError,
     fileInputRef,
@@ -1101,15 +1103,27 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   const renderCommunityAgentServeNotice = () => {
     if (!communityAgentServeIssue) return null;
+    const isMemberLimit = communityAgentServeIssue.reason === "member_agent_limit_reached";
     return (
       <div className="community-agent-serve-notice" role="status" aria-live="polite">
         <div className="community-agent-serve-notice-copy">
           <strong>
-            Community AI is temporarily unavailable
+            {isMemberLimit
+              ? "You've used this month's free agent messages"
+              : "Community AI is temporarily unavailable"}
           </strong>
           <span>{communityAgentServeIssue.message}</span>
         </div>
         <div className="community-agent-serve-notice-actions">
+          {communityAgentServeIssue.cta === "start_builder" && onStartBuilderFromServeIssue ? (
+            <button
+              className="community-agent-serve-notice-primary"
+              type="button"
+              onClick={onStartBuilderFromServeIssue}
+            >
+              Build your own community — $79/mo
+            </button>
+          ) : null}
           <button
             className="community-agent-serve-notice-dismiss"
             type="button"

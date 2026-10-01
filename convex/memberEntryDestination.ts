@@ -10,6 +10,7 @@ import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
 
 // Bounded candidate reads for the default destination. Entry never creates
 // membership: joining any community, including Polynet, is an explicit act.
+const RECENT_PRESENCE_SCAN = 10;
 const OWNED_COMMUNITY_SCAN = 10;
 const MEMBERSHIP_SCAN = 25;
 
@@ -33,8 +34,16 @@ type MemberEntryDestination =
       community_name: null;
     };
 
+// Last visited first (server-authorized presence heartbeat), then owned
+// communities, then the most recently activated membership. Presence rows
+// written before activeUntil existed sort last and fall through to the rest.
 async function resolveDefaultCommunityCandidates(ctx: any, userId: any): Promise<any[]> {
-  const [owned, memberships] = await Promise.all([
+  const [recent, owned, memberships] = await Promise.all([
+    ctx.db
+      .query("communityPresence")
+      .withIndex("by_user_activeUntil", (q: any) => q.eq("userId", userId))
+      .order("desc")
+      .take(RECENT_PRESENCE_SCAN),
     ctx.db
       .query("communities")
       .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", userId))
@@ -54,7 +63,10 @@ async function resolveDefaultCommunityCandidates(ctx: any, userId: any): Promise
     )
     .map((row) => row.communityId);
   const seen = new Set<string>();
-  return [...(owned as any[]).map((row) => row._id), ...joined].filter((id) => {
+  const visited = (recent as any[])
+    .filter((row) => typeof row.activeUntil === "number")
+    .map((row) => row.communityId);
+  return [...visited, ...(owned as any[]).map((row) => row._id), ...joined].filter((id) => {
     const key = String(id);
     if (seen.has(key)) return false;
     seen.add(key);
@@ -85,7 +97,6 @@ export const resolveMemberEntryDestinationInternal = internalQuery({
     }
 
     if (!targetCommunityId) {
-      // Owned communities first, then the most recently activated membership.
       for (const candidateId of await resolveDefaultCommunityCandidates(ctx, args.userId)) {
         try {
           const { community } = await requireCommunityChatAccess({

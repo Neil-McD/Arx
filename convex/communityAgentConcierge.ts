@@ -7,6 +7,10 @@ import {
 } from "./communityCore";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import {
+  PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED,
+  formatPlatformHomeMemberLimitMessage,
+} from "../shared/founderInference";
 
 const CONCIERGE_SERVE_ISSUE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -57,6 +61,7 @@ export const getMyLatestCommunityAgentServeIssue = query({
       if (row.status !== "skipped" && row.status !== "error") return false;
       const issueCode = row.status === "skipped" ? row.intakeReason : row.errorCode;
       if (
+        issueCode !== PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED &&
         issueCode !== "founder_plan_required" &&
         issueCode !== "founder_subscription_inactive" &&
         issueCode !== "founder_subscription_ambiguous" &&
@@ -75,6 +80,17 @@ export const getMyLatestCommunityAgentServeIssue = query({
 
     if (!issue) return null;
     const issueCode = issue.status === "skipped" ? issue.intakeReason : issue.errorCode;
+    if (issueCode === PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED) {
+      // The requester's own monthly allowance, not a community billing problem.
+      return {
+        id: normalizeIdValue(issue._id),
+        community_id: normalizeIdValue(args.communityId),
+        reason: "member_agent_limit_reached",
+        cta: "start_builder",
+        message: formatPlatformHomeMemberLimitMessage(nowMs),
+        created_at: new Date(coerceTimestampMs(issue.createdAt, nowMs)).toISOString(),
+      };
+    }
     const funding = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
     const usageIssue =
       issueCode === "founder_usage_exhausted" ||

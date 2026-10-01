@@ -138,3 +138,67 @@ describe("default member entry destination", () => {
     });
   });
 });
+
+describe("last-visited default entry", () => {
+  async function insertPresence(ctx: any, communityId: any, userId: any, seenAt: number, leased = true) {
+    await ctx.db.insert("communityPresence", {
+      communityId,
+      userId,
+      lastSeenAt: seenAt,
+      ...(leased ? { activeUntil: seenAt + 60_000 } : {}),
+      createdAt: seenAt,
+      updatedAt: seenAt,
+    });
+  }
+
+  test("the most recently visited community wins over newer owned communities", async () => {
+    const t = convexTest(schema, modules);
+    const f = await t.run(async (ctx) => {
+      const ownerId = await insertCompletedUser(ctx, "visit-owner");
+      const homeId = await insertCommunity(ctx, ownerId, "polynet", nowMs);
+      await insertCommunity(ctx, ownerId, "newest-test-fixture", nowMs + 500);
+      await insertPresence(ctx, homeId, ownerId, nowMs + 1_000);
+      return { ownerId };
+    });
+    await expect(resolve(t, f.ownerId)).resolves.toMatchObject({
+      page: "community",
+      reason: "default_community",
+      community_slug: "polynet",
+    });
+  });
+
+  test("a recently visited community the user has left is skipped", async () => {
+    const t = convexTest(schema, modules);
+    const f = await t.run(async (ctx) => {
+      const ownerId = await insertCompletedUser(ctx, "left-owner");
+      const memberId = await insertCompletedUser(ctx, "left-member");
+      const leftId = await insertCommunity(ctx, ownerId, "left-recently");
+      const stayedId = await insertCommunity(ctx, ownerId, "still-joined");
+      await insertMembership(ctx, leftId, memberId, nowMs + 10, true);
+      await insertMembership(ctx, stayedId, memberId, nowMs + 5);
+      await insertPresence(ctx, leftId, memberId, nowMs + 2_000);
+      await insertPresence(ctx, stayedId, memberId, nowMs + 1_000);
+      return { memberId };
+    });
+    await expect(resolve(t, f.memberId)).resolves.toMatchObject({
+      page: "community",
+      community_slug: "still-joined",
+    });
+  });
+
+  test("presence rows without a lease fall through to the existing order", async () => {
+    const t = convexTest(schema, modules);
+    const f = await t.run(async (ctx) => {
+      const builderId = await insertCompletedUser(ctx, "legacy-builder");
+      const otherOwnerId = await insertCompletedUser(ctx, "legacy-other");
+      const joinedId = await insertCommunity(ctx, otherOwnerId, "legacy-joined");
+      await insertMembership(ctx, joinedId, builderId, nowMs + 50);
+      await insertPresence(ctx, joinedId, builderId, nowMs + 3_000, false);
+      await insertCommunity(ctx, builderId, "legacy-owned");
+      return { builderId };
+    });
+    await expect(resolve(t, f.builderId)).resolves.toMatchObject({
+      community_slug: "legacy-owned",
+    });
+  });
+});

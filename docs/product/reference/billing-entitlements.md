@@ -63,7 +63,7 @@ The operator grant waives payment, not cost bounds. Each operator-funded communi
 
 ### Polynet home member allowance
 
-In the platform-home community (`polynet`), each member other than the owner gets 25 agent turns per UTC calendar month. Agent-page turns and direct community-agent mentions count; failed receipts, workflow actions, autonomous cognition, and retries of an existing receipt do not. The 26th turn fails closed with `platform_home_member_agent_limit_reached`. The Agent page shows the reset date and offers the Builder plan: "Build your own community — $79/mo". The allowance and its upsell apply only to Polynet home; members of builder communities never see a Polynet upsell.
+In the platform-home community (`polynet`), each member other than the owner gets 25 agent turns per UTC calendar month. Agent-page turns and direct community-agent mentions count; failed receipts, workflow actions, autonomous cognition, and retries of an existing receipt do not. The 26th turn fails closed with `platform_home_member_agent_limit_reached`. The Agent page, and the chat notice after a direct community-agent mention, show the reset date and offer the Builder plan: "Build your own community — $79/mo". The allowance and its upsell apply only to Polynet home; members of builder communities never see a Polynet upsell.
 
 ## Paid-Member Community Revenue
 

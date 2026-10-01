@@ -20,6 +20,19 @@ export const PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED =
 export const COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE =
   "community_member_agent_limit_reached";
 
+// One member-facing explanation for every surface that hits the allowance.
+export function formatPlatformHomeMemberLimitMessage(nowMs: number): string {
+  const resetsOn = new Date(utcMonthWindow(nowMs).endAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  return (
+    `You've used your ${PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS} free agent messages in Polynet this month. ` +
+    `They reset on ${resetsOn}. Want an agent that works for you and your clients all month? Build your own community.`
+  );
+}
+
 export function utcMonthWindow(nowMs: number): { startAt: number; endAt: number; key: string } {
   const now = new Date(nowMs);
   const year = now.getUTCFullYear();

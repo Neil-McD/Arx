@@ -57,8 +57,10 @@ audit; this slice does not delete or migrate them.
 
 Signing in establishes identity; it never creates community membership.
 
-- A signed-in user with no requested community lands on a community they own,
-  then their most recently activated active membership, then Discover.
+- A signed-in user with no requested community lands on the community they
+  most recently viewed (server-recorded presence), then a community they own,
+  then their most recently activated active membership, then Discover. Every
+  candidate must pass current access checks.
 - Polynet home (`/c/polynet`) is joined like any other community, through its
   public funnel and entry policy. There is no automatic platform-home
   membership.
