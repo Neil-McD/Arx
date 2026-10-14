@@ -1,0 +1,174 @@
+{
+  "observedAt": "2026-10-14T16:00:13.764Z",
+  "package": 1,
+  "status": "candidate_verified_release_held_at_dependency_audit",
+  "source": {
+    "main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "previousStaging": "1fc266e1ddaf3880491e7a7d3fdfa1bb32dfcfa4",
+    "candidateHead": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "candidateKind": "working_tree",
+    "runtimeDeltaFromMain": [],
+    "newExecutableDelta": [
+      "scripts/member_ontology_contract_proof.ts"
+    ]
+  },
+  "liveBefore": {
+    "stagingWeb": "1fc266e1ddaf3880491e7a7d3fdfa1bb32dfcfa4",
+    "productionWeb": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+    "backend": "dev:quick-porcupine-949",
+    "exactBackendCommit": "unverified",
+    "functionSpecSha256": "f38b8ee2c2e8e309da4ba5bc4013d04a7c5ef3ea7d8f6e3cabaecef5561ec9dd",
+    "entryInterface": {
+      "functionType": "Mutation",
+      "hasNowMs": true
+    }
+  },
+  "checks": {
+    "ontologyProof": "pass_after_reproduced_failure",
+    "focused": {
+      "passed": 233,
+      "failed": 0,
+      "files": 18,
+      "sha256": "2084f43b7b89a0ae8ccb4c3291b2d4215fdf6fc94a7f13964baabbc79e39ae1f"
+    },
+    "workflow": {
+      "passed": 213,
+      "failed": 0,
+      "files": 3,
+      "sha256": "5a05d7e3e8f64319be0d9117bcecea8ae5d6a848030903a91fd0d882a6076102"
+    },
+    "fullRepository": {
+      "passed": 1587,
+      "failed": 0,
+      "files": 189,
+      "logSha256": "b41778d6ef35ae409843f4861ca9c1adf5453b2546d79e88035dad4b0eb496ff"
+    },
+    "releaseGate": {
+      "status": "failed",
+      "candidate": {
+        "expectedSha": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+        "headSha": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+        "buildId": "0a100cfb544851ab06da25f93d8ad549db917ee4-dirty",
+        "clean": false,
+        "kind": "working_tree"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "status": "passed"
+        },
+        {
+          "id": "convex_generated_surface",
+          "status": "passed"
+        },
+        {
+          "id": "convex_typecheck",
+          "status": "passed"
+        },
+        {
+          "id": "web_typecheck",
+          "status": "passed"
+        },
+        {
+          "id": "web_build",
+          "status": "passed"
+        },
+        {
+          "id": "web_build_identity",
+          "status": "passed"
+        },
+        {
+          "id": "web_bundle_budget",
+          "status": "passed"
+        },
+        {
+          "id": "media_reading_browser",
+          "status": "passed"
+        },
+        {
+          "id": "app_theme_contract",
+          "status": "passed"
+        },
+        {
+          "id": "loading_correctness",
+          "status": "passed"
+        },
+        {
+          "id": "convex_cut_guard",
+          "status": "passed"
+        },
+        {
+          "id": "foundation_baseline",
+          "status": "passed"
+        },
+        {
+          "id": "dependency_security_interlock",
+          "status": "passed"
+        },
+        {
+          "id": "root_dependency_audit",
+          "status": "failed"
+        }
+      ],
+      "sha256": "6ddc3d7a63a84e33198f76cc1b01bd5ad25a91c3bfc062c6be49eeaee28364fc"
+    },
+    "rootAudit": {
+      "counts": {
+        "info": 0,
+        "low": 4,
+        "moderate": 0,
+        "high": 1,
+        "critical": 0,
+        "total": 5
+      },
+      "advisories": [
+        {
+          "package": "katex",
+          "range": ">=0.11.0 <0.18.2",
+          "severity": "low",
+          "url": "https://github.com/advisories/GHSA-238p-pmpm-9mq7"
+        },
+        {
+          "package": "source-map-js",
+          "range": ">=1.0.0 <1.2.2",
+          "severity": "high",
+          "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+        }
+      ],
+      "sha256": "7a2b6362f921a7f52ec0b7002176d38570a1c37466e57fd6159451b691e9eb59"
+    },
+    "webAudit": {
+      "counts": {
+        "info": 0,
+        "low": 4,
+        "moderate": 0,
+        "high": 1,
+        "critical": 0,
+        "total": 5
+      },
+      "advisories": [
+        {
+          "package": "katex",
+          "range": ">=0.11.0 <0.18.2",
+          "severity": "low",
+          "url": "https://github.com/advisories/GHSA-238p-pmpm-9mq7"
+        },
+        {
+          "package": "source-map-js",
+          "range": ">=1.0.0 <1.2.2",
+          "severity": "high",
+          "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+        }
+      ],
+      "sha256": "afa04eb883a894b72f5dbf69582929790a900cc2829109e5be2bc4531735c95e"
+    }
+  },
+  "effects": {
+    "remoteBranchesChanged": false,
+    "stagingBackendDeployed": false,
+    "stagingWebDeployed": false,
+    "productionChanged": false,
+    "realMcpBearerAcceptance": "package_2_not_run"
+  },
+  "nextGate": "dependency_remediation_scope_then_clean_commit_gate_before_staging_release"
+}
