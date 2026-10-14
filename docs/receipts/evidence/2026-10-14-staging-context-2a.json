@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "observedDate": "2026-10-14",
+  "slice": "2A authenticated community context",
+  "status": "passed",
+  "baseline": {
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "parentReceiptCommit": "bc7d8b2bb738c9174d9238a2cc301e565590859f",
+    "runtimeSha": "6ae69677964ccd599870de81afed9a45be4ca805",
+    "backendDeployment": "dev:quick-porcupine-949",
+    "backendProvenance": "Package 1 deployment receipt; no backend redeploy in slice 2A",
+    "harnessRevision": "60357434fc8a4ddba7f19fd43a501ae613360c6b",
+    "executedSourceWasUncommitted": true,
+    "executedSourceMatchesHarnessRevision": true,
+    "executedSourceSha256": {
+      "scripts/polynet_workspace_mcp_external_smoke.ts": "35f66712126b0090ea3fd1341bb175805827d2cfe2a45393a2828d206c0deabb",
+      "scripts/polynet_mcp_context_acceptance.ts": "60eb2cb233a80d1805b4a470a4457937c79419a1bc44ddebc85bd98c34b7227a",
+      "scripts/polynet_mcp_context_acceptance.test.ts": "c2cf158ccc189a1890e54962859198e94453e26b3bc88238b71a439aec8b926c"
+    }
+  },
+  "authentication": {
+    "identitySource": "Two fresh real Google-to-WorkOS staging logins in separate browser sessions",
+    "credentialAcquisition": "Existing internal authSessions bootstrap retrieved/refreshed provider-issued bearers using administrative staging access after browser tooling blocked session-response navigation",
+    "serverVerification": "Public MCP tools/list and list/read/search accepted actual provider JWTs; public auth:getActor additionally verified each canonical user",
+    "impersonatedIdentityUsed": false,
+    "administrativeAcquisitionCertifiesExternalOAuthEnrollment": false,
+    "bootstrapMayUpdateSessionContinuityAndRefreshProviderToken": true
+  },
+  "fixture": {
+    "communitySlug": "join-refresh-qa-sep23",
+    "deniedCommunitySlug": "builder-canary-aug-6-2026-v3",
+    "moduleName": "Context 2A Oct14 2026",
+    "publicDocumentPath": "/communities/join-refresh-qa-sep23/resources/context-2a-oct14-2026~sx7cn2mwacppt61sc6635k8qn98g8kfp/polynet-2a-public-oct14-6ae696779~m97ew2sw9fpgdgffy225x340pn8g9yte.md",
+    "privateDocumentPath": "/communities/join-refresh-qa-sep23/channels/context-2a-private-oct14/interaction:root:j97w00ztf37n27g7wzb6m7yv6d8g8172.md",
+    "publicCanary": "POLYNET_2A_PUBLIC_OCT14_6AE696779",
+    "privateCanary": "POLYNET_2A_PRIVATE_OCT14_6AE696779",
+    "syntheticContentOnly": true,
+    "workflowAutomationsAtSetup": 0,
+    "fixtureWrites": [
+      "one live resource module",
+      "one synthetic resource",
+      "one restricted channel",
+      "one synthetic interaction root"
+    ],
+    "earlierSetupFailure": "Resource/module creation succeeded; channel-list DTO mismatch stopped setup before channel creation. Resume reused exact module/resource names.",
+    "retainedForAudit": true,
+    "membershipLeftRevoked": true
+  },
+  "positive": {
+    "started": "2026-10-14T17:22:16.477Z",
+    "finished": "2026-10-14T17:22:24.965Z",
+    "exitCode": 0,
+    "memberBearerSha256": "c95392aa3cb486b2ad6f0932bdd5612e0705c21c9ea88dd70e0c0ad2426d5fe7",
+    "memberExpiresAt": 1791998722,
+    "builderExpiresAt": 1791998753,
+    "result": {
+      "ok": true,
+      "mode": "context",
+      "runtime_sha": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "mcp_url": "https://polynet-staging.vercel.app/runtime/mcp",
+      "metadata": {
+        "oauth_challenge": "ok",
+        "protected_resource_metadata": "ok",
+        "resource_metadata_url": "https://polynet-staging.vercel.app/.well-known/oauth-protected-resource"
+      },
+      "context_cases": {
+        "identity_fingerprints": {
+          "member": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+          "builder": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42"
+        },
+        "distinct_canonical_users": "passed",
+        "server_derived_roles": "passed",
+        "caller_bound_self_context": "passed",
+        "published_resource_read_search_round_trip": "passed",
+        "builder_dossier_denial": "passed",
+        "private_document_and_search_denial": "passed",
+        "control_proven_cross_community_denial": "passed"
+      },
+      "effects": {
+        "operations": [
+          "polynet_list",
+          "polynet_read",
+          "polynet_search"
+        ],
+        "content_writes": false,
+        "retrieval_receipts": "may_be_recorded"
+      }
+    },
+    "error": null
+  },
+  "revoked": {
+    "started": "2026-10-14T17:22:50.565Z",
+    "finished": "2026-10-14T17:22:53.531Z",
+    "exitCode": 0,
+    "memberBearerSha256": "c95392aa3cb486b2ad6f0932bdd5612e0705c21c9ea88dd70e0c0ad2426d5fe7",
+    "memberExpiresAt": 1791998722,
+    "builderExpiresAt": 1791998753,
+    "result": {
+      "ok": true,
+      "mode": "context-revoked",
+      "runtime_sha": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "mcp_url": "https://polynet-staging.vercel.app/runtime/mcp",
+      "metadata": {
+        "oauth_challenge": "ok",
+        "protected_resource_metadata": "ok",
+        "resource_metadata_url": "https://polynet-staging.vercel.app/.well-known/oauth-protected-resource"
+      },
+      "context_cases": {
+        "member_identity_fingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+        "bearer_still_authenticated": "passed",
+        "membership_revocation_next_request_denial": "passed",
+        "independent_control_still_authorized": "passed"
+      },
+      "effects": {
+        "operations": [
+          "polynet_list",
+          "polynet_read",
+          "polynet_search"
+        ],
+        "content_writes": false,
+        "retrieval_receipts": "may_be_recorded"
+      }
+    },
+    "error": null
+  },
+  "revocation": {
+    "started": "2026-10-14T17:22:49.241Z",
+    "finished": "2026-10-14T17:22:50.539Z",
+    "preflight": {
+      "active": true,
+      "role": "member",
+      "accessSource": "free_grant",
+      "subscriptionRows": 0,
+      "communityUserSubscriptionRows": 0
+    },
+    "result": {
+      "ok": true,
+      "stripe_canceled_count": 0
+    },
+    "postflight": {
+      "active": false,
+      "revokedAt": 1791998569558,
+      "revokedReason": "removed_by_manager"
+    }
+  },
+  "sameBearerProof": {
+    "unchangedMemberSha256": "c95392aa3cb486b2ad6f0932bdd5612e0705c21c9ea88dd70e0c0ad2426d5fe7",
+    "expiresAt": "2026-10-14T17:25:22.000Z",
+    "positiveAndRevokedChecksCompletedBeforeExpiry": true,
+    "globalProfileAuthenticatedAfterMembershipRevocation": true
+  },
+  "validation": {
+    "focusedTests": 68,
+    "focusedTestFiles": 2,
+    "canonicalExecutorTests": 51,
+    "harnessTests": 17,
+    "failedTests": 0,
+    "strictTypecheck": "passed for three changed scripts",
+    "staticProofs": [
+      "polynet_workspace_mcp_contract_proof: ok",
+      "polynet_workspace_mcp_auth_contract_proof: ok",
+      "polynet_profile_mcp_contract_proof: ok"
+    ],
+    "diffCheck": "passed"
+  },
+  "effects": {
+    "harnessOperations": [
+      "polynet_list",
+      "polynet_read",
+      "polynet_search"
+    ],
+    "retrievalEvidenceMayBeRecorded": true,
+    "fixtureSetupWrites": true,
+    "oneGrantOnlyMembershipRevoked": true,
+    "stripeCanceledCount": 0,
+    "testRequestedInference": false,
+    "providerConnectionChanges": false,
+    "productionRelease": false,
+    "runtimeCodeChanges": false,
+    "backgroundWorkerActivityNotCertified": true
+  },
+  "limitations": [
+    "No external OAuth client enrollment/PKCE round trip",
+    "No full public refresh/logout acceptance",
+    "No founder-client write/retry acceptance",
+    "No production acceptance",
+    "Local protocol tests are not live identity proof"
+  ],
+  "searchControlCorrection": "Canonical broad chat search is shared-channel-only for every actor. Exact restricted-channel search supplies builder positive control and member denial; broad member search separately checks no private snippets."
+}
