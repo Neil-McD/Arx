@@ -1,6 +1,6 @@
 # Canonical Polynet operation contract v1
 
-Status: production-released and current-SHA authenticated acceptance complete.
+Status: active operation contract; dated release and acceptance evidence below.
 
 ## Outcome
 
@@ -106,9 +106,14 @@ not expand or fork the base Polynet repository contract.
 ## Product-surface boundary
 
 The standalone general-purpose Workspace product is deleted. The member's
-personal agent is the bottom-right dock, and a community page supplies one
-explicit server-validated community context for subsequent turns. Discover and
+private conversation uses the desktop Agent page and mobile Agent root; the
+floating launcher is retired. A community supplies one explicit server-validated
+context for subsequent turns. Discover and
 generic platform pages do not silently inherit a prior community context.
+
+`member_agent_dock` component and receipt names are compatibility vocabulary,
+not a second UI surface. See `community-agent-conversations.md`. This presentation
+does not confer builder or autonomous community-agent authority on a member.
 
 Threads and messages may remain internal persistence and audit primitives.
 They are not a second user-facing Workspace navigation model. Likewise, legacy

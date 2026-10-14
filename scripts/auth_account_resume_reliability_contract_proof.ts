@@ -294,8 +294,8 @@ const sameOriginAuthCall = sliceBetween(
 );
 assert.match(
   sameOriginAuthCall,
-  /new AbortController\(\)[\s\S]*window\.setTimeout\(\(\) => controller\.abort\(\), params\.timeoutMs\)/,
-  "same-origin auth calls must support a bounded request lifetime",
+  /new AbortController\(\)[\s\S]*window\.setTimeout\(\(\) => controller\.abort\(\), APP_ADMISSION_TIMEOUT_MS\)/,
+  "same-origin auth calls must own the shared finite request lifetime",
 );
 assert.match(
   sameOriginAuthCall,
@@ -314,8 +314,8 @@ assert.match(
 );
 assert.match(
   bootstrapSession,
-  /timeoutMs: APP_ADMISSION_TIMEOUT_MS/,
-  "session bootstrap must use the bounded auth request",
+  /callSameOriginAuthEndpoint[\s\S]*consume:/,
+  "session bootstrap must consume its body inside the bounded auth request",
 );
 assert.match(
   asyncDeadline,
@@ -334,8 +334,8 @@ assert.match(
 );
 assert.match(
   authCore,
-  /refreshAuthSessionResult[\s\S]*timeoutMs: APP_ADMISSION_TIMEOUT_MS/,
-  "session refresh must use the same finite auth gateway boundary",
+  /refreshAuthSessionResult[\s\S]*callSameOriginAuthEndpoint[\s\S]*consume:/,
+  "session refresh must consume its body inside the same finite auth gateway boundary",
 );
 assert.match(
   authController,

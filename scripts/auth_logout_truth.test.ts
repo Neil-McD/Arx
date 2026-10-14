@@ -45,6 +45,22 @@ test("API timeout fails explicitly and remains retryable", async () => {
   expect(r.res.statusCode).toBe(503); expect(r.headers.has("Set-Cookie")).toBe(false);
 });
 
+function stalledBody(signal: AbortSignal) {
+  return new Response(new ReadableStream({ start(body) {
+    body.enqueue(new TextEncoder().encode('{"ok":'));
+    signal.addEventListener("abort",()=>body.error(new DOMException("aborted","AbortError")),{once:true});
+  } }), {status:200});
+}
+
+test("API retains the cookie when bridge headers arrive but its body stalls", async () => {
+  setup(); vi.useFakeTimers(); const r=reply();
+  vi.stubGlobal("fetch",async(_url:string,init:RequestInit)=>stalledBody(init.signal!));
+  const pending=logoutHandler(request,r.res);
+  await vi.advanceTimersByTimeAsync(5_000); await pending;
+  expect(r.res.statusCode).toBe(503); expect(r.body().error).toBe("logout_unconfirmed");
+  expect(r.headers.has("Set-Cookie")).toBe(false);
+});
+
 test("lost completion response is resolved by idempotent retry without false initial success", async () => {
   setup(); let revoked=false;
   vi.stubGlobal("fetch", vi.fn(async () => { if(!revoked){revoked=true; throw Error("response lost after revocation");}return json({ok:true}); }));
@@ -58,21 +74,29 @@ test("missing cookie is idempotent and origin/method guards do not contact the b
   setup(); const fetch=vi.fn(); vi.stubGlobal("fetch",fetch);
   const missing=reply(); await logoutHandler({...request,headers:{...request.headers,cookie:""}},missing.res);
   expect(missing.res.statusCode).toBe(200); expect(missing.body().ok).toBe(true);
-  for(const bad of [{...request,method:"GET"},{...request,headers:{...request.headers,origin:"https://other.test"}}]) {
-    const r=reply(); await logoutHandler(bad,r.res); expect([403,405]).toContain(r.res.statusCode); expect(r.headers.has("Set-Cookie")).toBe(false);
+  for(const [bad,status] of [[{...request,method:"GET"},405],[{...request,headers:{...request.headers,origin:"https://other.test"}},403],[{...request,headers:{...request.headers,host:""}},403]] as const) {
+    const r=reply(); await logoutHandler(bad,r.res); expect(r.res.statusCode).toBe(status); expect(r.headers.has("Set-Cookie")).toBe(false);
   }
   expect(fetch).not.toHaveBeenCalled();
 });
 
+test.each([undefined, "http://localhost"])("shared origin guard accepts the existing %s origin posture", async origin => {
+  setup(); const fetch=vi.fn(async()=>json({ok:true})); vi.stubGlobal("fetch",fetch);
+  const r=reply();
+  await logoutHandler({...request,headers:{...request.headers,origin,"x-forwarded-proto":"http"}},r.res);
+  expect(r.res.statusCode).toBe(200); expect(r.body().ok).toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(1); expect(String(r.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+});
+
 test.each(["503", "malformed", "false-success", "network"])("client rejects %s rather than completing logout", async failure => {
   setup(); vi.stubGlobal("fetch",async()=>{if(failure==="network")throw Error("network");return failure==="malformed"?new Response("invalid"):json({ok:failure!=="false-success"},failure==="503"?503:200);});
-  await expect(logoutAuthSessionRemote({scope:"local"})).rejects.toThrow(message);
+  await expect(logoutAuthSessionRemote()).rejects.toThrow(message);
 });
 
 test("client request timeout is an unconfirmed outcome", async () => {
   setup(); vi.useFakeTimers(); vi.stubGlobal("window", { location:{origin:"https://staging.test"},setTimeout,clearTimeout });
   vi.stubGlobal("fetch",(_url:string, init:RequestInit)=>new Promise((_resolve,reject)=>init.signal!.addEventListener("abort",()=>reject(Error("aborted")))));
-  const result=logoutAuthSessionRemote({}); const assertion=expect(result).rejects.toThrow(message);
+  const result=logoutAuthSessionRemote(); const assertion=expect(result).rejects.toThrow(message);
   await vi.advanceTimersByTimeAsync(10_000); await assertion;
 });
 
@@ -90,6 +114,17 @@ test("controller preserves local session on failure and clears it only after con
   expect(c.sessionRef.current).toBe(fixture); expect(events).toEqual(["remote"]);
   fail=false; await c.handleSignOut();
   expect(c.sessionRef.current).toBeNull(); expect(events).toEqual(["remote","remote","local-clear","completed"]);
+});
+
+test("controller preserves local authentication after body timeout and confirmed retry clears it", async () => {
+  vi.useFakeTimers(); setup(); const events:string[]=[]; const c=controller(events);
+  vi.stubGlobal("fetch",async(_url:string,init:RequestInit)=>stalledBody(init.signal!));
+  const pending=c.handleSignOut(); const rejected=expect(pending).rejects.toThrow(message);
+  await vi.advanceTimersByTimeAsync(10_000); await rejected;
+  expect(c.sessionRef.current).toBe(fixture); expect(events).toEqual([]);
+  vi.stubGlobal("fetch",async()=>json({ok:true}));
+  await c.handleSignOut(); expect(c.sessionRef.current).toBeNull();
+  expect(events).toEqual(["local-clear","completed"]);
 });
 
 test("late refresh cannot restore the session after confirmed logout", async () => {

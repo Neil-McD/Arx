@@ -2591,7 +2591,6 @@ export default function App() {
     publicRouteKind: publicRoute.kind,
     showSignIn: showPublicSignIn,
     requireSignIn,
-    handleSignOut,
     checkoutStatus,
     retryCheckoutFinalize,
     handlePublicCheckoutContinue,

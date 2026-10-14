@@ -93,8 +93,10 @@ assertIncludes(
 assertIncludes(
   corePath,
   core,
-  "The member's personal agent in the bottom-right dock under the selected",
+  "The member's private conversation under the selected community context uses",
 );
+assertIncludes(corePath, core, "the desktop Agent page and mobile Agent root.");
+assertIncludes(corePath, core, "member interactions and autonomous community-agent authority remain separate.");
 assertExcludes(corePath, core, "\n- Members\n");
 assertExcludes(corePath, core, "\n- AI Agent\n");
 

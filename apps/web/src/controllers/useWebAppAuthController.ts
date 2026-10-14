@@ -537,7 +537,7 @@ export function useWebAppAuthController(
     try {
       await onBeforeSignOutRef.current?.();
       try {
-        await logoutAuthSessionRemote({ scope: "local" });
+        await logoutAuthSessionRemote();
       } catch (error) {
         setAuthError("Sign out couldn't be confirmed. Try again.");
         throw error;

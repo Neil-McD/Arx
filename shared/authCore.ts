@@ -213,32 +213,27 @@ function buildSameOriginAuthUrl(routePath: string): string {
   return new URL(route, window.location.origin).toString();
 }
 
-async function callSameOriginAuthEndpoint(params: {
+async function callSameOriginAuthEndpoint<T>(params: {
   path: string;
   method?: "GET" | "POST";
   payload?: Record<string, unknown>;
-  timeoutMs?: number;
-}): Promise<Response | null> {
+  consume: (response: Response) => Promise<T>;
+}): Promise<T | null> {
   const hasBody = params.method !== "GET" && typeof params.payload === "object" && params.payload !== null;
-  const controller =
-    typeof params.timeoutMs === "number" && params.timeoutMs > 0
-      ? new AbortController()
-      : null;
-  const timeoutId = controller
-    ? window.setTimeout(() => controller.abort(), params.timeoutMs)
-    : null;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), APP_ADMISSION_TIMEOUT_MS);
   try {
-    return await fetch(buildSameOriginAuthUrl(params.path), {
+    const response = await fetch(buildSameOriginAuthUrl(params.path), {
       method: params.method ?? "POST",
       credentials: "include",
       headers: hasBody ? { "Content-Type": "application/json" } : undefined,
-      ...(controller ? { signal: controller.signal } : null),
+      signal: controller.signal,
       ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
-    });
-  } catch {
-    return null;
+    }).catch(() => null);
+    // Fetch settles at headers; retain the same deadline through body reads.
+    return response ? await params.consume(response) : null;
   } finally {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
+    window.clearTimeout(timeoutId);
   }
 }
 
@@ -508,38 +503,37 @@ export async function beginOAuthSignIn(params: {
 }
 
 export async function bootstrapSessionDetailed(): Promise<AuthSessionBootstrapResult> {
-  const response = await callSameOriginAuthEndpoint({
+  const result = await callSameOriginAuthEndpoint({
     path: AUTH_GATEWAY_SESSION_PATH,
     method: "GET",
-    timeoutMs: APP_ADMISSION_TIMEOUT_MS,
+    consume: async (response) => {
+      if (!response.ok) throw new Error(await readAuthError(response));
+      const payload = (await response.json()) as Record<string, unknown>;
+      return {
+        session: coerceAuthSession(payload?.session ?? null, { requireRefreshToken: false }),
+        trace: coerceAuthBridgeBootstrapTrace(payload?.trace ?? null),
+      };
+    },
   });
-  if (!response) throw new Error("Auth gateway is unavailable.");
-  if (!response.ok) throw new Error(await readAuthError(response));
-  const payload = (await response.json()) as Record<string, unknown>;
-  return {
-    session: coerceAuthSession(payload?.session ?? null, { requireRefreshToken: false }),
-    trace: coerceAuthBridgeBootstrapTrace(payload?.trace ?? null),
-  };
+  if (!result) throw new Error("Auth gateway is unavailable.");
+  return result;
 }
 
 export async function bootstrapSession(): Promise<AuthSession | null> {
   return (await bootstrapSessionDetailed()).session;
 }
 
-export async function logoutAuthSessionRemote(params: {
-  accessToken?: string | null;
-  scope?: string;
-}): Promise<void> {
-  void params.accessToken;
-  void params.scope;
-  const response = await callSameOriginAuthEndpoint({
+export async function logoutAuthSessionRemote(): Promise<void> {
+  const confirmed = await callSameOriginAuthEndpoint({
     path: AUTH_GATEWAY_LOGOUT_PATH,
     method: "POST",
     payload: {},
-    timeoutMs: APP_ADMISSION_TIMEOUT_MS,
+    consume: async (response) => {
+      const payload = response.ok ? await response.json().catch(() => null) : null;
+      return response.ok && payload?.ok === true;
+    },
   });
-  const payload = response?.ok ? await response.json().catch(() => null) : null;
-  if (!response?.ok || payload?.ok !== true) {
+  if (confirmed !== true) {
     throw new Error("Sign out couldn't be confirmed. Try again.");
   }
 }
@@ -746,39 +740,33 @@ export async function ensureAuthSessionForAuthenticatedSendResult(params: {
 }
 
 export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResult> {
-  const response = await callSameOriginAuthEndpoint({
+  const result = await callSameOriginAuthEndpoint<AuthSessionRefreshResult>({
     path: AUTH_GATEWAY_REFRESH_PATH,
     method: "POST",
     payload: {},
-    timeoutMs: APP_ADMISSION_TIMEOUT_MS,
+    consume: async (response) => {
+      if (!response.ok) {
+        return {
+          status: response.status === 401 ? "terminal_failure" : "transient_failure",
+          reason: (await readAuthError(response)).trim() ||
+            (response.status === 401 ? "auth_session_invalid" : `auth_refresh_failed_${response.status}`),
+        };
+      }
+      try {
+        const payload = (await response.json()) as Record<string, unknown>;
+        const refreshed = coerceAuthSession(payload?.session ?? null, {
+          requireRefreshToken: false,
+        });
+        if (!refreshed) {
+          return { status: "transient_failure", reason: "invalid_refresh_response" };
+        }
+        return { status: "refreshed", session: refreshed };
+      } catch {
+        return { status: "transient_failure", reason: "invalid_refresh_response" };
+      }
+    },
   });
-  if (!response) {
-    return { status: "transient_failure", reason: "auth_gateway_unavailable" };
-  }
-  if (!response.ok) {
-    if (response.status === 401) {
-      return {
-        status: "terminal_failure",
-        reason: (await readAuthError(response)).trim() || "auth_session_invalid",
-      };
-    }
-    return {
-      status: "transient_failure",
-      reason: (await readAuthError(response)).trim() || `auth_refresh_failed_${response.status}`,
-    };
-  }
-  try {
-    const payload = (await response.json()) as Record<string, unknown>;
-    const refreshed = coerceAuthSession(payload?.session ?? null, {
-      requireRefreshToken: false,
-    });
-    if (!refreshed) {
-      return { status: "transient_failure", reason: "invalid_refresh_response" };
-    }
-    return { status: "refreshed", session: refreshed };
-  } catch {
-    return { status: "transient_failure", reason: "invalid_refresh_response" };
-  }
+  return result ?? { status: "transient_failure", reason: "auth_gateway_unavailable" };
 }
 
 export async function fetchAuthUser(token: string): Promise<AuthUser | null> {

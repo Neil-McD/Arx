@@ -45,9 +45,13 @@ assert.match(
 );
 assert.match(
   operationContract,
-  /Status: production-released and current-SHA authenticated acceptance complete\./,
-  "the canonical operation contract must record completed authenticated acceptance",
+  /Status: active operation contract; dated release and acceptance evidence below\./,
+  "the canonical operation contract must distinguish current policy from dated acceptance",
 );
+assert.doesNotMatch(operationContract, /^Status:.*current-SHA authenticated acceptance complete/m,
+  "historical acceptance must not certify an unspecified current SHA");
+assert.match(operationContract, /passed on 2026-08-16[\s\S]*a17e3104ec1f47e304d69dae5677d5d1698af1d6/,
+  "the original acceptance must retain its date and actual source binding");
 assert.match(
   operationContract,
   /tools\/list[\s\S]*semantic_not_found[\s\S]*every advancing `\/communities\/` cursor/,

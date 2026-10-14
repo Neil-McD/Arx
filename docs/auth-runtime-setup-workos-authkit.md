@@ -186,11 +186,12 @@ After the env posture is aligned, verify the actual failure seam:
 
 Revoked rotated session rows are safe to prune after a retention window.
 
-Run:
+Audit (no deletion):
 
 ```bash
 npm run auth:prune-sessions -- --older-than-days 14 --limit 500
 ```
 
-This deletes only revoked auth session rows older than the chosen cutoff from
-the production Convex deployment.
+The maintenance script targets production and defaults to audit-only. Deletion
+requires `--execute` and removes only eligible revoked rows in bounded batches.
+It is not a staging validation command. See the script's `--help` for its bounds.
