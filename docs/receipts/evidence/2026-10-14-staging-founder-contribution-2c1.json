@@ -154,313 +154,61 @@
     {
       "phase": "after-first",
       "observedAt": "2026-10-14T20:48:40.194366+00:00",
-      "contribution": {
-        "receiptCount": 1,
-        "receipts": [
-          {
-            "attemptCount": 1,
-            "createdAt": 1792010902853,
-            "principalKind": "external_mcp",
-            "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
-            "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
-            "status": "completed",
-            "toolName": "polynet_write",
-            "updatedAt": 1792010903157,
-            "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
-            "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
-          }
-        ],
-        "rootCount": 1,
-        "roots": [
-          {
-            "actorMatches": true,
-            "actorType": "personal_agent",
-            "agentKeyMatches": true,
-            "blocks": [
-              {
-                "blockType": "markdown_text",
-                "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-                "urlPresent": false
-              }
-            ],
-            "channelMatches": true,
-            "communityMatches": true,
-            "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-            "createdAt": 1792010902992,
-            "replyCount": 0,
-            "status": "live",
-            "updatedAt": 1792010902992,
-            "visibilityScope": "community",
-            "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
-          }
-        ]
-      },
-      "deniedContribution": {
-        "receiptCount": 0,
-        "receipts": [],
-        "rootCount": 0,
-        "roots": []
-      },
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
       "membershipMetadataUnchanged": true
     },
     {
       "phase": "after-restart-timeout",
       "observedAt": "2026-10-14T20:49:46.223926+00:00",
-      "contribution": {
-        "receiptCount": 1,
-        "receipts": [
-          {
-            "attemptCount": 1,
-            "createdAt": 1792010902853,
-            "principalKind": "external_mcp",
-            "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
-            "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
-            "status": "completed",
-            "toolName": "polynet_write",
-            "updatedAt": 1792010903157,
-            "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
-            "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
-          }
-        ],
-        "rootCount": 1,
-        "roots": [
-          {
-            "actorMatches": true,
-            "actorType": "personal_agent",
-            "agentKeyMatches": true,
-            "blocks": [
-              {
-                "blockType": "markdown_text",
-                "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-                "urlPresent": false
-              }
-            ],
-            "channelMatches": true,
-            "communityMatches": true,
-            "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-            "createdAt": 1792010902992,
-            "replyCount": 0,
-            "status": "live",
-            "updatedAt": 1792010902992,
-            "visibilityScope": "community",
-            "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
-          }
-        ]
-      },
-      "deniedContribution": {
-        "receiptCount": 0,
-        "receipts": [],
-        "rootCount": 0,
-        "roots": []
-      },
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
       "membershipMetadataUnchanged": true
     },
     {
       "phase": "after-retry",
       "observedAt": "2026-10-14T20:53:37.568564+00:00",
-      "contribution": {
-        "receiptCount": 1,
-        "receipts": [
-          {
-            "attemptCount": 1,
-            "createdAt": 1792010902853,
-            "principalKind": "external_mcp",
-            "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
-            "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
-            "status": "completed",
-            "toolName": "polynet_write",
-            "updatedAt": 1792010903157,
-            "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
-            "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
-          }
-        ],
-        "rootCount": 1,
-        "roots": [
-          {
-            "actorMatches": true,
-            "actorType": "personal_agent",
-            "agentKeyMatches": true,
-            "blocks": [
-              {
-                "blockType": "markdown_text",
-                "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-                "urlPresent": false
-              }
-            ],
-            "channelMatches": true,
-            "communityMatches": true,
-            "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-            "createdAt": 1792010902992,
-            "replyCount": 0,
-            "status": "live",
-            "updatedAt": 1792010902992,
-            "visibilityScope": "community",
-            "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
-          }
-        ]
-      },
-      "deniedContribution": {
-        "receiptCount": 0,
-        "receipts": [],
-        "rootCount": 0,
-        "roots": []
-      },
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
       "membershipMetadataUnchanged": true
     },
     {
       "phase": "after-negative",
       "observedAt": "2026-10-14T20:54:15.600796+00:00",
-      "contribution": {
-        "receiptCount": 1,
-        "receipts": [
-          {
-            "attemptCount": 1,
-            "createdAt": 1792010902853,
-            "principalKind": "external_mcp",
-            "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
-            "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
-            "status": "completed",
-            "toolName": "polynet_write",
-            "updatedAt": 1792010903157,
-            "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
-            "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
-          }
-        ],
-        "rootCount": 1,
-        "roots": [
-          {
-            "actorMatches": true,
-            "actorType": "personal_agent",
-            "agentKeyMatches": true,
-            "blocks": [
-              {
-                "blockType": "markdown_text",
-                "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-                "urlPresent": false
-              }
-            ],
-            "channelMatches": true,
-            "communityMatches": true,
-            "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-            "createdAt": 1792010902992,
-            "replyCount": 0,
-            "status": "live",
-            "updatedAt": 1792010902992,
-            "visibilityScope": "community",
-            "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
-          }
-        ]
-      },
-      "deniedContribution": {
-        "receiptCount": 0,
-        "receipts": [],
-        "rootCount": 0,
-        "roots": []
-      },
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
       "membershipMetadataUnchanged": true
     },
     {
       "phase": "after-attribution",
       "observedAt": "2026-10-14T20:55:08.346053+00:00",
-      "contribution": {
-        "receiptCount": 1,
-        "receipts": [
-          {
-            "attemptCount": 1,
-            "createdAt": 1792010902853,
-            "principalKind": "external_mcp",
-            "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
-            "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
-            "status": "completed",
-            "toolName": "polynet_write",
-            "updatedAt": 1792010903157,
-            "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
-            "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
-          }
-        ],
-        "rootCount": 1,
-        "roots": [
-          {
-            "actorMatches": true,
-            "actorType": "personal_agent",
-            "agentKeyMatches": true,
-            "blocks": [
-              {
-                "blockType": "markdown_text",
-                "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-                "urlPresent": false
-              }
-            ],
-            "channelMatches": true,
-            "communityMatches": true,
-            "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-            "createdAt": 1792010902992,
-            "replyCount": 0,
-            "status": "live",
-            "updatedAt": 1792010902992,
-            "visibilityScope": "community",
-            "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
-          }
-        ]
-      },
-      "deniedContribution": {
-        "receiptCount": 0,
-        "receipts": [],
-        "rootCount": 0,
-        "roots": []
-      },
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
       "membershipMetadataUnchanged": true
     },
     {
       "phase": "after-disconnect",
       "observedAt": "2026-10-14T20:55:43.919259+00:00",
-      "contribution": {
-        "receiptCount": 1,
-        "receipts": [
-          {
-            "attemptCount": 1,
-            "createdAt": 1792010902853,
-            "principalKind": "external_mcp",
-            "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
-            "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
-            "status": "completed",
-            "toolName": "polynet_write",
-            "updatedAt": 1792010903157,
-            "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
-            "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
-          }
-        ],
-        "rootCount": 1,
-        "roots": [
-          {
-            "actorMatches": true,
-            "actorType": "personal_agent",
-            "agentKeyMatches": true,
-            "blocks": [
-              {
-                "blockType": "markdown_text",
-                "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-                "urlPresent": false
-              }
-            ],
-            "channelMatches": true,
-            "communityMatches": true,
-            "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
-            "createdAt": 1792010902992,
-            "replyCount": 0,
-            "status": "live",
-            "updatedAt": 1792010902992,
-            "visibilityScope": "community",
-            "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
-          }
-        ]
-      },
-      "deniedContribution": {
-        "receiptCount": 0,
-        "receipts": [],
-        "rootCount": 0,
-        "roots": []
-      },
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
       "membershipMetadataUnchanged": true
     }
   ],
@@ -510,5 +258,47 @@
       "sha256": "0968413698e5d9f8d3cc38fa1e1a22b64db710f40ab98c5bdbba3c9372b1aa2a",
       "retention": "local ignored artifact; not committed or uploaded"
     }
+  },
+  "canonicalCommittedContribution": {
+    "fingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+    "receiptCount": 1,
+    "receipts": [
+      {
+        "attemptCount": 1,
+        "createdAt": 1792010902853,
+        "principalKind": "external_mcp",
+        "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
+        "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
+        "status": "completed",
+        "toolName": "polynet_write",
+        "updatedAt": 1792010903157,
+        "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
+        "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
+      }
+    ],
+    "rootCount": 1,
+    "roots": [
+      {
+        "actorMatches": true,
+        "actorType": "personal_agent",
+        "agentKeyMatches": true,
+        "blocks": [
+          {
+            "blockType": "markdown_text",
+            "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
+            "urlPresent": false
+          }
+        ],
+        "channelMatches": true,
+        "communityMatches": true,
+        "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
+        "createdAt": 1792010902992,
+        "replyCount": 0,
+        "status": "live",
+        "updatedAt": 1792010902992,
+        "visibilityScope": "community",
+        "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
+      }
+    ]
   }
 }
