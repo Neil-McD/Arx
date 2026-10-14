@@ -74,10 +74,13 @@ one harness profile + one Polynet MCP config + one successful OAuth login
 
 Polynet is the OAuth resource server. WorkOS/AuthKit is the authorization server. The external harness is the OAuth client and owns local credential persistence. Polynet must not ask users to paste bearer tokens for normal MCP setup.
 
-WorkOS/AuthKit should be configured so MCP clients can identify themselves and receive refresh-capable credentials:
+WorkOS/AuthKit must offer a registration method supported by the selected client
+and issue refresh-capable credentials:
 
-1. enable Client ID Metadata Document support when available,
-2. keep Dynamic Client Registration enabled as a compatibility fallback for older MCP clients,
+1. prefer Client ID Metadata Documents (CIMD) when advertised by the issuer;
+   Dynamic Client Registration (DCR) or a pre-registered client are alternatives,
+2. enable DCR only when a required client needs it; both methods are not a
+   prerequisite for proving one native client,
 3. include `refresh_token` in authorization-server `grant_types_supported`,
 4. include `offline_access` in authorization-server `scopes_supported`,
 5. keep the MCP Resource Indicator equal to `https://<POLYNET_ORIGIN>/runtime/mcp`.
@@ -87,6 +90,11 @@ Recommended Codex credential persistence should be configured before OAuth when 
 ```toml
 mcp_oauth_credentials_store = "keyring"
 ```
+
+Codex discovers the authorization server from Polynet's protected-resource
+metadata. Check the advertised issuer's own discovery document when assessing
+registration support. Polynet's metadata mirror is not evidence that a provider
+capability is absent. Never advertise an unverified registration endpoint.
 
 Codex native Streamable HTTP OAuth is the canonical setup path. Run `add` first:
 
@@ -115,14 +123,30 @@ Re-authentication should be treated as a bug unless one of these is true:
 
 Continuity validation:
 
-1. create or use a clean Codex profile,
+1. isolate the staging endpoint and local alias without changing existing
+   production connections; a named conversation/profile alone does not prove
+   MCP configuration or credential-store isolation,
 2. add Polynet with native Streamable HTTP,
 3. complete OAuth during `codex mcp add`, or run the login fallback if `add` did not open OAuth,
-4. confirm authenticated `tools/list` works,
+4. discover tools, then require an authenticated `/users/me/profile.md` read,
+   identity-bound community self-context and a known authorized resource read;
+   tool listing alone is not an authentication proof,
 5. close and reopen Codex,
-6. confirm authenticated `tools/list` works without a browser login,
+6. repeat authenticated reads for the same canonical user without a browser
+   login; separately exercise a fresh conversation,
 7. wait past normal access-token expiry,
-8. confirm authenticated `tools/list` works without a browser login.
+8. verify native refresh and authenticated reads without a browser login,
+9. confirm a real inaccessible community fails closed, then disconnect only
+   the test connection and verify a fresh process cannot read protected data.
+
+Do not extract a bearer to drive a second client and call that native continuity.
+Use the native client's own transport and credential store. Record direct expiry
+observations separately from lifecycle-trace inferences. Local credential removal
+does not certify upstream grant revocation, rejection of already-issued JWTs,
+or logout of other clients. Web-session logout is a separate lifecycle.
+
+For a staging-only execution and receipt, see
+[slice 2B2](polynet-staging-external-oauth-2b2.md).
 
 ## 5) Redirect URI
 
