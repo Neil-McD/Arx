@@ -43,7 +43,7 @@ export function assertContextFlags(env: Record<string, string | undefined>) {
 type ReadCall = (request: ContextRequest) => Promise<Record<string, unknown>>;
 const body = (value: Record<string, unknown>) => String(value.body ?? "");
 const rows = (value: Record<string, unknown>) => Array.isArray(value.results) ? value.results as Array<Record<string, unknown>> : [];
-const fingerprint = (id: string) => createHash("sha256").update(id).digest("hex");
+export const contextFingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
 function profileUserId(value: Record<string, unknown>) {
   const id = /- User ref: `user:([^`\s]+)`/.exec(body(value))?.[1];
   assert.ok(id, "self profile must identify the server-resolved canonical user");
@@ -103,17 +103,73 @@ export async function runContextAcceptance(fixture: ContextFixture, call: ReadCa
   assert.ok(body(await read("builder", deniedRoot + "community.md")).length > 0, "control must prove the denied community exists");
   await list("member", deniedRoot, true);
   await read("member", deniedRoot + "community.md", true);
-  return { identity_fingerprints: { member: fingerprint(identities.member), builder: fingerprint(identities.builder) }, distinct_canonical_users: "passed", server_derived_roles: "passed", caller_bound_self_context: "passed", published_resource_read_search_round_trip: "passed", builder_dossier_denial: "passed", private_document_and_search_denial: "passed", control_proven_cross_community_denial: "passed" };
+  return { identity_fingerprints: { member: contextFingerprint(identities.member), builder: contextFingerprint(identities.builder) }, distinct_canonical_users: "passed", server_derived_roles: "passed", caller_bound_self_context: "passed", published_resource_read_search_round_trip: "passed", builder_dossier_denial: "passed", private_document_and_search_denial: "passed", control_proven_cross_community_denial: "passed" };
 }
 
-export async function runContextRevocation(fixture: ContextFixture, call: ReadCall) {
-  validateContextFixture(fixture);
+type ContextCases = Awaited<ReturnType<typeof runContextAcceptance>>;
+export type ContextBaseline = {
+  schema_version: 1;
+  ok: true;
+  mode: "context";
+  runtime_sha: string;
+  fixture: ContextFixture;
+  member_bearer_sha256: string;
+  context_cases: ContextCases;
+};
+type ContextBaselineMatch = { fixture: ContextFixture; runtimeSha: string; memberBearerSha256: string };
+export type ContextRevocationLink = Omit<ContextBaselineMatch, "fixture"> & { baseline: unknown };
+const positiveCaseNames = ["distinct_canonical_users", "server_derived_roles", "caller_bound_self_context", "published_resource_read_search_round_trip", "builder_dossier_denial", "private_document_and_search_denial", "control_proven_cross_community_denial"] as const;
+
+function baselineRecord(value: unknown): Record<string, unknown> {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), "positive baseline must contain valid records");
+  return value as Record<string, unknown>;
+}
+
+export function validateContextBaseline(value: unknown, expected: ContextBaselineMatch): ContextBaseline {
+  validateContextFixture(expected.fixture);
+  const baseline = baselineRecord(value);
+  assert.equal(baseline.schema_version, 1, "positive baseline schema is unsupported");
+  assert.equal(baseline.ok, true, "positive baseline must be successful");
+  assert.equal(baseline.mode, "context", "baseline must come from a positive context run");
+  assert.match(String(baseline.runtime_sha), /^[a-f0-9]{40}$/, "positive baseline runtime SHA must be valid");
+  assert.equal(baseline.runtime_sha, expected.runtimeSha, "baseline runtime must match");
+  assert.deepEqual(baseline.fixture, expected.fixture, "baseline fixture selectors must match");
+  assert.match(String(baseline.member_bearer_sha256), /^[a-f0-9]{64}$/, "positive baseline bearer fingerprint must be valid");
+  assert.equal(baseline.member_bearer_sha256, expected.memberBearerSha256, "revocation requires the unchanged member bearer");
+  const cases = baselineRecord(baseline.context_cases);
+  for (const name of positiveCaseNames) assert.equal(cases[name], "passed", "every positive baseline case must have passed");
+  const identities = baselineRecord(cases.identity_fingerprints);
+  for (const actor of ["member", "builder"] as const) {
+    assert.equal(typeof identities[actor], "string", "positive baseline identity fingerprints must be strings");
+    assert.match(identities[actor] as string, /^[a-f0-9]{64}$/, "positive baseline identity fingerprints must be valid");
+  }
+  assert.notEqual(identities.member, identities.builder, "positive baseline identities must be distinct");
+  // Return only the supported evidence fields; do not propagate arbitrary file contents.
+  return {
+    schema_version: 1, ok: true, mode: "context", runtime_sha: expected.runtimeSha,
+    fixture: { ...expected.fixture }, member_bearer_sha256: expected.memberBearerSha256,
+    context_cases: { ...Object.fromEntries(positiveCaseNames.map(name => [name, "passed"])),
+      identity_fingerprints: { member: String(identities.member), builder: String(identities.builder) } } as ContextCases,
+  };
+}
+
+export function createContextBaseline(args: ContextBaselineMatch & { contextCases: ContextCases }): ContextBaseline {
+  return validateContextBaseline({ schema_version: 1, ok: true, mode: "context", runtime_sha: args.runtimeSha,
+    fixture: args.fixture, member_bearer_sha256: args.memberBearerSha256, context_cases: args.contextCases }, args);
+}
+
+export async function runContextRevocation(fixture: ContextFixture, call: ReadCall, link: ContextRevocationLink) {
+  assert.ok(link, "revocation requires a successful positive baseline");
+  const baseline = validateContextBaseline(link.baseline, { ...link, fixture });
   const root = `/communities/${fixture.communitySlug}/`;
   const memberId = profileUserId(await call({ actor: "member", name: "polynet_read", input: { path: "/users/me/profile.md" } }));
+  assert.equal(contextFingerprint(memberId), baseline.context_cases.identity_fingerprints.member, "revocation member must match the positive baseline");
+  const builderId = profileUserId(await call({ actor: "builder", name: "polynet_read", input: { path: "/users/me/profile.md" } }));
+  assert.equal(contextFingerprint(builderId), baseline.context_cases.identity_fingerprints.builder, "revocation builder must match the positive baseline");
   for (const [name, path] of [["polynet_list", root], ["polynet_read", root + "members/me/context.md"], ["polynet_read", fixture.publicDocumentPath], ["polynet_search", root + "resources/"]] as const) {
     await call({ actor: "member", name, input: { path, ...(name === "polynet_search" ? { query: fixture.publicCanary, limit: 10 } : {}) }, expectedErrorCode: "semantic_not_found" });
   }
   const control = await call({ actor: "builder", name: "polynet_read", input: { path: fixture.publicDocumentPath } });
   assert.ok(body(control).includes(fixture.publicCanary), "builder control must remain healthy after member revocation");
-  return { member_identity_fingerprint: fingerprint(memberId), bearer_still_authenticated: "passed", membership_revocation_next_request_denial: "passed", independent_control_still_authorized: "passed" };
+  return { baseline_linkage: "passed", member_identity_fingerprint: contextFingerprint(memberId), builder_identity_fingerprint: contextFingerprint(builderId), bearer_still_authenticated: "passed", membership_revocation_next_request_denial: "passed", independent_control_still_authorized: "passed" };
 }

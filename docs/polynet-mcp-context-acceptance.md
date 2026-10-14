@@ -6,6 +6,11 @@ create fixtures, revoke memberships, enroll OAuth clients, or certify session
 refresh/logout. The older `acceptance` mode has broader write behavior; use
 `context` and `context-revoked` for this slice.
 
+Slice 2A.1 requires revocation to consume the successful positive run's
+versioned JSON. A standalone denial without that linkage is not a revocation
+proof. The original 2A live receipt remains historical evidence; this follow-up
+changes harness validation and does not claim another live membership removal.
+
 ## Requirements and scope
 
 Elon step 1: the founder-approved outcome is evidence that existing canonical
@@ -58,11 +63,20 @@ Set the following in the process environment from private storage:
 | `POLYNET_MCP_PRIVATE_DOCUMENT_PATH` | Exact A restricted-channel interaction `.md` path |
 | `POLYNET_MCP_PUBLIC_CANARY`, `POLYNET_MCP_PRIVATE_CANARY` | Distinct synthetic `POLYNET_2A_…` strings |
 | `POLYNET_MCP_ACCEPTANCE_RUN_ID` | Full deployed web SHA, distinct from harness commit |
+| `POLYNET_MCP_CONTEXT_BASELINE_FILE` | Required for `context-revoked`: JSON stdout from the successful positive run |
 | `POLYNET_MCP_WRITE_CHAT`, `POLYNET_MCP_EXERCISE_BUILDER` | Both `0` |
 
 ```sh
-node node_modules/tsx/dist/cli.mjs scripts/polynet_workspace_mcp_external_smoke.ts --mode=context --url=https://polynet-staging.vercel.app/runtime/mcp
+umask 077
+node node_modules/tsx/dist/cli.mjs scripts/polynet_workspace_mcp_external_smoke.ts --mode=context --url=https://polynet-staging.vercel.app/runtime/mcp > /tmp/polynet-context-positive-2a.json
 ```
+
+Only a successful complete suite emits this baseline. Schema version 1 records
+the runtime SHA, exact fixture selectors, distinct canonical identity
+fingerprints, member bearer SHA-256 and every positive case's passed status.
+No raw tokens, canonical user IDs or retrieved document bodies are emitted.
+Older output without this schema is rejected; obtain a new positive run rather
+than converting old evidence into a claimed new proof.
 
 The proof verifies distinct server-resolved users, server-derived roles, caller
 self-context, resource read/search round trips, builder dossier denial, private
@@ -78,13 +92,18 @@ and remove only the selected disposable membership through
 the member bearer unchanged and run before it expires:
 
 ```sh
-node node_modules/tsx/dist/cli.mjs scripts/polynet_workspace_mcp_external_smoke.ts --mode=context-revoked --url=https://polynet-staging.vercel.app/runtime/mcp
+POLYNET_MCP_CONTEXT_BASELINE_FILE=/tmp/polynet-context-positive-2a.json node node_modules/tsx/dist/cli.mjs scripts/polynet_workspace_mcp_external_smoke.ts --mode=context-revoked --url=https://polynet-staging.vercel.app/runtime/mcp
 ```
 
 Global self-profile must still authenticate, all tested A requests must deny,
-and the builder resource control must remain healthy. Compare the member token
-hash across runs. Retain fixture history and revoked membership; reactivation
-would alter activation history and is not a restoration of the original state.
+and the builder resource control must remain healthy. Before network requests,
+the harness rejects missing, malformed, failed or mismatched baselines and
+requires the unchanged member bearer hash, runtime and fixture. It then reads
+both global profiles and requires their canonical identity fingerprints to
+match before testing community denials. The builder may refresh its token while
+remaining the same canonical control user. Retain fixture history and revoked
+membership; reactivation would alter activation history and is not a restoration
+of the original state.
 
 Search/read may record retrieval evidence. Fixture setup and revocation are
 separate writes; report them explicitly. Do not claim that existing staged
@@ -93,12 +112,18 @@ background workers were stopped or that unrelated provider activity was absent.
 ## Validation and next gate
 
 Focused harness tests reject weak controls, same-user credentials, escaped
-paths, leaks and enabled mutation flags. Run the canonical executor tests and
-MCP/auth/profile contract proofs alongside them. Stamp runtime SHA, harness
+paths, leaks, enabled mutation flags and unlinked revocation. Subprocess tests
+exercise CLI output/file loading and the actual HTTP adapter with intercepted
+synthetic responses; unexpected requests throw and no live service is contacted.
+They cover successful baseline reuse, missing/invalid/failed evidence, changed
+bearers/users, expired authentication and incorrect denial codes.
+Run the canonical executor tests and MCP/auth/profile contract proofs alongside
+them. Stamp runtime SHA, harness
 revision, executed source hashes, timestamps, token hash/expiry, fixture effects
 and limitations in the receipt.
 
-Slice 2B separately covers public session lifecycle and external-client OAuth
-enrollment. An independent founder client remains the next product proof after
+Slice 2B1 separately covers truthful logout and public session lifecycle;
+2B2 covers external-client OAuth enrollment and continuity.
+An independent founder client remains the next product proof after
 those boundaries are established. Production release and broad API redesign
 are outside this slice.

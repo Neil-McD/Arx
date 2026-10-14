@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { assertContextFlags, runContextAcceptance, runContextRevocation, validateContextFixture, type ContextFixture, type ContextRequest } from "./polynet_mcp_context_acceptance.ts";
+import { readFileSync } from "node:fs";
+import { assertContextFlags, contextFingerprint, createContextBaseline, runContextAcceptance, runContextRevocation, validateContextBaseline, validateContextFixture, type ContextFixture, type ContextRequest } from "./polynet_mcp_context_acceptance.ts";
 import {
   POLYNET_MCP_PROTOCOL_VERSION,
   getPolynetMcpToolDefinitions,
@@ -862,6 +863,9 @@ Bounded staging context modes: --mode=context or --mode=context-revoked
   POLYNET_MCP_PUBLIC_DOCUMENT_PATH and POLYNET_MCP_PRIVATE_DOCUMENT_PATH
   POLYNET_MCP_PUBLIC_CANARY and POLYNET_MCP_PRIVATE_CANARY
   POLYNET_MCP_ACCEPTANCE_RUN_ID (deployed runtime SHA, distinct from harness revision)
+  POLYNET_MCP_CONTEXT_BASELINE_FILE (required for context-revoked; successful context JSON)
+Save context stdout as the positive baseline. Revocation requires the same fixture,
+runtime, canonical users and unchanged member bearer; no credentials are emitted.
 These modes forbid content-write switches and invoke only list/read/search.
 Membership revocation is a separate, explicitly scoped fixture operation.
 `);
@@ -886,7 +890,15 @@ Membership revocation is a separate, explicitly scoped fixture operation.
       privateCanary: requiredEnv("POLYNET_MCP_PRIVATE_CANARY", "Private canary is required."),
     };
     validateContextFixture(fixture);
-    const runtimeSha = readAcceptanceRunId(true);
+    const runtimeSha = readAcceptanceRunId(true)!;
+    const memberBearerSha256 = contextFingerprint(memberToken);
+    let baseline: unknown;
+    if (mode === "context-revoked") {
+      const path = requiredEnv("POLYNET_MCP_CONTEXT_BASELINE_FILE", "Revocation requires POLYNET_MCP_CONTEXT_BASELINE_FILE from a successful positive run.");
+      try { baseline = JSON.parse(readFileSync(path, "utf8")); }
+      catch { throw new Error("Positive baseline file must be readable valid JSON."); }
+      validateContextBaseline(baseline, { fixture, runtimeSha, memberBearerSha256 });
+    }
     const version = await fetchJson("https://polynet-staging.vercel.app/version.json");
     assert.equal(version.status, 200, "Staging version must be available.");
     assert.equal(asRecord(version.body).buildId, runtimeSha, "Deployed runtime must match the acceptance baseline.");
@@ -915,9 +927,12 @@ Membership revocation is a separate, explicitly scoped fixture operation.
       }
       return value;
     };
-    const cases = mode === "context" ? await runContextAcceptance(fixture, call) : await runContextRevocation(fixture, call);
-    console.log(JSON.stringify({ ok: true, mode, runtime_sha: runtimeSha, mcp_url: mcpUrl, metadata,
-      context_cases: cases, effects: { operations: ["polynet_list", "polynet_read", "polynet_search"], content_writes: false, retrieval_receipts: "may_be_recorded" } }, null, 2));
+    const proof = mode === "context"
+      ? createContextBaseline({ fixture, runtimeSha, memberBearerSha256, contextCases: await runContextAcceptance(fixture, call) })
+      : { ok: true, mode, runtime_sha: runtimeSha, fixture, member_bearer_sha256: memberBearerSha256,
+          context_cases: await runContextRevocation(fixture, call, { baseline, runtimeSha, memberBearerSha256 }) };
+    console.log(JSON.stringify({ ...proof, mcp_url: mcpUrl, metadata,
+      effects: { operations: ["polynet_list", "polynet_read", "polynet_search"], content_writes: false, retrieval_receipts: "may_be_recorded" } }, null, 2));
     return;
   }
   const metadata = await runMetadataSmoke(mcpUrl);
