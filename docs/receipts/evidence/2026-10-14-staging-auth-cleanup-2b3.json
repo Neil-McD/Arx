@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 1,
+  "slice": "2B3 bounded auth cleanup",
+  "status": "passed",
+  "observedDate": "2026-10-14",
+  "baseline": {
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "parent2B2": "318fdd132a3cb06bdea49cb779dacf8d49e38ac0",
+    "deployedRuntime": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+    "backend": "dev:quick-porcupine-949",
+    "unchangedBackendTree": "9dd6ee743bd4869c68047283d38e457bdf600058",
+    "backendDeploymentPerformed": false
+  },
+  "validation": {
+    "focusedTests": 66,
+    "focusedFiles": 6,
+    "fullSuiteTests": 1681,
+    "fullSuiteFiles": 192,
+    "webAndBackendTypechecks": "passed",
+    "affectedContractProofs": "passed",
+    "dependencyAudits": "zero root and web",
+    "exactCommitGate": {
+      "url": "https://github.com/Neil-McD/Arx/actions/runs/38628996471",
+      "evidence": {
+        "schemaVersion": 1,
+        "gateId": "polynet_release_gate_v1",
+        "mode": "ci",
+        "status": "passed",
+        "startedAt": "2026-10-14T20:05:36.494Z",
+        "finishedAt": "2026-10-14T20:09:40.426Z",
+        "durationMs": 243932,
+        "candidate": {
+          "expectedSha": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+          "headSha": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+          "buildId": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+          "clean": true,
+          "kind": "commit"
+        },
+        "steps": [
+          {
+            "id": "candidate_identity",
+            "label": "Candidate identity",
+            "command": "git identity and whitespace checks",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:05:36.495Z",
+            "finishedAt": "2026-10-14T20:05:36.616Z",
+            "durationMs": 121,
+            "failure": null
+          },
+          {
+            "id": "convex_generated_surface",
+            "label": "Convex generated-surface sanity",
+            "command": "validate checked-in convex/_generated files and source targets",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:05:36.616Z",
+            "finishedAt": "2026-10-14T20:05:36.636Z",
+            "durationMs": 20,
+            "failure": null
+          },
+          {
+            "id": "convex_typecheck",
+            "label": "Convex typecheck",
+            "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:05:36.636Z",
+            "finishedAt": "2026-10-14T20:06:02.011Z",
+            "durationMs": 25375,
+            "failure": null
+          },
+          {
+            "id": "web_typecheck",
+            "label": "Web typecheck",
+            "command": "npm run check:web-typecheck",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:06:02.011Z",
+            "finishedAt": "2026-10-14T20:06:29.171Z",
+            "durationMs": 27160,
+            "failure": null
+          },
+          {
+            "id": "web_build",
+            "label": "Production web build",
+            "command": "npm run build",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:06:29.171Z",
+            "finishedAt": "2026-10-14T20:06:31.047Z",
+            "durationMs": 1876,
+            "failure": null
+          },
+          {
+            "id": "web_build_identity",
+            "label": "Built web identity",
+            "command": "apps/web/dist/version.json buildId equals candidate build identity",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:06:31.047Z",
+            "finishedAt": "2026-10-14T20:06:31.047Z",
+            "durationMs": 0,
+            "failure": null
+          },
+          {
+            "id": "web_bundle_budget",
+            "label": "Web bundle budget",
+            "command": "npm run check:web-bundle-budget",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:06:31.047Z",
+            "finishedAt": "2026-10-14T20:06:31.248Z",
+            "durationMs": 201,
+            "failure": null
+          },
+          {
+            "id": "media_reading_browser",
+            "label": "Media reading browser proof",
+            "command": "npm run check:media-reading-browser-proof",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:06:31.248Z",
+            "finishedAt": "2026-10-14T20:07:21.210Z",
+            "durationMs": 49962,
+            "failure": null
+          },
+          {
+            "id": "app_theme_contract",
+            "label": "App theme contract",
+            "command": "npm run check:app-theme-contract-proof",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:07:21.210Z",
+            "finishedAt": "2026-10-14T20:07:21.550Z",
+            "durationMs": 340,
+            "failure": null
+          },
+          {
+            "id": "loading_correctness",
+            "label": "Account-scoped loading, profile drafts, and avatar transitions",
+            "command": "npm run check:loading-correctness",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:07:21.550Z",
+            "finishedAt": "2026-10-14T20:07:34.312Z",
+            "durationMs": 12762,
+            "failure": null
+          },
+          {
+            "id": "convex_cut_guard",
+            "label": "Convex cut guard",
+            "command": "npm run check:convex-cut-runtime-guard",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:07:34.312Z",
+            "finishedAt": "2026-10-14T20:07:34.596Z",
+            "durationMs": 284,
+            "failure": null
+          },
+          {
+            "id": "foundation_baseline",
+            "label": "Foundation invariants and behavior",
+            "command": "npm run check:foundation-baseline",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:07:34.596Z",
+            "finishedAt": "2026-10-14T20:09:39.365Z",
+            "durationMs": 124769,
+            "failure": null
+          },
+          {
+            "id": "dependency_security_interlock",
+            "label": "Dependency security compatibility",
+            "command": "npm run check:dependency-security-interlock",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:09:39.365Z",
+            "finishedAt": "2026-10-14T20:09:39.486Z",
+            "durationMs": 121,
+            "failure": null
+          },
+          {
+            "id": "root_dependency_audit",
+            "label": "Root dependency audit",
+            "command": "npm audit --audit-level=low",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:09:39.486Z",
+            "finishedAt": "2026-10-14T20:09:40.052Z",
+            "durationMs": 566,
+            "failure": null
+          },
+          {
+            "id": "web_dependency_audit",
+            "label": "Web dependency audit",
+            "command": "npm --prefix apps/web audit --audit-level=low",
+            "status": "passed",
+            "startedAt": "2026-10-14T20:09:40.052Z",
+            "finishedAt": "2026-10-14T20:09:40.426Z",
+            "durationMs": 374,
+            "failure": null
+          }
+        ],
+        "failure": null
+      }
+    },
+    "initialPrGate": "https://github.com/Neil-McD/Arx/actions/runs/38629115945"
+  },
+  "webRelease": {
+    "method": "Git staging fast-forward",
+    "deployment": "https://vercel.com/neil-mcds-projects/polynet-staging/3Txyd7APYXEqZj7T7HC1N14oLznN",
+    "serving": {
+      "observedAt": "2026-10-14T20:11:22.927804+00:00",
+      "host": "https://polynet-staging.vercel.app",
+      "version": {
+        "buildId": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+        "sentryRelease": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+        "environment": "staging"
+      },
+      "asset": "/assets/index-BJ5X2HpJ.js",
+      "assetSha256": "5d807af34f6fa3b652cf472bf81fa5c439197b0a4db5ac7e39f5960af2d72584",
+      "stagingCloudHost": true,
+      "stagingSiteHost": true
+    }
+  },
+  "publicHttpWithoutCookie": [
+    {
+      "observedAt": "2026-10-14T20:12:15.461534+00:00",
+      "path": "/api/auth/session",
+      "method": "GET",
+      "status": 200,
+      "body": {
+        "ok": true,
+        "session": null,
+        "trace": {
+          "bootstrap_path": "missing_cookie"
+        }
+      }
+    },
+    {
+      "observedAt": "2026-10-14T20:12:15.647724+00:00",
+      "path": "/api/auth/refresh",
+      "method": "POST",
+      "status": 401,
+      "body": {
+        "ok": false,
+        "error": "Missing auth session."
+      }
+    },
+    {
+      "observedAt": "2026-10-14T20:12:15.793583+00:00",
+      "path": "/api/auth/logout",
+      "method": "POST",
+      "status": 200,
+      "body": {
+        "ok": true
+      }
+    }
+  ],
+  "publicBrowser": {
+    "method": "existing test identity, normal Google/WorkOS sign-in and UI actions; no credential export or injected browser state",
+    "loginAndReload": "authenticated account settings",
+    "afterInitialExpiry": "authenticated protected account reload after original expiry plus 30 seconds",
+    "logout": "normal confirmation to signed-out home",
+    "signedOutReloadAndProtectedNavigation": "signed-out home persisted; protected account navigation returned to home",
+    "screenshots": [
+      {
+        "phase": "after-login",
+        "path": "artifacts/auth-cleanup-20261014/after-login.jpg",
+        "sha256": "29321ce3084653d12d241bbf1c4adc76f0cfe5c6fa3fe275997e622f9b897738",
+        "retention": "local ignored artifact; not committed or uploaded"
+      },
+      {
+        "phase": "after-expiry",
+        "path": "artifacts/auth-cleanup-20261014/after-expiry.jpg",
+        "sha256": "29321ce3084653d12d241bbf1c4adc76f0cfe5c6fa3fe275997e622f9b897738",
+        "retention": "local ignored artifact; not committed or uploaded"
+      },
+      {
+        "phase": "after-logout",
+        "path": "artifacts/auth-cleanup-20261014/after-logout.jpg",
+        "sha256": "9638bd9efd2e7ec849331c6b4a2ff821a64ca1f93b106fdc49437755365cb920",
+        "retention": "local ignored artifact; not committed or uploaded"
+      }
+    ]
+  },
+  "canonicalMetadata": {
+    "method": "read-only staging administrative corroboration; SHA-256 of user and canonical row IDs, timestamps, generation and presence flags only",
+    "beforeLoginAt": "2026-10-14T20:11:31.109982+00:00",
+    "observations": [
+      {
+        "phase": "after-login",
+        "observedAt": "2026-10-14T20:11:52.949151+00:00",
+        "backend": "dev:quick-porcupine-949",
+        "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+        "selectedSession": {
+          "rowFingerprint": "7156853beaf6885566412cb8157841682d7ab252648e6152b1ef792e1c3348e2",
+          "absoluteExpiresAt": 1799784704537,
+          "accessTokenExpiresAt": 1792009004,
+          "createdAt": 1792008704537,
+          "credentialsPresent": true,
+          "idleExpiresAt": 1794600705379,
+          "lastRefreshAt": 1792008704537,
+          "lastUsedAt": 1792008705379,
+          "leasePresent": false,
+          "refreshGeneration": 0,
+          "revokedAt": null,
+          "revokedReason": null,
+          "updatedAt": 1792008705379
+        },
+        "otherSessionMetadataUnchanged": true,
+        "priorSessionCount": 24
+      },
+      {
+        "phase": "after-reload",
+        "observedAt": "2026-10-14T20:12:15.232623+00:00",
+        "backend": "dev:quick-porcupine-949",
+        "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+        "selectedSession": {
+          "rowFingerprint": "7156853beaf6885566412cb8157841682d7ab252648e6152b1ef792e1c3348e2",
+          "absoluteExpiresAt": 1799784704537,
+          "accessTokenExpiresAt": 1792009004,
+          "createdAt": 1792008704537,
+          "credentialsPresent": true,
+          "idleExpiresAt": 1794600723341,
+          "lastRefreshAt": 1792008704537,
+          "lastUsedAt": 1792008723341,
+          "leasePresent": false,
+          "refreshGeneration": 0,
+          "revokedAt": null,
+          "revokedReason": null,
+          "updatedAt": 1792008723341
+        },
+        "otherSessionMetadataUnchanged": true,
+        "priorSessionCount": 24
+      },
+      {
+        "phase": "after-expiry",
+        "observedAt": "2026-10-14T20:17:29.847466+00:00",
+        "backend": "dev:quick-porcupine-949",
+        "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+        "selectedSession": {
+          "rowFingerprint": "7156853beaf6885566412cb8157841682d7ab252648e6152b1ef792e1c3348e2",
+          "absoluteExpiresAt": 1799784704537,
+          "accessTokenExpiresAt": 1792009215,
+          "createdAt": 1792008704537,
+          "credentialsPresent": true,
+          "idleExpiresAt": 1794601042698,
+          "lastRefreshAt": 1792008915236,
+          "lastUsedAt": 1792009042698,
+          "leasePresent": false,
+          "refreshGeneration": 1,
+          "revokedAt": null,
+          "revokedReason": null,
+          "updatedAt": 1792009042698
+        },
+        "otherSessionMetadataUnchanged": true,
+        "priorSessionCount": 24
+      },
+      {
+        "phase": "after-logout",
+        "observedAt": "2026-10-14T20:17:56.445310+00:00",
+        "backend": "dev:quick-porcupine-949",
+        "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+        "selectedSession": {
+          "rowFingerprint": "7156853beaf6885566412cb8157841682d7ab252648e6152b1ef792e1c3348e2",
+          "absoluteExpiresAt": 1799784704537,
+          "accessTokenExpiresAt": null,
+          "createdAt": 1792008704537,
+          "credentialsPresent": false,
+          "idleExpiresAt": 1794601042698,
+          "lastRefreshAt": 1792008915236,
+          "lastUsedAt": 1792009042698,
+          "leasePresent": false,
+          "refreshGeneration": 1,
+          "revokedAt": 1792009065372,
+          "revokedReason": "logout",
+          "updatedAt": 1792009065372
+        },
+        "otherSessionMetadataUnchanged": true,
+        "priorSessionCount": 24
+      },
+      {
+        "phase": "after-signedout-reload",
+        "observedAt": "2026-10-14T20:18:11.648865+00:00",
+        "backend": "dev:quick-porcupine-949",
+        "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+        "selectedSession": {
+          "rowFingerprint": "7156853beaf6885566412cb8157841682d7ab252648e6152b1ef792e1c3348e2",
+          "absoluteExpiresAt": 1799784704537,
+          "accessTokenExpiresAt": null,
+          "createdAt": 1792008704537,
+          "credentialsPresent": false,
+          "idleExpiresAt": 1794601042698,
+          "lastRefreshAt": 1792008915236,
+          "lastUsedAt": 1792009042698,
+          "leasePresent": false,
+          "refreshGeneration": 1,
+          "revokedAt": 1792009065372,
+          "revokedReason": "logout",
+          "updatedAt": 1792009065372
+        },
+        "otherSessionMetadataUnchanged": true,
+        "priorSessionCount": 24
+      }
+    ]
+  },
+  "verifiedInvariants": {
+    "sameUserAndCanonicalSessionAcrossLifecycle": true,
+    "refreshGenerations": [
+      0,
+      1
+    ],
+    "initialExpiry": "2026-10-14T20:16:44+00:00",
+    "laterExpiry": "2026-10-14T20:20:15+00:00",
+    "selectedSessionRevoked": true,
+    "storedCredentialsExpiryAndLeaseErased": true,
+    "otherSessionMetadataUnchangedCount": 24,
+    "revokedSessionRetainedForAudit": true
+  },
+  "production": {
+    "observedAt": "2026-10-14T20:18:38.943271+00:00",
+    "version": {
+      "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "environment": "production"
+    },
+    "unchanged": true,
+    "releasePerformed": false,
+    "backendDeploymentPerformed": false
+  },
+  "limits": [
+    "Stalled-header/body, failure, lost response and retry coverage are local simulations through real consumers/controllers/routes; no live fault injection",
+    "No exported authenticated response, cookie, token or secret; no retained-cookie replay or issued-JWT rejection claim",
+    "Provider-wide logout and external-client grant revocation not certified",
+    "2B2 external-client enrollment proof not repeated because its backend is unchanged",
+    "No requested membership, billing, provider connection or inference changes; existing staging background workers not certified inactive"
+  ]
+}

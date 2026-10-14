@@ -4,6 +4,10 @@ Scope: staging web/API only, stacked on 2B2 source `318fdd132`. Canonical main
 remains `0a100cfb`; the inherited staged backend is `dev:quick-porcupine-949`
 from runtime `7d8eb569`. This slice changes no backend source or provider settings.
 
+Result: passed on staging at runtime `09e1ca37`. The
+[dated receipt](receipts/2026-10-14-staging-auth-cleanup-2b3.md) separates local
+bounded-request checks, exact-candidate CI and the live public lifecycle proof.
+
 ## Requirements and deletion
 
 Elon step 1: the required outcome is bounded browser authentication with honest
