@@ -78,6 +78,24 @@ assert.equal(
   "web lock must resolve the patched DOMPurify release",
 );
 
+for (const [graph, manifest, lock] of [
+  ["root", rootManifest, rootLock],
+  ["web", webManifest, webLock],
+]) {
+  assert.equal(manifest.dependencies?.katex, "0.18.2", `${graph} must pin the patched KaTeX release`);
+  assert.equal(manifest.overrides?.katex, "$katex", `${graph} math plugins must share the direct KaTeX version`);
+  assert.equal(manifest.overrides?.["source-map-js"], "1.2.2", `${graph} must pin patched source-map-js`);
+  for (const [name, version] of [["katex", "0.18.2"], ["source-map-js", "1.2.2"]]) {
+    const copies = Object.entries(lock.packages ?? {}).filter(([path]) =>
+      path === `node_modules/${name}` || path.endsWith(`/node_modules/${name}`),
+    );
+    assert.ok(copies.length > 0, `${graph} lock must contain ${name}`);
+    for (const [path, entry] of copies) {
+      assert.equal(entry.version, version, `${graph} ${path} must use the patched version`);
+    }
+  }
+}
+
 console.log(
   "dependency_security_interlock_proof: ok (Daytona and Blaxel removed; patched root/web dependency graphs remain compatible)",
 );

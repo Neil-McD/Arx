@@ -58,6 +58,45 @@ describe("community resource markdown rendering", () => {
     expect(markup).not.toContain("alert('nope')");
   });
 
+  it("renders inline fractions and display equations without losing surrounding content", () => {
+    const markup = renderResourceMarkdown("Before $\\frac{1}{2}$ after\n\n$$\nx^2 + y^2 = z^2\n$$");
+
+    expect(markup).toContain('class="katex"');
+    expect(markup).toContain('class="katex-display"');
+    expect(markup).toContain("<mfrac>");
+    expect(markup).not.toContain('class="katex-error"');
+    expect(markup).toContain("Before");
+    expect(markup).toContain("after");
+  });
+
+  it("keeps malformed math local to the expression instead of breaking the resource", () => {
+    const markup = renderResourceMarkdown("Before $\\frac{$ after");
+
+    expect(markup).toContain('class="katex-error"');
+    expect(markup).toContain("Before");
+    expect(markup).toContain("after");
+  });
+
+  it("does not activate unsafe links or external image commands in math", () => {
+    const markup = renderResourceMarkdown("$\\href{javascript:alert(1)}{click}$\n\n$\\includegraphics{https://example.com/untrusted.png}$");
+
+    expect(markup).not.toMatch(/href=["']javascript:/i);
+    expect(markup).not.toContain("<img");
+    expect(markup).not.toContain("<script");
+  });
+
+  it.each([
+    ["root", createRequire(new URL("../package.json", import.meta.url))],
+    ["web", requireFromWeb],
+  ])("%s KaTeX does not inherit trust from the options prototype", (_graph, load) => {
+    const katex = load("katex") as typeof import("katex");
+    const expression = "\\href{https://example.com/allowed-only-with-trust}{link}";
+    const inheritedOptions = Object.create({ trust: true });
+
+    expect(katex.renderToString(expression, inheritedOptions)).not.toContain("<a ");
+    expect(katex.renderToString(expression, { trust: true })).toContain("<a ");
+  });
+
   it("defers the native lesson player until layout and viewport are known", () => {
     const resource: CommunityResource = {
       id: "lesson-1",
