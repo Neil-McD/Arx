@@ -43,6 +43,7 @@ export function WebAccountSettingsSection(
 ) {
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   useEffect(() => {
     if (props.session) return;
@@ -52,10 +53,13 @@ export function WebAccountSettingsSection(
 
   const handleConfirmSignOut = async (): Promise<void> => {
     if (isSubmittingSignOut) return;
+    setSignOutError(null);
     setIsSubmittingSignOut(true);
     try {
       await props.handleSignOut();
       setIsSignOutConfirmOpen(false);
+    } catch {
+      setSignOutError("Sign out couldn't be confirmed. Try again.");
     } finally {
       setIsSubmittingSignOut(false);
     }
@@ -207,8 +211,12 @@ export function WebAccountSettingsSection(
       <WebSignOutConfirmModal
         isOpen={Boolean(props.session) && isSignOutConfirmOpen}
         isSubmitting={isSubmittingSignOut}
+        error={signOutError}
         onClose={() => {
-          if (!isSubmittingSignOut) setIsSignOutConfirmOpen(false);
+          if (!isSubmittingSignOut) {
+            setIsSignOutConfirmOpen(false);
+            setSignOutError(null);
+          }
         }}
         onConfirm={handleConfirmSignOut}
       />

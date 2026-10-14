@@ -529,15 +529,21 @@ export function useWebAppAuthController(
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
-    authSessionEpochRef.current += 1;
+    const signOutEpoch = ++authSessionEpochRef.current;
     authBootstrapAttemptIdRef.current += 1;
     markAuthBootstrapComplete();
     setAuthError(null);
     setIsAuthSigningOut(true);
     try {
       await onBeforeSignOutRef.current?.();
+      try {
+        await logoutAuthSessionRemote({ scope: "local" });
+      } catch (error) {
+        setAuthError("Sign out couldn't be confirmed. Try again.");
+        throw error;
+      }
+      if (authSessionEpochRef.current !== signOutEpoch) return;
       await clearSessionLocally();
-      await logoutAuthSessionRemote({ scope: "local" });
       await onAfterSignOutRef.current?.();
     } finally {
       setIsAuthSigningOut(false);

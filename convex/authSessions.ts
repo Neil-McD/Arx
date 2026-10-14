@@ -508,9 +508,12 @@ async function refreshUpstreamSession(existing: StoredAuthSessionV1): Promise<St
 async function logoutUpstream(accessToken: string): Promise<void> {
   const logoutUrl = resolveOAuthLogoutUrl();
   if (!logoutUrl || !normalizeString(accessToken)) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2_000);
   try {
     await fetch(logoutUrl, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
@@ -522,6 +525,8 @@ async function logoutUpstream(accessToken: string): Promise<void> {
     });
   } catch {
     // best effort only
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1662,21 +1667,25 @@ export const logoutAuthSessionInternal = internalAction({
           reason: "auth_session_missing" | "auth_session_chain_invalid";
         };
     if (!resolved.ok) {
-      return { status: "ok" as const };
+      return resolved.reason === "auth_session_missing"
+        ? { status: "ok" as const }
+        : { status: "transient_failure" as const, reason: resolved.reason };
     }
     const row = resolved.row;
     if (typeof row.revokedAt === "number") {
       return { status: "ok" as const };
-    }
-    const stored = await decodeStoredState(row);
-    if (stored?.accessToken) {
-      await logoutUpstream(stored.accessToken);
     }
     await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
       sessionId: args.sessionId,
       nowMs: Date.now(),
       reason: "logout",
     });
+    // Canonical revocation must not depend on provider availability. Decode
+    // the pre-revocation snapshot solely for bounded best-effort provider logout.
+    const stored = await decodeStoredState(row);
+    if (stored?.accessToken) {
+      await logoutUpstream(stored.accessToken);
+    }
     return { status: "ok" as const };
   },
 });

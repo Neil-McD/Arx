@@ -35,12 +35,21 @@ export default async function handler(req, res) {
 
   const sessionId = readAuthSessionId(req);
   if (sessionId) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
-      await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
+      const response = await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
         payload: { session_id: sessionId },
+        signal: controller.signal,
       });
+      const payload = response.ok ? await response.json() : null;
+      if (!response.ok || payload?.ok !== true) throw new Error("logout_unconfirmed");
     } catch {
-      // best effort only
+      // Keep the opaque cookie so retry can resolve an uncertain outcome.
+      sendJson(res, 503, { ok: false, error: "logout_unconfirmed", message: "Sign out couldn't be confirmed. Try again." });
+      return;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

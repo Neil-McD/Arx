@@ -1,6 +1,7 @@
 type WebSignOutConfirmModalProps = {
   isOpen: boolean;
   isSubmitting: boolean;
+  error?: string | null;
   onClose: () => void;
   onConfirm: () => Promise<void> | void;
 };
@@ -26,6 +27,7 @@ export function WebSignOutConfirmModal(props: WebSignOutConfirmModalProps) {
           </button>
         </div>
         <div className="modal-body resource-delete-body">
+          {props.error ? <div role="alert" className="error">{props.error}</div> : null}
           <div className="resource-delete-surface">
             <div className="resource-delete-label">What happens next</div>
             <div className="resource-delete-note">

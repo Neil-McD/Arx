@@ -536,8 +536,12 @@ export async function logoutAuthSessionRemote(params: {
     path: AUTH_GATEWAY_LOGOUT_PATH,
     method: "POST",
     payload: {},
+    timeoutMs: APP_ADMISSION_TIMEOUT_MS,
   });
-  if (!response || response.ok) return;
+  const payload = response?.ok ? await response.json().catch(() => null) : null;
+  if (!response?.ok || payload?.ok !== true) {
+    throw new Error("Sign out couldn't be confirmed. Try again.");
+  }
 }
 
 function ensureResultFromRefreshFailure(

@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import {
   AUTH_SESSION_ABSOLUTE_TTL_MS,
   AUTH_SESSION_IDLE_TTL_MS,
@@ -440,4 +441,58 @@ test("a cross-tab refresh swarm performs one provider refresh and one row update
       refreshGeneration: 1,
     });
   });
+});
+
+async function createLogoutFixture(t: ReturnType<typeof convexTest>, sessionId: string) {
+  vi.stubEnv("ARX_DB_KEY", "auth-session-kernel-test-key");
+  const userId = await t.run(ctx => ctx.db.insert("users", { authSubject: "logout-user", createdAt: Date.now(), updatedAt: Date.now() }));
+  await t.mutation((internal as any).authSessions.createAuthSessionInternal, {
+    sessionId, authSubject: "logout-user", userId, accessToken: "synthetic-logout-access", refreshToken: "synthetic-logout-refresh",
+    accessTokenExpiresAt: Math.floor(Date.now()/1000)+300, externalUserId: "logout-user", nowMs: Date.now(),
+  });
+  return await t.run(ctx => ctx.db.query("authSessions").filter(q => q.eq(q.field("sessionId"), sessionId)).unique()) as Doc<"authSessions"> | null;
+}
+
+test.each(["http-failure", "network-failure", "timeout"])("canonical logout erases credentials before provider %s and is idempotent", async failure => {
+  const t = convexTest(schema, modules);
+  const row = await createLogoutFixture(t, "logout-one");
+  const other = await createLogoutFixture(t, "logout-other");
+  vi.stubEnv("ARX_AUTH_LOGOUT_URL", "https://identity.test/logout");
+  let observed: any;
+  const provider = vi.fn(async (_url: string, init: RequestInit) => {
+    observed = await t.run(ctx => ctx.db.get(row!._id));
+    if(failure === "network-failure") throw Error("provider unavailable");
+    if(failure === "timeout") return await new Promise<Response>((_resolve,reject) => init.signal!.addEventListener("abort",()=>reject(Error("aborted"))));
+    return new Response("provider unavailable", { status: 503 });
+  });
+  vi.stubGlobal("fetch", provider);
+  expect(await t.action((internal as any).authSessions.logoutAuthSessionInternal, { sessionId: "logout-one" })).toEqual({status:"ok"});
+  expect(observed.revokedReason).toBe("logout");
+  for(const field of ["encryptedSecretHex","secretIvHex","secretVersion","accessTokenExpiresAt","refreshLeaseId","refreshLeaseExpiresAt"]) expect(observed[field]).toBeUndefined();
+  const revokedAt=observed.revokedAt;
+  expect(await t.action((internal as any).authSessions.logoutAuthSessionInternal, { sessionId: "logout-one" })).toEqual({status:"ok"});
+  expect(provider).toHaveBeenCalledTimes(1);
+  const after = await t.run(ctx => ctx.db.get(row!._id)); expect(after?.revokedAt).toBe(revokedAt);
+  expect(await t.run(ctx => ctx.db.get(other!._id))).toEqual(other);
+  expect((await t.action((internal as any).authSessions.bootstrapAuthSessionInternal, {sessionId:"logout-one"})).status).toBe("terminal_failure");
+  expect((await t.action((internal as any).authSessions.refreshAuthSessionInternal, {sessionId:"logout-one"})).status).toBe("terminal_failure");
+  expect(provider).toHaveBeenCalledTimes(1);
+});
+
+test("missing and unreadable-secret sessions still have deterministic logout", async () => {
+  const t = convexTest(schema, modules);
+  expect(await t.action((internal as any).authSessions.logoutAuthSessionInternal,{sessionId:"absent"})).toEqual({status:"ok"});
+  const id=await insertSessionFixture(t,{sessionId:"unreadable"});
+  expect(await t.action((internal as any).authSessions.logoutAuthSessionInternal,{sessionId:"unreadable"})).toEqual({status:"ok"});
+  const row=await t.run(ctx=>ctx.db.get(id));
+  expect(row?.revokedReason).toBe("logout"); expect(row?.encryptedSecretHex).toBeUndefined(); expect(row?.secretIvHex).toBeUndefined();
+});
+
+test("an invalid replacement chain cannot report confirmed logout", async () => {
+  const t=convexTest(schema,modules);
+  const id=await insertSessionFixture(t,{sessionId:"cycle",replacedBySessionId:"cycle"});
+  const before=await t.run(ctx=>ctx.db.get(id));
+  const result=await t.action((internal as any).authSessions.logoutAuthSessionInternal,{sessionId:"cycle"});
+  expect(result).toEqual({status:"transient_failure",reason:"auth_session_chain_invalid"});
+  expect(await t.run(ctx=>ctx.db.get(id))).toEqual(before);
 });

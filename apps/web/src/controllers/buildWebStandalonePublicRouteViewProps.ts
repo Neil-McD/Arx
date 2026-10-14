@@ -32,7 +32,8 @@ export function buildWebStandalonePublicRouteViewProps(params: {
     showSignIn: params.showSignIn,
     onRequireSignIn: () => params.requireSignIn(),
     onSignOut: () => {
-      void params.handleSignOut();
+      // The auth controller owns the visible error; avoid an unhandled rejection.
+      void Promise.resolve().then(() => params.handleSignOut()).catch(() => {});
     },
     checkoutStatus: params.checkoutStatus,
     onRetryCheckoutFinalize: params.retryCheckoutFinalize,
