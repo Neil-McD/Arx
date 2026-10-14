@@ -87,8 +87,11 @@ profiles, and separates external grants from web-session logout.
 
 Workspace MCP, MCP auth and profile contract proofs passed. Diff/JSON/evidence
 checks and remote validation are recorded in the structured evidence. The
-existing deployed 2B1 runtime remains in place; no deployment, provider settings,
-membership, billing or production change was performed.
+existing deployed 2B1 runtime remains in place. GitHub created ordinary PR
+previews; neither canonical staging nor production was released. No provider
+settings, membership or billing changes were performed. The receipt captured
+remote CI while pending; [PR #169](https://github.com/Neil-McD/Arx/pull/169) owns
+the current check status. Local proof and remote validation are separate gates.
 
 Next: an independent founder client contribution/retry proof. Claude Code
 compatibility is a separate client gate, not implied by this native Codex result.

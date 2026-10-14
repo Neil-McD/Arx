@@ -11,7 +11,9 @@
     "backend": "dev:quick-porcupine-949",
     "productionBuildBefore": "91d28dc2c986ef88a8a507a269db710d6d28d878",
     "runtimeChanges": false,
-    "deploymentsPerformed": false
+    "canonicalRuntimeDeploymentsPerformed": false,
+    "automaticPullRequestPreviews": true,
+    "productionBuildAfter": "91d28dc2c986ef88a8a507a269db710d6d28d878"
   },
   "client": {
     "name": "native Codex app-server",
@@ -156,7 +158,13 @@
     "profileMcpContract": "passed",
     "workspaceMcpContract": "passed",
     "diffCheck": "passed",
-    "remoteReleaseGate": "pending",
+    "remoteReleaseGate": {
+      "statusAtReceiptCapture": "pending",
+      "pullRequest": "https://github.com/Neil-McD/Arx/pull/169",
+      "initialRun": "https://github.com/Neil-McD/Arx/actions/runs/38623390175",
+      "initialCandidateSha": "9700ed3852268ccb1838e2996b57a4b8fe9d72da",
+      "currentStatusOwner": "GitHub PR check rollup; inspect the current receipt head separately"
+    },
     "jsonAndEvidenceChecks": "passed"
   },
   "artifacts": [
