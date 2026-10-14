@@ -4,10 +4,10 @@ Scope: reconcile staging with canonical main and correct the stale member
 ontology proof. No new product behavior is introduced beyond the existing main
 baseline. Real authenticated MCP acceptance belongs to package 2.
 
-Current status: **source reconciliation, ontology correction and focused
-dependency remediation verified; awaiting the clean-commit release gate and
-staging release**. No deployed layer or remote branch has been changed yet.
-Package 1's live-baseline acceptance remains open. The
+Current status: **complete**. The clean candidate passed the full release gate
+and was deployed to both staging layers. See the
+[final staging acceptance receipt](../receipts/2026-10-14-staging-6ae696779.md).
+The
 [initial verification evidence](evidence/package-1-baseline-20261014.json)
 records the earlier audit failure before the authorized remediation below.
 
@@ -110,8 +110,9 @@ the inherited-trust regression in both root and web KaTeX installations. The
 positive control still permits links when trust is explicitly supplied.
 
 All 10 Markdown tests, the ontology proof and dependency guard passed. Both
-fresh dependency audits report zero findings. A clean-commit full release gate
-and the staged frontend/backend receipt remain the final acceptance boundaries.
+fresh dependency audits report zero findings. The clean-commit full release gate
+and staged frontend/backend acceptance also passed; their exact candidate and
+observations are recorded in the final receipt.
 
 ## Verification and release boundary
 

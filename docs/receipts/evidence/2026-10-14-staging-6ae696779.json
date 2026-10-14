@@ -1,0 +1,314 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-14T16:22:26.671Z",
+  "package": 1,
+  "status": "staging_baseline_established",
+  "candidate": "6ae69677964ccd599870de81afed9a45be4ca805",
+  "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+  "previousStaging": "1fc266e1ddaf3880491e7a7d3fdfa1bb32dfcfa4",
+  "backendSourceTree": "cae62e73ed311b6464797b2db0059abc81b3ce0e",
+  "gate": {
+    "schemaVersion": 1,
+    "gateId": "polynet_release_gate_v1",
+    "mode": "ci",
+    "status": "passed",
+    "startedAt": "2026-10-14T16:14:15.634Z",
+    "finishedAt": "2026-10-14T16:15:53.597Z",
+    "durationMs": 97963,
+    "candidate": {
+      "expectedSha": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "headSha": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "buildId": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "clean": true,
+      "kind": "commit"
+    },
+    "steps": [
+      {
+        "id": "candidate_identity",
+        "label": "Candidate identity",
+        "command": "git identity and whitespace checks",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:15.635Z",
+        "finishedAt": "2026-10-14T16:14:15.682Z",
+        "durationMs": 47,
+        "failure": null
+      },
+      {
+        "id": "convex_generated_surface",
+        "label": "Convex generated-surface sanity",
+        "command": "validate checked-in convex/_generated files and source targets",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:15.682Z",
+        "finishedAt": "2026-10-14T16:14:15.723Z",
+        "durationMs": 41,
+        "failure": null
+      },
+      {
+        "id": "convex_typecheck",
+        "label": "Convex typecheck",
+        "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:15.723Z",
+        "finishedAt": "2026-10-14T16:14:25.987Z",
+        "durationMs": 10264,
+        "failure": null
+      },
+      {
+        "id": "web_typecheck",
+        "label": "Web typecheck",
+        "command": "npm run check:web-typecheck",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:25.987Z",
+        "finishedAt": "2026-10-14T16:14:37.066Z",
+        "durationMs": 11079,
+        "failure": null
+      },
+      {
+        "id": "web_build",
+        "label": "Production web build",
+        "command": "npm run build",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:37.066Z",
+        "finishedAt": "2026-10-14T16:14:37.837Z",
+        "durationMs": 771,
+        "failure": null
+      },
+      {
+        "id": "web_build_identity",
+        "label": "Built web identity",
+        "command": "apps/web/dist/version.json buildId equals candidate build identity",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:37.837Z",
+        "finishedAt": "2026-10-14T16:14:37.838Z",
+        "durationMs": 1,
+        "failure": null
+      },
+      {
+        "id": "web_bundle_budget",
+        "label": "Web bundle budget",
+        "command": "npm run check:web-bundle-budget",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:37.838Z",
+        "finishedAt": "2026-10-14T16:14:38.041Z",
+        "durationMs": 203,
+        "failure": null
+      },
+      {
+        "id": "media_reading_browser",
+        "label": "Media reading browser proof",
+        "command": "npm run check:media-reading-browser-proof",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:14:38.041Z",
+        "finishedAt": "2026-10-14T16:15:15.454Z",
+        "durationMs": 37413,
+        "failure": null
+      },
+      {
+        "id": "app_theme_contract",
+        "label": "App theme contract",
+        "command": "npm run check:app-theme-contract-proof",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:15.454Z",
+        "finishedAt": "2026-10-14T16:15:15.648Z",
+        "durationMs": 194,
+        "failure": null
+      },
+      {
+        "id": "loading_correctness",
+        "label": "Account-scoped loading, profile drafts, and avatar transitions",
+        "command": "npm run check:loading-correctness",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:15.648Z",
+        "finishedAt": "2026-10-14T16:15:21.808Z",
+        "durationMs": 6160,
+        "failure": null
+      },
+      {
+        "id": "convex_cut_guard",
+        "label": "Convex cut guard",
+        "command": "npm run check:convex-cut-runtime-guard",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:21.808Z",
+        "finishedAt": "2026-10-14T16:15:21.934Z",
+        "durationMs": 126,
+        "failure": null
+      },
+      {
+        "id": "foundation_baseline",
+        "label": "Foundation invariants and behavior",
+        "command": "npm run check:foundation-baseline",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:21.934Z",
+        "finishedAt": "2026-10-14T16:15:50.479Z",
+        "durationMs": 28545,
+        "failure": null
+      },
+      {
+        "id": "dependency_security_interlock",
+        "label": "Dependency security compatibility",
+        "command": "npm run check:dependency-security-interlock",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:50.479Z",
+        "finishedAt": "2026-10-14T16:15:50.601Z",
+        "durationMs": 122,
+        "failure": null
+      },
+      {
+        "id": "root_dependency_audit",
+        "label": "Root dependency audit",
+        "command": "npm audit --audit-level=low",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:50.601Z",
+        "finishedAt": "2026-10-14T16:15:51.758Z",
+        "durationMs": 1157,
+        "failure": null
+      },
+      {
+        "id": "web_dependency_audit",
+        "label": "Web dependency audit",
+        "command": "npm --prefix apps/web audit --audit-level=low",
+        "status": "passed",
+        "startedAt": "2026-10-14T16:15:51.758Z",
+        "finishedAt": "2026-10-14T16:15:53.597Z",
+        "durationMs": 1839,
+        "failure": null
+      }
+    ],
+    "failure": null,
+    "rawEvidenceSha256": "f3bb79a43707b91a84a096e74df10e2e3b04df994d85b053a44cab80022dd514",
+    "logSha256": "ae9412a9a08600370a3f0d488463de5d08b207484eafafcb22f1586ad174d1e6",
+    "runner": {
+      "node": "v22.14.0",
+      "temporaryTypeScriptResolverSha256": "cbdabfbd23bd0bbc18709adf1c0253e2a684398c2876de575ed6027b1b4b9bf7"
+    }
+  },
+  "tests": {
+    "repository": {
+      "passed": 1592,
+      "failed": 0,
+      "files": 189
+    },
+    "markdown": {
+      "passed": 10,
+      "failed": 0,
+      "subsetOfRepository": true
+    },
+    "ontologyProof": "passed",
+    "dependencyGuard": "passed"
+  },
+  "audits": {
+    "root": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "web": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "backendDeployment": {
+    "candidate": "6ae69677964ccd599870de81afed9a45be4ca805",
+    "target": "dev:quick-porcupine-949",
+    "startedAt": "2026-10-14T16:16:28.129Z",
+    "finishedAt": "2026-10-14T16:16:42.301Z",
+    "exitCode": 0
+  },
+  "backendObserved": {
+    "functionSpecSha256": "085387e206d93ee67f87b04df19c31eb13a8cba0a260c4e5ab30bd461e1375d9",
+    "registrations": 735,
+    "entryInterface": {
+      "identifier": "memberEntryDestination.js:resolveMemberEntryDestinationInternal",
+      "functionType": "Query",
+      "visibility": {
+        "kind": "internal"
+      },
+      "argumentNames": [
+        "communityId",
+        "communitySlug",
+        "userId"
+      ]
+    },
+    "health": {
+      "nowMs": 1791994639090,
+      "ok": true,
+      "source": "convex"
+    },
+    "commitEvidence": "clean_candidate_and_successful_explicit_deployment_receipt_not_health_sha"
+  },
+  "webLiveProof": {
+    "observedAt": "2026-10-14T16:18:57.481Z",
+    "origin": "https://polynet-staging.vercel.app",
+    "version": {
+      "buildId": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "sentryRelease": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "environment": "staging"
+    },
+    "asset": "/assets/index-BDm0Tbzx.js",
+    "bundleSha256": "ee1c5fba9eea26523a9c6fa8f368af15a93d6f1dfb0147d850bfbfc65d536f29",
+    "embeddedBackend": "https://quick-porcupine-949.convex.cloud",
+    "embeddedBackendSite": "https://quick-porcupine-949.convex.site",
+    "oauthMetadata": {
+      "resource": "https://polynet-staging.vercel.app/runtime/mcp",
+      "authorization_servers": [
+        "https://sparkling-artist-49-staging.authkit.app"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ],
+      "scopes_supported": [
+        "openid",
+        "profile",
+        "email",
+        "offline_access"
+      ]
+    },
+    "production": {
+      "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "environment": "production"
+    }
+  },
+  "publicIdentityDenial": {
+    "observedAt": "2026-10-14T16:20:55.552Z",
+    "case": "public_unverified_asserted_subject",
+    "httpStatus": 200,
+    "status": "error",
+    "code": "verified_identity_required"
+  },
+  "mcpMetadataSmoke": {
+    "status": "passed",
+    "logSha256": "0a1dabfb9ccceaca78cf850c6728dfe8771a96eb25ed5e294ba44d1ee54fc74a",
+    "realAuthenticatedAcceptance": "package_2_not_run"
+  },
+  "gitConnectedDeploymentStatuses": [
+    {
+      "context": "Vercel – polynet",
+      "state": "success",
+      "description": "Canceled by Ignored Build Step",
+      "targetUrl": "https://vercel.com/neil-mcds-projects/polynet/Dous2AWBYcByf2NDC1aazgDAtP9y"
+    },
+    {
+      "context": "Vercel – polynet-staging",
+      "state": "success",
+      "description": "Deployment has completed",
+      "targetUrl": "https://vercel.com/neil-mcds-projects/polynet-staging/C8PP2NAh2bfbP7pXti561CWT1DwN"
+    }
+  ],
+  "effects": {
+    "stagingBackendDeployed": true,
+    "stagingBranchFastForwarded": true,
+    "stagingWebDeployed": true,
+    "mainPushed": false,
+    "productionRelease": false,
+    "testDrivenInference": false,
+    "fixtureProductWrites": false
+  }
+}
