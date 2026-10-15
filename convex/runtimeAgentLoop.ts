@@ -1,4 +1,10 @@
 import { api, internal } from "./_generated/api";
+import {
+  COMMUNITY_MEMORY_RECALL_LIMIT,
+  buildCommunityMemoryRecallQuery,
+  parseCommunityMemoryRecallEntries,
+  renderCommunityMemoryRecall,
+} from "../shared/communityMemoryRecall";
 import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
   runChatgptNativeToolCompletion,
@@ -988,6 +994,70 @@ async function executeRetrievalAgentLoop(
       memberIdentityContextStatus = "error";
     }
   }
+  // Accepted community memory reaches the turn by a server-run canonical search,
+  // not only when the model chooses to look. Same authority, mount and retrieval
+  // receipt as a model-issued polynet_search; failure never blocks the turn.
+  let communityMemoryRecallMd: string | null = null;
+  const communityMemoryRecallQuery = buildCommunityMemoryRecallQuery(
+    extractTextFromNativeToolMessageContent(latestUserContent),
+  );
+  const communityMemoryRecallSlug = String(params.communitySlug ?? "").trim();
+  if (
+    params.invocationSurface === "member_agent_dock" &&
+    params.communityId &&
+    communityMemoryRecallSlug &&
+    communityMemoryRecallQuery &&
+    effectiveAllowedToolNames.includes("polynet_search")
+  ) {
+    let recallStatus: "loaded" | "empty" | "error" = "error";
+    let recallPaths: string[] = [];
+    let recallRetrievalId: string | null = null;
+    try {
+      const recall = await executeRetrievalHarnessTool({
+        ctx: params.ctx,
+        userId: params.userId,
+        communityId: params.communityId,
+        authSubject: params.authSubject,
+        runId: params.runId,
+        toolCallId: `${params.runId}:community_memory_recall`,
+        toolName: "polynet_search",
+        args: {
+          path: `/communities/${communityMemoryRecallSlug}/memory/`,
+          query: communityMemoryRecallQuery,
+          limit: COMMUNITY_MEMORY_RECALL_LIMIT,
+        },
+        evidenceSurface: "member_agent_dock",
+        communityBoundConversation:
+          params.memberAgentSurfaceContext?.kind === "community" &&
+          params.memberAgentSurfaceContext.community_conversation === true,
+      });
+      if (recall.status === "ok") {
+        const parsed = parseCommunityMemoryRecallEntries(recall.outputText, communityMemoryRecallSlug);
+        communityMemoryRecallMd = renderCommunityMemoryRecall(parsed.entries);
+        recallPaths = parsed.entries.map((entry) => entry.path);
+        recallRetrievalId = parsed.retrievalId;
+        recallStatus = communityMemoryRecallMd ? "loaded" : "empty";
+      }
+    } catch {
+      communityMemoryRecallMd = null;
+    }
+    try {
+      await params.appendRunEvent({
+        eventType: "community_memory_recall",
+        eventKey: `${params.runId}:community_memory_recall:1`,
+        payload: {
+          version: 1,
+          run_id: params.runId,
+          status: recallStatus,
+          result_count: recallPaths.length,
+          memory_paths: recallPaths,
+          retrieval_id: recallRetrievalId,
+        },
+      });
+    } catch {
+      // Best-effort receipt; the prompt bundle receipt records the injected section.
+    }
+  }
   const runtimePromptBundle = buildPlatformHarnessRuntimePromptBundle({
     loopBudget: params.loopBudget,
     allowedToolNames: effectiveAllowedToolNames,
@@ -1007,6 +1077,7 @@ async function executeRetrievalAgentLoop(
     invocationSurface: params.invocationSurface,
     memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     memberIdentityContextMd,
+    communityMemoryRecallMd,
     promptExtensions: resolvedHarness.promptExtensions,
   });
   const systemPrompt = runtimePromptBundle.text;

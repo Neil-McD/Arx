@@ -1381,7 +1381,7 @@ Rules:
   - 20 pending eligible evidence units exist
   - 5 strong evidence units exist
   - 1 critical evidence unit exists
-  - oldest pending evidence is at least 72 hours old
+  - oldest pending evidence is at least 6 hours old
 - A measurement run selects up to 100 pending evidence units, ordered by critical first, then strong, then standard, oldest first within each tier.
 - `compilerPendingSince` is the age clock for pending evidence, with `createdAt` only as a legacy fallback.
 - `communityCompilerDigests.windowEndedAt` is not a consumption cursor and must not decide whether source traces are pending.
@@ -2227,7 +2227,8 @@ items are the sole autonomous handoff.
 - Admission selects at most eight packets and twelve exact traces from each.
   Legacy traces without a group key remain compatible as one-trace packets.
 - Eight pending packets, one full twelve-trace packet, five trusted strong
-  packets, one outcome/feedback packet, or 72-hour age wakes the compiler.
+  packets, one outcome/feedback packet, or 6-hour age wakes the compiler, so a
+  single shared post in a small funded community becomes memory the same day.
 - Free-form evidence wording never creates critical priority. Member text such
   as "broken" or "unsafe" is untrusted content, not a billing or urgency gate.
 - AI Feed, workflow, agent-run, and transcript packets are strong;
@@ -2413,3 +2414,29 @@ an untouched control and all product-source sentinels remained unchanged. The
 temporary acceptance function and flag were removed afterward. The durable
 certificate is
 `docs/community-cognition-cleanup-staging-acceptance-20260716.md`.
+
+## Thirty-Fourth Implementation Slice: Same-Day Cited Answer
+
+Goal: a member's shared post becomes accepted memory the same day, and a later
+member's agent turn reliably sees it, reads it, and cites it.
+
+- Compiler age wake is six hours (was 72). With the six-hour sweep, one eligible
+  shared post in a small funded community becomes memory within roughly 6–12
+  hours. The daily Steward cycle cap, owner off-switch, funding gate and run
+  reservation ceiling are unchanged.
+- Member-agent recall: before each `member_agent_dock` turn with an explicit
+  community and `polynet_search` available, the server runs one canonical
+  `polynet_search` on `/communities/<slug>/memory/` with the latest member text
+  (at most 500 characters, top three results) under the member's current
+  authority and mount. It writes the normal `member_agent_dock` retrieval
+  receipt and a `community_memory_recall` run event (status, result count,
+  memory paths, receipt id).
+- Results enter the prompt as the scoped `community_memory_recall` section with
+  `evidence` authority: titles, type, grade, applies-when and exact paths only,
+  framed as data, not instructions. The model must `polynet_read` an entry
+  before relying on it and cite its path; the read writes its own receipt with
+  the injected node, preserving the receipt chain above.
+- Recall never blocks a turn. Search failure, empty memory, trivial messages
+  and non-member-agent surfaces render no section. The Concierge and external
+  MCP keep model-initiated search for now.
+- Recall receipts carry no feedback, so they do not change metabolizer scores.

@@ -232,7 +232,7 @@
     "check:community-compiler-digest-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_digest_contract_proof.ts",
     "check:community-compiler-candidates-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_candidates_contract_proof.ts",
     "check:community-compiler-evidence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_evidence_contract_proof.ts",
-    "check:community-compiler-admission-proof": "tsx scripts/community_compiler_admission_contract_proof.ts",
+    "check:community-compiler-admission-proof": "vitest run convex/communityCompilerAdmission.test.ts",
     "check:community-compiler-evidence-diet-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_evidence_diet_contract_proof.ts",
     "check:community-memory-work-key-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_memory_work_key_contract_proof.ts",
     "check:community-metabolizer-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_metabolizer_contract_proof.ts",

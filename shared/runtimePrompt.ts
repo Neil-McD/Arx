@@ -126,6 +126,7 @@ export type RuntimePlatformHarnessPromptParams =
     invocationSurface: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
     memberIdentityContextMd?: string | null;
+    communityMemoryRecallMd?: string | null;
     promptExtensions?: readonly RuntimePromptExtensionSection[];
   };
 
@@ -629,6 +630,16 @@ export function buildPlatformHarnessRuntimePromptBundle(
               "shared/memberAgentIdentityContext.ts#renderMemberAgentIdentityContext",
             reason: "bounded deterministic member identity context",
             text: params.memberIdentityContextMd,
+          }),
+          buildRuntimePromptSection({
+            id: "community_memory_recall",
+            layer: "scoped",
+            slot: "context",
+            owner: "community",
+            authority: "evidence",
+            source: "shared/communityMemoryRecall.ts#renderCommunityMemoryRecall",
+            reason: "server-run bounded accepted-memory search for the latest member message",
+            text: params.communityMemoryRecallMd,
           }),
         ]
       : []),

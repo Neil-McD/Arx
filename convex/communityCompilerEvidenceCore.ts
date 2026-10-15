@@ -4,7 +4,9 @@ export { buildCommunitySourceTraceRevision } from "../shared/communitySourceTrac
 
 export const COMPILER_EVIDENCE_BATCH_THRESHOLD = 8;
 export const COMPILER_EVIDENCE_STRONG_THRESHOLD = 5;
-export const COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 72 * 60 * 60 * 1000;
+// One eligible shared post becomes memory the same day in a small community; the
+// six-hour sweep, daily cycle cap and funding gate still bound cost.
+export const COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 export const COMPILER_EVIDENCE_PACKET_LIMIT = 8;
 export const COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT = 12;
 export const COMPILER_EVIDENCE_RUN_LIMIT =
