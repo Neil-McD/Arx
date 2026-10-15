@@ -142,6 +142,31 @@ approval capability below does not make the queue writable.
 `capabilities/`. Current operations are:
 
 - member: `community.memory.record_outcome`
+- human self (`personal_agent` / `external_mcp`): `community.form.submit`, version 1.
+  Discover pending assignments at `/communities/<slug>/members/me/forms/` (12 per
+  indexed page; actor/community/visit-scoped cursors). Read the exact returned
+  `<request-id>.json` for immutable questions/version, answers and revision.
+  These paths are private, non-searchable and read-only. Submitted exact reads
+  remain available after progress completion under the same current membership
+  activation; cancelled or unverifiable requests are unavailable.
+  Call the exact capability target with `form_request_ref` (`form-request:<id>`),
+  `form_version_ref` (`form-version:<id>`), `expected_revision` and typed `answers`.
+  The adapter caps serialized answers and the complete exact document at 24,000
+  characters, including JSON escaping, and rejects `form_payload_too_large`
+  before mutation rather than truncating questions or accepted read-back.
+  Existing pinned-version required/choice validation and text limits apply.
+  Submission freezes answers and schedules the existing reconciler; its
+  acknowledgment says submitted, never completed. Canonical context and linked
+  transition evidence establish subsequent progress. No draft, authoring,
+  human-approval, actor selector or advancement override is exposed.
+  Community agents and funnel-builder projections cannot discover or execute it.
+  Reservation, answer freeze, scheduling and receipt completion share one
+  transaction. Exact replay after progress moves returns the original receipt;
+  changed payload conflicts and a new key cannot resubmit frozen answers.
+  Current access/funding and the exact membership activation are rechecked before
+  historical replay. External submission means authorized on behalf of the member,
+  not unaided human authorship.
+
 - human builder (current owner/admin): `community.admission.approve`, version 1.
   Target its exact capability document. Input is `request_ref`,
   `expected_created_at`, and `expected_updated_at` copied from the current pending

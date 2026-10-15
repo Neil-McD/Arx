@@ -68,6 +68,8 @@ const MEMORY_TYPES = new Set([
 const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
 const ADMISSION_DENY_OPERATION = "community.admission.deny";
 const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
+const FORM_SUBMIT_OPERATION = "community.form.submit";
+const SELF_FORMS_DIRECTORY = "/members/me/forms/";
 const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 
 const COMMUNITY_FUNNEL_UPDATE_OPERATION =
@@ -598,7 +600,9 @@ function capabilityDocument(args: {
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface !== "community_funnel_builder" &&
     args.principalKind !== "community_agent" && args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability) {
+  const isFormCapability = args.operation === FORM_SUBMIT_OPERATION &&
+    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -609,7 +613,11 @@ function capabilityDocument(args: {
     authority_lane: isFunnelCapability || isAdmissionCapability ? "builder" : "member",
     idempotency_required: true,
   };
-  if (isAdmissionCapability) {
+  if (isFormCapability) {
+    operationDefinition.input = { required: ["form_request_ref", "form_version_ref", "expected_revision", "answers"],
+      effects: ["freeze_own_form_answers", "schedule_existing_completion_reconciliation"],
+      maximum_document_chars: 24_000, guidance: "Submission acknowledges answers; read canonical context separately for progress." };
+  } else if (isAdmissionCapability) {
     operationDefinition.input = {
       required: ["request_ref", "expected_created_at", "expected_updated_at"],
       request_ref: "exact join-request reference from the pending queue",
@@ -711,6 +719,21 @@ async function executeCanonicalList(args: {
     }
   }
 
+  if (target.localPath === SELF_FORMS_DIRECTORY) {
+    if (args.principalKind === "community_agent" || args.evidenceSurface === "community_funnel_builder")
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    try {
+      const page = await args.ctx.runQuery(internal.communityFormRequests.listOwnFormsInternal,
+        { userId: args.userId, communityId: target.communityId,
+          ...(typeof args.input.cursor === "string" ? { cursor: args.input.cursor } : {}) });
+      return { ok: true, value: { ...virtualDirectory({ path: absolutePath, searchable: false, writable: false,
+        entries: page.rows.map((row: { id: string; name: string; answered: number; total: number }) => ({
+          ...row, ref: `form-request:${row.id}`, path: mountedPath(target.communitySlug, `${SELF_FORMS_DIRECTORY}${row.id}.json`),
+          kind: "document", type: "private_assigned_form" })) }), next_cursor: page.next_cursor,
+        truncated: page.next_cursor !== null, visit_changed: page.visit_changed } };
+    } catch { return canonicalError("semantic_not_found", "Repository path not found or not accessible."); }
+  }
+
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
     if (args.principalKind === "community_agent" || target.localPath !== COMMUNITY_MEMBER_SELF_DIRECTORY) {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
@@ -719,7 +742,8 @@ async function executeCanonicalList(args: {
       ok: true,
       value: virtualDirectory({
         path: absolutePath,
-        entries: [{ path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" }],
+        entries: [{ path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" },
+          { path: mountedPath(target.communitySlug, SELF_FORMS_DIRECTORY), kind: "directory", type: "private_assigned_forms" }],
         searchable: false, writable: false,
       }),
     };
@@ -892,7 +916,7 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
-      ...ADMISSION_OPERATIONS.filter(operation => capabilityDocument({ target, operation,
+      ...[FORM_SUBMIT_OPERATION, ...ADMISSION_OPERATIONS].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -1132,6 +1156,22 @@ async function executeCanonicalRead(args: {
     if (!args.integrationRead) return canonicalError("integration_pilot_unavailable", "Integration pilot is not connected.");
     return executeCommunityIntegrationRead({ communityId: target.communityId, userId: args.userId,
       runId: args.runId, toolCallId: args.toolCallId, contactId: match[1] }, args.integrationRead);
+  }
+
+  if (target.localPath.startsWith(SELF_FORMS_DIRECTORY)) {
+    const match = /^\/members\/me\/forms\/([A-Za-z0-9]+)\.json$/.exec(target.localPath);
+    if (!match || args.principalKind === "community_agent" || args.evidenceSurface === "community_funnel_builder")
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    try {
+      const payload = await args.ctx.runQuery(internal.communityFormRequests.readOwnFormInternal,
+        { userId: args.userId, communityId: target.communityId, requestId: match[1] });
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath,
+        payload, ref: payload.ref }), writable: false, searchable: false } };
+    } catch (error) {
+      return String(error).includes("form_payload_too_large")
+        ? canonicalError("form_payload_too_large", "Assigned form exceeds the 24000-character adapter budget.")
+        : canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    }
   }
 
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
@@ -1914,6 +1954,29 @@ async function executeCanonicalCall(args: {
       "operation_not_found",
       "Operation is not discoverable or authorized for this community.",
     );
+  }
+  if (operation === FORM_SUBMIT_OPERATION) {
+    const request = typeof rawInput.form_request_ref === "string" ? /^form-request:([A-Za-z0-9]+)$/.exec(rawInput.form_request_ref) : null;
+    const versionRef = typeof rawInput.form_version_ref === "string" ? /^form-version:([A-Za-z0-9]+)$/.exec(rawInput.form_version_ref) : null;
+    const answers = rawInput.answers;
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !request || !versionRef ||
+        !Number.isSafeInteger(rawInput.expected_revision) || (rawInput.expected_revision as number) < 0 ||
+        !answers || typeof answers !== "object" || Array.isArray(answers) ||
+        !Object.values(answers).every(value => typeof value === "string" || Array.isArray(value) && value.every(item => typeof item === "string")) ||
+        Object.keys(rawInput).some(key => !["form_request_ref", "form_version_ref", "expected_revision", "answers"].includes(key)))
+      return canonicalError("invalid_tool_args", "Exact form references, revision and typed answers are required.");
+    try {
+      const value = await args.ctx.runMutation(internal.communityFormRequests.submitOwnFormInternal,
+        { userId: args.userId, communityId: target.communityId, principalKind: args.principalKind,
+          requestId: request[1], versionId: versionRef[1], expectedRevision: rawInput.expected_revision, answers, idempotencyKey });
+      if (value.ok === false) return canonicalError(value.code, value.message,
+        value.retryAfterMs ? { retry_after_ms: value.retryAfterMs } : undefined);
+      return { ok: true, value };
+    } catch (error) {
+      return String(error).includes("form_payload_too_large")
+        ? canonicalError("form_payload_too_large", "Assigned form or answers exceed the 24000-character adapter budget.")
+        : canonicalError("form_request_unavailable", "Form request not available or submission not authorized.");
+    }
   }
   if (ADMISSION_OPERATIONS.includes(operation)) {
     const match = typeof rawInput.request_ref === "string" ? /^join-request:([A-Za-z0-9]+)$/.exec(rawInput.request_ref) : null;

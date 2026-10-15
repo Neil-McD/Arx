@@ -301,6 +301,9 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    form_request_ref: { type: "string", pattern: "^form-request:[A-Za-z0-9]+$", maxLength: 180 },
+    form_version_ref: { type: "string", pattern: "^form-version:[A-Za-z0-9]+$", maxLength: 180 },
+    answers: { type: "object", additionalProperties: { anyOf: [{ type: "string", maxLength: 10_000 }, { type: "array", items: { type: "string" } }] } },
     request_ref: { type: "string", pattern: "^join-request:[A-Za-z0-9]+$", maxLength: 180 },
     expected_created_at: { type: "string", maxLength: 24 },
     expected_updated_at: { type: "string", maxLength: 24 },

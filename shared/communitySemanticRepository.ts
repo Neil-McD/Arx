@@ -567,6 +567,11 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
   if (repositoryPath.kind === "community") {
     // This self-only subtree is served by the canonical executor, not the
     // legacy local-path reader. Reuse fixed document/directory input rules.
+    if (repositoryPath.localPath === "/members/me/forms/" || /^\/members\/me\/forms\/[A-Za-z0-9]+\.json$/.test(repositoryPath.localPath)) {
+      const validated = validateCommunitySemanticOperationInput({ ...args,
+        path: repositoryPath.localPath === "/members/me/forms/" ? POLYNET_JOIN_REQUESTS_DIRECTORY_PATH : "/community.md" });
+      return validated.ok ? { ...validated, path: repositoryPath.path } : validated;
+    }
     if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH) {
       const validated = validateCommunitySemanticOperationInput({
         ...args,
