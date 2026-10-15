@@ -1,8 +1,10 @@
-# Slice 4A1 proposal: truthful accepted-memory consumption and outcome receipts
+# Slice 4A1: truthful accepted-memory consumption and outcome receipts
 
 Date: October 15, 2026. Algorithm step **1 — question and rank requirements**.
-Status: implementation and bounded staging proof authorized October 15, 2026.
-The approved scope below governs execution. No inference or production change.
+Status: bounded staging acceptance passed October 15, 2026.
+[Receipt](receipts/2026-10-15-staging-memory-consumption-4a1.md) and
+[structured evidence](receipts/evidence/2026-10-15-staging-memory-consumption-4a1.json).
+The approved scope below was implemented and verified. Production remained untouched.
 
 ## 3A2 review and current baseline
 
