@@ -105,9 +105,11 @@ There are two human authority lanes:
   moderators and members.
 
 Both lanes can list, read, and search the member repository. Both can write
-participation to an exact returned `channels/<slug>/` path. Only the builder lane can
-see `builder/`, stage resource changesets there, and discover or call builder
-changeset operations.
+participation to an exact returned `channels/<slug>/` path. Only the builder lane
+can see `builder/` and stage resource changesets there. Terminal resource
+changeset decisions use authenticated product Apply/Reject controls; their agent
+capability paths and calls are unavailable. Builder capabilities are advertised
+individually under the mutation model below.
 
 The community-owned agent always uses the member lane, even when its
 operational sponsor is an owner or admin. It publishes with community-agent
@@ -116,6 +118,19 @@ attribution, not as the sponsor and never as a builder.
 Failures are intentionally non-enumerating. An inaccessible community or
 builder path appears not found; server state never trusts a client-claimed
 lane.
+
+### Pending admission queue
+
+Builder list/read exposes `builder/join-requests/` and its returned `<request-id>.md`
+paths. Every page and exact read rechecks current owner/admin manager authority.
+The queue includes only canonical pending requests: request reference, public
+applicant reference, status and timestamps. It excludes emails and free-text
+messages. Default page size is 20 (2–50); opaque continuation cursors are scoped
+to actor, community and pending query and confer no authority. Cancelled or
+otherwise decided requests are unavailable on exact read. The directory is
+read-only, non-searchable, and absent from member and community-agent projections.
+Existing first-party moderator review remains unchanged. The separate free
+approval capability below does not make the queue writable.
 
 ## Mutation model
 
@@ -129,6 +144,101 @@ lane.
 `capabilities/`. Current operations are:
 
 - member: `community.memory.record_outcome`
+- human self (`personal_agent` / `external_mcp`): `community.form.submit`, version 1.
+  Discover pending assignments at `/communities/<slug>/members/me/forms/` (12 per
+  indexed page; actor/community/visit-scoped cursors). Read the exact returned
+  `<request-id>.json` for immutable questions/version, answers and revision.
+  These paths are private, non-searchable and read-only. Submitted exact reads
+  remain available after progress completion under the same current membership
+  activation; cancelled or unverifiable requests are unavailable.
+  Call the exact capability target with `form_request_ref` (`form-request:<id>`),
+  `form_version_ref` (`form-version:<id>`), `expected_revision` and typed `answers`.
+  The adapter caps serialized answers and the complete exact document at 24,000
+  characters, including JSON escaping, and rejects `form_payload_too_large`
+  before mutation rather than truncating questions or accepted read-back.
+  Existing pinned-version required/choice validation and text limits apply.
+  Submission freezes answers and schedules the existing reconciler; its
+  acknowledgment says submitted, never completed. Canonical context and linked
+  transition evidence establish subsequent progress. No draft, authoring,
+  human-approval, actor selector or advancement override is exposed.
+  Community agents and funnel-builder projections cannot discover or execute it.
+  Reservation, answer freeze, scheduling and receipt completion share one
+  transaction. Exact replay after progress moves returns the original receipt;
+  changed payload conflicts and a new key cannot resubmit frozen answers.
+  Current access/funding and the exact membership activation are rechecked before
+  historical replay. External submission means authorized on behalf of the member,
+  not unaided human authorship.
+
+Builder decisions (`community.workflow.approve_milestone`,
+`community.admission.approve` and `community.admission.deny`) are discoverable
+and executable only through the official external MCP (`external_mcp`), where the
+founder operates the harness directly. The native personal agent cannot discover
+or execute them: it reads member-authored evidence and has no per-call human
+confirmation, so a prompt in that evidence must not be able to grant access or
+advance a member. Mutation validators also reject any other principal.
+
+- human builder (current owner/admin): `community.workflow.approve_milestone`,
+  version 1. Read the private member dossier's `workflow.approval` observation;
+  input is exactly `membership_ref` (`membership:<id>`),
+  `expected_activation_sequence` and `review_ref` (`workflow-approval:v1:<sha256>`).
+  The reference binds current workflow/revision, activation, stage visit/sequence,
+  configuration and exact verified action/form evidence. Only a complete bounded
+  evidence projection for a human-approval stage with at least one action offers
+  a reference. Ineligible, incomplete, truncated or oversized evidence offers none.
+  Current manager and target access/funding, canonical membership and activation
+  are checked before completed-receipt replay. New execution recomputes the
+  observation; transition, approval attribution, existing visit cleanup/scheduling
+  and receipt completion commit together. Same-envelope retries return the
+  historical approved acknowledgment without moving the member twice; changed
+  payload conflicts and a new key cannot reuse a stale observation.
+  Member self, community-agent and special funnel-builder projections do not
+  expose the approval observation/capability. There is no force-move flag, AI goal
+  verdict, actor selector, bulk decision or external authoring. First-party approval
+  compatibility, including its separate zero-action policy, remains unchanged.
+  An external approval acts on behalf of the authenticated founder; it does not
+  assert unaided human authorship or an AI-verified business outcome.
+
+- human builder (current owner/admin): `community.admission.approve`, version 1.
+  Target its exact capability document. Input is `request_ref`,
+  `expected_created_at`, and `expected_updated_at` copied from the current pending
+  request. Only approval-gated communities and applicants with no existing
+  membership/subscription qualify. This creates ordinary free member access using
+  existing activation, audit, workflow and best-effort access-email owners. Paid
+  access, prior membership restoration, role changes, denial and bulk decisions
+  are excluded. Members, moderators and community agents cannot invoke it.
+
+- human builder (current owner/admin): `community.admission.deny`, version 1.
+  Uses the same exact pending request reference and observed timestamps as
+  approval, with the same narrow fresh/free eligibility and authority lane.
+  Atomically records denial, a seven-day server-clock reapplication deadline,
+  attempt-specific critical audit and completed receipt. It grants no access
+  and triggers no activation, email or workflow. Replays return the historical
+  decision without extending cooldown or denying a later application.
+  Applicant status and reapplication use the existing authenticated public
+  access projection and join operation, not new MCP commands. Before expiry,
+  join is denied and cancellation preserves the denied row. At or after expiry,
+  an explicit join reopens the same ID with new creation/update observations.
+  Old observations cannot approve or deny this new attempt. First-party ID-only
+  decision RPC compatibility remains separate from this attempt-bound contract.
+
+Memory consumption and observed outcomes remain separate states. Memory search
+creates a receipt with returned nodes; exact `polynet_read` creates its own receipt
+with the returned node also marked injected. Use that exact-read `retrieval_id`
+for `community.memory.record_outcome`. This marker proves content was returned
+to the client, not that a model used it or that advice produced a real outcome.
+The owner validates current community access and receipt actor, community,
+surface, version and injected-node membership. Identical reports for the same
+receipt/node deduplicate; changed status or notes conflict, including under a
+new operation key. A new consumption receipt is a distinct episode.
+
+An explicit domain refusal or malformed acknowledgment is a canonical error,
+not a completed success. The adapter requires a successful outcome identity
+before completing its operation receipt. Historical cached nested refusals are
+also returned as errors without rewriting the audit row. Outcome effects and
+canonical receipt completion remain separately retry safe through the existing
+owner; an uncertain receipt completion may recover its one committed outcome.
+An observed outcome creates one pending `attach_outcome` request and marks
+metabolism pending; it does not directly promote or validate accepted memory.
 
 Builder resource changesets are terminally decided only through the authenticated
 product Apply or Reject controls. They are not agent-callable capabilities.
@@ -142,6 +252,12 @@ effect, rejects reuse with a different request, and persists the completed
 result. A same-request retry returns the original result with
 `deduped: true`. Domain mutations are independently retry safe so a process
 failure between the domain effect and receipt completion can be recovered.
+Fresh admission decisions instead reserve, apply their domain effects and complete
+their receipt in one domain transaction. Current manager authority is checked
+before both new decisions and receipt replay. A lost response replays the historical decision;
+it does not assert present entitlement or email delivery and cannot restore
+access after leave/revocation. Stale or reopened applications require a new
+observed request and cannot be approved with an older timestamp pair.
 
 The MCP contract exposes real active channels only. It does not create an All
 channel or duplicate interaction data. A broad status request lists the bounded
@@ -299,8 +415,10 @@ Acceptance is deliberately fail closed:
 Acceptance proves OAuth discovery, exact five-tool discovery, repository
 navigation, current authority, search/read, real chat write/read/replay,
 retired AI Feed absence, inaccessible-community denial, and—when the actor has
-builder authority—a staged changeset plus discovered reject call without
-applying the test change. Run it once with a builder identity and once with an
+builder authority—a staged changeset plus an expected `operation_not_found`
+response to an agent terminal-decision call. The changeset remains pending
+product review; this probe neither applies nor rejects it. Run it once with a
+builder identity and once with an
 ordinary member identity. Preserve a separate successful control read of the
 denied community so the certificate proves isolation from a real object rather
 than only missing-path behavior.

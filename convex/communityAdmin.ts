@@ -2,6 +2,8 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import {
   type CommunityBlockLike,
   type CommunityLike,
@@ -43,6 +45,7 @@ import {
   deleteCommunityJoinRequestByPair,
   denyCommunityJoinRequestCore,
   ensureDeniedCommunityJoinRequest,
+  getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
@@ -729,7 +732,7 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   request: CommunityJoinRequestLike;
   nowMs: number;
   grantReason: string;
-}): Promise<{ grantedMembership: boolean }> {
+}): Promise<{ grantedMembership: boolean; membership: CommunityMembershipLike }> {
   if (String(args.community.ownerId) === String(args.request.userId)) {
     throw new Error("community_owner_join_request_forbidden");
   }
@@ -773,7 +776,7 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
       nowMs: args.nowMs,
     });
   }
-  return { grantedMembership: Boolean(grantedMembershipMarker) };
+  return { grantedMembership: Boolean(grantedMembershipMarker), membership: activation.membership };
 }
 
 async function approvePendingJoinRequestsForOpenAccessBatch(args: {
@@ -1252,6 +1255,164 @@ export const listCommunityMembershipCreatedAtRows = query({
       .slice(0, limit)
       .map((row) => ({ created_at: toIsoString(row.createdAt) }));
   },
+});
+
+// Read-only founder projection. The existing moderator RPC below retains its contract.
+async function mapPendingAdmissionRequest(ctx: any, row: CommunityJoinRequestLike) {
+  if (assertCanonicalCommunityJoinRequest(row) !== "pending" ||
+      !Number.isFinite(row.createdAt) || !Number.isFinite(row.updatedAt)) {
+    throw new Error("community_join_request_unavailable");
+  }
+  const current = await getCurrentCommunityJoinRequestByPair({
+    ctx, communityId: row.communityId, userId: row.userId,
+  });
+  if (!current || String(current._id) !== String(row._id)) {
+    throw new Error("community_join_request_unavailable");
+  }
+  return {
+    ref: `join-request:${row._id}`,
+    applicant_ref: `user:${(await resolvePublicUserId(ctx, row.userId)) ?? String(row.userId)}`,
+    status: "pending" as const,
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+export const listPendingAdmissionRequestsInternal = internalQuery({
+  args: {
+    userId: v.id("users"), communityId: v.id("communities"),
+    cursor: v.optional(v.string()), limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const limit = args.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 2 || limit > 50) {
+      throw new Error("community_join_request_limit_invalid");
+    }
+    const scope = JSON.stringify([args.userId, args.communityId, "pending", "createdAt:desc", 1]);
+    let cursor: string | null = null;
+    if (args.cursor !== undefined) {
+      let decoded;
+      try { decoded = JSON.parse(args.cursor); } catch { throw new Error("community_join_request_cursor_invalid"); }
+      if (args.cursor.length > 2048 || decoded?.scope !== scope ||
+          typeof decoded.cursor !== "string" || !decoded.cursor) {
+        throw new Error("community_join_request_cursor_invalid");
+      }
+      cursor = decoded.cursor;
+    }
+    const result = await ctx.db.query("communityJoinRequests")
+      .withIndex("by_community_status_createdAt", q => q.eq("communityId", args.communityId).eq("status", "pending"))
+      .order("desc").paginate({ cursor, numItems: limit });
+    return {
+      requests: await Promise.all(result.page.map(row => mapPendingAdmissionRequest(ctx, row))),
+      next_cursor: result.isDone ? null : JSON.stringify({ scope, cursor: result.continueCursor }),
+    };
+  },
+});
+
+export const readPendingAdmissionRequestInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.id("communityJoinRequests") },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const row = await ctx.db.get(args.requestId);
+    if (!row || row.communityId !== args.communityId) throw new Error("community_join_request_unavailable");
+    return await mapPendingAdmissionRequest(ctx, row);
+  },
+});
+
+// Reservation, domain effects and completed result share one transaction.
+const freshAdmissionArgs = {
+  userId: v.id("users"), communityId: v.id("communities"),
+  principalKind: v.literal("external_mcp"),
+  requestId: v.id("communityJoinRequests"),
+  expectedCreatedAt: v.number(), expectedUpdatedAt: v.number(),
+  idempotencyKey: v.string(),
+};
+
+type FreshAdmissionArgs = {
+  userId: Id<"users">; communityId: Id<"communities">;
+  principalKind: "external_mcp"; requestId: Id<"communityJoinRequests">;
+  expectedCreatedAt: number; expectedUpdatedAt: number; idempotencyKey: string;
+};
+
+async function decideFreshAdmission(ctx: MutationCtx, args: FreshAdmissionArgs,
+  operation: "community.admission.approve" | "community.admission.deny"): Promise<Record<string, any>> {
+  const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+  if (!args.idempotencyKey.trim() || args.idempotencyKey.length > 200 ||
+      !Number.isSafeInteger(args.expectedCreatedAt) || !Number.isSafeInteger(args.expectedUpdatedAt)) {
+    throw new Error("invalid_tool_args");
+  }
+  const scope = { communityId: args.communityId, userId: args.userId,
+    principalKind: args.principalKind, toolName: "polynet_call" as const, idempotencyKey: args.idempotencyKey };
+  const requestFingerprint = JSON.stringify([operation, 1, args.requestId,
+    args.expectedCreatedAt, args.expectedUpdatedAt]);
+  const reservation = await ctx.runMutation(internal.polynetCanonicalReceipts.reserveCanonicalOperationReceiptInternal,
+    { ...scope, requestFingerprint });
+  if (!reservation.ok) return reservation;
+  if (reservation.status === "completed") {
+    const value = reservation.result;
+    return { ...value, deduped: true, receipt: { ...value.receipt, deduped: true } };
+  }
+  const nowMs = Date.now();
+  if (!reservation.attemptToken || !reservation.leaseExpiresAt || reservation.leaseExpiresAt <= nowMs) {
+    throw new Error("operation_in_progress");
+  }
+  const request = await ctx.db.get(args.requestId);
+  if (!request || request.communityId !== args.communityId ||
+      request.createdAt !== args.expectedCreatedAt || request.updatedAt !== args.expectedUpdatedAt ||
+      resolveCommunityEntryPolicy(community) !== "approval") {
+    throw new Error("admission_request_unavailable");
+  }
+  // Validates pending fields and the canonical pair; never repairs a read.
+  const projection = await mapPendingAdmissionRequest(ctx, request);
+  const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: request.userId });
+  const subscription = await ctx.db.query("communitySubscriptions")
+    .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", request.userId)).first();
+  if (membership || subscription) throw new Error("admission_request_unavailable");
+  let result: Record<string, unknown>;
+  if (operation === "community.admission.approve") {
+    const activation = await approveCommunityJoinRequestForFreeAccess({ ctx, community, request,
+      nowMs, grantReason: "join_request_approved" });
+    result = { status: "approved", request_ref: projection.ref, applicant_ref: projection.applicant_ref,
+      membership_ref: `membership:${activation.membership._id}`, decided_at: toIsoString(nowMs) };
+  } else {
+    if (community.ownerId === request.userId) throw new Error("admission_request_unavailable");
+    await requireCommunityUserNotBlocked({ ctx, communityId: args.communityId, userId: request.userId });
+    const denied = await denyCommunityJoinRequestCore({ ctx, request, nowMs,
+      cooldownMs: COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS });
+    result = { status: "denied", request_ref: projection.ref, applicant_ref: projection.applicant_ref,
+      denied_at: toIsoString(denied.request.deniedAt!), reapply_at: toIsoString(denied.request.reapplyAt!) };
+  }
+  const eventType = operation === "community.admission.approve"
+    ? "community_join_request_approved" : "community_join_request_denied";
+  const eventKey = operation === "community.admission.approve"
+    ? `${eventType}:${request._id}`
+    : `${eventType}:${request._id}:${args.expectedCreatedAt}:${args.expectedUpdatedAt}`;
+  await recordCriticalAuditEvent(ctx, {
+    eventKey, eventType, severity: "info", status: "succeeded",
+    actorUserId: args.userId, subjectUserId: request.userId, communityId: args.communityId,
+    provider: "polynet", providerObjectId: String(request._id), createdAt: nowMs,
+  });
+  const value = { ok: true, operation, result,
+    deduped: false,
+    receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_call",
+      principal_kind: args.principalKind, community_id: String(args.communityId), community_slug: community.slug,
+      authority_lane: "builder", relation: community.ownerId === args.userId ? "owner" : "admin",
+      idempotency_key: args.idempotencyKey, deduped: false } };
+  await ctx.runMutation(internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
+    { ...scope, requestFingerprint, attemptToken: reservation.attemptToken, result: value });
+  return value;
+
+}
+
+export const approveFreshAdmissionInternal = internalMutation({
+  args: freshAdmissionArgs,
+  handler: (ctx, args): Promise<Record<string, any>> => decideFreshAdmission(ctx, args, "community.admission.approve"),
+});
+
+export const denyFreshAdmissionInternal = internalMutation({
+  args: freshAdmissionArgs,
+  handler: (ctx, args): Promise<Record<string, any>> => decideFreshAdmission(ctx, args, "community.admission.deny"),
 });
 
 export const listCommunityJoinRequests = query({

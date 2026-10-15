@@ -1,0 +1,395 @@
+{
+  "slice": "2C4",
+  "status": "scoped_staging_acceptance_passed",
+  "observedAt": "2026-10-15T18:01:39.746646+00:00",
+  "release": {
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "initialCodeCandidate": "16d288bcf4d6900c587401b2e550183fd6e80c1a",
+    "runtimeCandidate": "32bf8995effd2b4fed485b4e9bc4b0393aaa1653",
+    "backendTree": "b869139fe77657e467c942142c12a4840b62df97",
+    "backendDeployment": "dev:quick-porcupine-949",
+    "backendDeploymentExit": 0,
+    "backendProvenance": "clean initial candidate deployment; runtime candidate has identical Convex tree; not remote commit attestation",
+    "stagingUrl": "https://polynet-staging.vercel.app",
+    "stagingDeployment": "https://vercel.com/neil-mcds-projects/polynet-staging/4LghZjvBkYKBfabQdj2GgQDYKeAS",
+    "productionWeb": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+    "productionTouched": false,
+    "pr": "https://github.com/Neil-McD/Arx/pull/174",
+    "bundle": {
+      "runtime": "32bf8995effd2b4fed485b4e9bc4b0393aaa1653",
+      "asset": "/assets/index-o54qA2e5.js",
+      "sha256": "ea0de874387cf38c5abce6b59c22c3ea4af52b301a10136d4847166a551fc3af",
+      "cloudHostEmbedded": true,
+      "siteHostEmbedded": true
+    },
+    "gitReleaseCorrection": "initial feature preview canceled and no staging web build appeared; documentation-only candidate pushed to staging before feature branch; no Vercel release command or setting change"
+  },
+  "validation": {
+    "focusedTests": 173,
+    "focusedFiles": 4,
+    "fullTests": 1777,
+    "fullFiles": 192,
+    "audits": {
+      "root": 0,
+      "web": 0
+    },
+    "candidateGate": {
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-15T17:52:37.953Z",
+      "finishedAt": "2026-10-15T17:54:22.333Z",
+      "durationMs": 104380,
+      "candidate": {
+        "expectedSha": "32bf8995effd2b4fed485b4e9bc4b0393aaa1653",
+        "headSha": "32bf8995effd2b4fed485b4e9bc4b0393aaa1653",
+        "buildId": "32bf8995effd2b4fed485b4e9bc4b0393aaa1653",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:52:37.953Z",
+          "finishedAt": "2026-10-15T17:52:38.035Z",
+          "durationMs": 82,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:52:38.035Z",
+          "finishedAt": "2026-10-15T17:52:38.080Z",
+          "durationMs": 45,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:52:38.080Z",
+          "finishedAt": "2026-10-15T17:52:50.516Z",
+          "durationMs": 12436,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:52:50.516Z",
+          "finishedAt": "2026-10-15T17:53:02.996Z",
+          "durationMs": 12480,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:02.996Z",
+          "finishedAt": "2026-10-15T17:53:03.806Z",
+          "durationMs": 810,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:03.806Z",
+          "finishedAt": "2026-10-15T17:53:03.807Z",
+          "durationMs": 1,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:03.807Z",
+          "finishedAt": "2026-10-15T17:53:03.993Z",
+          "durationMs": 186,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:03.993Z",
+          "finishedAt": "2026-10-15T17:53:42.439Z",
+          "durationMs": 38446,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:42.439Z",
+          "finishedAt": "2026-10-15T17:53:42.653Z",
+          "durationMs": 214,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:42.653Z",
+          "finishedAt": "2026-10-15T17:53:49.422Z",
+          "durationMs": 6769,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:49.422Z",
+          "finishedAt": "2026-10-15T17:53:49.586Z",
+          "durationMs": 164,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:53:49.586Z",
+          "finishedAt": "2026-10-15T17:54:21.332Z",
+          "durationMs": 31746,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:54:21.332Z",
+          "finishedAt": "2026-10-15T17:54:21.431Z",
+          "durationMs": 99,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:54:21.431Z",
+          "finishedAt": "2026-10-15T17:54:21.946Z",
+          "durationMs": 515,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T17:54:21.946Z",
+          "finishedAt": "2026-10-15T17:54:22.333Z",
+          "durationMs": 387,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "candidateCi": {
+      "url": "https://github.com/Neil-McD/Arx/actions/runs/38781348264",
+      "lastObservedStatus": "completed",
+      "conclusion": "success",
+      "verifiedAt": "2026-10-15T18:03:31.548489+00:00"
+    },
+    "localTimeProof": "actual seven-day policy with Date controlled locally; reapplyAt - 1 / exact / + 1; public access, join and cancel; same-ID reopening, old approval/denial fence, historical replay, second denial separate audit",
+    "otherLocalProof": [
+      "authority and strict input",
+      "atomic rollback",
+      "discarded response recovery",
+      "same/different actor and key",
+      "cross-operation key conflicts",
+      "competing external/first-party decisions and cancel",
+      "no activation/email/workflow effects",
+      "precise archived rejection assertion"
+    ]
+  },
+  "live": {
+    "communitySlug": "builder-canary-aug-6-2026-v3",
+    "communityId": "jx7486vxxfavmbyfm079dba9k98by70n",
+    "applicantId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+    "nativeClient": "codex-cli 0.162.0-alpha.17.2",
+    "native": {
+      "startedAt": "2026-10-15T17:53:28.901Z",
+      "founderFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+      "applicantFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "initialCachedAccountWasApplicant": true,
+      "founderExplicitGoogleSelection": true,
+      "founderExistingPendingReadable": true,
+      "applicantExistingPendingDenied": true,
+      "applicantContextDenied": true,
+      "request": {
+        "applicant_ref": "user:user_01KM4GDWGG4H9B4154SFKQKEBE",
+        "created_at": "2026-10-15T17:51:12.564Z",
+        "ref": "join-request:kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt",
+        "status": "pending",
+        "updated_at": "2026-10-15T17:51:12.564Z",
+        "path": "/communities/builder-canary-aug-6-2026-v3/builder/join-requests/kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt.md",
+        "kind": "document",
+        "type": "join_request"
+      },
+      "capabilityReadable": true,
+      "processBefore": 27028,
+      "applicantProcess": 25705,
+      "firstResponseDiscarded": true,
+      "dispatchedAt": "2026-10-15T17:55:59.156Z",
+      "deniedAt": "2026-10-15T17:55:59.047Z",
+      "reapplyAt": "2026-10-22T17:55:59.047Z",
+      "staleUiCancelAttempted": true,
+      "deniedRowSurvivedStaleCancel": true,
+      "recovered": {
+        "deduped": true,
+        "ok": true,
+        "operation": "community.admission.deny",
+        "receipt": {
+          "authority_lane": "builder",
+          "community_id": "jx7486vxxfavmbyfm079dba9k98by70n",
+          "community_slug": "builder-canary-aug-6-2026-v3",
+          "contract": "polynet.canonical.operation:v1",
+          "deduped": true,
+          "idempotency_key": "staging-2c4-20261015-denial-1",
+          "principal_kind": "external_mcp",
+          "relation": "owner",
+          "tool": "polynet_call"
+        },
+        "result": {
+          "applicant_ref": "user:user_01KM4GDWGG4H9B4154SFKQKEBE",
+          "denied_at": "2026-10-15T17:55:59.047Z",
+          "reapply_at": "2026-10-22T17:55:59.047Z",
+          "request_ref": "join-request:kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt",
+          "status": "denied"
+        }
+      },
+      "processAfter": 45856,
+      "processRestarted": true,
+      "queueEmpty": true,
+      "oldPendingPathDenied": true,
+      "applicantStillDenied": true,
+      "namedStateUnchangedByRetry": true,
+      "publicReentryDenied": true,
+      "publicReentryFlow": "confirmed sign-out -> public Join free -> explicit same Google applicant -> Request denied / Oct 22",
+      "cooldownUnchangedAfterPublicReentry": true
+    },
+    "envelope": {
+      "endpoint": "https://polynet-staging.vercel.app/runtime/mcp",
+      "runtimeSha": "32bf8995effd2b4fed485b4e9bc4b0393aaa1653",
+      "backendTree": "b869139fe77657e467c942142c12a4840b62df97",
+      "actorFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+      "tool": "polynet_call",
+      "arguments": {
+        "operation": "community.admission.deny",
+        "version": 1,
+        "target": "/communities/builder-canary-aug-6-2026-v3/capabilities/community.admission.deny.json",
+        "input": {
+          "request_ref": "join-request:kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt",
+          "expected_created_at": "2026-10-15T17:51:12.564Z",
+          "expected_updated_at": "2026-10-15T17:51:12.564Z"
+        },
+        "idempotency_key": "staging-2c4-20261015-denial-1"
+      }
+    },
+    "pendingCreation": "normal applicant public Join free and existing Google account; backend already initial candidate; web still preceding 2C3 build at creation; reloaded identified new web before denial",
+    "decision": {
+      "requestId": "kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt",
+      "createdAt": 1792086672564,
+      "updatedAt": 1792086959047,
+      "deniedAt": 1792086959047,
+      "reapplyAt": 1792691759047,
+      "cooldownMs": 604800000,
+      "auditId": "sh7evwhzaebt8wrahh84scn28s8gapzr",
+      "auditKey": "community_join_request_denied:kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt:1792086672564:1792086672564",
+      "receiptId": "ps7tsjtq5qkpkbsf5mhh1kp0ed8gbsaj",
+      "receiptStatus": "completed"
+    },
+    "firstResponseDiscarded": "native application response not retained for recovery; no TCP interruption claim",
+    "staleCancel": "visible pending Cancel request was attempted after denial; denied row survived; no wire-level response capture",
+    "publicReentry": "confirmed web sign-out -> ordinary public Join free -> same Google applicant -> Request denied / Oct 22; named state unchanged",
+    "afterRetryAndReentryAndCleanupSame": true,
+    "afterDenialNamedStateHash": "f47544fce33438426af98de5af023d40d659820e4b78762008fdce67929ba483",
+    "unchangedSideEffectKeys": [
+      "memberships",
+      "subscriptions",
+      "receipt",
+      "audit",
+      "outbox",
+      "activity",
+      "activeMemberCount",
+      "retainedRoot",
+      "revokedMemberships",
+      "workflows"
+    ],
+    "unchangedSideEffectHash": "953980f24b5e5f6daea2594e5357fb713a2eec3865629bb40ff6a2abf5a8b7cc",
+    "counts": {
+      "pendingBefore": 1,
+      "deniedAfter": 1,
+      "membershipAfter": 0,
+      "subscriptionAfter": 0,
+      "denialAudit": 1,
+      "denialReceipt": 1,
+      "existingAccessEmails": 1,
+      "existingArrivalEvents": 1,
+      "workflowDefinitions": 0
+    }
+  },
+  "cleanup": {
+    "founderOriginalExit": 0,
+    "founderRestartExit": 0,
+    "founderLogout": "Removed OAuth credentials for 'polynet_2c4_founder_staging'.",
+    "founderFreshAuthStatus": "notLoggedIn",
+    "founderFreshProtectedDenied": true,
+    "founderFreshExit": 0,
+    "applicantExit": 0,
+    "applicantLogout": "Removed OAuth credentials for 'polynet_2c4_staging'.",
+    "applicantFreshAuthStatus": "notLoggedIn",
+    "applicantFreshProfileDenied": true,
+    "applicantFreshExit": 0,
+    "configHashBefore": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "configHashAfter": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "configUnchanged": true,
+    "webSignedOut": true,
+    "browserOwnedTabsClosed": true
+  },
+  "screenshots": [
+    {
+      "path": "artifacts/admission-denial-20261015/cleanup-signed-out.jpg",
+      "sha256": "5caebf7807565eaee1995edc47150cb4c818b61886b2a66551558fe6091c559a"
+    },
+    {
+      "path": "artifacts/admission-denial-20261015/denial-cooldown.jpg",
+      "sha256": "d69ea4808cd5c5df146900173b46426f543a42ec3226465c061bd1373021846a"
+    },
+    {
+      "path": "artifacts/admission-denial-20261015/reentry-denied.jpg",
+      "sha256": "75089897a6031ee6fe42d466539293016b1113307ed70ac26b0fea34382fab8a"
+    },
+    {
+      "path": "artifacts/admission-denial-20261015/request-pending.jpg",
+      "sha256": "4ec7712f571331054ef721d509549d6d4be9ebda71f5e1eb66b540182eab7867"
+    }
+  ],
+  "limits": [
+    "Elapsed seven-day live reapplication not observed; natural deadline 2026-10-22T17:55:59.047Z",
+    "Same-ID reopening and subsequent stale/historical decisions are local controlled-time proof",
+    "Concurrency, rollback and lease behavior are local; no live fault injection",
+    "Local logout and fresh auth-required checks do not prove provider-wide grant revocation or old JWT rejection",
+    "Named snapshots do not cover every table; ordinary session/presence/read-cursor and background worker activity may occur",
+    "First-party ID-only decision compatibility is not attempt-fenced by this capability",
+    "One denied synthetic row and immutable decision history intentionally retained; no backdating or cleanup reset"
+  ]
+}

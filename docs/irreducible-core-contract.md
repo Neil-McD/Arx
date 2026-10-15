@@ -25,14 +25,16 @@ Canonical community surfaces:
 - Events.
 - Member context in the community right rail; there is no standalone Members
   tab or page.
-- The member's personal agent in the bottom-right dock under the selected
-  community context; there is no standalone AI Agent tab.
+- The member's private conversation under the selected community context uses
+  the desktop Agent page and mobile Agent root. The floating launcher is retired;
+  `member_agent_dock` component/receipt names remain compatibility vocabulary.
 - Builder-only Settings, canonical funnel management, and Analytics.
 
 Core AI-agent paths:
 
-- Member personal-agent dock under explicit, server-validated community
-  context.
+- Member conversation harness under explicit, server-validated community
+  context. See `community-agent-conversations.md` for the current presentation;
+  member interactions and autonomous community-agent authority remain separate.
 - Separate community-owned Concierge and Steward execution.
 - Active community system prompt.
 - Draft list/upsert/activate RPC paths.

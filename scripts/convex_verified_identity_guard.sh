@@ -80,35 +80,41 @@ guard_rg_assert_absent \
   -n --fixed-strings 'if (!authSubject) throw new Error("auth_subject_required")' "$GATES_FILE"
 echo "OK: gates relies on authenticated subject helper."
 
-echo "[9/13] Ensuring thread APIs are no longer hard-required to caller ownerId..."
-if ! python - "$THREADS_FILE" <<'PY'
+echo "[9/13] Ensuring public APIs allow authenticated-subject-first identity resolution..."
+if ! python - "$THREADS_FILE" "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts' <<'PYGUARD'
 import pathlib
 import re
 import sys
 
-bad = []
+# Internal functions receive an already resolved actor from trusted server code.
+# Public query/mutation/action arguments must keep authenticated-subject-first entry.
 pattern = re.compile(
-    r'export const (\w+) = (mutation|query|action)\(\{\s*args:\s*\{(?P<body>.*?)\n\s*\},',
+    r'export const (\w+) = (mutation|query|action)\(\{\s*args:\s*\{(?P<body>.*?)\}\s*,\s*handler\s*:',
     re.S,
 )
+def violations(text, field):
+    required = re.compile(r'\b' + field + r'\s*:\s*v\.id\(\s*["\']users["\']\s*\)')
+    return [match.group(1) for match in pattern.finditer(text) if required.search(match.group("body"))]
 
-for raw_path in sys.argv[1:]:
+for kind in ("query", "mutation", "action"):
+    assert violations(f'export const unsafe = {kind}({{args: {{ userId: v.id("users") }}, handler: x}})', "userId") == ["unsafe"]
+    assert violations(f'export const safe = {kind}({{args: {{ userId: v.optional(v.id("users")) }}, handler: x}})', "userId") == []
+    assert violations(f'export const trusted = internal{kind.title()}({{args: {{ userId: v.id("users") }}, handler: x}})', "userId") == []
+
+bad = []
+for index, raw_path in enumerate(sys.argv[1:]):
     path = pathlib.Path(raw_path)
-    text = path.read_text()
-    for match in pattern.finditer(text):
-        if 'ownerId: v.id("users")' not in match.group("body"):
-            continue
-        bad.append(f"{path}:{match.group(1)}")
-
+    field = "ownerId" if index == 0 else "userId"
+    bad.extend(f"{path}:{name}" for name in violations(path.read_text(), field))
 if bad:
     print("\n".join(bad))
     sys.exit(1)
-PY
+PYGUARD
 then
-  echo "FAIL: required ownerId argument reintroduced in public thread Convex functions."
+  echo "FAIL: required caller ID reintroduced in public thread/community Convex functions."
   exit 1
 fi
-echo "OK: public thread APIs allow authenticated-subject-first identity resolution."
+echo "OK: public thread/community APIs allow authenticated-subject-first identity resolution."
 guard_rg_assert_absent \
   "ownerId-only fallback in thread resolvers" \
   -n --fixed-strings 'owner_identity_required' "$THREADS_FILE"
@@ -122,10 +128,9 @@ fi
 echo "OK: community create API accepts optional authSubject."
 
 echo "[11/13] Ensuring community APIs avoid hard-required caller userId..."
-guard_rg_assert_absent \
-  "required userId argument in community Convex functions" \
-  -n --fixed-strings 'userId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'
-echo "OK: community APIs avoid hard-required caller userId."
+# Public argument validation runs with the thread check above; internal readers
+# intentionally take a server-resolved actor ID.
+echo "OK: community public caller ID arguments were checked in step 9."
 guard_rg_assert_absent \
   "userId-only fallback in community resolver" \
   -n --fixed-strings 'user_identity_required' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'

@@ -1,11 +1,12 @@
 import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
-import { communityMembershipRowIsActive } from "./communityCore";
-import { readSubmittedFormRecord } from "./communityFormEvidenceCore";
+import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
+import { readSubmittedFormRecord, readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
 import { workflowTriggerIdentity, type CommunityMemberWorkflowMilestone } from "../shared/communityMemberWorkflow";
-import type { WorkflowActionProgress } from "../shared/communityMembershipContext";
+import { getMemberMilestone, resolveCurrentMilestone } from "./communityMemberWorkflowReadCore";
+import type { WorkflowMilestoneApproval, WorkflowActionProgress } from "../shared/communityMembershipContext";
 import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
 
 /** Private assembly: callers establish manager authority or trusted execution scope. No transition writes.
@@ -124,4 +125,53 @@ export async function readWorkflowActionProgress(ctx: QueryCtx, args: {
     actions.push(item);
   }
   return { actions, all_actions_complete: actions.length > 0 && actions.every(a => a.status === "complete"), scan_truncated: runs.length > 256 };
+}
+
+
+/** Private observation only. Callers authorize the builder projection; execution
+ * omits projectedProgress and recomputes the current canonical evidence. */
+export async function readWorkflowApprovalObservation(ctx: QueryCtx, args: {
+  workflow: Doc<"communityMemberWorkflows">; membership: Doc<"communityMemberships">;
+  projectedProgress?: WorkflowActionProgress;
+}): Promise<WorkflowMilestoneApproval | null> {
+  const { workflow, membership } = args;
+  if (!communityMembershipRowIsActive(membership) || membership.communityId !== workflow.communityId) return null;
+  try {
+    await requireCommunityChatAccess({ ctx, communityId: workflow.communityId, userId: membership.userId });
+    const pair = await getUniqueCommunityMembershipByPair({ ctx, communityId: workflow.communityId, userId: membership.userId });
+    if (pair?._id !== membership._id) return null;
+  } catch { return null; }
+  const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });
+  const current = resolveCurrentMilestone({ workflow, membership, state });
+  if (current.completedAt || !current.milestone.requireHumanApproval ||
+      ![workflow.revision, membership.activationSequence ?? 0, state?.transitionSeq ?? 0, current.milestoneEnteredAt]
+        .every(value => Number.isSafeInteger(value) && value >= 0)) return null;
+  const progress = args.projectedProgress ?? await readWorkflowActionProgress(ctx, { workflow, membership,
+    milestone: current.milestone, milestoneEnteredAt: current.milestoneEnteredAt, transitionSeq: state?.transitionSeq ?? 0 });
+  if (!progress.actions.length || !progress.all_actions_complete || progress.scan_truncated) return null;
+  // The dossier must actually expose all reviewed form evidence without clipping.
+  const forms = await readSubmittedFormRecords(ctx, membership);
+  const projection = projectSubmittedFormEvidence(forms);
+  if (projection.truncated || projection.unavailable_records) return null;
+  const records = [];
+  for (const action of progress.actions) {
+    if (!action.evidence) return null;
+    if (action.action_type !== "request_form") continue;
+    const record = forms.records.find(r => String(r.request._id) === action.evidence!.source_id);
+    if (!record || !projection.submissions.some(r => r.request_id === String(record.request._id))) return null;
+    records.push({ request: String(record.request._id), version: String(record.version._id), revision: record.request.revision,
+      form_name: record.version.name, version_revision: record.version.revision,
+      questions: record.version.questions, answers: Object.fromEntries(Object.keys(record.request.answers).sort().map(key => [key, record.request.answers[key]])) });
+  }
+  const snapshot = JSON.stringify({ version: 1, workflowId: workflow._id, workflowRevision: workflow.revision,
+    membershipId: membership._id, activation: membership.activationSequence ?? 0, transitionSeq: state?.transitionSeq ?? 0,
+    milestoneKey: current.milestone.key, enteredAt: current.milestoneEnteredAt,
+    instructions: current.milestone.instructions ?? "", goal: current.milestone.goal ?? "",
+    requireHumanApproval: current.milestone.requireHumanApproval, automations: current.milestone.automations,
+    actions: progress.actions, records });
+  if (snapshot.length > 24_000) return null;
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(snapshot));
+  return { eligible: true, membership_ref: `membership:${membership._id}`,
+    expected_activation_sequence: membership.activationSequence ?? 0,
+    review_ref: `workflow-approval:v1:${Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("")}` };
 }

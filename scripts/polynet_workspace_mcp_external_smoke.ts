@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { assertContextFlags, contextFingerprint, createContextBaseline, runContextAcceptance, runContextRevocation, validateContextBaseline, validateContextFixture, type ContextFixture, type ContextRequest } from "./polynet_mcp_context_acceptance.ts";
 import {
   POLYNET_MCP_PROTOCOL_VERSION,
   getPolynetMcpToolDefinitions,
 } from "../shared/polynetMcp.ts";
 
-type SmokeMode = "metadata" | "authenticated" | "acceptance";
+type SmokeMode = "metadata" | "authenticated" | "acceptance" | "context" | "context-revoked";
 type ExpectedAuthorityLane = "member" | "builder";
 type HttpJsonResponse = {
   status: number;
@@ -97,7 +99,7 @@ function readMode(): SmokeMode {
   if (
     value === "metadata" ||
     value === "authenticated" ||
-    value === "acceptance"
+    value === "acceptance" || value === "context" || value === "context-revoked"
   ) {
     return value;
   }
@@ -854,6 +856,18 @@ Optional:
   POLYNET_MCP_WRITE_CHAT=1
   POLYNET_MCP_EXERCISE_BUILDER=1
   POLYNET_MCP_TIMEOUT_MS
+
+Bounded staging context modes: --mode=context or --mode=context-revoked
+  POLYNET_MCP_BEARER_TOKEN (member) and POLYNET_MCP_CONTROL_BEARER_TOKEN (builder)
+  POLYNET_MCP_COMMUNITY_SLUG and POLYNET_MCP_DENIED_COMMUNITY_SLUG
+  POLYNET_MCP_PUBLIC_DOCUMENT_PATH and POLYNET_MCP_PRIVATE_DOCUMENT_PATH
+  POLYNET_MCP_PUBLIC_CANARY and POLYNET_MCP_PRIVATE_CANARY
+  POLYNET_MCP_ACCEPTANCE_RUN_ID (deployed runtime SHA, distinct from harness revision)
+  POLYNET_MCP_CONTEXT_BASELINE_FILE (required for context-revoked; successful context JSON)
+Save context stdout as the positive baseline. Revocation requires the same fixture,
+runtime, canonical users and unchanged member bearer; no credentials are emitted.
+These modes forbid content-write switches and invoke only list/read/search.
+Membership revocation is a separate, explicitly scoped fixture operation.
 `);
     return;
   }
@@ -861,6 +875,66 @@ Optional:
   const mcpUrl = normalizeMcpUrl(
     argValue("--url") ?? readEnv("POLYNET_MCP_URL"),
   );
+  if (mode === "context" || mode === "context-revoked") {
+    assertContextFlags(process.env);
+    assert.equal(mcpUrl, "https://polynet-staging.vercel.app/runtime/mcp", "context acceptance is pinned to staging");
+    const memberToken = requiredEnv("POLYNET_MCP_BEARER_TOKEN", "Member bearer is required.");
+    const builderToken = requiredEnv("POLYNET_MCP_CONTROL_BEARER_TOKEN", "Builder control bearer is required.");
+    assert.ok(memberToken !== builderToken, "Context identities must use separate credentials.");
+    const fixture: ContextFixture = {
+      communitySlug: requiredEnv("POLYNET_MCP_COMMUNITY_SLUG", "Fixture community is required."),
+      deniedCommunitySlug: requiredEnv("POLYNET_MCP_DENIED_COMMUNITY_SLUG", "Control-only community is required."),
+      publicDocumentPath: requiredEnv("POLYNET_MCP_PUBLIC_DOCUMENT_PATH", "Published fixture document is required."),
+      privateDocumentPath: requiredEnv("POLYNET_MCP_PRIVATE_DOCUMENT_PATH", "Private fixture document is required."),
+      publicCanary: requiredEnv("POLYNET_MCP_PUBLIC_CANARY", "Public canary is required."),
+      privateCanary: requiredEnv("POLYNET_MCP_PRIVATE_CANARY", "Private canary is required."),
+    };
+    validateContextFixture(fixture);
+    const runtimeSha = readAcceptanceRunId(true)!;
+    const memberBearerSha256 = contextFingerprint(memberToken);
+    let baseline: unknown;
+    if (mode === "context-revoked") {
+      const path = requiredEnv("POLYNET_MCP_CONTEXT_BASELINE_FILE", "Revocation requires POLYNET_MCP_CONTEXT_BASELINE_FILE from a successful positive run.");
+      try { baseline = JSON.parse(readFileSync(path, "utf8")); }
+      catch { throw new Error("Positive baseline file must be readable valid JSON."); }
+      validateContextBaseline(baseline, { fixture, runtimeSha, memberBearerSha256 });
+    }
+    const version = await fetchJson("https://polynet-staging.vercel.app/version.json");
+    assert.equal(version.status, 200, "Staging version must be available.");
+    assert.equal(asRecord(version.body).buildId, runtimeSha, "Deployed runtime must match the acceptance baseline.");
+    const metadata = await runMetadataSmoke(mcpUrl);
+    for (const token of [memberToken, builderToken]) {
+      const response = await postJsonRpc({ mcpUrl, token, method: "tools/list" });
+      assert.equal(response.status, 200, "Context bearer must be accepted by MCP.");
+      const envelope = asRecord(response.body);
+      assert.ok(!envelope.error, "Authenticated tool discovery must succeed.");
+      const names = asArray(asRecord(envelope.result).tools).map(tool => asRecord(tool).name);
+      assert.deepEqual(names, CANONICAL_TOOLS, "Context clients must discover the canonical five tools.");
+    }
+    const call = async (request: ContextRequest) => {
+      const response = await postJsonRpc({ mcpUrl, token: request.actor === "member" ? memberToken : builderToken,
+        method: "tools/call", params: { name: request.name, arguments: request.input } });
+      assert.equal(response.status, 200, "Context tool transport must succeed.");
+      const envelope = asRecord(response.body);
+      assert.ok(!envelope.error, "Context request must have a valid JSON-RPC result.");
+      const result = asRecord(envelope.result);
+      const value = asRecord(result.structuredContent);
+      assert.equal(result.isError === true, Boolean(request.expectedErrorCode), "Context tool authorization outcome must match its case.");
+      if (request.expectedErrorCode) {
+        const code = String(value.error ?? "").split(":")[0];
+        assert.equal(code, request.expectedErrorCode, "Context denial must use its canonical error.");
+        assert.ok(!value.body && !value.context && !value.results, "Denied context must not contain content.");
+      }
+      return value;
+    };
+    const proof = mode === "context"
+      ? createContextBaseline({ fixture, runtimeSha, memberBearerSha256, contextCases: await runContextAcceptance(fixture, call) })
+      : { ok: true, mode, runtime_sha: runtimeSha, fixture, member_bearer_sha256: memberBearerSha256,
+          context_cases: await runContextRevocation(fixture, call, { baseline, runtimeSha, memberBearerSha256 }) };
+    console.log(JSON.stringify({ ...proof, mcp_url: mcpUrl, metadata,
+      effects: { operations: ["polynet_list", "polynet_read", "polynet_search"], content_writes: false, retrieval_receipts: "may_be_recorded" } }, null, 2));
+    return;
+  }
   const metadata = await runMetadataSmoke(mcpUrl);
   const authenticated =
     mode === "authenticated" || mode === "acceptance"

@@ -79,6 +79,38 @@ leader. Exact lease and generation fencing decides write authority.
   created before zeroization became a revocation invariant
 - transient provider failures release the lease and preserve a still-valid access token
 
+### Bounded browser authentication requests
+
+Bootstrap, refresh and logout share one ten-second deadline covering fetch and
+response-body consumption. Receiving headers does not clear or restart it.
+The client aborts stalled body reads and clears the timer after consumption.
+Refresh retains terminal `401` classification even if its error body stalls;
+other HTTP failures and malformed success bodies remain transient. Bootstrap
+errors reject, and logout rejects an unconfirmed response while preserving the
+local session for retry. These deadlines do not change provider lifetimes.
+
+### Public logout completion
+
+`POST /api/auth/logout` reports success only after the canonical logout owner
+confirms completion, including an absent/already-revoked session. An invalid
+replacement chain is an unconfirmed failure, not proof that its rows were erased.
+Canonical revocation and credential erasure precede provider logout; provider
+logout is best effort with a two-second deadline and does not promise account-wide
+or external-client grant revocation.
+
+The same-origin bridge has a five-second deadline. A bridge error, malformed
+response or timeout returns `503, logout_unconfirmed` without clearing the opaque
+cookie, so retry can resolve even a lost completion response. The client has a
+ten-second deadline through response-body consumption and rejects every
+unconfirmed outcome. It preserves
+local authentication until confirmation, then clears it and runs completion
+hooks. The existing confirmation dialog displays the error and remains retryable.
+Epoch fencing prevents a late refresh from reinstating a completed session.
+
+This contract ends the selected Polynet session and prevents it from minting new
+credentials. Already-issued JWT acceptance is a separate resource/provider
+boundary and must be measured rather than assumed to end immediately.
+
 ## 6. Request Flow
 
 ```mermaid

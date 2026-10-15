@@ -6,7 +6,6 @@ export type WebStandalonePublicRouteViewProps = {
   publicRouteKind: StandalonePublicRouteKind;
   showSignIn: boolean;
   onRequireSignIn: () => void;
-  onSignOut: () => void;
   checkoutStatus: CheckoutStatus;
   onRetryCheckoutFinalize: () => void;
   onContinueCheckout: () => void;

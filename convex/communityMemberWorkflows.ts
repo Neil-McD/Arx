@@ -1,9 +1,10 @@
 import { workflowSequenceCompletionIsNew, workflowSequenceIssue, workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import type { MutationCtx } from "./_generated/server";
 import { WORKFLOW_ASSESSMENT_PROMPT } from "../shared/communityWorkflowAssessment";
-import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
+import { readWorkflowActionProgress, readWorkflowApprovalObservation } from "./communityWorkflowCompletionCore";
 import { COMPLETION_REVIEW_KEY, readCompletionReviewSnapshot, requireCompletionReview } from "./communityWorkflowGoalReviewCore";
 import { internal } from "./_generated/api";
 import { workflowJoinArgs, resolveFirstMemberWorkflowJoin, provisionJoinedMemberServiceChannel } from "./communityMemberWorkflowJoinCore";
@@ -31,6 +32,7 @@ import {
   getUniqueCommunityMembershipByPair,
   readCommunityActiveMemberCount,
   requireCommunityManager,
+  requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
   type CommunityMembershipLike,
@@ -1013,6 +1015,22 @@ export const forceBuilderMemberMilestone = mutation({
   },
 });
 
+type MilestoneApprovalArgs = {
+  communityId: Id<"communities">; membershipId: Id<"communityMemberships">;
+  expectedWorkflowId: Id<"communityMemberWorkflows">; expectedWorkflowRevision: number;
+  expectedMilestoneKey: string; expectedMilestoneEnteredAt: number;
+  expectedActivationSequence: number; expectedTransitionSeq: number;
+};
+async function approveMemberMilestoneCore(ctx: MutationCtx, args: MilestoneApprovalArgs, actorUserId: Id<"users">) {
+    const workflow = await getCommunityMemberWorkflowByCommunity({ ctx, communityId: args.communityId });
+    if (!workflow || workflow._id !== args.expectedWorkflowId) throw new Error("community_member_workflow_transition_authority_changed");
+    return transitionMemberForWorkflowAction({ ctx, actionKey: "human_approved", nowMs: Date.now(),
+      expectedWorkflowRevision: args.expectedWorkflowRevision, expectedMilestoneKey: args.expectedMilestoneKey,
+      expectedMilestoneEnteredAt: args.expectedMilestoneEnteredAt,
+      approval: { workflowId: workflow._id, membershipId: args.membershipId, actorUserId: actorUserId,
+        activationSequence: args.expectedActivationSequence, transitionSeq: args.expectedTransitionSeq } });
+}
+
 export const approveBuilderMemberMilestone = mutation({
   args: { ...managerIdentityArgs, communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
     expectedWorkflowId: v.id("communityMemberWorkflows"), expectedWorkflowRevision: v.number(),
@@ -1020,15 +1038,57 @@ export const approveBuilderMemberMilestone = mutation({
     expectedActivationSequence: v.number(), expectedTransitionSeq: v.number() },
   handler: async (ctx, args) => {
     const actor = await requireWorkflowManager({ ctx, ...args });
-    const workflow = await getCommunityMemberWorkflowByCommunity({ ctx, communityId: args.communityId });
-    if (!workflow || workflow._id !== args.expectedWorkflowId) throw new Error("community_member_workflow_transition_authority_changed");
-    return transitionMemberForWorkflowAction({ ctx, actionKey: "human_approved", nowMs: Date.now(),
-      expectedWorkflowRevision: args.expectedWorkflowRevision, expectedMilestoneKey: args.expectedMilestoneKey,
-      expectedMilestoneEnteredAt: args.expectedMilestoneEnteredAt,
-      approval: { workflowId: workflow._id, membershipId: args.membershipId, actorUserId: actor.userId,
-        activationSequence: args.expectedActivationSequence, transitionSeq: args.expectedTransitionSeq } });
+    return approveMemberMilestoneCore(ctx, args, actor.userId);
   },
 });
+
+// Current authority, exact observed decision, transition and receipt share one transaction.
+export const approveObservedMilestoneInternal = internalMutation({ args: {
+  communityId: v.id("communities"), userId: v.id("users"), membershipId: v.id("communityMemberships"),
+  principalKind: v.literal("external_mcp"),
+  expectedActivationSequence: v.number(), reviewRef: v.string(), idempotencyKey: v.string(),
+}, handler: async (ctx, args): Promise<Record<string, any>> => {
+  const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+  const membership = await ctx.db.get(args.membershipId);
+  if (!membership || membership.communityId !== args.communityId || !communityMembershipRowIsActive(membership))
+    throw new Error("workflow_approval_unavailable");
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: membership.userId });
+  const pair = await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: membership.userId });
+  if (pair?._id !== membership._id || (membership.activationSequence ?? 0) !== args.expectedActivationSequence)
+    throw new Error("workflow_approval_unavailable");
+  if (!Number.isSafeInteger(args.expectedActivationSequence) || args.expectedActivationSequence < 0 ||
+      !/^workflow-approval:v1:[a-f0-9]{64}$/.test(args.reviewRef) || !args.idempotencyKey.trim() || args.idempotencyKey.length > 200)
+    throw new Error("invalid_tool_args");
+  const scope = { communityId: args.communityId, userId: args.userId, principalKind: args.principalKind,
+    toolName: "polynet_call" as const, idempotencyKey: args.idempotencyKey };
+  const requestFingerprint = JSON.stringify(["community.workflow.approve_milestone", 1, args.membershipId, args.expectedActivationSequence, args.reviewRef]);
+  const reservation = await ctx.runMutation(internal.polynetCanonicalReceipts.reserveCanonicalOperationReceiptInternal, { ...scope, requestFingerprint });
+  if (!reservation.ok) return reservation;
+  if (reservation.status === "completed") {
+    const value = reservation.result;
+    return { ...value, deduped: true, receipt: { ...value.receipt, deduped: true } };
+  }
+  if (!reservation.attemptToken || !reservation.leaseExpiresAt || reservation.leaseExpiresAt <= Date.now()) throw new Error("operation_in_progress");
+  const workflow = await getCommunityMemberWorkflowByCommunity({ ctx, communityId: args.communityId });
+  const observation = workflow ? await readWorkflowApprovalObservation(ctx, { workflow, membership }) : null;
+  if (!workflow || !observation || observation.review_ref !== args.reviewRef) throw new Error("workflow_approval_unavailable");
+  const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });
+  const current = resolveCurrentMilestone({ workflow, membership, state });
+  const result = await approveMemberMilestoneCore(ctx, { communityId: args.communityId, membershipId: membership._id,
+    expectedWorkflowId: workflow._id, expectedWorkflowRevision: workflow.revision,
+    expectedMilestoneKey: current.milestone.key, expectedMilestoneEnteredAt: current.milestoneEnteredAt,
+    expectedActivationSequence: args.expectedActivationSequence, expectedTransitionSeq: state?.transitionSeq ?? 0 }, args.userId);
+  if (!("transitionId" in result)) throw new Error("workflow_approval_unavailable");
+  const value = { ok: true, operation: "community.workflow.approve_milestone", deduped: false,
+    result: { status: "approved", transition_ref: `workflow-transition:${result.transitionId}`,
+      completed_workflow: result.completedWorkflow, membership_ref: `membership:${membership._id}`, review_ref: args.reviewRef },
+    receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_call", principal_kind: args.principalKind,
+      community_id: String(args.communityId), community_slug: community.slug, authority_lane: "builder",
+      relation: community.ownerId === args.userId ? "owner" : "admin", idempotency_key: args.idempotencyKey, deduped: false } };
+  await ctx.runMutation(internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
+    { ...scope, requestFingerprint, attemptToken: reservation.attemptToken, result: value });
+  return value;
+} });
 
 async function executeWorkflowAutomation(args: {
   ctx: any;

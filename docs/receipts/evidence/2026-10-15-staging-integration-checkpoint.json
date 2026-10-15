@@ -1,0 +1,365 @@
+{
+  "schema_version": 1,
+  "checkpoint": "staging integration after 4A1",
+  "observed_at": "2026-10-15T20:26:41.050327+00:00",
+  "scope": {
+    "canonical_main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "reviewed_head": "806aacca749e4fe59a88706510da5db365df1fa9",
+    "runtime": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+    "commits_ahead": 31,
+    "diff_files": 87,
+    "runtime_files": 20,
+    "documentation_only_checkpoint": true,
+    "production_unchanged": true,
+    "production_observed_build": "91d28dc2c986ef88a8a507a269db710d6d28d878"
+  },
+  "ci": {
+    "run_url": "https://github.com/Neil-McD/Arx/actions/runs/38800562376",
+    "event": "pull_request",
+    "status": "passed",
+    "candidate": {
+      "expectedSha": "56997d8db091ddc8b0b359b27cece8ddb0cf35ca",
+      "headSha": "56997d8db091ddc8b0b359b27cece8ddb0cf35ca",
+      "buildId": "56997d8db091ddc8b0b359b27cece8ddb0cf35ca",
+      "clean": true,
+      "kind": "commit"
+    },
+    "tested_tree": "7728a2a5ea955b2f74889210709aa528241d3e36",
+    "reviewed_head_has_same_tree": true,
+    "steps": [
+      {
+        "id": "candidate_identity",
+        "status": "passed"
+      },
+      {
+        "id": "convex_generated_surface",
+        "status": "passed"
+      },
+      {
+        "id": "convex_typecheck",
+        "status": "passed"
+      },
+      {
+        "id": "web_typecheck",
+        "status": "passed"
+      },
+      {
+        "id": "web_build",
+        "status": "passed"
+      },
+      {
+        "id": "web_build_identity",
+        "status": "passed"
+      },
+      {
+        "id": "web_bundle_budget",
+        "status": "passed"
+      },
+      {
+        "id": "media_reading_browser",
+        "status": "passed"
+      },
+      {
+        "id": "app_theme_contract",
+        "status": "passed"
+      },
+      {
+        "id": "loading_correctness",
+        "status": "passed"
+      },
+      {
+        "id": "convex_cut_guard",
+        "status": "passed"
+      },
+      {
+        "id": "foundation_baseline",
+        "status": "passed"
+      },
+      {
+        "id": "dependency_security_interlock",
+        "status": "passed"
+      },
+      {
+        "id": "root_dependency_audit",
+        "status": "passed"
+      },
+      {
+        "id": "web_dependency_audit",
+        "status": "passed"
+      }
+    ]
+  },
+  "pull_requests": [
+    {
+      "number": 166,
+      "baseRefName": "main",
+      "headRefName": "codex/staging-chunks-1-3",
+      "headRefOid": "bc7d8b2bb738c9174d9238a2cc301e565590859f",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38597874951/job/115969172084"
+        }
+      ]
+    },
+    {
+      "number": 167,
+      "baseRefName": "codex/staging-chunks-1-3",
+      "headRefName": "codex/package-2-auth-context",
+      "headRefOid": "77c4ae47ca04e5ec461d4afaba9def3321aa8d47",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38609866882/job/116010122142"
+        }
+      ]
+    },
+    {
+      "number": 168,
+      "baseRefName": "codex/package-2-auth-context",
+      "headRefName": "codex/staging-session-lifecycle",
+      "headRefOid": "cd408d177d592dceca4879dd225484f9bc061b3b",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38617281061/job/116035498809"
+        }
+      ]
+    },
+    {
+      "number": 169,
+      "baseRefName": "codex/staging-session-lifecycle",
+      "headRefName": "codex/staging-external-oauth-2b2",
+      "headRefOid": "318fdd132a3cb06bdea49cb779dacf8d49e38ac0",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38624151858/job/116058928611"
+        }
+      ]
+    },
+    {
+      "number": 170,
+      "baseRefName": "codex/staging-external-oauth-2b2",
+      "headRefName": "codex/staging-auth-cleanup-2b3",
+      "headRefOid": "1e50b72b1edf4c964acbea2adfa7806c710a1a87",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38631118887/job/116082703219"
+        }
+      ]
+    },
+    {
+      "number": 171,
+      "baseRefName": "codex/staging-auth-cleanup-2b3",
+      "headRefName": "codex/staging-founder-contribution-2c1",
+      "headRefOid": "89c094da4cd88c7f741ec77d9115db632b3596de",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38636848004/job/116102390017"
+        }
+      ]
+    },
+    {
+      "number": 172,
+      "baseRefName": "codex/staging-founder-contribution-2c1",
+      "headRefName": "codex/staging-founder-admission-queue-2c2",
+      "headRefOid": "f52859bcb230dbc22a096d5d0c73e2335ea36a17",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38771577402/job/116548464402"
+        }
+      ]
+    },
+    {
+      "number": 173,
+      "baseRefName": "codex/staging-founder-admission-queue-2c2",
+      "headRefName": "codex/staging-founder-admission-approval-2c3",
+      "headRefOid": "19b38eea33b6f0a5fa13f4fd4ab5324533655669",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38776123439/job/116564100593"
+        }
+      ]
+    },
+    {
+      "number": 174,
+      "baseRefName": "codex/staging-founder-admission-approval-2c3",
+      "headRefName": "codex/staging-founder-admission-denial-2c4",
+      "headRefOid": "5a782d0700d6148ae25622f3451bb11c4b5d8a16",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38782465304/job/116585909728"
+        }
+      ]
+    },
+    {
+      "number": 175,
+      "baseRefName": "codex/staging-founder-admission-denial-2c4",
+      "headRefName": "codex/staging-member-progress-3a1",
+      "headRefOid": "8e473058e2283560e2bc7eebf3078630ca3bc7bc",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38787685958/job/116604133446"
+        }
+      ]
+    },
+    {
+      "number": 176,
+      "baseRefName": "codex/staging-member-progress-3a1",
+      "headRefName": "codex/staging-founder-progress-approval-3a2",
+      "headRefOid": "0b00e1a01376c30fc2a6957ac2f00b519712f16b",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38796804956/job/116635229573"
+        }
+      ]
+    },
+    {
+      "number": 177,
+      "baseRefName": "codex/staging-founder-progress-approval-3a2",
+      "headRefName": "codex/staging-memory-consumption-4a1",
+      "headRefOid": "806aacca749e4fe59a88706510da5db365df1fa9",
+      "isDraft": true,
+      "state": "OPEN",
+      "check_rollup": "SUCCESS",
+      "release_gate": [
+        {
+          "name": "Release Gate",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/Neil-McD/Arx/actions/runs/38800562376/job/116648167786"
+        }
+      ]
+    }
+  ],
+  "fresh_local_verification": {
+    "changed_test_files": 8,
+    "tests_passed": 344,
+    "test_log_sha256": "0e47b54e25f2c872cbc56fe7265846af7591c4f90914df44e1e4ec3e4bc3d25b",
+    "cumulative_diff_check": "passed"
+  },
+  "live_observations": {
+    "observed_at": "2026-10-15T20:23:46.093496+00:00",
+    "staging": {
+      "url": "https://polynet-staging.vercel.app/version.json",
+      "version": {
+        "buildId": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+        "sentryRelease": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+        "environment": "staging"
+      }
+    },
+    "production": {
+      "url": "https://www.polynet.ai/version.json",
+      "version": {
+        "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+        "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+        "environment": "production"
+      }
+    },
+    "preservation": [
+      {
+        "fixture": "4a1",
+        "identical": true,
+        "canonical_snapshot_sha256": "82a8837ec88a1b9fc1e0ac48848a0c015f7a71129398ae35d5447c1d3ea6f4b3"
+      },
+      {
+        "fixture": "3a2",
+        "identical": true,
+        "canonical_snapshot_sha256": "5e0bfa6316f15e0065fc5bf43b1d206d90acafcaf6b34d856a13dd6ca5333ede"
+      },
+      {
+        "fixture": "3a1",
+        "identical": true,
+        "canonical_snapshot_sha256": "b68edb9c558aab3e1e4d0cd18ac0df49abfa3c8a94f2902fdff58c9139d1cc43"
+      },
+      {
+        "fixture": "prior",
+        "identical": true,
+        "canonical_snapshot_sha256": "f47544fce33438426af98de5af023d40d659820e4b78762008fdce67929ba483"
+      }
+    ]
+  },
+  "review": {
+    "reviewer": "implementing agent",
+    "new_blocking_findings": [],
+    "independent_review_claimed": false,
+    "unresolved_items": [
+      "Unmerged draft stack needs explicit main integration strategy and final candidate review",
+      "Fresh-source learning and governed outcome application unaccepted",
+      "Elapsed live reapplication unobserved until October 22 or later",
+      "Preexisting unbounded directory listings require dependency and compatibility review before protected cleanup"
+    ]
+  },
+  "boundaries": {
+    "runtime_edits": false,
+    "deployments": false,
+    "main_push": false,
+    "product_writes": false,
+    "new_oauth_or_inference": false,
+    "production_provider_changes": false,
+    "historical_receipts_rewritten": false
+  }
+}

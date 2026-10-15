@@ -1,0 +1,945 @@
+{
+  "status": "bounded_staging_acceptance_passed",
+  "runtime": {
+    "commit": "ad8c7071d3a8a8db65501ddc6825090de7817374",
+    "convex_deployment": "dev:quick-porcupine-949",
+    "backend_source_tree": "e1d6553b4039e8a1c300a7e69aa6f325d421104c",
+    "backend_deploy_exit": 0,
+    "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
+    "git_deployment_id": 7102504865,
+    "git_deployment_url": "https://polynet-staging-8vlvvs164-neil-mcds-projects.vercel.app",
+    "asset": {
+      "asset": "/assets/index-C6xR9-XZ.js",
+      "sha256": "d39d4bdbc8ed9278a669d26dee9c4523297decf2e1bca8742d1ae5885f989f71",
+      "cloud": true,
+      "site": true
+    }
+  },
+  "production": {
+    "unchanged": true,
+    "main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "web_build": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+    "production_deploy_commands": 0
+  },
+  "validation": {
+    "focused_tests": 410,
+    "focused_files": 9,
+    "new_approval_tests": 30,
+    "final_form_and_approval_tests": 59,
+    "full_tests": 1836,
+    "full_files": 194,
+    "dependency_audits": {
+      "root": 0,
+      "web": 0
+    },
+    "typechecks": [
+      "convex",
+      "web"
+    ],
+    "release_gate": {
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-15T19:34:00.865Z",
+      "finishedAt": "2026-10-15T19:35:49.540Z",
+      "durationMs": 108675,
+      "candidate": {
+        "expectedSha": "ad8c7071d3a8a8db65501ddc6825090de7817374",
+        "headSha": "ad8c7071d3a8a8db65501ddc6825090de7817374",
+        "buildId": "ad8c7071d3a8a8db65501ddc6825090de7817374",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:00.865Z",
+          "finishedAt": "2026-10-15T19:34:00.903Z",
+          "durationMs": 38,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:00.903Z",
+          "finishedAt": "2026-10-15T19:34:00.941Z",
+          "durationMs": 38,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:00.941Z",
+          "finishedAt": "2026-10-15T19:34:12.893Z",
+          "durationMs": 11952,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:12.893Z",
+          "finishedAt": "2026-10-15T19:34:24.491Z",
+          "durationMs": 11598,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:24.491Z",
+          "finishedAt": "2026-10-15T19:34:25.239Z",
+          "durationMs": 748,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:25.239Z",
+          "finishedAt": "2026-10-15T19:34:25.239Z",
+          "durationMs": 0,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:25.239Z",
+          "finishedAt": "2026-10-15T19:34:25.396Z",
+          "durationMs": 157,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:34:25.396Z",
+          "finishedAt": "2026-10-15T19:35:02.810Z",
+          "durationMs": 37414,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:02.810Z",
+          "finishedAt": "2026-10-15T19:35:02.984Z",
+          "durationMs": 174,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:02.984Z",
+          "finishedAt": "2026-10-15T19:35:09.185Z",
+          "durationMs": 6201,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:09.185Z",
+          "finishedAt": "2026-10-15T19:35:09.320Z",
+          "durationMs": 135,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:09.320Z",
+          "finishedAt": "2026-10-15T19:35:48.435Z",
+          "durationMs": 39115,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:48.435Z",
+          "finishedAt": "2026-10-15T19:35:48.534Z",
+          "durationMs": 99,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:48.534Z",
+          "finishedAt": "2026-10-15T19:35:49.167Z",
+          "durationMs": 633,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T19:35:49.167Z",
+          "finishedAt": "2026-10-15T19:35:49.540Z",
+          "durationMs": 373,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "runtime_ci": "https://github.com/Neil-McD/Arx/actions/runs/38795620082",
+    "runtime_ci_status": "passed"
+  },
+  "fixture": {
+    "slug": "exact-build-canary-234c2972",
+    "community_id": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+    "founder_id": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+    "founder_profile_sha256": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "member_id": "jn7ckswapk976rra6egsxydm0x82a7nc",
+    "member_profile_sha256": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "membership_id": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+    "activation": 1,
+    "preflight": {
+      "workflow": null,
+      "forms": 0,
+      "requests": 0,
+      "transitions": 0,
+      "active_roster_count": 1,
+      "roster_scan_capped": false,
+      "access": "native founder private directory and ordinary member protected self-context succeeded"
+    },
+    "original_empty_configuration_snapshot_sha256": "c67ef0afa86756f6b11ea3751266f8376bc0fea6a4d1b8e5f21b51b10655abe7"
+  },
+  "live": {
+    "codex_cli": "0.162.0-alpha.17.2",
+    "first_approval_application_response_discarded": true,
+    "approval_envelope": {
+      "target": "/communities/exact-build-canary-234c2972/capabilities/community.workflow.approve_milestone.json",
+      "operation": "community.workflow.approve_milestone",
+      "version": 1,
+      "idempotency_key": "staging-3a2-20261015-approval-1",
+      "input": {
+        "membership_ref": "membership:ks72c8mdnebazbp5rkjevgftzn8c50t3",
+        "expected_activation_sequence": 1,
+        "review_ref": "workflow-approval:v1:9fb4621d07dd27fb7f6cf00fe0ff6143cb842f1605dbf2863fd1cd2979e5bbb7"
+      }
+    },
+    "approval_envelope_sha256": "98ea38b52d4d45a8612d6ad1eee235fbd70add0254c4f33d749116df1674ffba",
+    "reviewed_evidence": {
+      "workflow": {
+        "action_progress": {
+          "actions": [
+            {
+              "action_key": "action-840c83ae-5799-406f-ace2-dcb0c849d0da",
+              "action_type": "request_form",
+              "automation_key": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+              "evidence": {
+                "completed_at": 1792093355327,
+                "run_id": "t57sfax2neqmvknwatpp2h4bgs8gah46",
+                "source_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7"
+              },
+              "label": "Request 3A2 synthetic founder approval proof 20261015",
+              "status": "complete"
+            }
+          ],
+          "all_actions_complete": true,
+          "scan_truncated": false
+        },
+        "approval": {
+          "eligible": true,
+          "expected_activation_sequence": 1,
+          "membership_ref": "membership:ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "review_ref": "workflow-approval:v1:9fb4621d07dd27fb7f6cf00fe0ff6143cb842f1605dbf2863fd1cd2979e5bbb7"
+        },
+        "completed_at": null,
+        "current_milestone_entered_at": "2026-08-09T21:34:01.364Z",
+        "current_milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+        "current_milestone_name": "3A2 synthetic founder approval",
+        "goal": "",
+        "id": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+        "instructions": "Complete the synthetic form. The founder reviews the frozen answer before approving this milestone.",
+        "override_state": {
+          "activation_sequence": 1,
+          "next_milestone_name": null,
+          "transition_seq": 0
+        },
+        "require_human_approval": true,
+        "revision": 2
+      },
+      "evidence": {
+        "submissions": [
+          {
+            "activation_sequence": 1,
+            "answer_revision": 1,
+            "form_name": "3A2 synthetic founder approval proof 20261015",
+            "form_revision": 2,
+            "milestone_entered_at": "2026-08-09T21:34:01.364Z",
+            "milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+            "omitted_questions": 0,
+            "questions": [
+              {
+                "answer": "Synthetic 3A2 step complete: the member supplied this frozen answer for explicit founder review.",
+                "key": "66e2f13c-05c3-4e8e-b512-1b5e1f42d399",
+                "title": "What synthetic step is ready for founder review?",
+                "truncated": false,
+                "type": "short_text"
+              }
+            ],
+            "request_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+            "submitted_at": "2026-10-15T19:42:35.327Z",
+            "version_id": "tn7skbss5f55a7pgfmssjrqazn8gbh85",
+            "workflow_id": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2"
+          }
+        ],
+        "truncated": false,
+        "unavailable_records": 0
+      }
+    },
+    "trigger": {
+      "post": {
+        "_creationTime": 1792093332846.1848,
+        "_id": "j97qyh2ehnqgryygvntc1ke09s8gb1yr",
+        "actorType": "human",
+        "actorUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+        "channelId": "qh7qj8bhg55vctqkvs310xr1s58c4z04",
+        "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+        "composerPayloadHash": "6344f2a5d6dee64be0fff7002831e891120d96bff30157436f35daaa3a0feddb",
+        "contentSummary": "3A2 staging synthetic evidence trigger 20261015 \u2014 one member form for explicit founder review.",
+        "createdAt": 1792093332846,
+        "idempotencyKey": "community_composer:root:community-composer:jx7by3s07d0hd6z47613245b3s8c5ex0:general:root:mv9y3l9g:x6moelhi",
+        "kind": "discussion",
+        "reactionSummary": [],
+        "replyCount": 0,
+        "status": "live",
+        "updatedAt": 1792093332846,
+        "visibilityScope": "community"
+      },
+      "serveRequests": []
+    },
+    "reconciliation": [
+      {
+        "_creationTime": 1792093355327.9902,
+        "_id": "kc247kan46x2c63t2c4vctht1h8gavs4",
+        "args": [
+          {
+            "workflowRunId": "t57sfax2neqmvknwatpp2h4bgs8gah46"
+          }
+        ],
+        "completedTime": 1792093355384.0667,
+        "name": "communityMemberWorkflows.js:reconcileCompletedWorkflowActionsInternal",
+        "scheduledTime": 1792093355327,
+        "state": {
+          "kind": "success"
+        }
+      }
+    ],
+    "awaiting_approval": {
+      "submitted_requests": [
+        {
+          "_creationTime": 1792093333105.7026,
+          "_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+          "activationSequence": 1,
+          "answers": {
+            "66e2f13c-05c3-4e8e-b512-1b5e1f42d399": "Synthetic 3A2 step complete: the member supplied this frozen answer for explicit founder review."
+          },
+          "automationKey": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "createdAt": 1792093333105,
+          "formKey": "bebae631-fcfe-44e5-907f-b550c15c5273",
+          "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "milestoneEnteredAt": 1786311241364,
+          "milestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "revision": 1,
+          "status": "submitted",
+          "submittedAt": 1792093355327,
+          "updatedAt": 1792093355327,
+          "versionId": "tn7skbss5f55a7pgfmssjrqazn8gbh85",
+          "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+          "workflowRunId": "t57sfax2neqmvknwatpp2h4bgs8gah46"
+        }
+      ],
+      "transitions": [],
+      "states": []
+    },
+    "approved_transitions": [
+      {
+        "_creationTime": 1792093385486.8577,
+        "_id": "t97hqqff9ejfrd94km0fthwapn8gbgm8",
+        "actionKey": "human_approved",
+        "approval": {
+          "activationSequence": 1,
+          "actorUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+          "goal": ""
+        },
+        "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+        "completedWorkflow": true,
+        "completionEvidence": [
+          {
+            "actionKey": "action-840c83ae-5799-406f-ace2-dcb0c849d0da",
+            "automationKey": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+            "completed_at": 1792093355327,
+            "run_id": "t57sfax2neqmvknwatpp2h4bgs8gah46",
+            "source_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7"
+          }
+        ],
+        "createdAt": 1792093385486,
+        "fromMilestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+        "fromMilestoneName": "3A2 synthetic founder approval",
+        "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+        "milestoneEnteredAt": 1786311241364,
+        "occurredAt": 1792093385486,
+        "seq": 1,
+        "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+        "workflowRevision": 2
+      }
+    ],
+    "approved_states": [
+      {
+        "_creationTime": 1792093385486.8574,
+        "_id": "sx7rfsgc05j01g6bmd7fg6kzxn8gak5n",
+        "completedAt": 1792093385486,
+        "createdAt": 1792093385486,
+        "currentMilestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+        "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+        "milestoneEnteredAt": 1786311241364,
+        "transitionSeq": 1,
+        "updatedAt": 1792093385486,
+        "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2"
+      }
+    ],
+    "replay": {
+      "oldPid": 11493,
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "newPid": 25640,
+      "replay": {
+        "deduped": true,
+        "ok": true,
+        "operation": "community.workflow.approve_milestone",
+        "receipt": {
+          "authority_lane": "builder",
+          "community_id": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "community_slug": "exact-build-canary-234c2972",
+          "contract": "polynet.canonical.operation:v1",
+          "deduped": true,
+          "idempotency_key": "staging-3a2-20261015-approval-1",
+          "principal_kind": "external_mcp",
+          "relation": "owner",
+          "tool": "polynet_call"
+        },
+        "result": {
+          "completed_workflow": true,
+          "membership_ref": "membership:ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "review_ref": "workflow-approval:v1:9fb4621d07dd27fb7f6cf00fe0ff6143cb842f1605dbf2863fd1cd2979e5bbb7",
+          "status": "approved",
+          "transition_ref": "workflow-transition:t97hqqff9ejfrd94km0fthwapn8gbgm8"
+        }
+      }
+    },
+    "native_controls_and_readbacks": {
+      "memberCapabilityDenial": {
+        "error": "semantic_not_found: Capability not found or not authorized."
+      },
+      "memberExecutionDenial": {
+        "error": "operation_not_found: Operation is not discoverable or authorized for this community."
+      },
+      "changedPayload": {
+        "error": "idempotency_key_conflict: This idempotency key was already reserved for a different request."
+      },
+      "newKey": {
+        "error": "workflow_approval_unavailable: Observed milestone not available or approval not authorized."
+      },
+      "founder": {
+        "workflow": {
+          "approval": null,
+          "completed_at": "2026-10-15T19:43:05.486Z",
+          "current_milestone_entered_at": "2026-08-09T21:34:01.364Z",
+          "current_milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "current_milestone_name": "3A2 synthetic founder approval",
+          "goal": "",
+          "id": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+          "instructions": "Complete the synthetic form. The founder reviews the frozen answer before approving this milestone.",
+          "override_state": {
+            "activation_sequence": 1,
+            "next_milestone_name": null,
+            "transition_seq": 1
+          },
+          "require_human_approval": true,
+          "revision": 2
+        },
+        "milestone_history": [
+          {
+            "completed_workflow": true,
+            "id": "t97hqqff9ejfrd94km0fthwapn8gbgm8",
+            "milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+            "milestone_name": "3A2 synthetic founder approval",
+            "next_milestone_key": null,
+            "next_milestone_name": null,
+            "occurred_at": "2026-10-15T19:43:05.486Z",
+            "sequence": 1
+          }
+        ],
+        "submitted_form_evidence": {
+          "submissions": [
+            {
+              "activation_sequence": 1,
+              "answer_revision": 1,
+              "form_name": "3A2 synthetic founder approval proof 20261015",
+              "form_revision": 2,
+              "milestone_entered_at": "2026-08-09T21:34:01.364Z",
+              "milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+              "omitted_questions": 0,
+              "questions": [
+                {
+                  "answer": "Synthetic 3A2 step complete: the member supplied this frozen answer for explicit founder review.",
+                  "key": "66e2f13c-05c3-4e8e-b512-1b5e1f42d399",
+                  "title": "What synthetic step is ready for founder review?",
+                  "truncated": false,
+                  "type": "short_text"
+                }
+              ],
+              "request_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+              "submitted_at": "2026-10-15T19:42:35.327Z",
+              "version_id": "tn7skbss5f55a7pgfmssjrqazn8gbh85",
+              "workflow_id": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2"
+            }
+          ],
+          "truncated": false,
+          "unavailable_records": 0
+        }
+      },
+      "member": {
+        "workflow": {
+          "completed_at": "2026-10-15T19:43:05.486Z",
+          "current_milestone_entered_at": "2026-08-09T21:34:01.364Z",
+          "current_milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "current_milestone_name": "3A2 synthetic founder approval",
+          "goal": "",
+          "id": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+          "require_human_approval": true,
+          "revision": 2
+        },
+        "milestone_history": [
+          {
+            "completed_workflow": true,
+            "id": "t97hqqff9ejfrd94km0fthwapn8gbgm8",
+            "milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+            "milestone_name": "3A2 synthetic founder approval",
+            "next_milestone_key": null,
+            "next_milestone_name": null,
+            "occurred_at": "2026-10-15T19:43:05.486Z",
+            "sequence": 1
+          }
+        ]
+      },
+      "submittedForm": {
+        "answers": {
+          "66e2f13c-05c3-4e8e-b512-1b5e1f42d399": "Synthetic 3A2 step complete: the member supplied this frozen answer for explicit founder review."
+        },
+        "assignment": {
+          "activation_sequence": 1,
+          "milestone_entered_at": 1786311241364,
+          "milestone_key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "workflow_ref": "workflow:sh7v5wea1q7z08bjk4fcf5gag98gbqb2"
+        },
+        "form_version_ref": "form-version:tn7skbss5f55a7pgfmssjrqazn8gbh85",
+        "name": "3A2 synthetic founder approval proof 20261015",
+        "questions": [
+          {
+            "description": "",
+            "key": "66e2f13c-05c3-4e8e-b512-1b5e1f42d399",
+            "options": [],
+            "required": true,
+            "title": "What synthetic step is ready for founder review?",
+            "type": "short_text"
+          }
+        ],
+        "ref": "form-request:tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+        "revision": 1,
+        "status": "submitted",
+        "submitted_at": 1792093355327
+      }
+    },
+    "canonical_snapshot_unchanged_after_retries": true,
+    "final": {
+      "workflow": {
+        "_creationTime": 1792093206862.3499,
+        "_id": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+        "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+        "createdAt": 1792093206862,
+        "createdByUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+        "milestones": [
+          {
+            "automations": [
+              {
+                "action": {
+                  "formKey": "bebae631-fcfe-44e5-907f-b550c15c5273",
+                  "key": "action-840c83ae-5799-406f-ace2-dcb0c849d0da",
+                  "type": "request_form"
+                },
+                "key": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+                "trigger": {
+                  "type": "member_contributed"
+                }
+              }
+            ],
+            "goal": "",
+            "instructions": "Complete the synthetic form. The founder reviews the frozen answer before approving this milestone.",
+            "key": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+            "name": "3A2 synthetic founder approval",
+            "requireHumanApproval": true
+          }
+        ],
+        "revision": 2,
+        "updatedAt": 1792093242230,
+        "updatedByUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      },
+      "forms": [
+        {
+          "_creationTime": 1792093191688.4314,
+          "_id": "ts7xzszjm5f955dp6y0sz54kax8gbs78",
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "createdAt": 1792093191688,
+          "key": "bebae631-fcfe-44e5-907f-b550c15c5273",
+          "name": "3A2 synthetic founder approval proof 20261015",
+          "publishedRevision": 2,
+          "questions": [
+            {
+              "description": "",
+              "key": "66e2f13c-05c3-4e8e-b512-1b5e1f42d399",
+              "options": [],
+              "required": true,
+              "title": "What synthetic step is ready for founder review?",
+              "type": "short_text"
+            }
+          ],
+          "revision": 2,
+          "updatedAt": 1792093194648
+        }
+      ],
+      "versions": [
+        {
+          "_creationTime": 1792093196424.3086,
+          "_id": "tn7skbss5f55a7pgfmssjrqazn8gbh85",
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "formId": "ts7xzszjm5f955dp6y0sz54kax8gbs78",
+          "name": "3A2 synthetic founder approval proof 20261015",
+          "publishedAt": 1792093196424,
+          "publishedBy": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+          "questions": [
+            {
+              "description": "",
+              "key": "66e2f13c-05c3-4e8e-b512-1b5e1f42d399",
+              "options": [],
+              "required": true,
+              "title": "What synthetic step is ready for founder review?",
+              "type": "short_text"
+            }
+          ],
+          "revision": 2
+        }
+      ],
+      "requests": [
+        {
+          "_creationTime": 1792093333105.7026,
+          "_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+          "activationSequence": 1,
+          "answers": {
+            "66e2f13c-05c3-4e8e-b512-1b5e1f42d399": "Synthetic 3A2 step complete: the member supplied this frozen answer for explicit founder review."
+          },
+          "automationKey": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "createdAt": 1792093333105,
+          "formKey": "bebae631-fcfe-44e5-907f-b550c15c5273",
+          "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "milestoneEnteredAt": 1786311241364,
+          "milestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "revision": 1,
+          "status": "submitted",
+          "submittedAt": 1792093355327,
+          "updatedAt": 1792093355327,
+          "versionId": "tn7skbss5f55a7pgfmssjrqazn8gbh85",
+          "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+          "workflowRunId": "t57sfax2neqmvknwatpp2h4bgs8gah46"
+        }
+      ],
+      "states": [
+        {
+          "_creationTime": 1792093385486.8574,
+          "_id": "sx7rfsgc05j01g6bmd7fg6kzxn8gak5n",
+          "completedAt": 1792093385486,
+          "createdAt": 1792093385486,
+          "currentMilestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "milestoneEnteredAt": 1786311241364,
+          "transitionSeq": 1,
+          "updatedAt": 1792093385486,
+          "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2"
+        }
+      ],
+      "runs": [
+        {
+          "_creationTime": 1792093333105.7024,
+          "_id": "t57sfax2neqmvknwatpp2h4bgs8gah46",
+          "actionResult": {
+            "actionKey": "action-840c83ae-5799-406f-ace2-dcb0c849d0da",
+            "formRequestId": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+            "resultCode": "form_requested",
+            "status": "complete"
+          },
+          "actionSnapshot": {
+            "formKey": "bebae631-fcfe-44e5-907f-b550c15c5273",
+            "key": "action-840c83ae-5799-406f-ace2-dcb0c849d0da",
+            "type": "request_form"
+          },
+          "activationSequence": 1,
+          "automationKey": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "createdAt": 1792093333105,
+          "finishedAt": 1792093333105,
+          "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "milestoneContextSnapshot": {
+            "goal": "",
+            "instructions": "Complete the synthetic form. The founder reviews the frozen answer before approving this milestone."
+          },
+          "milestoneEnteredAt": 1786311241364,
+          "milestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "milestoneName": "3A2 synthetic founder approval",
+          "status": "finished",
+          "transitionSeq": 0,
+          "triggerReceiptRef": "interaction:root:j97qyh2ehnqgryygvntc1ke09s8gb1yr",
+          "triggerSnapshot": {
+            "type": "member_contributed"
+          },
+          "triggerType": "member_contributed",
+          "updatedAt": 1792093333105,
+          "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+          "workflowRevision": 2
+        }
+      ],
+      "transitions": [
+        {
+          "_creationTime": 1792093385486.8577,
+          "_id": "t97hqqff9ejfrd94km0fthwapn8gbgm8",
+          "actionKey": "human_approved",
+          "approval": {
+            "activationSequence": 1,
+            "actorUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+            "goal": ""
+          },
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "completedWorkflow": true,
+          "completionEvidence": [
+            {
+              "actionKey": "action-840c83ae-5799-406f-ace2-dcb0c849d0da",
+              "automationKey": "automation-d63dd816-14ef-422d-81bf-99a3bfcf585c",
+              "completed_at": 1792093355327,
+              "run_id": "t57sfax2neqmvknwatpp2h4bgs8gah46",
+              "source_id": "tx7p7z4bvrak840w8eq57x5z4n8gbnd7"
+            }
+          ],
+          "createdAt": 1792093385486,
+          "fromMilestoneKey": "milestone-302ae572-df78-4815-b0f0-57424d27045b",
+          "fromMilestoneName": "3A2 synthetic founder approval",
+          "membershipId": "ks72c8mdnebazbp5rkjevgftzn8c50t3",
+          "milestoneEnteredAt": 1786311241364,
+          "occurredAt": 1792093385486,
+          "seq": 1,
+          "workflowId": "sh7v5wea1q7z08bjk4fcf5gag98gbqb2",
+          "workflowRevision": 2
+        }
+      ],
+      "receipts": [
+        {
+          "_creationTime": 1792093385486.8572,
+          "_id": "ps7qrajnsqa3v9gx953kq8pwc98gb8k2",
+          "attemptCount": 1,
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "createdAt": 1792093385486,
+          "idempotencyKey": "staging-3a2-20261015-approval-1",
+          "principalKind": "external_mcp",
+          "requestFingerprint": "[\"community.workflow.approve_milestone\",1,\"ks72c8mdnebazbp5rkjevgftzn8c50t3\",1,\"workflow-approval:v1:9fb4621d07dd27fb7f6cf00fe0ff6143cb842f1605dbf2863fd1cd2979e5bbb7\"]",
+          "result": {
+            "deduped": false,
+            "ok": true,
+            "operation": "community.workflow.approve_milestone",
+            "receipt": {
+              "authority_lane": "builder",
+              "community_id": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+              "community_slug": "exact-build-canary-234c2972",
+              "contract": "polynet.canonical.operation:v1",
+              "deduped": false,
+              "idempotency_key": "staging-3a2-20261015-approval-1",
+              "principal_kind": "external_mcp",
+              "relation": "owner",
+              "tool": "polynet_call"
+            },
+            "result": {
+              "completed_workflow": true,
+              "membership_ref": "membership:ks72c8mdnebazbp5rkjevgftzn8c50t3",
+              "review_ref": "workflow-approval:v1:9fb4621d07dd27fb7f6cf00fe0ff6143cb842f1605dbf2863fd1cd2979e5bbb7",
+              "status": "approved",
+              "transition_ref": "workflow-transition:t97hqqff9ejfrd94km0fthwapn8gbgm8"
+            }
+          },
+          "status": "completed",
+          "toolName": "polynet_call",
+          "updatedAt": 1792093385486,
+          "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+        },
+        {
+          "_creationTime": 1792093355327.9897,
+          "_id": "ps7krn97fkczfpq5yamq1e121s8ga4ae",
+          "attemptCount": 1,
+          "communityId": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+          "createdAt": 1792093355327,
+          "idempotencyKey": "staging-3a2-20261015-form-submit-1",
+          "principalKind": "external_mcp",
+          "requestFingerprint": "[\"community.form.submit\",1,\"tx7p7z4bvrak840w8eq57x5z4n8gbnd7\",\"tn7skbss5f55a7pgfmssjrqazn8gbh85\",0,{\"66e2f13c-05c3-4e8e-b512-1b5e1f42d399\":\"Synthetic 3A2 step complete: the member supplied this frozen answer for explicit founder review.\"}]",
+          "result": {
+            "deduped": false,
+            "ok": true,
+            "operation": "community.form.submit",
+            "receipt": {
+              "authority_lane": "member",
+              "community_id": "jx7by3s07d0hd6z47613245b3s8c5ex0",
+              "community_slug": "exact-build-canary-234c2972",
+              "contract": "polynet.canonical.operation:v1",
+              "deduped": false,
+              "idempotency_key": "staging-3a2-20261015-form-submit-1",
+              "principal_kind": "external_mcp",
+              "relation": "member",
+              "tool": "polynet_call"
+            },
+            "result": {
+              "form_request_ref": "form-request:tx7p7z4bvrak840w8eq57x5z4n8gbnd7",
+              "form_version_ref": "form-version:tn7skbss5f55a7pgfmssjrqazn8gbh85",
+              "revision": 1,
+              "status": "submitted",
+              "submitted_at": 1792093355327
+            }
+          },
+          "status": "completed",
+          "toolName": "polynet_call",
+          "updatedAt": 1792093355327,
+          "userId": "jn7ckswapk976rra6egsxydm0x82a7nc"
+        }
+      ]
+    },
+    "first_acknowledgment_scope": "discarded after transport returned; not a forced network fault or general crash recovery proof",
+    "approval_attribution_scope": "authorized external MCP harness acting as founder; no claim of unaided human authorship or AI goal verification"
+  },
+  "preservation": {
+    "3a1_snapshot_identical": true,
+    "3a1_snapshot_before_sha256": "1f826c462a2998768397046ee5859bd11a2e839122213e18757d034b67f2a86c",
+    "3a1_workflow_revision": 5,
+    "3a1_submitted_count": 2,
+    "3a1_transition_ids": [
+      "t97p51p1ah1dnk3s2gt6d9meq98gaw9s"
+    ],
+    "prior_2a_2c_snapshot_identical": true,
+    "prior_snapshot_before_sha256": "94e7ed2d579f39a02185a9c3411cd73dc10f2bc82849870a3ae88bb0bda16677",
+    "2c4_denial": [
+      {
+        "_creationTime": 1792086672564.458,
+        "_id": "kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt",
+        "communityId": "jx7486vxxfavmbyfm079dba9k98by70n",
+        "createdAt": 1792086672564,
+        "deniedAt": 1792086959047,
+        "reapplyAt": 1792691759047,
+        "status": "denied",
+        "updatedAt": 1792086959047,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      }
+    ],
+    "2c1_root_id": "j97xym1sxb5knx6111a0wksgp18g9ptq",
+    "2a_revoked_still_inactive": true
+  },
+  "cleanup": {
+    "exits": [
+      {
+        "alias": "polynet_3a2_founder_staging",
+        "pid": 25640,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "alias": "polynet_3a2_member_staging",
+        "pid": 19817,
+        "code": 0,
+        "signal": null
+      }
+    ],
+    "logouts": [
+      {
+        "alias": "polynet_3a2_founder_staging",
+        "stdout": "Removed OAuth credentials for 'polynet_3a2_founder_staging'.\n",
+        "stderr": ""
+      },
+      {
+        "alias": "polynet_3a2_member_staging",
+        "stdout": "Removed OAuth credentials for 'polynet_3a2_member_staging'.\n",
+        "stderr": ""
+      }
+    ],
+    "freshAuth": [
+      {
+        "alias": "polynet_3a2_founder_staging",
+        "pid": 27707,
+        "authStatus": "notLoggedIn",
+        "protectedReadRequiresAuth": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      },
+      {
+        "alias": "polynet_3a2_member_staging",
+        "pid": 27989,
+        "authStatus": "notLoggedIn",
+        "protectedReadRequiresAuth": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      }
+    ],
+    "configBefore": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "configAfter": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "configUnchanged": true,
+    "web_sessions_signed_out": true,
+    "final_web_public_sign_in_visible": true,
+    "owned_browser_tabs_closed": 3,
+    "retained_synthetic_fixture": true,
+    "provider_wide_revocation_claimed": false
+  },
+  "screenshot": "artifacts/founder-progress-approval-20261015/founder-completed.png",
+  "boundaries": {
+    "new_inference_or_community_serve_requests": 0,
+    "payment_or_provider_settings": false,
+    "forced_movement": false,
+    "private_answer_memory_promotion": false,
+    "workflow_or_form_reset": false,
+    "production_mutation": false
+  }
+}

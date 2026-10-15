@@ -1,0 +1,408 @@
+{
+  "assessment": "C01-C03 read-only staging source and boundary assessment",
+  "observedAtUtc": "2026-10-14T15:36:43.646712+00:00",
+  "stagingSource": "1fc266e1ddaf3880491e7a7d3fdfa1bb32dfcfa4",
+  "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+  "stagingBehindMainCommits": 16,
+  "stagingWeb": {
+    "url": "https://polynet-staging.vercel.app",
+    "buildId": "1fc266e1ddaf3880491e7a7d3fdfa1bb32dfcfa4",
+    "bundle": "/assets/index-ToVY_uz_.js",
+    "bundleSha256": "87ffb386fa4dbc70081dfa7917eecbd1ded29588aa3344b4746be6f94f9cae4f",
+    "embeddedBackendOrigins": [
+      "https://quick-porcupine-949.convex.cloud",
+      "https://quick-porcupine-949.convex.site"
+    ]
+  },
+  "productionWebBuildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+  "stagingBackend": {
+    "deployment": "dev:quick-porcupine-949",
+    "health": "pass",
+    "exactSourceSha": "unverified",
+    "functionSpecSha256": "f38b8ee2c2e8e309da4ba5bc4013d04a7c5ef3ea7d8f6e3cabaecef5561ec9dd",
+    "registeredFunctions": 735,
+    "functionTypeCounts": {
+      "Mutation": 348,
+      "Query": 277,
+      "HttpAction": 41,
+      "Action": 69
+    },
+    "examinedMetadata": [
+      {
+        "identifier": "authActor.js:resolveAuthenticatedActorInternal",
+        "functionType": "Query",
+        "visibility": {
+          "kind": "internal"
+        }
+      },
+      {
+        "identifier": "communityCapabilityContext.js:resolveCommunityCapabilityContextForTrustedActorInternal",
+        "functionType": "Query",
+        "visibility": {
+          "kind": "internal"
+        }
+      },
+      {
+        "identifier": "communityCapabilityContext.js:resolveCommunityCapabilityContextInternal",
+        "functionType": "Query",
+        "visibility": {
+          "kind": "internal"
+        }
+      },
+      {
+        "identifier": "communityCapabilityContext.js:resolveCommunityMemberSelfContextInternal",
+        "functionType": "Query",
+        "visibility": {
+          "kind": "internal"
+        }
+      },
+      {
+        "identifier": "memberEntryDestination.js:resolveMemberEntryDestinationInternal",
+        "functionType": "Mutation",
+        "visibility": {
+          "kind": "internal"
+        }
+      },
+      {
+        "identifier": "communityMemberWorkflows.js:getBuilderWorkflowMemberSuccessDossier",
+        "functionType": "Query",
+        "visibility": {
+          "kind": "public"
+        }
+      }
+    ]
+  },
+  "sourceParity": [
+    {
+      "path": "convex/authActor.ts",
+      "stagingGitBlob": "7149599992d55c668e8a588a780f18a3edff1f9c",
+      "mainGitBlob": "7149599992d55c668e8a588a780f18a3edff1f9c",
+      "identical": true
+    },
+    {
+      "path": "convex/authIdentity.ts",
+      "stagingGitBlob": "b247e3810b3a6dbf6323f6259a6126a73670053c",
+      "mainGitBlob": "b247e3810b3a6dbf6323f6259a6126a73670053c",
+      "identical": true
+    },
+    {
+      "path": "convex/authSessions.ts",
+      "stagingGitBlob": "3e56c3a245d6b743f9a2375e4a70c79a1c4f54db",
+      "mainGitBlob": "3e56c3a245d6b743f9a2375e4a70c79a1c4f54db",
+      "identical": true
+    },
+    {
+      "path": "convex/authSessionLifecycleCore.ts",
+      "stagingGitBlob": "15e3a338fe7d3a1bac90a7f28b039b55a7419d06",
+      "mainGitBlob": "15e3a338fe7d3a1bac90a7f28b039b55a7419d06",
+      "identical": true
+    },
+    {
+      "path": "convex/auth.config.ts",
+      "stagingGitBlob": "47f61ed4bf0709b5f7463d05b3f410aa7f8164bb",
+      "mainGitBlob": "47f61ed4bf0709b5f7463d05b3f410aa7f8164bb",
+      "identical": true
+    },
+    {
+      "path": "convex/communityCore.ts",
+      "stagingGitBlob": "57a742ede6ea8af6cb57454fcffaee0632a810e3",
+      "mainGitBlob": "57a742ede6ea8af6cb57454fcffaee0632a810e3",
+      "identical": true
+    },
+    {
+      "path": "convex/communityCapabilityContext.ts",
+      "stagingGitBlob": "fcca5150f6c873190ec16e52e68bf36bb0db6c6c",
+      "mainGitBlob": "fcca5150f6c873190ec16e52e68bf36bb0db6c6c",
+      "identical": true
+    },
+    {
+      "path": "convex/communityMembershipContextCore.ts",
+      "stagingGitBlob": "50561cf533b687246b1d338efaa9915b3f948583",
+      "mainGitBlob": "50561cf533b687246b1d338efaa9915b3f948583",
+      "identical": true
+    },
+    {
+      "path": "convex/memberOntology.ts",
+      "stagingGitBlob": "11512afb0ed5a7117a1587236901a9d9fa2417ee",
+      "mainGitBlob": "11512afb0ed5a7117a1587236901a9d9fa2417ee",
+      "identical": true
+    },
+    {
+      "path": "convex/memberOntologyCore.ts",
+      "stagingGitBlob": "ab97e2bad9856219ba6a62b9539844b2dc4a3362",
+      "mainGitBlob": "ab97e2bad9856219ba6a62b9539844b2dc4a3362",
+      "identical": true
+    },
+    {
+      "path": "convex/polynetCanonicalExecutor.ts",
+      "stagingGitBlob": "7997ae4acf6418576ce4b29020d724c4a35a4ace",
+      "mainGitBlob": "7997ae4acf6418576ce4b29020d724c4a35a4ace",
+      "identical": true
+    },
+    {
+      "path": "convex/polynetCanonicalReceipts.ts",
+      "stagingGitBlob": "80bc5aa55ad7edab0c3908cb22bd52f0efbd31b0",
+      "mainGitBlob": "80bc5aa55ad7edab0c3908cb22bd52f0efbd31b0",
+      "identical": true
+    },
+    {
+      "path": "shared/polynetCanonicalToolContract.ts",
+      "stagingGitBlob": "0930f6076fe7059e07909866eab44bed765a9de5",
+      "mainGitBlob": "0930f6076fe7059e07909866eab44bed765a9de5",
+      "identical": true
+    },
+    {
+      "path": "shared/polynetSemanticRepositoryContract.ts",
+      "stagingGitBlob": "988686ab69eddc509fab67ca1e2406eba266df51",
+      "mainGitBlob": "988686ab69eddc509fab67ca1e2406eba266df51",
+      "identical": true
+    },
+    {
+      "path": "shared/communitySemanticRepository.ts",
+      "stagingGitBlob": "20fab0368cc658971b0e7e580522f55d546bb596",
+      "mainGitBlob": "20fab0368cc658971b0e7e580522f55d546bb596",
+      "identical": true
+    },
+    {
+      "path": "shared/polynetAuthority.ts",
+      "stagingGitBlob": "77648d60d8187b35b45347abd4c967779f202ced",
+      "mainGitBlob": "77648d60d8187b35b45347abd4c967779f202ced",
+      "identical": true
+    },
+    {
+      "path": "shared/runtimePrompt.ts",
+      "stagingGitBlob": "3937595bccdfc8f58c9d1e3e9b124150b06ec413",
+      "mainGitBlob": "3937595bccdfc8f58c9d1e3e9b124150b06ec413",
+      "identical": true
+    },
+    {
+      "path": "shared/runtimeContextManifest.ts",
+      "stagingGitBlob": "b94705c01fe3e8a8514855c44503b4d6038c855c",
+      "mainGitBlob": "b94705c01fe3e8a8514855c44503b4d6038c855c",
+      "identical": true
+    },
+    {
+      "path": "convex/runtimeHarnessComposition.ts",
+      "stagingGitBlob": "d41d38bc4e23279818f1e303340f36faf75c35c6",
+      "mainGitBlob": "d41d38bc4e23279818f1e303340f36faf75c35c6",
+      "identical": true
+    }
+  ],
+  "oauthMetadata": {
+    "resource": "https://polynet-staging.vercel.app/runtime/mcp",
+    "authorizationServer": "https://sparkling-artist-49-staging.authkit.app",
+    "pkceMethods": [
+      "S256"
+    ],
+    "publicChallengeSmoke": "pass",
+    "authenticatedRealBearerAcceptance": "not_run"
+  },
+  "liveReadOnlyBoundaryChecks": {
+    "initialInternalUserCalls": [
+      {
+        "case": "unauthenticated_community_context",
+        "kind": "read-only-query",
+        "exitCode": 1,
+        "error": "verified_identity_required"
+      },
+      {
+        "case": "administrator_supplied_owner_identity",
+        "kind": "read-only-query",
+        "exitCode": 1,
+        "error": "internal_not_user_callable_with_simulated_user_identity"
+      },
+      {
+        "case": "identity_subject_mismatch",
+        "kind": "read-only-query",
+        "exitCode": 1,
+        "error": "internal_not_user_callable_with_simulated_user_identity"
+      },
+      {
+        "case": "identity_without_user",
+        "kind": "read-only-query",
+        "exitCode": 1,
+        "error": "internal_not_user_callable_with_simulated_user_identity"
+      },
+      {
+        "case": "invalid_community_selector",
+        "kind": "read-only-query",
+        "exitCode": 1,
+        "error": "internal_not_user_callable_with_simulated_user_identity"
+      },
+      {
+        "case": "unknown_community_selector",
+        "kind": "read-only-query",
+        "exitCode": 1,
+        "error": "internal_not_user_callable_with_simulated_user_identity"
+      },
+      {
+        "case": "internal_trusted_actor_context",
+        "kind": "read-only-query",
+        "exitCode": 0,
+        "ok": true,
+        "code": null,
+        "relation": "owner",
+        "authorityLens": "owner_builder",
+        "availableCapabilities": [
+          "community_context",
+          "accepted_memory",
+          "raw_evidence_search",
+          "member_resources",
+          "builder_resources",
+          "join_request_review",
+          "community_admin",
+          "owner_controls"
+        ]
+      }
+    ],
+    "clarifiedReadCases": [
+      {
+        "case": "public_owner_identity_read",
+        "kind": "read-only-query",
+        "identityMode": "administrator-supplied-user",
+        "exitCode": 0,
+        "ok": null,
+        "code": null,
+        "authenticated": true,
+        "hasStoredActor": true,
+        "actorMatchesFixture": true
+      },
+      {
+        "case": "public_subject_mismatch",
+        "kind": "read-only-query",
+        "identityMode": "administrator-supplied-user",
+        "exitCode": 1,
+        "error": "auth_subject_mismatch"
+      },
+      {
+        "case": "unprovisioned_identity_read",
+        "kind": "read-only-query",
+        "identityMode": "administrator-supplied-user",
+        "exitCode": 0,
+        "ok": null,
+        "code": null,
+        "authenticated": true,
+        "hasStoredActor": false,
+        "actorMatchesFixture": false
+      },
+      {
+        "case": "trusted_actor_matching_owner",
+        "kind": "read-only-query",
+        "identityMode": "administrator-internal",
+        "exitCode": 0,
+        "ok": true,
+        "code": null,
+        "relation": "owner",
+        "authorityLens": "owner_builder"
+      },
+      {
+        "case": "trusted_actor_subject_mismatch",
+        "kind": "read-only-query",
+        "identityMode": "administrator-internal",
+        "exitCode": 0,
+        "ok": false,
+        "code": "community_not_accessible",
+        "relation": null,
+        "authorityLens": null
+      },
+      {
+        "case": "trusted_actor_invalid_selector",
+        "kind": "read-only-query",
+        "identityMode": "administrator-internal",
+        "exitCode": 0,
+        "ok": false,
+        "code": "invalid_community_slug",
+        "relation": null,
+        "authorityLens": null
+      },
+      {
+        "case": "trusted_actor_unknown_selector",
+        "kind": "read-only-query",
+        "identityMode": "administrator-internal",
+        "exitCode": 0,
+        "ok": false,
+        "code": "community_not_accessible",
+        "relation": null,
+        "authorityLens": null
+      }
+    ]
+  },
+  "localVerification": {
+    "testFiles": [
+      {
+        "file": "convex/authActor.test.ts",
+        "tests": 1,
+        "status": "passed"
+      },
+      {
+        "file": "convex/authSessionKernel.test.ts",
+        "tests": 10,
+        "status": "passed"
+      },
+      {
+        "file": "convex/authSessionLifecycleCore.test.ts",
+        "tests": 6,
+        "status": "passed"
+      },
+      {
+        "file": "convex/memberOntologyAdmission.test.ts",
+        "tests": 3,
+        "status": "passed"
+      },
+      {
+        "file": "convex/polynetCanonicalExecutor.test.ts",
+        "tests": 51,
+        "status": "passed"
+      },
+      {
+        "file": "convex/polynetCanonicalReceipts.test.ts",
+        "tests": 6,
+        "status": "passed"
+      },
+      {
+        "file": "scripts/member_context_markdown.test.ts",
+        "tests": 3,
+        "status": "passed"
+      },
+      {
+        "file": "scripts/member_workflow_context.test.ts",
+        "tests": 8,
+        "status": "passed"
+      },
+      {
+        "file": "scripts/runtime_context_projection.test.ts",
+        "tests": 9,
+        "status": "passed"
+      }
+    ],
+    "testsPassed": 97,
+    "testsFailed": 0,
+    "webTypecheck": "pass",
+    "convexTypecheck": "pass",
+    "webBuild": "pass",
+    "webBundleBudget": "pass",
+    "jsChunks": 15,
+    "totalJsKiB": 3166.7,
+    "sourceContractProofsPassed": [
+      "canonical_operation_surface_contract_proof",
+      "community_semantic_repository_contract_proof",
+      "auth_session_kernel_contract_proof",
+      "polynet_workspace_mcp_auth_contract_proof",
+      "polynet_workspace_mcp_contract_proof"
+    ],
+    "sourceContractProofFailure": {
+      "proof": "member_ontology_contract_proof",
+      "reason": "obsolete document regex expects no internal member lens; current document describes lease-authorized workflow_execution lens",
+      "runtimeFailureEstablished": false
+    }
+  },
+  "limits": [
+    "No exact Convex backend source commit established",
+    "Administrator-supplied identity checks are not WorkOS JWT/OAuth client acceptance",
+    "No live membership revocation or paid inference performed",
+    "Local build is compilation evidence, not proof of deployment configuration",
+    "No full release gate or full-platform benchmark run"
+  ],
+  "remoteProductMutations": 0,
+  "runtimeSourceChanges": 0
+}

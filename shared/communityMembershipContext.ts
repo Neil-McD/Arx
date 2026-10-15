@@ -81,6 +81,10 @@ export type CommunityMemberSuccessWorkflowActivity = {
   occurred_at: string;
 };
 
+/** Builder-only current evidence observation; conveys no execution authority. */
+export type WorkflowMilestoneApproval = { eligible: true; membership_ref: string;
+  expected_activation_sequence: number; review_ref: string };
+
 /** Authorized, read-only context for one member in one community. */
 export type CommunityMemberServiceChannel = {
   status: "unassigned" | "available" | "unavailable";
@@ -107,6 +111,7 @@ export type CommunityMembershipContext = {
     owned_communities: { name: string; slug: string }[]; mutual_communities: { name: string; slug: string }[] };
   service_channel: CommunityMemberServiceChannel;
   workflow: {
+    approval?: WorkflowMilestoneApproval | null;
     action_progress?: WorkflowActionProgress;
     require_human_approval?: boolean;
     goal_review?: { status: "waiting" | "not_started" | "reviewing" | "failed" | "achieved" | "not_yet" | "insufficient_evidence" | "configured"; reason?: string; retryable?: boolean; receipt_ref?: string };

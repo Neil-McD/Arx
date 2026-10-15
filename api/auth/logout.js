@@ -1,4 +1,4 @@
-import { callAuthBridgeJson } from "./_bridge.js";
+import { callAuthBridgeJson, isSameOriginPost } from "./_bridge.js";
 import { clearAuthSessionCookie, readAuthSessionId } from "./_cookies.js";
 
 function sendJson(res, status, payload) {
@@ -6,14 +6,6 @@ function sendJson(res, status, payload) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(payload));
-}
-
-function isSameOriginPost(req) {
-  const origin = String(req.headers.origin ?? "").trim();
-  if (!origin) return true;
-  const proto = String(req.headers["x-forwarded-proto"] ?? "").trim() || "https";
-  const host = String(req.headers.host ?? "").trim();
-  return Boolean(host) && origin === `${proto}://${host}`;
 }
 
 export default async function handler(req, res) {
@@ -35,12 +27,24 @@ export default async function handler(req, res) {
 
   const sessionId = readAuthSessionId(req);
   if (sessionId) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
-      await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
+      const response = await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
         payload: { session_id: sessionId },
+        signal: controller.signal,
       });
+      const payload = response.ok || response.status === 401 ? await response.json() : null;
+      // A session the bridge reports as permanently invalid cannot authenticate again,
+      // matching bootstrap; other unauthorized responses remain unconfirmed.
+      const sessionInvalid = response.status === 401 && payload?.code === "auth_session_invalid";
+      if (!sessionInvalid && (!response.ok || payload?.ok !== true)) throw new Error("logout_unconfirmed");
     } catch {
-      // best effort only
+      // Keep the opaque cookie so retry can resolve an uncertain outcome.
+      sendJson(res, 503, { ok: false, error: "logout_unconfirmed", message: "Sign out couldn't be confirmed. Try again." });
+      return;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

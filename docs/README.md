@@ -1,5 +1,8 @@
 # Docs Index
 
+## Agent orientation
+1. [Polynet headless vision and zero-context handoff](polynet-headless-agent-handoff.md)
+
 ## Product Documentation
 1. `product/README.md`
 2. `product/llms.txt`
@@ -7,6 +10,9 @@
 
 ## Current Release Truth
 1. `alpha-release-workflow.md`
+
+## Current staging coverage
+1. [Headless coverage and integration checkpoint](polynet-staging-coverage-ledger.md)
 
 ## Active contracts
 1. `auth-money-access-matrix.md`
@@ -24,8 +30,10 @@
 2. `community-agent-cognition-contract-v1.md`
 
 Implementation status is owned by current code, executable proof, Git/ref state,
-deployment markers, and live evidence. Do not create a replacement milestone
-ledger.
+deployment markers, and live evidence. The staging coverage ledger above is a
+derived index requested for the headless integration checkpoint; it does not
+replace those sources. Keep dated plans and receipts as historical evidence,
+and update that single coverage index rather than adding competing status ledgers.
 
 ## Active operational guides
 1. `auth-runtime-setup-workos-authkit.md`

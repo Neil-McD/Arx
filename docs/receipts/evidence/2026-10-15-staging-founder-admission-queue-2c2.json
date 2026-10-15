@@ -1,0 +1,340 @@
+{
+  "schemaVersion": 1,
+  "slice": "2C2",
+  "date": "2026-10-15",
+  "runtimeSha": "a4319529c90bde037e251e095aa20c3a55318ab3",
+  "backendTree": "eadbf3e72539b251c9473145793d71403ea20268",
+  "backend": "dev:quick-porcupine-949",
+  "main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+  "productionBuild": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+  "founderFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+  "local": {
+    "focusedTests": 89,
+    "semanticAndMcpProofs": "passed",
+    "backendTypecheck": "passed",
+    "webTypecheck": "passed"
+  },
+  "observations": [
+    {
+      "at": "2026-10-15T16:01:41.281Z",
+      "gate": "founder_identity_and_authority",
+      "fingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+      "authority": {
+        "lane": "builder",
+        "relation": "owner"
+      }
+    },
+    {
+      "at": "2026-10-15T16:01:41.286Z",
+      "gate": "inaccessible_community_baseline",
+      "denied": true
+    },
+    {
+      "at": "2026-10-15T16:08:24.719Z",
+      "gate": "builder_discovers_empty_queue",
+      "entryCount": 0,
+      "writable": false,
+      "searchable": false,
+      "nextCursor": null
+    },
+    {
+      "at": "2026-10-15T16:08:53.244Z",
+      "gate": "nonempty_founder_list_exact_read_repeat",
+      "count": 1,
+      "requestFingerprint": "c5a06c174ec19d35324cb8bb4998f19abecf474ab7140c3e66b2dfe57f073512",
+      "applicantPublicFingerprint": "408a9c314ff5401fe479d2d9addcf70b4f1d80a2080bcfc3f28ecde8f1c68b9a",
+      "status": "pending",
+      "listHash": "06da4c2a0bb8a963f802416d5ba1c8cfd045e6061a7f0086a53213bb455ec721",
+      "readHash": "780b71f67e2228a327394e0063e383b96f1d31f4c46ad5b02958b2b5ce10418d",
+      "minimalFields": [
+        "applicant_ref",
+        "created_at",
+        "ref",
+        "status",
+        "updated_at"
+      ],
+      "nextCursor": null,
+      "repeatIdentical": true
+    },
+    {
+      "at": "2026-10-15T16:09:15.845Z",
+      "gate": "fresh_conversation_and_private_boundaries",
+      "listAndReadIdentical": true,
+      "wrongCommunityExactReadDenied": true,
+      "inaccessibleCommunityQueueDenied": true,
+      "queueSearchDenied": true
+    },
+    {
+      "at": "2026-10-15T16:09:56.468Z",
+      "gate": "normal_applicant_cancellation",
+      "queueEmpty": true,
+      "nextCursor": null,
+      "oldDetailDenied": true,
+      "error": "semantic_not_found: Community path not found or not accessible."
+    }
+  ],
+  "limits": [
+    "Pagination beyond one row is local evidence only (including default20 with21 rows); live fixture contained one pending request.",
+    "No approval, denial, membership or role mutation is exposed. No inference turn. Source provenance for backend is not a remote commit attestation.",
+    "Normal public-session setup and navigation can write session/presence/read-cursor state; read-only means the MCP queue calls and domain projections. Snapshot equality covers the named admission/membership/subscription and retained-history fixtures, not every staging table.",
+    "Native logout and missing Keychain items certify local credential removal, not provider-wide grant revocation or issued-token rejection.",
+    "The original pending request was already cancelled; no second admission fixture was created.",
+    "Native document-denial probes used a syntactically valid nonexistent selector. Earlier live founder evidence covers an existing pending document; local role tests cover existing-row denial.",
+    "Local credential removal does not revoke the provider grant or establish rejection of already issued tokens. No new Polynet web session was opened."
+  ],
+  "releaseGate": {
+    "runId": 38765421520,
+    "url": "https://github.com/Neil-McD/Arx/actions/runs/38765421520",
+    "status": "passed",
+    "tests": 1699,
+    "files": 192,
+    "auditVulnerabilities": 0,
+    "clean": true,
+    "exactCandidate": true
+  },
+  "backendDeployment": {
+    "target": "dev:quick-porcupine-949",
+    "sourceSha": "a4319529c90bde037e251e095aa20c3a55318ab3",
+    "sourceTree": "eadbf3e72539b251c9473145793d71403ea20268",
+    "exitCode": 0,
+    "completedAt": "2026-10-15T16:06:37.582Z",
+    "note": "Explicit convex dev --once --typecheck enable --env-file target selector; source provenance, not remote commit attestation."
+  },
+  "fixture": {
+    "communitySlug": "builder-canary-aug-6-2026-v3",
+    "createdBy": "existing applicant normal public funnel",
+    "applicantCanonicalFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "applicantPublicFingerprint": "408a9c314ff5401fe479d2d9addcf70b4f1d80a2080bcfc3f28ecde8f1c68b9a",
+    "requestFingerprint": "c5a06c174ec19d35324cb8bb4998f19abecf474ab7140c3e66b2dfe57f073512",
+    "outcome": "approval_pending",
+    "pendingRows": 1,
+    "membershipRows": 0,
+    "subscriptionRows": 0,
+    "earlierRevokedMembershipHash": "d0ea2735dca6c95e3cb31acdac279ef0c44a572b6a205ff99707c2cb8a5d46bf",
+    "retainedContributionHash": "79bc61d04531eabc7726b5755e480bb7707227772c4239368ab9c7120775418a",
+    "cleanup": {
+      "requests": 0,
+      "memberships": 0,
+      "subscriptions": 0,
+      "baselineRestored": true,
+      "earlierRevokedMembershipUnchanged": true,
+      "retainedContributionUnchanged": true,
+      "readPhaseUnchanged": true
+    }
+  },
+  "domainDenials": [
+    {
+      "function": "listPendingAdmissionRequestsInternal",
+      "denied": true,
+      "error": "community_forbidden",
+      "evidenceClass": "live internal domain observer, not native OAuth"
+    },
+    {
+      "function": "readPendingAdmissionRequestInternal",
+      "denied": true,
+      "error": "community_forbidden",
+      "evidenceClass": "live internal domain observer, not native OAuth"
+    }
+  ],
+  "web": {
+    "entry": "/assets/index-DFbDZ1Ee.js",
+    "sha256": "3403b88c09bd144d3076a49f74985b1b10da05a576f11907b3713adb4a1c260f",
+    "convexCloudHost": true,
+    "convexSiteHost": true,
+    "version": {
+      "buildId": "a4319529c90bde037e251e095aa20c3a55318ab3",
+      "sentryRelease": "a4319529c90bde037e251e095aa20c3a55318ab3",
+      "environment": "staging"
+    },
+    "deploymentUrl": "https://vercel.com/neil-mcds-projects/polynet-staging/Cpk8zQiixH26PU1kr5A9h1wFJJnB"
+  },
+  "cleanup": {
+    "founderProcessExit": {
+      "code": 0,
+      "signal": null
+    },
+    "applicantProcessExit": {
+      "code": 0,
+      "signal": null
+    },
+    "nativeLogout": [
+      {
+        "alias": "polynet_2c2_staging",
+        "result": "Removed OAuth credentials for 'polynet_2c2_staging'."
+      },
+      {
+        "alias": "polynet_2c2_applicant_staging",
+        "result": "Removed OAuth credentials for 'polynet_2c2_applicant_staging'."
+      }
+    ],
+    "configUnchanged": true,
+    "freshNativeAuthStatus": "notLoggedIn",
+    "freshProtectedReadDenied": true,
+    "freshProcessExit": {
+      "code": 0,
+      "signal": null
+    },
+    "webSession": "Normal Account > Sign out > confirmation returned to signed-out landing with Sign in link.",
+    "keychain": [
+      {
+        "alias": "polynet_2c2_staging",
+        "keychainItemAbsent": true
+      },
+      {
+        "alias": "polynet_2c2_applicant_staging",
+        "keychainItemAbsent": true
+      }
+    ]
+  },
+  "screenshots": [
+    {
+      "file": "request-pending.png",
+      "sha256": "558c4989aa6c2c0f004672d01b3d647c2fff060fc09e86b7bb77f72649561a4a",
+      "localIgnored": true
+    },
+    {
+      "file": "request-cancelled.png",
+      "sha256": "d17892f3392f12652ca7b9ef856208928201db934068ebbb253ce318f164cada",
+      "localIgnored": true
+    },
+    {
+      "file": "applicant-oauth-complete.png",
+      "sha256": "564b28ea2eacd5612cfad859f263769cfdd593739db03db3d4b2919d7342603f",
+      "localIgnored": true
+    }
+  ],
+  "status": "passed_scoped_staging_acceptance",
+  "requiredRemainingGate": null,
+  "finalTargets": {
+    "main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "staging": "a4319529c90bde037e251e095aa20c3a55318ab3",
+    "productionVersion": {
+      "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "environment": "production"
+    },
+    "mainUnchanged": true,
+    "productionWebUnchanged": true,
+    "productionReleaseCommandsRun": false
+  },
+  "finishedAt": "2026-10-15T16:43:11.591Z",
+  "nativeApplicantCompletion": {
+    "at": "2026-10-15T16:40:40.808Z",
+    "userAuthorizedConsent": true,
+    "oauthCompleted": true,
+    "canonicalApplicantFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "memberPositiveControl": {
+      "communitySlug": "workflow-member-browser-qa-sep23",
+      "authority": {
+        "lane": "member",
+        "relation": "member"
+      }
+    },
+    "denials": [
+      {
+        "communitySlug": "builder-canary-aug-6-2026-v3",
+        "relation": "former_pending_applicant_now_cancelled",
+        "tool": "polynet_list",
+        "selector": "/builder/",
+        "error": "semantic_not_found: Community path not found or not accessible.",
+        "isError": true
+      },
+      {
+        "communitySlug": "builder-canary-aug-6-2026-v3",
+        "relation": "former_pending_applicant_now_cancelled",
+        "tool": "polynet_list",
+        "selector": "/builder/join-requests/",
+        "error": "semantic_not_found: Community path not found or not accessible.",
+        "isError": true
+      },
+      {
+        "communitySlug": "builder-canary-aug-6-2026-v3",
+        "relation": "former_pending_applicant_now_cancelled",
+        "tool": "polynet_read",
+        "selector": "syntactically_valid_nonexistent_document_probe",
+        "error": "semantic_not_found: Community path not found or not accessible.",
+        "isError": true
+      },
+      {
+        "communitySlug": "workflow-member-browser-qa-sep23",
+        "relation": "current_member",
+        "tool": "polynet_list",
+        "selector": "/builder/",
+        "error": "semantic_not_found: Community path not found or not accessible.",
+        "isError": true
+      },
+      {
+        "communitySlug": "workflow-member-browser-qa-sep23",
+        "relation": "current_member",
+        "tool": "polynet_list",
+        "selector": "/builder/join-requests/",
+        "error": "semantic_not_found: Community path not found or not accessible.",
+        "isError": true
+      },
+      {
+        "communitySlug": "workflow-member-browser-qa-sep23",
+        "relation": "current_member",
+        "tool": "polynet_read",
+        "selector": "syntactically_valid_nonexistent_document_probe",
+        "error": "semantic_not_found: Community path not found or not accessible.",
+        "isError": true
+      }
+    ],
+    "freshConversationDenied": true,
+    "noMutationToolsCalled": true,
+    "inferenceTurns": 0,
+    "clientExit": {
+      "code": 0,
+      "signal": null
+    },
+    "restart": {
+      "identityMatches": true,
+      "queueDenied": true,
+      "newLoginRequired": false,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    "cleanup": {
+      "nativeLogout": "Removed OAuth credentials for 'polynet_2c2_applicant_staging'.",
+      "configUnchanged": true,
+      "webSession": "No new Polynet web session opened in this follow-up.",
+      "freshAuthStatus": "notLoggedIn",
+      "protectedQueueRequiresAuth": true,
+      "freshClientExit": {
+        "code": 0,
+        "signal": null
+      },
+      "keychain": [
+        {
+          "alias": "polynet_2c2_applicant_staging",
+          "absent": true
+        },
+        {
+          "alias": "polynet_2c2_staging",
+          "absent": true
+        }
+      ],
+      "screenshot": {
+        "file": "applicant-oauth-complete.png",
+        "sha256": "564b28ea2eacd5612cfad859f263769cfdd593739db03db3d4b2919d7342603f",
+        "localIgnored": true
+      }
+    },
+    "fixtureUnchanged": true,
+    "completedAt": "2026-10-15T16:43:11.591Z",
+    "targets": {
+      "mainUnchanged": true,
+      "stagingRuntimeUnchanged": true,
+      "productionWebUnchanged": true,
+      "productionBuild": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "fixtureUnchanged": true
+    },
+    "limits": [
+      "The original pending request was already cancelled; no second admission fixture was created.",
+      "Native document-denial probes used a syntactically valid nonexistent selector. Earlier live founder evidence covers an existing pending document; local role tests cover existing-row denial.",
+      "Local credential removal does not revoke the provider grant or establish rejection of already issued tokens. No new Polynet web session was opened."
+    ]
+  }
+}

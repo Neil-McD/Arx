@@ -1,0 +1,1094 @@
+{
+  "status": "bounded_staging_acceptance_passed",
+  "runtime": {
+    "commit": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+    "convex_deployment": "dev:quick-porcupine-949",
+    "backend_source_tree": "3c578d333a83a8cf1d5da5bff5aec970814fda28",
+    "backend_deploy_exit": 0,
+    "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
+    "git_deployment_id": 7101214564,
+    "git_deployment_url": "https://polynet-staging-muex0nyz5-neil-mcds-projects.vercel.app",
+    "serving_asset": "/assets/index-BbfJWUDb.js",
+    "serving_asset_sha256": "b24b7249dfe006344ff1a4b898e8c66981027c30c08ce306e71330336f08edae",
+    "staging_cloud_and_site_embedded": true
+  },
+  "production": {
+    "unchanged": true,
+    "main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "web_build": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+    "production_deploy_commands": 0
+  },
+  "validation": {
+    "focused_tests": 379,
+    "focused_files": 8,
+    "full_tests": 1806,
+    "full_files": 193,
+    "added_tests": 29,
+    "typechecks": [
+      "convex",
+      "web"
+    ],
+    "source_proofs": [
+      "community_semantic_repository",
+      "canonical_operation_surface",
+      "verified_identity_guard"
+    ],
+    "dependency_audits": {
+      "root": 0,
+      "web": 0
+    },
+    "release_gate": {
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-15T18:37:21.571Z",
+      "finishedAt": "2026-10-15T18:38:57.164Z",
+      "durationMs": 95593,
+      "candidate": {
+        "expectedSha": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+        "headSha": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+        "buildId": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:21.572Z",
+          "finishedAt": "2026-10-15T18:37:21.609Z",
+          "durationMs": 37,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:21.609Z",
+          "finishedAt": "2026-10-15T18:37:21.646Z",
+          "durationMs": 37,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:21.646Z",
+          "finishedAt": "2026-10-15T18:37:32.025Z",
+          "durationMs": 10379,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:32.025Z",
+          "finishedAt": "2026-10-15T18:37:43.153Z",
+          "durationMs": 11128,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:43.153Z",
+          "finishedAt": "2026-10-15T18:37:43.909Z",
+          "durationMs": 756,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:43.909Z",
+          "finishedAt": "2026-10-15T18:37:43.909Z",
+          "durationMs": 0,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:43.909Z",
+          "finishedAt": "2026-10-15T18:37:44.079Z",
+          "durationMs": 170,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:44.079Z",
+          "finishedAt": "2026-10-15T18:38:21.649Z",
+          "durationMs": 37570,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:21.649Z",
+          "finishedAt": "2026-10-15T18:38:21.795Z",
+          "durationMs": 146,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:21.795Z",
+          "finishedAt": "2026-10-15T18:38:27.982Z",
+          "durationMs": 6187,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:27.982Z",
+          "finishedAt": "2026-10-15T18:38:28.098Z",
+          "durationMs": 116,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:28.098Z",
+          "finishedAt": "2026-10-15T18:38:56.195Z",
+          "durationMs": 28097,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:56.195Z",
+          "finishedAt": "2026-10-15T18:38:56.293Z",
+          "durationMs": 98,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:56.293Z",
+          "finishedAt": "2026-10-15T18:38:56.788Z",
+          "durationMs": 495,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:56.788Z",
+          "finishedAt": "2026-10-15T18:38:57.164Z",
+          "durationMs": 376,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "initial_release_gate": {
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-15T18:25:33.171Z",
+      "finishedAt": "2026-10-15T18:27:04.787Z",
+      "durationMs": 91616,
+      "candidate": {
+        "expectedSha": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+        "headSha": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+        "buildId": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:33.172Z",
+          "finishedAt": "2026-10-15T18:25:33.223Z",
+          "durationMs": 51,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:33.223Z",
+          "finishedAt": "2026-10-15T18:25:33.263Z",
+          "durationMs": 40,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:33.263Z",
+          "finishedAt": "2026-10-15T18:25:43.129Z",
+          "durationMs": 9866,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:43.129Z",
+          "finishedAt": "2026-10-15T18:25:53.152Z",
+          "durationMs": 10023,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:53.152Z",
+          "finishedAt": "2026-10-15T18:25:53.917Z",
+          "durationMs": 765,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:53.917Z",
+          "finishedAt": "2026-10-15T18:25:53.917Z",
+          "durationMs": 0,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:53.917Z",
+          "finishedAt": "2026-10-15T18:25:54.080Z",
+          "durationMs": 163,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:25:54.080Z",
+          "finishedAt": "2026-10-15T18:26:31.503Z",
+          "durationMs": 37423,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:26:31.503Z",
+          "finishedAt": "2026-10-15T18:26:31.644Z",
+          "durationMs": 141,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:26:31.644Z",
+          "finishedAt": "2026-10-15T18:26:37.894Z",
+          "durationMs": 6250,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:26:37.894Z",
+          "finishedAt": "2026-10-15T18:26:38.009Z",
+          "durationMs": 115,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:26:38.009Z",
+          "finishedAt": "2026-10-15T18:27:03.907Z",
+          "durationMs": 25898,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:27:03.907Z",
+          "finishedAt": "2026-10-15T18:27:03.998Z",
+          "durationMs": 91,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:27:03.999Z",
+          "finishedAt": "2026-10-15T18:27:04.395Z",
+          "durationMs": 396,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:27:04.395Z",
+          "finishedAt": "2026-10-15T18:27:04.787Z",
+          "durationMs": 392,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "final_form_regression_tests": 29,
+    "initial_runtime_ci": {
+      "conclusion": "success",
+      "url": "https://github.com/Neil-McD/Arx/actions/runs/38786152112"
+    }
+  },
+  "fixture": {
+    "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+    "workflow_before": {
+      "_creationTime": 1789152622095.8745,
+      "_id": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "createdAt": 1789152622095,
+      "createdByUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+      "milestones": [
+        {
+          "automations": [
+            {
+              "action": {
+                "formKey": "browser-intake",
+                "key": "action-d0263b0c-3570-4cc6-ba88-7deaf173f048",
+                "type": "request_form"
+              },
+              "key": "automation-b0e8ff84-732f-4353-b374-89da8a1e7eeb",
+              "trigger": {
+                "type": "member_joined"
+              }
+            }
+          ],
+          "goal": "Owner verifies the synthetic browser acceptance.",
+          "instructions": "",
+          "key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+          "name": "Browser form acceptance",
+          "requireHumanApproval": true
+        }
+      ],
+      "revision": 4,
+      "updatedAt": 1790183993905,
+      "updatedByUserId": "jn7ckswapk976rra6egsxydm0x82a7nc"
+    },
+    "workflow_after": {
+      "_creationTime": 1789152622095.8745,
+      "_id": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "createdAt": 1789152622095,
+      "createdByUserId": "jn7ckswapk976rra6egsxydm0x82a7nc",
+      "milestones": [
+        {
+          "automations": [
+            {
+              "action": {
+                "formKey": "ad979e97-fb5b-46e1-8490-1c142ab28e7f",
+                "key": "action-6e217136-726c-4a05-9dc5-ac8b2e30c79f",
+                "type": "request_form"
+              },
+              "key": "automation-33aac401-3300-48f2-b2fb-67bd8df48be1",
+              "trigger": {
+                "type": "member_contributed"
+              }
+            }
+          ],
+          "goal": "",
+          "instructions": "",
+          "key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+          "name": "Browser form acceptance",
+          "requireHumanApproval": false
+        }
+      ],
+      "revision": 5,
+      "updatedAt": 1792088950788,
+      "updatedByUserId": "jn7ckswapk976rra6egsxydm0x82a7nc"
+    },
+    "original_workflow_snapshot_sha256": "bb4a57054fc26756b1e4da1d7483a55d8e10fa19c4d421439d1820aa7b321926",
+    "preflight_snapshot_sha256": "1cbe7e8f19972ac637d96c32b02a993c1aeee742617adada0acf1cf848d9d5de",
+    "preflight": {
+      "active_member_count": 1,
+      "activation": 1,
+      "pending": 0,
+      "historical_submitted": 1,
+      "stored_milestones": 0,
+      "transitions": 0
+    },
+    "form": {
+      "_creationTime": 1792088886316.7722,
+      "_id": "ts7ygwe13cw68tf0917zx8z3bn8ga38k",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "createdAt": 1792088886316,
+      "key": "ad979e97-fb5b-46e1-8490-1c142ab28e7f",
+      "name": "3A1 synthetic progress proof 20261015",
+      "publishedRevision": 2,
+      "questions": [
+        {
+          "description": "",
+          "key": "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3",
+          "options": [],
+          "required": true,
+          "title": "What synthetic step did you complete for the staging progress proof?",
+          "type": "short_text"
+        }
+      ],
+      "revision": 2,
+      "updatedAt": 1792088890094
+    },
+    "version": {
+      "_creationTime": 1792088898268.1907,
+      "_id": "tn7j3ma5dww0f5171fngpa2kvd8gawar",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "formId": "ts7ygwe13cw68tf0917zx8z3bn8ga38k",
+      "name": "3A1 synthetic progress proof 20261015",
+      "publishedAt": 1792088898268,
+      "publishedBy": "jn7ckswapk976rra6egsxydm0x82a7nc",
+      "questions": [
+        {
+          "description": "",
+          "key": "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3",
+          "options": [],
+          "required": true,
+          "title": "What synthetic step did you complete for the staging progress proof?",
+          "type": "short_text"
+        }
+      ],
+      "revision": 2
+    },
+    "request": {
+      "_creationTime": 1792089084628.8237,
+      "_id": "tx7xc84qvs9cm225a4z8tezrsn8gav05",
+      "activationSequence": 1,
+      "answers": {
+        "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3": "3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement."
+      },
+      "automationKey": "automation-33aac401-3300-48f2-b2fb-67bd8df48be1",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "createdAt": 1792089084628,
+      "formKey": "ad979e97-fb5b-46e1-8490-1c142ab28e7f",
+      "membershipId": "ks77ga7tkc35waggjg9yw20wf98e69bn",
+      "milestoneEnteredAt": 1789152738992,
+      "milestoneKey": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+      "revision": 1,
+      "status": "submitted",
+      "submittedAt": 1792089110319,
+      "updatedAt": 1792089110319,
+      "versionId": "tn7j3ma5dww0f5171fngpa2kvd8gawar",
+      "workflowId": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "workflowRunId": "t57n1z1t5246c8thctb0qfs1hn8gbyqv"
+    },
+    "workflow_run": {
+      "_creationTime": 1792089084628.8235,
+      "_id": "t57n1z1t5246c8thctb0qfs1hn8gbyqv",
+      "actionResult": {
+        "actionKey": "action-6e217136-726c-4a05-9dc5-ac8b2e30c79f",
+        "formRequestId": "tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "resultCode": "form_requested",
+        "status": "complete"
+      },
+      "actionSnapshot": {
+        "formKey": "ad979e97-fb5b-46e1-8490-1c142ab28e7f",
+        "key": "action-6e217136-726c-4a05-9dc5-ac8b2e30c79f",
+        "type": "request_form"
+      },
+      "activationSequence": 1,
+      "automationKey": "automation-33aac401-3300-48f2-b2fb-67bd8df48be1",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "createdAt": 1792089084628,
+      "finishedAt": 1792089084628,
+      "membershipId": "ks77ga7tkc35waggjg9yw20wf98e69bn",
+      "milestoneContextSnapshot": {
+        "goal": "",
+        "instructions": ""
+      },
+      "milestoneEnteredAt": 1789152738992,
+      "milestoneKey": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+      "milestoneName": "Browser form acceptance",
+      "status": "finished",
+      "transitionSeq": 0,
+      "triggerReceiptRef": "interaction:root:j97qg0z3dch4d2jykm8ypfw0898gbtpy",
+      "triggerSnapshot": {
+        "type": "member_contributed"
+      },
+      "triggerType": "member_contributed",
+      "updatedAt": 1792089084628,
+      "workflowId": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "workflowRevision": 5
+    },
+    "post": {
+      "_creationTime": 1792089084548.5117,
+      "_id": "j97qg0z3dch4d2jykm8ypfw0898gbtpy",
+      "actorType": "human",
+      "actorUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+      "channelId": "qh7xcde6x63zsne9vxrxs0d3wx8e6m56",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "composerPayloadHash": "b4f509010bacd58039607aa3688281dec48eba88e8a2bb8f6c1c894c2f07ed7b",
+      "contentSummary": "3A1 staging synthetic progress trigger 20261015. Request the configured private proof form; no agent response is requested.",
+      "createdAt": 1792089084548,
+      "idempotencyKey": "community_composer:root:community-composer:jx73pspeb1bk5vsrb7q9e226bs8e66bb:general:root:mv9vkjbe:p7iw39q6",
+      "kind": "discussion",
+      "reactionSummary": [],
+      "replyCount": 0,
+      "status": "live",
+      "updatedAt": 1792089084548,
+      "visibilityScope": "community"
+    },
+    "transition": {
+      "_creationTime": 1792089110638.069,
+      "_id": "t97p51p1ah1dnk3s2gt6d9meq98gaw9s",
+      "actionKey": "all_actions_complete",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "completedWorkflow": true,
+      "completionEvidence": [
+        {
+          "actionKey": "action-6e217136-726c-4a05-9dc5-ac8b2e30c79f",
+          "automationKey": "automation-33aac401-3300-48f2-b2fb-67bd8df48be1",
+          "completed_at": 1792089110319,
+          "run_id": "t57n1z1t5246c8thctb0qfs1hn8gbyqv",
+          "source_id": "tx7xc84qvs9cm225a4z8tezrsn8gav05"
+        }
+      ],
+      "createdAt": 1792089110638,
+      "fromMilestoneKey": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+      "fromMilestoneName": "Browser form acceptance",
+      "membershipId": "ks77ga7tkc35waggjg9yw20wf98e69bn",
+      "milestoneEnteredAt": 1789152738992,
+      "occurredAt": 1792089110638,
+      "seq": 1,
+      "workflowId": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "workflowRevision": 5,
+      "workflowRunId": "t57n1z1t5246c8thctb0qfs1hn8gbyqv"
+    },
+    "state": {
+      "_creationTime": 1792089110638.0688,
+      "_id": "sx7mpm4bqcapejj3n3gk5aab8s8gamvk",
+      "completedAt": 1792089110638,
+      "createdAt": 1792089110638,
+      "currentMilestoneKey": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+      "membershipId": "ks77ga7tkc35waggjg9yw20wf98e69bn",
+      "milestoneEnteredAt": 1789152738992,
+      "transitionSeq": 1,
+      "updatedAt": 1792089110638,
+      "workflowId": "sh7jaebsbmgb871a141erpvz558e75g2"
+    },
+    "receipt": {
+      "_creationTime": 1792089110319.4253,
+      "_id": "ps7hz7t4b2z4mxmddb9xhe0t818gbsxf",
+      "attemptCount": 1,
+      "attemptToken": "canonical_attempt:f26f802a-a8bf-4cc9-9d07-2c0b5b416632",
+      "communityId": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+      "createdAt": 1792089110319,
+      "idempotencyKey": "staging-3a1-20261015-form-submit-1",
+      "principalKind": "external_mcp",
+      "requestFingerprint": "[\"community.form.submit\",1,\"tx7xc84qvs9cm225a4z8tezrsn8gav05\",\"tn7j3ma5dww0f5171fngpa2kvd8gawar\",0,{\"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\":\"3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement.\"}]",
+      "result": {
+        "deduped": false,
+        "ok": true,
+        "operation": "community.form.submit",
+        "receipt": {
+          "authority_lane": "member",
+          "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+          "community_slug": "form-browser-qa-20260911",
+          "contract": "polynet.canonical.operation:v1",
+          "deduped": false,
+          "idempotency_key": "staging-3a1-20261015-form-submit-1",
+          "principal_kind": "external_mcp",
+          "relation": "member",
+          "tool": "polynet_call"
+        },
+        "result": {
+          "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+          "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+          "revision": 1,
+          "status": "submitted",
+          "submitted_at": 1792089110319
+        }
+      },
+      "status": "completed",
+      "toolName": "polynet_call",
+      "updatedAt": 1792089110319,
+      "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+    }
+  },
+  "native": {
+    "recorded_at": "2026-10-15T18:33:04.597Z",
+    "runtime": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+    "client_version": "0.162.0-alpha.17.2",
+    "member_identity_sha256": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "founder_identity_sha256": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "pending_before": {
+      "path": "/communities/form-browser-qa-20260911/members/me/forms/",
+      "entries": [],
+      "next_cursor": null,
+      "truncated": false,
+      "skipped_incomplete": 0,
+      "searchable": false,
+      "writable": false,
+      "visit_changed": false
+    },
+    "assigned": {
+      "path": "/communities/form-browser-qa-20260911/members/me/forms/",
+      "entries": [
+        {
+          "answered": 0,
+          "createdAt": 1792089084628,
+          "id": "tx7xc84qvs9cm225a4z8tezrsn8gav05",
+          "name": "3A1 synthetic progress proof 20261015",
+          "total": 1,
+          "ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+          "path": "/communities/form-browser-qa-20260911/members/me/forms/tx7xc84qvs9cm225a4z8tezrsn8gav05.json",
+          "kind": "document",
+          "type": "private_assigned_form"
+        }
+      ],
+      "next_cursor": null,
+      "truncated": false,
+      "skipped_incomplete": 0,
+      "searchable": false,
+      "writable": false,
+      "visit_changed": false
+    },
+    "pinned_form": {
+      "answers": {},
+      "assignment": {
+        "activation_sequence": 1,
+        "milestone_entered_at": 1789152738992,
+        "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+        "workflow_ref": "workflow:sh7jaebsbmgb871a141erpvz558e75g2"
+      },
+      "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+      "name": "3A1 synthetic progress proof 20261015",
+      "questions": [
+        {
+          "description": "",
+          "key": "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3",
+          "options": [],
+          "required": true,
+          "title": "What synthetic step did you complete for the staging progress proof?",
+          "type": "short_text"
+        }
+      ],
+      "ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+      "revision": 0,
+      "status": "pending",
+      "submitted_at": null
+    },
+    "envelope": {
+      "target": "/communities/form-browser-qa-20260911/capabilities/community.form.submit.json",
+      "operation": "community.form.submit",
+      "version": 1,
+      "idempotency_key": "staging-3a1-20261015-form-submit-1",
+      "input": {
+        "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+        "expected_revision": 0,
+        "answers": {
+          "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3": "3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement."
+        }
+      }
+    },
+    "first_application_response_discarded": true,
+    "restart": {
+      "old_pid": 78104,
+      "old_exit": {
+        "code": 0,
+        "signal": null
+      },
+      "new_pid": 83364
+    },
+    "replay": {
+      "deduped": true,
+      "ok": true,
+      "operation": "community.form.submit",
+      "receipt": {
+        "authority_lane": "member",
+        "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+        "community_slug": "form-browser-qa-20260911",
+        "contract": "polynet.canonical.operation:v1",
+        "deduped": true,
+        "idempotency_key": "staging-3a1-20261015-form-submit-1",
+        "principal_kind": "external_mcp",
+        "relation": "member",
+        "tool": "polynet_call"
+      },
+      "result": {
+        "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+        "revision": 1,
+        "status": "submitted",
+        "submitted_at": 1792089110319
+      }
+    },
+    "submitted_exact_read": {
+      "path": "/communities/form-browser-qa-20260911/members/me/forms/tx7xc84qvs9cm225a4z8tezrsn8gav05.json",
+      "body": "{\n  \"answers\": {\n    \"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\": \"3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement.\"\n  },\n  \"assignment\": {\n    \"activation_sequence\": 1,\n    \"milestone_entered_at\": 1789152738992,\n    \"milestone_key\": \"milestone-0e404dc5-18a4-4599-898e-30e5c7096596\",\n    \"workflow_ref\": \"workflow:sh7jaebsbmgb871a141erpvz558e75g2\"\n  },\n  \"form_version_ref\": \"form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar\",\n  \"name\": \"3A1 synthetic progress proof 20261015\",\n  \"questions\": [\n    {\n      \"description\": \"\",\n      \"key\": \"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\",\n      \"options\": [],\n      \"required\": true,\n      \"title\": \"What synthetic step did you complete for the staging progress proof?\",\n      \"type\": \"short_text\"\n    }\n  ],\n  \"ref\": \"form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05\",\n  \"revision\": 1,\n  \"status\": \"submitted\",\n  \"submitted_at\": 1792089110319\n}",
+      "truncated": false,
+      "ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+      "total_chars": 968,
+      "next_offset": null,
+      "writable": false,
+      "searchable": false
+    },
+    "member_context": {
+      "workflow": {
+        "completed_at": "2026-10-15T18:31:50.638Z",
+        "current_milestone_entered_at": "2026-09-11T18:52:18.992Z",
+        "current_milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+        "current_milestone_name": "Browser form acceptance",
+        "goal": "",
+        "id": "sh7jaebsbmgb871a141erpvz558e75g2",
+        "require_human_approval": false,
+        "revision": 5
+      },
+      "milestone_history": [
+        {
+          "completed_workflow": true,
+          "id": "t97p51p1ah1dnk3s2gt6d9meq98gaw9s",
+          "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+          "milestone_name": "Browser form acceptance",
+          "next_milestone_key": null,
+          "next_milestone_name": null,
+          "occurred_at": "2026-10-15T18:31:50.638Z",
+          "sequence": 1
+        }
+      ],
+      "submitted_form_evidence": [
+        {
+          "activation_sequence": 1,
+          "answer_revision": 1,
+          "form_name": "3A1 synthetic progress proof 20261015",
+          "form_revision": 2,
+          "milestone_entered_at": "2026-09-11T18:52:18.992Z",
+          "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+          "omitted_questions": 0,
+          "questions": [
+            {
+              "answer": "3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement.",
+              "key": "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3",
+              "title": "What synthetic step did you complete for the staging progress proof?",
+              "truncated": false,
+              "type": "short_text"
+            }
+          ],
+          "request_id": "tx7xc84qvs9cm225a4z8tezrsn8gav05",
+          "submitted_at": "2026-10-15T18:31:50.319Z",
+          "version_id": "tn7j3ma5dww0f5171fngpa2kvd8gawar",
+          "workflow_id": "sh7jaebsbmgb871a141erpvz558e75g2"
+        }
+      ]
+    },
+    "founder_context": {
+      "workflow": {
+        "completed_at": "2026-10-15T18:31:50.638Z",
+        "current_milestone_entered_at": "2026-09-11T18:52:18.992Z",
+        "current_milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+        "current_milestone_name": "Browser form acceptance",
+        "goal": "",
+        "id": "sh7jaebsbmgb871a141erpvz558e75g2",
+        "instructions": "",
+        "override_state": {
+          "activation_sequence": 1,
+          "next_milestone_name": null,
+          "transition_seq": 1
+        },
+        "require_human_approval": false,
+        "revision": 5
+      },
+      "milestone_history": [
+        {
+          "completed_workflow": true,
+          "id": "t97p51p1ah1dnk3s2gt6d9meq98gaw9s",
+          "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+          "milestone_name": "Browser form acceptance",
+          "next_milestone_key": null,
+          "next_milestone_name": null,
+          "occurred_at": "2026-10-15T18:31:50.638Z",
+          "sequence": 1
+        }
+      ],
+      "form_evidence": [
+        {
+          "activation_sequence": 1,
+          "answer_revision": 1,
+          "form_name": "3A1 synthetic progress proof 20261015",
+          "form_revision": 2,
+          "milestone_entered_at": "2026-09-11T18:52:18.992Z",
+          "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+          "omitted_questions": 0,
+          "questions": [
+            {
+              "answer": "3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement.",
+              "key": "6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3",
+              "title": "What synthetic step did you complete for the staging progress proof?",
+              "truncated": false,
+              "type": "short_text"
+            }
+          ],
+          "request_id": "tx7xc84qvs9cm225a4z8tezrsn8gav05",
+          "submitted_at": "2026-10-15T18:31:50.319Z",
+          "version_id": "tn7j3ma5dww0f5171fngpa2kvd8gawar",
+          "workflow_id": "sh7jaebsbmgb871a141erpvz558e75g2"
+        }
+      ]
+    },
+    "founder_self_denied": {
+      "error": "semantic_not_found: Repository path not found or not accessible."
+    },
+    "member_builder_denied": {
+      "error": "semantic_not_found: Repository path not found or not accessible."
+    },
+    "changed_payload": {
+      "error": "idempotency_key_conflict: This idempotency key was already reserved for a different request."
+    },
+    "new_key": {
+      "error": "form_request_unavailable: Form request not available or submission not authorized."
+    },
+    "pending_after": {
+      "path": "/communities/form-browser-qa-20260911/members/me/forms/",
+      "entries": [],
+      "next_cursor": null,
+      "truncated": false,
+      "skipped_incomplete": 0,
+      "searchable": false,
+      "writable": false,
+      "visit_changed": false
+    },
+    "shared_search": {
+      "returned_refs": [
+        "interaction:root:j97qg0z3dch4d2jykm8ypfw0898gbtpy"
+      ],
+      "private_answer_absent": true
+    }
+  },
+  "post_retry_comparison": {
+    "transitions_unchanged": true,
+    "submissions_unchanged": true,
+    "transition_count": 1,
+    "receipt_count": 1,
+    "receipt_attempt_count": 1,
+    "historical_submission_unchanged": true,
+    "final_candidate_submissions_and_transitions_unchanged": true
+  },
+  "retained_prior_fixtures": {
+    "equal": true,
+    "before_sha256": "94e7ed2d579f39a02185a9c3411cd73dc10f2bc82849870a3ae88bb0bda16677",
+    "after_sha256": "94e7ed2d579f39a02185a9c3411cd73dc10f2bc82849870a3ae88bb0bda16677",
+    "revoked_2a_stays_inactive": true,
+    "denial_deadline_utc": "2026-10-22T17:55:59.047Z",
+    "contribution_id": "j97xym1sxb5knx6111a0wksgp18g9ptq"
+  },
+  "cleanup": {
+    "stops": [
+      {
+        "alias": "polynet_3a1_member_staging",
+        "code": 0,
+        "signal": null
+      },
+      {
+        "alias": "polynet_3a1_founder_staging",
+        "code": 0,
+        "signal": null
+      }
+    ],
+    "logout": [
+      {
+        "alias": "polynet_3a1_member_staging",
+        "stdout": "Removed OAuth credentials for 'polynet_3a1_member_staging'.",
+        "stderr": ""
+      },
+      {
+        "alias": "polynet_3a1_founder_staging",
+        "stdout": "Removed OAuth credentials for 'polynet_3a1_founder_staging'.",
+        "stderr": ""
+      }
+    ],
+    "fresh_clients": [
+      {
+        "alias": "polynet_3a1_member_staging",
+        "auth_status": "notLoggedIn",
+        "protected_read_auth_required": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      },
+      {
+        "alias": "polynet_3a1_founder_staging",
+        "auth_status": "notLoggedIn",
+        "protected_read_auth_required": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      }
+    ],
+    "config_hash_before": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "config_hash_after": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "config_unchanged": true,
+    "web_signed_out": true,
+    "owned_tabs_closed": 4,
+    "provider_grant_revocation_claimed": false,
+    "final_candidate": {
+      "stop": {
+        "code": 0,
+        "signal": null
+      },
+      "logout": "Removed OAuth credentials for 'polynet_3a1_member_staging'.",
+      "fresh_auth_status": "notLoggedIn",
+      "protected_read_auth_required": true,
+      "fresh_exit": {
+        "code": 0,
+        "signal": null
+      },
+      "config_sha256": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2"
+    }
+  },
+  "limits": [
+    "First application acknowledgment discarded after delivery; not a TCP interruption or crash during commit.",
+    "Form authoring and the human contribution trigger use the reference web UI; no full independent founder application claim.",
+    "One configured form action is completed; no coaching or business goal achievement claim.",
+    "Revocation, rollback, concurrency, stale rules and visit faults are local automated proofs, not live fixture mutations.",
+    "No test-requested model inference, provider setup, payment, memory promotion or production release.",
+    "Named record comparison is not a census of background jobs."
+  ],
+  "initial_runtime": {
+    "commit": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+    "convex_deployment": "dev:quick-porcupine-949",
+    "backend_source_tree": "19c862be2e0cd48f7bec8421ce37e0afebad3daf",
+    "backend_deploy_exit": 0,
+    "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
+    "git_deployment_id": 7100968324,
+    "git_deployment_url": "https://polynet-staging-r0q5bk7js-neil-mcds-projects.vercel.app",
+    "serving_asset": "/assets/index-lP2dpUN2.js",
+    "serving_asset_sha256": "c316b1c17163b3f52bb4aae6d3554f624249296489ca4a6c9922e1df3a39509b",
+    "staging_cloud_and_site_embedded": true
+  },
+  "final_candidate_verification": {
+    "backend_candidate": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+    "recorded_at": "2026-10-15T18:39:53.090Z",
+    "identity_sha256": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "replay": {
+      "deduped": true,
+      "ok": true,
+      "operation": "community.form.submit",
+      "receipt": {
+        "authority_lane": "member",
+        "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+        "community_slug": "form-browser-qa-20260911",
+        "contract": "polynet.canonical.operation:v1",
+        "deduped": true,
+        "idempotency_key": "staging-3a1-20261015-form-submit-1",
+        "principal_kind": "external_mcp",
+        "relation": "member",
+        "tool": "polynet_call"
+      },
+      "result": {
+        "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+        "revision": 1,
+        "status": "submitted",
+        "submitted_at": 1792089110319
+      }
+    },
+    "submitted_read": {
+      "path": "/communities/form-browser-qa-20260911/members/me/forms/tx7xc84qvs9cm225a4z8tezrsn8gav05.json",
+      "body": "{\n  \"answers\": {\n    \"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\": \"3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement.\"\n  },\n  \"assignment\": {\n    \"activation_sequence\": 1,\n    \"milestone_entered_at\": 1789152738992,\n    \"milestone_key\": \"milestone-0e404dc5-18a4-4599-898e-30e5c7096596\",\n    \"workflow_ref\": \"workflow:sh7jaebsbmgb871a141erpvz558e75g2\"\n  },\n  \"form_version_ref\": \"form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar\",\n  \"name\": \"3A1 synthetic progress proof 20261015\",\n  \"questions\": [\n    {\n      \"description\": \"\",\n      \"key\": \"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\",\n      \"options\": [],\n      \"required\": true,\n      \"title\": \"What synthetic step did you complete for the staging progress proof?\",\n      \"type\": \"short_text\"\n    }\n  ],\n  \"ref\": \"form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05\",\n  \"revision\": 1,\n  \"status\": \"submitted\",\n  \"submitted_at\": 1792089110319\n}",
+      "truncated": false,
+      "ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+      "total_chars": 968,
+      "next_offset": null,
+      "writable": false,
+      "searchable": false
+    },
+    "workflow": {
+      "completed_at": "2026-10-15T18:31:50.638Z",
+      "current_milestone_entered_at": "2026-09-11T18:52:18.992Z",
+      "current_milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+      "current_milestone_name": "Browser form acceptance",
+      "goal": "",
+      "id": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "require_human_approval": false,
+      "revision": 5
+    },
+    "milestone_history": [
+      {
+        "completed_workflow": true,
+        "id": "t97p51p1ah1dnk3s2gt6d9meq98gaw9s",
+        "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+        "milestone_name": "Browser form acceptance",
+        "next_milestone_key": null,
+        "next_milestone_name": null,
+        "occurred_at": "2026-10-15T18:31:50.638Z",
+        "sequence": 1
+      }
+    ],
+    "served_web_candidate": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+    "after_matching_web_marker_replay": {
+      "deduped": true,
+      "ok": true,
+      "operation": "community.form.submit",
+      "receipt": {
+        "authority_lane": "member",
+        "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+        "community_slug": "form-browser-qa-20260911",
+        "contract": "polynet.canonical.operation:v1",
+        "deduped": true,
+        "idempotency_key": "staging-3a1-20261015-form-submit-1",
+        "principal_kind": "external_mcp",
+        "relation": "member",
+        "tool": "polynet_call"
+      },
+      "result": {
+        "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+        "revision": 1,
+        "status": "submitted",
+        "submitted_at": 1792089110319
+      }
+    }
+  },
+  "final_candidate_change": "Suppress the private forms directory link on the special funnel-builder self-directory projection; submission, read and reconciliation owners unchanged."
+}

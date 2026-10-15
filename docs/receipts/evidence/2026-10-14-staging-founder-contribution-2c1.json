@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "slice": "2C1 independent founder contribution and retry proof",
+  "status": "passed",
+  "observedDate": "2026-10-14",
+  "provenance": {
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "parentSourceHead": "1e50b72b1edf4c964acbea2adfa7806c710a1a87",
+    "deployedRuntime": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+    "backend": "dev:quick-porcupine-949",
+    "backendSourceTree": "9dd6ee743bd4869c68047283d38e457bdf600058",
+    "runtimeChanges": false,
+    "deploymentsPerformed": false,
+    "productionUnchanged": true,
+    "versionsObservedAt": "2026-10-14T20:57:29.846687+00:00",
+    "versions": {
+      "staging": {
+        "buildId": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+        "sentryRelease": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+        "environment": "staging"
+      },
+      "production": {
+        "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+        "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+        "environment": "production"
+      }
+    }
+  },
+  "requestEnvelope": {
+    "schemaVersion": 1,
+    "resource": "https://polynet-staging.vercel.app/runtime/mcp",
+    "canonicalIdentityFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "runtimeSha": "09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc",
+    "createdAt": "2026-10-14T20:46:52.946Z",
+    "runId": "20261014204652941-7ae9f446",
+    "tool": "polynet_write",
+    "arguments": {
+      "path": "/communities/join-refresh-qa-sep23/channels/general/",
+      "mode": "create",
+      "content": {
+        "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof."
+      },
+      "idempotency_key": "stage-2c1-09e1ca37-20261014204652941-7ae9f446"
+    }
+  },
+  "requestEnvelopeSha256": "e8aabb2ca4292a39ab81e6d38f2eedd9f02bc9452301b49ecd44803ea672f3eb",
+  "nativeClient": {
+    "schemaVersion": 1,
+    "clientVersion": "0.162.0-alpha.17.2",
+    "alias": "polynet_2c1_staging",
+    "resource": "https://polynet-staging.vercel.app/runtime/mcp",
+    "configHashBefore": "808813ef1a640d257e560398d6f212403aa4d413208e39a1f9da82b7f0d2bde0",
+    "configHashAfter": "808813ef1a640d257e560398d6f212403aa4d413208e39a1f9da82b7f0d2bde0",
+    "loginCompletions": [
+      {
+        "at": "2026-10-14T20:44:57.946Z",
+        "name": "polynet_2c1_staging",
+        "success": true,
+        "error": null
+      }
+    ],
+    "launches": [
+      {
+        "pid": 12233,
+        "at": "2026-10-14T20:43:57.648Z"
+      },
+      {
+        "pid": 15222,
+        "at": "2026-10-14T20:48:40.332Z"
+      },
+      {
+        "pid": 22897,
+        "at": "2026-10-14T20:55:41.398Z"
+      }
+    ],
+    "firstDispatchAt": "2026-10-14T20:48:22.228Z",
+    "firstResponseDiscardedAt": "2026-10-14T20:48:23.242Z",
+    "firstResultAdopted": false,
+    "oldExitedAt": "2026-10-14T20:48:40.254Z",
+    "retryCompletedAt": "2026-10-14T20:53:36.133Z",
+    "replayed": {
+      "path": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
+      "ref": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
+      "deduped": true,
+      "receipt": {
+        "contract": "polynet.canonical.operation:v1",
+        "principal_kind": "external_mcp",
+        "authority_lane": "builder",
+        "relation": "owner",
+        "idempotency_key": "stage-2c1-09e1ca37-20261014204652941-7ae9f446",
+        "deduped": true
+      }
+    },
+    "readBack": {
+      "markerPresent": true,
+      "truncated": false,
+      "channel": "general",
+      "visibility": "community",
+      "attribution": {
+        "persistedType": "personal_agent",
+        "publicActorFingerprint": "6c3a7d0f4b0077e0968dc5d91bdc7db42f447406e34c14a3620faf78ef65af0f",
+        "publicAuthorityFingerprint": "6c3a7d0f4b0077e0968dc5d91bdc7db42f447406e34c14a3620faf78ef65af0f",
+        "canonicalAgentKeyMatches": true,
+        "mode": "on_behalf_of"
+      },
+      "attachments": 0,
+      "embeds": 0
+    },
+    "negativeControls": {
+      "conflict": {
+        "code": "idempotency_key_conflict",
+        "observedAt": "2026-10-14T20:54:14.446Z"
+      },
+      "inaccessibleCommunity": {
+        "code": "semantic_not_found",
+        "observedAt": "2026-10-14T20:54:14.628Z"
+      }
+    },
+    "localDriverRepair": {
+      "initialRecoveryGate": "identity read deadline; scratch helper held stale client binding",
+      "runtimeChange": false,
+      "correction": "Explicitly bind tool caller to current native process and thread; direct new-process read corroborated success before retry",
+      "failedRequestsSentNoRetryWrite": true
+    },
+    "inferenceTurns": 0,
+    "disconnect": {
+      "observedAt": "2026-10-14T20:55:42.617Z",
+      "authStatus": "notLoggedIn",
+      "protectedReadDenied": true,
+      "reason": "Auth required",
+      "pid": 22897,
+      "testKeychainAccountAbsent": true
+    }
+  },
+  "canonicalBaseline": {
+    "observedAt": "2026-10-14T20:48:06.028531+00:00",
+    "ownerFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "profileReady": true,
+    "channel": {
+      "accessMode": "all_members",
+      "postingPolicy": "members",
+      "status": "active"
+    },
+    "denialFixture": {
+      "activeCallerMembership": false,
+      "exists": true,
+      "ownedByCaller": false
+    },
+    "matchingRootCount": 0,
+    "matchingReceiptCount": 0,
+    "membershipRowCount": 1
+  },
+  "canonicalObservations": [
+    {
+      "phase": "after-first",
+      "observedAt": "2026-10-14T20:48:40.194366+00:00",
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
+      "membershipMetadataUnchanged": true
+    },
+    {
+      "phase": "after-restart-timeout",
+      "observedAt": "2026-10-14T20:49:46.223926+00:00",
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
+      "membershipMetadataUnchanged": true
+    },
+    {
+      "phase": "after-retry",
+      "observedAt": "2026-10-14T20:53:37.568564+00:00",
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
+      "membershipMetadataUnchanged": true
+    },
+    {
+      "phase": "after-negative",
+      "observedAt": "2026-10-14T20:54:15.600796+00:00",
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
+      "membershipMetadataUnchanged": true
+    },
+    {
+      "phase": "after-attribution",
+      "observedAt": "2026-10-14T20:55:08.346053+00:00",
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
+      "membershipMetadataUnchanged": true
+    },
+    {
+      "phase": "after-disconnect",
+      "observedAt": "2026-10-14T20:55:43.919259+00:00",
+      "contributionFingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+      "matchingRootCount": 1,
+      "matchingReceiptCount": 1,
+      "deniedRootCount": 0,
+      "deniedReceiptCount": 0,
+      "membershipMetadataUnchanged": true
+    }
+  ],
+  "verifiedInvariants": {
+    "oneCanonicalContribution": true,
+    "oneCompletedOperationReceipt": true,
+    "sameReferenceAndPathAcrossDiscardAndReplay": true,
+    "receiptAndDomainEffectUnchangedByRetry": true,
+    "persistedActorType": "personal_agent",
+    "receiptPrincipal": "external_mcp",
+    "founderAttributionMatches": true,
+    "noRepliesAttachmentsEmbeds": true,
+    "changedPayloadDenied": true,
+    "inaccessibleCommunityWriteDeniedWithNoEffect": true,
+    "membershipMetadataUnchanged": true,
+    "nativeDisconnectFailsClosed": true,
+    "userConfigurationHashUnchanged": true
+  },
+  "validation": {
+    "canonicalExecutorTests": 51,
+    "mcpSurfaceAuthAndProfileProofs": "passed",
+    "runtimeBaselineGate": "https://github.com/Neil-McD/Arx/actions/runs/38628996471",
+    "focusedTests": 59,
+    "focusedFiles": 3,
+    "receiptAndChannelTestsCombined": 8
+  },
+  "effects": {
+    "oneLabeledSyntheticContributionRetained": true,
+    "normalEvidenceSyncAndRetrievalReceipts": "may be recorded",
+    "membershipOwnershipBillingOrProviderConfigChanged": false,
+    "inferenceTurns": 0,
+    "productionChanges": false
+  },
+  "limits": [
+    "The application discarded a completed native response before adopting its result; no TCP interruption or live backend crash was injected",
+    "Two scratch-helper identity read deadlines failed before recovery; explicit current-process binding repaired the proof helper, and native direct reads corroborated the boundary",
+    "The existing owner authority was retained; inaccessible-community denial does not prove positive-then-revoked founder writes",
+    "This agent-attributed contribution does not prove human-only workflow triggers, progress completion or accepted intelligence",
+    "Native local disconnect does not certify upstream grant revocation, provider-wide logout or rejection of issued JWTs",
+    "Existing WorkOS browser session completed native OAuth; Chrome blocked rendering the final loopback page after native success",
+    "One Codex client only; no complete custom founder app, second client matrix or resource-pagination claim"
+  ],
+  "browser": {
+    "finalCallbackRendering": "Chrome ERR_BLOCKED_BY_CLIENT after native callback completion",
+    "screenshot": {
+      "path": "artifacts/founder-contribution-20261014/oauth-callback.jpg",
+      "sha256": "0968413698e5d9f8d3cc38fa1e1a22b64db710f40ab98c5bdbba3c9372b1aa2a",
+      "retention": "local ignored artifact; not committed or uploaded"
+    }
+  },
+  "canonicalCommittedContribution": {
+    "fingerprint": "56882587a8ccc00fa0f08e4e3d5c60ec3c96b3085ff37733080b5272137b2cf1",
+    "receiptCount": 1,
+    "receipts": [
+      {
+        "attemptCount": 1,
+        "createdAt": 1792010902853,
+        "principalKind": "external_mcp",
+        "resultPath": "/communities/join-refresh-qa-sep23/channels/general/interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq.md",
+        "resultRef": "interaction:root:j97xym1sxb5knx6111a0wksgp18g9ptq",
+        "status": "completed",
+        "toolName": "polynet_write",
+        "updatedAt": 1792010903157,
+        "rowFingerprint": "d0100bdf0198d08c7cf481eac39adb3b8ec651da05b88acad1ebae25823fd121",
+        "requestFingerprintHash": "a2015adc281377fd9060ee814a00c508de89fb9e404171710a5606dd30d141ea"
+      }
+    ],
+    "rootCount": 1,
+    "roots": [
+      {
+        "actorMatches": true,
+        "actorType": "personal_agent",
+        "agentKeyMatches": true,
+        "blocks": [
+          {
+            "blockType": "markdown_text",
+            "text": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
+            "urlPresent": false
+          }
+        ],
+        "channelMatches": true,
+        "communityMatches": true,
+        "contentSummary": "POLYNET_2C1_CONTRIBUTION_20261014204652941-7ae9f446: Synthetic staging contribution and retry proof.",
+        "createdAt": 1792010902992,
+        "replyCount": 0,
+        "status": "live",
+        "updatedAt": 1792010902992,
+        "visibilityScope": "community",
+        "rowFingerprint": "2680ebdd841484e3dfe2b7631c892153c29f9a4b45071d18baeaba5389283f3d"
+      }
+    ]
+  }
+}

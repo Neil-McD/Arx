@@ -7,7 +7,6 @@ export function buildWebStandalonePublicRouteViewProps(params: {
   publicRouteKind: Extract<PublicRoute["kind"], "checkout_success" | "claim"> | PublicRoute["kind"];
   showSignIn: boolean;
   requireSignIn: () => void;
-  handleSignOut: () => void | Promise<void>;
   checkoutStatus: CheckoutStatus;
   retryCheckoutFinalize: () => void;
   handlePublicCheckoutContinue: () => void;
@@ -31,9 +30,6 @@ export function buildWebStandalonePublicRouteViewProps(params: {
     publicRouteKind: params.publicRouteKind,
     showSignIn: params.showSignIn,
     onRequireSignIn: () => params.requireSignIn(),
-    onSignOut: () => {
-      void params.handleSignOut();
-    },
     checkoutStatus: params.checkoutStatus,
     onRetryCheckoutFinalize: params.retryCheckoutFinalize,
     onContinueCheckout: params.handlePublicCheckoutContinue,

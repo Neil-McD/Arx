@@ -1,0 +1,470 @@
+{
+  "schemaVersion": 1,
+  "observedDate": "2026-10-14",
+  "slice": "2B1 truthful logout and public web session lifecycle",
+  "status": "passed",
+  "baseline": {
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "parent": "77c4ae47ca04e5ec461d4afaba9def3321aa8d47",
+    "runtime": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+    "backendTree": "9dd6ee743bd4869c68047283d38e457bdf600058"
+  },
+  "validation": {
+    "focusedTests": 45,
+    "focusedFiles": 4,
+    "backendTypecheck": "passed",
+    "webTypecheck": "passed",
+    "sessionKernelProof": "passed",
+    "retentionProof": "passed",
+    "accountResumeProof": "passed",
+    "fullSuiteTests": 1663,
+    "fullSuiteFiles": 191,
+    "dependencyAudits": "zero root and web",
+    "exactCommitGate": {
+      "runUrl": "https://github.com/Neil-McD/Arx/actions/runs/38613970891",
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-14T18:20:18.161Z",
+      "finishedAt": "2026-10-14T18:25:19.272Z",
+      "durationMs": 301111,
+      "candidate": {
+        "expectedSha": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "headSha": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "buildId": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:20:18.161Z",
+          "finishedAt": "2026-10-14T18:20:18.429Z",
+          "durationMs": 268,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:20:18.429Z",
+          "finishedAt": "2026-10-14T18:20:18.477Z",
+          "durationMs": 48,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:20:18.477Z",
+          "finishedAt": "2026-10-14T18:20:50.741Z",
+          "durationMs": 32264,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:20:50.741Z",
+          "finishedAt": "2026-10-14T18:21:25.244Z",
+          "durationMs": 34503,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:21:25.244Z",
+          "finishedAt": "2026-10-14T18:21:27.638Z",
+          "durationMs": 2394,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:21:27.638Z",
+          "finishedAt": "2026-10-14T18:21:27.638Z",
+          "durationMs": 0,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:21:27.638Z",
+          "finishedAt": "2026-10-14T18:21:27.887Z",
+          "durationMs": 249,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:21:27.887Z",
+          "finishedAt": "2026-10-14T18:22:23.312Z",
+          "durationMs": 55425,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:22:23.312Z",
+          "finishedAt": "2026-10-14T18:22:23.604Z",
+          "durationMs": 292,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:22:23.604Z",
+          "finishedAt": "2026-10-14T18:22:37.484Z",
+          "durationMs": 13880,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:22:37.484Z",
+          "finishedAt": "2026-10-14T18:22:37.762Z",
+          "durationMs": 278,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:22:37.762Z",
+          "finishedAt": "2026-10-14T18:25:18.123Z",
+          "durationMs": 160361,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:25:18.123Z",
+          "finishedAt": "2026-10-14T18:25:18.275Z",
+          "durationMs": 152,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:25:18.275Z",
+          "finishedAt": "2026-10-14T18:25:18.769Z",
+          "durationMs": 494,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-14T18:25:18.769Z",
+          "finishedAt": "2026-10-14T18:25:19.272Z",
+          "durationMs": 503,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "prGateRunUrl": "https://github.com/Neil-McD/Arx/actions/runs/38613707221"
+  },
+  "deployment": {
+    "backend": {
+      "selector": "dev:quick-porcupine-949",
+      "command": "convex dev --once --typecheck enable --env-file <explicit-public-staging-selector> --tail-logs disable",
+      "result": "functions ready",
+      "sourceCleanBeforeAndAfter": true,
+      "readyLogTimestamp": "2026-10-14T18:26:19.493Z",
+      "logSha256": "121b076fd524726c79b02818c97046f11af428f89376d60f1f3c5affe6c8a4bf"
+    },
+    "web": {
+      "observedAt": "2026-10-14T18:28:35.054Z",
+      "version": {
+        "buildId": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "sentryRelease": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "environment": "staging"
+      },
+      "asset": "/assets/index-D2GDmu8R.js",
+      "bundleSha256": "159deb4674f4e643772b3d44276ebd1520dbfae7f442cc6c7f4bcd78777aa121",
+      "backendHosts": [
+        "quick-porcupine-949.convex.cloud",
+        "quick-porcupine-949.convex.site"
+      ],
+      "unauthenticatedPublicBoundaries": [
+        {
+          "path": "/api/auth/session",
+          "method": "GET",
+          "status": 200,
+          "payload": {
+            "ok": true,
+            "session": null,
+            "trace": {
+              "bootstrap_path": "missing_cookie"
+            }
+          }
+        },
+        {
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "status": 401,
+          "payload": {
+            "ok": false,
+            "error": "Missing auth session."
+          }
+        },
+        {
+          "path": "/api/auth/logout",
+          "method": "POST",
+          "status": 200,
+          "payload": {
+            "ok": true
+          }
+        }
+      ],
+      "verifiedAtReceipt": {
+        "buildId": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "sentryRelease": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+        "environment": "staging"
+      },
+      "gitBranch": "staging",
+      "gitFastForwardFrom": "6ae69677964ccd599870de81afed9a45be4ca805",
+      "vercelDeploymentUrl": "https://vercel.com/neil-mcds-projects/polynet-staging/CKa7zhHmTZ2tp5fx3cvXHHiUbSEQ"
+    }
+  },
+  "authentication": {
+    "flow": "Real public Google/WorkOS login through staging /api/auth/google/start and callback, then ordinary application bootstrap/refresh/logout",
+    "newSessions": 1,
+    "identityFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "sessionRowFingerprint": "2cc5b2356c155500fdb42ba62629fa145058814df6ae7b3684b827f517ec85a7",
+    "administrativeCredentialBootstrapUsed": false,
+    "impersonationUsed": false,
+    "cookiesJwtOrRefreshSecretsExported": false,
+    "administrativeReads": "Metadata only; authSessions by canonical test user; no secret contents or opaque session cookie IDs returned"
+  },
+  "publicUiEvidence": {
+    "entry": "Dedicated staging browser tab",
+    "login": "Authenticated account identity observed",
+    "reload": "Same account remained authenticated",
+    "naturalExpiry": "Authenticated protected account surface after initial expiry plus 30 seconds; same row, generation 0 to 1, later access-token expiry",
+    "logout": "Normal confirmation displayed Signing out, then returned to public signed-out home",
+    "signedOutReload": "Public signed-out home remained; account navigation redirected to public home",
+    "screenshots": [
+      {
+        "phase": "after-login",
+        "path": "artifacts/session-lifecycle-20261014/after-login.jpg",
+        "sha256": "e955c8b5a77e27d5ce5011015e8008a49397dddc88d06a6735812341c987f6a1",
+        "retention": "local ignored artifact; not committed or uploaded to PR"
+      },
+      {
+        "phase": "after-expiry",
+        "path": "artifacts/session-lifecycle-20261014/after-expiry.jpg",
+        "sha256": "e955c8b5a77e27d5ce5011015e8008a49397dddc88d06a6735812341c987f6a1",
+        "retention": "local ignored artifact; not committed or uploaded to PR"
+      },
+      {
+        "phase": "after-logout",
+        "path": "artifacts/session-lifecycle-20261014/after-logout.jpg",
+        "sha256": "c6bc5662bf8adc60aeb0b9b65cd8bd0fd6a7674a70d475d518e36a5f1757ffca",
+        "retention": "local ignored artifact; not committed or uploaded to PR"
+      }
+    ]
+  },
+  "canonicalObservations": [
+    {
+      "phase": "before-login",
+      "observedAt": "2026-10-14T18:21:12.568Z",
+      "deployment": "dev:quick-porcupine-949",
+      "credentialAcquisition": "none; read-only canonical metadata",
+      "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "sessionRowFingerprint": null,
+      "selectedSession": null,
+      "totalUserSessions": 23,
+      "newUserSessions": 0,
+      "otherSessionsExplicitlyRevoked": false
+    },
+    {
+      "phase": "after-login",
+      "observedAt": "2026-10-14T18:28:34.320Z",
+      "deployment": "dev:quick-porcupine-949",
+      "credentialAcquisition": "none; read-only canonical metadata",
+      "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "sessionRowFingerprint": "2cc5b2356c155500fdb42ba62629fa145058814df6ae7b3684b827f517ec85a7",
+      "selectedSession": {
+        "accessTokenExpiresAt": 1792002796,
+        "createdAt": 1792002496965,
+        "hasEncryptedCredentials": true,
+        "hasRefreshLease": false,
+        "lastRefreshAt": 1792002496965,
+        "refreshGeneration": 0,
+        "revokedAt": null,
+        "revokedReason": null,
+        "updatedAt": 1792002497797
+      },
+      "totalUserSessions": 24,
+      "newUserSessions": 1,
+      "otherSessionsExplicitlyRevoked": false
+    },
+    {
+      "phase": "after-reload",
+      "observedAt": "2026-10-14T18:29:55.435Z",
+      "deployment": "dev:quick-porcupine-949",
+      "credentialAcquisition": "none; read-only canonical metadata",
+      "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "sessionRowFingerprint": "2cc5b2356c155500fdb42ba62629fa145058814df6ae7b3684b827f517ec85a7",
+      "selectedSession": {
+        "accessTokenExpiresAt": 1792002796,
+        "createdAt": 1792002496965,
+        "hasEncryptedCredentials": true,
+        "hasRefreshLease": false,
+        "lastRefreshAt": 1792002496965,
+        "refreshGeneration": 0,
+        "revokedAt": null,
+        "revokedReason": null,
+        "updatedAt": 1792002581328
+      },
+      "totalUserSessions": 24,
+      "newUserSessions": 1,
+      "otherSessionsExplicitlyRevoked": false
+    },
+    {
+      "otherSessionMetadataUnchanged": true,
+      "phase": "after-expiry",
+      "observedAt": "2026-10-14T18:34:11.418Z",
+      "deployment": "dev:quick-porcupine-949",
+      "credentialAcquisition": "none; read-only canonical metadata",
+      "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "sessionRowFingerprint": "2cc5b2356c155500fdb42ba62629fa145058814df6ae7b3684b827f517ec85a7",
+      "selectedSession": {
+        "accessTokenExpiresAt": 1792003007,
+        "createdAt": 1792002496965,
+        "hasEncryptedCredentials": true,
+        "hasRefreshLease": false,
+        "lastRefreshAt": 1792002707430,
+        "refreshGeneration": 1,
+        "revokedAt": null,
+        "revokedReason": null,
+        "updatedAt": 1792002845635
+      },
+      "totalUserSessions": 24,
+      "newUserSessions": 1,
+      "otherSessionsExplicitlyRevoked": false
+    },
+    {
+      "otherSessionMetadataUnchanged": true,
+      "phase": "after-logout",
+      "observedAt": "2026-10-14T18:34:39.603Z",
+      "deployment": "dev:quick-porcupine-949",
+      "credentialAcquisition": "none; read-only canonical metadata",
+      "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "sessionRowFingerprint": "2cc5b2356c155500fdb42ba62629fa145058814df6ae7b3684b827f517ec85a7",
+      "selectedSession": {
+        "accessTokenExpiresAt": null,
+        "createdAt": 1792002496965,
+        "hasEncryptedCredentials": false,
+        "hasRefreshLease": false,
+        "lastRefreshAt": 1792002707430,
+        "refreshGeneration": 1,
+        "revokedAt": 1792002874432,
+        "revokedReason": "logout",
+        "updatedAt": 1792002874432
+      },
+      "totalUserSessions": 24,
+      "newUserSessions": 1,
+      "otherSessionsExplicitlyRevoked": false
+    },
+    {
+      "otherSessionMetadataUnchanged": true,
+      "phase": "after-signedout-reload",
+      "observedAt": "2026-10-14T18:35:53.628Z",
+      "deployment": "dev:quick-porcupine-949",
+      "credentialAcquisition": "none; read-only canonical metadata",
+      "userFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+      "sessionRowFingerprint": "2cc5b2356c155500fdb42ba62629fa145058814df6ae7b3684b827f517ec85a7",
+      "selectedSession": {
+        "accessTokenExpiresAt": null,
+        "createdAt": 1792002496965,
+        "hasEncryptedCredentials": false,
+        "hasRefreshLease": false,
+        "lastRefreshAt": 1792002707430,
+        "refreshGeneration": 1,
+        "revokedAt": 1792002874432,
+        "revokedReason": "logout",
+        "updatedAt": 1792002874432
+      },
+      "totalUserSessions": 24,
+      "newUserSessions": 1,
+      "otherSessionsExplicitlyRevoked": false
+    }
+  ],
+  "verifiedInvariants": {
+    "sameCanonicalUserAndRowAcrossLifecycle": true,
+    "refreshGenerations": [
+      0,
+      1
+    ],
+    "initialCredentialExpiry": "2026-10-14T18:33:16.000Z",
+    "laterCredentialExpiry": "2026-10-14T18:36:47.000Z",
+    "selectedSessionRevoked": true,
+    "storedCredentialsAndLeaseErased": true,
+    "otherSessionMetadataUnchangedCount": 23,
+    "revokedSessionRetainedForAudit": true
+  },
+  "evidenceClasses": {
+    "publicBrowser": "Observable real UI flow; authenticated response bodies/cookies/headers were not exported",
+    "publicHttp": "Unauthenticated GET session empty, POST refresh denied, POST logout idempotent",
+    "canonicalMetadata": "Read-only administrative corroboration of the same fresh session, natural refresh and zeroization",
+    "failureAndRetry": "Local simulations through actual route/client/controller and canonical actions; no live fault injection"
+  },
+  "production": {
+    "observedAt": "2026-10-14T18:39:49.280Z",
+    "version": {
+      "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "environment": "production"
+    },
+    "unchanged": true,
+    "releasePerformed": false,
+    "backendDeploymentPerformed": false
+  },
+  "effects": {
+    "oneFreshLoginSessionCreated": true,
+    "publicRefreshObserved": true,
+    "selectedSessionLogoutConfirmed": true,
+    "otherSessionsRevoked": false,
+    "membershipOrBillingChangesRequested": false,
+    "providerConnectionChanges": false,
+    "testRequestedInference": false,
+    "productionChanges": false
+  },
+  "limits": [
+    "No direct retained-cookie replay after logout; cookie-clear response tested locally and signed-out bootstrap/navigation observed live",
+    "Already-issued JWT rejection after logout not measured; no claim of immediate global credential revocation",
+    "Provider-wide logout and external harness OAuth grant revocation are not certified",
+    "External-client OAuth enrollment/continuity belongs to 2B2",
+    "Existing staging background workers were not certified inactive"
+  ]
+}

@@ -102,6 +102,7 @@ export async function callAuthBridgeJson(routePath, params = {}) {
   return await fetch(url, {
     method: "POST",
     headers,
+    ...(params.signal ? { signal: params.signal } : null),
     body: JSON.stringify(params.payload ?? {}),
   });
 }

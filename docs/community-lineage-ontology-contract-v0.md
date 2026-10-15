@@ -22,8 +22,10 @@ truth, resources remain resource truth, events remain event truth, and accepted
 community intelligence remains directory truth. Lineage stores or derives the
 minimum identities and relationships needed to traverse between those records.
 
-The current implementation establishes interaction, published-resource, and
-live AI Feed evidence lineage. It does not build profile UI, topic clustering,
+The current implementation establishes interaction and published-resource
+evidence lineage. AI Feed records/citations remain historical compatibility only;
+new AI Feed retrieval, publication and compiler admission are retired. It does not
+build profile UI, topic clustering,
 meeting ingestion, or a universal graph.
 
 ## Irreducible Ontology
@@ -66,10 +68,11 @@ Attribution modes are conceptually:
 - `imported`: source authorship is preserved from another system
 - `system`: operational infrastructure produced the record
 
-Current chat writes are unambiguous `direct`, `autonomous`, or `system` cases.
-There is no current personal-agent or external-MCP community publishing path.
-Such a path must fail closed until its mutation accepts and validates explicit
-authority and credit; it must not infer credit merely from authentication.
+Current chat supports direct human, autonomous community-agent and system
+contributions, plus bounded personal-agent/external-MCP publishing through
+`polynet_write`. Agent-assisted writes persist explicit `on_behalf_of` authority
+and the permitted credit decision. Authentication alone never implies authorship
+or human contribution credit. See `polynet-workspace-mcp-contract-v0.md`.
 Legacy evidence missing the required actor identity is projected as
 `unattributed`, receives no contribution credit, and remains `source_only`.
 
@@ -108,34 +111,13 @@ For current resources:
 resource:<communityResourceId>
 ```
 
-For current AI Feed posts:
-
-```txt
-ai_feed:<communityAiFeedPostId>
-```
-
-AI Feed evidence resolves only a canonical `live` post in the requested
-community. Hidden posts, foreign-community ids, stale archive hits, and ids from
-another table fail closed. Search returns a `retrieval_score` for relevance and
-the post's separate `signal_score` plus aggregate reaction counts; those values
-must never be conflated.
-
-Publishing an AI Feed post creates its matching compiler source trace.
-Publication does not make the post accepted directory truth.
-The persisted `agentKey` is the only admissible agent identity and credit. If it
-is absent, lineage is `unattributed` with `credit = null`; the system must not
-invent `community_agent`. `authorUserId` is the accountable recorder/sponsor,
-not human authorship credit. Free-form `evidence[]` entries remain supporting
-notes until a later typed citation contract exists.
-
-The compiler consumes the canonical source trace at most once. Live-post and
-archive projections serve retrieval only and must not become independent
-compiler signals.
-
-Hiding or pruning a post narrows the source trace to admin/redacted visibility
-without rewriting the post's persisted source actor. A moderator or pruner is a
-lifecycle actor, not the author; any moderation audit belongs in a separate
-event or audit record.
+Historical AI Feed evidence references use `ai_feed:<communityAiFeedPostId>`.
+Existing immutable citations can still be revalidated for audit and retained
+lineage. Current compiler evidence excludes AI Feed, and new citation capture
+rejects that retired source. Historical certificates describe older behavior on
+their named deployments; they authorize no new publication or memory admission.
+The original persisted agent identity and source lifecycle remain evidence truth;
+compatibility must not invent human authorship or agent credit.
 
 The typed resource reference is the evidence identity. A resource directory
 path or `resources://` URI is a current location projection and may change when
@@ -341,12 +323,13 @@ provenance for compilation. Retrieval always rechecks the source.
 
 ### Scenario B: Personal Agent Or External Harness
 
-Current personal-agent, Concierge, and MCP chat tools are read-only. Searching
-or reading creates a metadata-only audit record, not a community contribution.
+Personal-agent, Concierge and MCP retrieval creates metadata-only audit records,
+not community contributions. Memory search/read also creates actor-owned
+consumption receipts; those are operational evidence, not accepted learning.
 The retrieval audit retains principal, community, surface, capability, result
 references, and time; it does not copy raw search text.
 
-If a future personal-agent or MCP mutation publishes evidence:
+Bounded personal-agent or MCP publishing uses the explicit contribution contract:
 
 ```txt
 actor       = the concrete agent or harness identity
@@ -391,10 +374,9 @@ Interaction search/read returns a deterministic lineage envelope:
 - relation: the targeted reply when present, otherwise the root for replies
 - profile projection: `source_only`
 
-This envelope is a read projection over canonical interaction fields. It avoids
-speculative database columns while current writes remain unambiguous. Enabling
-agent-on-behalf publishing is the gate that requires persisted explicit
-authority and credit.
+This envelope projects canonical interaction fields. Agent-on-behalf publishing
+persists its explicit authority/attribution decision in those source records;
+retrieval does not infer authorship or grant new publication authority.
 
 ## Deletions And Non-Goals
 
@@ -418,7 +400,8 @@ The interaction evidence proof must demonstrate:
 2. Deterministic direct-human and autonomous-agent attribution.
 3. No inferred human credit for personal-agent or system evidence.
 4. Reply-to relations preserve target reply or root continuity.
-5. All three retrieval surfaces are read-only and produce retrieval audit rows.
+5. Retrieval produces metadata-only audit/consumption rows, not contributions.
+   Agent publishing uses a separate explicit write and attribution contract.
 6. Community access and source visibility fail closed at read time.
 7. Source traces preserve the source actor and evidence reference.
 8. Redaction removes archive visibility, excludes the trace, and recursively

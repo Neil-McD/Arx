@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "slice": "2B2",
+  "status": "passed",
+  "environment": "staging",
+  "observedDate": "2026-10-14",
+  "provenance": {
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "parentSourceHead": "cd408d177d592dceca4879dd225484f9bc061b3b",
+    "deployedRuntimeSha": "7d8eb5693092692ed4c44e74505f5b8f04cfde1f",
+    "backend": "dev:quick-porcupine-949",
+    "productionBuildBefore": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+    "runtimeChanges": false,
+    "canonicalRuntimeDeploymentsPerformed": false,
+    "automaticPullRequestPreviews": true,
+    "productionBuildAfter": "91d28dc2c986ef88a8a507a269db710d6d28d878"
+  },
+  "client": {
+    "name": "native Codex app-server",
+    "version": "0.162.0-alpha.17.2",
+    "alias": "polynet_2b2_staging",
+    "url": "https://polynet-staging.vercel.app/runtime/mcp",
+    "configIsolation": "Process -c overrides; existing node_repl disabled and apps disabled in the test process",
+    "credentialStore": "keyring",
+    "testKeychainAccount": "polynet_2b2_staging|6b8f87ff9124f80d",
+    "configurationFileUnchanged": true,
+    "inferenceTurns": 0,
+    "writeToolsInvoked": 0
+  },
+  "oauth": {
+    "issuer": "https://sparkling-artist-49-staging.authkit.app",
+    "registrationMethod": "CIMD selected by native auto discovery",
+    "clientId": "https://chatgpt.com/oauth/codex/yXYfatw2Su-y/client.json",
+    "resource": "https://polynet-staging.vercel.app/runtime/mcp",
+    "requestedScopes": [
+      "openid",
+      "profile",
+      "email",
+      "offline_access"
+    ],
+    "pkce": "S256",
+    "browserAccount": "Existing staging builder identity",
+    "nativeCompletionSuccess": true,
+    "successfulLoginCalls": 1,
+    "initialCredentialRecordCreatedAt": "2026-10-14T19:08:11Z",
+    "browserFinalPage": "Chrome ERR_BLOCKED_BY_CLIENT after native callback completion; native success independently corroborated by authenticated reads",
+    "administrativeCredentialAcquisition": false,
+    "manualBearerInjection": false
+  },
+  "context": {
+    "canonicalIdentityFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "identityMatchesPrior2ABuilder": true,
+    "communitySlug": "join-refresh-qa-sep23",
+    "authority": {
+      "lane": "builder",
+      "relation": "owner"
+    },
+    "selfContextIdentityMatches": true,
+    "resourcePath": "/communities/join-refresh-qa-sep23/resources/context-2a-oct14-2026~sx7cn2mwacppt61sc6635k8qn98g8kfp/polynet-2a-public-oct14-6ae696779~m97ew2sw9fpgdgffy225x340pn8g9yte.md",
+    "resourceCanary": "POLYNET_2A_PUBLIC_OCT14_6AE696779",
+    "authorizedReadPassed": true,
+    "deniedCommunitySlug": "public-funnel-preview-20260308",
+    "deniedCommunityCorroboration": {
+      "exists": true,
+      "active": true,
+      "ownedByCaller": false,
+      "activeCallerMembership": false,
+      "source": "Explicit staging inline read-only canonical metadata query"
+    },
+    "denialError": "semantic_not_found: Community path not found or not accessible.",
+    "fixtureMutations": 0
+  },
+  "continuity": {
+    "newConversation": {
+      "observedAt": "2026-10-14T19:10:40.822Z",
+      "identityMatches": true,
+      "canaryPresent": true,
+      "oauthCompletionCount": 1
+    },
+    "fullProcessRestart": {
+      "observedAt": "2026-10-14T19:12:05.833Z",
+      "previousPid": 62951,
+      "newPid": 67189,
+      "newPidSource": "Native server/diagnostics process.id",
+      "oldProcessExited": true,
+      "identityMatches": true,
+      "canaryPresent": true,
+      "loginRepeated": false
+    },
+    "firstCredentialUpdateObservedAt": "2026-10-14T19:15:14Z",
+    "nativeExpiryRefresh": {
+      "observedAt": "2026-10-14T19:20:15.838Z",
+      "reason": "expiry",
+      "providerRequestObserved": true,
+      "providerResponseObserved": true,
+      "persistenceObserved": true,
+      "clockOrLifetimeManipulation": false,
+      "trace": [
+        {
+          "observedAt": "2026-10-14T19:20:14.495Z",
+          "event": "2026-10-14T19:20:14.495837Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: new"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:14.495Z",
+          "event": "2026-10-14T19:20:14.495851Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: waiting for the MCP OAuth credential transaction lock"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:14.495Z",
+          "event": "2026-10-14T19:20:14.495962Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: acquired the MCP OAuth credential transaction lock"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:14.495Z",
+          "event": "2026-10-14T19:20:14.495967Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: rereading authoritative MCP OAuth credentials"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:15.396Z",
+          "event": "2026-10-14T19:20:15.396604Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: requesting refreshed MCP OAuth credentials from the provider timeout_ms=45000"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:15.816Z",
+          "event": "2026-10-14T19:20:15.815838Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: received refreshed MCP OAuth credentials from the provider"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:15.816Z",
+          "event": "2026-10-14T19:20:15.815881Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: persisting refreshed MCP OAuth credentials to the resolved store"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:15.838Z",
+          "event": "2026-10-14T19:20:15.838131Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: persisted refreshed MCP OAuth credentials and completed the transaction"
+        },
+        {
+          "observedAt": "2026-10-14T19:20:15.838Z",
+          "event": "2026-10-14T19:20:15.838187Z DEBUG refresh_transaction{server_name=polynet_2b2_staging refresh_reason=\"expiry\"}: codex_rmcp_client::oauth::refresh_transaction: close time.busy=34.7ms time.idle=1.31s"
+        }
+      ]
+    },
+    "afterRefresh": {
+      "observedAt": "2026-10-14T19:20:58.076Z",
+      "identityMatches": true,
+      "selfContextIdentityMatches": true,
+      "authorizedCanaryReadAt": "2026-10-14T19:20:16.532Z",
+      "authorizedCanaryPresent": true,
+      "denialStillEnforced": true
+    },
+    "directExpiresAtObserved": false,
+    "expiryEvidence": "Native expiry-triggered refresh transaction, earlier native credential modification, and subsequent authenticated reads; exact JWT exp/token response not exported"
+  },
+  "disconnect": {
+    "nativeLogoutConfirmed": true,
+    "testCredentialRecordAbsent": true,
+    "freshProcessAuthStatus": "notLoggedIn",
+    "protectedReadRejected": true,
+    "observedAt": "2026-10-14T19:21:25.086Z",
+    "upstreamGrantRevocationCertified": false
+  },
+  "validation": {
+    "workspaceMcpAuthContract": "passed",
+    "profileMcpContract": "passed",
+    "workspaceMcpContract": "passed",
+    "diffCheck": "passed",
+    "remoteReleaseGate": {
+      "statusAtReceiptCapture": "pending",
+      "pullRequest": "https://github.com/Neil-McD/Arx/pull/169",
+      "initialRun": "https://github.com/Neil-McD/Arx/actions/runs/38623390175",
+      "initialCandidateSha": "9700ed3852268ccb1838e2996b57a4b8fe9d72da",
+      "currentStatusOwner": "GitHub PR check rollup; inspect the current receipt head separately"
+    },
+    "jsonAndEvidenceChecks": "passed"
+  },
+  "artifacts": [
+    {
+      "path": "artifacts/external-oauth-20261014/callback-browser-block.jpg",
+      "sha256": "0968413698e5d9f8d3cc38fa1e1a22b64db710f40ab98c5bdbba3c9372b1aa2a",
+      "localOnly": true
+    }
+  ],
+  "limits": [
+    "Exact initial JWT expiration and token-response bodies were not exported; natural expiry is established through native lifecycle diagnostics, not a direct exp capture.",
+    "Optional secret-backed expiry metadata inspection was unavailable under OS Keychain access controls; controls were not weakened.",
+    "Local disconnect does not revoke the upstream OAuth grant or invalidate already-issued JWTs.",
+    "No Claude Code compatibility, provider-wide logout, membership/billing changes, founder writes or inference proof.",
+    "Metadata mirror omission did not prevent the tested native issuer-discovery path.",
+    "Existing staging background workers were not certified inactive."
+  ]
+}

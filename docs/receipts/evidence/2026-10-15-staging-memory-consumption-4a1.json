@@ -1,0 +1,924 @@
+{
+  "status": "bounded_staging_acceptance_passed",
+  "runtime": {
+    "commit": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+    "backend_source_tree": "1f15d41b0ccbc04091ba1fca0f92da65cebb0c6b",
+    "convex_deployment": "dev:quick-porcupine-949",
+    "backend_deploy_exit": 0,
+    "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
+    "git_deployment_id": 7103152932,
+    "git_deployment_url": "https://polynet-staging-pqm20ids4-neil-mcds-projects.vercel.app",
+    "asset": {
+      "asset": "/assets/index-pqBy0i6E.js",
+      "sha256": "27520efba35648594b1a864bb060336bb783d3e151ed8845c65c98605543e5a0",
+      "cloud": true,
+      "site": true
+    }
+  },
+  "production": {
+    "main": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "web_build": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+    "unchanged": true,
+    "production_deploy_commands": 0
+  },
+  "validation": {
+    "focused_tests": 245,
+    "focused_files": 5,
+    "added_memory_tests": 29,
+    "full_tests": 1865,
+    "full_files": 194,
+    "typechecks": [
+      "convex",
+      "web"
+    ],
+    "dependency_audits": {
+      "root": 0,
+      "web": 0
+    },
+    "release_gate": {
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-15T20:06:01.429Z",
+      "finishedAt": "2026-10-15T20:08:09.929Z",
+      "durationMs": 128500,
+      "candidate": {
+        "expectedSha": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+        "headSha": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+        "buildId": "ac49ad2f8308b1ffec20dcc622fe6c332aad7a4b",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:01.430Z",
+          "finishedAt": "2026-10-15T20:06:01.489Z",
+          "durationMs": 59,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:01.489Z",
+          "finishedAt": "2026-10-15T20:06:01.529Z",
+          "durationMs": 40,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:01.529Z",
+          "finishedAt": "2026-10-15T20:06:20.182Z",
+          "durationMs": 18653,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:20.182Z",
+          "finishedAt": "2026-10-15T20:06:41.816Z",
+          "durationMs": 21634,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:41.816Z",
+          "finishedAt": "2026-10-15T20:06:42.626Z",
+          "durationMs": 810,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:42.626Z",
+          "finishedAt": "2026-10-15T20:06:42.626Z",
+          "durationMs": 0,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:42.626Z",
+          "finishedAt": "2026-10-15T20:06:42.825Z",
+          "durationMs": 199,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:06:42.825Z",
+          "finishedAt": "2026-10-15T20:07:22.742Z",
+          "durationMs": 39917,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:07:22.742Z",
+          "finishedAt": "2026-10-15T20:07:22.988Z",
+          "durationMs": 246,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:07:22.988Z",
+          "finishedAt": "2026-10-15T20:07:30.602Z",
+          "durationMs": 7614,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:07:30.602Z",
+          "finishedAt": "2026-10-15T20:07:30.809Z",
+          "durationMs": 207,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:07:30.809Z",
+          "finishedAt": "2026-10-15T20:08:04.655Z",
+          "durationMs": 33846,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:08:04.655Z",
+          "finishedAt": "2026-10-15T20:08:04.755Z",
+          "durationMs": 100,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:08:04.755Z",
+          "finishedAt": "2026-10-15T20:08:05.731Z",
+          "durationMs": 976,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T20:08:05.731Z",
+          "finishedAt": "2026-10-15T20:08:09.929Z",
+          "durationMs": 4198,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "runtime_ci": "https://github.com/Neil-McD/Arx/actions/runs/38799577972",
+    "runtime_ci_status_at_receipt": "passed"
+  },
+  "fixture": {
+    "slug": "workflow-cursor-20260907",
+    "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+    "member_id": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+    "member_profile_sha256": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "founder_id": "jn7ckswapk976rra6egsxydm0x82a7nc",
+    "founder_profile_sha256": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "membership_id": "ks78mj4ga2kanz4ddxdw5etf7n8e0ymg",
+    "activation": 1,
+    "accepted_node_id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+    "accepted_node_status": "promising",
+    "accepted_node_version": 1,
+    "source_ref": "interaction:root:j97vwfz8cq0tcd3kg0wv0zq7358e0m5j",
+    "source_trace_id": "wn787khs51xkkemn97nb88sd4s8e0xd3",
+    "retention_decision": {
+      "decidedAt": 1789100527535,
+      "disposition": "retain",
+      "reason": "The exact trace is a high-confidence, reusable diagnostic distinction: the staging cursor regression occurred deterministically with no workflow model calls, and the directory has no overlapping node.",
+      "runId": "xx7cw1gv7synfjctakhc7ghgen8e6d3z",
+      "targetNodeId": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+      "version": 1,
+      "workKey": "community_memory_work:v1:0297831bcaa768cea6140c6bb60128169e85e098db0b52ecb941852026b4c7ef"
+    },
+    "citation": {
+      "_creationTime": 1789100527535.1545,
+      "_id": "n97kwsh75acre6p32gb1ajzmw58e6zae",
+      "capturedAt": 1789100527535,
+      "capturedVisibility": "community",
+      "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+      "contentHash": "d10f36e97d522254009ec3524b6a0a75b1fddf2a2b7c9454b2f6682828fcbea2",
+      "provenanceHash": "10e29a1b96f0c976e0dc0f8da74f4b5905ae5654e3f5d7717059c648e42bbd29",
+      "sourceKind": "interaction",
+      "sourceRef": "interaction:root:j97vwfz8cq0tcd3kg0wv0zq7358e0m5j",
+      "sourceTraceId": "wn787khs51xkkemn97nb88sd4s8e0xd3",
+      "sourceVersion": "u:1788836747790:c:d10f36e97d522254:p:10e29a1b96f0c976"
+    },
+    "preflight": {
+      "outcomes": 0,
+      "retrieval_logs": 0,
+      "4a1_receipts": 0,
+      "changes": 1,
+      "roster_scan_capped": false,
+      "other_active_participants": 0,
+      "original_snapshot_sha256": "ace37c7f8e8c4c5a068de7ab1b238747aae22f25fe22805690fb22adcbb2f128",
+      "workflow_revision": 3
+    }
+  },
+  "live": {
+    "codex_cli": "0.162.0-alpha.17.2",
+    "first_application_response_discarded": true,
+    "outcome_envelope": {
+      "operation": "community.memory.record_outcome",
+      "version": 1,
+      "target": "/communities/workflow-cursor-20260907/capabilities/community.memory.record_outcome.json",
+      "input": {
+        "retrieval_log_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+        "node_id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+        "result_status": "worked",
+        "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed."
+      },
+      "idempotency_key": "staging-4a1-20261015-outcome-1"
+    },
+    "outcome_envelope_sha256": "4b137c176f27ee0cb4f919795b5572744ae5b429b76f4db6ecbc8a844a22dd3e",
+    "native": {
+      "search": {
+        "path": "/communities/workflow-cursor-20260907/memory/",
+        "results": [
+          {
+            "applies_when": "Investigating the staging path that requests the next milestone form and the observed cursor does not advance or resolves incorrectly.",
+            "confidence": 0.8,
+            "evidence_citation_ids": [
+              "n97kwsh75acre6p32gb1ajzmw58e6zae"
+            ],
+            "evidence_policy_version": "citation_v1",
+            "evidence_strength": "observed",
+            "grade": "promising",
+            "id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+            "status": "promising",
+            "tags": [
+              "compiler_memory",
+              "source:interaction"
+            ],
+            "title": "Staging cursor regression is deterministic and model-call-free",
+            "type": "warning_failure",
+            "updated_at": "2026-09-11T04:22:07.535Z",
+            "path": "/communities/workflow-cursor-20260907/memory/w97fphdpn87dx9g1rcapq39mgd8e67f4.md"
+          }
+        ],
+        "truncated": false,
+        "retrieval_id": "wd7de8c6g1k93f6r0a4qk994zh8gbpak"
+      },
+      "read": {
+        "path": "/communities/workflow-cursor-20260907/memory/w97fphdpn87dx9g1rcapq39mgd8e67f4.md",
+        "body": {
+          "applies_when": "Investigating the staging path that requests the next milestone form and the observed cursor does not advance or resolves incorrectly.",
+          "body_md": "A staging request for the next milestone form exposed a deterministic cursor regression without invoking workflow model calls. Treat this path as a workflow-cursor/state-transition issue first, rather than attributing the failure to model behavior.",
+          "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+          "confidence": 0.8,
+          "created_at": "2026-09-11T04:22:07.535Z",
+          "created_by_actor_type": "agent",
+          "created_by_agent_key": "community_agent",
+          "created_by_user_id": null,
+          "deprecated_by_node_id": null,
+          "does_not_apply_when": "The failure is reproduced only in production or requires an actual workflow model invocation; those cases need separate evidence.",
+          "evidence_citation_ids": [
+            "n97kwsh75acre6p32gb1ajzmw58e6zae"
+          ],
+          "evidence_policy_version": "citation_v1",
+          "evidence_strength": "observed",
+          "grade": "promising",
+          "id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+          "last_updated_by_actor_type": "agent",
+          "last_updated_by_agent_key": "community_agent",
+          "last_updated_by_user_id": null,
+          "last_validated_at": null,
+          "outcome_impact_score": 0,
+          "outcome_observation_ids": [],
+          "retrieval_usefulness_score": 0,
+          "source_trace_ids": [
+            "wn787khs51xkkemn97nb88sd4s8e0xd3"
+          ],
+          "source_visibility": "community",
+          "staleness_score": 0,
+          "status": "promising",
+          "tags": [
+            "compiler_memory",
+            "source:interaction"
+          ],
+          "title": "Staging cursor regression is deterministic and model-call-free",
+          "type": "warning_failure",
+          "updated_at": "2026-09-11T04:22:07.535Z",
+          "version": 1,
+          "visibility_scope": "community",
+          "workflow_ids": []
+        },
+        "truncated": false,
+        "ref": "memory:w97fphdpn87dx9g1rcapq39mgd8e67f4",
+        "total_chars": 1757,
+        "next_offset": null,
+        "retrieval_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr"
+      },
+      "founderRead": {
+        "path": "/communities/workflow-cursor-20260907/memory/w97fphdpn87dx9g1rcapq39mgd8e67f4.md",
+        "body": {
+          "applies_when": "Investigating the staging path that requests the next milestone form and the observed cursor does not advance or resolves incorrectly.",
+          "body_md": "A staging request for the next milestone form exposed a deterministic cursor regression without invoking workflow model calls. Treat this path as a workflow-cursor/state-transition issue first, rather than attributing the failure to model behavior.",
+          "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+          "confidence": 0.8,
+          "created_at": "2026-09-11T04:22:07.535Z",
+          "created_by_actor_type": "agent",
+          "created_by_agent_key": "community_agent",
+          "created_by_user_id": null,
+          "deprecated_by_node_id": null,
+          "does_not_apply_when": "The failure is reproduced only in production or requires an actual workflow model invocation; those cases need separate evidence.",
+          "evidence_citation_ids": [
+            "n97kwsh75acre6p32gb1ajzmw58e6zae"
+          ],
+          "evidence_policy_version": "citation_v1",
+          "evidence_strength": "observed",
+          "grade": "promising",
+          "id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+          "last_updated_by_actor_type": "agent",
+          "last_updated_by_agent_key": "community_agent",
+          "last_updated_by_user_id": null,
+          "last_validated_at": null,
+          "outcome_impact_score": 0,
+          "outcome_observation_ids": [],
+          "retrieval_usefulness_score": 0,
+          "source_trace_ids": [
+            "wn787khs51xkkemn97nb88sd4s8e0xd3"
+          ],
+          "source_visibility": "community",
+          "staleness_score": 0,
+          "status": "promising",
+          "tags": [
+            "compiler_memory",
+            "source:interaction"
+          ],
+          "title": "Staging cursor regression is deterministic and model-call-free",
+          "type": "warning_failure",
+          "updated_at": "2026-09-11T04:22:07.535Z",
+          "version": 1,
+          "visibility_scope": "community",
+          "workflow_ids": []
+        },
+        "truncated": false,
+        "ref": "memory:w97fphdpn87dx9g1rcapq39mgd8e67f4",
+        "total_chars": 1757,
+        "next_offset": null,
+        "retrieval_id": "wd76zhyn0zmpnq7m9hyxkvegfh8gb5t1"
+      },
+      "searchOnlyDenial": {
+        "isError": true,
+        "result": {
+          "error": "community_intelligence_retrieval_node_not_injected: community_intelligence_retrieval_node_not_injected"
+        }
+      },
+      "foreignReceiptDenial": {
+        "isError": true,
+        "result": {
+          "error": "community_intelligence_retrieval_log_forbidden: community_intelligence_retrieval_log_forbidden"
+        }
+      },
+      "changedPayload": {
+        "isError": true,
+        "result": {
+          "error": "idempotency_key_conflict: This idempotency key was already reserved for a different request."
+        }
+      },
+      "newKey": {
+        "ok": true,
+        "operation": "community.memory.record_outcome",
+        "result": {
+          "deduplicated": true,
+          "ok": true,
+          "outcome": {
+            "baseline_value": null,
+            "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+            "created_at": "2026-10-15T20:10:44.649Z",
+            "evidence_strength": "observed",
+            "id": "wh7cvs77gj4j991312g5y53q0h8gbbh0",
+            "metric_name": null,
+            "metric_value": null,
+            "node_id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+            "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.",
+            "observed_at": "2026-10-15T20:10:44.649Z",
+            "observed_by_actor_type": "member",
+            "observed_by_agent_key": null,
+            "observed_by_user_id": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+            "result_status": "worked",
+            "retrieval_log_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+            "updated_at": "2026-10-15T20:10:44.649Z",
+            "workflow_id": null
+          },
+          "outcome_observation_id": "wh7cvs77gj4j991312g5y53q0h8gbbh0"
+        },
+        "deduped": true,
+        "receipt": {
+          "contract": "polynet.canonical.operation:v1",
+          "tool": "polynet_call",
+          "principal_kind": "external_mcp",
+          "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+          "community_slug": "workflow-cursor-20260907",
+          "authority_lane": "member",
+          "relation": "member",
+          "idempotency_key": "staging-4a1-20261015-same-episode-new-key",
+          "deduped": true
+        }
+      },
+      "newKeyConflict": {
+        "isError": true,
+        "result": {
+          "error": "community_memory_outcome_conflict: community_memory_outcome_conflict"
+        }
+      },
+      "sourceRead": {
+        "ref": "interaction:root:j97vwfz8cq0tcd3kg0wv0zq7358e0m5j",
+        "truncated": false,
+        "bodySha256": "898e8ea50776155ec1cb2a1a6cc8ff7d17ee153485dcf49210089263a3078e8e"
+      }
+    },
+    "restart_replay": {
+      "oldPid": 46723,
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "newPid": 60862,
+      "replay": {
+        "deduped": true,
+        "ok": true,
+        "operation": "community.memory.record_outcome",
+        "receipt": {
+          "authority_lane": "member",
+          "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+          "community_slug": "workflow-cursor-20260907",
+          "contract": "polynet.canonical.operation:v1",
+          "deduped": true,
+          "idempotency_key": "staging-4a1-20261015-outcome-1",
+          "principal_kind": "external_mcp",
+          "relation": "member",
+          "tool": "polynet_call"
+        },
+        "result": {
+          "deduplicated": false,
+          "ok": true,
+          "outcome": {
+            "baseline_value": null,
+            "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+            "created_at": "2026-10-15T20:10:44.649Z",
+            "evidence_strength": "observed",
+            "id": "wh7cvs77gj4j991312g5y53q0h8gbbh0",
+            "metric_name": null,
+            "metric_value": null,
+            "node_id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+            "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.",
+            "observed_at": "2026-10-15T20:10:44.649Z",
+            "observed_by_actor_type": "member",
+            "observed_by_agent_key": null,
+            "observed_by_user_id": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+            "result_status": "worked",
+            "retrieval_log_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+            "updated_at": "2026-10-15T20:10:44.649Z",
+            "workflow_id": null
+          },
+          "outcome_observation_id": "wh7cvs77gj4j991312g5y53q0h8gbbh0"
+        }
+      }
+    },
+    "restarted_replay_snapshot_identical": true,
+    "denials_before_report": {
+      "outcomes": 0,
+      "failed_receipts": 2,
+      "completed_receipts": 0
+    },
+    "final_outcomes": [
+      {
+        "_creationTime": 1792095044649.599,
+        "_id": "wh7cvs77gj4j991312g5y53q0h8gbbh0",
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792095044649,
+        "evidenceStrength": "observed",
+        "nodeId": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+        "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.",
+        "observedAt": 1792095044649,
+        "observedByActorType": "member",
+        "observedByUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+        "resultStatus": "worked",
+        "retrievalLogId": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+        "updatedAt": 1792095044649
+      }
+    ],
+    "final_attach_outcome_requests": [
+      {
+        "_creationTime": 1792095044649.5994,
+        "_id": "x17fp8vy7wbashmq730570s5098gaywb",
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "confidence": 0.55,
+        "createdAt": 1792095044649,
+        "createdByActorType": "member",
+        "createdByUserId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+        "evidenceCitationIds": [],
+        "evidencePolicyVersion": "citation_v1",
+        "operation": "attach_outcome",
+        "outcomeObservationIds": [
+          "wh7cvs77gj4j991312g5y53q0h8gbbh0"
+        ],
+        "primaryTargetNodeId": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+        "privacyRisk": 0.2,
+        "requestedPayload": {
+          "evidenceStrength": "observed",
+          "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.",
+          "outcomeObservationId": "wh7cvs77gj4j991312g5y53q0h8gbbh0",
+          "resultStatus": "worked",
+          "retrievalLogId": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+          "workflowId": null
+        },
+        "sourceTraceIds": [],
+        "status": "pending_decision",
+        "targetEdgeIds": [],
+        "targetEdgeSnapshots": [],
+        "targetNodeIds": [
+          "w97fphdpn87dx9g1rcapq39mgd8e67f4"
+        ],
+        "targetNodeSnapshots": [
+          {
+            "nodeId": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+            "updatedAt": 1789100527535,
+            "version": 1
+          }
+        ],
+        "updatedAt": 1792095044649
+      }
+    ],
+    "retrieval_logs": [
+      {
+        "_creationTime": 1792094975202.793,
+        "_id": "wd76zhyn0zmpnq7m9hyxkvegfh8gb5t1",
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792094975202,
+        "injectedNodeIds": [
+          "w97fphdpn87dx9g1rcapq39mgd8e67f4"
+        ],
+        "outcomeObservationIds": [],
+        "receiptVersion": "community_memory_retrieval_receipt:v1",
+        "retrievedNodeIds": [
+          "w97fphdpn87dx9g1rcapq39mgd8e67f4"
+        ],
+        "surface": "external_mcp",
+        "updatedAt": 1792094975202,
+        "userId": "jn7ckswapk976rra6egsxydm0x82a7nc"
+      },
+      {
+        "_creationTime": 1792094969146.8252,
+        "_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792094969146,
+        "injectedNodeIds": [
+          "w97fphdpn87dx9g1rcapq39mgd8e67f4"
+        ],
+        "outcomeObservationIds": [
+          "wh7cvs77gj4j991312g5y53q0h8gbbh0"
+        ],
+        "receiptVersion": "community_memory_retrieval_receipt:v1",
+        "retrievedNodeIds": [
+          "w97fphdpn87dx9g1rcapq39mgd8e67f4"
+        ],
+        "surface": "external_mcp",
+        "updatedAt": 1792095044649,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      },
+      {
+        "_creationTime": 1792094968019.5825,
+        "_id": "wd7de8c6g1k93f6r0a4qk994zh8gbpak",
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792094968019,
+        "injectedNodeIds": [],
+        "outcomeObservationIds": [],
+        "receiptVersion": "community_memory_retrieval_receipt:v1",
+        "retrievedNodeIds": [
+          "w97fphdpn87dx9g1rcapq39mgd8e67f4"
+        ],
+        "surface": "external_mcp",
+        "updatedAt": 1792094968019,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      }
+    ],
+    "canonical_operation_receipts": [
+      {
+        "_creationTime": 1792095156778.2136,
+        "_id": "ps7t4apr5nvv2tdy6cphy26qad8gab32",
+        "attemptCount": 1,
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792095156778,
+        "failedAt": 1792095156831,
+        "idempotencyKey": "staging-4a1-20261015-conflict-new-key",
+        "lastErrorCode": "community_memory_outcome_conflict",
+        "lastErrorMessage": "community_memory_outcome_conflict",
+        "principalKind": "external_mcp",
+        "requestFingerprint": "{\"idempotencyKey\":\"staging-4a1-20261015-conflict-new-key\",\"input\":{\"node_id\":\"w97fphdpn87dx9g1rcapq39mgd8e67f4\",\"notes\":\"Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.\",\"result_status\":\"failed\",\"retrieval_log_id\":\"wd773gsh8xzegbffpm5xc92x7x8ga2vr\"},\"operation\":\"community.memory.record_outcome\",\"target\":\"/communities/workflow-cursor-20260907/capabilities/community.memory.record_outcome.json\",\"version\":1}",
+        "status": "failed",
+        "toolName": "polynet_call",
+        "updatedAt": 1792095156831,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      },
+      {
+        "_creationTime": 1792095016904.1921,
+        "_id": "ps7kbtg2s1wfhvs5spcv39zxwd8gasm4",
+        "attemptCount": 1,
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792095016904,
+        "failedAt": 1792095016992,
+        "idempotencyKey": "staging-4a1-20261015-foreign-receipt",
+        "lastErrorCode": "community_intelligence_retrieval_log_forbidden",
+        "lastErrorMessage": "community_intelligence_retrieval_log_forbidden",
+        "principalKind": "external_mcp",
+        "requestFingerprint": "{\"idempotencyKey\":\"staging-4a1-20261015-foreign-receipt\",\"input\":{\"node_id\":\"w97fphdpn87dx9g1rcapq39mgd8e67f4\",\"notes\":\"Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.\",\"result_status\":\"worked\",\"retrieval_log_id\":\"wd76zhyn0zmpnq7m9hyxkvegfh8gb5t1\"},\"operation\":\"community.memory.record_outcome\",\"target\":\"/communities/workflow-cursor-20260907/capabilities/community.memory.record_outcome.json\",\"version\":1}",
+        "status": "failed",
+        "toolName": "polynet_call",
+        "updatedAt": 1792095016992,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      },
+      {
+        "_creationTime": 1792095044618.8193,
+        "_id": "ps7tf13v732m3c3kcthrf4gq4h8gbfyk",
+        "attemptCount": 1,
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792095044618,
+        "idempotencyKey": "staging-4a1-20261015-outcome-1",
+        "principalKind": "external_mcp",
+        "requestFingerprint": "{\"idempotencyKey\":\"staging-4a1-20261015-outcome-1\",\"input\":{\"node_id\":\"w97fphdpn87dx9g1rcapq39mgd8e67f4\",\"notes\":\"Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.\",\"result_status\":\"worked\",\"retrieval_log_id\":\"wd773gsh8xzegbffpm5xc92x7x8ga2vr\"},\"operation\":\"community.memory.record_outcome\",\"target\":\"/communities/workflow-cursor-20260907/capabilities/community.memory.record_outcome.json\",\"version\":1}",
+        "result": {
+          "deduped": false,
+          "ok": true,
+          "operation": "community.memory.record_outcome",
+          "receipt": {
+            "authority_lane": "member",
+            "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+            "community_slug": "workflow-cursor-20260907",
+            "contract": "polynet.canonical.operation:v1",
+            "deduped": false,
+            "idempotency_key": "staging-4a1-20261015-outcome-1",
+            "principal_kind": "external_mcp",
+            "relation": "member",
+            "tool": "polynet_call"
+          },
+          "result": {
+            "deduplicated": false,
+            "ok": true,
+            "outcome": {
+              "baseline_value": null,
+              "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+              "created_at": "2026-10-15T20:10:44.649Z",
+              "evidence_strength": "observed",
+              "id": "wh7cvs77gj4j991312g5y53q0h8gbbh0",
+              "metric_name": null,
+              "metric_value": null,
+              "node_id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+              "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.",
+              "observed_at": "2026-10-15T20:10:44.649Z",
+              "observed_by_actor_type": "member",
+              "observed_by_agent_key": null,
+              "observed_by_user_id": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+              "result_status": "worked",
+              "retrieval_log_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+              "updated_at": "2026-10-15T20:10:44.649Z",
+              "workflow_id": null
+            },
+            "outcome_observation_id": "wh7cvs77gj4j991312g5y53q0h8gbbh0"
+          }
+        },
+        "status": "completed",
+        "toolName": "polynet_call",
+        "updatedAt": 1792095044730,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      },
+      {
+        "_creationTime": 1792095155921.0408,
+        "_id": "ps7p4renhhnhpr02me9bxzetgx8gbe5t",
+        "attemptCount": 1,
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792095155921,
+        "idempotencyKey": "staging-4a1-20261015-same-episode-new-key",
+        "principalKind": "external_mcp",
+        "requestFingerprint": "{\"idempotencyKey\":\"staging-4a1-20261015-same-episode-new-key\",\"input\":{\"node_id\":\"w97fphdpn87dx9g1rcapq39mgd8e67f4\",\"notes\":\"Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.\",\"result_status\":\"worked\",\"retrieval_log_id\":\"wd773gsh8xzegbffpm5xc92x7x8ga2vr\"},\"operation\":\"community.memory.record_outcome\",\"target\":\"/communities/workflow-cursor-20260907/capabilities/community.memory.record_outcome.json\",\"version\":1}",
+        "result": {
+          "deduped": true,
+          "ok": true,
+          "operation": "community.memory.record_outcome",
+          "receipt": {
+            "authority_lane": "member",
+            "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+            "community_slug": "workflow-cursor-20260907",
+            "contract": "polynet.canonical.operation:v1",
+            "deduped": true,
+            "idempotency_key": "staging-4a1-20261015-same-episode-new-key",
+            "principal_kind": "external_mcp",
+            "relation": "member",
+            "tool": "polynet_call"
+          },
+          "result": {
+            "deduplicated": true,
+            "ok": true,
+            "outcome": {
+              "baseline_value": null,
+              "community_id": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+              "created_at": "2026-10-15T20:10:44.649Z",
+              "evidence_strength": "observed",
+              "id": "wh7cvs77gj4j991312g5y53q0h8gbbh0",
+              "metric_name": null,
+              "metric_value": null,
+              "node_id": "w97fphdpn87dx9g1rcapq39mgd8e67f4",
+              "notes": "Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.",
+              "observed_at": "2026-10-15T20:10:44.649Z",
+              "observed_by_actor_type": "member",
+              "observed_by_agent_key": null,
+              "observed_by_user_id": "jn70qrjgn0pb16q2rf90bg1b518c3qjd",
+              "result_status": "worked",
+              "retrieval_log_id": "wd773gsh8xzegbffpm5xc92x7x8ga2vr",
+              "updated_at": "2026-10-15T20:10:44.649Z",
+              "workflow_id": null
+            },
+            "outcome_observation_id": "wh7cvs77gj4j991312g5y53q0h8gbbh0"
+          }
+        },
+        "status": "completed",
+        "toolName": "polynet_call",
+        "updatedAt": 1792095155987,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      },
+      {
+        "_creationTime": 1792095014475.6611,
+        "_id": "ps7n4k4k6sp4jfe85dxxey661x8gahg7",
+        "attemptCount": 1,
+        "communityId": "jx76tshcgsbe3bqt0rdytkayh98e1f57",
+        "createdAt": 1792095014475,
+        "failedAt": 1792095014540,
+        "idempotencyKey": "staging-4a1-20261015-search-only",
+        "lastErrorCode": "community_intelligence_retrieval_node_not_injected",
+        "lastErrorMessage": "community_intelligence_retrieval_node_not_injected",
+        "principalKind": "external_mcp",
+        "requestFingerprint": "{\"idempotencyKey\":\"staging-4a1-20261015-search-only\",\"input\":{\"node_id\":\"w97fphdpn87dx9g1rcapq39mgd8e67f4\",\"notes\":\"Synthetic 4A1 staging consumption proof only: read the retained cursor diagnostic and its cited human source. No customer result, model use, or validation of business advice is claimed.\",\"result_status\":\"worked\",\"retrieval_log_id\":\"wd7de8c6g1k93f6r0a4qk994zh8gbpak\"},\"operation\":\"community.memory.record_outcome\",\"target\":\"/communities/workflow-cursor-20260907/capabilities/community.memory.record_outcome.json\",\"version\":1}",
+        "status": "failed",
+        "toolName": "polynet_call",
+        "updatedAt": 1792095014540,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      }
+    ],
+    "outcomes_and_changes_unchanged_after_new_key_retries": true,
+    "community_metabolism_effect": {
+      "before_pending": null,
+      "after_pending": true,
+      "before_revision": null,
+      "after_revision": 1
+    },
+    "inference_observation": {
+      "runs": [],
+      "serve": [],
+      "since": 1792094400000
+    }
+  },
+  "preservation": {
+    "fixture_fields_unchanged": {
+      "node": true,
+      "trace": true,
+      "citation": true,
+      "source": true,
+      "blocks": true,
+      "workflow": true,
+      "states": true,
+      "runs": true,
+      "transitions": true,
+      "membership": true,
+      "roster": true
+    },
+    "3a2_snapshot_identical": true,
+    "3a2_before_sha256": "0a81fc84ee1087de3339171bc2fa5b3a2ad74a11667df6ba66810735a493ecd5",
+    "3a1_snapshot_identical": true,
+    "3a1_before_sha256": "1f826c462a2998768397046ee5859bd11a2e839122213e18757d034b67f2a86c",
+    "3a1_workflow_revision": 5,
+    "3a1_transition_ids": [
+      "t97p51p1ah1dnk3s2gt6d9meq98gaw9s"
+    ],
+    "prior_snapshot_identical": true,
+    "prior_before_sha256": "94e7ed2d579f39a02185a9c3411cd73dc10f2bc82849870a3ae88bb0bda16677",
+    "2c4_denial": [
+      {
+        "_creationTime": 1792086672564.458,
+        "_id": "kh7ckcn44eejxaqgn2rsr1jrgd8gbfdt",
+        "communityId": "jx7486vxxfavmbyfm079dba9k98by70n",
+        "createdAt": 1792086672564,
+        "deniedAt": 1792086959047,
+        "reapplyAt": 1792691759047,
+        "status": "denied",
+        "updatedAt": 1792086959047,
+        "userId": "jn70qrjgn0pb16q2rf90bg1b518c3qjd"
+      }
+    ],
+    "2c1_root_id": "j97xym1sxb5knx6111a0wksgp18g9ptq",
+    "2a_revoked_still_inactive": true
+  },
+  "cleanup": {
+    "exits": [
+      {
+        "alias": "polynet_4a1_member_staging",
+        "pid": 60862,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "alias": "polynet_4a1_founder_staging",
+        "pid": 48658,
+        "code": 0,
+        "signal": null
+      }
+    ],
+    "logouts": [
+      {
+        "alias": "polynet_4a1_member_staging",
+        "stdout": "Removed OAuth credentials for 'polynet_4a1_member_staging'.\n",
+        "stderr": ""
+      },
+      {
+        "alias": "polynet_4a1_founder_staging",
+        "stdout": "Removed OAuth credentials for 'polynet_4a1_founder_staging'.\n",
+        "stderr": ""
+      }
+    ],
+    "freshAuth": [
+      {
+        "alias": "polynet_4a1_member_staging",
+        "pid": 63154,
+        "authStatus": "notLoggedIn",
+        "protectedReadRequiresAuth": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      },
+      {
+        "alias": "polynet_4a1_founder_staging",
+        "pid": 63713,
+        "authStatus": "notLoggedIn",
+        "protectedReadRequiresAuth": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      }
+    ],
+    "configBefore": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "configAfter": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
+    "configUnchanged": true,
+    "owned_oauth_tabs_closed": 2,
+    "polynet_web_product_session_used": false,
+    "provider_wide_revocation_claimed": false,
+    "synthetic_records_retained": true
+  },
+  "boundaries": {
+    "requested_inference": 0,
+    "new_compiler_run": false,
+    "metabolizer_invocation": false,
+    "memory_source_or_workflow_edit": false,
+    "payment_or_provider_setting_change": false,
+    "receipt_migration": false,
+    "protected_core_deletion": false,
+    "production_mutation": false
+  },
+  "limits": [
+    "Acknowledgment discarded after transport completion, then independent observation and full process restart; not a forced network failure or general crash recovery proof.",
+    "Injected means returned as context to this client; no claim that a model used it.",
+    "Synthetic worked observation remains observed evidence and pending application; not accepted learning or a customer outcome.",
+    "Cached refusal, malformed response, concurrency and source revocation faults are local behavioral tests, not live fixture changes."
+  ]
+}

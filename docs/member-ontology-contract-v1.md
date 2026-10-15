@@ -172,6 +172,10 @@ run/member/action, active community membership and agent/source/destination acce
 Clients cannot choose an arbitrary subject or inherit a sponsor's manager role.
 The reader is not registered as a member-agent or MCP tool.
 
+The ontology contract proof checks both boundaries: human founder/admin reads
+exclude unapproved, withdrawn, and observed facts; the distinct workflow reader
+requires current execution authority and is not a client-selectable public tool.
+
 The existing authenticated `/members/me/context.md` read resolves its subject
 from the caller, rechecks current community access, and now includes that member's
 stage goal, human-approval requirement, verified action progress, and submitted
