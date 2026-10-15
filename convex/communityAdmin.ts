@@ -2,6 +2,8 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import {
   type CommunityBlockLike,
   type CommunityLike,
@@ -1318,69 +1320,99 @@ export const readPendingAdmissionRequestInternal = internalQuery({
   },
 });
 
-// The reservation, domain effects and completed result share this transaction.
-// No approval can commit without the result needed to recover a lost response.
-export const approveFreshAdmissionInternal = internalMutation({
-  args: {
-    userId: v.id("users"), communityId: v.id("communities"),
-    principalKind: v.union(v.literal("personal_agent"), v.literal("external_mcp")),
-    requestId: v.id("communityJoinRequests"),
-    expectedCreatedAt: v.number(), expectedUpdatedAt: v.number(),
-    idempotencyKey: v.string(),
-  },
-  handler: async (ctx, args): Promise<Record<string, any>> => {
-    const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
-    if (!args.idempotencyKey.trim() || args.idempotencyKey.length > 200 ||
-        !Number.isSafeInteger(args.expectedCreatedAt) || !Number.isSafeInteger(args.expectedUpdatedAt)) {
-      throw new Error("invalid_tool_args");
-    }
-    const scope = { communityId: args.communityId, userId: args.userId,
-      principalKind: args.principalKind, toolName: "polynet_call" as const, idempotencyKey: args.idempotencyKey };
-    const requestFingerprint = JSON.stringify(["community.admission.approve", 1, args.requestId,
-      args.expectedCreatedAt, args.expectedUpdatedAt]);
-    const reservation = await ctx.runMutation(internal.polynetCanonicalReceipts.reserveCanonicalOperationReceiptInternal,
-      { ...scope, requestFingerprint });
-    if (!reservation.ok) return reservation;
-    if (reservation.status === "completed") {
-      const value = reservation.result;
-      return { ...value, deduped: true, receipt: { ...value.receipt, deduped: true } };
-    }
-    const nowMs = Date.now();
-    if (!reservation.attemptToken || !reservation.leaseExpiresAt || reservation.leaseExpiresAt <= nowMs) {
-      throw new Error("operation_in_progress");
-    }
-    const request = await ctx.db.get(args.requestId);
-    if (!request || request.communityId !== args.communityId ||
-        request.createdAt !== args.expectedCreatedAt || request.updatedAt !== args.expectedUpdatedAt ||
-        resolveCommunityEntryPolicy(community) !== "approval") {
-      throw new Error("admission_request_unavailable");
-    }
-    // Validates pending fields and the canonical pair; never repairs a read.
-    const projection = await mapPendingAdmissionRequest(ctx, request);
-    const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: request.userId });
-    const subscription = await ctx.db.query("communitySubscriptions")
-      .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", request.userId)).first();
-    if (membership || subscription) throw new Error("admission_request_unavailable");
+// Reservation, domain effects and completed result share one transaction.
+const freshAdmissionArgs = {
+  userId: v.id("users"), communityId: v.id("communities"),
+  principalKind: v.union(v.literal("personal_agent"), v.literal("external_mcp")),
+  requestId: v.id("communityJoinRequests"),
+  expectedCreatedAt: v.number(), expectedUpdatedAt: v.number(),
+  idempotencyKey: v.string(),
+};
+
+type FreshAdmissionArgs = {
+  userId: Id<"users">; communityId: Id<"communities">;
+  principalKind: "personal_agent" | "external_mcp"; requestId: Id<"communityJoinRequests">;
+  expectedCreatedAt: number; expectedUpdatedAt: number; idempotencyKey: string;
+};
+
+async function decideFreshAdmission(ctx: MutationCtx, args: FreshAdmissionArgs,
+  operation: "community.admission.approve" | "community.admission.deny"): Promise<Record<string, any>> {
+  const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+  if (!args.idempotencyKey.trim() || args.idempotencyKey.length > 200 ||
+      !Number.isSafeInteger(args.expectedCreatedAt) || !Number.isSafeInteger(args.expectedUpdatedAt)) {
+    throw new Error("invalid_tool_args");
+  }
+  const scope = { communityId: args.communityId, userId: args.userId,
+    principalKind: args.principalKind, toolName: "polynet_call" as const, idempotencyKey: args.idempotencyKey };
+  const requestFingerprint = JSON.stringify([operation, 1, args.requestId,
+    args.expectedCreatedAt, args.expectedUpdatedAt]);
+  const reservation = await ctx.runMutation(internal.polynetCanonicalReceipts.reserveCanonicalOperationReceiptInternal,
+    { ...scope, requestFingerprint });
+  if (!reservation.ok) return reservation;
+  if (reservation.status === "completed") {
+    const value = reservation.result;
+    return { ...value, deduped: true, receipt: { ...value.receipt, deduped: true } };
+  }
+  const nowMs = Date.now();
+  if (!reservation.attemptToken || !reservation.leaseExpiresAt || reservation.leaseExpiresAt <= nowMs) {
+    throw new Error("operation_in_progress");
+  }
+  const request = await ctx.db.get(args.requestId);
+  if (!request || request.communityId !== args.communityId ||
+      request.createdAt !== args.expectedCreatedAt || request.updatedAt !== args.expectedUpdatedAt ||
+      resolveCommunityEntryPolicy(community) !== "approval") {
+    throw new Error("admission_request_unavailable");
+  }
+  // Validates pending fields and the canonical pair; never repairs a read.
+  const projection = await mapPendingAdmissionRequest(ctx, request);
+  const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: request.userId });
+  const subscription = await ctx.db.query("communitySubscriptions")
+    .withIndex("by_community_user", q => q.eq("communityId", args.communityId).eq("userId", request.userId)).first();
+  if (membership || subscription) throw new Error("admission_request_unavailable");
+  let result: Record<string, unknown>;
+  if (operation === "community.admission.approve") {
     const activation = await approveCommunityJoinRequestForFreeAccess({ ctx, community, request,
       nowMs, grantReason: "join_request_approved" });
-    await recordCriticalAuditEvent(ctx, {
-      eventKey: `community_join_request_approved:${String(request._id)}`,
-      eventType: "community_join_request_approved", severity: "info", status: "succeeded",
-      actorUserId: args.userId, subjectUserId: request.userId, communityId: args.communityId,
-      provider: "polynet", providerObjectId: String(request._id), createdAt: nowMs,
-    });
-    const value = { ok: true, operation: "community.admission.approve",
-      result: { status: "approved", request_ref: projection.ref, applicant_ref: projection.applicant_ref,
-        membership_ref: `membership:${activation.membership._id}`, decided_at: toIsoString(nowMs) },
-      deduped: false,
-      receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_call",
-        principal_kind: args.principalKind, community_id: String(args.communityId), community_slug: community.slug,
-        authority_lane: "builder", relation: community.ownerId === args.userId ? "owner" : "admin",
-        idempotency_key: args.idempotencyKey, deduped: false } };
-    await ctx.runMutation(internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
-      { ...scope, requestFingerprint, attemptToken: reservation.attemptToken, result: value });
-    return value;
-  },
+    result = { status: "approved", request_ref: projection.ref, applicant_ref: projection.applicant_ref,
+      membership_ref: `membership:${activation.membership._id}`, decided_at: toIsoString(nowMs) };
+  } else {
+    if (community.ownerId === request.userId) throw new Error("admission_request_unavailable");
+    await requireCommunityUserNotBlocked({ ctx, communityId: args.communityId, userId: request.userId });
+    const denied = await denyCommunityJoinRequestCore({ ctx, request, nowMs,
+      cooldownMs: COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS });
+    result = { status: "denied", request_ref: projection.ref, applicant_ref: projection.applicant_ref,
+      denied_at: toIsoString(denied.request.deniedAt!), reapply_at: toIsoString(denied.request.reapplyAt!) };
+  }
+  const eventType = operation === "community.admission.approve"
+    ? "community_join_request_approved" : "community_join_request_denied";
+  const eventKey = operation === "community.admission.approve"
+    ? `${eventType}:${request._id}`
+    : `${eventType}:${request._id}:${args.expectedCreatedAt}:${args.expectedUpdatedAt}`;
+  await recordCriticalAuditEvent(ctx, {
+    eventKey, eventType, severity: "info", status: "succeeded",
+    actorUserId: args.userId, subjectUserId: request.userId, communityId: args.communityId,
+    provider: "polynet", providerObjectId: String(request._id), createdAt: nowMs,
+  });
+  const value = { ok: true, operation, result,
+    deduped: false,
+    receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_call",
+      principal_kind: args.principalKind, community_id: String(args.communityId), community_slug: community.slug,
+      authority_lane: "builder", relation: community.ownerId === args.userId ? "owner" : "admin",
+      idempotency_key: args.idempotencyKey, deduped: false } };
+  await ctx.runMutation(internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
+    { ...scope, requestFingerprint, attemptToken: reservation.attemptToken, result: value });
+  return value;
+
+}
+
+export const approveFreshAdmissionInternal = internalMutation({
+  args: freshAdmissionArgs,
+  handler: (ctx, args): Promise<Record<string, any>> => decideFreshAdmission(ctx, args, "community.admission.approve"),
+});
+
+export const denyFreshAdmissionInternal = internalMutation({
+  args: freshAdmissionArgs,
+  handler: (ctx, args): Promise<Record<string, any>> => decideFreshAdmission(ctx, args, "community.admission.deny"),
 });
 
 export const listCommunityJoinRequests = query({

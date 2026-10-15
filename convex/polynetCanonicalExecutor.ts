@@ -66,6 +66,8 @@ const MEMORY_TYPES = new Set([
   "open_question",
 ]);
 const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
+const ADMISSION_DENY_OPERATION = "community.admission.deny";
+const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
 const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 
 const COMMUNITY_FUNNEL_UPDATE_OPERATION =
@@ -593,7 +595,7 @@ function capabilityDocument(args: {
     args.evidenceSurface === "community_funnel_builder" &&
     args.principalKind === "personal_agent" &&
     args.target.authority.canUseBuilderProjection;
-  const isAdmissionCapability = args.operation === ADMISSION_APPROVE_OPERATION &&
+  const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface !== "community_funnel_builder" &&
     args.principalKind !== "community_agent" && args.target.authority.canUseBuilderProjection;
   if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability) {
@@ -613,8 +615,11 @@ function capabilityDocument(args: {
       request_ref: "exact join-request reference from the pending queue",
       expected_created_at: "exact canonical ISO timestamp from the pending request",
       expected_updated_at: "exact canonical ISO timestamp from the pending request",
-      effects: ["grant_fresh_free_member_access", "record_approval", "existing_activation_workflows_and_access_email"],
-      forbidden_effects: ["paid_access", "restore_membership", "change_role", "deny", "bulk_decision"],
+      effects: args.operation === ADMISSION_APPROVE_OPERATION
+        ? ["grant_fresh_free_member_access", "record_approval", "existing_activation_workflows_and_access_email"]
+        : ["record_denial", "seven_day_reapplication_cooldown"],
+      forbidden_effects: ["paid_access", "restore_membership", "change_role", "bulk_decision",
+        ...(args.operation === ADMISSION_APPROVE_OPERATION ? ["deny"] : ["grant_access", "extend_existing_cooldown", "send_email", "run_workflow"])],
     };
   } else if (isFunnelCapability) {
     operationDefinition.input = {
@@ -887,8 +892,8 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
-      ...(capabilityDocument({ target, operation: ADMISSION_APPROVE_OPERATION,
-        evidenceSurface: args.evidenceSurface, principalKind: args.principalKind }) ? [ADMISSION_APPROVE_OPERATION] : []),
+      ...ADMISSION_OPERATIONS.filter(operation => capabilityDocument({ target, operation,
+        evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
       ok: true,
@@ -1910,7 +1915,7 @@ async function executeCanonicalCall(args: {
       "Operation is not discoverable or authorized for this community.",
     );
   }
-  if (operation === ADMISSION_APPROVE_OPERATION) {
+  if (ADMISSION_OPERATIONS.includes(operation)) {
     const match = typeof rawInput.request_ref === "string" ? /^join-request:([A-Za-z0-9]+)$/.exec(rawInput.request_ref) : null;
     const timestamp = (value: unknown): number | null => {
       if (typeof value !== "string" || value.length !== 24) return null;
@@ -1925,7 +1930,8 @@ async function executeCanonicalCall(args: {
       return canonicalError("invalid_tool_args", "An exact capability target and observed pending request reference/timestamps are required.");
     }
     try {
-      const value = await args.ctx.runMutation(internal.communityAdmin.approveFreshAdmissionInternal, {
+      const value = await args.ctx.runMutation(operation === ADMISSION_APPROVE_OPERATION
+        ? internal.communityAdmin.approveFreshAdmissionInternal : internal.communityAdmin.denyFreshAdmissionInternal, {
         userId: args.userId, communityId: target.communityId, principalKind: args.principalKind,
         requestId: match[1], expectedCreatedAt: createdAt, expectedUpdatedAt: updatedAt, idempotencyKey,
       });
@@ -1933,7 +1939,7 @@ async function executeCanonicalCall(args: {
         value.retryAfterMs ? { retry_after_ms: value.retryAfterMs } : undefined);
       return { ok: true, value };
     } catch {
-      return canonicalError("admission_request_unavailable", "Admission request not available or approval not authorized.");
+      return canonicalError("admission_request_unavailable", "Admission request not available or decision not authorized.");
     }
   }
   if (operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) {

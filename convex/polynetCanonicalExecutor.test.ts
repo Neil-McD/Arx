@@ -3,9 +3,9 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { completeCanonicalOperationReceiptInternal } from "./polynetCanonicalReceipts";
-import { ensurePendingCommunityJoinRequest } from "./communityJoinRequestCore";
+import { COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS, ensurePendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import * as verificationPilot from "./integrationVerificationPilot";
-afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
+afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers();});
 
 import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
@@ -615,6 +615,8 @@ test("self-context query rechecks access after path resolution and refuses direc
 });
 
 const modules = import.meta.glob([
+  "./communityPublic.ts",
+  "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
   "./communityIntegrationConnections.ts",
@@ -2982,14 +2984,14 @@ test("admission queue defaults to twenty and rejects write or decision operation
 
 
 const admissionApprovalPath = "/communities/canonical-community/capabilities/community.admission.approve.json";
-async function approvalFixture(t: ReturnType<typeof convexTest>) {
+async function approvalFixture(t: ReturnType<typeof convexTest>, operation = "approve") {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const f = await admissionFixture(t, 1);
   const row = await t.run(async ctx => {
     await ctx.db.patch(f.communityId, { entryPolicy: "approval" });
     return (await ctx.db.get(f.requests[0]))!;
   });
-  const input = { operation: "community.admission.approve", version: 1, target: admissionApprovalPath,
+  const input = { operation: `community.admission.${operation}`, version: 1, target: admissionApprovalPath.replace(".approve.", `.${operation}.`),
     input: { request_ref: `join-request:${row._id}`, expected_created_at: new Date(row.createdAt).toISOString(),
       expected_updated_at: new Date(row.updatedAt).toISOString() }, idempotency_key: "approve-one" };
   const call = (request: any = input, actor = { userId: f.ownerId, authSubject: f.ownerSubject }, principalKind: any = "external_mcp",
@@ -3027,8 +3029,8 @@ test.each(["owner", "admin"])("fresh admission %s grants once, stores a historic
   expect(await f.snapshot()).toEqual(revoked);
 });
 
-test.each(["member", "moderator", "applicant", "outsider", "community_agent"])("admission approval denies %s without any mutation", async mode => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t);
+test.each(["member", "moderator", "applicant", "outsider", "community_agent"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation denies $mode without any mutation", async ({ mode, operation }) => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   let actor = { userId: f.memberId, authSubject: f.memberSubject };
   if (mode === "moderator") await t.run(async ctx => {
     const row = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique())!;
@@ -3039,15 +3041,15 @@ test.each(["member", "moderator", "applicant", "outsider", "community_agent"])("
   if (mode === "community_agent") actor = { userId: f.ownerId, authSubject: f.ownerSubject };
   const before = await f.snapshot();
   expect(await f.call(f.input, actor, mode === "community_agent" ? mode : "external_mcp")).toMatchObject({ ok: false });
-  if (mode !== "community_agent") await expect(t.mutation(internal.communityAdmin.approveFreshAdmissionInternal, {
+  if (mode !== "community_agent") await expect(t.mutation((operation === "approve" ? internal.communityAdmin.approveFreshAdmissionInternal : internal.communityAdmin.denyFreshAdmissionInternal), {
     userId: actor.userId, communityId: f.communityId, principalKind: "external_mcp", requestId: f.row._id,
     expectedCreatedAt: f.row.createdAt, expectedUpdatedAt: f.row.updatedAt, idempotencyKey: "direct",
   })).rejects.toThrow();
   expect(await f.snapshot()).toEqual(before);
 });
 
-test.each(["paid", "open", "cancelled", "denied", "reopened", "duplicate", "legacy", "wrong-community", "blocked", "owner-applicant", "membership-active", "membership-inactive", "membership-admin", "membership-paid", "subscription"])("admission approval rejects %s without effects", async mode => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t);
+test.each(["paid", "open", "cancelled", "denied", "reopened", "duplicate", "legacy", "wrong-community", "blocked", "owner-applicant", "membership-active", "membership-inactive", "membership-admin", "membership-paid", "subscription"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation rejects $mode without effects", async ({ mode, operation }) => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   await t.run(async ctx => {
     if (["paid", "open"].includes(mode)) await ctx.db.patch(f.communityId, { entryPolicy: mode === "paid" ? "paid_subscription" : "open" });
     if (mode === "cancelled") await ctx.db.delete(f.row._id);
@@ -3074,8 +3076,8 @@ test.each(["paid", "open", "cancelled", "denied", "reopened", "duplicate", "lega
   const before = await f.snapshot(); expect(await f.call()).toMatchObject({ ok: false }); expect(await f.snapshot()).toEqual(before);
 });
 
-test.each(["role", "entitlement", "block", "funding", "archived"])("admission approval reauthorizes %s even for a completed receipt", async mode => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t);
+test.each(["role", "entitlement", "block", "funding", "archived"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation reauthorizes $mode even for a completed receipt", async ({ mode, operation }) => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   expect(await f.call(f.input, f.admin)).toMatchObject({ ok: true });
   await t.run(async ctx => {
     const membership = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.admin.userId)).unique())!;
@@ -3086,14 +3088,15 @@ test.each(["role", "entitlement", "block", "funding", "archived"])("admission ap
     if (mode === "archived") await ctx.db.patch(f.communityId, { lifecycleStatus: "archived" });
   });
   const before = await f.snapshot();
-  try { expect(await f.call(f.input, f.admin)).toMatchObject({ ok: false }); } catch (e) { if (mode !== "archived") throw e; }
-  await expect(t.mutation(internal.communityAdmin.approveFreshAdmissionInternal, { userId: f.admin.userId, communityId: f.communityId,
+  if (mode === "archived") await expect(f.call(f.input, f.admin)).rejects.toThrow("community_archived");
+  else expect(await f.call(f.input, f.admin)).toMatchObject({ ok: false });
+  await expect(t.mutation((operation === "approve" ? internal.communityAdmin.approveFreshAdmissionInternal : internal.communityAdmin.denyFreshAdmissionInternal), { userId: f.admin.userId, communityId: f.communityId,
     principalKind: "external_mcp", requestId: f.row._id, expectedCreatedAt: f.row.createdAt, expectedUpdatedAt: f.row.updatedAt, idempotencyKey: "approve-one" })).rejects.toThrow();
   expect(await f.snapshot()).toEqual(before);
 });
 
-test("admission input is exact and a key cannot be reused for different observations", async () => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t);
+test.each(["approve", "deny"])("admission input is exact and a key cannot be reused for different observations (%s)", async operation => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   for (const input of [{ ...f.input.input, role: "admin" }, { ...f.input.input, request_ref: "user:applicant-0" },
     { ...f.input.input, expected_created_at: "1970-01-01" }, { ...f.input.input, expected_updated_at: null }])
     expect(await f.call({ ...f.input, input })).toMatchObject({ ok: false, code: "invalid_tool_args" });
@@ -3104,8 +3107,8 @@ test("admission input is exact and a key cannot be reused for different observat
   expect(await f.snapshot()).toEqual(before);
 });
 
-test("admission and receipt roll back together when completion fails", async () => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t); const before = await f.snapshot();
+test.each(["approve", "deny"])("admission and receipt roll back together when completion fails (%s)", async operation => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation); const before = await f.snapshot();
   const handler = vi.spyOn(completeCanonicalOperationReceiptInternal as any, "_handler").mockImplementationOnce(async () => { throw new Error("simulated_completion_failure"); });
   expect(await f.call()).toMatchObject({ ok: false });
   expect(await f.snapshot()).toEqual(before); handler.mockRestore();
@@ -3126,8 +3129,8 @@ test.each(["same-key", "different-key", "first-party-approve", "first-party-deny
   if (mode === "same-key") { expect(results.every(r => r.status === "fulfilled" && (r.value as any).ok === true)).toBe(true); expect(state.receipts).toHaveLength(1); }
 });
 
-test("admission first response can be discarded after commit and safely recovered", async () => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t);
+test.each(["approve", "deny"])("admission first response can be discarded after commit and safely recovered (%s)", async operation => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   const ctx = executionContext(t.withIdentity({ subject: f.ownerSubject }));
   expect(await f.call(f.input, undefined, "external_mcp", { ...ctx, runMutation: async (ref: any, args: any) => {
     await ctx.runMutation(ref, args); throw new Error("discarded_committed_response");
@@ -3137,16 +3140,115 @@ test("admission first response can be discarded after commit and safely recovere
   expect(await f.snapshot()).toEqual(committed);
 });
 
-test("admission capability is discoverable only by current human builders", async () => {
-  const t = convexTest(schema, modules); const f = await approvalFixture(t);
+test.each(["approve", "deny"])("admission capability is discoverable only by current human builders (%s)", async operation => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   for (const actor of [{ userId: f.ownerId, authSubject: f.ownerSubject }, f.admin, { userId: f.memberId, authSubject: f.memberSubject }]) {
     const execute = (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({
       ctx: executionContext(t.withIdentity({ subject: actor.authSubject })), ...actor, principalKind: "external_mcp",
       evidenceSurface: "external_mcp", toolName, input: { path } });
     const list = await execute("polynet_list", "/communities/canonical-community/capabilities/");
-    const read = await execute("polynet_read", admissionApprovalPath);
+    const read = await execute("polynet_read", admissionApprovalPath.replace(".approve.", `.${operation}.`));
     const permitted = actor.userId !== f.memberId;
-    expect(JSON.stringify(list).includes("community.admission.approve")).toBe(permitted);
+    expect(JSON.stringify(list).includes(`community.admission.${operation}`)).toBe(permitted);
     expect(read.ok).toBe(permitted);
   }
+});
+
+test.each(["owner", "admin"])("denial by %s preserves one cooldown and has no activation effects", async role => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, "deny");
+  const before = await f.snapshot();
+  const actor = role === "owner" ? undefined : f.admin;
+  const result = await f.call(f.input, actor);
+  expect(result).toMatchObject({ ok: true, value: { operation: "community.admission.deny", deduped: false,
+    result: { status: "denied", request_ref: `join-request:${f.row._id}` } } });
+  const denied = await f.snapshot();
+  expect(denied.request).toMatchObject({ status: "denied", createdAt: f.row.createdAt });
+  expect(denied.request!.reapplyAt! - denied.request!.deniedAt!).toBe(COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS);
+  expect(denied.audit).toHaveLength(1); expect(denied.audit[0].eventType).toBe("community_join_request_denied");
+  expect(denied.receipts).toHaveLength(1); expect(denied.receipts[0].status).toBe("completed");
+  for (const key of ["memberships", "email", "activity", "scheduled", "timers"] as const)
+    expect(denied[key]).toEqual(before[key]);
+  expect(await f.call(f.input, actor)).toMatchObject({ ok: true, value: { deduped: true,
+    result: (result as any).value.result } });
+  expect(await f.snapshot()).toEqual(denied);
+  expect(await f.call({ ...f.input, idempotency_key: "new-key" }, actor)).toMatchObject({ ok: false });
+  expect(await f.call(f.input, role === "owner" ? f.admin : { userId: f.ownerId, authSubject: f.ownerSubject })).toMatchObject({ ok: false });
+  expect(await f.snapshot()).toEqual(denied);
+});
+
+test.each(["approve", "deny"])("%s and opposite operation cannot share an idempotency key", async operation => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
+  expect(await f.call()).toMatchObject({ ok: true });
+  const before = await f.snapshot(); const opposite = operation === "deny" ? "approve" : "deny";
+  expect(await f.call({ ...f.input, operation: `community.admission.${opposite}`,
+    target: admissionApprovalPath.replace(".approve.", `.${opposite}.`) })).toMatchObject({ ok: false, code: "idempotency_key_conflict" });
+  expect(await f.snapshot()).toEqual(before);
+});
+
+test.each([-1, 0, 1])("public reapplication at expiry %s ms preserves attempt and historical-retry boundaries", async offset => {
+  // Advance the actual public domain clock; never shorten the seven-day policy.
+  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-15T12:00:00.000Z"));
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, "deny");
+  await t.run(async ctx => {
+    await ctx.db.patch(f.row.userId, { handle: "applicant", normalizedHandle: "applicant" });
+    await ctx.db.insert("userProfileDetails", { userId: f.row.userId, displayName: "Applicant",
+      avatarUrl: "https://example.com/avatar.png", onboardingCompletedAt: 1, createdAt: 1, updatedAt: 1 });
+    for (const d of PLATFORM_LEGAL_DOCUMENTS) await ctx.db.insert("legalAcceptances", {
+      userId: f.row.userId, documentKey: d.key, documentVersion: d.version, acceptedAt: 1, source: "test", createdAt: 1 });
+  });
+  const applicant = t.withIdentity({ subject: "applicant-0" });
+  const join = () => applicant.mutation(api.communityPublic.joinPublicCommunityBySlug, { communitySlug: "canonical-community" });
+  const original = await f.call(); expect(original).toMatchObject({ ok: true });
+  const denied = await f.snapshot(); const expiry = denied.request!.reapplyAt!;
+  const access = await applicant.query(api.communityAccessQueries.getMyCommunityAccessBySlug, { communitySlug: "canonical-community" });
+  expect(access).toMatchObject({ can_enter_community: false, join_request_status: "denied",
+    join_request_reapply_at: new Date(expiry).toISOString() });
+  vi.setSystemTime(expiry - 1);
+  for (let i = 0; i < 2; i++) expect(await join()).toMatchObject({ outcome: "approval_denied", reapply_at: new Date(expiry).toISOString() });
+  expect(await applicant.mutation(api.communityPublic.cancelMyJoinRequestBySlug, { communitySlug: "canonical-community" }))
+    .toMatchObject({ outcome: "ignored", status: "denied" });
+  expect(await f.snapshot()).toEqual(denied);
+  vi.setSystemTime(expiry + offset);
+  // Time passing alone cannot reopen a request or grant access.
+  expect(await f.snapshot()).toEqual(denied);
+  expect(await join()).toMatchObject({ outcome: offset < 0 ? "approval_denied" : "approval_pending" });
+  if (offset < 0) { expect(await f.snapshot()).toEqual(denied); return; }
+  const reopened = await f.snapshot();
+  expect(reopened.request).toMatchObject({ _id: f.row._id, status: "pending", createdAt: expiry + offset, updatedAt: expiry + offset });
+  expect(reopened.request!.deniedAt).toBeUndefined(); expect(reopened.request!.reapplyAt).toBeUndefined();
+  expect(await f.call()).toMatchObject({ ok: true, value: { deduped: true, result: (original as any).value.result } });
+  for (const operation of ["approve", "deny"]) expect(await f.call({ ...f.input,
+    operation: `community.admission.${operation}`, target: admissionApprovalPath.replace(".approve.", `.${operation}.`),
+    idempotency_key: `stale-${operation}` })).toMatchObject({ ok: false });
+  expect(await f.snapshot()).toEqual(reopened);
+  expect(await join()).toMatchObject({ outcome: "approval_pending" });
+  const fresh = { ...f.input, idempotency_key: "second-attempt", input: { ...f.input.input,
+    expected_created_at: new Date(reopened.request!.createdAt).toISOString(),
+    expected_updated_at: new Date(reopened.request!.updatedAt).toISOString() } };
+  expect(await f.call(fresh)).toMatchObject({ ok: true, value: { deduped: false, result: { status: "denied" } } });
+  const second = await f.snapshot(); expect(second.audit).toHaveLength(2);
+  expect(new Set(second.audit.map(x => x.eventKey)).size).toBe(2);
+  expect(second.request!.reapplyAt).toBe(expiry + offset + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS);
+  expect(second.memberships).toHaveLength(0); expect(second.email).toEqual(denied.email);
+  expect(second.activity).toEqual(denied.activity); expect(second.timers).toEqual(denied.timers);
+});
+
+test.each(["same-key", "different-key", "external-approve", "first-party-approve", "first-party-deny", "cancel"])("concurrent denial versus %s preserves one outcome", async mode => {
+  const t = convexTest(schema, modules); const f = await approvalFixture(t, "deny");
+  const owner = t.withIdentity({ subject: f.ownerSubject });
+  const competitor = mode === "same-key" ? () => f.call() : mode === "different-key" ? () => f.call({ ...f.input, idempotency_key: "other" }) :
+    mode === "external-approve" ? () => f.call({ ...f.input, operation: "community.admission.approve", target: admissionApprovalPath, idempotency_key: "approve" }) :
+    mode === "first-party-approve" ? () => owner.mutation(api.communityAdmin.approveCommunityJoinRequest, { requestId: f.row._id }) :
+    mode === "first-party-deny" ? () => owner.mutation(api.communityAdmin.denyCommunityJoinRequest, { requestId: f.row._id }) :
+    () => t.withIdentity({ subject: "applicant-0" }).mutation(api.communityPublic.cancelMyJoinRequestBySlug, { communitySlug: "canonical-community" });
+  const results = await Promise.allSettled([f.call(), competitor()]); const state = await f.snapshot();
+  expect(state.audit.length).toBeLessThanOrEqual(1); expect(state.receipts.length).toBeLessThanOrEqual(1);
+  if (state.request?.status === "denied") {
+    expect(state.memberships).toHaveLength(0); expect(state.email).toHaveLength(0); expect(state.activity).toHaveLength(0);
+    expect(state.request.reapplyAt! - state.request.deniedAt!).toBe(COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS);
+  } else {
+    expect(state.request).toBeNull(); expect(state.memberships.length).toBeLessThanOrEqual(1);
+    expect(state.email.length).toBeLessThanOrEqual(1); expect(state.activity.length).toBeLessThanOrEqual(1);
+  }
+  if (mode === "same-key") expect(results.every(r => r.status === "fulfilled" && (r.value as any).ok)).toBe(true);
 });

@@ -151,6 +151,20 @@ approval capability below does not make the queue writable.
   access, prior membership restoration, role changes, denial and bulk decisions
   are excluded. Members, moderators and community agents cannot invoke it.
 
+- human builder (current owner/admin): `community.admission.deny`, version 1.
+  Uses the same exact pending request reference and observed timestamps as
+  approval, with the same narrow fresh/free eligibility and authority lane.
+  Atomically records denial, a seven-day server-clock reapplication deadline,
+  attempt-specific critical audit and completed receipt. It grants no access
+  and triggers no activation, email or workflow. Replays return the historical
+  decision without extending cooldown or denying a later application.
+  Applicant status and reapplication use the existing authenticated public
+  access projection and join operation, not new MCP commands. Before expiry,
+  join is denied and cancellation preserves the denied row. At or after expiry,
+  an explicit join reopens the same ID with new creation/update observations.
+  Old observations cannot approve or deny this new attempt. First-party ID-only
+  decision RPC compatibility remains separate from this attempt-bound contract.
+
 Builder resource changesets are terminally decided only through the authenticated
 product Apply or Reject controls. They are not agent-callable capabilities.
 
@@ -163,9 +177,9 @@ effect, rejects reuse with a different request, and persists the completed
 result. A same-request retry returns the original result with
 `deduped: true`. Domain mutations are independently retry safe so a process
 failure between the domain effect and receipt completion can be recovered.
-Fresh admission approval instead reserves, grants and completes its receipt in
-one domain transaction. Current manager authority is checked before both new
-approval and receipt replay. A lost response replays the historical decision;
+Fresh admission decisions instead reserve, apply their domain effects and complete
+their receipt in one domain transaction. Current manager authority is checked
+before both new decisions and receipt replay. A lost response replays the historical decision;
 it does not assert present entitlement or email delivery and cannot restore
 access after leave/revocation. Stale or reopened applications require a new
 observed request and cannot be approved with an older timestamp pair.
