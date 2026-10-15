@@ -169,6 +169,14 @@ approval capability below does not make the queue writable.
   historical replay. External submission means authorized on behalf of the member,
   not unaided human authorship.
 
+Builder decisions (`community.workflow.approve_milestone`,
+`community.admission.approve` and `community.admission.deny`) are discoverable
+and executable only through the official external MCP (`external_mcp`), where the
+founder operates the harness directly. The native personal agent cannot discover
+or execute them: it reads member-authored evidence and has no per-call human
+confirmation, so a prompt in that evidence must not be able to grant access or
+advance a member. Mutation validators also reject any other principal.
+
 - human builder (current owner/admin): `community.workflow.approve_milestone`,
   version 1. Read the private member dossier's `workflow.approval` observation;
   input is exactly `membership_ref` (`membership:<id>`),

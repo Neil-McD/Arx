@@ -34,8 +34,11 @@ export default async function handler(req, res) {
         payload: { session_id: sessionId },
         signal: controller.signal,
       });
-      const payload = response.ok ? await response.json() : null;
-      if (!response.ok || payload?.ok !== true) throw new Error("logout_unconfirmed");
+      const payload = response.ok || response.status === 401 ? await response.json() : null;
+      // A session the bridge reports as permanently invalid cannot authenticate again,
+      // matching bootstrap; other unauthorized responses remain unconfirmed.
+      const sessionInvalid = response.status === 401 && payload?.code === "auth_session_invalid";
+      if (!sessionInvalid && (!response.ok || payload?.ok !== true)) throw new Error("logout_unconfirmed");
     } catch {
       // Keep the opaque cookie so retry can resolve an uncertain outcome.
       sendJson(res, 503, { ok: false, error: "logout_unconfirmed", message: "Sign out couldn't be confirmed. Try again." });

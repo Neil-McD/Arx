@@ -1045,7 +1045,7 @@ export const approveBuilderMemberMilestone = mutation({
 // Current authority, exact observed decision, transition and receipt share one transaction.
 export const approveObservedMilestoneInternal = internalMutation({ args: {
   communityId: v.id("communities"), userId: v.id("users"), membershipId: v.id("communityMemberships"),
-  principalKind: v.union(v.literal("personal_agent"), v.literal("external_mcp")),
+  principalKind: v.literal("external_mcp"),
   expectedActivationSequence: v.number(), reviewRef: v.string(), idempotencyKey: v.string(),
 }, handler: async (ctx, args): Promise<Record<string, any>> => {
   const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });

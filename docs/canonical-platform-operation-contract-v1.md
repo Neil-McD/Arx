@@ -67,6 +67,8 @@ The executor derives authority for every call:
 - owner/admin with current resource-management permission: builder lane;
 - moderator/member: member lane;
 - community-owned agent: fixed member lane within its mounted community;
+- builder decisions that grant access or advance members (admission and
+  milestone approval): official external MCP only, never the native personal agent;
 - missing or revoked entitlement: no access.
 
 Member and builder lanes can participate in chat. Builder-only

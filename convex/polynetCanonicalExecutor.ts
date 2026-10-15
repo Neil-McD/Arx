@@ -617,13 +617,16 @@ function capabilityDocument(args: {
     args.evidenceSurface === "community_funnel_builder" &&
     args.principalKind === "personal_agent" &&
     args.target.authority.canUseBuilderProjection;
+  // Builder decisions run only from a harness the founder operates directly. The native
+  // personal agent reads member-authored evidence and has no per-call human confirmation.
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
-    args.evidenceSurface !== "community_funnel_builder" &&
-    args.principalKind !== "community_agent" && args.target.authority.canUseBuilderProjection;
+    args.evidenceSurface === "external_mcp" &&
+    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
   const isFormCapability = args.operation === FORM_SUBMIT_OPERATION &&
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
   const isWorkflowApprovalCapability = args.operation === APPROVE_MILESTONE_OPERATION &&
-    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent" && args.target.authority.canUseBuilderProjection;
+    args.evidenceSurface === "external_mcp" &&
+    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
   if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability) {
     return null;
   }
@@ -1990,6 +1993,9 @@ async function executeCanonicalCall(args: {
     );
   }
   if (operation === APPROVE_MILESTONE_OPERATION) {
+    if (args.principalKind !== "external_mcp") {
+      return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+    }
     const member = typeof rawInput.membership_ref === "string" ? /^membership:([A-Za-z0-9]+)$/.exec(rawInput.membership_ref) : null;
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !member ||
         !Number.isSafeInteger(rawInput.expected_activation_sequence) || (rawInput.expected_activation_sequence as number) < 0 ||
@@ -2030,6 +2036,9 @@ async function executeCanonicalCall(args: {
     }
   }
   if (ADMISSION_OPERATIONS.includes(operation)) {
+    if (args.principalKind !== "external_mcp") {
+      return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+    }
     const match = typeof rawInput.request_ref === "string" ? /^join-request:([A-Za-z0-9]+)$/.exec(rawInput.request_ref) : null;
     const timestamp = (value: unknown): number | null => {
       if (typeof value !== "string" || value.length !== 24) return null;

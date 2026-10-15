@@ -493,6 +493,7 @@ test("an invalid replacement chain cannot report confirmed logout", async () => 
   const id=await insertSessionFixture(t,{sessionId:"cycle",replacedBySessionId:"cycle"});
   const before=await t.run(ctx=>ctx.db.get(id));
   const result=await t.action((internal as any).authSessions.logoutAuthSessionInternal,{sessionId:"cycle"});
-  expect(result).toEqual({status:"transient_failure",reason:"auth_session_chain_invalid"});
+  expect(result).toEqual({status:"terminal_failure",reason:"auth_session_chain_invalid"});
+  expect((await t.action((internal as any).authSessions.bootstrapAuthSessionInternal,{sessionId:"cycle"})).status).toBe("terminal_failure");
   expect(await t.run(ctx=>ctx.db.get(id))).toEqual(before);
 });

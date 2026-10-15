@@ -3156,6 +3156,16 @@ test.each(["approve", "deny"])("admission capability is discoverable only by cur
     expect(JSON.stringify(list).includes(`community.admission.${operation}`)).toBe(permitted);
     expect(read.ok).toBe(permitted);
   }
+  const before = await f.snapshot();
+  const personalAgent = { ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), userId: f.ownerId,
+    authSubject: f.ownerSubject, principalKind: "personal_agent" as const, evidenceSurface: "member_agent_dock" as const };
+  const inventory = await executePolynetCanonicalTool({ ...personalAgent, toolName: "polynet_list",
+    input: { path: "/communities/canonical-community/capabilities/" } });
+  expect(inventory.ok).toBe(true);
+  expect(JSON.stringify(inventory).includes(`community.admission.${operation}`)).toBe(false);
+  expect(await executePolynetCanonicalTool({ ...personalAgent, toolName: "polynet_call", input: f.input }))
+    .toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await f.snapshot()).toEqual(before);
 });
 
 test.each(["owner", "admin"])("denial by %s preserves one cooldown and has no activation effects", async role => {

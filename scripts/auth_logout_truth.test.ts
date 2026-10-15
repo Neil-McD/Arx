@@ -38,6 +38,18 @@ test.each(["503", "401", "bad-json", "false-success", "network"])("API retains r
   expect(r.headers.has("Set-Cookie")).toBe(false);
 });
 
+test("API clears the cookie only when the bridge reports a permanently invalid session", async () => {
+  setup(); const r=reply();
+  vi.stubGlobal("fetch", vi.fn(async () => json({ ok:false, code:"auth_session_invalid", error:"auth_session_invalid" }, 401)));
+  await logoutHandler(request,r.res);
+  expect(r.res.statusCode).toBe(200); expect(r.body()).toEqual({ok:true});
+  expect(String(r.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+  const unauthorized=reply();
+  vi.stubGlobal("fetch", vi.fn(async () => json({ ok:false, code:"auth_bridge_unauthorized" }, 401)));
+  await logoutHandler(request,unauthorized.res);
+  expect(unauthorized.res.statusCode).toBe(503); expect(unauthorized.headers.has("Set-Cookie")).toBe(false);
+});
+
 test("API timeout fails explicitly and remains retryable", async () => {
   setup(); vi.useFakeTimers(); const r=reply();
   vi.stubGlobal("fetch", (_url: string, init: RequestInit) => new Promise((_resolve,reject) => init.signal!.addEventListener("abort",()=>reject(Error("aborted")))));

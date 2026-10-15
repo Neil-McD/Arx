@@ -1323,7 +1323,7 @@ export const readPendingAdmissionRequestInternal = internalQuery({
 // Reservation, domain effects and completed result share one transaction.
 const freshAdmissionArgs = {
   userId: v.id("users"), communityId: v.id("communities"),
-  principalKind: v.union(v.literal("personal_agent"), v.literal("external_mcp")),
+  principalKind: v.literal("external_mcp"),
   requestId: v.id("communityJoinRequests"),
   expectedCreatedAt: v.number(), expectedUpdatedAt: v.number(),
   idempotencyKey: v.string(),
@@ -1331,7 +1331,7 @@ const freshAdmissionArgs = {
 
 type FreshAdmissionArgs = {
   userId: Id<"users">; communityId: Id<"communities">;
-  principalKind: "personal_agent" | "external_mcp"; requestId: Id<"communityJoinRequests">;
+  principalKind: "external_mcp"; requestId: Id<"communityJoinRequests">;
   expectedCreatedAt: number; expectedUpdatedAt: number; idempotencyKey: string;
 };
 

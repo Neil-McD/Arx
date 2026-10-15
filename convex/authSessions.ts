@@ -1667,9 +1667,10 @@ export const logoutAuthSessionInternal = internalAction({
           reason: "auth_session_missing" | "auth_session_chain_invalid";
         };
     if (!resolved.ok) {
+      // An invalid chain is permanent and unusable, as bootstrap and refresh report.
       return resolved.reason === "auth_session_missing"
         ? { status: "ok" as const }
-        : { status: "transient_failure" as const, reason: resolved.reason };
+        : { status: "terminal_failure" as const, reason: resolved.reason };
     }
     const row = resolved.row;
     if (typeof row.revokedAt === "number") {
