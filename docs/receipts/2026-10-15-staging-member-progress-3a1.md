@@ -15,7 +15,7 @@
 | Backend | Explicit `convex dev --once --typecheck enable --env-file /tmp/polynet-package-1-staging.env`, exit 0; `dev:quick-porcupine-949` |
 | Backend source tree | `3c578d333a83a8cf1d5da5bff5aec970814fda28`; clean local deployment provenance, not remote commit attestation |
 | Staging web | Successful [Git staging deployment](https://polynet-staging-muex0nyz5-neil-mcds-projects.vercel.app), GitHub deployment `7101214564` |
-| Serving asset | `/assets/index-lP2dpUN2.js`; SHA-256 `c316b1c17163b3f52bb4aae6d3554f624249296489ca4a6c9922e1df3a39509b`; both staging Convex hosts embedded |
+| Serving asset | `/assets/index-BbfJWUDb.js`; SHA-256 `b24b7249dfe006344ff1a4b898e8c66981027c30c08ce306e71330336f08edae`; both staging Convex hosts embedded |
 | Canonical main | `0a100cfb544851ab06da25f93d8ad549db917ee4`, unchanged |
 | Production web | `91d28dc2c986ef88a8a507a269db710d6d28d878`, unchanged |
 

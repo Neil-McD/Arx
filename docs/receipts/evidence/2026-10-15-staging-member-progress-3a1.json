@@ -8,8 +8,8 @@
     "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
     "git_deployment_id": 7101214564,
     "git_deployment_url": "https://polynet-staging-muex0nyz5-neil-mcds-projects.vercel.app",
-    "serving_asset": "/assets/index-lP2dpUN2.js",
-    "serving_asset_sha256": "c316b1c17163b3f52bb4aae6d3554f624249296489ca4a6c9922e1df3a39509b",
+    "serving_asset": "/assets/index-BbfJWUDb.js",
+    "serving_asset_sha256": "b24b7249dfe006344ff1a4b898e8c66981027c30c08ce306e71330336f08edae",
     "staging_cloud_and_site_embedded": true
   },
   "production": {
