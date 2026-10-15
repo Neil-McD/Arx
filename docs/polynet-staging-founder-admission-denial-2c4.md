@@ -3,7 +3,11 @@
 Status: approved and implementation in progress October 15, 2026.
 Production remains untouched. Step 1 requirements were reconciled before work;
 Step 2 excluded unnecessary infrastructure. Step 3 verifies the remaining
-bounded adapter. Acceptance is pending the candidate gate and live staging proof.
+bounded adapter. The initial clean candidate `16d288bcf` passed all 15 gate
+steps (1,777 tests / 192 files, both audits zero) and deployed to the explicit
+staging backend. Its feature preview was canceled and no staging-branch web
+build appeared; this documentation-only candidate advances the Git staging
+release without changing backend source. Live acceptance remains pending.
 
 ## 2C3 review and baseline
 
