@@ -61,6 +61,13 @@ Historical receipts retain their original source and deployment boundaries.
 | 6. Intelligence usefulness | Partial: 4A1 consumption/reporting complete | Fresh source compilation/lifecycle (4A2), then governed outcome application/usefulness (4A3) |
 | 7. Reference UI and distribution | Open | Founder journey parity before UI deletion; distribution follows demonstrated value |
 
+Next slice: [4A2 fresh-source compilation and citation plan](polynet-staging-source-compilation-4a2.md).
+Planning found a preexisting standalone compiler-admission proof failure: its
+mock interaction refs do not satisfy current source checks, and the check is not
+in the release gate. Repair source-backed behavioral coverage before live 4A2.
+This new finding does not rewrite the successful integration checkpoint or imply
+fresh compilation acceptance.
+
 ## Accepted slices and their proof limits
 
 | Slice / receipt | What the acceptance establishes | What remains outside it |
@@ -119,10 +126,11 @@ automation phase is claimed.
 
 ## Next bounded work
 
-1. Plan **4A2**: one fresh eligible interaction or published resource -> bounded
-   digest -> actual governed retention/citation -> authorized retrieval and source
-   lifecycle. Specify identities, fixture, inference/cost bounds and cleanup
-   before execution. Existing retained memory is not the fresh-source proof.
+1. Review the proposed **4A2** plan linked above: repair the stale admission proof,
+   then one fresh interaction -> bounded digest -> claimed Steward retention/
+   citation -> authorized retrieval and source lifecycle. It specifies identities,
+   fixture, a single funded run with the existing $1 reservation ceiling, and
+   cleanup. No 4A2 live write or inference has been performed.
 2. Reassess, then plan **4A3**: observed outcome -> governed application/metabolism
    -> correct future context. Synthetic success is not validated learning.
 3. Close the remaining community-operation gaps individually; prove a complete
