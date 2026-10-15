@@ -1,7 +1,9 @@
-# Slice 3A2 proposal: one founder-approved evidence-backed progress decision
+# Slice 3A2: one founder-approved evidence-backed progress decision
 
-Status: implementation authorized October 15, 2026. The approved scope below
-bounds implementation and staging proof. Production remains untouched.
+Status: bounded staging acceptance passed October 15, 2026.
+[Receipt](receipts/2026-10-15-staging-founder-progress-approval-3a2.md) and
+[structured evidence](receipts/evidence/2026-10-15-staging-founder-progress-approval-3a2.json).
+The approved scope below was implemented and verified. Production remained untouched.
 
 ## 3A1 review and present ground truth
 
@@ -218,8 +220,8 @@ membership pairs, cross-member/community, mounted community-agent and moderator
 controls, complete/truncated scans, first-party compatibility, same/new-key races,
 receipt rollback including scheduled work, and replay after movement.
 
-Implementation would branch `codex/staging-founder-progress-approval-3a2` from
-the reviewed 3A1 source in the attached staging worktree. Deploy only the explicit
+Implementation branched `codex/staging-founder-progress-approval-3a2` from
+the reviewed 3A1 source in the attached staging worktree. Release only the explicit
 staging Convex selector and Git staging; verify the served candidate/backend
 provenance, push staging before the feature branch, and use a stacked draft PR.
 No deployment or runtime change is authorized by this planning document itself.
