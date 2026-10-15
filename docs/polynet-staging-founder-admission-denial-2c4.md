@@ -1,13 +1,12 @@
 # Slice 2C4 proposal: denial, cooldown and reapplication
 
-Status: approved and implementation in progress October 15, 2026.
-Production remains untouched. Step 1 requirements were reconciled before work;
-Step 2 excluded unnecessary infrastructure. Step 3 verifies the remaining
-bounded adapter. The initial clean candidate `16d288bcf` passed all 15 gate
-steps (1,777 tests / 192 files, both audits zero) and deployed to the explicit
-staging backend. Its feature preview was canceled and no staging-branch web
-build appeared; this documentation-only candidate advances the Git staging
-release without changing backend source. Live acceptance remains pending.
+Status: **scoped staging acceptance passed October 15, 2026**. One live denial,
+discarded-response recovery after native process restart, unchanged cooldown,
+public re-entry denial and cleanup are verified. Full seven-day expiry and
+same-ID reapplication are controlled-time local proof; elapsed live reapplication
+remains unobserved. See the [execution receipt](receipts/2026-10-15-staging-founder-admission-denial-2c4.md).
+Production is untouched. Step 1 requirements were reconciled; Step 2 excluded
+unnecessary infrastructure; Step 3 verified the remaining bounded adapter.
 
 ## 2C3 review and baseline
 
