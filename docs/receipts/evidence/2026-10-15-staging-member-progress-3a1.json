@@ -1,13 +1,13 @@
 {
   "status": "bounded_staging_acceptance_passed",
   "runtime": {
-    "commit": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+    "commit": "7d039f038fe36fca866a9ec11b189274d0b20e90",
     "convex_deployment": "dev:quick-porcupine-949",
-    "backend_source_tree": "19c862be2e0cd48f7bec8421ce37e0afebad3daf",
+    "backend_source_tree": "3c578d333a83a8cf1d5da5bff5aec970814fda28",
     "backend_deploy_exit": 0,
     "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
-    "git_deployment_id": 7100968324,
-    "git_deployment_url": "https://polynet-staging-r0q5bk7js-neil-mcds-projects.vercel.app",
+    "git_deployment_id": 7101214564,
+    "git_deployment_url": "https://polynet-staging-muex0nyz5-neil-mcds-projects.vercel.app",
     "serving_asset": "/assets/index-lP2dpUN2.js",
     "serving_asset_sha256": "c316b1c17163b3f52bb4aae6d3554f624249296489ca4a6c9922e1df3a39509b",
     "staging_cloud_and_site_embedded": true
@@ -21,9 +21,9 @@
   "validation": {
     "focused_tests": 379,
     "focused_files": 8,
-    "full_tests": 1805,
+    "full_tests": 1806,
     "full_files": 193,
-    "added_tests": 28,
+    "added_tests": 29,
     "typechecks": [
       "convex",
       "web"
@@ -38,6 +38,175 @@
       "web": 0
     },
     "release_gate": {
+      "schemaVersion": 1,
+      "gateId": "polynet_release_gate_v1",
+      "mode": "ci",
+      "status": "passed",
+      "startedAt": "2026-10-15T18:37:21.571Z",
+      "finishedAt": "2026-10-15T18:38:57.164Z",
+      "durationMs": 95593,
+      "candidate": {
+        "expectedSha": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+        "headSha": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+        "buildId": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+        "clean": true,
+        "kind": "commit"
+      },
+      "steps": [
+        {
+          "id": "candidate_identity",
+          "label": "Candidate identity",
+          "command": "git identity and whitespace checks",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:21.572Z",
+          "finishedAt": "2026-10-15T18:37:21.609Z",
+          "durationMs": 37,
+          "failure": null
+        },
+        {
+          "id": "convex_generated_surface",
+          "label": "Convex generated-surface sanity",
+          "command": "validate checked-in convex/_generated files and source targets",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:21.609Z",
+          "finishedAt": "2026-10-15T18:37:21.646Z",
+          "durationMs": 37,
+          "failure": null
+        },
+        {
+          "id": "convex_typecheck",
+          "label": "Convex typecheck",
+          "command": "npx tsc --noEmit -p convex/tsconfig.json --pretty false",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:21.646Z",
+          "finishedAt": "2026-10-15T18:37:32.025Z",
+          "durationMs": 10379,
+          "failure": null
+        },
+        {
+          "id": "web_typecheck",
+          "label": "Web typecheck",
+          "command": "npm run check:web-typecheck",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:32.025Z",
+          "finishedAt": "2026-10-15T18:37:43.153Z",
+          "durationMs": 11128,
+          "failure": null
+        },
+        {
+          "id": "web_build",
+          "label": "Production web build",
+          "command": "npm run build",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:43.153Z",
+          "finishedAt": "2026-10-15T18:37:43.909Z",
+          "durationMs": 756,
+          "failure": null
+        },
+        {
+          "id": "web_build_identity",
+          "label": "Built web identity",
+          "command": "apps/web/dist/version.json buildId equals candidate build identity",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:43.909Z",
+          "finishedAt": "2026-10-15T18:37:43.909Z",
+          "durationMs": 0,
+          "failure": null
+        },
+        {
+          "id": "web_bundle_budget",
+          "label": "Web bundle budget",
+          "command": "npm run check:web-bundle-budget",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:43.909Z",
+          "finishedAt": "2026-10-15T18:37:44.079Z",
+          "durationMs": 170,
+          "failure": null
+        },
+        {
+          "id": "media_reading_browser",
+          "label": "Media reading browser proof",
+          "command": "npm run check:media-reading-browser-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:37:44.079Z",
+          "finishedAt": "2026-10-15T18:38:21.649Z",
+          "durationMs": 37570,
+          "failure": null
+        },
+        {
+          "id": "app_theme_contract",
+          "label": "App theme contract",
+          "command": "npm run check:app-theme-contract-proof",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:21.649Z",
+          "finishedAt": "2026-10-15T18:38:21.795Z",
+          "durationMs": 146,
+          "failure": null
+        },
+        {
+          "id": "loading_correctness",
+          "label": "Account-scoped loading, profile drafts, and avatar transitions",
+          "command": "npm run check:loading-correctness",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:21.795Z",
+          "finishedAt": "2026-10-15T18:38:27.982Z",
+          "durationMs": 6187,
+          "failure": null
+        },
+        {
+          "id": "convex_cut_guard",
+          "label": "Convex cut guard",
+          "command": "npm run check:convex-cut-runtime-guard",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:27.982Z",
+          "finishedAt": "2026-10-15T18:38:28.098Z",
+          "durationMs": 116,
+          "failure": null
+        },
+        {
+          "id": "foundation_baseline",
+          "label": "Foundation invariants and behavior",
+          "command": "npm run check:foundation-baseline",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:28.098Z",
+          "finishedAt": "2026-10-15T18:38:56.195Z",
+          "durationMs": 28097,
+          "failure": null
+        },
+        {
+          "id": "dependency_security_interlock",
+          "label": "Dependency security compatibility",
+          "command": "npm run check:dependency-security-interlock",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:56.195Z",
+          "finishedAt": "2026-10-15T18:38:56.293Z",
+          "durationMs": 98,
+          "failure": null
+        },
+        {
+          "id": "root_dependency_audit",
+          "label": "Root dependency audit",
+          "command": "npm audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:56.293Z",
+          "finishedAt": "2026-10-15T18:38:56.788Z",
+          "durationMs": 495,
+          "failure": null
+        },
+        {
+          "id": "web_dependency_audit",
+          "label": "Web dependency audit",
+          "command": "npm --prefix apps/web audit --audit-level=low",
+          "status": "passed",
+          "startedAt": "2026-10-15T18:38:56.788Z",
+          "finishedAt": "2026-10-15T18:38:57.164Z",
+          "durationMs": 376,
+          "failure": null
+        }
+      ],
+      "failure": null
+    },
+    "initial_release_gate": {
       "schemaVersion": 1,
       "gateId": "polynet_release_gate_v1",
       "mode": "ci",
@@ -205,6 +374,11 @@
         }
       ],
       "failure": null
+    },
+    "final_form_regression_tests": 29,
+    "initial_runtime_ci": {
+      "conclusion": "success",
+      "url": "https://github.com/Neil-McD/Arx/actions/runs/38786152112"
     }
   },
   "fixture": {
@@ -735,7 +909,8 @@
     "transition_count": 1,
     "receipt_count": 1,
     "receipt_attempt_count": 1,
-    "historical_submission_unchanged": true
+    "historical_submission_unchanged": true,
+    "final_candidate_submissions_and_transitions_unchanged": true
   },
   "retained_prior_fixtures": {
     "equal": true,
@@ -794,8 +969,22 @@
     "config_hash_after": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2",
     "config_unchanged": true,
     "web_signed_out": true,
-    "owned_tabs_closed": 3,
-    "provider_grant_revocation_claimed": false
+    "owned_tabs_closed": 4,
+    "provider_grant_revocation_claimed": false,
+    "final_candidate": {
+      "stop": {
+        "code": 0,
+        "signal": null
+      },
+      "logout": "Removed OAuth credentials for 'polynet_3a1_member_staging'.",
+      "fresh_auth_status": "notLoggedIn",
+      "protected_read_auth_required": true,
+      "fresh_exit": {
+        "code": 0,
+        "signal": null
+      },
+      "config_sha256": "0041dd6497be4f8aacd06e5a83fed2750713a9e20cb4160cd362b61146abbfc2"
+    }
   },
   "limits": [
     "First application acknowledgment discarded after delivery; not a TCP interruption or crash during commit.",
@@ -804,5 +993,102 @@
     "Revocation, rollback, concurrency, stale rules and visit faults are local automated proofs, not live fixture mutations.",
     "No test-requested model inference, provider setup, payment, memory promotion or production release.",
     "Named record comparison is not a census of background jobs."
-  ]
+  ],
+  "initial_runtime": {
+    "commit": "aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87",
+    "convex_deployment": "dev:quick-porcupine-949",
+    "backend_source_tree": "19c862be2e0cd48f7bec8421ce37e0afebad3daf",
+    "backend_deploy_exit": 0,
+    "backend_provenance_kind": "clean explicit local deployment; not remote commit attestation",
+    "git_deployment_id": 7100968324,
+    "git_deployment_url": "https://polynet-staging-r0q5bk7js-neil-mcds-projects.vercel.app",
+    "serving_asset": "/assets/index-lP2dpUN2.js",
+    "serving_asset_sha256": "c316b1c17163b3f52bb4aae6d3554f624249296489ca4a6c9922e1df3a39509b",
+    "staging_cloud_and_site_embedded": true
+  },
+  "final_candidate_verification": {
+    "backend_candidate": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+    "recorded_at": "2026-10-15T18:39:53.090Z",
+    "identity_sha256": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "replay": {
+      "deduped": true,
+      "ok": true,
+      "operation": "community.form.submit",
+      "receipt": {
+        "authority_lane": "member",
+        "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+        "community_slug": "form-browser-qa-20260911",
+        "contract": "polynet.canonical.operation:v1",
+        "deduped": true,
+        "idempotency_key": "staging-3a1-20261015-form-submit-1",
+        "principal_kind": "external_mcp",
+        "relation": "member",
+        "tool": "polynet_call"
+      },
+      "result": {
+        "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+        "revision": 1,
+        "status": "submitted",
+        "submitted_at": 1792089110319
+      }
+    },
+    "submitted_read": {
+      "path": "/communities/form-browser-qa-20260911/members/me/forms/tx7xc84qvs9cm225a4z8tezrsn8gav05.json",
+      "body": "{\n  \"answers\": {\n    \"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\": \"3A1 synthetic answer 20261015: completed the bounded private-form proof step. This is test evidence, not a claim of business-goal achievement.\"\n  },\n  \"assignment\": {\n    \"activation_sequence\": 1,\n    \"milestone_entered_at\": 1789152738992,\n    \"milestone_key\": \"milestone-0e404dc5-18a4-4599-898e-30e5c7096596\",\n    \"workflow_ref\": \"workflow:sh7jaebsbmgb871a141erpvz558e75g2\"\n  },\n  \"form_version_ref\": \"form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar\",\n  \"name\": \"3A1 synthetic progress proof 20261015\",\n  \"questions\": [\n    {\n      \"description\": \"\",\n      \"key\": \"6270d369-3f34-4bef-a8ca-c5e8fb7ba3c3\",\n      \"options\": [],\n      \"required\": true,\n      \"title\": \"What synthetic step did you complete for the staging progress proof?\",\n      \"type\": \"short_text\"\n    }\n  ],\n  \"ref\": \"form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05\",\n  \"revision\": 1,\n  \"status\": \"submitted\",\n  \"submitted_at\": 1792089110319\n}",
+      "truncated": false,
+      "ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+      "total_chars": 968,
+      "next_offset": null,
+      "writable": false,
+      "searchable": false
+    },
+    "workflow": {
+      "completed_at": "2026-10-15T18:31:50.638Z",
+      "current_milestone_entered_at": "2026-09-11T18:52:18.992Z",
+      "current_milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+      "current_milestone_name": "Browser form acceptance",
+      "goal": "",
+      "id": "sh7jaebsbmgb871a141erpvz558e75g2",
+      "require_human_approval": false,
+      "revision": 5
+    },
+    "milestone_history": [
+      {
+        "completed_workflow": true,
+        "id": "t97p51p1ah1dnk3s2gt6d9meq98gaw9s",
+        "milestone_key": "milestone-0e404dc5-18a4-4599-898e-30e5c7096596",
+        "milestone_name": "Browser form acceptance",
+        "next_milestone_key": null,
+        "next_milestone_name": null,
+        "occurred_at": "2026-10-15T18:31:50.638Z",
+        "sequence": 1
+      }
+    ],
+    "served_web_candidate": "7d039f038fe36fca866a9ec11b189274d0b20e90",
+    "after_matching_web_marker_replay": {
+      "deduped": true,
+      "ok": true,
+      "operation": "community.form.submit",
+      "receipt": {
+        "authority_lane": "member",
+        "community_id": "jx73pspeb1bk5vsrb7q9e226bs8e66bb",
+        "community_slug": "form-browser-qa-20260911",
+        "contract": "polynet.canonical.operation:v1",
+        "deduped": true,
+        "idempotency_key": "staging-3a1-20261015-form-submit-1",
+        "principal_kind": "external_mcp",
+        "relation": "member",
+        "tool": "polynet_call"
+      },
+      "result": {
+        "form_request_ref": "form-request:tx7xc84qvs9cm225a4z8tezrsn8gav05",
+        "form_version_ref": "form-version:tn7j3ma5dww0f5171fngpa2kvd8gawar",
+        "revision": 1,
+        "status": "submitted",
+        "submitted_at": 1792089110319
+      }
+    }
+  },
+  "final_candidate_change": "Suppress the private forms directory link on the special funnel-builder self-directory projection; submission, read and reconciliation owners unchanged."
 }

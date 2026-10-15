@@ -10,10 +10,11 @@
 
 | Boundary | Verified evidence |
 | --- | --- |
-| Clean runtime candidate / Git staging / served staging | `aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87` |
+| Final clean runtime / Git staging / served staging | `7d039f038fe36fca866a9ec11b189274d0b20e90` |
+| Initial live submission candidate | `aeb8717c099a9b1ba6cdb3a5d3b963e9c1347f87` |
 | Backend | Explicit `convex dev --once --typecheck enable --env-file /tmp/polynet-package-1-staging.env`, exit 0; `dev:quick-porcupine-949` |
-| Backend source tree | `19c862be2e0cd48f7bec8421ce37e0afebad3daf`; clean local deployment provenance, not remote commit attestation |
-| Staging web | Successful [Git staging deployment](https://polynet-staging-r0q5bk7js-neil-mcds-projects.vercel.app), GitHub deployment `7100968324` |
+| Backend source tree | `3c578d333a83a8cf1d5da5bff5aec970814fda28`; clean local deployment provenance, not remote commit attestation |
+| Staging web | Successful [Git staging deployment](https://polynet-staging-muex0nyz5-neil-mcds-projects.vercel.app), GitHub deployment `7101214564` |
 | Serving asset | `/assets/index-lP2dpUN2.js`; SHA-256 `c316b1c17163b3f52bb4aae6d3554f624249296489ca4a6c9922e1df3a39509b`; both staging Convex hosts embedded |
 | Canonical main | `0a100cfb544851ab06da25f93d8ad549db917ee4`, unchanged |
 | Production web | `91d28dc2c986ef88a8a507a269db710d6d28d878`, unchanged |
@@ -22,6 +23,17 @@ Staging was pushed before the feature branch. The feature branch also generated
 an isolated `Preview – polynet` deployment; this did not change the production
 alias. No production release command or provider setting change was used.
 Receipt-only commits are separate from the deployed runtime candidate.
+
+Final review removed an advertised forms-directory link from the special
+funnel-builder self directory; direct access was already denied. The final
+candidate adds that regression assertion and retains the same submit/read and
+reconciliation owners. Both clean candidates passed all 15 gate steps. The
+initial submission/restart/founder proof ran on the initial candidate; after the
+final backend and matching web marker deployed, native member OAuth again
+verified the canonical identity and exact submitted read, unchanged completion
+and saved-envelope deduplicated replay. The fixture was never reset or resubmitted.
+[Initial runtime CI passed](https://github.com/Neil-McD/Arx/actions/runs/38786152112);
+final and receipt-head CI are distinct from these exact local gates.
 
 ## Implementation and local proof
 
@@ -44,7 +56,7 @@ Receipt-only commits are separate from the deployed runtime candidate.
 - Exact documents and serialized answers have a 24,000-character adapter budget,
   including JSON escaping and the proposed submitted read-back. Oversized forms
   fail explicitly before writing; question schemas are never silently truncated.
-- 379 tests across eight affected files passed. The 28 added cases cover private
+- 379 tests across eight affected files passed. The 29 added cases cover private
   access, replay after completion, changed-key/payload behavior, concurrency,
   receipt-fault rollback including scheduled work, pinned versions/revisions,
   required/choice/unknown answers, aggregate/escaped payloads, pagination/rebinding,
@@ -52,9 +64,9 @@ Receipt-only commits are separate from the deployed runtime candidate.
   changed rules and first-party compatibility. Existing foundation coverage retains
   incomplete/zero-action/truncated and human-versus-agent trigger boundaries.
 - Both typechecks, semantic repository, canonical operation and verified identity
-  proofs passed. The exact clean-candidate gate passed all 15 steps: **1,805 tests /
+  proofs passed. The exact clean-candidate gate passed all 15 steps: **1,806 tests /
   193 files**, browser foundation proof, build/bundle checks and both dependency
-  audits zero. Its complete gate record is embedded in the structured evidence.
+  audits zero. The final 29-test form regression file also passed independently. Its complete gate record is embedded in the structured evidence.
 
 ## Live proof
 
@@ -121,7 +133,8 @@ not achievement of a written coaching or business goal.
 - Both native aliases logged out; all proof processes exited 0. Fresh processes
   reported `notLoggedIn` and protected reads failed with Auth required. User
   configuration SHA-256 was unchanged. Founder and member web sessions signed
-  out; public home showed Sign in. All three owned tabs closed.
+  out; public home showed Sign in. All four owned tabs closed. The final verification client was logged out again;
+  a fresh process again required authentication, with the same configuration hash.
 - Local disconnect does not claim upstream grant revocation or rejection of
   previously issued tokens. The discarded application acknowledgment is not a
   TCP interruption or crash during transaction commit. Rollback, concurrency,
