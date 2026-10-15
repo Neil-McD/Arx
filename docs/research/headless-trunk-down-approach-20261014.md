@@ -3,6 +3,10 @@
 Date: 2026-10-14. Algorithm step: **1 — question and rank requirements**.
 This is a proposed approach, not a deployment or runtime change.
 
+Current progress and remaining acceptance boundaries are maintained in the
+[staging coverage ledger](../polynet-staging-coverage-ledger.md). The source refs,
+findings and proposed order below describe the original October 14 assessment.
+
 ## Trunk: the product promise
 
 **A founder can build a custom experience whose members and agents share
@@ -126,5 +130,6 @@ requirements have been questioned. A proposed deletion needs call-path, data
 and behavior evidence. Protected harness/compiler/resources/memory cleanup
 retains the repository's explicit human-confirmation boundary.
 
-The next concrete package is baseline reconciliation. This map authorizes no
+Baseline reconciliation was the first package proposed by this dated map; use
+the current coverage ledger for the next bounded work. This map authorizes no
 deployment, production change, provider connection or protected-core deletion.
