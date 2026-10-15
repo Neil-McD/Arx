@@ -1,7 +1,9 @@
 # Slice 2C2: bounded founder admission queue
 
-Status: implementation authorized October 15, 2026. Read-only adapter and boundary
-tests implemented; release and live acceptance are recorded separately in the receipt.
+Status: implemented and deployed to staging October 15, 2026. Native founder
+and cancellation proof passed; native applicant denial awaits first-time OAuth
+consent. See the [execution receipt](receipts/2026-10-15-staging-founder-admission-queue-2c2.md).
+Do not mark full live acceptance complete yet.
 
 ## 2C1 review and current baseline
 
