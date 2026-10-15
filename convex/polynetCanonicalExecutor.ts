@@ -118,6 +118,25 @@ function requiredString(value: unknown, maxLength = 2_000): string | null {
   return normalized ? normalized.slice(0, maxLength) : null;
 }
 
+// The memory owner returns explicit refusals instead of throwing. A returned
+// object (including one cached by an older adapter) is not necessarily success.
+function memoryOutcomeAcknowledgmentError(result: unknown): { code: string; message: string } | null {
+  const row = result && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown> : null;
+  if (row?.ok === false) return {
+    code: typeof row.reason_code === "string" && row.reason_code.trim()
+      ? row.reason_code.trim().slice(0, 180) : "community_memory_outcome_failed",
+    message: typeof row.message === "string" && row.message.trim()
+      ? row.message.trim().slice(0, 2_000) : "Memory outcome was refused.",
+  };
+  const outcome = row?.outcome && typeof row.outcome === "object" && !Array.isArray(row.outcome)
+    ? row.outcome as Record<string, unknown> : null;
+  const id = row?.outcome_observation_id;
+  return row?.ok === true && typeof id === "string" && id.trim() === id && id.length > 0 &&
+    id.length <= 180 && outcome?.id === id && typeof row.deduplicated === "boolean"
+    ? null : { code: "community_memory_outcome_acknowledgment_invalid", message: "Memory outcome acknowledgment is invalid." };
+}
+
 function mountedPath(communitySlug: string, localPath: string): string {
   return localPath === "/"
     ? `/communities/${communitySlug}/`
@@ -2147,7 +2166,9 @@ async function executeCanonicalCall(args: {
   });
   if (!reservation.ok) return reservation.result;
   if (reservation.status === "completed") {
-    return { ok: true, value: reservation.completedValue };
+    const value = reservation.completedValue;
+    const error = memoryOutcomeAcknowledgmentError(value.ok === true ? value.result : null);
+    return error ? canonicalError(error.code, error.message) : { ok: true, value };
   }
   try {
     const result = (await args.ctx.runMutation(
@@ -2164,7 +2185,14 @@ async function executeCanonicalCall(args: {
         ...(input.notes ? { notes: String(input.notes) } : {}),
       },
     )) as Record<string, unknown>;
-    const deduped = result.deduped === true || result.deduplicated === true;
+    const refusal = memoryOutcomeAcknowledgmentError(result);
+    if (refusal) {
+      await failMutatingOperation({ ...args, target, toolName: "polynet_call", idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+        errorCode: refusal.code, errorMessage: refusal.message });
+      return canonicalError(refusal.code, refusal.message);
+    }
+    const deduped = result.deduplicated === true;
     const responseValue = {
       ok: true,
       operation,

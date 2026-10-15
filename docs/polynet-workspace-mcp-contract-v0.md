@@ -213,6 +213,25 @@ approval capability below does not make the queue writable.
   Old observations cannot approve or deny this new attempt. First-party ID-only
   decision RPC compatibility remains separate from this attempt-bound contract.
 
+Memory consumption and observed outcomes remain separate states. Memory search
+creates a receipt with returned nodes; exact `polynet_read` creates its own receipt
+with the returned node also marked injected. Use that exact-read `retrieval_id`
+for `community.memory.record_outcome`. This marker proves content was returned
+to the client, not that a model used it or that advice produced a real outcome.
+The owner validates current community access and receipt actor, community,
+surface, version and injected-node membership. Identical reports for the same
+receipt/node deduplicate; changed status or notes conflict, including under a
+new operation key. A new consumption receipt is a distinct episode.
+
+An explicit domain refusal or malformed acknowledgment is a canonical error,
+not a completed success. The adapter requires a successful outcome identity
+before completing its operation receipt. Historical cached nested refusals are
+also returned as errors without rewriting the audit row. Outcome effects and
+canonical receipt completion remain separately retry safe through the existing
+owner; an uncertain receipt completion may recover its one committed outcome.
+An observed outcome creates one pending `attach_outcome` request and marks
+metabolism pending; it does not directly promote or validate accepted memory.
+
 Builder resource changesets are terminally decided only through the authenticated
 product Apply or Reject controls. They are not agent-callable capabilities.
 
