@@ -301,6 +301,9 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    request_ref: { type: "string", pattern: "^join-request:[A-Za-z0-9]+$", maxLength: 180 },
+    expected_created_at: { type: "string", maxLength: 24 },
+    expected_updated_at: { type: "string", maxLength: 24 },
     retrieval_log_id: { type: "string", minLength: 1, maxLength: 180 },
     node_id: { type: "string", minLength: 1, maxLength: 180 },
     result_status: {

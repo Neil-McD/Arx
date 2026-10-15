@@ -65,6 +65,7 @@ const MEMORY_TYPES = new Set([
   "decision_judgment",
   "open_question",
 ]);
+const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
 const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 
 const COMMUNITY_FUNNEL_UPDATE_OPERATION =
@@ -592,7 +593,10 @@ function capabilityDocument(args: {
     args.evidenceSurface === "community_funnel_builder" &&
     args.principalKind === "personal_agent" &&
     args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isFunnelCapability) {
+  const isAdmissionCapability = args.operation === ADMISSION_APPROVE_OPERATION &&
+    args.evidenceSurface !== "community_funnel_builder" &&
+    args.principalKind !== "community_agent" && args.target.authority.canUseBuilderProjection;
+  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -600,10 +604,19 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isFunnelCapability ? "builder" : "member",
+    authority_lane: isFunnelCapability || isAdmissionCapability ? "builder" : "member",
     idempotency_required: true,
   };
-  if (isFunnelCapability) {
+  if (isAdmissionCapability) {
+    operationDefinition.input = {
+      required: ["request_ref", "expected_created_at", "expected_updated_at"],
+      request_ref: "exact join-request reference from the pending queue",
+      expected_created_at: "exact canonical ISO timestamp from the pending request",
+      expected_updated_at: "exact canonical ISO timestamp from the pending request",
+      effects: ["grant_fresh_free_member_access", "record_approval", "existing_activation_workflows_and_access_email"],
+      forbidden_effects: ["paid_access", "restore_membership", "change_role", "deny", "bulk_decision"],
+    };
+  } else if (isFunnelCapability) {
     operationDefinition.input = {
       required: ["expected_revision", "content"],
       expected_revision: "non-negative integer",
@@ -874,6 +887,8 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
+      ...(capabilityDocument({ target, operation: ADMISSION_APPROVE_OPERATION,
+        evidenceSurface: args.evidenceSurface, principalKind: args.principalKind }) ? [ADMISSION_APPROVE_OPERATION] : []),
     ];
     return {
       ok: true,
@@ -1894,6 +1909,32 @@ async function executeCanonicalCall(args: {
       "operation_not_found",
       "Operation is not discoverable or authorized for this community.",
     );
+  }
+  if (operation === ADMISSION_APPROVE_OPERATION) {
+    const match = typeof rawInput.request_ref === "string" ? /^join-request:([A-Za-z0-9]+)$/.exec(rawInput.request_ref) : null;
+    const timestamp = (value: unknown): number | null => {
+      if (typeof value !== "string" || value.length !== 24) return null;
+      const ms = Date.parse(value);
+      return Number.isSafeInteger(ms) && new Date(ms).toISOString() === value ? ms : null;
+    };
+    const createdAt = timestamp(rawInput.expected_created_at);
+    const updatedAt = timestamp(rawInput.expected_updated_at);
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
+        !match || createdAt === null || updatedAt === null ||
+        Object.keys(rawInput).some(key => !["request_ref", "expected_created_at", "expected_updated_at"].includes(key))) {
+      return canonicalError("invalid_tool_args", "An exact capability target and observed pending request reference/timestamps are required.");
+    }
+    try {
+      const value = await args.ctx.runMutation(internal.communityAdmin.approveFreshAdmissionInternal, {
+        userId: args.userId, communityId: target.communityId, principalKind: args.principalKind,
+        requestId: match[1], expectedCreatedAt: createdAt, expectedUpdatedAt: updatedAt, idempotencyKey,
+      });
+      if (value.ok === false) return canonicalError(value.code, value.message,
+        value.retryAfterMs ? { retry_after_ms: value.retryAfterMs } : undefined);
+      return { ok: true, value };
+    } catch {
+      return canonicalError("admission_request_unavailable", "Admission request not available or approval not authorized.");
+    }
   }
   if (operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) {
     const funnelDraftSlot = args.funnelDraftSlot ?? "custom_1";

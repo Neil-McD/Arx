@@ -127,8 +127,8 @@ messages. Default page size is 20 (2–50); opaque continuation cursors are scop
 to actor, community and pending query and confer no authority. Cancelled or
 otherwise decided requests are unavailable on exact read. The directory is
 read-only, non-searchable, and absent from member and community-agent projections.
-Existing first-party moderator review remains unchanged. Admission decisions are
-not agent-callable.
+Existing first-party moderator review remains unchanged. The separate free
+approval capability below does not make the queue writable.
 
 ## Mutation model
 
@@ -142,6 +142,14 @@ not agent-callable.
 `capabilities/`. Current operations are:
 
 - member: `community.memory.record_outcome`
+- human builder (current owner/admin): `community.admission.approve`, version 1.
+  Target its exact capability document. Input is `request_ref`,
+  `expected_created_at`, and `expected_updated_at` copied from the current pending
+  request. Only approval-gated communities and applicants with no existing
+  membership/subscription qualify. This creates ordinary free member access using
+  existing activation, audit, workflow and best-effort access-email owners. Paid
+  access, prior membership restoration, role changes, denial and bulk decisions
+  are excluded. Members, moderators and community agents cannot invoke it.
 
 Builder resource changesets are terminally decided only through the authenticated
 product Apply or Reject controls. They are not agent-callable capabilities.
@@ -155,6 +163,12 @@ effect, rejects reuse with a different request, and persists the completed
 result. A same-request retry returns the original result with
 `deduped: true`. Domain mutations are independently retry safe so a process
 failure between the domain effect and receipt completion can be recovered.
+Fresh admission approval instead reserves, grants and completes its receipt in
+one domain transaction. Current manager authority is checked before both new
+approval and receipt replay. A lost response replays the historical decision;
+it does not assert present entitlement or email delivery and cannot restore
+access after leave/revocation. Stale or reopened applications require a new
+observed request and cannot be approved with an older timestamp pair.
 
 The MCP contract exposes real active channels only. It does not create an All
 channel or duplicate interaction data. A broad status request lists the bounded
