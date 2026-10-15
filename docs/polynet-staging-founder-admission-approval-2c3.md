@@ -1,10 +1,11 @@
 # Slice 2C3 proposal: approve one fresh, free admission
 
-Status: implementation authorized October 15, 2026. Staging only. The approved
-scope includes one synthetic free admission and normal activation/notification
-effects, safe retry proof, and normal lifecycle cleanup. Production is untouched.
-Elon algorithm: Step 1 requirements reconciled; Step 2 excludes new infrastructure;
-Step 3 implements and verifies the remaining adapter.
+Status: scoped staging acceptance passed October 15, 2026. One synthetic free
+admission, discarded-response recovery, native process restart, normal leave and
+non-restoring historical replay are verified. See the
+[execution receipt](receipts/2026-10-15-staging-founder-admission-approval-2c3.md).
+Production is untouched. Elon algorithm: Step 1 requirements reconciled; Step 2
+excluded unnecessary infrastructure; Step 3 verified the remaining adapter.
 
 ## 2C2 review and refreshed baseline
 

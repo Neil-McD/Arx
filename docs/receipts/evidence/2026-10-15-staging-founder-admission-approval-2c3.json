@@ -1,0 +1,220 @@
+{
+  "slice": "2C3",
+  "status": "passed_scoped_staging_acceptance",
+  "recordedAt": "2026-10-15T17:15:56.145837+00:00",
+  "source": {
+    "runtimeSha": "76b83959942c65392b7ce0a12fb15f6726f6f453",
+    "backendTree": "e9dbb94b93b29f11d05d7ed9f05fb516ea9500ef",
+    "backendDeployment": "dev:quick-porcupine-949",
+    "canonicalMain": "0a100cfb544851ab06da25f93d8ad549db917ee4",
+    "backendProvenance": "clean candidate deployed with convex dev --once --typecheck enable; not remote commit attestation"
+  },
+  "validation": {
+    "focusedTests": 131,
+    "newExecutorCases": 36,
+    "fullGateTests": 1735,
+    "fullGateFiles": 192,
+    "audits": {
+      "root": 0,
+      "web": 0
+    },
+    "exactGate": {
+      "status": "passed",
+      "clean": true,
+      "mode": "ci",
+      "candidate": "76b83959942c65392b7ce0a12fb15f6726f6f453",
+      "localArtifact": "artifacts/admission-approval-20261015/release-gate.json",
+      "remoteUrl": "https://github.com/Neil-McD/Arx/actions/runs/38773842838"
+    },
+    "backendTypecheck": "passed",
+    "webTypecheck": "passed"
+  },
+  "web": {
+    "version": {
+      "buildId": "76b83959942c65392b7ce0a12fb15f6726f6f453",
+      "sentryRelease": "76b83959942c65392b7ce0a12fb15f6726f6f453",
+      "environment": "staging"
+    },
+    "entry": "/assets/index-DhORBc0B.js",
+    "sha256": "111a3c3ef487eaaa12ff179afa0910450c85a602718a3cdc14191216dd1efbe8",
+    "stagingCloudHost": true,
+    "stagingSiteHost": true,
+    "productionVersion": {
+      "buildId": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "sentryRelease": "91d28dc2c986ef88a8a507a269db710d6d28d878",
+      "environment": "production"
+    }
+  },
+  "fixture": {
+    "communitySlug": "builder-canary-aug-6-2026-v3",
+    "founderFingerprint": "c95f6d5e478f110b61e5457831fa71d4f4701804926890113a6f7d7c6b02ce42",
+    "applicantFingerprint": "0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc",
+    "requestFingerprint": "30c7805f67ced61018d722037a25058fbfaf511668d5baea4a863a51ff64659e",
+    "membershipFingerprint": "430fb8f68f286524c2a2e4625500793ccde7707efdcfb6936cadf2dcb623c391",
+    "entryPolicy": "approval",
+    "joinWorkflowRows": 0,
+    "preexistingMemberships": 0,
+    "preexistingSubscriptions": 0,
+    "initialSetup": "normal public funnel Join free with existing test identity; no new account/legal acceptance"
+  },
+  "native": {
+    "pendingExistingDocumentDenied": true,
+    "pendingContextDenied": true,
+    "capabilityReadable": true,
+    "firstResponseDiscarded": true,
+    "approvedAt": "2026-10-15T17:09:16.095Z",
+    "memberAuthority": {
+      "lane": "member",
+      "relation": "member"
+    },
+    "memberPrivateDenied": true,
+    "queueEmpty": true,
+    "oldPendingPathDenied": true,
+    "processRestarted": true,
+    "afterLeaveDenied": true,
+    "stillDeniedAfterReplay": true,
+    "inferenceTurns": 0,
+    "applicantAccountCorrection": "cached founder detected before admission; local credential removed; explicit Google applicant selection; restart with existing grant"
+  },
+  "retry": {
+    "key": "staging-2c3-20261015-fresh-free-1",
+    "recoveredDeduped": true,
+    "sameHistoricalDecisionAfterLeave": true,
+    "decisionFingerprint": "5b52255fb058cf39aaa2d1c422346357f38c2a96366d463818dfba363fab7607",
+    "effectCountsStableOnRetry": true,
+    "sameEmailJobOnRetry": true,
+    "replayAfterLeaveDoesNotRegrant": true,
+    "faultClass": "application-discarded successful response, then fresh native process; no TCP failure or live lease-reclaim claim"
+  },
+  "observations": {
+    "before-grant": {
+      "counts": {
+        "requests": 1,
+        "memberships": 0,
+        "subscriptions": 0,
+        "audit": 0,
+        "receipt": 0,
+        "outbox": 0,
+        "activity": 0
+      },
+      "activeMemberCount": 1,
+      "namedStateFingerprint": "638b225076c99065616a0c8c3a6e2762279b5dc070bfc39756c66cb6f7ace638"
+    },
+    "after-grant": {
+      "counts": {
+        "requests": 0,
+        "memberships": 1,
+        "subscriptions": 0,
+        "audit": 1,
+        "receipt": 1,
+        "outbox": 1,
+        "activity": 1
+      },
+      "activeMemberCount": 2,
+      "namedStateFingerprint": "90dfe67b2e934beba9349331a60572f17f5a6fd03c8c0752d5ff14c68af6c550"
+    },
+    "after-retry": {
+      "counts": {
+        "requests": 0,
+        "memberships": 1,
+        "subscriptions": 0,
+        "audit": 1,
+        "receipt": 1,
+        "outbox": 1,
+        "activity": 1
+      },
+      "activeMemberCount": 2,
+      "namedStateFingerprint": "1c3bf9eb89e3be822bc7ad9a1704f04ea8d812b5be7c4c3c8b2338f5c1d30eed"
+    },
+    "final-domain": {
+      "counts": {
+        "requests": 0,
+        "memberships": 0,
+        "subscriptions": 0,
+        "audit": 1,
+        "receipt": 1,
+        "outbox": 1,
+        "activity": 1
+      },
+      "activeMemberCount": 1,
+      "namedStateFingerprint": "7a5d263b585b6b8fcc4f5d56487d526e522895b610447718ef5cb70729da974c"
+    }
+  },
+  "email": {
+    "jobs": 1,
+    "status": "sent",
+    "attemptCount": 1,
+    "scope": "normal access-granted notification to the verified synthetic applicant; staging link",
+    "mailboxDeliveryProven": false
+  },
+  "cleanup": {
+    "processes": [
+      {
+        "alias": "polynet_2c3_staging",
+        "processExit": 0,
+        "signal": null,
+        "logout": "Removed OAuth credentials for 'polynet_2c3_staging'."
+      },
+      {
+        "alias": "polynet_2c3_applicant_staging",
+        "processExit": 0,
+        "signal": null,
+        "logout": "Removed OAuth credentials for 'polynet_2c3_applicant_staging'."
+      }
+    ],
+    "keychain": [
+      {
+        "alias": "polynet_2c3_staging",
+        "absent": true
+      },
+      {
+        "alias": "polynet_2c3_applicant_staging",
+        "absent": true
+      }
+    ],
+    "freshAuthStatus": "notLoggedIn",
+    "protectedQueueRequiresAuth": true,
+    "configUnchanged": true,
+    "webSession": "Account Sign out, confirmation, then native UI showed public home with Sign in link",
+    "membership": "normal non-platform-home Leave community deleted only the new membership",
+    "remainingEvidence": [
+      "one approval audit",
+      "one completed receipt",
+      "one member-joined activity event",
+      "one sent notification job"
+    ],
+    "earlierRevokedMembershipUnchanged": true,
+    "earlierContributionUnchanged": true,
+    "globalProviderGrantsRevoked": false
+  },
+  "screenshots": {
+    "request-pending.png": {
+      "sha256": "06c838dead976665e8a63d9733ad7fcb2ac2d3138e91b2ffb0eb6792ae10584e",
+      "localIgnored": true
+    },
+    "cleanup-gate.png": {
+      "sha256": "f49f51065b69fba3a30b6300c920b9d64a322b8c75583b0783b3ef6aef21493a",
+      "localIgnored": true
+    },
+    "approval-visible.png": {
+      "sha256": "c34034a838a6a2486f6c95a91b42df187d566c08a586c6a68f61886ae61e80b9",
+      "localIgnored": true
+    },
+    "member-access.png": {
+      "sha256": "3507923812cac08977aa9c7ccf0b1de233f559f20af7b29d3ac9e8a9b9939a30",
+      "localIgnored": true
+    }
+  },
+  "limits": [
+    "concurrency, stale roles, eligibility rejection, completion rollback and reopened application cases are local evidence",
+    "live proof used one owner, one applicant and one quiet community, without inference or workflow execution",
+    "normal navigation may write sessions, presence and read cursors; snapshots cover named domain fixtures, not all staging tables",
+    "browser DOM controls intermittently stalled on Google and JavaScript confirmation; native UI and independent server observations verified outcomes"
+  ],
+  "production": {
+    "webBuildUnchanged": true,
+    "mainUntouched": true,
+    "productionDeployCommands": 0,
+    "productionBackendMutations": 0
+  }
+}
