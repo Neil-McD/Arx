@@ -105,9 +105,11 @@ There are two human authority lanes:
   moderators and members.
 
 Both lanes can list, read, and search the member repository. Both can write
-participation to an exact returned `channels/<slug>/` path. Only the builder lane can
-see `builder/`, stage resource changesets there, and discover or call builder
-changeset operations.
+participation to an exact returned `channels/<slug>/` path. Only the builder lane
+can see `builder/` and stage resource changesets there. Terminal resource
+changeset decisions use authenticated product Apply/Reject controls; their agent
+capability paths and calls are unavailable. Builder capabilities are advertised
+individually under the mutation model below.
 
 The community-owned agent always uses the member lane, even when its
 operational sponsor is an owner or admin. It publishes with community-agent
@@ -166,6 +168,27 @@ approval capability below does not make the queue writable.
   Current access/funding and the exact membership activation are rechecked before
   historical replay. External submission means authorized on behalf of the member,
   not unaided human authorship.
+
+- human builder (current owner/admin): `community.workflow.approve_milestone`,
+  version 1. Read the private member dossier's `workflow.approval` observation;
+  input is exactly `membership_ref` (`membership:<id>`),
+  `expected_activation_sequence` and `review_ref` (`workflow-approval:v1:<sha256>`).
+  The reference binds current workflow/revision, activation, stage visit/sequence,
+  configuration and exact verified action/form evidence. Only a complete bounded
+  evidence projection for a human-approval stage with at least one action offers
+  a reference. Ineligible, incomplete, truncated or oversized evidence offers none.
+  Current manager and target access/funding, canonical membership and activation
+  are checked before completed-receipt replay. New execution recomputes the
+  observation; transition, approval attribution, existing visit cleanup/scheduling
+  and receipt completion commit together. Same-envelope retries return the
+  historical approved acknowledgment without moving the member twice; changed
+  payload conflicts and a new key cannot reuse a stale observation.
+  Member self, community-agent and special funnel-builder projections do not
+  expose the approval observation/capability. There is no force-move flag, AI goal
+  verdict, actor selector, bulk decision or external authoring. First-party approval
+  compatibility, including its separate zero-action policy, remains unchanged.
+  An external approval acts on behalf of the authenticated founder; it does not
+  assert unaided human authorship or an AI-verified business outcome.
 
 - human builder (current owner/admin): `community.admission.approve`, version 1.
   Target its exact capability document. Input is `request_ref`,
@@ -365,8 +388,10 @@ Acceptance is deliberately fail closed:
 Acceptance proves OAuth discovery, exact five-tool discovery, repository
 navigation, current authority, search/read, real chat write/read/replay,
 retired AI Feed absence, inaccessible-community denial, and—when the actor has
-builder authority—a staged changeset plus discovered reject call without
-applying the test change. Run it once with a builder identity and once with an
+builder authority—a staged changeset plus an expected `operation_not_found`
+response to an agent terminal-decision call. The changeset remains pending
+product review; this probe neither applies nor rejects it. Run it once with a
+builder identity and once with an
 ordinary member identity. Preserve a separate successful control read of the
 denied community so the certificate proves isolation from a real object rather
 than only missing-path behavior.

@@ -96,6 +96,8 @@ export function renderCommunityMemberSuccessDossierMarkdown(
       lines.push(`- All actions complete: ${progress.all_actions_complete ? "Yes" : "No"}. This is not goal approval or authority to advance.`);
       if (progress.scan_truncated) lines.push("_Action scan truncated; evidence is incomplete._");
     }
+    if (workflow.approval) lines.push("", "## Current approval observation", JSON.stringify(workflow.approval),
+      "This reference binds the reviewed stage and evidence; current authorization is checked again on execution.");
   }
   lines.push("", `Service channel: ${service.status === "available" ? `${markdownInline(service.name)} (${service.channel_id})` : service.status}. A destination reference does not grant access or authorize posting.`);
   lines.push("", "## Approved community context");

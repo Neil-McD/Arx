@@ -2,7 +2,7 @@ import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import type { Doc, Id } from "./_generated/dataModel";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
-import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
+import { readWorkflowActionProgress, readWorkflowApprovalObservation } from "./communityWorkflowCompletionCore";
 import { readCompletionReviewStatus } from "./communityWorkflowGoalReviewCore";
 import { workflowActivityExplanation } from "../shared/workflowActivityExplanation";
 import type { QueryCtx } from "./_generated/server";
@@ -442,6 +442,7 @@ async function readMembershipContextRecords(args: {
               } } : {}),
             } : {}),
             ...(args.view === "builder" ? {
+              approval: membership ? await readWorkflowApprovalObservation(args.ctx, { workflow, membership, projectedProgress: actionProgress }) : null,
               instructions: current.milestone.instructions ?? "",
               ...(actionProgress ? { action_progress: actionProgress } : {}),
               require_human_approval: current.milestone.requireHumanApproval ?? false,

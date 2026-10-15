@@ -91,6 +91,8 @@ test("answer identity sorts keys; changed answers/version conflict without a sec
   const before = await f.snapshot();
   expect(await f.call({ ...input, input: { ...input.input, answers: { choice: "0", q: "done" } } })).toMatchObject({ ok: true, value: { deduped: true } });
   expect(await f.call({ ...input, input: { ...input.input, answers: { q: "changed" } } })).toMatchObject({ ok: false, code: "idempotency_key_conflict" });
+  const versionId = await f.t.run(async ctx => { const { _id, _creationTime, ...version } = (await ctx.db.get(f.versionId))!; return ctx.db.insert("communityFormVersions", { ...version, revision: 2 }); });
+  expect(await f.call({ ...input, input: { ...input.input, form_version_ref: `form-version:${versionId}` } })).toMatchObject({ ok: false, code: "idempotency_key_conflict" });
   expect(await f.snapshot()).toEqual(before);
 });
 
@@ -118,8 +120,13 @@ test.each(["revoked", "activation", "archived", "blocked", "funding"])("current 
     if (kind === "blocked") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.memberId, createdByUserId: f.ownerId, createdAt: Date.now(), updatedAt: Date.now() });
   });
   const before = await f.snapshot();
-  await expect(f.call().catch(() => ({ ok: false }))).resolves.toMatchObject({ ok: false });
-  await expect(f.execute("polynet_read", { path: f.path }).catch(() => ({ ok: false }))).resolves.toMatchObject({ ok: false });
+  if (kind === "archived") {
+    await expect(f.call()).rejects.toThrow("community_archived");
+    await expect(f.execute("polynet_read", { path: f.path })).rejects.toThrow("community_archived");
+  } else {
+    expect(await f.call()).toMatchObject({ ok: false });
+    expect(await f.execute("polynet_read", { path: f.path })).toMatchObject({ ok: false });
+  }
   expect(await f.snapshot()).toEqual(before);
 });
 
@@ -127,9 +134,9 @@ test("other member, community agent and funnel builder cannot read or submit pri
   const f = await formFixture();
   const owner = f.t.withIdentity({ subject: "join-owner" });
   const ownerCtx = { runQuery: (ref: any, args: any) => owner.query(ref, args), runMutation: (ref: any, args: any) => owner.mutation(ref, args) };
-  for (const overrides of [{ principalKind: "community_agent" }, { evidenceSurface: "community_funnel_builder" }, { userId: f.ownerId, authSubject: "join-owner", ctx: ownerCtx }]) {
-    expect(await f.execute("polynet_read", { path: f.path }, overrides).catch(() => ({ ok: false }))).toMatchObject({ ok: false });
-    expect(await f.execute("polynet_call", f.input, overrides).catch(() => ({ ok: false }))).toMatchObject({ ok: false });
+  for (const overrides of [{ principalKind: "community_agent", mountedCommunityId: f.communityId }, { evidenceSurface: "community_funnel_builder" }, { userId: f.ownerId, authSubject: "join-owner", ctx: ownerCtx }]) {
+    expect(await f.execute("polynet_read", { path: f.path }, overrides)).toMatchObject({ ok: false });
+    expect(await f.execute("polynet_call", f.input, overrides)).toMatchObject({ ok: false });
   }
 });
 
