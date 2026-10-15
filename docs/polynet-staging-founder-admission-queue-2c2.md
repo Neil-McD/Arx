@@ -1,9 +1,9 @@
 # Slice 2C2: bounded founder admission queue
 
-Status: implemented and deployed to staging October 15, 2026. Native founder
-and cancellation proof passed; native applicant denial awaits first-time OAuth
-consent. See the [execution receipt](receipts/2026-10-15-staging-founder-admission-queue-2c2.md).
-Do not mark full live acceptance complete yet.
+Status: scoped staging acceptance passed October 15, 2026. Native founder,
+applicant/member denial and cancellation proofs are complete, with their exact
+limits in the [execution receipt](receipts/2026-10-15-staging-founder-admission-queue-2c2.md).
+Production is unchanged. Admission decisions remain outside this slice.
 
 ## 2C1 review and current baseline
 

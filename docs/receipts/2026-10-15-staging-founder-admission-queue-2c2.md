@@ -1,8 +1,7 @@
 # Slice 2C2: bounded founder admission queue
 
-**Implemented and deployed to staging, October 15, 2026. Live acceptance is
-partial: the native applicant OAuth denial control still requires consent.
-Production was untouched.**
+**Scoped staging acceptance passed, October 15, 2026. Applicant consent and
+native denial checks are now complete. Production was untouched.**
 
 [Structured evidence](evidence/2026-10-15-staging-founder-admission-queue-2c2.json).
 [Approved scope](../polynet-staging-founder-admission-queue-2c2.md).
@@ -59,28 +58,49 @@ scope correction, not a relaxation of runtime authentication.
 | Public fixture | Existing test applicant used Join free on `builder-canary-aug-6-2026-v3`; UI showed Request pending; canonical state was exactly one pending request and zero memberships/subscriptions |
 | Nonempty native list/read | Returned the same canonical request and public applicant; exact minimal fields; repeated list/read and fresh conversation were identical |
 | Private boundaries | Native wrong-community detail, inaccessible-community queue and queue search denied |
-| Applicant domain boundary | Both live internal domain readers returned `community_forbidden` for the actual applicant ID; this is an administrative read-only observer, not authenticated native applicant proof |
+| Applicant domain boundary | Both live internal domain readers returned `community_forbidden` for the actual applicant ID; separate administrative observer evidence |
+| Native applicant/member completion | Approved consent, verified exact applicant fingerprint; former applicant and current ordinary member both denied builder/queue list and document probes; fresh conversation and process restart retained denial |
+| Positive member control | The same native identity successfully listed `workflow-member-browser-qa-sep23` with current member/member authority before private-path denial |
 | No read effects | Named canonical fixture/history snapshots were identical during native reads and boundary calls |
 | Cancellation | Applicant used Cancel request; queue became empty and old exact detail denied; canonical fixture returned exactly to its baseline |
 | Retained history | Earlier revoked membership stayed inactive and unchanged; 2C1 contribution stayed unchanged |
 | Local disconnect | Both test aliases logged out; exact Keychain items absent; all proof processes exited; fresh process reported `notLoggedIn` and protected queue access required auth; user configuration hash unchanged |
 | Web cleanup | Account > Sign out > confirmation returned to signed-out landing with Sign in link |
 
-The first applicant native enrollment reused the founder's AuthKit session.
-Canonical identity checking rejected it before it could count as an applicant
-control. Fresh `prompt=login` selected the actual applicant but reached first-time
-consent for identity, profile, email and ongoing access. **Allow access was not
-clicked.** The browser tool requires action-time human confirmation for this new
-persistent grant. The unfinished consent was cancelled and temporary credentials
-were removed. Native applicant/member denial is therefore still unproven here;
-it must not be inferred from the live internal-domain check or local tests.
+The initial applicant enrollment reused the founder's AuthKit session. Identity
+checking rejected it before it counted as an applicant control; first-time
+applicant consent was initially left untouched and cancelled. The user then
+explicitly authorized that exact grant and requested completion.
+
+At 16:40 UTC the resumed native flow used fresh account selection and the normal
+Google sign-in. The consent screen identified the test applicant and the expected
+identity/profile/email/ongoing-access scope; Allow access was clicked under that
+explicit authorization. Native completion and canonical profile fingerprint
+`0443a57360b984c5d1cd38a8c2c078fb77c48ef3198dc535c37775b5e7b51bfc`
+matched. All six builder/queue list and document probes returned non-enumerating
+`semantic_not_found`. The positive member control independently established
+current ordinary-member authority. A fresh conversation and restarted process
+retained denial with the same canonical identity and no new login.
+
+Native logout removed the test credential again; both exact test Keychain items
+were absent. A fresh process reported `notLoggedIn` and protected queue access
+required auth. Every proof process exited and the user configuration hash stayed
+unchanged. The OAuth tab was closed; no new Polynet web session or admission
+fixture was created. Named admission/access/history snapshots stayed identical.
+Local removal does not certify upstream grant revocation.
+
+Foreground browser control was interrupted by another active workflow. Explicitly
+claiming the empty test tab allowed isolated completion. Transient DOM inspection
+timeouts did not prevent the callback screenshot from showing Authentication
+complete; native completion and authenticated identity checks independently
+corroborated success. No unrelated authorization control was operated.
 
 The browser-tab service initially failed to load its request-header policy;
 normal native Chrome control completed the founder/public-funnel flows. No
 browser warning, callback or permission bypass was used. Local ignored screenshots
 show the pending and cancelled public fixture; their hashes are in the JSON.
 
-## Limits and remaining gate
+## Verification limits
 
 - 89 focused executor/admission tests passed, including advancing pages,
   termination, default 20 with 21 rows, bounds, foreign/malformed cursors,
@@ -90,6 +110,11 @@ show the pending and cancelled public fixture; their hashes are in the JSON.
   Semantic repository, MCP surface/auth/profile and operation proofs passed;
   both typechecks passed. Full candidate gate passed separately.
 - Live pagination contained one request. Multi-page coverage is local evidence.
+- The follow-up applicant's original request was already cancelled. Native
+  document-denial probes used a syntactically valid nonexistent selector; they
+  do not certify access denial for a currently existing pending record. Earlier
+  live founder reads cover an existing record, and local role tests cover
+  existing-row denial. No second fixture or membership change was introduced.
 - Session setup and normal navigation may write session/presence/read-cursor
   state. Snapshot equality covers the named admission/access/history fixtures,
   not all staging tables. No inference, approval, denial, billing change,
@@ -98,7 +123,7 @@ show the pending and cancelled public fixture; their hashes are in the JSON.
   rejection of already issued tokens. Provider/Google sessions were not globally
   revoked. Existing staging background workers were not certified inactive.
 
-Remaining: obtain explicit confirmation for the applicant's first-time staging
-Codex OAuth consent, then use its verified canonical identity for native queue
-list/read denial, clean up again, and reconcile this receipt. Do not proceed to
-an admission-decision slice or call full 2C2 live acceptance complete before then.
+No gate remains for this bounded read-only slice. Admission decisions, notifications,
+and membership changes remain a separately scoped future contract. Runtime source
+and deployment were unchanged during this follow-up; only receipt/plan documents
+were updated. The existing exact-candidate gate remains the runtime validation.
