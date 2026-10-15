@@ -62,6 +62,7 @@ Historical receipts retain their original source and deployment boundaries.
 | 7. Reference UI and distribution | Open | Founder journey parity before UI deletion; distribution follows demonstrated value |
 
 Next slice: [4A2 fresh-source compilation and citation plan](polynet-staging-source-compilation-4a2.md).
+**Execution is paused by the user for the [product-vision handoff](polynet-headless-agent-handoff.md).**
 Planning found a preexisting standalone compiler-admission proof failure: its
 mock interaction refs do not satisfy current source checks, and the check is not
 in the release gate. Repair source-backed behavioral coverage before live 4A2.

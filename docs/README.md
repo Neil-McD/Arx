@@ -1,5 +1,8 @@
 # Docs Index
 
+## Agent orientation
+1. [Polynet headless vision and zero-context handoff](polynet-headless-agent-handoff.md)
+
 ## Product Documentation
 1. `product/README.md`
 2. `product/llms.txt`
