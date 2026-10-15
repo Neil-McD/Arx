@@ -1,9 +1,9 @@
 # Slice 3A1 proposal: one private form to verified member progress
 
-Status: implementation authorized October 15, 2026. Work is confined to staging;
-production remains untouched. The approved requirements and exclusions below
-remain the proof boundary. Implementation and live evidence are recorded in the
-completion receipt.
+Status: bounded staging acceptance passed October 15, 2026. Production is
+untouched. [Implementation and live evidence](receipts/2026-10-15-staging-member-progress-3a1.md)
+record the exact candidate, retained effects and proof limits. The requirements
+and exclusions below remain the approved boundary.
 
 This is the first progress slice from execution package 5, principally C17/C18
 with one C22 external adapter. It does not require completing every administration

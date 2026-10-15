@@ -743,7 +743,8 @@ async function executeCanonicalList(args: {
       value: virtualDirectory({
         path: absolutePath,
         entries: [{ path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" },
-          { path: mountedPath(target.communitySlug, SELF_FORMS_DIRECTORY), kind: "directory", type: "private_assigned_forms" }],
+          ...(args.evidenceSurface === "community_funnel_builder" ? [] :
+            [{ path: mountedPath(target.communitySlug, SELF_FORMS_DIRECTORY), kind: "directory", type: "private_assigned_forms" }])],
         searchable: false, writable: false,
       }),
     };

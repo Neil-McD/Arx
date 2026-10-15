@@ -211,3 +211,10 @@ test("aggregate valid text answers cannot make a submitted document unreadable",
   expect(await f.call({ ...f.input, input: { ...f.input.input, answers: { a: "x".repeat(8000), b: "x".repeat(8000), c: "x".repeat(8000) } } })).toMatchObject({ ok: false, code: "form_payload_too_large" });
   expect(await f.snapshot()).toEqual(before);
 });
+
+test("funnel builder self directory does not advertise the private forms adapter", async () => {
+  const f = await formFixture();
+  const result = await f.execute("polynet_list", { path: "/communities/join-workflow/members/me/" }, { evidenceSurface: "community_funnel_builder" });
+  expect(result).toMatchObject({ ok: true });
+  expect(JSON.stringify(result)).not.toContain("/forms/");
+});
