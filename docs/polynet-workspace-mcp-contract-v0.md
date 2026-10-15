@@ -117,6 +117,19 @@ Failures are intentionally non-enumerating. An inaccessible community or
 builder path appears not found; server state never trusts a client-claimed
 lane.
 
+### Pending admission queue
+
+Builder list/read exposes `builder/join-requests/` and its returned `<request-id>.md`
+paths. Every page and exact read rechecks current owner/admin manager authority.
+The queue includes only canonical pending requests: request reference, public
+applicant reference, status and timestamps. It excludes emails and free-text
+messages. Default page size is 20 (2–50); opaque continuation cursors are scoped
+to actor, community and pending query and confer no authority. Cancelled or
+otherwise decided requests are unavailable on exact read. The directory is
+read-only, non-searchable, and absent from member and community-agent projections.
+Existing first-party moderator review remains unchanged. Admission decisions are
+not agent-callable.
+
 ## Mutation model
 
 `polynet_write` writes only through canonical domain owners:

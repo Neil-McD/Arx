@@ -613,6 +613,7 @@ test("self-context query rechecks access after path resolution and refuses direc
 });
 
 const modules = import.meta.glob([
+  "./communityAdmin.ts",
   "./communityIntegrationConnections.ts",
   "./communityIntegrationActions.ts",
   "./communityAgent.ts",
@@ -2819,4 +2820,159 @@ test("community-memory outcome effects survive receipt-completion crashes withou
       await ctx.db.query("communityIntelligenceChangeRequests").collect(),
     ).toHaveLength(1);
   });
+});
+
+
+const admissionQueuePath = "/communities/canonical-community/builder/join-requests/";
+async function admissionFixture(t: ReturnType<typeof convexTest>, count = 5) {
+  const f = await createFixture(t);
+  const admin = await createAdminFixture(t, f);
+  const requests = await t.run(async ctx => {
+    const ids = [];
+    for (let i = 0; i < count; i++) {
+      const userId = await ctx.db.insert("users", { authSubject: `applicant-${i}`, email: `private-${i}@example.com`, createdAt: 100 + i, updatedAt: 100 + i });
+      ids.push(await ctx.db.insert("communityJoinRequests", { communityId: f.communityId, userId, status: "pending", createdAt: 100 + i, updatedAt: 100 + i }));
+    }
+    return ids;
+  });
+  const call = (toolName: "polynet_list" | "polynet_read" | "polynet_search", input: Record<string, unknown>,
+    actor = { userId: f.ownerId, authSubject: f.ownerSubject }, communityAgent = false) => executePolynetCanonicalTool({
+      ctx: executionContext(t.withIdentity({ subject: actor.authSubject })), ...actor,
+      principalKind: communityAgent ? "community_agent" : "external_mcp", evidenceSurface: "external_mcp",
+      ...(communityAgent ? { mountedCommunityId: f.communityId } : {}), toolName, input,
+    });
+  return { ...f, admin, requests, call };
+}
+
+test("admission queue advances bounded pages, exact reads and replay without domain writes", async () => {
+  const t = convexTest(schema, modules); const f = await admissionFixture(t);
+  const snapshot = () => t.run(async ctx => ({ requests: await ctx.db.query("communityJoinRequests").collect(),
+    memberships: await ctx.db.query("communityMemberships").collect(), subscriptions: await ctx.db.query("communitySubscriptions").collect(),
+    audit: await ctx.db.query("criticalAuditEvents").collect() }));
+  const before = await snapshot();
+  const builder = await f.call("polynet_list", { path: "/communities/canonical-community/builder/" });
+  expect(builder).toMatchObject({ ok: true, value: { entries: expect.arrayContaining([expect.objectContaining({ path: admissionQueuePath })]) } });
+  const found: string[] = []; const cursors = new Set<string>(); let cursor: string | null = null;
+  do {
+    const result = await f.call("polynet_list", { path: admissionQueuePath, limit: 2, ...(cursor ? { cursor } : {}) });
+    expect(result.ok).toBe(true); if (!result.ok) throw new Error("queue failed");
+    expect(result.value).toMatchObject({ searchable: false, writable: false });
+    expect(result.value.total_count).toBeUndefined();
+    const entries = result.value.entries as Array<Record<string, any>>;
+    expect(entries.length).toBeLessThanOrEqual(2);
+    for (const entry of entries) {
+      found.push(entry.path);
+      expect(Object.keys(entry).sort()).toEqual(["applicant_ref", "created_at", "kind", "path", "ref", "status", "type", "updated_at"]);
+      expect(entry.applicant_ref).toMatch(/^user:applicant-/);
+      const read = await f.call("polynet_read", { path: entry.path });
+      expect(read, entry.path).toMatchObject({ ok: true }); if (!read.ok) throw new Error("read failed");
+      expect(JSON.parse(String(read.value.body))).toEqual({ ref: entry.ref, applicant_ref: entry.applicant_ref,
+        status: "pending", created_at: entry.created_at, updated_at: entry.updated_at });
+      expect(await f.call("polynet_read", { path: entry.path })).toEqual(read);
+    }
+    cursor = result.value.next_cursor as string | null;
+    if (cursor) { expect(cursors.has(cursor)).toBe(false); cursors.add(cursor); }
+    expect(cursors.size).toBeLessThan(5);
+  } while (cursor);
+  expect(found).toEqual([...f.requests].reverse().map(id => `${admissionQueuePath}${id}.md`));
+  expect(await snapshot()).toEqual(before);
+  expect(await f.call("polynet_list", { path: admissionQueuePath }, f.admin)).toMatchObject({ ok: true });
+  expect(await f.call("polynet_read", { path: found[0] }, f.admin)).toMatchObject({ ok: true });
+  expect(await f.call("polynet_search", { path: admissionQueuePath, query: "applicant" })).toMatchObject({ ok: false });
+  const broad = await f.call("polynet_search", { path: "/communities/canonical-community/", query: "applicant" });
+  expect(JSON.stringify(broad)).not.toContain("join-request:");
+  expect(JSON.stringify(broad)).not.toContain("private-");
+});
+
+test("admission queue bounds, cursor scope and empty termination fail closed", async () => {
+  const t = convexTest(schema, modules); const f = await admissionFixture(t);
+  const first = await f.call("polynet_list", { path: admissionQueuePath, limit: 2 });
+  if (!first.ok) throw new Error("queue failed");
+  const cursor = first.value.next_cursor;
+  for (const limit of [1, 51, 2.5]) expect(await f.call("polynet_list", { path: admissionQueuePath, limit })).toMatchObject({ ok: false });
+  expect(await f.call("polynet_list", { path: admissionQueuePath, limit: 50 })).toMatchObject({ ok: true });
+  for (const invalid of ["bad", "{}", JSON.stringify({ scope: [], cursor: "bad" })]) {
+    expect(await f.call("polynet_list", { path: admissionQueuePath, cursor: invalid })).toMatchObject({ ok: false });
+  }
+  expect(await f.call("polynet_list", { path: admissionQueuePath, cursor }, f.admin)).toMatchObject({ ok: false });
+  const other = admissionQueuePath.replace("canonical-community", "other-community");
+  expect(await f.call("polynet_list", { path: other, cursor })).toMatchObject({ ok: false });
+  expect(await f.call("polynet_list", { path: other })).toMatchObject({ ok: true, value: { entries: [], next_cursor: null, truncated: false } });
+  const tampered = JSON.parse(String(cursor)); tampered.cursor = "invalid-native-cursor";
+  expect(await f.call("polynet_list", { path: admissionQueuePath, cursor: JSON.stringify(tampered) })).toMatchObject({ ok: false });
+});
+
+test.each(["member", "moderator", "applicant", "outsider", "community_agent"])("admission queue denies %s list and detail", async mode => {
+  const t = convexTest(schema, modules); const f = await admissionFixture(t);
+  let actor = { userId: f.memberId, authSubject: f.memberSubject };
+  if (mode === "moderator") await t.run(async ctx => {
+    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique();
+    await ctx.db.patch(membership!._id, { role: "moderator" });
+  });
+  if (mode === "applicant") actor = await t.run(async ctx => ({ userId: (await ctx.db.get(f.requests[0]))!.userId, authSubject: "applicant-0" }));
+  if (mode === "outsider") actor = await t.run(async ctx => ({ userId: await ctx.db.insert("users", { authSubject: "outsider", createdAt: 1, updatedAt: 1 }), authSubject: "outsider" }));
+  if (mode === "community_agent") actor = { userId: f.ownerId, authSubject: f.ownerSubject };
+  for (const [tool, path] of [["polynet_list", admissionQueuePath], ["polynet_read", `${admissionQueuePath}${f.requests[0]}.md`]] as const) {
+    expect(await f.call(tool, { path }, actor, mode === "community_agent")).toMatchObject({ ok: false });
+  }
+  // Domain authorization independently protects reads even without the MCP lane guard.
+  if (mode !== "community_agent") {
+    await expect(t.query(internal.communityAdmin.listPendingAdmissionRequestsInternal, { userId: actor.userId, communityId: f.communityId })).rejects.toThrow();
+    await expect(t.query(internal.communityAdmin.readPendingAdmissionRequestInternal, { userId: actor.userId, communityId: f.communityId, requestId: f.requests[0] })).rejects.toThrow();
+  }
+});
+
+test.each(["role", "entitlement", "block", "archived"])("admission queue reauthorizes %s on subsequent pages and detail", async mode => {
+  const t = convexTest(schema, modules); const f = await admissionFixture(t);
+  const first = await f.call("polynet_list", { path: admissionQueuePath, limit: 2 }, f.admin);
+  if (!first.ok) throw new Error("queue failed");
+  await t.run(async ctx => {
+    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.admin.userId)).unique();
+    if (mode === "role") await ctx.db.patch(membership!._id, { role: "member" });
+    if (mode === "entitlement") await ctx.db.patch(membership!._id, { active: false });
+    if (mode === "block") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.admin.userId, createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
+    if (mode === "archived") await ctx.db.patch(f.communityId, { lifecycleStatus: "archived" });
+  });
+  for (const [tool, input] of [["polynet_list", { path: admissionQueuePath, cursor: first.value.next_cursor }],
+    ["polynet_read", { path: `${admissionQueuePath}${f.requests[0]}.md` }]] as const) {
+    if (mode === "archived") await expect(f.call(tool, input, f.admin)).rejects.toThrow("community_archived");
+    else expect(await f.call(tool, input, f.admin)).toMatchObject({ ok: false });
+  }
+  await expect(t.query(internal.communityAdmin.listPendingAdmissionRequestsInternal, { userId: f.admin.userId, communityId: f.communityId, cursor: "bad" })).rejects.toThrow();
+  await expect(t.query(internal.communityAdmin.readPendingAdmissionRequestInternal, { userId: f.admin.userId, communityId: f.communityId, requestId: f.requests[0] })).rejects.toThrow();
+});
+
+test.each(["cancelled", "denied", "legacy", "malformed", "duplicate", "wrong-community"])("admission exact read denies %s state without repair", async mode => {
+  const t = convexTest(schema, modules); const f = await admissionFixture(t, 1);
+  const id = f.requests[0];
+  await t.run(async ctx => {
+    const row = (await ctx.db.get(id))!;
+    if (mode === "cancelled") await ctx.db.delete(id);
+    if (mode === "denied") await ctx.db.patch(id, { status: "denied", deniedAt: 200, reapplyAt: 300 });
+    if (mode === "legacy") await ctx.db.patch(id, { status: "approved" });
+    if (mode === "malformed") await ctx.db.patch(id, { message: "private legacy message" });
+    if (mode === "duplicate") await ctx.db.insert("communityJoinRequests", { communityId: f.communityId, userId: row.userId, status: "pending", createdAt: 101, updatedAt: 101 });
+    if (mode === "wrong-community") await ctx.db.patch(id, { communityId: f.otherCommunityId });
+  });
+  const before = await t.run(ctx => ctx.db.query("communityJoinRequests").collect());
+  expect(await f.call("polynet_read", { path: `${admissionQueuePath}${id}.md` })).toMatchObject({ ok: false });
+  if (["malformed", "duplicate"].includes(mode)) expect(await f.call("polynet_list", { path: admissionQueuePath })).toMatchObject({ ok: false });
+  expect(await t.run(ctx => ctx.db.query("communityJoinRequests").collect())).toEqual(before);
+});
+
+
+test("admission queue defaults to twenty and rejects write or decision operations", async () => {
+  const t = convexTest(schema, modules); const f = await admissionFixture(t, 21);
+  const page = await f.call("polynet_list", { path: admissionQueuePath });
+  expect(page).toMatchObject({ ok: true, value: { entries: expect.any(Array), next_cursor: expect.any(String) } });
+  if (!page.ok) throw new Error("queue failed");
+  expect(page.value.entries).toHaveLength(20);
+  const common = { ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), userId: f.ownerId,
+    authSubject: f.ownerSubject, principalKind: "external_mcp" as const, evidenceSurface: "external_mcp" as const };
+  expect(await executePolynetCanonicalTool({ ...common, toolName: "polynet_write", input: {
+    path: admissionQueuePath, content: "approve", idempotency_key: "queue-must-not-write" } })).toMatchObject({ ok: false });
+  expect(await executePolynetCanonicalTool({ ...common, toolName: "polynet_call", input: {
+    path: admissionQueuePath, operation: "community.admission.approve", version: 1,
+    input: { request_id: f.requests[0] }, idempotency_key: "queue-must-not-decide" } })).toMatchObject({ ok: false });
+  expect(await t.run(ctx => ctx.db.query("communityJoinRequests").collect())).toHaveLength(21);
 });

@@ -5,6 +5,7 @@ import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContra
 import { parseCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract.ts";
 import {
   WORKFLOW_MEMBERS_DIRECTORY,
+  POLYNET_JOIN_REQUESTS_DIRECTORY_PATH,
   POLYNET_BUILDER_DIRECTORY_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
@@ -891,6 +892,27 @@ async function executeCanonicalList(args: {
       }),
     };
   }
+  if (target.localPath === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH) {
+    if (!target.authority.canUseBuilderProjection || args.principalKind === "community_agent") {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const page = await args.ctx.runQuery(
+        internal.communityAdmin.listPendingAdmissionRequestsInternal,
+        { userId: args.userId, communityId: target.communityId,
+          ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
+          ...(args.input.limit !== undefined ? { limit: args.input.limit } : {}) },
+      );
+      return { ok: true, value: virtualDirectory({ path: absolutePath,
+        entries: page.requests.map((request: { ref: string }) => ({ ...request,
+          path: mountedPath(target.communitySlug, `${POLYNET_JOIN_REQUESTS_DIRECTORY_PATH}${request.ref.slice("join-request:".length)}.md`),
+          kind: "document", type: "join_request" })),
+        nextCursor: page.next_cursor, truncated: page.next_cursor !== null,
+        searchable: false, writable: false }) };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
   if (target.localPath === POLYNET_BUILDER_DIRECTORY_PATH) {
     if (!target.authority.canUseBuilderProjection) {
       return canonicalError(
@@ -903,6 +925,7 @@ async function executeCanonicalList(args: {
       value: virtualDirectory({
         path: absolutePath,
         entries: [
+          { path: mountedPath(target.communitySlug, POLYNET_JOIN_REQUESTS_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Pending admission requests" },
           { path: mountedPath(target.communitySlug, WORKFLOW_MEMBERS_DIRECTORY), kind: "directory", type: "builder", name: "Member workflow context and form responses" },
           {
             path: mountedPath(
@@ -1107,6 +1130,21 @@ async function executeCanonicalRead(args: {
       ...renderCommunityMemberSelfContext(resolvedSelf.context),
       writable: false,
     } };
+  }
+
+  if (target.localPath.startsWith(POLYNET_JOIN_REQUESTS_DIRECTORY_PATH)) {
+    const match = /^\/builder\/join-requests\/([A-Za-z0-9]+)\.md$/.exec(target.localPath);
+    if (!match || !target.authority.canUseBuilderProjection || args.principalKind === "community_agent") {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const request = await args.ctx.runQuery(internal.communityAdmin.readPendingAdmissionRequestInternal,
+        { userId: args.userId, communityId: target.communityId, requestId: match[1] });
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath,
+        payload: request, ref: request.ref }), writable: false, searchable: false } };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
   }
 
   if (target.localPath.startsWith(WORKFLOW_MEMBERS_DIRECTORY)) {
@@ -1379,6 +1417,9 @@ async function executeCanonicalSearch(args: {
       "semantic_not_found",
       "Repository path not found or not accessible.",
     );
+  }
+  if (target.localPath.startsWith(POLYNET_JOIN_REQUESTS_DIRECTORY_PATH)) {
+    return canonicalError("semantic_not_found", "Community path not found or not accessible.");
   }
   const query = requiredString(args.input.query, 500);
   if (!query) return canonicalError("invalid_tool_args", "query is required.");

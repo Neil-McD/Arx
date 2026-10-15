@@ -43,6 +43,7 @@ import {
   deleteCommunityJoinRequestByPair,
   denyCommunityJoinRequestCore,
   ensureDeniedCommunityJoinRequest,
+  getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
@@ -1251,6 +1252,69 @@ export const listCommunityMembershipCreatedAtRows = query({
       .sort((a, b) => a.createdAt - b.createdAt)
       .slice(0, limit)
       .map((row) => ({ created_at: toIsoString(row.createdAt) }));
+  },
+});
+
+// Read-only founder projection. The existing moderator RPC below retains its contract.
+async function mapPendingAdmissionRequest(ctx: any, row: CommunityJoinRequestLike) {
+  if (assertCanonicalCommunityJoinRequest(row) !== "pending" ||
+      !Number.isFinite(row.createdAt) || !Number.isFinite(row.updatedAt)) {
+    throw new Error("community_join_request_unavailable");
+  }
+  const current = await getCurrentCommunityJoinRequestByPair({
+    ctx, communityId: row.communityId, userId: row.userId,
+  });
+  if (!current || String(current._id) !== String(row._id)) {
+    throw new Error("community_join_request_unavailable");
+  }
+  return {
+    ref: `join-request:${row._id}`,
+    applicant_ref: `user:${(await resolvePublicUserId(ctx, row.userId)) ?? String(row.userId)}`,
+    status: "pending" as const,
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+export const listPendingAdmissionRequestsInternal = internalQuery({
+  args: {
+    userId: v.id("users"), communityId: v.id("communities"),
+    cursor: v.optional(v.string()), limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const limit = args.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 2 || limit > 50) {
+      throw new Error("community_join_request_limit_invalid");
+    }
+    const scope = JSON.stringify([args.userId, args.communityId, "pending", "createdAt:desc", 1]);
+    let cursor: string | null = null;
+    if (args.cursor !== undefined) {
+      let decoded;
+      try { decoded = JSON.parse(args.cursor); } catch { throw new Error("community_join_request_cursor_invalid"); }
+      if (args.cursor.length > 2048 || decoded?.scope !== scope ||
+          typeof decoded.cursor !== "string" || !decoded.cursor) {
+        throw new Error("community_join_request_cursor_invalid");
+      }
+      cursor = decoded.cursor;
+    }
+    const result = await ctx.db.query("communityJoinRequests")
+      .withIndex("by_community_status_createdAt", q => q.eq("communityId", args.communityId).eq("status", "pending"))
+      .order("desc").paginate({ cursor, numItems: limit });
+    return {
+      requests: await Promise.all(result.page.map(row => mapPendingAdmissionRequest(ctx, row))),
+      next_cursor: result.isDone ? null : JSON.stringify({ scope, cursor: result.continueCursor }),
+    };
+  },
+});
+
+export const readPendingAdmissionRequestInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.id("communityJoinRequests") },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const row = await ctx.db.get(args.requestId);
+    if (!row || row.communityId !== args.communityId) throw new Error("community_join_request_unavailable");
+    return await mapPendingAdmissionRequest(ctx, row);
   },
 });
 

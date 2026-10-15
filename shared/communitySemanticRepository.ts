@@ -21,6 +21,7 @@ export const POLYNET_EVENTS_DIRECTORY_PATH = "/events/";
 export const POLYNET_MEMORY_DIRECTORY_PATH = "/memory/";
 export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";
 export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
+export const POLYNET_JOIN_REQUESTS_DIRECTORY_PATH = "/builder/join-requests/";
 export const WORKFLOW_MEMBERS_DIRECTORY = "/builder/workflow-members/";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
@@ -346,6 +347,7 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_MEMORY_DIRECTORY_PATH &&
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
       value !== POLYNET_BUILDER_DIRECTORY_PATH &&
+      value !== POLYNET_JOIN_REQUESTS_DIRECTORY_PATH &&
       value !== WORKFLOW_MEMBERS_DIRECTORY &&
       value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) ||
     value.split("/").some((part) => part === "." || part === "..")
@@ -376,6 +378,8 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
+    value === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH ||
+    /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
     value === WORKFLOW_MEMBERS_DIRECTORY ||
     /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
@@ -457,6 +461,7 @@ export function validateCommunitySemanticOperationInput(args: {
       );
     }
     const listable =
+      parsed.path === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH ||
       parsed.path === WORKFLOW_MEMBERS_DIRECTORY ||
       parsed.path === POLYNET_SEMANTIC_ROOT_PATH ||
       parsed.path === POLYNET_MEMBERS_DIRECTORY_PATH ||
@@ -512,6 +517,7 @@ export function validateCommunitySemanticOperationInput(args: {
     "memberUserId" in parsed;
   const isCanonicalVirtualDocumentRead =
     /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(parsed.path) ||
+    /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||
     /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||
