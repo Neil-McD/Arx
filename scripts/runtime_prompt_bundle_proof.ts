@@ -86,6 +86,7 @@ assert.deepEqual(
     "invocation_surface",
     "current_surface",
     "member_identity_context",
+    "community_memory_recall",
     "community_lens",
     "community_lens_authority",
     "community_system_prompt",

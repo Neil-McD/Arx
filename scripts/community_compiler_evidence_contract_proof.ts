@@ -23,7 +23,7 @@ assert.doesNotMatch(`${evidence}\n${evidenceCore}`, /userId|authSubject|userProm
 
 assert.match(evidenceCore, /COMPILER_EVIDENCE_BATCH_THRESHOLD = 8/);
 assert.match(evidenceCore, /COMPILER_EVIDENCE_STRONG_THRESHOLD = 5/);
-assert.match(evidenceCore, /COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 72 \* 60 \* 60 \* 1000/);
+assert.match(evidenceCore, /COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 6 \* 60 \* 60 \* 1000/);
 assert.match(
   evidenceCore,
   /COMPILER_EVIDENCE_PACKET_LIMIT = 8[\s\S]*COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT = 12[\s\S]*COMPILER_EVIDENCE_RUN_LIMIT =[\s\S]*COMPILER_EVIDENCE_PACKET_LIMIT \* COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT/,
