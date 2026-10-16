@@ -34,8 +34,8 @@ edge, deploys.**
 | Platform | Front ends | Backend | Why it fits them |
 | --- | --- | --- | --- |
 | **Shopify** Oxygen | Gateway Worker plus per-store workers, on Cloudflare's runtime | One shared commerce backend | Shared, trusted core (orders, money) + custom storefronts. **Closest to us** |
-| **Lovable** | Hosted per app (reported on Cloudflare Workers) | One Supabase project per app | Apps share nothing |
-| **Bolt** | Netlify or `.bolt.host` | Supabase database per project | Apps share nothing |
+| **Lovable** | Hosted per app (reported on Cloudflare Workers) | One managed Postgres project per app | Apps share nothing |
+| **Bolt** | Netlify or `.bolt.host` | A managed Postgres database per project | Apps share nothing |
 | **Convex Chef** | Dev deploy per app | One Convex project per app | Apps share nothing |
 | **Vercel for Platforms** | One codebase for many tenants, or a project per tenant (100 creations an hour) | Bring your own | Built for one app with many domains |
 
@@ -125,8 +125,7 @@ Convex (one shared deployment): canonical executor, domain owners, invariants
   [Hydrogen and Oxygen fundamentals](https://shopify.dev/docs/storefronts/headless/hydrogen/fundamentals)
 - Vercel: [multi-project platform limits](https://vercel.com/docs/platforms/multi-project-platforms/reference),
   [multi-tenant limits](https://vercel.com/docs/platforms/multi-tenant-platforms/limits)
-- Builders: [Lovable Cloud on Supabase](https://supabase.com/blog/lovable-cloud-launch),
-  [Bolt Cloud](https://bolt.new/blog/bolt-cloud), [Convex Chef](https://docs.convex.dev/chef)
+- Builders: [Lovable Cloud](https://lovable.dev/blog), [Bolt Cloud](https://bolt.new/blog/bolt-cloud), [Convex Chef](https://docs.convex.dev/chef)
 - Convex: [custom JWT providers](https://docs.convex.dev/auth/advanced/custom-jwt),
   [limits](https://docs.convex.dev/production/state/limits)
 - Auth and isolation: [WorkOS redirect URIs](https://workos.com/docs/sso/redirect-uris/wildcard-characters),
