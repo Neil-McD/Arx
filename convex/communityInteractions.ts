@@ -1654,8 +1654,7 @@ async function insertCommunityInteractionMentionRows(args: {
   return { communityAgentMention };
 }
 
-export const createCommunityInteractionComposerMessage = mutation({
-  args: {
+const communityInteractionComposerArgs = {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
@@ -1677,9 +1676,17 @@ export const createCommunityInteractionComposerMessage = mutation({
     ),
     attachments: v.optional(v.array(v.union(interactionAttachmentInputValidator, legacyInteractionAttachmentInputValidator))),
     asPersonalAgent: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
+  };
+
+// One composer path. The public mutation verifies the signed-in caller; the
+// internal variant serves trusted server adapters (community apps) that have
+// already authenticated the member, and must never take a client-chosen user.
+async function createCommunityInteractionComposerMessageCore(
+  ctx: any,
+  args: any,
+  trustedUserId?: any,
+) {
+    const userId = trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
@@ -2012,7 +2019,17 @@ export const createCommunityInteractionComposerMessage = mutation({
         idempotency_key: idempotencyKey,
       },
     };
-  },
+}
+
+export const createCommunityInteractionComposerMessage = mutation({
+  args: communityInteractionComposerArgs,
+  handler: (ctx, args) => createCommunityInteractionComposerMessageCore(ctx, args),
+});
+
+export const createCommunityInteractionComposerMessageForTrustedUserInternal = internalMutation({
+  args: { ...communityInteractionComposerArgs, trustedUserId: v.id("users") },
+  handler: (ctx, { trustedUserId, ...args }) =>
+    createCommunityInteractionComposerMessageCore(ctx, args, trustedUserId),
 });
 
 export const createCommunityAgentCanonicalInteractionInternal = internalMutation({

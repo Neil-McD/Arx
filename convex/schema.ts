@@ -2449,6 +2449,43 @@ export default defineSchema({
     .index("by_run_seq", ["runId", "seq"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
+  // Community apps: founder-registered experiences that act for a signed-in
+  // member through an app session, confined to one community and member lane.
+  communityApps: defineTable({
+    communityId: v.id("communities"),
+    slug: v.string(),
+    name: v.string(),
+    origin: v.string(),
+    allowedTools: v.array(
+      v.union(
+        v.literal("polynet_list"),
+        v.literal("polynet_read"),
+        v.literal("polynet_search"),
+        v.literal("polynet_write"),
+        v.literal("polynet_call"),
+      ),
+    ),
+    status: v.union(v.literal("active"), v.literal("disabled")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_slug", ["communityId", "slug"])
+    .index("by_origin_status", ["origin", "status"]),
+
+  // Short-lived opaque app sessions. Only the SHA-256 of the token is stored.
+  communityAppSessions: defineTable({
+    tokenHash: v.string(),
+    appId: v.id("communityApps"),
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    origin: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_app_user_expiresAt", ["appId", "userId", "expiresAt"]),
+
   skillPackages: defineTable({
     ownerUserId: v.id("users"),
     catalogSkillId: v.optional(v.string()),
@@ -2816,6 +2853,7 @@ export default defineSchema({
       v.literal("personal_agent"),
       v.literal("external_mcp"),
       v.literal("community_agent"),
+      v.literal("community_app"),
     ),
     toolName: v.union(v.literal("polynet_write"), v.literal("polynet_call")),
     idempotencyKey: v.string(),
