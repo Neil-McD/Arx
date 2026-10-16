@@ -105,6 +105,8 @@ test("first sign-in shows an escaped consent page instead of a code", async () =
   expect(html).toContain("Post as you");
   expect(html).toContain('<form method="post">');
   expect(html).not.toContain("<Hello>");
+  // The post-submit redirect to the community must be allowed by form-action.
+  expect(String(r.headers.get("content-security-policy"))).toContain("form-action 'self' https://hello.example.com;");
 });
 
 test("approving from the consent page requests a code with consent", async () => {

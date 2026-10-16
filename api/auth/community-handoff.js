@@ -62,14 +62,16 @@ function readParams(req) {
   return new URL(req.url ?? "/", "http://polynet.local").searchParams;
 }
 
-function renderConsent(res, app, params) {
+function renderConsent(res, app, params, callbackOrigin) {
   const tools = (app.tools ?? []).map((tool) => `<li>${escapeHtml(TOOL_LABELS[tool] ?? tool)}</li>`).join("");
   const hidden = ["community", "redirect_uri", "state"]
     .map((name) => `<input type="hidden" name="${name}" value="${escapeHtml(params.get(name))}">`).join("");
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'");
+  // form-action also governs the redirect after posting, so it must allow the
+  // community's validated callback origin as well as this page.
+  res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${callbackOrigin}; frame-ancestors 'none'`);
   res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Allow access</title>
 <style>:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;display:grid;place-items:center;min-height:100vh}main{max-width:420px;padding:24px}button{padding:10px 16px;border-radius:8px;border:1px solid #8886;margin-right:8px;cursor:pointer}.primary{font-weight:600}.origin{opacity:.7;word-break:break-all}</style></head>
 <body><main><h1>Allow ${escapeHtml(app.name)}?</h1>
@@ -130,7 +132,7 @@ export default async function handler(req, res) {
     return;
   }
   if (payload?.code === "consent_required" && payload.app) {
-    renderConsent(res, payload.app, query);
+    renderConsent(res, payload.app, query, callback.origin);
     return;
   }
   if (payload?.code === "sign_in_required") {
