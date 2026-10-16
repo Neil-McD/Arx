@@ -67,6 +67,8 @@ The executor derives authority for every call:
 - owner/admin with current resource-management permission: builder lane;
 - moderator/member: member lane;
 - community-owned agent: fixed member lane within its mounted community;
+- community app: the signed-in member's current relation, forced to the member
+  lane and mounted to the app's community (see Community apps below);
 - builder decisions that grant access or advance members (admission and
   milestone approval): official external MCP only, never the native personal agent;
 - missing or revoked entitlement: no access.
@@ -164,3 +166,30 @@ function-spec digest
 6. The external smoke now follows every advancing `/communities/` cursor before
    validating an explicitly requested community. A repeated cursor fails
    closed instead of silently substituting a first-page community.
+
+## Community apps
+
+A founder registers a community app (`convex/communityApps.ts`) with an exact
+HTTPS origin (or `http://localhost` for development) and the subset of the five
+verbs it may use. When a member opens it from Polynet, the shell calls
+`mintCommunityAppSession`; an action generates a random `pna_` token, and only
+its SHA-256 is stored, bound to member, community, app and origin, for 15
+minutes.
+
+The app calls `POST /runtime/app` on the Convex site with
+`Authorization: Bearer <token>` and `{ "tool": "polynet_*", "input": {...} }`.
+CORS is granted only to an active app's exact origin. Each request resolves the
+session, then runs the canonical executor as principal `community_app`:
+
+- authority = the member's current access ∩ the mounted community ∩ the app's
+  allowed verbs, re-derived on every request; revoking membership or disabling
+  the app takes effect immediately;
+- member lane only, even when the member owns the community: no `builder/`
+  paths and no admission or milestone capabilities;
+- community paths only: no platform root, other communities or user profiles;
+- channel writes are the member's own posts (actor `human`) through the trusted
+  composer, with `community_app` canonical receipts; file attachments are refused.
+
+Retrieval logs record these reads on the `external_mcp` surface; a dedicated
+surface is a follow-up.
+

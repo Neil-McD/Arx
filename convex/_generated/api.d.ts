@@ -41,6 +41,7 @@ import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCor
 import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
+import type * as communityApps from "../communityApps.js";
 import type * as communityAttachmentDownloads from "../communityAttachmentDownloads.js";
 import type * as communityAttachmentUploads from "../communityAttachmentUploads.js";
 import type * as communityAttention from "../communityAttention.js";
@@ -175,6 +176,7 @@ import type * as httpAuth from "../httpAuth.js";
 import type * as httpAuthBridge from "../httpAuthBridge.js";
 import type * as httpBilling from "../httpBilling.js";
 import type * as httpChatgpt from "../httpChatgpt.js";
+import type * as httpCommunityApps from "../httpCommunityApps.js";
 import type * as httpCommunityAttachments from "../httpCommunityAttachments.js";
 import type * as httpCommunitySourceIntegrations from "../httpCommunitySourceIntegrations.js";
 import type * as httpContext from "../httpContext.js";
@@ -287,6 +289,7 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedRetirement: typeof communityAiFeedRetirement;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
+  communityApps: typeof communityApps;
   communityAttachmentDownloads: typeof communityAttachmentDownloads;
   communityAttachmentUploads: typeof communityAttachmentUploads;
   communityAttention: typeof communityAttention;
@@ -421,6 +424,7 @@ declare const fullApi: ApiFromModules<{
   httpAuthBridge: typeof httpAuthBridge;
   httpBilling: typeof httpBilling;
   httpChatgpt: typeof httpChatgpt;
+  httpCommunityApps: typeof httpCommunityApps;
   httpCommunityAttachments: typeof httpCommunityAttachments;
   httpCommunitySourceIntegrations: typeof httpCommunitySourceIntegrations;
   httpContext: typeof httpContext;

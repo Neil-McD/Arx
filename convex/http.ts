@@ -14,6 +14,7 @@ import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
 import { registerCommunityAttachmentRoutes } from "./httpCommunityAttachments";
+import { registerCommunityAppRoutes } from "./httpCommunityApps";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 import { normalizeEmailForVerification } from "./workosEmailVerification";
 
@@ -345,6 +346,8 @@ registerMemberAgentAttachmentRoutes({
 });
 
 registerCommunityAttachmentRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
+
+registerCommunityAppRoutes({ http, httpAction });
 
 registerRuntimeContextRoutes({
   http,

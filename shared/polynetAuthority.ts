@@ -4,7 +4,8 @@ export type PolynetHumanAuthorityLane = "member" | "builder";
 export type PolynetPrincipalKind =
   | "personal_agent"
   | "external_mcp"
-  | "community_agent";
+  | "community_agent"
+  | "community_app";
 
 export type PolynetResolvedAuthority = {
   principalKind: PolynetPrincipalKind;
@@ -32,7 +33,7 @@ function normalizeRelation(
 
 export function derivePolynetHumanAuthority(args: {
   access: Partial<CommunityAccess>;
-  principalKind: "personal_agent" | "external_mcp";
+  principalKind: "personal_agent" | "external_mcp" | "community_app";
 }): PolynetResolvedAuthority | null {
   const relation = normalizeRelation(args.access.relation);
   if (
@@ -43,7 +44,10 @@ export function derivePolynetHumanAuthority(args: {
   ) {
     return null;
   }
+  // A community app acts for its member but never with builder authority, even
+  // when that member owns the community.
   const lane: PolynetHumanAuthorityLane =
+    args.principalKind !== "community_app" &&
     (relation === "owner" || relation === "admin") &&
     args.access.can_manage_resources === true
       ? "builder"
