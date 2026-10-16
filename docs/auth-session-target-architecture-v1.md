@@ -93,7 +93,11 @@ local session for retry. These deadlines do not change provider lifetimes.
 
 `POST /api/auth/logout` reports success only after the canonical logout owner
 confirms completion, including an absent/already-revoked session. An invalid
-replacement chain is an unconfirmed failure, not proof that its rows were erased.
+replacement chain (a cycle, or longer than the bounded walk) is terminal: the
+row cannot authenticate again, exactly as bootstrap and refresh report, so the
+bridge returns `auth_session_invalid` and the gateway clears the cookie. Any
+other unauthorized, failed or uncertain response remains unconfirmed and keeps
+the cookie for retry.
 Canonical revocation and credential erasure precede provider logout; provider
 logout is best effort with a two-second deadline and does not promise account-wide
 or external-client grant revocation.
