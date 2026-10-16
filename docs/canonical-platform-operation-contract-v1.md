@@ -67,8 +67,8 @@ The executor derives authority for every call:
 - owner/admin with current resource-management permission: builder lane;
 - moderator/member: member lane;
 - community-owned agent: fixed member lane within its mounted community;
-- community app: the signed-in member's current relation, forced to the member
-  lane and mounted to the app's community (see Community apps below);
+- community front end: the signed-in member's current relation, forced to the
+  member lane and mounted to its community (see Community front ends below);
 - builder decisions that grant access or advance members (admission and
   milestone approval): official external MCP only, never the native personal agent;
 - missing or revoked entitlement: no access.
@@ -167,29 +167,40 @@ function-spec digest
    validating an explicitly requested community. A repeated cursor fails
    closed instead of silently substituting a first-page community.
 
-## Community apps
+## Community front ends
 
-A founder registers a community app (`convex/communityApps.ts`) with an exact
-HTTPS origin (or `http://localhost` for development) and the subset of the five
-verbs it may use. When a member opens it from Polynet, the shell calls
-`mintCommunityAppSession`; an action generates a random `pna_` token, and only
-its SHA-256 is stored, bound to member, community, app and origin, for 15
-minutes.
+A community's front end lives at its own address, behind the Polynet community
+edge (`infra/community-edge`). A founder registers that address
+(`convex/communityApps.ts`): an exact HTTPS origin (or `localhost` /
+`*.localhost` for development) and the subset of the five verbs it may use.
 
-The app calls `POST /runtime/app` on the Convex site with
-`Authorization: Bearer <token>` and `{ "tool": "polynet_*", "input": {...} }`.
-CORS is granted only to an active app's exact origin. Each request resolves the
-session, then runs the canonical executor as principal `community_app`:
+Sign-in:
 
-- authority = the member's current access ∩ the mounted community ∩ the app's
-  allowed verbs, re-derived on every request; revoking membership or disabling
-  the app takes effect immediately;
+1. The edge sends the member to Polynet's login bridge
+   (`/api/auth/community-handoff`) with the community, its callback and a state.
+2. With a live Polynet session, Convex checks membership and that the callback
+   belongs to a registered address. The first time, or when the front end's
+   verbs change, the member must approve it on a Polynet-hosted consent page.
+3. Convex issues a one-time code (60 seconds, single use, bound to state and
+   address; only hashes stored). Sign-in attempts are limited per member per hour.
+4. The edge swaps the code server to server (edge secret) for a session kept in
+   an HttpOnly, host-only cookie on the community's domain: 7-day sliding,
+   30-day absolute. Page code never sees a token.
+
+The edge forwards `/__polynet/api` to `POST /runtime/app` with the session.
+Each request runs the canonical executor as principal `community_app`:
+
+- authority = the member's current access ∩ the mounted community ∩ the
+  front end's allowed verbs, re-derived on every request; revoking membership,
+  the session or the address takes effect immediately;
 - member lane only, even when the member owns the community: no `builder/`
   paths and no admission or milestone capabilities;
-- community paths only: no platform root, other communities or user profiles;
+- community paths only: no platform root, other communities, user profiles or
+  direct messages. Payments, account and direct messages stay on
+  Polynet-hosted pages;
 - channel writes are the member's own posts (actor `human`) through the trusted
   composer, with `community_app` canonical receipts; file attachments are refused.
 
-Retrieval logs record these reads on the `external_mcp` surface; a dedicated
-surface is a follow-up.
+API rate limits belong at the edge. Retrieval logs record these reads on the
+`external_mcp` surface; a dedicated surface is a follow-up.
 

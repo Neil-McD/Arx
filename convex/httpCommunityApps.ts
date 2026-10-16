@@ -183,8 +183,18 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         origin,
         codeHash: await hashCommunityAppSessionToken(code),
         stateHash: await hashCommunityAppSessionToken(state),
-      })) as { ok: true } | { ok: false; reason: string; communitySlug?: string };
+        consent: body?.consent === true,
+      })) as
+        | { ok: true }
+        | { ok: false; reason: string; communitySlug?: string; app?: { name: string; origin: string; communityName: string; tools: string[] } };
       if (!result.ok) {
+        if (result.reason === "consent_required" && result.app) {
+          return reply(200, {
+            ok: false, code: "consent_required",
+            app: { name: result.app.name, origin: result.app.origin, community_name: result.app.communityName, tools: result.app.tools },
+          }, null);
+        }
+        if (result.reason === "rate_limited") return reply(429, { ok: false, code: "rate_limited" }, null);
         return reply(403, { ok: false, code: result.reason, community_slug: result.communitySlug ?? null }, null);
       }
       return reply(200, { ok: true, code }, null);

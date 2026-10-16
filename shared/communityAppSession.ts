@@ -8,6 +8,8 @@ export const COMMUNITY_APP_SESSION_EXTEND_AFTER_MS = 24 * 60 * 60 * 1000;
 // One-time sign-in handoff code from Polynet's login to a community's edge.
 export const COMMUNITY_APP_HANDOFF_TTL_MS = 60 * 1000;
 export const COMMUNITY_APP_HANDOFF_PREFIX = "pnh_";
+// Sign-in attempts per member per hour across all community front ends.
+export const COMMUNITY_APP_HANDOFFS_PER_HOUR = 30;
 export const COMMUNITY_APP_TOKEN_PREFIX = "pna_";
 export const COMMUNITY_APP_MAX_REQUEST_BYTES = 64 * 1024;
 export const COMMUNITY_APP_TOOLS = [

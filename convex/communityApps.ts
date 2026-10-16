@@ -5,6 +5,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   COMMUNITY_APP_HANDOFF_TTL_MS,
+  COMMUNITY_APP_HANDOFFS_PER_HOUR,
   COMMUNITY_APP_SESSION_ABSOLUTE_MS,
   COMMUNITY_APP_SESSION_EXTEND_AFTER_MS,
   COMMUNITY_APP_SESSION_TTL_MS,
@@ -173,6 +174,12 @@ async function memberHasAccess(ctx: any, communityId: any, userId: any): Promise
 
 // Step 1 of sign-in, called by Polynet's login bridge for an already-verified
 // Polynet session. Issues a one-time code for a registered community address.
+const HOUR_MS = 60 * 60 * 1000;
+
+function toolsKeyFor(app: { allowedTools: string[] }): string {
+  return [...app.allowedTools].sort().join(",");
+}
+
 export const createCommunityAppHandoffInternal = internalMutation({
   args: {
     userId: v.id("users"),
@@ -180,6 +187,7 @@ export const createCommunityAppHandoffInternal = internalMutation({
     origin: v.string(),
     codeHash: v.string(),
     stateHash: v.string(),
+    consent: v.boolean(),
   },
   handler: async (ctx, args) => {
     if (!/^[a-f0-9]{64}$/.test(args.codeHash) || !/^[a-f0-9]{64}$/.test(args.stateHash)) {
@@ -197,11 +205,37 @@ export const createCommunityAppHandoffInternal = internalMutation({
       return { ok: false as const, reason: "not_a_member" as const, communitySlug: community.slug };
     }
     const nowMs = Date.now();
-    const expired = await ctx.db
+    // Consent: a member approves each front end once, and again if its
+    // allowed operations change.
+    const toolsKey = toolsKeyFor(app);
+    const grant = await ctx.db
+      .query("communityAppGrants")
+      .withIndex("by_user_app", (q) => q.eq("userId", args.userId).eq("appId", app._id))
+      .first();
+    if (!grant || grant.toolsKey !== toolsKey) {
+      if (!args.consent) {
+        return {
+          ok: false as const,
+          reason: "consent_required" as const,
+          app: { name: app.name, origin: app.origin, communityName: community.name, tools: app.allowedTools },
+        };
+      }
+      if (grant) await ctx.db.patch(grant._id, { toolsKey, grantedAt: nowMs });
+      else await ctx.db.insert("communityAppGrants", { userId: args.userId, appId: app._id, communityId: community._id, toolsKey, grantedAt: nowMs });
+    }
+    // Rate limit sign-in attempts, keeping an hour of history for counting.
+    const recent = await ctx.db
       .query("communityAppHandoffs")
-      .withIndex("by_user_expiresAt", (q) => q.eq("userId", args.userId).lt("expiresAt", nowMs))
+      .withIndex("by_user_createdAt", (q) => q.eq("userId", args.userId).gte("createdAt", nowMs - HOUR_MS))
+      .take(COMMUNITY_APP_HANDOFFS_PER_HOUR);
+    if (recent.length >= COMMUNITY_APP_HANDOFFS_PER_HOUR) {
+      return { ok: false as const, reason: "rate_limited" as const };
+    }
+    const old = await ctx.db
+      .query("communityAppHandoffs")
+      .withIndex("by_user_createdAt", (q) => q.eq("userId", args.userId).lt("createdAt", nowMs - HOUR_MS))
       .take(MAX_SESSIONS_PRUNED_PER_MINT);
-    for (const row of expired) await ctx.db.delete(row._id);
+    for (const row of old) await ctx.db.delete(row._id);
     await ctx.db.insert("communityAppHandoffs", {
       codeHash: args.codeHash, stateHash: args.stateHash, appId: app._id, communityId: community._id,
       userId: args.userId, origin, expiresAt: nowMs + COMMUNITY_APP_HANDOFF_TTL_MS, createdAt: nowMs,
@@ -236,6 +270,12 @@ export const consumeCommunityAppHandoffInternal = internalMutation({
     if (!(await memberHasAccess(ctx, handoff.communityId, handoff.userId))) {
       return { ok: false as const, reason: "not_a_member" as const };
     }
+    // Prune this member's expired sessions for this front end.
+    const expiredSessions = await ctx.db
+      .query("communityAppSessions")
+      .withIndex("by_app_user_expiresAt", (q) => q.eq("appId", app._id).eq("userId", handoff.userId).lt("expiresAt", nowMs))
+      .take(MAX_SESSIONS_PRUNED_PER_MINT);
+    for (const row of expiredSessions) await ctx.db.delete(row._id);
     const absoluteExpiresAt = nowMs + COMMUNITY_APP_SESSION_ABSOLUTE_MS;
     const expiresAt = Math.min(nowMs + COMMUNITY_APP_SESSION_TTL_MS, absoluteExpiresAt);
     await ctx.db.insert("communityAppSessions", {

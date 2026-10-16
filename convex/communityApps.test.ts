@@ -132,7 +132,7 @@ async function fixture() {
   };
   const handoff = (handle: string, overrides: Record<string, unknown> = {}, secret = BRIDGE_SECRET) =>
     post(COMMUNITY_APP_HANDOFF_PATH, { "x-arx-auth-bridge-secret": secret },
-      { session_id: `sess-${handle}`, community_slug: "apps-community", origin: ORIGIN, state: STATE, ...overrides });
+      { session_id: `sess-${handle}`, community_slug: "apps-community", origin: ORIGIN, state: STATE, consent: true, ...overrides });
   const exchange = (code: string, overrides: Record<string, unknown> = {}, secret = EDGE_SECRET) =>
     post(COMMUNITY_EDGE_EXCHANGE_PATH, { "x-polynet-edge-secret": secret }, { code, state: STATE, origin: ORIGIN, ...overrides });
   const signIn = async (handle = "apps-member") => {
@@ -277,3 +277,57 @@ test("a front-end post is the member's own post, retried safely, without files",
   expect((await write({ text: "Week three tip: switch check-ins to a short async form." }, "post-1")).body).toMatchObject({ ok: true });
   expect(await f.t.run((c) => c.db.query("communityInteractionRoots").collect())).toHaveLength(1);
 });
+
+test("a member approves a front end once, and again only when its permissions change", async () => {
+  const f = await fixture();
+  await f.register({ allowedTools: ["polynet_list", "polynet_read"] });
+  const first = await f.handoff("apps-member", { consent: false });
+  expect(first).toMatchObject({
+    status: 200,
+    body: { ok: false, code: "consent_required", app: { name: "Hello", origin: ORIGIN, community_name: "apps-community", tools: ["polynet_list", "polynet_read"] } },
+  });
+  expect(first.body.code).not.toMatch(/^pnh_/);
+  expect(await f.t.run((c) => c.db.query("communityAppHandoffs").collect())).toHaveLength(0);
+  expect((await f.handoff("apps-member", { consent: true })).body).toMatchObject({ ok: true });
+  expect((await f.handoff("apps-member", { consent: false })).body).toMatchObject({ ok: true });
+  await f.t.run(async (c) => {
+    const app = (await c.db.query("communityApps").collect())[0];
+    await c.db.patch(app._id, { allowedTools: ["polynet_list", "polynet_read", "polynet_write"] });
+  });
+  expect((await f.handoff("apps-member", { consent: false })).body).toMatchObject({ code: "consent_required" });
+});
+
+test("sign-in attempts are rate limited per member per hour, and old attempts are pruned", async () => {
+  const f = await fixture();
+  await f.register();
+  await f.t.run(async (c) => {
+    const app = (await c.db.query("communityApps").collect())[0];
+    const now = Date.now();
+    for (let i = 0; i < 29; i += 1) {
+      await c.db.insert("communityAppHandoffs", {
+        codeHash: `${i}`.padStart(64, "0"), stateHash: "0".repeat(64), appId: app._id, communityId: app.communityId,
+        userId: f.ids.memberId, origin: ORIGIN, expiresAt: now, usedAt: now, createdAt: now - 1000,
+      });
+    }
+    await c.db.insert("communityAppHandoffs", {
+      codeHash: "f".repeat(64), stateHash: "0".repeat(64), appId: app._id, communityId: app.communityId,
+      userId: f.ids.memberId, origin: ORIGIN, expiresAt: now - 2 * 3_600_000, createdAt: now - 2 * 3_600_000,
+    });
+  });
+  expect((await f.handoff("apps-member")).body).toMatchObject({ ok: true });
+  expect(await f.handoff("apps-member")).toMatchObject({ status: 429, body: { code: "rate_limited" } });
+  const rows = await f.t.run((c) => c.db.query("communityAppHandoffs").collect());
+  expect(rows.some((row) => row.codeHash === "f".repeat(64))).toBe(false);
+});
+
+test("signing in again prunes this member's expired sessions", async () => {
+  const f = await fixture();
+  await f.register();
+  await f.signIn();
+  await f.t.run(async (c) => { for (const row of await c.db.query("communityAppSessions").collect()) await c.db.patch(row._id, { expiresAt: 1 }); });
+  await f.signIn();
+  const remaining = await f.sessions();
+  expect(remaining).toHaveLength(1);
+  expect(remaining[0].expiresAt).toBeGreaterThan(Date.now());
+});
+

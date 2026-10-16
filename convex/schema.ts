@@ -2650,7 +2650,18 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_codeHash", ["codeHash"])
-    .index("by_user_expiresAt", ["userId", "expiresAt"]),
+    .index("by_user_expiresAt", ["userId", "expiresAt"])
+    .index("by_user_createdAt", ["userId", "createdAt"]),
+
+  // A member's consent for a community front end to act as them. Re-asked
+  // whenever the front end's allowed operations change (toolsKey).
+  communityAppGrants: defineTable({
+    userId: v.id("users"),
+    appId: v.id("communityApps"),
+    communityId: v.id("communities"),
+    toolsKey: v.string(),
+    grantedAt: v.number(),
+  }).index("by_user_app", ["userId", "appId"]),
 
   skillPackages: defineTable({
     ownerUserId: v.id("users"),
