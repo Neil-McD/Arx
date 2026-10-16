@@ -408,6 +408,12 @@ async function failMutatingOperation(args: {
   }
 }
 
+// A community app is the member's own interface, so channel access and
+// attribution treat it as the human. Agents keep their own actor kinds.
+function channelActorKind(principalKind: PolynetPrincipalKind) {
+  return principalKind === "community_app" ? "human" as const : principalKind;
+}
+
 async function resolveCommunityTarget(args: {
   ctx: any;
   authSubject: string;
@@ -430,15 +436,19 @@ async function resolveCommunityTarget(args: {
     };
   }
   const communityAgentPrincipal = args.principalKind === "community_agent";
+  // Community agents and community apps have no Convex session identity; their
+  // user was established server-side (sponsor, or app session token).
+  const trustedActorPrincipal =
+    communityAgentPrincipal || args.principalKind === "community_app";
   const resolved = (await args.ctx.runQuery(
-    communityAgentPrincipal
+    trustedActorPrincipal
       ? (internal as any).communityCapabilityContext
           .resolveCommunityCapabilityContextForTrustedActorInternal
       : (internal as any).communityCapabilityContext
           .resolveCommunityCapabilityContextInternal,
     {
       authSubject: args.authSubject,
-      ...(communityAgentPrincipal ? { userId: args.userId } : {}),
+      ...(trustedActorPrincipal ? { userId: args.userId } : {}),
       communitySlug: parsed.communitySlug,
     },
   )) as
@@ -506,7 +516,7 @@ async function resolveRepositoryChannel(args: {
       userId: args.userId,
       communityId: args.target.communityId,
       slug: args.slug,
-      actorKind: args.principalKind,
+      actorKind: channelActorKind(args.principalKind),
     },
   )) as Record<string, unknown> | null;
   const id = requiredString(value?.id, 180);
@@ -783,7 +793,7 @@ async function executeCanonicalList(args: {
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
     const value = (await args.ctx.runQuery(
       (internal as any).communityChannels.listCommunityChannelPageInternal,
-      { userId: args.userId, communityId: target.communityId, actorKind: args.principalKind,
+      { userId: args.userId, communityId: target.communityId, actorKind: channelActorKind(args.principalKind),
         ...(typeof args.input.cursor === "string" ? { cursor: args.input.cursor } : {}) },
     )) as Record<string, unknown>;
     const channels = Array.isArray(value.channels)
@@ -834,7 +844,7 @@ async function executeCanonicalList(args: {
         (internal as any).communityInteractionEvidence
           .listRecentCommunityInteractionEvidenceInternal,
         {
-          actorKind: args.principalKind,
+          actorKind: channelActorKind(args.principalKind),
           userId: args.userId,
           communityId: target.communityId,
           channelSlug: channel.slug,
@@ -1291,7 +1301,7 @@ async function executeCanonicalRead(args: {
         (internal as any).communityInteractionEvidence
           .readCommunityInteractionEvidenceForToolInternal,
         {
-          actorKind: args.principalKind,
+          actorKind: channelActorKind(args.principalKind),
           userId: args.userId,
           authSubject: args.authSubject,
           communityId: target.communityId,
@@ -1577,7 +1587,7 @@ async function executeCanonicalSearch(args: {
         (internal as any).communityInteractionEvidence
           .searchCommunityInteractionEvidenceInternal,
         {
-          actorKind: args.principalKind,
+          actorKind: channelActorKind(args.principalKind),
           ...common,
           ...(channel
             ? {
@@ -1788,15 +1798,25 @@ async function executeCanonicalWrite(args: {
           ? { attachments: content.attachments }
           : {}),
       };
+      if (args.principalKind === "community_app" && "attachments" in mutationArgs) {
+        return canonicalError("invalid_tool_args", "Community apps cannot attach files.");
+      }
+      // A community app has no Convex session identity; its member was
+      // authenticated by the app session token, so it uses the trusted composer.
       const value = (await args.ctx.runMutation(
         args.principalKind === "community_agent"
           ? (internal as any).communityInteractions
               .createCommunityAgentCanonicalInteractionInternal
-          : (api as any).communityInteractions
-              .createCommunityInteractionComposerMessage,
+          : args.principalKind === "community_app"
+            ? (internal as any).communityInteractions
+                .createCommunityInteractionComposerMessageForTrustedUserInternal
+            : (api as any).communityInteractions
+                .createCommunityInteractionComposerMessage,
         args.principalKind === "community_agent"
           ? mutationArgs
-          : { ...mutationArgs, asPersonalAgent: true },
+          : args.principalKind === "community_app"
+            ? { ...mutationArgs, trustedUserId: args.userId }
+            : { ...mutationArgs, asPersonalAgent: true },
       )) as Record<string, unknown>;
       const interaction =
         value.interaction && typeof value.interaction === "object"
@@ -2269,6 +2289,18 @@ export async function executePolynetCanonicalTool(args: {
       "authenticated_user_required",
       "An authenticated Polynet principal is required.",
     );
+  }
+  // A community app is confined to its mounted community: no platform root,
+  // other communities or user profiles.
+  if (args.principalKind === "community_app") {
+    const rawPath = args.input?.path ?? args.input?.target;
+    const parsedPath = parsePolynetSemanticRepositoryPath(rawPath);
+    if (!args.mountedCommunityId || !parsedPath.ok || parsedPath.kind !== "community") {
+      return canonicalError(
+        "community_path_required",
+        "A community app is restricted to its own community repository.",
+      );
+    }
   }
   let input: Record<string, unknown>;
   try {

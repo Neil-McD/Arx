@@ -67,6 +67,8 @@ The executor derives authority for every call:
 - owner/admin with current resource-management permission: builder lane;
 - moderator/member: member lane;
 - community-owned agent: fixed member lane within its mounted community;
+- community front end: the signed-in member's current relation, forced to the
+  member lane and mounted to its community (see Community front ends below);
 - builder decisions that grant access or advance members (admission and
   milestone approval): official external MCP only, never the native personal agent;
 - missing or revoked entitlement: no access.
@@ -164,3 +166,51 @@ function-spec digest
 6. The external smoke now follows every advancing `/communities/` cursor before
    validating an explicitly requested community. A repeated cursor fails
    closed instead of silently substituting a first-page community.
+
+## Community front ends
+
+Polynet splits into two surfaces:
+
+- **The community's front end** is the member experience: chat, posts,
+  content, events, memory and the agent. Founders vibe-code it, and it acts
+  only through the five verbs.
+- **Polynet Studio** (today's web app) keeps founder administration,
+  settings, analytics, billing, direct messages and account. These never move
+  into front ends.
+
+A front end lives at the community's own domain, behind the Polynet community
+edge (`infra/community-edge`). A domain is registered to exactly one community
+(`communityDomains`, `convex/communityApps.ts`): an exact HTTPS origin, or
+`localhost` / `*.localhost` for development.
+
+Sign-in is invisible when the member is already signed in to Polynet:
+
+1. The edge sends the member to Polynet's login bridge
+   (`/api/auth/community-handoff`) with the community, its callback and a state.
+2. With a live Polynet session, Convex checks membership and that the callback
+   belongs to a registered domain of that community, then issues a one-time
+   code (60 seconds, bound to state and domain, deleted when presented; only
+   hashes stored). Non-members go to the community's join page.
+3. The edge swaps the code server to server (edge secret) for a 30-day session
+   kept in an HttpOnly, host-only cookie on the community's domain. Page code
+   and the community's own Worker never see it. When it expires, the same hop
+   signs the member in again.
+
+The edge forwards `/__polynet/api` to `POST /runtime/app` with the edge secret
+and the session; the backend answers nothing else, so a token is useless
+outside the edge. Each request runs the canonical executor as principal
+`community_app`:
+
+- authority = the member's current access ∩ the mounted community, re-derived
+  on every request; revoking membership, the session or the domain takes
+  effect immediately;
+- member lane only, even when the member owns the community: no `builder/`
+  paths and no admission or milestone capabilities;
+- community paths only: no platform root, other communities, user profiles or
+  direct messages;
+- channel writes are the member's own posts (actor `human`) through the trusted
+  composer, with `community_app` canonical receipts; file attachments are refused.
+
+API rate limits belong at the edge. Retrieval logs record these reads on the
+`external_mcp` surface; a dedicated surface is a follow-up.
+

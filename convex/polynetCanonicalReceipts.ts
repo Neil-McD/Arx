@@ -5,6 +5,7 @@ const principalKindValidator = v.union(
   v.literal("personal_agent"),
   v.literal("external_mcp"),
   v.literal("community_agent"),
+  v.literal("community_app"),
 );
 
 const mutatingToolNameValidator = v.union(
@@ -21,7 +22,7 @@ function newAttemptToken(): string {
 async function findReceipt(ctx: any, args: {
   communityId: any;
   userId: any;
-  principalKind: "personal_agent" | "external_mcp" | "community_agent";
+  principalKind: "personal_agent" | "external_mcp" | "community_agent" | "community_app";
   toolName: "polynet_write" | "polynet_call";
   idempotencyKey: string;
 }) {

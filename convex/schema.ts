@@ -2449,6 +2449,38 @@ export default defineSchema({
     .index("by_run_seq", ["runId", "seq"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
+  // Community front ends: a community's own domain (exact origin). One domain
+  // belongs to one community; deleting it ends sign-in there.
+  communityDomains: defineTable({
+    communityId: v.id("communities"),
+    origin: v.string(),
+    createdAt: v.number(),
+  }).index("by_origin", ["origin"]),
+
+  // A member's session on a community's domain, held by the community edge in
+  // an HttpOnly cookie. Only the SHA-256 of the token is stored.
+  communityAppSessions: defineTable({
+    tokenHash: v.string(),
+    domainId: v.id("communityDomains"),
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    expiresAt: v.number(),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_domain_user_expiresAt", ["domainId", "userId", "expiresAt"]),
+
+  // One-time sign-in codes from Polynet's login to a community's edge, deleted
+  // when presented. Only hashes of the code and state are stored.
+  communityAppHandoffs: defineTable({
+    codeHash: v.string(),
+    stateHash: v.string(),
+    domainId: v.id("communityDomains"),
+    userId: v.id("users"),
+    expiresAt: v.number(),
+  })
+    .index("by_codeHash", ["codeHash"])
+    .index("by_user_expiresAt", ["userId", "expiresAt"]),
+
   skillPackages: defineTable({
     ownerUserId: v.id("users"),
     catalogSkillId: v.optional(v.string()),
@@ -2816,6 +2848,7 @@ export default defineSchema({
       v.literal("personal_agent"),
       v.literal("external_mcp"),
       v.literal("community_agent"),
+      v.literal("community_app"),
     ),
     toolName: v.union(v.literal("polynet_write"), v.literal("polynet_call")),
     idempotencyKey: v.string(),
