@@ -1,95 +1,109 @@
 # Polynet invariant core
 
-Status: **draft spec**, October 16, 2026, from `main` at `6b7c269ec` and a
-read-only staging snapshot. It defines what must stay true as Polynet becomes
-infrastructure, with every community, including Polynet's own home, a
-vibe-coded app on top. Code wins when it disagrees; fix this page.
+**Polynet owns the canonical community world and the rules for acting within
+it. Founders compose their own experiences through supported capabilities,
+without rebuilding or overriding those guarantees.**
 
-## The model
+Status: **draft contract**, October 16, 2026, from `main` at `6b7c269ec` and a
+read-only staging snapshot. Code shows what happens today; this contract says
+what should happen. A disagreement is a bug to triage, not a reason to weaken
+the contract.
 
-```text
-Polynet (infrastructure) ─┬─ identity, sessions          one account across communities
-                          ├─ communities                 the unit of authority and data
-                          ├─ community front ends        one vibe-coded app per community (planned)
-                          ├─ payments                    Builder plan + paid membership
-                          └─ intelligence + agents       memory, member agent, community agent, MCP
-```
+## Three layers
 
-## Entities and relations
+| Layer | What belongs there | Changes how |
+| --- | --- | --- |
+| **Invariant core** | Object identity, relationships, authority, privacy, valid state transitions, evidence lineage, retry guarantees | Rarely, by contract change |
+| **Configurable product rules** | Pricing and fees, admission policies, workflow structure, available capabilities, front-end and deployment choices | Versioned policy |
+| **Founder experience** | Screens, navigation, branding, programs, personas, application logic | Freely, by founders |
 
-| Entity | Key tables | Belongs to | Notes |
-| --- | --- | --- | --- |
-| **User** | `users`, `userProfileDetails`, `authSessions` | none | One identity everywhere |
-| **Community** | `communities` | owner (user) | Lifecycle, visibility, entry policy, funding mode |
-| **Membership** | `communityMemberships` | community + user (unique pair) | Role, access source, activation sequence |
-| **Channel** | `communityChannels`, `communityChannelParticipants` | community | All-members or restricted |
-| **Contribution** | `communityInteractionRoots` → `…Replies` (+ attachments, mentions, reactions) | channel | The only community chat substrate |
-| **Direct message** | `dmConversations`, `dmParticipants`, `dmMessages` | users | Cross-community; private |
-| **Content** | `communityResourceModules` → `communityResources` (+ source units) | community | Curated knowledge |
-| **Event** | `communityEvents` | community | Timezone and recurrence |
-| **Progress** | `communityMemberWorkflows` → milestones → `communityFormRequests` | community → membership | One workflow per community; form versions pinned per request |
-| **Money** | `founderSubscriptions` (community) · `communityPricePoints` → `communitySubscriptions` (membership) | community / membership | Provider-verified |
-| **Memory** | `communitySourceTraces` → `communityCompilerDigests` → `communityIntelligenceNodes` + `communityEvidenceCitations` | community | Accepted knowledge, always cited |
-| **Member knowledge** | `memberFacts`, `memberProfileSpines`, `personalMemoryItems` | user (+ community) | Never pooled into community memory |
-| **Agent conversation** | `threads`, `cloudMessages`, `runtimeRuns` | user (+ community context) | Every turn recorded |
+Hosting, templates, the SDK and the CLI make the core easier to consume. They
+sit on this boundary and never move it.
 
-## Rules
+## Core objects
 
-1. **The community is the authority boundary.** Every read and write names
-   one community and passes one guard chain: active → funded → not blocked →
-   entitled → role.
-2. **Authority is current, never cached.** Re-derived on every request from
-   stored state. Tokens identify; they never grant.
-3. **One canonical owner per object.** Every surface (UI, member agent,
-   community agent, MCP, community front ends) calls the same domain owner
-   through the canonical executor.
+| Object | Belongs to | Canonical tables |
+| --- | --- | --- |
+| User | none; one identity everywhere | `users`, `userProfileDetails`, `authSessions` |
+| Community | its owner | `communities` |
+| Membership | community + user, unique pair | `communityMemberships` |
+| Channel | community | `communityChannels`, `communityChannelParticipants` |
+| Contribution | channel | `communityInteractionRoots` → `…Replies` (+ attachments, mentions, reactions) |
+| Direct message | its participants | `dmConversations`, `dmParticipants`, `dmMessages` |
+| Content | community | `communityResourceModules` → `communityResources` |
+| Event | community | `communityEvents` |
+| Progress | community → membership | workflows → milestones → `communityFormRequests` |
+| Money | community (Builder) / membership (paid access) | `founderSubscriptions`, `communityPricePoints` → `communitySubscriptions` |
+| Accepted memory | community | traces → digests → `communityIntelligenceNodes` + `communityEvidenceCitations` |
+| Member knowledge | user (+ community) | `memberFacts`, `memberProfileSpines`, `personalMemoryItems` |
+| Agent conversation | user (+ community context) | `threads`, `cloudMessages`, `runtimeRuns` |
+
+## Invariants
+
+1. **Explicit, validated authority scope.** Every operation declares its scope
+   (a community, a conversation's participants, the user's own account,
+   Discover, or operator) and is authorized for it. Community operations pass
+   the community guard chain: active → funded → not blocked → entitled → role.
+2. **Authority is current.** It is re-derived from stored state on every
+   request. Tokens and sessions identify an actor; they never grant authority.
+3. **Same domain owners, same semantics.** UI, SDK, CLI, MCP and agents may
+   use different adapters, but every one reaches the same domain owner with
+   the same authorization and effects. No second source of truth.
 4. **Fail closed.** Missing, malformed or ambiguous state denies.
-5. **Money follows the provider.** Webhooks decide payment and entitlement;
-   redirects grant nothing. One 2.9% fee on paid-member revenue.
-6. **Archive wins.** It overrides payment, role and membership.
-   Restore is generation-fenced.
-7. **Private stays private.** DMs, private forms and personal memory never
-   become shared memory or cross communities.
-8. **Memory is cited.** No accepted node without an immutable source citation;
-   editing or deleting the source changes what can be reused.
-9. **Durable effects are idempotent.** Admission, posts, submissions,
-   approvals, payments and memory outcomes carry a receipt and safe retries.
-10. **Front ends never exceed their member.** A community front end acts as
-    the signed-in member, inside its own community, in the member lane only.
+5. **Provider-verified money.** Webhooks decide payment and entitlement;
+   redirects grant nothing.
+6. **Archive wins** over payment, role and membership. Restore is
+   generation-fenced.
+7. **Private stays private.** DMs, private form answers and personal memory
+   never become shared memory and never cross communities.
+8. **Memory is cited.** No accepted knowledge without an immutable source
+   citation. Editing or deleting the source changes what can be reused.
+9. **Durable effects are idempotent** and leave a receipt: admission, posts,
+   submissions, approvals, payments, memory outcomes.
+10. **An actor never exceeds its grant.** A member's front end acts as that
+    member, inside that community, in the member lane. Founder administration
+    from a custom front end needs separately authorized management operations,
+    never an ordinary member session.
 
-## Layers (129 tables)
+## Current product rules (configurable, not invariant)
 
-| Layer | Tables | Staging rows | Rule |
-| --- | --- | --- | --- |
-| Core state | 59 | 11.0k | Canonical truth; changes only through owners |
-| History and receipts | 31 | 81.3k | Append-only evidence; **needs a retention policy** |
-| Derived and operational | 18 | 0.8k | Rebuildable or short-lived |
-| Integrations and skills | 7 | 0.1k | Per-user or per-community connections |
-| Retired and legacy | 14 | 0.5k | Delete with a data migration |
+- One founder plan: $79 per managed community, including a $20 model allowance.
+- A 2.9% fee on paid-member revenue, versioned in commerce policy.
+- One member workflow per community.
+- One front end per community: the current Polynet UI today; vibe-coded front
+  ends are planned.
+- Entry policies: open, approval, paid.
 
-## What to retire
+## Audit evidence (not the core)
 
-| Item | Why |
+| Layer | Tables | Staging rows |
+| --- | --- | --- |
+| Core state | 59 | 11.0k |
+| History and receipts | 31 | 81.3k |
+| Derived and operational | 18 | 0.8k |
+| Integrations and skills | 7 | 0.1k |
+| Retired and legacy | 14 | 0.5k |
+
+## Retirement candidates: dependency and data proof required
+
+None of these is deletion-ready until its writers, compatibility obligations
+and data are proven gone, following the two-release pattern in
+[alpha-release-workflow.md](alpha-release-workflow.md).
+
+| Candidate | Known state |
 | --- | --- |
-| `workspaceCreditBalances`, `creditLedgerEntries`, `workspaceComputeCharges`, `workspaceUsageCollections`, `legacyProgramGrants` | Credits and BYOK retired; no writers |
-| `communityAiFeedPosts`, `communityAiFeedReactions` | AI feed retired |
-| `communityArchiveDocuments`, `communityOnboardingSessions` | No writers or readers |
-| `communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityInteractionLegacyChatLinks` | Second chat substrate; no UI calls it |
-| `communityFunnels` | Composer retired; keep read-only until audit review |
+| Credit and workspace-compute tables, `legacyProgramGrants` | No writers found |
+| AI feed tables | Feature retired; retirement module still present |
+| `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |
+| Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityInteractionLegacyChatLinks`) | **Still written:** `communityChat.createThreadUserMessage` and the legacy bridge. Duplicate substrate; prove callers and migration first |
+| `communityFunnels` | Composer retired; records kept for audit |
 | Seven app-mount tables | In progress: [#180](https://github.com/Neil-McD/Arx/pull/180) |
-| 63 orphan tables on staging | Staging-only residue from other branches; clean staging |
-
-Each retirement follows the two-release pattern in
-[alpha-release-workflow.md](alpha-release-workflow.md): stop writes, empty
-data, then drop the schema.
+| 63 orphan tables on staging | Staging-only residue from other branches |
 
 ## Open risks
 
-- **Log growth:** diagnostics (41k) and run events (24k) dominate staging and
-  grow without a cap. Define retention before scale.
-- **Hot spots:** `communityResources.ts` (10.3k lines), `communityIntelligenceDirectory.ts`
-  (4.5k), `threads.ts` (4.3k). Put a thin, stable operation layer in front before
-  exposing them to front ends.
-- **Front ends:** "one front end per community" needs hosting and "Sign in with
-  Polynet." Rule 10 already holds in the backend (#181's `community_app`
-  principal); the Apps-tab and iframe parts of #181 are dropped.
+- **Unbounded history:** diagnostics and run events grow without retention.
+- **Hot spots:** `communityResources.ts`, `communityIntelligenceDirectory.ts`,
+  `threads.ts`. Add stable operation boundaries before exposing them.
+- **Founder administration** from custom front ends needs its own authorized
+  operations (invariant 10).
