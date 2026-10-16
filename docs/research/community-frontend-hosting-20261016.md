@@ -3,6 +3,19 @@
 October 16, 2026. Research note, not yet a contract. Builds on
 [invariant-core.md](../invariant-core.md) (#182).
 
+## Decision (October 16, 2026)
+
+- **Convex stays** the one shared backend.
+- **Cloudflare (Workers for Platforms) hosts every community front end,** including
+  Polynet's home once it becomes a community. Chosen over Vercel's multi-project
+  model to avoid building the hosting layer twice; Vercel could serve v1, but its
+  per-project and domain rate limits and the eventual need for isolated founder
+  code favour Cloudflare long term.
+- **Vercel retires naturally** when Polynet home moves onto community hosting;
+  no separate migration.
+- Sign-in through the edge is built and verified end to end against staging
+  (branch `claude/community-edge-signin-20261016`).
+
 ## The question
 
 Every community, including Polynet's home, becomes a vibe-coded front end.
