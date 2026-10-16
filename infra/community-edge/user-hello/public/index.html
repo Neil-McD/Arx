@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hello, community</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; max-width: 640px; }
+    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; }
+    pre { white-space: pre-wrap; background: #8881; padding: 12px; border-radius: 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Hello, community</h1>
+  <p>This page is the community's own front end, served by the Polynet edge on the community's address.</p>
+  <button id="call">Call the Polynet API</button>
+  <pre id="out"></pre>
+  <script>
+    // Same-origin call through the edge. Sign-in (step 2) will add the session.
+    document.getElementById("call").onclick = async () => {
+      const res = await fetch("/__polynet/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool: "polynet_list", input: { path: "/communities/polynet/channels/" } }),
+      });
+      document.getElementById("out").textContent = `${res.status}\n` + JSON.stringify(await res.json(), null, 2);
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  // Local spike config. Production adds a dispatch_namespaces binding (DISPATCHER)
+  // and a KV namespace (ROUTES) instead of the DEV_* values below.
+  "name": "polynet-community-edge",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "vars": {
+    "POLYNET_API_URL": "https://quick-porcupine-949.convex.site",
+    "DEV_ROUTES_JSON": "{\"hello.localhost\":\"hello\"}"
+  },
+  "services": [{ "binding": "DEV_USER_WORKER", "service": "polynet-community-hello" }]
+}
