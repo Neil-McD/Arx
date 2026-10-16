@@ -63,6 +63,12 @@ This is the canonical path. Do not rely on branch names, preview URLs, or old Ve
 
 Removing Polynet's third-party MCP consumer is a two-release data migration:
 
+Status (2026-10-16): the first release is in production. Staging
+(`dev:quick-porcupine-949`) was emptied with the batch mutation (287 rows across
+the seven tables; all counts zero), and the second-release code is on branch
+`claude/retire-app-mounts-20261016`. **Production steps 3-5 have not run.** Do
+not release the second release to production until they have.
+
 1. First release the code that severs all catalog, connect, OAuth, mount,
    runtime, worker, UI, and fanout paths while retaining the seven retired
    tables and `thirdPartyMcpRetirement.ts`.
@@ -84,11 +90,11 @@ npx convex run thirdPartyMcpRetirement:deleteRetiredStateBatchInternal \
 5. Re-run the inspection and stop unless all seven retired tables are empty.
 6. In a second release, remove the seven schema tables, their anonymous-user
    cleanup entries, and the temporary migration module.
-7. Require both:
+7. Require the surface proof. Once the migration module is gone it verifies
+   completion: no retired table in the schema and no cleanup entries.
 
 ```bash
 npm run check:no-third-party-mcp-surface-proof
-npm run check:third-party-mcp-retirement-complete-proof
 ```
 
 Never delete the production rows before the first release proves ordinary

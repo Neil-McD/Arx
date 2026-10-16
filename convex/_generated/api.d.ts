@@ -236,7 +236,6 @@ import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
 import type * as stripeCore from "../stripeCore.js";
 import type * as stripeCustomers from "../stripeCustomers.js";
 import type * as stripeSubscriptionCancellation from "../stripeSubscriptionCancellation.js";
-import type * as thirdPartyMcpRetirement from "../thirdPartyMcpRetirement.js";
 import type * as threads from "../threads.js";
 import type * as userPlatformSkills from "../userPlatformSkills.js";
 import type * as userProfileProjection from "../userProfileProjection.js";
@@ -482,7 +481,6 @@ declare const fullApi: ApiFromModules<{
   stripeCore: typeof stripeCore;
   stripeCustomers: typeof stripeCustomers;
   stripeSubscriptionCancellation: typeof stripeSubscriptionCancellation;
-  thirdPartyMcpRetirement: typeof thirdPartyMcpRetirement;
   threads: typeof threads;
   userPlatformSkills: typeof userPlatformSkills;
   userProfileProjection: typeof userProfileProjection;
