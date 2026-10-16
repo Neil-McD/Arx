@@ -2630,10 +2630,27 @@ export default defineSchema({
     userId: v.id("users"),
     origin: v.string(),
     expiresAt: v.number(),
+    absoluteExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_app_user_expiresAt", ["appId", "userId", "expiresAt"]),
+
+  // One-time sign-in handoffs from Polynet's login to a community's edge.
+  // Only hashes of the code and state are stored.
+  communityAppHandoffs: defineTable({
+    codeHash: v.string(),
+    stateHash: v.string(),
+    appId: v.id("communityApps"),
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    origin: v.string(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_codeHash", ["codeHash"])
+    .index("by_user_expiresAt", ["userId", "expiresAt"]),
 
   skillPackages: defineTable({
     ownerUserId: v.id("users"),

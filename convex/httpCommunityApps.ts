@@ -3,7 +3,14 @@ import type { PublicHttpAction } from "convex/server";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import {
   COMMUNITY_APP_MAX_REQUEST_BYTES,
+  COMMUNITY_APP_SESSION_EXTEND_AFTER_MS,
+  COMMUNITY_APP_SESSION_TTL_MS,
+  generateCommunityAppHandoffCode,
+  generateCommunityAppSessionToken,
   hashCommunityAppSessionToken,
+  isCommunityAppHandoffCode,
+  isCommunityAppHandoffState,
+  isCommunityAppSessionToken,
   isCommunityAppTool,
   normalizeCommunityAppOrigin,
   readCommunityAppBearerToken,
@@ -11,6 +18,34 @@ import {
 import type { PolynetCanonicalToolName } from "../shared/polynetCanonicalToolContract";
 
 export const COMMUNITY_APP_RUNTIME_PATH = "/runtime/app";
+export const COMMUNITY_APP_HANDOFF_PATH = "/runtime/auth_bridge_community_handoff";
+export const COMMUNITY_EDGE_EXCHANGE_PATH = "/runtime/community_edge/session_exchange";
+export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revoke";
+
+function readEnv(name: string): string {
+  return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
+}
+
+// Constant-time comparison of shared secrets.
+function secretMatches(provided: string | null, expected: string): boolean {
+  const a = new TextEncoder().encode(String(provided ?? ""));
+  const b = new TextEncoder().encode(expected);
+  if (!expected || a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) diff |= a[index] ^ b[index];
+  return diff === 0;
+}
+
+async function readJsonObject(req: Request, maxBytes: number): Promise<Record<string, unknown> | null> {
+  const raw = await req.text();
+  if (raw.length > maxBytes) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 type HttpRouterLike = {
   route: (config: { path: string; method: "POST" | "OPTIONS"; handler: PublicHttpAction }) => void;
@@ -65,7 +100,7 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         origin,
       })) as
         | { ok: false }
-        | { ok: true; userId: string; authSubject: string; communityId: string; appId: string; allowedTools: string[] };
+        | { ok: true; userId: string; authSubject: string; communityId: string; appId: string; allowedTools: string[]; expiresAt: number };
       if (!session.ok) {
         return reply(401, { ok: false, code: "community_app_session_invalid", message: "The app session is invalid or expired." }, null);
       }
@@ -91,6 +126,11 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       if (!session.allowedTools.includes(tool)) {
         return reply(403, { ok: false, code: "community_app_tool_not_allowed", message: "This app is not allowed to use that tool." }, origin);
       }
+      if (session.expiresAt - Date.now() < COMMUNITY_APP_SESSION_TTL_MS - COMMUNITY_APP_SESSION_EXTEND_AFTER_MS) {
+        await ctx.runMutation(internal.communityApps.extendCommunityAppSessionInternal, {
+          tokenHash: await hashCommunityAppSessionToken(token),
+        });
+      }
       const execution = await executePolynetCanonicalTool({
         ctx,
         authSubject: session.authSubject,
@@ -104,6 +144,92 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       return execution.ok
         ? reply(200, { ok: true, value: execution.value }, origin)
         : reply(200, { ok: false, code: execution.code, message: execution.message }, origin);
+    }),
+  });
+
+  // Polynet's login bridge (server-side, bridge secret) asks for a one-time
+  // handoff code for an already-signed-in Polynet session.
+  args.http.route({
+    path: COMMUNITY_APP_HANDOFF_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!secretMatches(req.headers.get("x-arx-auth-bridge-secret"), readEnv("ARX_AUTH_BRIDGE_SECRET"))) {
+        return reply(401, { ok: false, code: "auth_bridge_unauthorized" }, null);
+      }
+      const body = await readJsonObject(req, 4096);
+      const sessionId = typeof body?.session_id === "string" ? body.session_id.trim() : "";
+      const communitySlug = typeof body?.community_slug === "string" ? body.community_slug.trim() : "";
+      const origin = normalizeCommunityAppOrigin(typeof body?.origin === "string" ? body.origin : "");
+      const state = body?.state;
+      if (!sessionId || !communitySlug || !origin || !isCommunityAppHandoffState(state)) {
+        return reply(400, { ok: false, code: "invalid_request" }, null);
+      }
+      const touched = (await ctx.runMutation(internal.authSessions.touchAuthSessionForUseInternal as any, {
+        sessionId, nowMs: Date.now(),
+      })) as { status: string; sessionId?: string };
+      if (touched?.status !== "ready" || !touched.sessionId) {
+        return reply(401, { ok: false, code: "sign_in_required" }, null);
+      }
+      const resolved = (await ctx.runQuery(internal.authSessions.resolveAuthSessionBySessionIdInternal as any, {
+        sessionId: touched.sessionId,
+      })) as { ok: boolean; row?: { userId?: string } };
+      if (!resolved?.ok || !resolved.row?.userId) {
+        return reply(401, { ok: false, code: "sign_in_required" }, null);
+      }
+      const code = generateCommunityAppHandoffCode();
+      const result = (await ctx.runMutation(internal.communityApps.createCommunityAppHandoffInternal, {
+        userId: resolved.row.userId as any,
+        communitySlug,
+        origin,
+        codeHash: await hashCommunityAppSessionToken(code),
+        stateHash: await hashCommunityAppSessionToken(state),
+      })) as { ok: true } | { ok: false; reason: string; communitySlug?: string };
+      if (!result.ok) {
+        return reply(403, { ok: false, code: result.reason, community_slug: result.communitySlug ?? null }, null);
+      }
+      return reply(200, { ok: true, code }, null);
+    }),
+  });
+
+  // The community edge (server-side, edge secret) swaps a one-time code for a
+  // member session it keeps in an HttpOnly cookie on the community's domain.
+  args.http.route({
+    path: COMMUNITY_EDGE_EXCHANGE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"))) {
+        return reply(401, { ok: false, code: "edge_unauthorized" }, null);
+      }
+      const body = await readJsonObject(req, 4096);
+      const origin = normalizeCommunityAppOrigin(typeof body?.origin === "string" ? body.origin : "");
+      if (!origin || !isCommunityAppHandoffCode(body?.code) || !isCommunityAppHandoffState(body?.state)) {
+        return reply(400, { ok: false, code: "invalid_request" }, null);
+      }
+      const token = generateCommunityAppSessionToken();
+      const result = (await ctx.runMutation(internal.communityApps.consumeCommunityAppHandoffInternal, {
+        codeHash: await hashCommunityAppSessionToken(body.code as string),
+        stateHash: await hashCommunityAppSessionToken(body.state as string),
+        origin,
+        tokenHash: await hashCommunityAppSessionToken(token),
+      })) as { ok: true; expiresAt: number } | { ok: false; reason: string };
+      if (!result.ok) return reply(403, { ok: false, code: result.reason }, null);
+      return reply(200, { ok: true, token, expires_at: new Date(result.expiresAt).toISOString() }, null);
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_EDGE_REVOKE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"))) {
+        return reply(401, { ok: false, code: "edge_unauthorized" }, null);
+      }
+      const body = await readJsonObject(req, 1024);
+      if (!isCommunityAppSessionToken(body?.token)) return reply(400, { ok: false, code: "invalid_request" }, null);
+      await ctx.runMutation(internal.communityApps.revokeCommunityAppSessionInternal, {
+        tokenHash: await hashCommunityAppSessionToken(body.token as string),
+      });
+      return reply(200, { ok: true }, null);
     }),
   });
 }

@@ -7,25 +7,50 @@
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { margin: 0; padding: 24px; max-width: 640px; }
-    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; }
+    button, a.button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; text-decoration: none; color: inherit; display: inline-block; }
     pre { white-space: pre-wrap; background: #8881; padding: 12px; border-radius: 8px; font-size: 12px; }
   </style>
 </head>
 <body>
   <h1>Hello, community</h1>
-  <p>This page is the community's own front end, served by the Polynet edge on the community's address.</p>
-  <button id="call">Call the Polynet API</button>
+  <p id="status">Checking your session…</p>
+  <p>
+    <a class="button" id="signin" href="/__polynet/auth/start?return=/" hidden>Sign in with Polynet</a>
+    <button id="channels" hidden>List channels</button>
+    <button id="signout" hidden>Sign out</button>
+  </p>
   <pre id="out"></pre>
   <script>
-    // Same-origin call through the edge. Sign-in (step 2) will add the session.
-    document.getElementById("call").onclick = async () => {
+    // This page never handles a token. The Polynet edge on this domain keeps the
+    // member session in an HttpOnly cookie and adds it to /__polynet/api calls.
+    const $ = (id) => document.getElementById(id);
+    const show = (value) => { $("out").textContent = JSON.stringify(value, null, 2); };
+
+    async function refresh() {
+      const session = await (await fetch("/__polynet/auth/session")).json();
+      $("status").textContent = session.signed_in ? "Signed in with Polynet." : "Not signed in.";
+      $("signin").hidden = session.signed_in;
+      $("channels").hidden = !session.signed_in;
+      $("signout").hidden = !session.signed_in;
+    }
+
+    $("channels").onclick = async () => {
       const res = await fetch("/__polynet/api", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tool: "polynet_list", input: { path: "/communities/polynet/channels/" } }),
       });
-      document.getElementById("out").textContent = `${res.status}\n` + JSON.stringify(await res.json(), null, 2);
+      show({ status: res.status, body: await res.json() });
+      if (res.status === 401) refresh();
     };
+
+    $("signout").onclick = async () => {
+      await fetch("/__polynet/auth/logout", { method: "POST" });
+      show({});
+      refresh();
+    };
+
+    refresh();
   </script>
 </body>
 </html>

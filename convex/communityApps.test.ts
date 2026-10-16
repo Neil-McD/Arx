@@ -1,14 +1,29 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
-import { registerCommunityAppRoutes, COMMUNITY_APP_RUNTIME_PATH } from "./httpCommunityApps";
+import {
+  registerCommunityAppRoutes,
+  COMMUNITY_APP_RUNTIME_PATH,
+  COMMUNITY_APP_HANDOFF_PATH,
+  COMMUNITY_EDGE_EXCHANGE_PATH,
+  COMMUNITY_EDGE_REVOKE_PATH,
+} from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import { hashCommunityAppSessionToken } from "../shared/communityAppSession";
+import {
+  COMMUNITY_APP_SESSION_ABSOLUTE_MS,
+  COMMUNITY_APP_SESSION_TTL_MS,
+  hashCommunityAppSessionToken,
+} from "../shared/communityAppSession";
 
 const modules = import.meta.glob([
   "./communityApps.ts",
+  "./authSessions.ts",
+  "./authSessionLifecycleCore.ts",
+  "./authSessionMaintenanceCore.ts",
+  "./providerConnections.ts",
+  "./platformDiagnostics.ts",
   "./communityAdmin.ts",
   "./communityPublic.ts",
   "./communityAccessQueries.ts",
@@ -34,12 +49,19 @@ const modules = import.meta.glob([
   "./_generated/**/*.*s",
 ]);
 
-const ORIGIN = "https://portal.example.com";
+const ORIGIN = "https://hello.example.com";
 const COMMUNITY = "/communities/apps-community";
+const STATE = "s".repeat(43);
+const BRIDGE_SECRET = "test-bridge-secret";
+const EDGE_SECRET = "test-edge-secret";
+
+afterEach(() => { vi.unstubAllEnvs(); });
 
 async function fixture() {
+  vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", BRIDGE_SECRET);
+  vi.stubEnv("POLYNET_COMMUNITY_EDGE_SECRET", EDGE_SECRET);
   const t = convexTest(schema, modules);
-  const nowMs = 1_760_000_000_000;
+  const nowMs = Date.now();
   const ids = await t.run(async (ctx) => {
     const user = async (handle: string) => {
       const userId = await ctx.db.insert("users", {
@@ -53,6 +75,12 @@ async function fixture() {
           userId, documentKey: document.key, documentVersion: document.version, acceptedAt: nowMs, source: "test", createdAt: nowMs,
         });
       }
+      await ctx.db.insert("authSessions", {
+        sessionId: `sess-${handle}`, authSubject: `${handle}-subject`, userId,
+        encryptedSecretHex: "encrypted-placeholder", secretIvHex: "iv-placeholder", secretVersion: 1,
+        idleExpiresAt: nowMs + 86_400_000, absoluteExpiresAt: nowMs + 86_400_000 * 30,
+        createdAt: nowMs, updatedAt: nowMs,
+      } as any);
       return userId;
     };
     const ownerId = await user("apps-owner");
@@ -79,18 +107,16 @@ async function fixture() {
   const as = (handle: string) => t.withIdentity({ subject: `${handle}-subject` });
   const register = (overrides: Record<string, unknown> = {}, handle = "apps-owner") =>
     as(handle).mutation(api.communityApps.registerCommunityApp, {
-      communityId: ids.communityId, slug: "portal", name: "Coaching portal", origin: ORIGIN,
+      communityId: ids.communityId, slug: "hello", name: "Hello", origin: ORIGIN,
       allowedTools: ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"],
       ...overrides,
     } as any);
-  const mint = (handle = "apps-member", appSlug = "portal") =>
-    as(handle).action(api.communityApps.mintCommunityAppSession, { communityId: ids.communityId, appSlug });
 
   // The real route handlers, registered on a capturing router and run without
-  // any Convex session identity, exactly as an app request arrives.
+  // a Convex session identity, exactly as the bridge, edge and front end call them.
   const handlers = new Map<string, (ctx: any, req: Request) => Promise<Response>>();
   registerCommunityAppRoutes({
-    http: { route: ({ method, handler }) => { handlers.set(method, handler as any); } },
+    http: { route: ({ path, method, handler }) => { handlers.set(`${method} ${path}`, handler as any); } },
     httpAction: (handler) => handler as any,
   });
   const ctx = {
@@ -98,130 +124,156 @@ async function fixture() {
     runMutation: (ref: any, args: any) => t.mutation(ref, args),
     runAction: (ref: any, args: any) => t.action(ref, args),
   };
-  const call = async (token: string | null, body: unknown, origin = ORIGIN) => {
-    const res = await handlers.get("POST")!(ctx, new Request(`https://example.convex.site${COMMUNITY_APP_RUNTIME_PATH}`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify(body),
+  const post = async (path: string, headers: Record<string, string>, body: unknown) => {
+    const res = await handlers.get(`POST ${path}`)!(ctx, new Request(`https://example.convex.site${path}`, {
+      method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
     }));
-    return { status: res.status, cors: res.headers.get("access-control-allow-origin"), body: await res.json() as any };
+    return { status: res.status, body: await res.json() as any };
   };
-  const preflight = async (origin: string) => {
-    const res = await handlers.get("OPTIONS")!(ctx, new Request(`https://example.convex.site${COMMUNITY_APP_RUNTIME_PATH}`, {
-      method: "OPTIONS", headers: { origin },
-    }));
-    return { status: res.status, cors: res.headers.get("access-control-allow-origin") };
+  const handoff = (handle: string, overrides: Record<string, unknown> = {}, secret = BRIDGE_SECRET) =>
+    post(COMMUNITY_APP_HANDOFF_PATH, { "x-arx-auth-bridge-secret": secret },
+      { session_id: `sess-${handle}`, community_slug: "apps-community", origin: ORIGIN, state: STATE, ...overrides });
+  const exchange = (code: string, overrides: Record<string, unknown> = {}, secret = EDGE_SECRET) =>
+    post(COMMUNITY_EDGE_EXCHANGE_PATH, { "x-polynet-edge-secret": secret }, { code, state: STATE, origin: ORIGIN, ...overrides });
+  const signIn = async (handle = "apps-member") => {
+    const issued = await handoff(handle);
+    expect(issued).toMatchObject({ status: 200, body: { ok: true } });
+    const exchanged = await exchange(issued.body.code);
+    expect(exchanged).toMatchObject({ status: 200, body: { ok: true } });
+    return exchanged.body.token as string;
   };
-  return { t, ids, as, register, mint, call, preflight };
+  const call = (token: string | null, body: unknown, origin = ORIGIN) =>
+    post(COMMUNITY_APP_RUNTIME_PATH, { origin, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body);
+  const sessions = () => t.run((c) => c.db.query("communityAppSessions").collect());
+  return { t, ids, as, register, handoff, exchange, signIn, call, post, sessions };
 }
 
-test("only a community manager registers an app, with an exact origin and unique slug", async () => {
+test("only a community manager registers an address, which must be exact", async () => {
   const f = await fixture();
   await expect(f.register({}, "apps-member")).rejects.toThrow();
-  for (const origin of ["http://portal.example.com", "https://portal.example.com/path", "https://u:p@portal.example.com", "not a url"]) {
+  for (const origin of ["http://hello.example.com", "https://hello.example.com/path", "https://u:p@hello.example.com"]) {
     await expect(f.register({ origin, slug: "bad" })).rejects.toThrow("community_app_origin_invalid");
   }
-  await expect(f.register({ allowedTools: [] })).rejects.toThrow("community_app_tools_required");
-  expect(await f.register()).toMatchObject({ slug: "portal", origin: ORIGIN, status: "active" });
+  expect(await f.register()).toMatchObject({ slug: "hello", origin: ORIGIN, status: "active" });
   await expect(f.register()).rejects.toThrow("community_app_slug_taken");
-  expect(await f.register({ slug: "local-dev", origin: "http://localhost:5173" })).toMatchObject({ origin: "http://localhost:5173" });
+  expect(await f.register({ slug: "dev", origin: "http://hello.localhost:8787" })).toMatchObject({ origin: "http://hello.localhost:8787" });
 });
 
-test("minting needs current community access and an active app, and stores only a hash", async () => {
+test("handoff requires the bridge secret, a live Polynet session, membership and a registered address", async () => {
   const f = await fixture();
   await f.register();
-  const session = await f.mint();
-  expect(session.token).toMatch(/^pna_[A-Za-z0-9_-]{43}$/);
-  expect(session.origin).toBe(ORIGIN);
-  const stored = await f.t.run((ctx) => ctx.db.query("communityAppSessions").collect());
-  expect(stored).toHaveLength(1);
-  expect(stored[0].tokenHash).toBe(await hashCommunityAppSessionToken(session.token));
-  expect(JSON.stringify(stored)).not.toContain(session.token);
-  await expect(f.mint("apps-outsider")).rejects.toThrow();
-  await f.as("apps-owner").mutation(api.communityApps.setCommunityAppStatus, { communityId: f.ids.communityId, slug: "portal", status: "disabled" });
-  await expect(f.mint()).rejects.toThrow("community_app_not_found");
+  expect((await f.handoff("apps-member", {}, "wrong")).status).toBe(401);
+  expect(await f.handoff("apps-member", { session_id: "sess-missing" })).toMatchObject({ status: 401, body: { code: "sign_in_required" } });
+  expect(await f.handoff("apps-outsider")).toMatchObject({ status: 403, body: { code: "not_a_member", community_slug: "apps-community" } });
+  expect(await f.handoff("apps-member", { origin: "https://evil.example.com" })).toMatchObject({ status: 403, body: { code: "address_not_registered" } });
+  expect(await f.handoff("apps-member", { community_slug: "apps-other" })).toMatchObject({ status: 403, body: { code: "address_not_registered" } });
+  expect(await f.handoff("apps-member", { state: "short" })).toMatchObject({ status: 400 });
+  const issued = await f.handoff("apps-member");
+  expect(issued.body.code).toMatch(/^pnh_[A-Za-z0-9_-]{43}$/);
+  const stored = await f.t.run((c) => c.db.query("communityAppHandoffs").collect());
+  expect(stored[0].codeHash).toBe(await hashCommunityAppSessionToken(issued.body.code));
+  expect(JSON.stringify(stored)).not.toContain(issued.body.code);
+  await f.as("apps-owner").mutation(api.communityApps.setCommunityAppStatus, { communityId: f.ids.communityId, slug: "hello", status: "disabled" });
+  expect(await f.handoff("apps-member")).toMatchObject({ status: 403, body: { code: "address_not_registered" } });
 });
 
-test("CORS preflight is granted only to an active app's exact origin", async () => {
+test("a code works once, for its own state and address, within its lifetime", async () => {
   const f = await fixture();
   await f.register();
-  expect(await f.preflight(ORIGIN)).toEqual({ status: 204, cors: ORIGIN });
-  expect(await f.preflight("https://evil.example.com")).toEqual({ status: 403, cors: null });
+  expect((await f.exchange("pnh_" + "a".repeat(43), {}, "wrong")).status).toBe(401);
+  const first = (await f.handoff("apps-member")).body.code;
+  expect(await f.exchange(first, { state: "t".repeat(43) })).toMatchObject({ status: 403, body: { code: "code_invalid" } });
+  expect(await f.exchange(first)).toMatchObject({ status: 403, body: { code: "code_invalid" } });
+  const second = (await f.handoff("apps-member")).body.code;
+  expect(await f.exchange(second, { origin: "https://evil.example.com" })).toMatchObject({ status: 403, body: { code: "code_invalid" } });
+  const third = (await f.handoff("apps-member")).body.code;
+  await f.t.run(async (c) => { for (const row of await c.db.query("communityAppHandoffs").collect()) await c.db.patch(row._id, { expiresAt: 1 }); });
+  expect(await f.exchange(third)).toMatchObject({ status: 403, body: { code: "code_invalid" } });
+  const fourth = (await f.handoff("apps-member")).body.code;
+  const ok = await f.exchange(fourth);
+  expect(ok.body.token).toMatch(/^pna_[A-Za-z0-9_-]{43}$/);
+  expect(await f.exchange(fourth)).toMatchObject({ status: 403, body: { code: "code_invalid" } });
+  expect(await f.sessions()).toHaveLength(1);
 });
 
-test("an app session reads its own community as the member", async () => {
+test("membership lost between handoff and exchange denies the session", async () => {
   const f = await fixture();
   await f.register();
-  const { token } = await f.mint();
-  const listed = await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } });
-  expect(listed).toMatchObject({ status: 200, cors: ORIGIN, body: { ok: true } });
-  expect(JSON.stringify(listed.body)).toContain(`${COMMUNITY}/channels/general/`);
+  const code = (await f.handoff("apps-member")).body.code;
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  expect(await f.exchange(code)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  expect(await f.sessions()).toHaveLength(0);
 });
 
-test("missing, foreign-origin, expired and disallowed sessions fail closed", async () => {
+test("sessions slide for 7 days, never past 30, and revoke immediately", async () => {
   const f = await fixture();
-  await f.register({ allowedTools: ["polynet_list", "polynet_read"] });
-  const { token } = await f.mint();
+  await f.register();
+  const token = await f.signIn();
+  const [created] = await f.sessions();
+  expect(created.expiresAt - created.createdAt).toBe(COMMUNITY_APP_SESSION_TTL_MS);
+  expect(created.absoluteExpiresAt! - created.createdAt).toBe(COMMUNITY_APP_SESSION_ABSOLUTE_MS);
   const list = { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } };
-  expect(await f.call(null, list)).toMatchObject({ status: 401, cors: null });
-  expect(await f.call(token, list, "https://evil.example.com")).toMatchObject({ status: 401, cors: null });
-  expect(await f.call(token, { tool: "polynet_search", input: { path: `${COMMUNITY}/`, query: "x" } }))
-    .toMatchObject({ status: 403, body: { code: "community_app_tool_not_allowed" } });
-  await f.t.run(async (ctx) => {
-    for (const row of await ctx.db.query("communityAppSessions").collect()) await ctx.db.patch(row._id, { expiresAt: 1 });
-  });
+  await f.t.run((c) => c.db.patch(created._id, { expiresAt: Date.now() + 2 * 86_400_000 }));
+  expect((await f.call(token, list)).body).toMatchObject({ ok: true });
+  const [extended] = await f.sessions();
+  expect(extended.expiresAt).toBeGreaterThan(Date.now() + COMMUNITY_APP_SESSION_TTL_MS - 60_000);
+  await f.t.run((c) => c.db.patch(created._id, { expiresAt: Date.now() + 86_400_000, absoluteExpiresAt: Date.now() + 2 * 86_400_000 }));
+  await f.call(token, list);
+  const [capped] = await f.sessions();
+  expect(capped.expiresAt).toBeLessThanOrEqual(capped.absoluteExpiresAt!);
+  expect((await f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, { token })).status).toBe(200);
   expect(await f.call(token, list)).toMatchObject({ status: 401, body: { code: "community_app_session_invalid" } });
 });
 
-test("an app is confined to its community: no platform root, users or other communities", async () => {
+test("a signed-in front end reads its own community and nothing else", async () => {
   const f = await fixture();
   await f.register();
-  const { token } = await f.mint();
+  const token = await f.signIn();
+  const listed = await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } });
+  expect(listed.body).toMatchObject({ ok: true });
+  expect(JSON.stringify(listed.body)).toContain(`${COMMUNITY}/channels/general/`);
   for (const path of ["/", "/communities/", "/users/"]) {
-    expect((await f.call(token, { tool: "polynet_list", input: { path } })).body)
-      .toMatchObject({ ok: false, code: "community_path_required" });
+    expect((await f.call(token, { tool: "polynet_list", input: { path } })).body).toMatchObject({ ok: false, code: "community_path_required" });
   }
-  expect((await f.call(token, { tool: "polynet_list", input: { path: "/communities/apps-other/" } })).body)
-    .toMatchObject({ ok: false });
+  expect((await f.call(token, { tool: "polynet_list", input: { path: "/communities/apps-other/" } })).body).toMatchObject({ ok: false });
+  expect(await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/` } }, "https://evil.example.com"))
+    .toMatchObject({ status: 401 });
 });
 
-test("an owner's app session never receives builder authority", async () => {
+test("an owner's front-end session never receives builder authority", async () => {
   const f = await fixture();
   await f.register();
-  const { token } = await f.mint("apps-owner");
-  expect((await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/builder/` } })).body)
-    .toMatchObject({ ok: false });
+  const token = await f.signIn("apps-owner");
+  expect((await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/builder/` } })).body).toMatchObject({ ok: false });
   const capabilities = await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/capabilities/` } });
   expect(capabilities.body).toMatchObject({ ok: true });
   expect(JSON.stringify(capabilities.body)).not.toMatch(/community\.admission\.|approve_milestone/);
 });
 
-test("revoking membership denies the very next request", async () => {
+test("losing membership denies the very next API call", async () => {
   const f = await fixture();
   await f.register();
-  const { token } = await f.mint();
+  const token = await f.signIn();
   const list = { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } };
   expect((await f.call(token, list)).body).toMatchObject({ ok: true });
-  await f.t.run((ctx) => ctx.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
   expect((await f.call(token, list)).body).toMatchObject({ ok: false });
 });
 
-test("an app post is the member's own post, with a community_app receipt and no files", async () => {
+test("a front-end post is the member's own post, retried safely, without files", async () => {
   const f = await fixture();
   await f.register();
-  const { token } = await f.mint();
+  const token = await f.signIn();
   const write = (content: Record<string, unknown>, key: string) => f.call(token, {
     tool: "polynet_write",
     input: { path: `${COMMUNITY}/channels/general/`, mode: "create", content, idempotency_key: key },
   });
-  const posted = await write({ text: "Week three tip: switch check-ins to a short async form." }, "app-post-1");
+  const posted = await write({ text: "Week three tip: switch check-ins to a short async form." }, "post-1");
   expect(posted.body).toMatchObject({ ok: true, value: { receipt: { principal_kind: "community_app" } } });
   const rootId = String(posted.body.value.result.interaction.root_id);
-  const root = await f.t.run(async (ctx) => ctx.db.get(ctx.db.normalizeId("communityInteractionRoots", rootId)!));
+  const root = await f.t.run(async (c) => c.db.get(c.db.normalizeId("communityInteractionRoots", rootId)!));
   expect(root).toMatchObject({ actorType: "human", actorUserId: f.ids.memberId, communityId: f.ids.communityId });
-  expect((await write({ text: "with a file", attachments: [{ storageId: "x" }] }, "app-post-2")).body)
-    .toMatchObject({ ok: false, code: "invalid_tool_args" });
-  const replay = await write({ text: "Week three tip: switch check-ins to a short async form." }, "app-post-1");
-  expect(replay.body).toMatchObject({ ok: true });
-  expect(await f.t.run((ctx) => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(1);
+  expect((await write({ text: "with a file", attachments: [{ storageId: "x" }] }, "post-2")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect((await write({ text: "Week three tip: switch check-ins to a short async form." }, "post-1")).body).toMatchObject({ ok: true });
+  expect(await f.t.run((c) => c.db.query("communityInteractionRoots").collect())).toHaveLength(1);
 });
