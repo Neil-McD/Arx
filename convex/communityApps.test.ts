@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import schema from "./schema";
 import {
   registerCommunityAppRoutes,
@@ -11,11 +11,7 @@ import {
   COMMUNITY_EDGE_REVOKE_PATH,
 } from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import {
-  COMMUNITY_APP_SESSION_ABSOLUTE_MS,
-  COMMUNITY_APP_SESSION_TTL_MS,
-  hashCommunityAppSessionToken,
-} from "../shared/communityAppSession";
+import { COMMUNITY_APP_SESSION_TTL_MS, hashCommunityAppSessionToken } from "../shared/communityAppSession";
 
 const modules = import.meta.glob([
   "./communityApps.ts",
@@ -105,12 +101,8 @@ async function fixture() {
     return { ownerId, memberId, outsiderId, communityId, otherCommunityId, membershipId };
   });
   const as = (handle: string) => t.withIdentity({ subject: `${handle}-subject` });
-  const register = (overrides: Record<string, unknown> = {}, handle = "apps-owner") =>
-    as(handle).mutation(api.communityApps.registerCommunityApp, {
-      communityId: ids.communityId, slug: "hello", name: "Hello", origin: ORIGIN,
-      allowedTools: ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"],
-      ...overrides,
-    } as any);
+  const register = (origin = ORIGIN, communityId = ids.communityId) =>
+    t.mutation(internal.communityApps.registerCommunityDomainInternal, { communityId, origin });
 
   // The real route handlers, registered on a capturing router and run without
   // a Convex session identity, exactly as the bridge, edge and front end call them.
@@ -132,7 +124,7 @@ async function fixture() {
   };
   const handoff = (handle: string, overrides: Record<string, unknown> = {}, secret = BRIDGE_SECRET) =>
     post(COMMUNITY_APP_HANDOFF_PATH, { "x-arx-auth-bridge-secret": secret },
-      { session_id: `sess-${handle}`, community_slug: "apps-community", origin: ORIGIN, state: STATE, consent: true, ...overrides });
+      { session_id: `sess-${handle}`, community_slug: "apps-community", origin: ORIGIN, state: STATE, ...overrides });
   const exchange = (code: string, overrides: Record<string, unknown> = {}, secret = EDGE_SECRET) =>
     post(COMMUNITY_EDGE_EXCHANGE_PATH, { "x-polynet-edge-secret": secret }, { code, state: STATE, origin: ORIGIN, ...overrides });
   const signIn = async (handle = "apps-member") => {
@@ -142,21 +134,21 @@ async function fixture() {
     expect(exchanged).toMatchObject({ status: 200, body: { ok: true } });
     return exchanged.body.token as string;
   };
-  const call = (token: string | null, body: unknown, origin = ORIGIN) =>
-    post(COMMUNITY_APP_RUNTIME_PATH, { origin, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body);
+  // As the edge forwards it: the edge secret, the community's origin and the cookie's token.
+  const call = (token: string | null, body: unknown, origin = ORIGIN, secret = EDGE_SECRET) =>
+    post(COMMUNITY_APP_RUNTIME_PATH, { origin, "x-polynet-edge-secret": secret, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body);
   const sessions = () => t.run((c) => c.db.query("communityAppSessions").collect());
-  return { t, ids, as, register, handoff, exchange, signIn, call, post, sessions };
+  return { t, ids, register, handoff, exchange, signIn, call, post, sessions };
 }
 
-test("only a community manager registers an address, which must be exact", async () => {
+test("a domain is an exact origin and belongs to one community", async () => {
   const f = await fixture();
-  await expect(f.register({}, "apps-member")).rejects.toThrow();
   for (const origin of ["http://hello.example.com", "https://hello.example.com/path", "https://u:p@hello.example.com"]) {
-    await expect(f.register({ origin, slug: "bad" })).rejects.toThrow("community_app_origin_invalid");
+    await expect(f.register(origin)).rejects.toThrow("community_domain_invalid");
   }
-  expect(await f.register()).toMatchObject({ slug: "hello", origin: ORIGIN, status: "active" });
-  await expect(f.register()).rejects.toThrow("community_app_slug_taken");
-  expect(await f.register({ slug: "dev", origin: "http://hello.localhost:8787" })).toMatchObject({ origin: "http://hello.localhost:8787" });
+  expect(await f.register()).toMatchObject({ origin: ORIGIN });
+  await expect(f.register(ORIGIN, f.ids.otherCommunityId)).rejects.toThrow("community_domain_taken");
+  expect(await f.register("http://hello.localhost:8787")).toMatchObject({ origin: "http://hello.localhost:8787" });
 });
 
 test("handoff requires the bridge secret, a live Polynet session, membership and a registered address", async () => {
@@ -173,7 +165,7 @@ test("handoff requires the bridge secret, a live Polynet session, membership and
   const stored = await f.t.run((c) => c.db.query("communityAppHandoffs").collect());
   expect(stored[0].codeHash).toBe(await hashCommunityAppSessionToken(issued.body.code));
   expect(JSON.stringify(stored)).not.toContain(issued.body.code);
-  await f.as("apps-owner").mutation(api.communityApps.setCommunityAppStatus, { communityId: f.ids.communityId, slug: "hello", status: "disabled" });
+  await f.t.mutation(internal.communityApps.removeCommunityDomainInternal, { origin: ORIGIN });
   expect(await f.handoff("apps-member")).toMatchObject({ status: 403, body: { code: "address_not_registered" } });
 });
 
@@ -184,6 +176,7 @@ test("a code works once, for its own state and address, within its lifetime", as
   const first = (await f.handoff("apps-member")).body.code;
   expect(await f.exchange(first, { state: "t".repeat(43) })).toMatchObject({ status: 403, body: { code: "code_invalid" } });
   expect(await f.exchange(first)).toMatchObject({ status: 403, body: { code: "code_invalid" } });
+  expect(await f.t.run((c) => c.db.query("communityAppHandoffs").collect())).toHaveLength(0);
   const second = (await f.handoff("apps-member")).body.code;
   expect(await f.exchange(second, { origin: "https://evil.example.com" })).toMatchObject({ status: 403, body: { code: "code_invalid" } });
   const third = (await f.handoff("apps-member")).body.code;
@@ -205,24 +198,25 @@ test("membership lost between handoff and exchange denies the session", async ()
   expect(await f.sessions()).toHaveLength(0);
 });
 
-test("sessions slide for 7 days, never past 30, and revoke immediately", async () => {
+test("a session lasts 30 days, answers only the edge, and ends on sign-out or domain removal", async () => {
   const f = await fixture();
   await f.register();
   const token = await f.signIn();
   const [created] = await f.sessions();
-  expect(created.expiresAt - created.createdAt).toBe(COMMUNITY_APP_SESSION_TTL_MS);
-  expect(created.absoluteExpiresAt! - created.createdAt).toBe(COMMUNITY_APP_SESSION_ABSOLUTE_MS);
+  expect(created.expiresAt - Date.now()).toBeGreaterThan(COMMUNITY_APP_SESSION_TTL_MS - 60_000);
   const list = { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } };
-  await f.t.run((c) => c.db.patch(created._id, { expiresAt: Date.now() + 2 * 86_400_000 }));
   expect((await f.call(token, list)).body).toMatchObject({ ok: true });
-  const [extended] = await f.sessions();
-  expect(extended.expiresAt).toBeGreaterThan(Date.now() + COMMUNITY_APP_SESSION_TTL_MS - 60_000);
-  await f.t.run((c) => c.db.patch(created._id, { expiresAt: Date.now() + 86_400_000, absoluteExpiresAt: Date.now() + 2 * 86_400_000 }));
-  await f.call(token, list);
-  const [capped] = await f.sessions();
-  expect(capped.expiresAt).toBeLessThanOrEqual(capped.absoluteExpiresAt!);
-  expect((await f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, { token })).status).toBe(200);
+  expect(await f.call(token, list, ORIGIN, "wrong")).toMatchObject({ status: 401, body: { code: "edge_unauthorized" } });
+  await f.t.run((c) => c.db.patch(created._id, { expiresAt: Date.now() - 1 }));
   expect(await f.call(token, list)).toMatchObject({ status: 401, body: { code: "community_app_session_invalid" } });
+  const second = await f.signIn();
+  expect(await f.sessions()).toHaveLength(1);
+  expect((await f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, { token: second })).status).toBe(200);
+  expect(await f.call(second, list)).toMatchObject({ status: 401 });
+  const third = await f.signIn();
+  await f.t.mutation(internal.communityApps.removeCommunityDomainInternal, { origin: ORIGIN });
+  expect(await f.call(third, list)).toMatchObject({ status: 401 });
+  expect(await f.sessions()).toHaveLength(0);
 });
 
 test("a signed-in front end reads its own community and nothing else", async () => {
@@ -277,57 +271,3 @@ test("a front-end post is the member's own post, retried safely, without files",
   expect((await write({ text: "Week three tip: switch check-ins to a short async form." }, "post-1")).body).toMatchObject({ ok: true });
   expect(await f.t.run((c) => c.db.query("communityInteractionRoots").collect())).toHaveLength(1);
 });
-
-test("a member approves a front end once, and again only when its permissions change", async () => {
-  const f = await fixture();
-  await f.register({ allowedTools: ["polynet_list", "polynet_read"] });
-  const first = await f.handoff("apps-member", { consent: false });
-  expect(first).toMatchObject({
-    status: 200,
-    body: { ok: false, code: "consent_required", app: { name: "Hello", origin: ORIGIN, community_name: "apps-community", tools: ["polynet_list", "polynet_read"] } },
-  });
-  expect(first.body.code).not.toMatch(/^pnh_/);
-  expect(await f.t.run((c) => c.db.query("communityAppHandoffs").collect())).toHaveLength(0);
-  expect((await f.handoff("apps-member", { consent: true })).body).toMatchObject({ ok: true });
-  expect((await f.handoff("apps-member", { consent: false })).body).toMatchObject({ ok: true });
-  await f.t.run(async (c) => {
-    const app = (await c.db.query("communityApps").collect())[0];
-    await c.db.patch(app._id, { allowedTools: ["polynet_list", "polynet_read", "polynet_write"] });
-  });
-  expect((await f.handoff("apps-member", { consent: false })).body).toMatchObject({ code: "consent_required" });
-});
-
-test("sign-in attempts are rate limited per member per hour, and old attempts are pruned", async () => {
-  const f = await fixture();
-  await f.register();
-  await f.t.run(async (c) => {
-    const app = (await c.db.query("communityApps").collect())[0];
-    const now = Date.now();
-    for (let i = 0; i < 29; i += 1) {
-      await c.db.insert("communityAppHandoffs", {
-        codeHash: `${i}`.padStart(64, "0"), stateHash: "0".repeat(64), appId: app._id, communityId: app.communityId,
-        userId: f.ids.memberId, origin: ORIGIN, expiresAt: now, usedAt: now, createdAt: now - 1000,
-      });
-    }
-    await c.db.insert("communityAppHandoffs", {
-      codeHash: "f".repeat(64), stateHash: "0".repeat(64), appId: app._id, communityId: app.communityId,
-      userId: f.ids.memberId, origin: ORIGIN, expiresAt: now - 2 * 3_600_000, createdAt: now - 2 * 3_600_000,
-    });
-  });
-  expect((await f.handoff("apps-member")).body).toMatchObject({ ok: true });
-  expect(await f.handoff("apps-member")).toMatchObject({ status: 429, body: { code: "rate_limited" } });
-  const rows = await f.t.run((c) => c.db.query("communityAppHandoffs").collect());
-  expect(rows.some((row) => row.codeHash === "f".repeat(64))).toBe(false);
-});
-
-test("signing in again prunes this member's expired sessions", async () => {
-  const f = await fixture();
-  await f.register();
-  await f.signIn();
-  await f.t.run(async (c) => { for (const row of await c.db.query("communityAppSessions").collect()) await c.db.patch(row._id, { expiresAt: 1 }); });
-  await f.signIn();
-  const remaining = await f.sessions();
-  expect(remaining).toHaveLength(1);
-  expect(remaining[0].expiresAt).toBeGreaterThan(Date.now());
-});
-

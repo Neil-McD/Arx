@@ -1,25 +1,15 @@
-// Pure helpers for community app sessions, shared by the backend and tests.
+// Pure helpers for community front-end sessions, shared by the backend and tests.
 
-// Sliding member session on a community's own domain, capped by an absolute lifetime.
-export const COMMUNITY_APP_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-export const COMMUNITY_APP_SESSION_ABSOLUTE_MS = 30 * 24 * 60 * 60 * 1000;
-// Extend a session at most about once a day.
-export const COMMUNITY_APP_SESSION_EXTEND_AFTER_MS = 24 * 60 * 60 * 1000;
+import { POLYNET_CANONICAL_TOOL_NAMES, type PolynetCanonicalToolName } from "./polynetCanonicalToolContract.ts";
+
+// A member session on a community's own domain. Expiry signs the member in
+// again through the same invisible hop.
+export const COMMUNITY_APP_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // One-time sign-in handoff code from Polynet's login to a community's edge.
 export const COMMUNITY_APP_HANDOFF_TTL_MS = 60 * 1000;
 export const COMMUNITY_APP_HANDOFF_PREFIX = "pnh_";
-// Sign-in attempts per member per hour across all community front ends.
-export const COMMUNITY_APP_HANDOFFS_PER_HOUR = 30;
 export const COMMUNITY_APP_TOKEN_PREFIX = "pna_";
 export const COMMUNITY_APP_MAX_REQUEST_BYTES = 64 * 1024;
-export const COMMUNITY_APP_TOOLS = [
-  "polynet_list",
-  "polynet_read",
-  "polynet_search",
-  "polynet_write",
-  "polynet_call",
-] as const;
-export type CommunityAppTool = (typeof COMMUNITY_APP_TOOLS)[number];
 
 function base64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -75,11 +65,7 @@ export function normalizeCommunityAppOrigin(raw: string): string | null {
   return null;
 }
 
-export function normalizeCommunityAppSlug(raw: string): string | null {
-  const slug = String(raw ?? "").trim().toLowerCase();
-  return /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(slug) ? slug : null;
-}
-
-export function isCommunityAppTool(value: unknown): value is CommunityAppTool {
-  return typeof value === "string" && (COMMUNITY_APP_TOOLS as readonly string[]).includes(value);
+// A front end uses the same five verbs as every other actor.
+export function isCommunityAppTool(value: unknown): value is PolynetCanonicalToolName {
+  return typeof value === "string" && (POLYNET_CANONICAL_TOOL_NAMES as readonly string[]).includes(value);
 }

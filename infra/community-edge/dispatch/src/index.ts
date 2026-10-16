@@ -61,6 +61,18 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
+// The front end's own Worker never receives Polynet's cookies.
+export function withoutPolynetCookies(request: Request): Request {
+  const kept = (request.headers.get("cookie") ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part && !part.startsWith(`${SESSION_COOKIE}=`) && !part.startsWith(`${SIGNIN_COOKIE}=`));
+  const headers = new Headers(request.headers);
+  if (kept.length) headers.set("cookie", kept.join("; "));
+  else headers.delete("cookie");
+  return new Request(request, { headers });
+}
+
 // Host-only (no Domain attribute), so one community can never read another's.
 function cookie(url: URL, name: string, value: string, maxAgeSeconds: number, path = "/"): string {
   const secure = url.protocol === "https:" ? "; Secure" : "";
@@ -158,7 +170,10 @@ async function proxyApi(request: Request, url: URL, env: Env): Promise<Response>
   if (body.length > MAX_API_BODY_BYTES) return json(413, { ok: false, code: "request_too_large" });
   const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Origin: url.origin, Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, Authorization: `Bearer ${token}`,
+      "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+    },
     body,
   });
   const headers = new Headers({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -177,6 +192,6 @@ export default {
     }
     const worker = userWorker(route.script, env);
     if (!worker) return new Response("Community front end unavailable", { status: 503 });
-    return await worker.fetch(request);
+    return await worker.fetch(withoutPolynetCookies(request));
   },
 };

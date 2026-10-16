@@ -90,8 +90,17 @@ test("API calls use only the session cookie and clear it when the backend reject
   const [, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
   expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
   expect((init.headers as Record<string, string>).Origin).toBe(ORIGIN);
+  expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBe("edge-secret");
   expect(rejected.status).toBe(401);
   expect(rejected.headers.get("set-cookie")).toMatch(/__polynet_session=; .*Max-Age=0/);
+});
+
+test("the community's own Worker never receives Polynet's cookies", async () => {
+  const seen: string[] = [];
+  const e = { ...env(), DEV_USER_WORKER: { fetch: async (req: Request) => { seen.push(req.headers.get("cookie") ?? ""); return new Response("ok"); } } };
+  await edge.fetch(request("/", { headers: { cookie: `theme=dark; __polynet_session=${TOKEN}; __polynet_signin=x.%2F` } }), e);
+  await edge.fetch(request("/", { headers: { cookie: `__polynet_session=${TOKEN}` } }), e);
+  expect(seen).toEqual(["theme=dark", ""]);
 });
 
 test("logout revokes the session and clears the cookie", async () => {

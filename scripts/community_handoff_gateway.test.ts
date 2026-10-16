@@ -67,7 +67,7 @@ test("a signed-in member is returned to the community with a one-time code", asy
   const [url, init] = bridge.mock.calls[0] as unknown as [string, RequestInit];
   expect(String(url)).toContain("/runtime/auth_bridge_community_handoff");
   expect(JSON.parse(String(init.body))).toEqual({
-    session_id: "synthetic-session", community_slug: "apps-community", origin: "https://hello.example.com", state: STATE, consent: false,
+    session_id: "synthetic-session", community_slug: "apps-community", origin: "https://hello.example.com", state: STATE,
   });
 });
 
@@ -85,51 +85,12 @@ test("non-members go to the community gate; unregistered addresses get no redire
   expect(unregistered.headers.has("location")).toBe(false);
 });
 
-function post(form: Record<string, string>, origin = "https://polynet.example.com", cookie = "__Secure-arx-auth-session=synthetic-session") {
-  return { method: "POST", url: "/api/auth/community-handoff", headers: { host: "polynet.example.com", origin, cookie }, body: form };
-}
-
-test("first sign-in shows an escaped consent page instead of a code", async () => {
-  setup();
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-    ok: false, code: "consent_required",
-    app: { name: "<Hello>", origin: "https://hello.example.com", community_name: "Apps & Co", tools: ["polynet_list", "polynet_write"] },
-  }), { status: 200 })));
-  const r = reply();
-  await handler(request(valid), r.res);
-  expect(r.res.statusCode).toBe(200);
-  expect(r.headers.has("location")).toBe(false);
-  const html = r.body();
-  expect(html).toContain("Allow &lt;Hello&gt;?");
-  expect(html).toContain("Apps &amp; Co");
-  expect(html).toContain("Post as you");
-  expect(html).toContain('<form method="post">');
-  expect(html).not.toContain("<Hello>");
-  // The post-submit redirect to the community must be allowed by form-action.
-  expect(String(r.headers.get("content-security-policy"))).toContain("form-action 'self' https://hello.example.com;");
-});
-
-test("approving from the consent page requests a code with consent", async () => {
-  setup();
-  const bridge = vi.fn(async () => new Response(JSON.stringify({ ok: true, code: `pnh_${"d".repeat(43)}` }), { status: 200 }));
-  vi.stubGlobal("fetch", bridge);
-  const r = reply();
-  await handler(post({ ...valid, decision: "approve" }), r.res);
-  expect(r.res.statusCode).toBe(302);
-  expect(String(r.headers.get("location"))).toContain("code=pnh_");
-  expect(JSON.parse(String((bridge.mock.calls[0] as unknown as [string, RequestInit])[1].body)).consent).toBe(true);
-});
-
-test("cancel returns to the community without a code; cross-site posts are refused", async () => {
+test("only a plain redirect: no form posts", async () => {
   setup();
   const bridge = vi.fn();
   vi.stubGlobal("fetch", bridge);
-  const cancel = reply();
-  await handler(post({ ...valid, decision: "cancel" }), cancel.res);
-  expect(cancel.headers.get("location")).toBe("https://hello.example.com/");
-  const forged = reply();
-  await handler(post({ ...valid, decision: "approve" }, "https://evil.example.com"), forged.res);
-  expect(forged.res.statusCode).toBe(403);
+  const r = reply();
+  await handler({ method: "POST", url: "/api/auth/community-handoff", headers: { host: "polynet.example.com" }, body: valid }, r.res);
+  expect(r.res.statusCode).toBe(405);
   expect(bridge).not.toHaveBeenCalled();
 });
-

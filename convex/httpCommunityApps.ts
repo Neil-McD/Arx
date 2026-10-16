@@ -3,8 +3,6 @@ import type { PublicHttpAction } from "convex/server";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import {
   COMMUNITY_APP_MAX_REQUEST_BYTES,
-  COMMUNITY_APP_SESSION_EXTEND_AFTER_MS,
-  COMMUNITY_APP_SESSION_TTL_MS,
   generateCommunityAppHandoffCode,
   generateCommunityAppSessionToken,
   hashCommunityAppSessionToken,
@@ -52,61 +50,40 @@ type HttpRouterLike = {
 };
 type HttpActionLike = (handler: (ctx: any, req: Request) => Promise<Response>) => PublicHttpAction;
 
-// CORS is granted only to the exact origin of an active community app; the
-// response never reflects an arbitrary Origin.
-function corsHeaders(origin: string | null): Record<string, string> {
-  return origin
-    ? {
-        "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type",
-        "Access-Control-Max-Age": "600",
-        Vary: "Origin",
-      }
-    : { Vary: "Origin" };
-}
-
-function reply(status: number, body: Record<string, unknown>, origin: string | null): Response {
+function reply(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...corsHeaders(origin) },
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
   });
+}
+
+function fromEdge(req: Request): boolean {
+  return secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"));
 }
 
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
-  args.http.route({
-    path: COMMUNITY_APP_RUNTIME_PATH,
-    method: "OPTIONS",
-    handler: args.httpAction(async (ctx, req) => {
-      const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "");
-      const allowed = origin
-        ? await ctx.runQuery(internal.communityApps.isActiveCommunityAppOriginInternal, { origin })
-        : false;
-      return new Response(null, { status: allowed ? 204 : 403, headers: corsHeaders(allowed ? origin : null) });
-    }),
-  });
-
+  // Front-end API calls, forwarded only by the community edge with the member
+  // session from its HttpOnly cookie. The browser never calls this directly.
   args.http.route({
     path: COMMUNITY_APP_RUNTIME_PATH,
     method: "POST",
     handler: args.httpAction(async (ctx, req) => {
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
       const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "");
       const token = readCommunityAppBearerToken(req.headers.get("authorization"));
       if (!origin || !token) {
-        return reply(401, { ok: false, code: "community_app_session_required", message: "A community app session is required." }, null);
+        return reply(401, { ok: false, code: "community_app_session_required", message: "Sign in to this community." });
       }
       const session = (await ctx.runQuery(internal.communityApps.resolveCommunityAppSessionInternal, {
         tokenHash: await hashCommunityAppSessionToken(token),
         origin,
-      })) as
-        | { ok: false }
-        | { ok: true; userId: string; authSubject: string; communityId: string; appId: string; allowedTools: string[]; expiresAt: number };
+      })) as { ok: false } | { ok: true; userId: string; authSubject: string; communityId: string };
       if (!session.ok) {
-        return reply(401, { ok: false, code: "community_app_session_invalid", message: "The app session is invalid or expired." }, null);
+        return reply(401, { ok: false, code: "community_app_session_invalid", message: "The session is invalid or expired." });
       }
       const raw = await req.text();
       if (raw.length > COMMUNITY_APP_MAX_REQUEST_BYTES) {
-        return reply(413, { ok: false, code: "request_too_large", message: "Request body is too large." }, origin);
+        return reply(413, { ok: false, code: "request_too_large", message: "Request body is too large." });
       }
       let body: Record<string, unknown>;
       try {
@@ -114,22 +91,14 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid");
         body = parsed as Record<string, unknown>;
       } catch {
-        return reply(400, { ok: false, code: "invalid_json", message: "Body must be a JSON object." }, origin);
+        return reply(400, { ok: false, code: "invalid_json", message: "Body must be a JSON object." });
       }
       const tool = body.tool;
       const input = body.input && typeof body.input === "object" && !Array.isArray(body.input)
         ? (body.input as Record<string, unknown>)
         : null;
       if (!isCommunityAppTool(tool) || !input) {
-        return reply(400, { ok: false, code: "invalid_tool_args", message: "Provide a Polynet tool and an input object." }, origin);
-      }
-      if (!session.allowedTools.includes(tool)) {
-        return reply(403, { ok: false, code: "community_app_tool_not_allowed", message: "This app is not allowed to use that tool." }, origin);
-      }
-      if (session.expiresAt - Date.now() < COMMUNITY_APP_SESSION_TTL_MS - COMMUNITY_APP_SESSION_EXTEND_AFTER_MS) {
-        await ctx.runMutation(internal.communityApps.extendCommunityAppSessionInternal, {
-          tokenHash: await hashCommunityAppSessionToken(token),
-        });
+        return reply(400, { ok: false, code: "invalid_tool_args", message: "Provide a Polynet tool and an input object." });
       }
       const execution = await executePolynetCanonicalTool({
         ctx,
@@ -142,8 +111,8 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         input,
       });
       return execution.ok
-        ? reply(200, { ok: true, value: execution.value }, origin)
-        : reply(200, { ok: false, code: execution.code, message: execution.message }, origin);
+        ? reply(200, { ok: true, value: execution.value })
+        : reply(200, { ok: false, code: execution.code, message: execution.message });
     }),
   });
 
@@ -154,7 +123,7 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
     method: "POST",
     handler: args.httpAction(async (ctx, req) => {
       if (!secretMatches(req.headers.get("x-arx-auth-bridge-secret"), readEnv("ARX_AUTH_BRIDGE_SECRET"))) {
-        return reply(401, { ok: false, code: "auth_bridge_unauthorized" }, null);
+        return reply(401, { ok: false, code: "auth_bridge_unauthorized" });
       }
       const body = await readJsonObject(req, 4096);
       const sessionId = typeof body?.session_id === "string" ? body.session_id.trim() : "";
@@ -162,19 +131,19 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       const origin = normalizeCommunityAppOrigin(typeof body?.origin === "string" ? body.origin : "");
       const state = body?.state;
       if (!sessionId || !communitySlug || !origin || !isCommunityAppHandoffState(state)) {
-        return reply(400, { ok: false, code: "invalid_request" }, null);
+        return reply(400, { ok: false, code: "invalid_request" });
       }
       const touched = (await ctx.runMutation(internal.authSessions.touchAuthSessionForUseInternal as any, {
         sessionId, nowMs: Date.now(),
       })) as { status: string; sessionId?: string };
       if (touched?.status !== "ready" || !touched.sessionId) {
-        return reply(401, { ok: false, code: "sign_in_required" }, null);
+        return reply(401, { ok: false, code: "sign_in_required" });
       }
       const resolved = (await ctx.runQuery(internal.authSessions.resolveAuthSessionBySessionIdInternal as any, {
         sessionId: touched.sessionId,
       })) as { ok: boolean; row?: { userId?: string } };
       if (!resolved?.ok || !resolved.row?.userId) {
-        return reply(401, { ok: false, code: "sign_in_required" }, null);
+        return reply(401, { ok: false, code: "sign_in_required" });
       }
       const code = generateCommunityAppHandoffCode();
       const result = (await ctx.runMutation(internal.communityApps.createCommunityAppHandoffInternal, {
@@ -183,21 +152,11 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         origin,
         codeHash: await hashCommunityAppSessionToken(code),
         stateHash: await hashCommunityAppSessionToken(state),
-        consent: body?.consent === true,
-      })) as
-        | { ok: true }
-        | { ok: false; reason: string; communitySlug?: string; app?: { name: string; origin: string; communityName: string; tools: string[] } };
+      })) as { ok: true } | { ok: false; reason: string; communitySlug?: string };
       if (!result.ok) {
-        if (result.reason === "consent_required" && result.app) {
-          return reply(200, {
-            ok: false, code: "consent_required",
-            app: { name: result.app.name, origin: result.app.origin, community_name: result.app.communityName, tools: result.app.tools },
-          }, null);
-        }
-        if (result.reason === "rate_limited") return reply(429, { ok: false, code: "rate_limited" }, null);
-        return reply(403, { ok: false, code: result.reason, community_slug: result.communitySlug ?? null }, null);
+        return reply(403, { ok: false, code: result.reason, community_slug: result.communitySlug ?? null });
       }
-      return reply(200, { ok: true, code }, null);
+      return reply(200, { ok: true, code });
     }),
   });
 
@@ -207,13 +166,11 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
     path: COMMUNITY_EDGE_EXCHANGE_PATH,
     method: "POST",
     handler: args.httpAction(async (ctx, req) => {
-      if (!secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"))) {
-        return reply(401, { ok: false, code: "edge_unauthorized" }, null);
-      }
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
       const body = await readJsonObject(req, 4096);
       const origin = normalizeCommunityAppOrigin(typeof body?.origin === "string" ? body.origin : "");
       if (!origin || !isCommunityAppHandoffCode(body?.code) || !isCommunityAppHandoffState(body?.state)) {
-        return reply(400, { ok: false, code: "invalid_request" }, null);
+        return reply(400, { ok: false, code: "invalid_request" });
       }
       const token = generateCommunityAppSessionToken();
       const result = (await ctx.runMutation(internal.communityApps.consumeCommunityAppHandoffInternal, {
@@ -222,8 +179,8 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         origin,
         tokenHash: await hashCommunityAppSessionToken(token),
       })) as { ok: true; expiresAt: number } | { ok: false; reason: string };
-      if (!result.ok) return reply(403, { ok: false, code: result.reason }, null);
-      return reply(200, { ok: true, token, expires_at: new Date(result.expiresAt).toISOString() }, null);
+      if (!result.ok) return reply(403, { ok: false, code: result.reason });
+      return reply(200, { ok: true, token, expires_at: new Date(result.expiresAt).toISOString() });
     }),
   });
 
@@ -231,15 +188,13 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
     path: COMMUNITY_EDGE_REVOKE_PATH,
     method: "POST",
     handler: args.httpAction(async (ctx, req) => {
-      if (!secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"))) {
-        return reply(401, { ok: false, code: "edge_unauthorized" }, null);
-      }
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
       const body = await readJsonObject(req, 1024);
-      if (!isCommunityAppSessionToken(body?.token)) return reply(400, { ok: false, code: "invalid_request" }, null);
+      if (!isCommunityAppSessionToken(body?.token)) return reply(400, { ok: false, code: "invalid_request" });
       await ctx.runMutation(internal.communityApps.revokeCommunityAppSessionInternal, {
         tokenHash: await hashCommunityAppSessionToken(body.token as string),
       });
-      return reply(200, { ok: true }, null);
+      return reply(200, { ok: true });
     }),
   });
 }

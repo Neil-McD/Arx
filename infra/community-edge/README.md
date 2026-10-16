@@ -5,16 +5,23 @@ one edge Worker in front of every community front end.
 
 ```text
 <community address> → dispatch Worker (Polynet edge)
-                         ├─ /__polynet/api  → Polynet backend /runtime/app (server-side, same origin for the browser)
-                         └─ everything else → that community's user Worker (static assets)
+                         ├─ /__polynet/auth/* → "Sign in with Polynet" (start, callback, session, logout)
+                         ├─ /__polynet/api    → Polynet backend /runtime/app (server-side, edge secret + session cookie)
+                         └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 
 ## Run locally
 
 ```bash
 cd infra/community-edge && npm install && npm run dev
-curl -H 'Host: hello.localhost' http://localhost:8787/
 ```
+
+Then open `http://hello.localhost:8787/`. Sign-in needs:
+
+- `dispatch/.dev.vars` (gitignored) with `POLYNET_EDGE_SECRET`, equal to the
+  backend's `POLYNET_COMMUNITY_EDGE_SECRET`;
+- the domain registered to its community with
+  `communityApps:registerCommunityDomainInternal` (`communityId`, `origin`).
 
 Locally, the edge reaches the hello Worker through a service binding, because
 wrangler cannot run dispatch-namespace user Workers locally. In production the
@@ -28,7 +35,7 @@ hostname map.
 | Known community host serves its front end | 200 |
 | Deep link falls back to the app (single-page app) | 200 |
 | Unknown host | 404 |
-| API proxy to staging without a session | 401 `community_app_session_required` from staging |
+| API call without a session | 401 `sign_in_required` at the edge |
 | API GET | 405 at the edge |
 | Body over 64 KB | 413 at the edge |
 
@@ -36,6 +43,4 @@ hostname map.
 
 - Cloudflare resources (account, Workers for Platforms plan, namespace, KV, a
   test hostname): needs approval and a paid plan.
-- Sign-in (step 2), realtime JWTs (step 3), CLI (step 4).
-- Backend: `normalizeCommunityAppOrigin` accepts plain `localhost` only; local
-  `*.localhost` community addresses need allowing for dev.
+- Live updates through the door, then the CLI.

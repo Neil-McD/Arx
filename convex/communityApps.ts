@@ -1,166 +1,24 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
-import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { internalMutation, internalQuery } from "./_generated/server";
+import { requireCommunityChatAccess } from "./communityCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   COMMUNITY_APP_HANDOFF_TTL_MS,
-  COMMUNITY_APP_HANDOFFS_PER_HOUR,
-  COMMUNITY_APP_SESSION_ABSOLUTE_MS,
-  COMMUNITY_APP_SESSION_EXTEND_AFTER_MS,
   COMMUNITY_APP_SESSION_TTL_MS,
-  COMMUNITY_APP_TOOLS,
   normalizeCommunityAppOrigin,
-  normalizeCommunityAppSlug,
 } from "../shared/communityAppSession";
 
-// Community front ends: a registered address (origin) for a community whose
-// front end acts for one signed-in member, in that community and the member
-// lane. Members sign in at Polynet; a one-time handoff code becomes a session
-// on the community's own domain, held by the community edge. Authority is
-// re-derived from current membership on every request by the canonical executor.
+// Community front ends. A community's own domain (origin) is registered to
+// that community. A member already signed in to Polynet hops through Polynet's
+// login, which issues a one-time code for that domain; the community edge swaps
+// it for a session it keeps in an HttpOnly cookie. The front end then acts as
+// that member, in that community, in the member lane. Authority is re-derived
+// from current membership on every request by the canonical executor.
 
-const identityArgs = { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()) };
-const toolValidator = v.union(
-  v.literal("polynet_list"),
-  v.literal("polynet_read"),
-  v.literal("polynet_search"),
-  v.literal("polynet_write"),
-  v.literal("polynet_call"),
-);
-const MAX_SESSIONS_PRUNED_PER_MINT = 20;
+const MAX_ROWS_PRUNED = 20;
 
-function requireAppOrigin(raw: string): string {
-  const origin = normalizeCommunityAppOrigin(raw);
-  if (!origin) throw new Error("community_app_origin_invalid");
-  let polynetOrigin: string | null = null;
-  try {
-    polynetOrigin = readCanonicalPublicAppOrigin();
-  } catch {
-    polynetOrigin = null;
-  }
-  if (polynetOrigin && origin === polynetOrigin) throw new Error("community_app_origin_invalid");
-  return origin;
-}
-
-function mapApp(row: any) {
-  return {
-    id: String(row._id),
-    slug: row.slug,
-    name: row.name,
-    origin: row.origin,
-    allowed_tools: row.allowedTools,
-    status: row.status,
-    updated_at: new Date(row.updatedAt).toISOString(),
-  };
-}
-
-export const registerCommunityApp = mutation({
-  args: {
-    ...identityArgs,
-    communityId: v.id("communities"),
-    slug: v.string(),
-    name: v.string(),
-    origin: v.string(),
-    allowedTools: v.array(toolValidator),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const slug = normalizeCommunityAppSlug(args.slug);
-    const name = args.name.replace(/\s+/g, " ").trim();
-    if (!slug) throw new Error("community_app_slug_invalid");
-    if (!name || name.length > 80) throw new Error("community_app_name_invalid");
-    const origin = requireAppOrigin(args.origin);
-    const allowedTools = COMMUNITY_APP_TOOLS.filter((tool) => args.allowedTools.includes(tool));
-    if (allowedTools.length === 0) throw new Error("community_app_tools_required");
-    const existing = await ctx.db
-      .query("communityApps")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", slug))
-      .first();
-    if (existing) throw new Error("community_app_slug_taken");
-    const nowMs = Date.now();
-    const appId = await ctx.db.insert("communityApps", {
-      communityId: args.communityId, slug, name, origin, allowedTools, status: "active",
-      createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
-    });
-    return mapApp((await ctx.db.get(appId))!);
-  },
-});
-
-export const setCommunityAppStatus = mutation({
-  args: {
-    ...identityArgs,
-    communityId: v.id("communities"),
-    slug: v.string(),
-    status: v.union(v.literal("active"), v.literal("disabled")),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const app = await ctx.db
-      .query("communityApps")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug))
-      .first();
-    if (!app) throw new Error("community_app_not_found");
-    await ctx.db.patch(app._id, { status: args.status, updatedAt: Date.now() });
-    return mapApp((await ctx.db.get(app._id))!);
-  },
-});
-
-export const listCommunityApps = query({
-  args: { ...identityArgs, communityId: v.id("communities") },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const rows = await ctx.db
-      .query("communityApps")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId))
-      .take(100);
-    return rows.map(mapApp);
-  },
-});
-
-// Operator setup for staging and support, until founders register front ends
-// through their own management surface. Same validation as registerCommunityApp.
-export const registerCommunityAppInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    slug: v.string(),
-    name: v.string(),
-    origin: v.string(),
-    allowedTools: v.array(toolValidator),
-  },
-  handler: async (ctx, args) => {
-    const community = await ctx.db.get(args.communityId);
-    if (!community) throw new Error("community_not_found");
-    const slug = normalizeCommunityAppSlug(args.slug);
-    const name = args.name.replace(/\s+/g, " ").trim();
-    if (!slug) throw new Error("community_app_slug_invalid");
-    if (!name || name.length > 80) throw new Error("community_app_name_invalid");
-    const origin = requireAppOrigin(args.origin);
-    const allowedTools = COMMUNITY_APP_TOOLS.filter((tool) => args.allowedTools.includes(tool));
-    if (allowedTools.length === 0) throw new Error("community_app_tools_required");
-    const existing = await ctx.db
-      .query("communityApps")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", slug))
-      .first();
-    if (existing) throw new Error("community_app_slug_taken");
-    const nowMs = Date.now();
-    const appId = await ctx.db.insert("communityApps", {
-      communityId: args.communityId, slug, name, origin, allowedTools, status: "active",
-      createdByUserId: community.ownerId, createdAt: nowMs, updatedAt: nowMs,
-    });
-    return mapApp((await ctx.db.get(appId))!);
-  },
-});
-
-async function activeAppForCommunityOrigin(ctx: any, communityId: any, origin: string) {
-  const rows = await ctx.db
-    .query("communityApps")
-    .withIndex("by_origin_status", (q: any) => q.eq("origin", origin).eq("status", "active"))
-    .take(10);
-  return rows.find((row: any) => row.communityId === communityId) ?? null;
+function hashLooksValid(value: string): boolean {
+  return /^[a-f0-9]{64}$/.test(value);
 }
 
 async function memberHasAccess(ctx: any, communityId: any, userId: any): Promise<boolean> {
@@ -172,14 +30,44 @@ async function memberHasAccess(ctx: any, communityId: any, userId: any): Promise
   }
 }
 
-// Step 1 of sign-in, called by Polynet's login bridge for an already-verified
-// Polynet session. Issues a one-time code for a registered community address.
-const HOUR_MS = 60 * 60 * 1000;
+// Operator setup until the CLI registers domains. One domain belongs to one community.
+export const registerCommunityDomainInternal = internalMutation({
+  args: { communityId: v.id("communities"), origin: v.string() },
+  handler: async (ctx, args) => {
+    if (!(await ctx.db.get(args.communityId))) throw new Error("community_not_found");
+    const origin = normalizeCommunityAppOrigin(args.origin);
+    let polynetOrigin: string | null = null;
+    try {
+      polynetOrigin = readCanonicalPublicAppOrigin();
+    } catch {
+      polynetOrigin = null;
+    }
+    if (!origin || origin === polynetOrigin) throw new Error("community_domain_invalid");
+    const existing = await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", origin)).first();
+    if (existing) throw new Error("community_domain_taken");
+    const domainId = await ctx.db.insert("communityDomains", { communityId: args.communityId, origin, createdAt: Date.now() });
+    return { id: String(domainId), origin };
+  },
+});
 
-function toolsKeyFor(app: { allowedTools: string[] }): string {
-  return [...app.allowedTools].sort().join(",");
-}
+// Removing a domain ends its sign-in immediately; its sessions stop resolving.
+export const removeCommunityDomainInternal = internalMutation({
+  args: { origin: v.string() },
+  handler: async (ctx, args) => {
+    const domain = await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", args.origin)).first();
+    if (!domain) return { removed: false };
+    const sessions = await ctx.db
+      .query("communityAppSessions")
+      .withIndex("by_domain_user_expiresAt", (q) => q.eq("domainId", domain._id))
+      .take(500);
+    for (const row of sessions) await ctx.db.delete(row._id);
+    await ctx.db.delete(domain._id);
+    return { removed: true };
+  },
+});
 
+// Step 1, called by Polynet's login bridge for an already-verified Polynet
+// session: a one-time code for a registered domain of a community the user belongs to.
 export const createCommunityAppHandoffInternal = internalMutation({
   args: {
     userId: v.id("users"),
@@ -187,65 +75,38 @@ export const createCommunityAppHandoffInternal = internalMutation({
     origin: v.string(),
     codeHash: v.string(),
     stateHash: v.string(),
-    consent: v.boolean(),
   },
   handler: async (ctx, args) => {
-    if (!/^[a-f0-9]{64}$/.test(args.codeHash) || !/^[a-f0-9]{64}$/.test(args.stateHash)) {
+    if (!hashLooksValid(args.codeHash) || !hashLooksValid(args.stateHash)) {
       return { ok: false as const, reason: "invalid_request" as const };
     }
     const origin = normalizeCommunityAppOrigin(args.origin);
-    const community = await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", args.communitySlug))
-      .first();
-    if (!origin || !community) return { ok: false as const, reason: "address_not_registered" as const };
-    const app = await activeAppForCommunityOrigin(ctx, community._id, origin);
-    if (!app) return { ok: false as const, reason: "address_not_registered" as const };
+    const community = await ctx.db.query("communities").withIndex("by_slug", (q) => q.eq("slug", args.communitySlug)).first();
+    const domain = origin
+      ? await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", origin)).first()
+      : null;
+    if (!community || !domain || domain.communityId !== community._id) {
+      return { ok: false as const, reason: "address_not_registered" as const };
+    }
     if (!(await memberHasAccess(ctx, community._id, args.userId))) {
       return { ok: false as const, reason: "not_a_member" as const, communitySlug: community.slug };
     }
     const nowMs = Date.now();
-    // Consent: a member approves each front end once, and again if its
-    // allowed operations change.
-    const toolsKey = toolsKeyFor(app);
-    const grant = await ctx.db
-      .query("communityAppGrants")
-      .withIndex("by_user_app", (q) => q.eq("userId", args.userId).eq("appId", app._id))
-      .first();
-    if (!grant || grant.toolsKey !== toolsKey) {
-      if (!args.consent) {
-        return {
-          ok: false as const,
-          reason: "consent_required" as const,
-          app: { name: app.name, origin: app.origin, communityName: community.name, tools: app.allowedTools },
-        };
-      }
-      if (grant) await ctx.db.patch(grant._id, { toolsKey, grantedAt: nowMs });
-      else await ctx.db.insert("communityAppGrants", { userId: args.userId, appId: app._id, communityId: community._id, toolsKey, grantedAt: nowMs });
-    }
-    // Rate limit sign-in attempts, keeping an hour of history for counting.
-    const recent = await ctx.db
+    const expired = await ctx.db
       .query("communityAppHandoffs")
-      .withIndex("by_user_createdAt", (q) => q.eq("userId", args.userId).gte("createdAt", nowMs - HOUR_MS))
-      .take(COMMUNITY_APP_HANDOFFS_PER_HOUR);
-    if (recent.length >= COMMUNITY_APP_HANDOFFS_PER_HOUR) {
-      return { ok: false as const, reason: "rate_limited" as const };
-    }
-    const old = await ctx.db
-      .query("communityAppHandoffs")
-      .withIndex("by_user_createdAt", (q) => q.eq("userId", args.userId).lt("createdAt", nowMs - HOUR_MS))
-      .take(MAX_SESSIONS_PRUNED_PER_MINT);
-    for (const row of old) await ctx.db.delete(row._id);
+      .withIndex("by_user_expiresAt", (q) => q.eq("userId", args.userId).lt("expiresAt", nowMs))
+      .take(MAX_ROWS_PRUNED);
+    for (const row of expired) await ctx.db.delete(row._id);
     await ctx.db.insert("communityAppHandoffs", {
-      codeHash: args.codeHash, stateHash: args.stateHash, appId: app._id, communityId: community._id,
-      userId: args.userId, origin, expiresAt: nowMs + COMMUNITY_APP_HANDOFF_TTL_MS, createdAt: nowMs,
+      codeHash: args.codeHash, stateHash: args.stateHash, domainId: domain._id,
+      userId: args.userId, expiresAt: nowMs + COMMUNITY_APP_HANDOFF_TTL_MS,
     });
     return { ok: true as const };
   },
 });
 
-// Step 2 of sign-in, called only by the community edge. A code works once,
-// within its lifetime, for the address and state it was issued to.
+// Step 2, called only by the community edge. A code works once, within its
+// lifetime, for the domain and state it was issued to.
 export const consumeCommunityAppHandoffInternal = internalMutation({
   args: { codeHash: v.string(), stateHash: v.string(), origin: v.string(), tokenHash: v.string() },
   handler: async (ctx, args) => {
@@ -253,54 +114,33 @@ export const consumeCommunityAppHandoffInternal = internalMutation({
       .query("communityAppHandoffs")
       .withIndex("by_codeHash", (q) => q.eq("codeHash", args.codeHash))
       .first();
+    if (!handoff) return { ok: false as const, reason: "code_invalid" as const };
+    // Any presentation burns the code, so a leaked code cannot be retried.
+    await ctx.db.delete(handoff._id);
     const nowMs = Date.now();
-    if (!handoff || handoff.usedAt !== undefined || handoff.expiresAt <= nowMs) {
+    const domain = await ctx.db.get(handoff.domainId);
+    if (
+      handoff.expiresAt <= nowMs ||
+      handoff.stateHash !== args.stateHash ||
+      !domain ||
+      domain.origin !== normalizeCommunityAppOrigin(args.origin) ||
+      !hashLooksValid(args.tokenHash)
+    ) {
       return { ok: false as const, reason: "code_invalid" as const };
     }
-    // Any presentation of a live code burns it, so a leaked code cannot be retried.
-    await ctx.db.patch(handoff._id, { usedAt: nowMs });
-    const origin = normalizeCommunityAppOrigin(args.origin);
-    if (handoff.stateHash !== args.stateHash || !origin || origin !== handoff.origin || !/^[a-f0-9]{64}$/.test(args.tokenHash)) {
-      return { ok: false as const, reason: "code_invalid" as const };
-    }
-    const app = await ctx.db.get(handoff.appId);
-    if (!app || app.status !== "active" || app.origin !== origin || app.communityId !== handoff.communityId) {
-      return { ok: false as const, reason: "address_not_registered" as const };
-    }
-    if (!(await memberHasAccess(ctx, handoff.communityId, handoff.userId))) {
+    if (!(await memberHasAccess(ctx, domain.communityId, handoff.userId))) {
       return { ok: false as const, reason: "not_a_member" as const };
     }
-    // Prune this member's expired sessions for this front end.
-    const expiredSessions = await ctx.db
+    const expired = await ctx.db
       .query("communityAppSessions")
-      .withIndex("by_app_user_expiresAt", (q) => q.eq("appId", app._id).eq("userId", handoff.userId).lt("expiresAt", nowMs))
-      .take(MAX_SESSIONS_PRUNED_PER_MINT);
-    for (const row of expiredSessions) await ctx.db.delete(row._id);
-    const absoluteExpiresAt = nowMs + COMMUNITY_APP_SESSION_ABSOLUTE_MS;
-    const expiresAt = Math.min(nowMs + COMMUNITY_APP_SESSION_TTL_MS, absoluteExpiresAt);
+      .withIndex("by_domain_user_expiresAt", (q) => q.eq("domainId", domain._id).eq("userId", handoff.userId).lt("expiresAt", nowMs))
+      .take(MAX_ROWS_PRUNED);
+    for (const row of expired) await ctx.db.delete(row._id);
+    const expiresAt = nowMs + COMMUNITY_APP_SESSION_TTL_MS;
     await ctx.db.insert("communityAppSessions", {
-      tokenHash: args.tokenHash, appId: app._id, communityId: handoff.communityId, userId: handoff.userId,
-      origin, expiresAt, absoluteExpiresAt, createdAt: nowMs,
+      tokenHash: args.tokenHash, domainId: domain._id, communityId: domain.communityId, userId: handoff.userId, expiresAt,
     });
     return { ok: true as const, expiresAt };
-  },
-});
-
-// Sliding lifetime: extend at most about once a day, never past the absolute cap.
-export const extendCommunityAppSessionInternal = internalMutation({
-  args: { tokenHash: v.string() },
-  handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("communityAppSessions")
-      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
-      .first();
-    const nowMs = Date.now();
-    if (!session || session.expiresAt <= nowMs) return { extended: false };
-    const absolute = session.absoluteExpiresAt ?? session.expiresAt;
-    const target = Math.min(nowMs + COMMUNITY_APP_SESSION_TTL_MS, absolute);
-    if (target - session.expiresAt < COMMUNITY_APP_SESSION_EXTEND_AFTER_MS) return { extended: false };
-    await ctx.db.patch(session._id, { expiresAt: target });
-    return { extended: true };
   },
 });
 
@@ -323,39 +163,12 @@ export const resolveCommunityAppSessionInternal = internalQuery({
       .query("communityAppSessions")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
       .first();
-    if (!session || session.expiresAt <= Date.now() || session.origin !== args.origin) {
-      return { ok: false as const };
-    }
-    const app = await ctx.db.get(session.appId);
-    if (!app || app.status !== "active" || app.origin !== args.origin || app.communityId !== session.communityId) {
-      return { ok: false as const };
-    }
+    if (!session || session.expiresAt <= Date.now()) return { ok: false as const };
+    const domain = await ctx.db.get(session.domainId);
+    if (!domain || domain.origin !== args.origin || domain.communityId !== session.communityId) return { ok: false as const };
     const user = await ctx.db.get(session.userId);
     const authSubject = typeof user?.authSubject === "string" ? user.authSubject : "";
     if (!authSubject) return { ok: false as const };
-    return {
-      ok: true as const,
-      userId: String(session.userId),
-      authSubject,
-      communityId: String(session.communityId) as string,
-      appId: String(app._id) as string,
-      allowedTools: app.allowedTools,
-      expiresAt: session.expiresAt,
-    };
+    return { ok: true as const, userId: String(session.userId), authSubject, communityId: String(session.communityId) };
   },
 });
-
-export const isActiveCommunityAppOriginInternal = internalQuery({
-  args: { origin: v.string() },
-  handler: async (ctx, args) => {
-    const app = await ctx.db
-      .query("communityApps")
-      .withIndex("by_origin_status", (q) => q.eq("origin", args.origin).eq("status", "active"))
-      .first();
-    return Boolean(app);
-  },
-});
-
-export type CommunityAppSessionResolution =
-  | { ok: false }
-  | { ok: true; userId: string; authSubject: string; communityId: string; appId: string; allowedTools: Array<(typeof COMMUNITY_APP_TOOLS)[number]>; expiresAt: number };
