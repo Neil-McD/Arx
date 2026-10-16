@@ -225,3 +225,13 @@ test("an app post is the member's own post, with a community_app receipt and no 
   expect(replay.body).toMatchObject({ ok: true });
   expect(await f.t.run((ctx) => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(1);
 });
+
+test("members list only active apps, without tool or status detail", async () => {
+  const f = await fixture();
+  await f.register();
+  await f.register({ slug: "paused", name: "Paused" });
+  await f.as("apps-owner").mutation(api.communityApps.setCommunityAppStatus, { communityId: f.ids.communityId, slug: "paused", status: "disabled" });
+  expect(await f.as("apps-member").query(api.communityApps.listCommunityAppsForMember, { communityId: f.ids.communityId }))
+    .toEqual([{ slug: "portal", name: "Coaching portal", origin: ORIGIN }]);
+  await expect(f.as("apps-outsider").query(api.communityApps.listCommunityAppsForMember, { communityId: f.ids.communityId })).rejects.toThrow();
+});

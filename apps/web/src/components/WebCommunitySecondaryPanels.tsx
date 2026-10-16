@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { WebCommunityAppsSection } from "./WebCommunityAppsSection";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
@@ -53,6 +54,7 @@ export type WebCommunitySecondaryPanelsProps = {
   resources: ComponentProps<typeof CommunityResourcesPanel>;
   knowledge: ComponentProps<typeof WebCommunityKnowledgePanel>["context"];
   events: ComponentProps<typeof WebCommunityEventsSection>;
+  apps: ComponentProps<typeof WebCommunityAppsSection>;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
 };
@@ -144,6 +146,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "events" &&
         renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
+
+      {props.communityTab === "apps" &&
+        renderCenteredPane(<WebCommunityAppsSection {...props.apps} />)}
 
     </>
   );

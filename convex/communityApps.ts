@@ -119,6 +119,22 @@ export const listCommunityApps = query({
   },
 });
 
+// Members see only active apps, and only what is needed to open one.
+export const listCommunityAppsForMember = query({
+  args: { ...identityArgs, communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const rows = await ctx.db
+      .query("communityApps")
+      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId))
+      .take(100);
+    return rows
+      .filter((row) => row.status === "active")
+      .map((row) => ({ slug: row.slug, name: row.name, origin: row.origin }));
+  },
+});
+
 export const createCommunityAppSessionInternal = internalMutation({
   args: {
     ...identityArgs,

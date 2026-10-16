@@ -7,6 +7,7 @@ import {
   GitFork,
   GripVertical,
   Hash,
+  LayoutGrid,
   LockKeyhole,
   Plus,
   Settings,
@@ -603,6 +604,17 @@ export const CommunityNav = memo(function CommunityNav({
             </span>
             <span className="nav-item-label">Events</span>
             {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+          </button>
+          <button
+            className={showActiveSelection && communityTab === "apps" ? "nav-item active" : "nav-item"}
+            type="button"
+            onClick={() => onSelectTab("apps")}
+            title="Apps"
+          >
+            <span className="nav-icon">
+              <LayoutGrid size={18} strokeWidth={1.7} aria-hidden="true" />
+            </span>
+            <span className="nav-item-label">Apps</span>
           </button>
         </>
       ) : null}

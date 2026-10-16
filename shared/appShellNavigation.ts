@@ -48,6 +48,7 @@ export const COMMUNITY_TABS = [
   "agent",
   "resources",
   "events",
+  "apps",
   "settings",
   "workflows",
   "analytics",
@@ -94,6 +95,7 @@ export function isCommunityTabAllowedForAccess(
     case "agent":
     case "resources":
     case "events":
+    case "apps":
       return true;
   }
 }
@@ -123,6 +125,8 @@ export function parseCommunityTab(
       return "events";
     case "calendar":
       return "events";
+    case "apps":
+      return "apps";
     case "settings":
       return "settings";
     case "workflows":

@@ -76,6 +76,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityFunnelError: WebCommunitySecondaryPanelsProps["funnel"]["communityFunnelError"];
   funnelEditorProps: WebCommunitySecondaryPanelsProps["funnel"]["editorProps"];
   workflows: WebCommunitySecondaryPanelsProps["workflows"];
+  apps: WebCommunitySecondaryPanelsProps["apps"];
   canViewActiveCommunityAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewActiveCommunityAnalytics"];
   canViewPlatformAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewPlatformAnalytics"];
   analyticsState: WebCommunitySecondaryPanelsProps["analytics"]["state"];
@@ -220,6 +221,7 @@ export function buildWebCommunitySurfaceProjection(
       editorProps: params.funnelEditorProps,
     },
     workflows: params.workflows,
+    apps: params.apps,
     analytics: {
       hasActiveCommunity: Boolean(params.activeCommunity),
       hasSession: params.hasAuthenticatedPresentation,

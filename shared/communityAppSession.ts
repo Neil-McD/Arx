@@ -57,3 +57,19 @@ export function normalizeCommunityAppSlug(raw: string): string | null {
 export function isCommunityAppTool(value: unknown): value is CommunityAppTool {
   return typeof value === "string" && (COMMUNITY_APP_TOOLS as readonly string[]).includes(value);
 }
+
+// postMessage protocol between Polynet's shell and an embedded community app.
+// The shell only answers requests from the app's exact registered origin and
+// only posts to that origin.
+export const COMMUNITY_APP_SESSION_REQUEST = "polynet:session:request";
+export const COMMUNITY_APP_SESSION_MESSAGE = "polynet:session";
+export const COMMUNITY_APP_SESSION_ERROR = "polynet:session:error";
+
+export type CommunityAppSessionMessage = {
+  type: typeof COMMUNITY_APP_SESSION_MESSAGE;
+  version: 1;
+  token: string;
+  expires_at: string;
+  community_slug: string;
+  api_url: string;
+};
