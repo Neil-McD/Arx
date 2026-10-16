@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hello, community</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; max-width: 640px; }
+    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; }
+    textarea { width: 100%; min-height: 72px; margin: 8px 0; }
+    pre { white-space: pre-wrap; background: #8881; padding: 12px; border-radius: 8px; font-size: 12px; }
+    .status { opacity: 0.7; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Hello, community</h1>
+  <p class="status" id="status">Waiting for Polynet…</p>
+  <button id="channels" disabled>List channels</button>
+  <h2>Post to General</h2>
+  <textarea id="text" placeholder="Share something with the community"></textarea>
+  <button id="post" disabled>Post</button>
+  <pre id="out"></pre>
+
+  <script>
+    // Minimal Polynet community app. Polynet's shell hands this page a
+    // short-lived session over postMessage; every call goes to /runtime/app
+    // and acts for the signed-in member, only inside this community.
+    let session = null;
+    const $ = (id) => document.getElementById(id);
+    const show = (value) => { $("out").textContent = JSON.stringify(value, null, 2); };
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) return;
+      const data = event.data || {};
+      if (data.type === "polynet:session" && data.version === 1) {
+        session = data;
+        $("status").textContent = `Connected to ${data.community_slug}. Session expires ${new Date(data.expires_at).toLocaleTimeString()}.`;
+        $("channels").disabled = false;
+        $("post").disabled = false;
+      } else if (data.type === "polynet:session:error") {
+        $("status").textContent = "Polynet couldn't start a session.";
+      }
+    });
+
+    const requestSession = () => window.parent.postMessage({ type: "polynet:session:request" }, "*");
+
+    async function polynet(tool, input) {
+      if (!session || Date.parse(session.expires_at) - Date.now() < 30000) {
+        requestSession();
+        throw new Error("Session refreshing, try again in a moment.");
+      }
+      const res = await fetch(session.api_url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ tool, input }),
+      });
+      return res.json();
+    }
+
+    $("channels").onclick = async () => {
+      try { show(await polynet("polynet_list", { path: `/communities/${session.community_slug}/channels/` })); }
+      catch (error) { show({ error: String(error.message || error) }); }
+    };
+
+    $("post").onclick = async () => {
+      const text = $("text").value.trim();
+      if (!text) return;
+      try {
+        show(await polynet("polynet_write", {
+          path: `/communities/${session.community_slug}/channels/general/`,
+          mode: "create",
+          content: { text },
+          idempotency_key: `hello-app-${Date.now()}`,
+        }));
+        $("text").value = "";
+      } catch (error) { show({ error: String(error.message || error) }); }
+    };
+
+    requestSession();
+  </script>
+</body>
+</html>

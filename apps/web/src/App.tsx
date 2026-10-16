@@ -72,7 +72,7 @@ import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLif
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
-import { useWebCommunityAppsController } from "./controllers/useWebCommunityAppsController";
+import { useWebCommunityAppsGateway } from "./controllers/useWebCommunityAppsGateway";
 import { useWebCommunityWorkflowsController } from "./controllers/useWebCommunityWorkflowsController";
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebShellState } from "./controllers/useWebShellState";
@@ -1104,7 +1104,7 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     session,
   });
-  const communityApps = useWebCommunityAppsController({
+  const communityApps = useWebCommunityAppsGateway({
     activeCommunityId,
     canManage: canManageMembersActiveCommunity,
     session,

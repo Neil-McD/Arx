@@ -30,7 +30,7 @@ export type CommunityAppsGateway = {
 
 // Every call re-checks that the community and signed-in user it was created for
 // are still current, so a late result can never land in another community.
-export function useWebCommunityAppsController(params: {
+export function useWebCommunityAppsGateway(params: {
   activeCommunityId: string | null;
   canManage: boolean;
   session: AuthSession | null;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { CommunityAppsGateway } from "../controllers/useWebCommunityAppsController";
+import type { CommunityAppsGateway } from "../controllers/useWebCommunityAppsGateway";
 import { COMMUNITY_APP_TOOLS, type CommunityAppTool } from "../../../../shared/communityAppSession";
 import type { CloudCommunityAppDetail, CloudCommunityAppSummary } from "../../../../shared/cloudCommunityAppsGateway";
 import { WebCommunityAppFrame } from "./WebCommunityAppFrame";
