@@ -348,7 +348,8 @@ test("a front end runs a full chat: names, threads, reactions, and edits or dele
   expect(memberEntry.actor).toMatchObject({ display_name: "apps-member", avatar_url: "https://example.com/apps-member.png" });
   expect(memberEntry).toMatchObject({ object_type: "root", reply_count: 1, reactions: [], reacted_by_me: [], by_me: true, edited_at: null });
   expect(listed.find((entry) => entry.ref === ownerPost)).toMatchObject({ by_me: false });
-  expect(listed.find((entry) => entry.ref === reply)).toMatchObject({ object_type: "reply", root_id: rootId });
+  expect(listed.find((entry) => entry.ref === reply)).toMatchObject({ object_type: "reply", root_ref: memberPost });
+  expect(JSON.stringify(listed)).not.toContain('"root_id"');
 
   // Thread listing: the post, then its replies.
   const thread = await list(member, `${general}${memberPost}/`);

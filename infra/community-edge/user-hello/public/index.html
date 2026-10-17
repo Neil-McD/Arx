@@ -226,7 +226,7 @@
       const text = $("replyText").value.trim();
       if (!text || !state.thread) return;
       $("replyText").value = "";
-      await door("polynet_write", { path: state.channel.path, mode: "append", content: { text, root_id: state.thread.root_id }, idempotency_key: key() });
+      await door("polynet_write", { path: state.channel.path, mode: "append", content: { text, root_id: state.thread.ref.replace("interaction:root:", "") }, idempotency_key: key() });
     };
     $("closeThread").onclick = closeThread;
     $("signout").onclick = async () => {

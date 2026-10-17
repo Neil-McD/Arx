@@ -178,7 +178,10 @@ function compactCommunityInteractionDirectoryEntry(args: {
     channel_slug: args.result.channel_slug,
     visibility_scope: args.result.visibility_scope,
     object_type: args.result.object_type,
-    root_id: args.result.root_id,
+    // Replies point at their post by ref; listings never expose raw ids.
+    ...(args.result.object_type === "reply" && args.result.root_id
+      ? { root_ref: `interaction:root:${String(args.result.root_id)}` }
+      : {}),
     title: args.result.title,
     snippet: args.result.snippet,
     snippet_truncated: args.result.snippet_truncated,

@@ -214,7 +214,7 @@ outside the edge. Each request runs the canonical executor as principal
 Chat through the door, the same for every actor:
 
 - `polynet_list` on `channels/<slug>/` returns recent posts and replies with
-  `object_type`, `root_id`, the author's `display_name`, `handle` and
+  `object_type`, a reply's `root_ref`, the author's `display_name`, `handle` and
   `avatar_url`, `reactions`, the caller's own `reacted_by_me`, `by_me`,
   `reply_count`, `edited_at` and `snippet_truncated`.
 - `polynet_list` on `channels/<slug>/interaction:root:<id>/` returns that post
