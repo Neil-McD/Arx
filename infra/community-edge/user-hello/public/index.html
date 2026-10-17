@@ -18,6 +18,14 @@
     nav { border-right: 1px solid var(--line); padding: 12px 8px; }
     nav button { display: block; width: 100%; text-align: left; border: 0; margin-bottom: 2px; }
     nav button.active { background: var(--soft); font-weight: 600; }
+    nav .group { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .55; margin: 12px 8px 4px; }
+    #page .body { padding: 12px 16px; overflow-y: auto; flex: 1; min-height: 0; }
+    .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .card h3 { margin: 0 0 4px; font-size: 15px; }
+    .card button.link { border: 0; padding: 0; text-align: left; font-weight: 600; text-decoration: underline; }
+    .tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: 6px; opacity: .8; }
+    .doc { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+    .search { display: flex; gap: 8px; margin-bottom: 12px; }
     section { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     #thread { border-left: 1px solid var(--line); }
     .pane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
@@ -65,12 +73,23 @@
     <div class="row"><a class="button joinLink" target="_blank" rel="noopener">Join on Polynet</a><a class="button" href="/__polynet/auth/start?return=/">I've joined, sign in</a></div>
   </div>
   <main id="app" hidden>
-    <nav id="channels"></nav>
+    <nav>
+      <div class="group">Channels</div>
+      <div id="channels"></div>
+      <div class="group">Community</div>
+      <button data-page="events">Events</button>
+      <button data-page="resources">Resources</button>
+      <button data-page="knowledge">Knowledge</button>
+    </nav>
     <section id="channel">
       <div class="pane-head"><span id="channelName"></span></div>
       <ol id="feed"></ol>
       <div class="pending" id="pending"></div>
       <form id="composer"><label class="attach" title="Attach files">📎<input id="files" type="file" multiple /></label><input id="text" placeholder="Message" autocomplete="off" /><button>Send</button></form>
+    </section>
+    <section id="page" hidden>
+      <div class="pane-head"><span id="pageTitle"></span><button id="pageBack" hidden>Back</button></div>
+      <div class="body" id="pageBody"></div>
     </section>
     <section id="thread" hidden>
       <div class="pane-head"><span>Thread</span><button id="closeThread">Close</button></div>
@@ -88,7 +107,7 @@
     const COMMUNITY = "/communities/polynet";
     const REACTIONS = ["👍", "❤️", "😂"];
     const $ = (id) => document.getElementById(id);
-    const state = { live: null, client: null, unwatch: null, channel: null, thread: null };
+    const state = { live: null, client: null, unwatch: null, channel: null, thread: null, back: null };
 
     async function door(tool, input) {
       const res = await fetch("/__polynet/api", {
@@ -192,12 +211,18 @@
       });
     }
 
+    function setActive(match) {
+      for (const button of document.querySelectorAll("nav button")) button.classList.toggle("active", match(button));
+    }
+
     function selectChannel(channel) {
       state.channel = channel;
       closeThread();
+      $("page").hidden = true;
+      $("channel").hidden = false;
       $("channelName").textContent = `# ${channel.name}`;
       $("text").placeholder = `Message #${channel.name}`;
-      for (const button of $("channels").children) button.classList.toggle("active", button.dataset.path === channel.path);
+      setActive((button) => button.dataset.path === channel.path);
       $("composer").hidden = channel.capabilities?.canPost === false;
       watchChannel();
     }
@@ -214,6 +239,79 @@
       const current = channels.find((channel) => channel.path === state.channel?.path) ?? channels.find((c) => c.is_general) ?? channels[0];
       if (current) selectChannel(current);
     }
+
+    // Community pages: events, resources and knowledge, read through the door.
+    function showPage(title, children, back = null) {
+      closeThread();
+      $("channel").hidden = true;
+      $("page").hidden = false;
+      $("pageTitle").textContent = title;
+      state.back = back;
+      $("pageBack").hidden = !back;
+      $("pageBody").replaceChildren(...children);
+    }
+    const empty = (text) => el("p", { className: "meta", textContent: text });
+
+    async function openEvents() {
+      const value = await door("polynet_list", { path: `${COMMUNITY}/events/`, limit: 20 });
+      const events = value?.entries ?? [];
+      showPage("Events", events.length ? events.map((event) => el("div", { className: "card" },
+        el("h3", { textContent: event.title ?? event.name }),
+        el("div", { className: "meta", textContent: [
+          new Date(event.starts_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }),
+          event.location_label, event.recurrence_frequency && event.recurrence_frequency !== "none" ? `repeats ${event.recurrence_frequency}` : null,
+        ].filter(Boolean).join(" · ") }),
+        ...(event.description_md ? [el("div", { className: "doc", textContent: event.description_md })] : []),
+        ...(event.url ? [el("a", { href: event.url, target: "_blank", rel: "noopener noreferrer", textContent: "Join link" })] : []),
+      )) : [empty("No upcoming events.")]);
+    }
+
+    async function readDocument(entry, back) {
+      const value = await door("polynet_read", { path: entry.path });
+      // Some documents (like memories) are JSON; show their text, not the JSON.
+      let text = value?.body ?? "This document isn't available.";
+      try { const parsed = JSON.parse(text); text = parsed?.body_md ?? parsed?.bodyMd ?? text; } catch {}
+      showPage(entry.title ?? entry.name ?? "Document", [el("div", { className: "doc", textContent: text })], back);
+    }
+
+    async function openResources(path = `${COMMUNITY}/resources/`, title = "Resources") {
+      const value = await door("polynet_list", { path });
+      const entries = value?.entries ?? [];
+      const back = path === `${COMMUNITY}/resources/` ? null : () => openResources();
+      showPage(title, entries.length ? entries.map((entry) => {
+        const name = entry.title ?? entry.name ?? entry.path.split("/").filter(Boolean).pop();
+        const open = el("button", { className: "link", textContent: `${entry.kind === "directory" ? "📁" : "📄"} ${name}` });
+        open.onclick = () => entry.kind === "directory" ? openResources(entry.path, name) : readDocument(entry, () => openResources(path, title));
+        return el("div", { className: "card" }, open, ...(entry.summary ? [el("div", { className: "meta", textContent: entry.summary })] : []));
+      }) : [empty("No resources yet.")], back);
+    }
+
+    function memoryCard(node) {
+      const open = el("button", { className: "link", textContent: node.title ?? "Memory" });
+      open.onclick = () => readDocument(node, () => openKnowledge());
+      return el("div", { className: "card" }, open, el("span", { className: "tag", textContent: String(node.type ?? "").replace(/_/g, " ") }),
+        el("span", { className: "tag", textContent: node.grade ?? node.status ?? "" }),
+        ...(node.applies_when ? [el("div", { className: "meta", textContent: `When: ${node.applies_when}` })] : []));
+    }
+
+    async function openKnowledge(query = "") {
+      const value = query
+        ? await door("polynet_search", { path: `${COMMUNITY}/memory/`, query })
+        : await door("polynet_list", { path: `${COMMUNITY}/memory/` });
+      const nodes = (query ? value?.results : value?.entries) ?? [];
+      const input = el("input", { placeholder: "Search what this community knows", value: query });
+      const form = el("form", { className: "search" }, input, el("button", { textContent: "Search" }));
+      form.onsubmit = (event) => { event.preventDefault(); openKnowledge(input.value.trim()); };
+      showPage("Knowledge", [form, ...(nodes.length ? nodes.map(memoryCard) : [empty(query ? "Nothing found." : "This community hasn't built shared knowledge yet.")])]);
+    }
+
+    for (const button of document.querySelectorAll("nav button[data-page]")) {
+      button.onclick = () => {
+        setActive((candidate) => candidate === button);
+        ({ events: openEvents, resources: () => openResources(), knowledge: () => openKnowledge() })[button.dataset.page]();
+      };
+    }
+    $("pageBack").onclick = () => state.back?.();
 
     async function refresh() {
       const session = await (await fetch("/__polynet/auth/session")).json();

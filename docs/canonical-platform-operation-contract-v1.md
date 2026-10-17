@@ -228,6 +228,14 @@ Chat through the door, the same for every actor:
 - `polynet_call` `community.interaction.react` sets the caller's reaction
   (`ref`, `emoji`, `on`), so retries are safe.
 
+Community pages through the door: `events/` lists upcoming events with
+times, location and link; `resources/` lists module folders and resource
+documents to read; `memory/` lists the top accepted memories the member can
+read (up to 12, recorded as a retrieval like a search), and `polynet_search`
+on `memory/` finds more. Front ends reach memory as their trusted member,
+since they have no Convex identity. Creating events and resources stays in
+Studio.
+
 Files: the page posts a file to the edge's `/__polynet/upload` (headers
 `x-polynet-channel`, `x-polynet-idempotency-key`, optional `x-polynet-root-id`
 for a reply) before writing the post with the same idempotency key and
