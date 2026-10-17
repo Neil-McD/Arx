@@ -1040,7 +1040,8 @@ async function executeCanonicalList(args: {
           entries: nodes.flatMap((node) => {
             const nodeId = requiredString(node.node_id ?? node.id ?? node._id, 180);
             return nodeId
-              ? [{ ...node, path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${nodeId}.md`), kind: "document", type: "memory" }]
+              // Keep the memory's own type (insight, example, ...), as search results do.
+              ? [{ ...node, path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${nodeId}.md`), kind: "document" }]
               : [];
           }),
           truncated: value.truncated === true,

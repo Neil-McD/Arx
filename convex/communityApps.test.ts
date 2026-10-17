@@ -462,8 +462,7 @@ test("a front end browses, searches and reads community memory, never admin-only
 
   const listed = await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/memory/` } });
   expect(listed.body).toMatchObject({ ok: true });
-  const titles = listed.body.value.entries.map((entry: any) => entry.title);
-  expect(titles).toEqual(["Async check-ins beat calls"]);
+  expect(listed.body.value.entries.map((entry: any) => [entry.title, entry.type])).toEqual([["Async check-ins beat calls", "insight"]]);
   expect(listed.body.value.retrieval_id).toBeTruthy();
 
   const searched = await f.call(token, { tool: "polynet_search", input: { path: `${COMMUNITY}/memory/`, query: "check-ins" } });
