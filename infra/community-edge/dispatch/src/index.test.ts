@@ -107,13 +107,36 @@ test("the community's own Worker never receives Polynet's cookies", async () => 
 
 test("the session endpoint gives a signed-in page its watch-only token, matching the backend's", async () => {
   const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
-  expect(anonymous).toEqual({ signed_in: false });
+  expect(anonymous).toEqual({ signed_in: false, join_url: "https://polynet.example.com/c/apps-community" });
   const signedIn = await (await edge.fetch(request("/__polynet/auth/session", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env())).json();
   expect(signedIn).toEqual({
     signed_in: true,
+    join_url: "https://polynet.example.com/c/apps-community",
     live: { url: "https://live.example.convex.cloud", token: await deriveCommunityAppWatchToken(TOKEN) },
   });
   expect(JSON.stringify(signedIn)).not.toContain(TOKEN);
+});
+
+test("uploads and files go to the backend with the session and edge secret only", async () => {
+  const upstream = vi.fn(async () => new Response("ok", { status: 200, headers: { "content-type": "image/png", "x-secret": "no" } }));
+  vi.stubGlobal("fetch", upstream);
+  const cookie = `__polynet_session=${TOKEN}`;
+  expect((await edge.fetch(request("/__polynet/upload", { method: "POST", body: "x" }), env())).status).toBe(401);
+  await edge.fetch(request("/__polynet/upload", { method: "POST", body: "png", headers: {
+    cookie, "content-type": "image/png", "x-polynet-channel": "general", "x-polynet-idempotency-key": "k", authorization: "Bearer pna_forged",
+  } }), env());
+  const [uploadUrl, uploadInit] = upstream.mock.calls[0] as unknown as [string, RequestInit];
+  expect(uploadUrl).toBe("https://api.example.convex.site/runtime/app/upload");
+  expect(uploadInit.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}`, "x-polynet-edge-secret": "edge-secret",
+    "x-polynet-channel": "general", "x-polynet-idempotency-key": "k", Origin: ORIGIN });
+  const file = await edge.fetch(request("/__polynet/files/j97y81p9dam48njv1jqnm1wv4s8gfm67", { headers: { cookie } }), env());
+  const [fileUrl, fileInit] = upstream.mock.calls[1] as unknown as [string, RequestInit];
+  expect(fileUrl).toBe("https://api.example.convex.site/runtime/app/file");
+  expect(fileInit.headers).toMatchObject({ "x-polynet-attachment-id": "j97y81p9dam48njv1jqnm1wv4s8gfm67" });
+  expect(file.headers.get("content-type")).toBe("image/png");
+  expect(file.headers.get("x-secret")).toBeNull();
+  expect((await edge.fetch(request("/__polynet/files/Not_An-Id", { headers: { cookie } }), env())).status).toBe(404);
+  expect(upstream).toHaveBeenCalledTimes(2);
 });
 
 test("logout revokes the session and clears the cookie", async () => {

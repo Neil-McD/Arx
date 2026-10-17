@@ -1,6 +1,7 @@
 import { internal } from "./_generated/api";
 import type { PublicHttpAction } from "convex/server";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
+import { storeCommunityAttachmentUpload } from "./httpCommunityAttachments";
 import {
   COMMUNITY_APP_MAX_REQUEST_BYTES,
   generateCommunityAppHandoffCode,
@@ -17,6 +18,8 @@ import {
 import type { PolynetCanonicalToolName } from "../shared/polynetCanonicalToolContract";
 
 export const COMMUNITY_APP_RUNTIME_PATH = "/runtime/app";
+export const COMMUNITY_APP_UPLOAD_PATH = "/runtime/app/upload";
+export const COMMUNITY_APP_FILE_PATH = "/runtime/app/file";
 export const COMMUNITY_APP_HANDOFF_PATH = "/runtime/auth_bridge_community_handoff";
 export const COMMUNITY_EDGE_EXCHANGE_PATH = "/runtime/community_edge/session_exchange";
 export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revoke";
@@ -62,26 +65,99 @@ function fromEdge(req: Request): boolean {
   return secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"));
 }
 
+type AppSession = { userId: string; authSubject: string; communityId: string };
+
+// Every front-end route: only the edge, with the member session from its
+// HttpOnly cookie, for the community domain it was issued to.
+async function requireAppSession(ctx: any, req: Request): Promise<AppSession | Response> {
+  if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
+  const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "");
+  const token = readCommunityAppBearerToken(req.headers.get("authorization"));
+  if (!origin || !token) {
+    return reply(401, { ok: false, code: "community_app_session_required", message: "Sign in to this community." });
+  }
+  const session = (await ctx.runQuery(internal.communityApps.resolveCommunityAppSessionInternal, {
+    tokenHash: await hashCommunityAppSessionToken(token),
+    origin,
+  })) as { ok: false } | ({ ok: true } & AppSession);
+  if (!session.ok) {
+    return reply(401, { ok: false, code: "community_app_session_invalid", message: "The session is invalid or expired." });
+  }
+  return session;
+}
+
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
+  // A file for a post: stored under a reservation the post claims with the
+  // same idempotency key. Same limits and checks as Studio's uploads.
+  args.http.route({
+    path: COMMUNITY_APP_UPLOAD_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requireAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const key = (req.headers.get("x-polynet-idempotency-key") ?? "").trim();
+      const slug = (req.headers.get("x-polynet-channel") ?? "").trim();
+      const rootId = (req.headers.get("x-polynet-root-id") ?? "").trim();
+      if (!key || key.length > 200 || !slug) return reply(400, { ok: false, code: "invalid_request" });
+      const channel = (await ctx.runQuery(internal.communityChannels.resolveCommunityChannelBySlugInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, slug, actorKind: "human",
+      })) as { id?: string } | null;
+      if (!channel?.id) return reply(404, { ok: false, code: "channel_unavailable" });
+      const result = await storeCommunityAttachmentUpload(ctx, req, {
+        ownerId: session.userId, communityId: session.communityId, channelId: channel.id,
+        ...(rootId ? { uploadRootId: rootId } : {}),
+        // The door's composer claims attachments by its canonical idempotency key.
+        messageKey: `polynet:community_app:${key}`,
+      });
+      return reply(result.status, { ok: result.status === 200, ...result.body });
+    }),
+  });
+
+  // Streams a file the member can see in this community. Images display
+  // inline; anything else downloads.
+  args.http.route({
+    path: COMMUNITY_APP_FILE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requireAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const attachmentId = req.headers.get("x-polynet-attachment-id") ?? "";
+      let upstream: Response | undefined;
+      try {
+        const queryArgs = { userId: session.userId, communityId: session.communityId, attachmentId };
+        const source = (await ctx.runQuery((internal as any).communityAttachmentDownloads.resolveInternal, queryArgs)) as
+          { url: string; name: string; mime: string } | null;
+        if (!source) return reply(404, { ok: false, code: "file_unavailable" });
+        upstream = await fetch(source.url, { redirect: "error", signal: req.signal });
+        if (!upstream.ok || !upstream.body) throw new Error("file_unavailable");
+        const current = await ctx.runQuery((internal as any).communityAttachmentDownloads.resolveInternal, queryArgs);
+        if (!current || current.url !== source.url) throw new Error("file_unavailable");
+        const image = /^image\/(jpeg|png|gif|webp|avif)$/.test(source.mime);
+        return new Response(upstream.body, {
+          status: 200,
+          headers: {
+            "Content-Type": image ? source.mime : "application/octet-stream",
+            "Content-Disposition": `${image ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(source.name).replace(/'/g, "%27")}`,
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, no-store",
+          },
+        });
+      } catch {
+        await upstream?.body?.cancel().catch(() => undefined);
+        return reply(404, { ok: false, code: "file_unavailable" });
+      }
+    }),
+  });
+
   // Front-end API calls, forwarded only by the community edge with the member
   // session from its HttpOnly cookie. The browser never calls this directly.
   args.http.route({
     path: COMMUNITY_APP_RUNTIME_PATH,
     method: "POST",
     handler: args.httpAction(async (ctx, req) => {
-      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
-      const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "");
-      const token = readCommunityAppBearerToken(req.headers.get("authorization"));
-      if (!origin || !token) {
-        return reply(401, { ok: false, code: "community_app_session_required", message: "Sign in to this community." });
-      }
-      const session = (await ctx.runQuery(internal.communityApps.resolveCommunityAppSessionInternal, {
-        tokenHash: await hashCommunityAppSessionToken(token),
-        origin,
-      })) as { ok: false } | { ok: true; userId: string; authSubject: string; communityId: string };
-      if (!session.ok) {
-        return reply(401, { ok: false, code: "community_app_session_invalid", message: "The session is invalid or expired." });
-      }
+      const session = await requireAppSession(ctx, req);
+      if (session instanceof Response) return session;
       const raw = await req.text();
       if (raw.length > COMMUNITY_APP_MAX_REQUEST_BYTES) {
         return reply(413, { ok: false, code: "request_too_large", message: "Request body is too large." });

@@ -190,6 +190,7 @@ function compactCommunityInteractionDirectoryEntry(args: {
     reacted_by_me: args.result.reacted_by_me,
     by_me: args.result.by_me,
     reply_count: args.result.reply_count,
+    attachments: args.result.attachments,
     edited_at: args.result.edited_at,
     created_at: args.result.created_at,
     updated_at: args.result.updated_at,
@@ -1916,9 +1917,6 @@ async function executeCanonicalWrite(args: {
           ? { attachments: content.attachments }
           : {}),
       };
-      if (args.principalKind === "community_app" && "attachments" in mutationArgs) {
-        return canonicalError("invalid_tool_args", "Community apps cannot attach files.");
-      }
       // A community app has no Convex session identity; its member was
       // authenticated by the app session token, so it uses the trusted composer.
       const value = (await args.ctx.runMutation(

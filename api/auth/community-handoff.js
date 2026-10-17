@@ -7,7 +7,8 @@ import { readAuthSessionId } from "./_cookies.js";
 // state. With a Polynet session, the backend checks membership and that
 // redirect_uri belongs to a registered domain of that community, then this
 // page redirects back with a one-time code. Already signed in, the member sees
-// nothing but a redirect. Unregistered domains never receive a redirect, so
+// nothing but a redirect. A Polynet user who isn't a member yet is sent back
+// to the front end to join. Unregistered domains never receive a redirect, so
 // this is not an open redirect.
 
 const CALLBACK_PATH = "/__polynet/auth/callback";
@@ -86,7 +87,9 @@ export default async function handler(req, res) {
     return;
   }
   if (payload?.code === "not_a_member") {
-    redirect(res, `/c/${encodeURIComponent(communitySlug)}`);
+    // The domain was verified before membership, so this redirect stays on a
+    // registered domain. The front end offers Polynet's join page from there.
+    redirect(res, `${callback.origin}/?polynet=join`);
     return;
   }
   sendText(res, 400, "This community domain isn't registered for sign-in.");

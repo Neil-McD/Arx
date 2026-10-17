@@ -13,15 +13,21 @@
     header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
     header h1 { font-size: 16px; margin: 0; flex: 1; }
     .live { font-size: 12px; opacity: .7; }
-    main { display: grid; grid-template-columns: 180px 1fr; min-height: calc(100vh - 53px); }
+    main { display: grid; grid-template-columns: 180px 1fr; height: calc(100dvh - 53px); }
     main.thread-open { grid-template-columns: 180px 1fr 340px; }
     nav { border-right: 1px solid var(--line); padding: 12px 8px; }
     nav button { display: block; width: 100%; text-align: left; border: 0; margin-bottom: 2px; }
     nav button.active { background: var(--soft); font-weight: 600; }
-    section { display: flex; flex-direction: column; min-width: 0; }
+    section { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     #thread { border-left: 1px solid var(--line); }
     .pane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
-    ol { list-style: none; margin: 0; padding: 8px 16px; flex: 1; overflow-y: auto; }
+    ol { list-style: none; margin: 0; padding: 8px 16px; flex: 1; overflow-y: auto; min-height: 0; }
+    .files { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .files img { max-width: min(320px, 100%); max-height: 240px; border-radius: 8px; display: block; }
+    .files a { font-size: 13px; }
+    label.attach { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    label.attach input { display: none; }
+    .pending { font-size: 12px; opacity: .7; padding: 0 16px; }
     li { display: grid; grid-template-columns: 32px 1fr; gap: 10px; padding: 10px 0; }
     .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--soft); object-fit: cover; }
     .who { font-weight: 600; margin-right: 6px; }
@@ -32,9 +38,10 @@
     .row button.mine { border-color: var(--accent); }
     form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
     input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); font: inherit; background: none; color: inherit; }
-    .signed-out { padding: 48px 16px; text-align: center; }
+    .notice { padding: 48px 16px; text-align: center; max-width: 480px; margin: 0 auto; }
+    .notice .row { justify-content: center; margin-top: 16px; }
     @media (max-width: 720px) {
-      main, main.thread-open { grid-template-columns: 1fr; }
+      main, main.thread-open { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
       nav { border-right: 0; border-bottom: 1px solid var(--line); display: flex; gap: 4px; overflow-x: auto; }
       nav button { width: auto; white-space: nowrap; }
       main.thread-open #channel { display: none; }
@@ -49,18 +56,27 @@
     <a class="button" id="signin" href="/__polynet/auth/start?return=/" hidden>Sign in with Polynet</a>
     <button id="signout" hidden>Sign out</button>
   </header>
-  <p class="signed-out" id="signedOut" hidden>Sign in with your Polynet account to join the conversation.</p>
+  <div class="notice" id="signedOut" hidden>
+    <p>Sign in with your Polynet account to join the conversation.</p>
+    <div class="row"><a class="button" href="/__polynet/auth/start?return=/">Sign in with Polynet</a><a class="button joinLink" target="_blank" rel="noopener">New here? Join</a></div>
+  </div>
+  <div class="notice" id="joinNeeded" hidden>
+    <p>Your Polynet account isn't a member of this community yet. Join on Polynet, then come back and sign in.</p>
+    <div class="row"><a class="button joinLink" target="_blank" rel="noopener">Join on Polynet</a><a class="button" href="/__polynet/auth/start?return=/">I've joined, sign in</a></div>
+  </div>
   <main id="app" hidden>
     <nav id="channels"></nav>
     <section id="channel">
       <div class="pane-head"><span id="channelName"></span></div>
       <ol id="feed"></ol>
-      <form id="composer"><input id="text" placeholder="Message" autocomplete="off" required /><button>Send</button></form>
+      <div class="pending" id="pending"></div>
+      <form id="composer"><label class="attach" title="Attach files">📎<input id="files" type="file" multiple /></label><input id="text" placeholder="Message" autocomplete="off" /><button>Send</button></form>
     </section>
     <section id="thread" hidden>
       <div class="pane-head"><span>Thread</span><button id="closeThread">Close</button></div>
       <ol id="threadFeed"></ol>
-      <form id="replyComposer"><input id="replyText" placeholder="Reply" autocomplete="off" required /><button>Reply</button></form>
+      <div class="pending" id="replyPending"></div>
+      <form id="replyComposer"><label class="attach" title="Attach files">📎<input id="replyFiles" type="file" multiple /></label><input id="replyText" placeholder="Reply" autocomplete="off" /><button>Reply</button></form>
     </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/convex@1.42.1/dist/browser.bundle.js"></script>
@@ -100,6 +116,12 @@
       const meta = el("span", { className: "meta",
         textContent: `${new Date(entry.created_at).toLocaleString()}${entry.edited_at ? " · edited" : ""}` });
       const text = el("div", { className: "text", textContent: entry.snippet ?? "" });
+      const files = el("div", { className: "files" }, ...(entry.attachments ?? []).map((file) => {
+        const src = `/__polynet/files/${file.ref.replace("attachment:", "")}`;
+        return file.kind === "image"
+          ? el("a", { href: src, target: "_blank", rel: "noopener" }, el("img", { src, alt: file.name, loading: "lazy" }))
+          : el("a", { href: src, textContent: `📄 ${file.name}` });
+      }));
       const row = el("div", { className: "row" });
       const counts = new Map((entry.reactions ?? []).map((r) => [r.emoji, r.count]));
       for (const emoji of new Set([...REACTIONS, ...counts.keys()])) {
@@ -130,7 +152,7 @@
         };
         row.append(edit, remove);
       }
-      return el("li", {}, avatar, el("div", {}, el("span", { className: "who", textContent: name }), meta, text, row));
+      return el("li", {}, avatar, el("div", {}, el("span", { className: "who", textContent: name }), meta, text, files, row));
     }
 
     async function loadFeed() {
@@ -195,9 +217,12 @@
 
     async function refresh() {
       const session = await (await fetch("/__polynet/auth/session")).json();
-      $("signin").hidden = session.signed_in;
+      const joinNeeded = !session.signed_in && new URLSearchParams(location.search).get("polynet") === "join";
+      for (const link of document.querySelectorAll(".joinLink")) link.href = session.join_url ?? "#";
+      $("signin").hidden = session.signed_in || joinNeeded;
       $("signout").hidden = !session.signed_in;
-      $("signedOut").hidden = session.signed_in;
+      $("signedOut").hidden = session.signed_in || joinNeeded;
+      $("joinNeeded").hidden = !joinNeeded;
       $("app").hidden = !session.signed_in;
       if (session.signed_in && session.live) {
         if (state.live?.token !== session.live.token) {
@@ -214,19 +239,54 @@
       }
     }
 
-    $("composer").onsubmit = async (event) => {
+    // Files upload first under the post's idempotency key; the post then claims them.
+    async function upload(files, idempotencyKey, rootId, status) {
+      const attachments = [];
+      for (const file of files) {
+        status.textContent = `Uploading ${file.name}…`;
+        const res = await fetch("/__polynet/upload", {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+            "x-polynet-file-name": encodeURIComponent(file.name),
+            "x-polynet-channel": state.channel.slug,
+            "x-polynet-idempotency-key": idempotencyKey,
+            ...(rootId ? { "x-polynet-root-id": rootId } : {}),
+          },
+          body: file,
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body.attachment) { status.textContent = `Couldn't upload ${file.name}.`; return null; }
+        attachments.push({ attachmentId: body.attachment.attachmentId });
+      }
+      status.textContent = "";
+      return attachments;
+    }
+
+    async function send({ input, fileInput, status, mode, rootId }) {
+      const text = input.value.trim();
+      const files = [...fileInput.files];
+      if (!text && !files.length) return;
+      const idempotencyKey = key();
+      const attachments = files.length ? await upload(files, idempotencyKey, rootId, status) : [];
+      if (!attachments) return;
+      input.value = "";
+      fileInput.value = "";
+      await door("polynet_write", {
+        path: state.channel.path, mode, idempotency_key: idempotencyKey,
+        content: { text, ...(rootId ? { root_id: rootId } : {}), ...(attachments.length ? { attachments } : {}) },
+      });
+    }
+
+    $("composer").onsubmit = (event) => {
       event.preventDefault();
-      const text = $("text").value.trim();
-      if (!text) return;
-      $("text").value = "";
-      await door("polynet_write", { path: state.channel.path, mode: "create", content: { text }, idempotency_key: key() });
+      send({ input: $("text"), fileInput: $("files"), status: $("pending"), mode: "create" });
     };
-    $("replyComposer").onsubmit = async (event) => {
+    $("replyComposer").onsubmit = (event) => {
       event.preventDefault();
-      const text = $("replyText").value.trim();
-      if (!text || !state.thread) return;
-      $("replyText").value = "";
-      await door("polynet_write", { path: state.channel.path, mode: "append", content: { text, root_id: state.thread.ref.replace("interaction:root:", "") }, idempotency_key: key() });
+      if (!state.thread) return;
+      send({ input: $("replyText"), fileInput: $("replyFiles"), status: $("replyPending"), mode: "append",
+        rootId: state.thread.ref.replace("interaction:root:", "") });
     };
     $("closeThread").onclick = closeThread;
     $("signout").onclick = async () => {
