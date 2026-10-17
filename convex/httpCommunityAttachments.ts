@@ -58,6 +58,52 @@ export async function prepareCommunityAttachmentStream(req: Request) {
   }
 }
 
+// Streams one upload into storage under a pending reservation that the post
+// later claims. Shared by Studio and by community front ends (via the edge).
+export async function storeCommunityAttachmentUpload(ctx: any, req: Request, scope: {
+  ownerId: any; communityId: any; channelId?: any; uploadRootId?: any; messageKey: string;
+}): Promise<{ status: number; body: Record<string, unknown> }> {
+  let attachmentId: any;
+  let storageId: any;
+  let finished = false;
+  let upload: Awaited<ReturnType<typeof prepareCommunityAttachmentStream>> | undefined;
+  try {
+    upload = await prepareCommunityAttachmentStream(req);
+    const fileName = decodeURIComponent(req.headers.get("x-polynet-file-name") ?? "attachment");
+    const prepared = await ctx.runMutation((internal as any).communityAttachmentUploads.prepareInternal, {
+      ownerId: scope.ownerId, communityId: scope.communityId, channelId: scope.channelId,
+      uploadRootId: scope.uploadRootId, messageKey: scope.messageKey, name: fileName, mime: upload.mime,
+    });
+    attachmentId = prepared.attachmentId;
+    const response = await fetch(prepared.uploadUrl, {
+      method: "POST", headers: { "Content-Type": upload.mime }, body: upload.stream,
+      // Node's test fetch requires duplex; Convex uses the standard streaming body.
+      duplex: "half",
+    } as RequestInit);
+    if (!response.ok) throw new Error("community_attachment_storage_failed");
+    const stored = await response.json();
+    storageId = stored?.storageId;
+    if (!storageId || !upload.bytesReceived()) throw new Error("community_attachment_storage_failed");
+    const attachment = await ctx.runMutation((internal as any).communityAttachmentUploads.finishInternal, {
+      ownerId: scope.ownerId, attachmentId, storageId,
+    });
+    finished = true;
+    return { status: 200, body: { attachment } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const status = message.includes("too_large") ? 413 : message.includes("pending_limit") ? 429 : 400;
+    return { status, body: { code: "community_attachment_upload_failed" } };
+  } finally {
+    await upload?.cancel();
+    if (!finished && attachmentId) {
+      // Reconcile through the row: never delete a blob after a successful claim.
+      await ctx.runMutation((internal as any).communityAttachmentUploads.cleanupInternal, {
+        attachmentId, cancelOwnerId: scope.ownerId, ...(storageId ? { storageId } : {}),
+      });
+    }
+  }
+}
+
 export function registerCommunityAttachmentRoutes(args: RouteDependencies) {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
   http.route({ path: LEGACY_ATTACHMENT_UPLOAD_PATH, method: "OPTIONS",
@@ -123,46 +169,12 @@ export function registerCommunityAttachmentRoutes(args: RouteDependencies) {
   http.route({ path: COMMUNITY_ATTACHMENT_UPLOAD_PATH, method: "POST", handler: httpAction(async (ctx, req) => {
     const auth = await requireAuthenticatedActor(ctx, req);
     if (!auth.ok) return auth.response;
-    let attachmentId: any;
-    let storageId: any;
-    let finished = false;
-    let upload: Awaited<ReturnType<typeof prepareCommunityAttachmentStream>> | undefined;
-    try {
-      upload = await prepareCommunityAttachmentStream(req);
-      const fileName = decodeURIComponent(req.headers.get("x-polynet-file-name") ?? "attachment");
-      const prepared = await ctx.runMutation((internal as any).communityAttachmentUploads.prepareInternal, {
-        ownerId: auth.actor.dbUserId, communityId: req.headers.get("x-polynet-community-id"),
-        channelId: req.headers.get("x-polynet-channel-id") || undefined,
-        uploadRootId: req.headers.get("x-polynet-root-id") || undefined,
-        messageKey: req.headers.get("x-polynet-message-key") ?? "", name: fileName, mime: upload.mime,
-      });
-      attachmentId = prepared.attachmentId;
-      const response = await fetch(prepared.uploadUrl, {
-        method: "POST", headers: { "Content-Type": upload.mime }, body: upload.stream,
-        // Node's test fetch requires duplex; Convex uses the standard streaming body.
-        duplex: "half",
-      } as RequestInit);
-      if (!response.ok) throw new Error("community_attachment_storage_failed");
-      const stored = await response.json();
-      storageId = stored?.storageId;
-      if (!storageId || !upload.bytesReceived()) throw new Error("community_attachment_storage_failed");
-      const attachment = await ctx.runMutation((internal as any).communityAttachmentUploads.finishInternal, {
-        ownerId: auth.actor.dbUserId, attachmentId, storageId,
-      });
-      finished = true;
-      return jsonResponse(req, 200, { attachment });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      const status = message.includes("too_large") ? 413 : message.includes("pending_limit") ? 429 : 400;
-      return jsonResponse(req, status, { code: "community_attachment_upload_failed" });
-    } finally {
-      await upload?.cancel();
-      if (!finished && attachmentId) {
-        // Reconcile through the row: never delete a blob after a successful claim.
-        await ctx.runMutation((internal as any).communityAttachmentUploads.cleanupInternal, {
-          attachmentId, cancelOwnerId: auth.actor.dbUserId, ...(storageId ? { storageId } : {}),
-        });
-      }
-    }
+    const result = await storeCommunityAttachmentUpload(ctx, req, {
+      ownerId: auth.actor.dbUserId, communityId: req.headers.get("x-polynet-community-id"),
+      channelId: req.headers.get("x-polynet-channel-id") || undefined,
+      uploadRootId: req.headers.get("x-polynet-root-id") || undefined,
+      messageKey: req.headers.get("x-polynet-message-key") ?? "",
+    });
+    return jsonResponse(req, result.status, result.body);
   }) });
 }

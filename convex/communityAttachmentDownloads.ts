@@ -5,10 +5,11 @@ import { resolveNotificationRecipientSource } from "./communityNotificationAcces
 // The HTTP adapter alone receives the provider URL. It streams the bytes;
 // neither storage IDs nor permanent provider URLs are a private-file API.
 export const resolveInternal = internalQuery({
-  args: { userId: v.id("users"), attachmentId: v.id("communityInteractionAttachments") },
+  // communityId confines a community front end to its own community's files.
+  args: { userId: v.id("users"), attachmentId: v.id("communityInteractionAttachments"), communityId: v.optional(v.id("communities")) },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.attachmentId);
-    if (!row || row.status !== "uploaded" || !row.storageId || !row.channelId || Boolean(row.rootId) === Boolean(row.replyId)) return null;
+    if (!row || (args.communityId && row.communityId !== args.communityId) || row.status !== "uploaded" || !row.storageId || !row.channelId || Boolean(row.rootId) === Boolean(row.replyId)) return null;
     const source = await resolveNotificationRecipientSource({ ctx, communityId: row.communityId, userId: args.userId,
       channelId: row.channelId, rootId: row.rootId, replyId: row.replyId });
     if (!source || String(source.channel._id) !== String(row.channelId)) return null;

@@ -29,6 +29,11 @@ const AUTH_PREFIX = "/__polynet/auth/";
 const SESSION_COOKIE = "__polynet_session";
 const SIGNIN_COOKIE = "__polynet_signin";
 const MAX_API_BODY_BYTES = 64 * 1024;
+const UPLOAD_PATH = "/__polynet/upload";
+const FILES_PREFIX = "/__polynet/files/";
+// Largest attachment the backend accepts (video and audio); it enforces exact limits.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const ATTACHMENT_ID_PATTERN = /^[a-z0-9]{20,40}$/;
 const SIGNIN_TTL_SECONDS = 600;
 const TOKEN_PATTERN = /^pna_[A-Za-z0-9_-]{43}$/;
 const STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -159,8 +164,10 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
 
   if (action === "session" && request.method === "GET") {
     const token = String(readCookie(request, SESSION_COOKIE) ?? "");
-    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false });
-    return json(200, { signed_in: true, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
+    // Joining (open, approval or paid) happens on Polynet's own join page.
+    const joinUrl = new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
+    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, join_url: joinUrl });
+    return json(200, { signed_in: true, join_url: joinUrl, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
   }
 
   if (action === "logout" && request.method === "POST") {
@@ -196,6 +203,42 @@ async function proxyApi(request: Request, url: URL, env: Env): Promise<Response>
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+// Uploads and file downloads, forwarded server-side with the member session.
+async function proxyFile(request: Request, url: URL, env: Env): Promise<Response> {
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
+  const base = env.POLYNET_API_URL.replace(/\/+$/, "");
+  const headers: Record<string, string> = {
+    Origin: url.origin, Authorization: `Bearer ${token}`, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+  };
+  let upstream: Response;
+  if (url.pathname === UPLOAD_PATH) {
+    if (request.method !== "POST") return json(405, { ok: false, code: "method_not_allowed" });
+    if (!request.body || Number(request.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES) {
+      return json(413, { ok: false, code: "request_too_large" });
+    }
+    for (const name of ["content-type", "content-length", "x-polynet-file-name", "x-polynet-channel", "x-polynet-root-id", "x-polynet-idempotency-key"]) {
+      const value = request.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    upstream = await fetch(`${base}/runtime/app/upload`, { method: "POST", headers, body: request.body });
+  } else {
+    const attachmentId = url.pathname.slice(FILES_PREFIX.length);
+    if (request.method !== "GET") return json(405, { ok: false, code: "method_not_allowed" });
+    if (!ATTACHMENT_ID_PATTERN.test(attachmentId)) return json(404, { ok: false, code: "file_unavailable" });
+    upstream = await fetch(`${base}/runtime/app/file`, {
+      method: "POST", headers: { ...headers, "x-polynet-attachment-id": attachmentId },
+    });
+  }
+  const out = new Headers();
+  for (const name of ["content-type", "content-disposition", "x-content-type-options", "content-security-policy", "cache-control"]) {
+    const value = upstream.headers.get(name);
+    if (value) out.set(name, value);
+  }
+  if (upstream.status === 401) out.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  return new Response(upstream.body, { status: upstream.status, headers: out });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -204,6 +247,9 @@ export default {
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
     if (url.pathname === API_PREFIX || url.pathname.startsWith(`${API_PREFIX}/`)) {
       return await proxyApi(request, url, env);
+    }
+    if (url.pathname === UPLOAD_PATH || url.pathname.startsWith(FILES_PREFIX)) {
+      return await proxyFile(request, url, env);
     }
     const worker = userWorker(route.script, env);
     if (!worker) return new Response("Community front end unavailable", { status: 503 });

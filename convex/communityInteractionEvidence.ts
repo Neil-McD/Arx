@@ -206,6 +206,11 @@ async function chatPresentationFields(args: {
           q.eq(args.objectType === "root" ? "rootId" : "replyId", row._id).eq("actorKey", viewerKey))
         .take(32)
     : [];
+  const files = await args.ctx.db
+    .query("communityInteractionAttachments" as any)
+    .withIndex(args.objectType === "root" ? "by_root" : "by_reply", (q: any) =>
+      q.eq(args.objectType === "root" ? "rootId" : "replyId", row._id))
+    .take(8);
   return {
     actorProfile: row.actorUserId ? await actorProfile(args.ctx, row.actorUserId, args.presentation) : null,
     fields: {
@@ -215,6 +220,11 @@ async function chatPresentationFields(args: {
       reacted_by_me: mine.map((reaction: any) => String(reaction.emoji)),
       by_me: Boolean(viewerKey) && normalizeIdValue(row.actorUserId) === viewerKey,
       reply_count: args.objectType === "root" ? Math.max(0, Math.floor(Number(row.replyCount) || 0)) : null,
+      // Files are fetched by ref through the caller's own surface (the edge for front ends).
+      attachments: files.filter((file: any) => file.status === "uploaded").map((file: any) => ({
+        ref: `attachment:${normalizeIdValue(file._id)}`, name: String(file.name ?? "attachment"),
+        kind: file.attachmentKind ?? "file", mime: file.mimeType ?? "application/octet-stream", size: Number(file.sizeBytes) || 0,
+      })),
       edited_at: row.editedAt ? toIsoString(row.editedAt) : null,
       snippet_truncated: String(row.contentSummary ?? "").length > EVIDENCE_SNIPPET_CHARS,
     },

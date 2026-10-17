@@ -71,12 +71,12 @@ test("a signed-in member is returned to the community with a one-time code", asy
   });
 });
 
-test("non-members go to the community gate; unregistered addresses get no redirect", async () => {
+test("non-members go back to the front end to join; unregistered addresses get no redirect", async () => {
   setup();
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: false, code: "not_a_member" }), { status: 403 })));
   const member = reply();
   await handler(request(valid), member.res);
-  expect(member.headers.get("location")).toBe("/c/apps-community");
+  expect(member.headers.get("location")).toBe("https://hello.example.com/?polynet=join");
 
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: false, code: "address_not_registered" }), { status: 403 })));
   const unregistered = reply();

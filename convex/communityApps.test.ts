@@ -9,6 +9,8 @@ import {
   COMMUNITY_APP_HANDOFF_PATH,
   COMMUNITY_EDGE_EXCHANGE_PATH,
   COMMUNITY_EDGE_REVOKE_PATH,
+  COMMUNITY_APP_UPLOAD_PATH,
+  COMMUNITY_APP_FILE_PATH,
 } from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommunityAppSessionToken } from "../shared/communityAppSession";
@@ -16,6 +18,8 @@ import { COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommuni
 const modules = import.meta.glob([
   "./communityApps.ts",
   "./communityLive.ts",
+  "./communityAttachmentUploads.ts",
+  "./communityAttachmentDownloads.ts",
   "./authSessions.ts",
   "./authSessionLifecycleCore.ts",
   "./authSessionMaintenanceCore.ts",
@@ -52,7 +56,7 @@ const STATE = "s".repeat(43);
 const BRIDGE_SECRET = "test-bridge-secret";
 const EDGE_SECRET = "test-edge-secret";
 
-afterEach(() => { vi.unstubAllEnvs(); });
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 async function fixture() {
   vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", BRIDGE_SECRET);
@@ -139,7 +143,13 @@ async function fixture() {
   const call = (token: string | null, body: unknown, origin = ORIGIN, secret = EDGE_SECRET) =>
     post(COMMUNITY_APP_RUNTIME_PATH, { origin, "x-polynet-edge-secret": secret, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body);
   const sessions = () => t.run((c) => c.db.query("communityAppSessions").collect());
-  return { t, ids, register, handoff, exchange, signIn, call, post, sessions };
+  // Raw requests as the edge forwards them, for binary upload and download routes.
+  const raw = (path: string, token: string, init: { headers?: Record<string, string>; body?: BodyInit } = {}) =>
+    handlers.get(`POST ${path}`)!(ctx, new Request(`https://example.convex.site${path}`, {
+      method: "POST", body: init.body,
+      headers: { origin: ORIGIN, "x-polynet-edge-secret": EDGE_SECRET, authorization: `Bearer ${token}`, ...(init.headers ?? {}) },
+    }));
+  return { t, ids, register, handoff, exchange, signIn, call, post, sessions, raw };
 }
 
 test("a domain is an exact origin and belongs to one community", async () => {
@@ -255,7 +265,7 @@ test("losing membership denies the very next API call", async () => {
   expect((await f.call(token, list)).body).toMatchObject({ ok: false });
 });
 
-test("a front-end post is the member's own post, retried safely, without files", async () => {
+test("a front-end post is the member's own post, retried safely", async () => {
   const f = await fixture();
   await f.register();
   const token = await f.signIn();
@@ -268,7 +278,6 @@ test("a front-end post is the member's own post, retried safely, without files",
   const rootId = String(posted.body.value.result.interaction.root_id);
   const root = await f.t.run(async (c) => c.db.get(c.db.normalizeId("communityInteractionRoots", rootId)!));
   expect(root).toMatchObject({ actorType: "human", actorUserId: f.ids.memberId, communityId: f.ids.communityId });
-  expect((await write({ text: "with a file", attachments: [{ storageId: "x" }] }, "post-2")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect((await write({ text: "Week three tip: switch check-ins to a short async form." }, "post-1")).body).toMatchObject({ ok: true });
   expect(await f.t.run((c) => c.db.query("communityInteractionRoots").collect())).toHaveLength(1);
 });
@@ -378,4 +387,61 @@ test("a front end runs a full chat: names, threads, reactions, and edits or dele
   expect((await list(member, `${general}${memberPost}/`)).map((entry) => entry.ref)).toEqual([memberPost]);
   expect((await write(member, memberPost, "delete", {}, "d-3")).body).toMatchObject({ ok: true });
   expect((await list(member)).some((entry) => entry.ref === memberPost)).toBe(false);
+});
+
+test("a front end uploads a file with a post, lists it, and serves it only within its community", async () => {
+  const f = await fixture();
+  await f.register();
+  const token = await f.signIn();
+  const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+  const general = `${COMMUNITY}/channels/general/`;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (!init?.body) return new Response(PNG, { headers: { "content-type": "image/png" } });
+    const blob = await new Response(init?.body, { headers: init?.headers }).blob();
+    const storageId = await f.t.run(async (c) => {
+      const id = await c.storage.store(blob);
+      await c.db.patch(id as any, { contentType: blob.type } as any);
+      return id;
+    });
+    return Response.json({ storageId });
+  });
+  const upload = (headers: Record<string, string>, secretless = false) => f.raw(COMMUNITY_APP_UPLOAD_PATH, token, {
+    body: PNG,
+    headers: { "content-type": "image/png", "x-polynet-file-name": "photo.png", "x-polynet-channel": "general",
+      "x-polynet-idempotency-key": "with-photo", ...headers, ...(secretless ? { "x-polynet-edge-secret": "wrong" } : {}) },
+  });
+
+  expect((await upload({}, true)).status).toBe(401);
+  expect((await upload({ "x-polynet-channel": "missing" })).status).toBe(404);
+  const uploaded = await upload({});
+  expect(uploaded.status).toBe(200);
+  const { attachment } = await uploaded.json();
+  expect(attachment).toMatchObject({ name: "photo.png", mime: "image/png", type: "image" });
+
+  const posted = await f.call(token, { tool: "polynet_write", input: {
+    path: general, mode: "create", content: { text: "With a photo", attachments: [{ attachmentId: attachment.attachmentId }] },
+    idempotency_key: "with-photo" } });
+  expect(posted.body).toMatchObject({ ok: true });
+  const listed = (await f.call(token, { tool: "polynet_list", input: { path: general, limit: 50 } })).body.value.entries;
+  const entry = listed.find((item: any) => item.snippet === "With a photo");
+  expect(entry.attachments).toEqual([{ ref: `attachment:${attachment.attachmentId}`, name: "photo.png", kind: "image", mime: "image/png", size: PNG.length }]);
+
+  const served = await f.raw(COMMUNITY_APP_FILE_PATH, token, { headers: { "x-polynet-attachment-id": attachment.attachmentId } });
+  expect(served.status).toBe(200);
+  expect(Object.fromEntries(served.headers as unknown as Iterable<[string, string]>)).toMatchObject({
+    "content-type": "image/png", "content-disposition": "inline; filename*=UTF-8''photo.png",
+    "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "cache-control": "private, no-store",
+  });
+  expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
+
+  // A file in another community is never served to this front end.
+  const foreign = await f.t.run(async (c) => {
+    const channel = (await c.db.query("communityChannels").collect()).find((row) => row.communityId === f.ids.otherCommunityId)!;
+    return c.db.insert("communityInteractionAttachments", {
+      communityId: f.ids.otherCommunityId, channelId: channel._id, status: "uploaded", name: "x.png", mimeType: "image/png",
+      attachmentKind: "image", sizeBytes: 1, createdByActorType: "human", createdAt: Date.now(), updatedAt: Date.now(),
+    } as any);
+  });
+  expect((await f.raw(COMMUNITY_APP_FILE_PATH, token, { headers: { "x-polynet-attachment-id": foreign } })).status).toBe(404);
+  expect((await f.raw(COMMUNITY_APP_FILE_PATH, token, { headers: { "x-polynet-attachment-id": "not-an-id" } })).status).toBe(404);
 });

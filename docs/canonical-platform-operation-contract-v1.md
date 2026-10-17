@@ -190,7 +190,10 @@ Sign-in is invisible when the member is already signed in to Polynet:
 2. With a live Polynet session, Convex checks membership and that the callback
    belongs to a registered domain of that community, then issues a one-time
    code (60 seconds, bound to state and domain, deleted when presented; only
-   hashes stored). Non-members go to the community's join page.
+   hashes stored). A Polynet user who isn't a member yet is sent back to the
+   front end (`/?polynet=join`), which links to Polynet's join page
+   (`join_url` from the edge's session endpoint); joining (open, approval or
+   paid) stays Polynet-hosted.
 3. The edge swaps the code server to server (edge secret) for a 30-day session
    kept in an HttpOnly, host-only cookie on the community's domain. Page code
    and the community's own Worker never see it. When it expires, the same hop
@@ -224,6 +227,15 @@ Chat through the door, the same for every actor:
   posts stays in Studio.
 - `polynet_call` `community.interaction.react` sets the caller's reaction
   (`ref`, `emoji`, `on`), so retries are safe.
+
+Files: the page posts a file to the edge's `/__polynet/upload` (headers
+`x-polynet-channel`, `x-polynet-idempotency-key`, optional `x-polynet-root-id`
+for a reply) before writing the post with the same idempotency key and
+`content.attachments: [{ attachmentId }]`; the post claims it. Limits and
+content checks are Studio's. Listings show files as
+`attachments: [{ ref: "attachment:<id>", name, kind, mime, size }]`, and the
+page loads them from `/__polynet/files/<id>`: images inline, everything else
+as a download, only within the session's community.
 
 Live updates: the edge's `/__polynet/auth/session` gives a signed-in page the
 Convex URL and a **watch-only token** (`pnw_`), derived from the session token
