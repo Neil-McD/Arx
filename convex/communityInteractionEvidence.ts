@@ -11,6 +11,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import { normalizeOptionalText, truncateText } from "./communityText";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import {
   communityInteractionEvidenceSourceIsReadable,
@@ -172,6 +173,54 @@ async function loadReadableInteraction(args: {
   return { row: source.row, root: source.root, channel };
 }
 
+const EVIDENCE_SNIPPET_CHARS = 500;
+
+type ChatPresentation = { viewerUserId: any; profiles: Map<string, Promise<Record<string, unknown>>> };
+
+function newChatPresentation(viewerUserId: any): ChatPresentation {
+  return { viewerUserId, profiles: new Map() };
+}
+
+async function actorProfile(ctx: any, userId: any, presentation: ChatPresentation) {
+  const key = normalizeIdValue(userId);
+  if (!presentation.profiles.has(key)) {
+    presentation.profiles.set(key, (async () => {
+      const [user, display] = await Promise.all([ctx.db.get(userId), resolveUserProfileDisplayProjection(ctx, userId)]);
+      return { display_name: display.display_name, handle: normalizeOptionalText((user as any)?.handle, 64), avatar_url: display.avatar_url };
+    })());
+  }
+  return await presentation.profiles.get(key)!;
+}
+
+// What a chat surface needs beyond evidence: who posted, reactions (and the
+// viewer's own), replies and edits. Only computed for channel and thread listings.
+async function chatPresentationFields(args: {
+  ctx: any; objectType: CommunityInteractionEvidenceObjectType; row: InteractionRow; presentation: ChatPresentation;
+}) {
+  const row = args.row as any;
+  const viewerKey = normalizeIdValue(args.presentation.viewerUserId);
+  const mine = viewerKey
+    ? await args.ctx.db
+        .query("communityInteractionReactions" as any)
+        .withIndex(args.objectType === "root" ? "by_root_actor_emoji" : "by_reply_actor_emoji", (q: any) =>
+          q.eq(args.objectType === "root" ? "rootId" : "replyId", row._id).eq("actorKey", viewerKey))
+        .take(32)
+    : [];
+  return {
+    actorProfile: row.actorUserId ? await actorProfile(args.ctx, row.actorUserId, args.presentation) : null,
+    fields: {
+      reactions: Array.isArray(row.reactionSummary)
+        ? row.reactionSummary.map((entry: any) => ({ emoji: String(entry.emoji), count: Number(entry.count) || 0 }))
+        : [],
+      reacted_by_me: mine.map((reaction: any) => String(reaction.emoji)),
+      by_me: Boolean(viewerKey) && normalizeIdValue(row.actorUserId) === viewerKey,
+      reply_count: args.objectType === "root" ? Math.max(0, Math.floor(Number(row.replyCount) || 0)) : null,
+      edited_at: row.editedAt ? toIsoString(row.editedAt) : null,
+      snippet_truncated: String(row.contentSummary ?? "").length > EVIDENCE_SNIPPET_CHARS,
+    },
+  };
+}
+
 async function mapEvidenceSearchItem(args: {
   ctx: any;
   community: CommunityRow;
@@ -182,9 +231,13 @@ async function mapEvidenceSearchItem(args: {
   score: number | null;
   source: "recent" | "archive";
   userIdCache?: Map<string, string | null>;
+  presentation?: ChatPresentation;
 }) {
   const publicActorUserId = args.row.actorUserId
     ? await resolvePublicUserId(args.ctx, args.row.actorUserId, args.userIdCache)
+    : null;
+  const chat = args.presentation
+    ? await chatPresentationFields({ ctx: args.ctx, objectType: args.objectType, row: args.row, presentation: args.presentation })
     : null;
   const ref = buildCommunityInteractionEvidenceRef({
     objectType: args.objectType,
@@ -221,12 +274,14 @@ async function mapEvidenceSearchItem(args: {
     version: Math.max(1, Math.floor(Number(args.row.updatedAt) || 1)),
     visibility_scope: args.row.visibilityScope,
     title: normalizeOptionalText(args.root.title, 180),
-    snippet: truncateText(args.row.contentSummary, 500),
+    snippet: truncateText(args.row.contentSummary, EVIDENCE_SNIPPET_CHARS),
     actor: {
       type: args.row.actorType,
       user_id: actorUserId,
       agent_key: args.row.actorAgentKey ?? null,
+      ...(chat?.actorProfile ?? {}),
     },
+    ...(chat?.fields ?? {}),
     lineage,
     created_at: toIsoString(args.row.createdAt),
     updated_at: toIsoString(args.row.updatedAt),
@@ -252,6 +307,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
   channelSlug?: string | null;
   beforeCreatedAt?: number | null;
   actorKind?: ChannelActorKind;
+  presentForViewer?: boolean;
 }) {
   await requireCommunityChatAccess({
     ctx: args.ctx,
@@ -395,6 +451,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
     );
   const candidates = rankedCandidates.slice(0, args.limit);
   const userIdCache = new Map<string, string | null>();
+  const presentation = args.presentForViewer ? newChatPresentation(args.userId) : undefined;
   return {
     community: {
       id: normalizeIdValue(community._id),
@@ -413,6 +470,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
           score: entry.score,
           source: "recent",
           userIdCache,
+          presentation,
         }),
       ),
     ),
@@ -475,6 +533,7 @@ export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
       channelId: args.channelId,
       channelSlug: args.channelSlug,
       beforeCreatedAt,
+      presentForViewer: true,
     });
     const results = recent.results.slice(0, limit);
     const lastCreatedAt = results.length
@@ -489,6 +548,60 @@ export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
         hasMore && Number.isSafeInteger(lastCreatedAt)
           ? String(lastCreatedAt)
           : null,
+    };
+  },
+});
+
+const THREAD_REPLY_PAGE = 100;
+
+// One post and its replies, oldest first, for a chat thread. Same access as
+// reading the post itself.
+export const listCommunityInteractionThreadInternal = internalQuery({
+  args: {
+    actorKind: v.optional(channelActorKindValidator),
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    channelSlug: v.string(),
+    rootId: v.string(),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const afterCreatedAt = args.cursor ? Number(args.cursor) : null;
+    if (afterCreatedAt !== null && (!Number.isSafeInteger(afterCreatedAt) || afterCreatedAt <= 0)) {
+      throw new Error("community_interaction_thread_cursor_invalid");
+    }
+    const { row: root, channel } = await loadReadableInteraction({
+      ctx,
+      actor: args.actorKind && args.actorKind !== "community_agent"
+        ? await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId, kind: args.actorKind })
+        : undefined,
+      communityId: args.communityId,
+      objectType: "root",
+      objectId: args.rootId,
+    });
+    if (channel.slug !== args.channelSlug) throw new Error("community_interaction_evidence_channel_mismatch");
+    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
+    if (!community) throw new Error("community_not_found");
+    const page = (await ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_root_status_createdAt", (q: any) => {
+        const scoped = q.eq("rootId", root._id).eq("status", "live");
+        return afterCreatedAt === null ? scoped : scoped.gt("createdAt", afterCreatedAt);
+      })
+      .take(THREAD_REPLY_PAGE + 1)) as InteractionRow[];
+    const replies = page.slice(0, THREAD_REPLY_PAGE).filter((reply) =>
+      communityInteractionVisibilityIsEvidenceReadable(reply.visibilityScope) && interactionBelongsToChannel(reply, channel));
+    const presentation = newChatPresentation(args.userId);
+    const userIdCache = new Map<string, string | null>();
+    const map = (objectType: "root" | "reply", row: InteractionRow) => mapEvidenceSearchItem({
+      ctx, community, objectType, row, root, channel, score: null, source: "recent", userIdCache, presentation,
+    });
+    const last = page.length > THREAD_REPLY_PAGE ? page[THREAD_REPLY_PAGE - 1] : null;
+    return {
+      root: afterCreatedAt === null ? await map("root", root) : null,
+      replies: await Promise.all(replies.map((reply) => map("reply", reply))),
+      next_cursor: last ? String(last.createdAt) : null,
     };
   },
 });

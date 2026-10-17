@@ -211,6 +211,20 @@ outside the edge. Each request runs the canonical executor as principal
 - channel writes are the member's own posts (actor `human`) through the trusted
   composer, with `community_app` canonical receipts; file attachments are refused.
 
+Chat through the door, the same for every actor:
+
+- `polynet_list` on `channels/<slug>/` returns recent posts and replies with
+  `object_type`, a reply's `root_ref`, the author's `display_name`, `handle` and
+  `avatar_url`, `reactions`, the caller's own `reacted_by_me`, `by_me`,
+  `reply_count`, `edited_at` and `snippet_truncated`.
+- `polynet_list` on `channels/<slug>/interaction:root:<id>/` returns that post
+  and its replies, oldest first.
+- `polynet_write` with `update` or `delete` on a post's `.md` path edits or
+  deletes the caller's own post only, even for owners; moderating others'
+  posts stays in Studio.
+- `polynet_call` `community.interaction.react` sets the caller's reaction
+  (`ref`, `emoji`, `on`), so retries are safe.
+
 Live updates: the edge's `/__polynet/auth/session` gives a signed-in page the
 Convex URL and a **watch-only token** (`pnw_`), derived from the session token
 (only its hash is stored). The page subscribes to the public query

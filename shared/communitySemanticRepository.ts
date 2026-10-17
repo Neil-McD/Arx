@@ -34,6 +34,12 @@ export type ParsedCommunityChannelSemanticPath =
       kind: "document";
       slug: string;
       ref: string;
+    }
+  | {
+      // A post and its replies: /channels/<slug>/interaction:root:<id>/
+      kind: "thread";
+      slug: string;
+      rootId: string;
     };
 
 export function parseCommunityChannelSemanticPath(
@@ -43,6 +49,11 @@ export function parseCommunityChannelSemanticPath(
     /^\/channels\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/$/.exec(value);
   if (directoryMatch) {
     return { kind: "directory", slug: directoryMatch[1] };
+  }
+  const threadMatch =
+    /^\/channels\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/interaction:root:([A-Za-z0-9_-]+)\/$/.exec(value);
+  if (threadMatch) {
+    return { kind: "thread", slug: threadMatch[1], rootId: threadMatch[2] };
   }
   const documentMatch =
     /^\/channels\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/(interaction:(?:root|reply):[A-Za-z0-9_-]+)\.md$/.exec(
@@ -343,6 +354,7 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_RESOURCES_DIRECTORY_PATH &&
       value !== POLYNET_CHANNELS_DIRECTORY_PATH &&
       channelPath?.kind !== "directory" &&
+      channelPath?.kind !== "thread" &&
       value !== POLYNET_EVENTS_DIRECTORY_PATH &&
       value !== POLYNET_MEMORY_DIRECTORY_PATH &&
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
@@ -468,6 +480,7 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
       parsed.path === POLYNET_CHANNELS_DIRECTORY_PATH ||
       parseCommunityChannelSemanticPath(parsed.path)?.kind === "directory" ||
+      parseCommunityChannelSemanticPath(parsed.path)?.kind === "thread" ||
       parsed.path === POLYNET_EVENTS_DIRECTORY_PATH ||
       parsed.path === POLYNET_MEMORY_DIRECTORY_PATH ||
       parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||

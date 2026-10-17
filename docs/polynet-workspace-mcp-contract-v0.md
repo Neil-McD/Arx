@@ -38,8 +38,9 @@ The tools mean:
 - `polynet_read`: read one exact path returned by the repository.
 - `polynet_search`: search one authorized subtree and return paths for
   follow-up reads.
-- `polynet_write`: create, append, or update a naturally writable repository
-  object with an idempotency key.
+- `polynet_write`: create, append, update or delete a naturally writable
+  repository object with an idempotency key. Update and delete apply only to
+  the caller's own posts and replies; moderation stays in Studio.
 - `polynet_call`: invoke one versioned operation that was first discovered
   under the selected community's `capabilities/` directory.
 
