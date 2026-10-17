@@ -428,7 +428,7 @@ test("a front end uploads a file with a post, lists it, and serves it only withi
 
   const served = await f.raw(COMMUNITY_APP_FILE_PATH, token, { headers: { "x-polynet-attachment-id": attachment.attachmentId } });
   expect(served.status).toBe(200);
-  expect(Object.fromEntries(served.headers)).toMatchObject({
+  expect(Object.fromEntries(served.headers as unknown as Iterable<[string, string]>)).toMatchObject({
     "content-type": "image/png", "content-disposition": "inline; filename*=UTF-8''photo.png",
     "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "cache-control": "private, no-store",
   });
