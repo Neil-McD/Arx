@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
   registerCommunityAppRoutes,
@@ -11,10 +11,11 @@ import {
   COMMUNITY_EDGE_REVOKE_PATH,
 } from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import { COMMUNITY_APP_SESSION_TTL_MS, hashCommunityAppSessionToken } from "../shared/communityAppSession";
+import { COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommunityAppSessionToken } from "../shared/communityAppSession";
 
 const modules = import.meta.glob([
   "./communityApps.ts",
+  "./communityLive.ts",
   "./authSessions.ts",
   "./authSessionLifecycleCore.ts",
   "./authSessionMaintenanceCore.ts",
@@ -270,4 +271,43 @@ test("a front-end post is the member's own post, retried safely, without files",
   expect((await write({ text: "with a file", attachments: [{ storageId: "x" }] }, "post-2")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect((await write({ text: "Week three tip: switch check-ins to a short async form." }, "post-1")).body).toMatchObject({ ok: true });
   expect(await f.t.run((c) => c.db.query("communityInteractionRoots").collect())).toHaveLength(1);
+});
+
+test("a front end watches a channel it can read and sees every change, until access ends", async () => {
+  const f = await fixture();
+  await f.register();
+  const restrictedId = await f.t.run((c) => c.db.insert("communityChannels", {
+    communityId: f.ids.communityId, slug: "founders", name: "Founders", accessMode: "restricted",
+    postingPolicy: "members", status: "active", position: 1, createdAt: Date.now(), updatedAt: Date.now(),
+  } as any));
+  const token = await f.signIn();
+  const watchToken = await deriveCommunityAppWatchToken(token);
+  const watch = (path: string, tokenValue = watchToken) => f.t.query(api.communityLive.watch, { token: tokenValue, path });
+  const general = `${COMMUNITY}/channels/general/`;
+
+  expect(await watch(general, `pnw_${"x".repeat(43)}`)).toEqual({ ok: false, code: "session_invalid" });
+  expect(await watch(general, token)).toEqual({ ok: false, code: "session_invalid" });
+  const before = await watch(general);
+  expect(before).toMatchObject({ ok: true });
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await f.call(token, {
+    tool: "polynet_write",
+    input: { path: general, mode: "create", content: { text: "Live from the front end." }, idempotency_key: "live-1" },
+  });
+  const after = await watch(general);
+  expect(after.ok && before.ok && after.version > before.version).toBe(true);
+
+  for (const path of ["/communities/apps-other/channels/general/", `${COMMUNITY}/channels/founders/`, `${COMMUNITY}/channels/missing/`, `${COMMUNITY}/events/`, "/"]) {
+    expect(await watch(path)).toEqual({ ok: false, code: "watch_unavailable" });
+  }
+  expect(restrictedId).toBeTruthy();
+
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  expect(await watch(general)).toEqual({ ok: false, code: "watch_unavailable" });
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: true, revokedAt: undefined }));
+  expect(await watch(general)).toMatchObject({ ok: true });
+
+  await f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, { token });
+  expect(await watch(general)).toEqual({ ok: false, code: "session_invalid" });
 });

@@ -1766,6 +1766,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_channel_updatedAt", ["channelId", "updatedAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_updatedAt", ["communityId", "updatedAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
@@ -1829,6 +1830,7 @@ export default defineSchema({
     .index("by_root_seq", ["rootId", "seq"])
     .index("by_root_createdAt", ["rootId", "createdAt"])
     .index("by_root_status_createdAt", ["rootId", "status", "createdAt"])
+    .index("by_channel_updatedAt", ["channelId", "updatedAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_channel_visibility_status_createdAt", [
@@ -2465,8 +2467,11 @@ export default defineSchema({
     communityId: v.id("communities"),
     userId: v.id("users"),
     expiresAt: v.number(),
+    // Hash of the watch-only token the edge derives from the session token.
+    watchTokenHash: v.optional(v.string()),
   })
     .index("by_tokenHash", ["tokenHash"])
+    .index("by_watchTokenHash", ["watchTokenHash"])
     .index("by_domain_user_expiresAt", ["domainId", "userId", "expiresAt"]),
 
   // One-time sign-in codes from Polynet's login to a community's edge, deleted

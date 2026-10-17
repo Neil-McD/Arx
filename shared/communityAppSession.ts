@@ -9,6 +9,7 @@ export const COMMUNITY_APP_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const COMMUNITY_APP_HANDOFF_TTL_MS = 60 * 1000;
 export const COMMUNITY_APP_HANDOFF_PREFIX = "pnh_";
 export const COMMUNITY_APP_TOKEN_PREFIX = "pna_";
+export const COMMUNITY_APP_WATCH_TOKEN_PREFIX = "pnw_";
 export const COMMUNITY_APP_MAX_REQUEST_BYTES = 64 * 1024;
 
 function base64Url(bytes: Uint8Array): string {
@@ -41,6 +42,18 @@ export function isCommunityAppHandoffState(value: unknown): value is string {
 export async function hashCommunityAppSessionToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function isCommunityAppWatchToken(value: unknown): value is string {
+  return typeof value === "string" && /^pnw_[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+// The watch-only token for live updates, derived from the session token so the
+// edge needs no extra storage. It can only ask whether a channel the member can
+// read has changed; it cannot call the API.
+export async function deriveCommunityAppWatchToken(sessionToken: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`polynet-watch:${sessionToken}`));
+  return `${COMMUNITY_APP_WATCH_TOKEN_PREFIX}${base64Url(new Uint8Array(digest))}`;
 }
 
 export function readCommunityAppBearerToken(authorization: string | null): string | null {

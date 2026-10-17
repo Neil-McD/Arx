@@ -6,9 +6,15 @@
   <title>Hello, community</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; padding: 24px; max-width: 640px; }
-    button, a.button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; text-decoration: none; color: inherit; display: inline-block; }
-    pre { white-space: pre-wrap; background: #8881; padding: 12px; border-radius: 8px; font-size: 12px; }
+    body { margin: 0; padding: 24px 16px; max-width: 640px; }
+    button, a.button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; text-decoration: none; color: inherit; display: inline-block; background: none; font: inherit; }
+    form { display: flex; gap: 8px; margin: 16px 0; }
+    input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #8884; font: inherit; }
+    ol { list-style: none; padding: 0; margin: 0; }
+    li { padding: 10px 0; border-bottom: 1px solid #8882; }
+    .who { font-weight: 600; margin-right: 6px; }
+    .when { opacity: .6; font-size: 12px; }
+    .live { font-size: 12px; opacity: .7; }
   </style>
 </head>
 <body>
@@ -16,37 +22,86 @@
   <p id="status">Checking your session…</p>
   <p>
     <a class="button" id="signin" href="/__polynet/auth/start?return=/" hidden>Sign in with Polynet</a>
-    <button id="channels" hidden>List channels</button>
     <button id="signout" hidden>Sign out</button>
+    <span class="live" id="live"></span>
   </p>
-  <pre id="out"></pre>
+  <section id="room" hidden>
+    <h2># general</h2>
+    <form id="composer"><input id="text" placeholder="Say something" autocomplete="off" required /><button>Post</button></form>
+    <ol id="feed"></ol>
+  </section>
+  <script src="https://cdn.jsdelivr.net/npm/convex@1.42.1/dist/browser.bundle.js"></script>
   <script>
-    // This page never handles a token. The Polynet edge on this domain keeps the
-    // member session in an HttpOnly cookie and adds it to /__polynet/api calls.
+    // Everything goes through the door at /__polynet/api, where this domain's
+    // Polynet edge adds the member session from an HttpOnly cookie. For live
+    // updates the page subscribes to a watch-only signal and re-reads on change.
+    const CHANNEL = "/communities/polynet/channels/general/";
     const $ = (id) => document.getElementById(id);
-    const show = (value) => { $("out").textContent = JSON.stringify(value, null, 2); };
+    let client = null;
+
+    async function door(tool, input) {
+      const res = await fetch("/__polynet/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool, input }),
+      });
+      if (res.status === 401) { await refresh(); return null; }
+      const body = await res.json();
+      return body.ok ? body.value : null;
+    }
+
+    function render(entries) {
+      const feed = $("feed");
+      feed.replaceChildren(...entries.slice().reverse().map((entry) => {
+        const li = document.createElement("li");
+        const who = document.createElement("span");
+        who.className = "who";
+        const actor = entry.actor ?? {};
+        who.textContent = actor.display_name ?? actor.name ?? actor.handle ?? actor.kind ?? "member";
+        const when = document.createElement("span");
+        when.className = "when";
+        when.textContent = entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : "";
+        const text = document.createElement("div");
+        text.textContent = entry.snippet ?? entry.title ?? "";
+        li.append(who, when, text);
+        return li;
+      }));
+    }
+
+    async function loadFeed() {
+      const value = await door("polynet_list", { path: CHANNEL });
+      if (value) render(value.entries ?? []);
+    }
+
+    function startLive(live) {
+      client?.close();
+      client = new convex.ConvexClient(live.url);
+      client.onUpdate("communityLive:watch", { token: live.token, path: CHANNEL }, (result) => {
+        if (result?.ok) { $("live").textContent = "● live"; loadFeed(); }
+        else { $("live").textContent = ""; if (result?.code === "session_invalid") refresh(); }
+      });
+    }
 
     async function refresh() {
       const session = await (await fetch("/__polynet/auth/session")).json();
       $("status").textContent = session.signed_in ? "Signed in with Polynet." : "Not signed in.";
       $("signin").hidden = session.signed_in;
-      $("channels").hidden = !session.signed_in;
       $("signout").hidden = !session.signed_in;
+      $("room").hidden = !session.signed_in;
+      if (session.signed_in && session.live) startLive(session.live);
+      else { client?.close(); client = null; $("live").textContent = ""; }
     }
 
-    $("channels").onclick = async () => {
-      const res = await fetch("/__polynet/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tool: "polynet_list", input: { path: "/communities/polynet/channels/" } }),
-      });
-      show({ status: res.status, body: await res.json() });
-      if (res.status === 401) refresh();
+    $("composer").onsubmit = async (event) => {
+      event.preventDefault();
+      const text = $("text").value.trim();
+      if (!text) return;
+      $("text").value = "";
+      await door("polynet_write", { path: CHANNEL, mode: "create", content: { text }, idempotency_key: crypto.randomUUID() });
     };
 
     $("signout").onclick = async () => {
       await fetch("/__polynet/auth/logout", { method: "POST" });
-      show({});
       refresh();
     };
 

@@ -5,7 +5,8 @@ one edge Worker in front of every community front end.
 
 ```text
 <community address> → dispatch Worker (Polynet edge)
-                         ├─ /__polynet/auth/* → "Sign in with Polynet" (start, callback, session, logout)
+                         ├─ /__polynet/auth/* → "Sign in with Polynet" (start, callback, session, logout);
+                         │                      session also returns the live URL and watch-only token
                          ├─ /__polynet/api    → Polynet backend /runtime/app (server-side, edge secret + session cookie)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
@@ -43,4 +44,4 @@ hostname map.
 
 - Cloudflare resources (account, Workers for Platforms plan, namespace, KV, a
   test hostname): needs approval and a paid plan.
-- Live updates through the door, then the CLI.
+- Live updates beyond channels (presence, typing, events, resources), then the CLI.

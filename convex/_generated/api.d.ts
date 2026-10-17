@@ -97,6 +97,7 @@ import type * as communityJoinRequestCore from "../communityJoinRequestCore.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLegacyAttachmentUploads from "../communityLegacyAttachmentUploads.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
+import type * as communityLive from "../communityLive.js";
 import type * as communityMaintenance from "../communityMaintenance.js";
 import type * as communityMemberServiceChannelCore from "../communityMemberServiceChannelCore.js";
 import type * as communityMemberWorkflowJoinCore from "../communityMemberWorkflowJoinCore.js";
@@ -344,6 +345,7 @@ declare const fullApi: ApiFromModules<{
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLegacyAttachmentUploads: typeof communityLegacyAttachmentUploads;
   communityLifecycle: typeof communityLifecycle;
+  communityLive: typeof communityLive;
   communityMaintenance: typeof communityMaintenance;
   communityMemberServiceChannelCore: typeof communityMemberServiceChannelCore;
   communityMemberWorkflowJoinCore: typeof communityMemberWorkflowJoinCore;
