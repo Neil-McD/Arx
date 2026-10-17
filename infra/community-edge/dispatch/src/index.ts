@@ -14,6 +14,8 @@ export interface Env {
   POLYNET_API_URL: string;
   POLYNET_AUTH_URL: string;
   POLYNET_EDGE_SECRET: string;
+  // Convex client URL that front ends subscribe to for live updates.
+  POLYNET_LIVE_URL: string;
   DISPATCHER?: { get(scriptName: string): Fetcher };
   ROUTES?: { get(key: string): Promise<string | null> };
   DEV_ROUTES_JSON?: string;
@@ -61,6 +63,14 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
+// Watch-only token for live updates, derived from the session token exactly as
+// the backend derives it (shared/communityAppSession.ts). It can only ask
+// whether a channel the member can read has changed.
+export async function deriveWatchToken(sessionToken: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`polynet-watch:${sessionToken}`));
+  return `pnw_${base64Url(new Uint8Array(digest))}`;
+}
+
 // The front end's own Worker never receives Polynet's cookies.
 export function withoutPolynetCookies(request: Request): Request {
   const kept = (request.headers.get("cookie") ?? "")
@@ -79,11 +89,14 @@ function cookie(url: URL, name: string, value: string, maxAgeSeconds: number, pa
   return `${name}=${value}; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}${secure}`;
 }
 
-function randomState(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+function base64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomState(): string {
+  return base64Url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 // Only same-site paths; never a scheme-relative or absolute URL.
@@ -145,7 +158,9 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
   }
 
   if (action === "session" && request.method === "GET") {
-    return json(200, { signed_in: TOKEN_PATTERN.test(String(readCookie(request, SESSION_COOKIE) ?? "")) });
+    const token = String(readCookie(request, SESSION_COOKIE) ?? "");
+    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false });
+    return json(200, { signed_in: true, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
   }
 
   if (action === "logout" && request.method === "POST") {

@@ -8,6 +8,7 @@
   "vars": {
     "POLYNET_API_URL": "https://quick-porcupine-949.convex.site",
     "POLYNET_AUTH_URL": "https://polynet-staging.vercel.app",
+    "POLYNET_LIVE_URL": "https://quick-porcupine-949.convex.cloud",
     // Host -> { script, community }. Production uses the ROUTES KV namespace instead.
     "DEV_ROUTES_JSON": "{\"hello.localhost\":{\"script\":\"hello\",\"community\":\"polynet\"}}"
   },

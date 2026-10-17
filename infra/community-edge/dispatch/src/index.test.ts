@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import edge, { safeReturnPath, type Env } from "./index";
+import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
 const TOKEN = `pna_${"a".repeat(43)}`;
@@ -9,6 +10,7 @@ function env(): Env {
     POLYNET_API_URL: "https://api.example.convex.site",
     POLYNET_AUTH_URL: "https://polynet.example.com",
     POLYNET_EDGE_SECRET: "edge-secret",
+    POLYNET_LIVE_URL: "https://live.example.convex.cloud",
     DEV_ROUTES_JSON: JSON.stringify({ "hello.example.com": { script: "hello", community: "apps-community" } }),
     DEV_USER_WORKER: { fetch: async () => new Response("front end", { status: 200 }) },
   };
@@ -101,6 +103,17 @@ test("the community's own Worker never receives Polynet's cookies", async () => 
   await edge.fetch(request("/", { headers: { cookie: `theme=dark; __polynet_session=${TOKEN}; __polynet_signin=x.%2F` } }), e);
   await edge.fetch(request("/", { headers: { cookie: `__polynet_session=${TOKEN}` } }), e);
   expect(seen).toEqual(["theme=dark", ""]);
+});
+
+test("the session endpoint gives a signed-in page its watch-only token, matching the backend's", async () => {
+  const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
+  expect(anonymous).toEqual({ signed_in: false });
+  const signedIn = await (await edge.fetch(request("/__polynet/auth/session", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env())).json();
+  expect(signedIn).toEqual({
+    signed_in: true,
+    live: { url: "https://live.example.convex.cloud", token: await deriveCommunityAppWatchToken(TOKEN) },
+  });
+  expect(JSON.stringify(signedIn)).not.toContain(TOKEN);
 });
 
 test("logout revokes the session and clears the cookie", async () => {

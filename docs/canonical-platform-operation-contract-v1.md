@@ -211,6 +211,16 @@ outside the edge. Each request runs the canonical executor as principal
 - channel writes are the member's own posts (actor `human`) through the trusted
   composer, with `community_app` canonical receipts; file attachments are refused.
 
+Live updates: the edge's `/__polynet/auth/session` gives a signed-in page the
+Convex URL and a **watch-only token** (`pnw_`), derived from the session token
+(only its hash is stored). The page subscribes to the public query
+`communityLive:watch` with that token and a channel path; it returns only a
+version that changes when anything in the channel changes (posts, replies,
+edits, deletions, reactions, the channel itself), and the page re-reads the
+channel through the door. `watch` re-checks the session, membership and channel
+access on every run, so losing any of them turns the subscription off live. The
+watch token cannot call the API and carries no content.
+
 API rate limits belong at the edge. Retrieval logs record these reads on the
 `external_mcp` surface; a dedicated surface is a follow-up.
 

@@ -108,7 +108,7 @@ export const createCommunityAppHandoffInternal = internalMutation({
 // Step 2, called only by the community edge. A code works once, within its
 // lifetime, for the domain and state it was issued to.
 export const consumeCommunityAppHandoffInternal = internalMutation({
-  args: { codeHash: v.string(), stateHash: v.string(), origin: v.string(), tokenHash: v.string() },
+  args: { codeHash: v.string(), stateHash: v.string(), origin: v.string(), tokenHash: v.string(), watchTokenHash: v.string() },
   handler: async (ctx, args) => {
     const handoff = await ctx.db
       .query("communityAppHandoffs")
@@ -124,7 +124,8 @@ export const consumeCommunityAppHandoffInternal = internalMutation({
       handoff.stateHash !== args.stateHash ||
       !domain ||
       domain.origin !== normalizeCommunityAppOrigin(args.origin) ||
-      !hashLooksValid(args.tokenHash)
+      !hashLooksValid(args.tokenHash) ||
+      !hashLooksValid(args.watchTokenHash)
     ) {
       return { ok: false as const, reason: "code_invalid" as const };
     }
@@ -138,7 +139,8 @@ export const consumeCommunityAppHandoffInternal = internalMutation({
     for (const row of expired) await ctx.db.delete(row._id);
     const expiresAt = nowMs + COMMUNITY_APP_SESSION_TTL_MS;
     await ctx.db.insert("communityAppSessions", {
-      tokenHash: args.tokenHash, domainId: domain._id, communityId: domain.communityId, userId: handoff.userId, expiresAt,
+      tokenHash: args.tokenHash, watchTokenHash: args.watchTokenHash, domainId: domain._id,
+      communityId: domain.communityId, userId: handoff.userId, expiresAt,
     });
     return { ok: true as const, expiresAt };
   },

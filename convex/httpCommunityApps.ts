@@ -4,6 +4,7 @@ import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import {
   COMMUNITY_APP_MAX_REQUEST_BYTES,
   generateCommunityAppHandoffCode,
+  deriveCommunityAppWatchToken,
   generateCommunityAppSessionToken,
   hashCommunityAppSessionToken,
   isCommunityAppHandoffCode,
@@ -178,6 +179,7 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         stateHash: await hashCommunityAppSessionToken(body.state as string),
         origin,
         tokenHash: await hashCommunityAppSessionToken(token),
+        watchTokenHash: await hashCommunityAppSessionToken(await deriveCommunityAppWatchToken(token)),
       })) as { ok: true; expiresAt: number } | { ok: false; reason: string };
       if (!result.ok) return reply(403, { ok: false, code: result.reason });
       return reply(200, { ok: true, token, expires_at: new Date(result.expiresAt).toISOString() });
