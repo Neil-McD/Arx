@@ -4055,6 +4055,9 @@ export const searchCommunityMemoryInternal = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    // Set only by the canonical executor for a member it already authenticated
+    // without a Convex identity (a community front end).
+    trustedUserId: v.optional(v.id("users")),
     communityId: v.id("communities"),
     surface: communityEvidenceSurfaceValidator,
     query: v.optional(v.string()),
@@ -4075,7 +4078,7 @@ export const searchCommunityMemoryInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     try {
-      const userId = await resolveUserIdForAuthenticatedRequest({
+      const userId = args.trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
         ctx,
         userId: args.userId,
         authSubject: args.authSubject ?? null,
@@ -4100,6 +4103,9 @@ export const readCommunityMemoryInternal = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    // Set only by the canonical executor for a member it already authenticated
+    // without a Convex identity (a community front end).
+    trustedUserId: v.optional(v.id("users")),
     communityId: v.id("communities"),
     surface: communityEvidenceSurfaceValidator,
     nodeId: v.id("communityIntelligenceNodes"),
@@ -4108,7 +4114,7 @@ export const readCommunityMemoryInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     try {
-      const userId = await resolveUserIdForAuthenticatedRequest({
+      const userId = args.trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
         ctx,
         userId: args.userId,
         authSubject: args.authSubject ?? null,
@@ -4370,6 +4376,9 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    // Set only by the canonical executor for a member it already authenticated
+    // without a Convex identity (a community front end).
+    trustedUserId: v.optional(v.id("users")),
     communityId: v.id("communities"),
     surface: communityEvidenceSurfaceValidator,
     nodeId: v.id("communityIntelligenceNodes"),
@@ -4383,7 +4392,7 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     try {
-      const userId = await resolveUserIdForAuthenticatedRequest({
+      const userId = args.trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
         ctx,
         userId: args.userId,
         authSubject: args.authSubject ?? null,

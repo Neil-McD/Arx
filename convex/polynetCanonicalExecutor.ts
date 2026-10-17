@@ -423,6 +423,12 @@ async function failMutatingOperation(args: {
 
 // A community app is the member's own interface, so channel access and
 // attribution treat it as the human. Agents keep their own actor kinds.
+// A community front end has no Convex identity; the executor already
+// authenticated its member, so memory calls take that member as trusted.
+function trustedMemberArgs(args: { principalKind: PolynetPrincipalKind; userId: string }) {
+  return args.principalKind === "community_app" ? { trustedUserId: args.userId } : {};
+}
+
 function channelActorKind(principalKind: PolynetPrincipalKind) {
   return principalKind === "community_app" ? "human" as const : principalKind;
 }
@@ -1004,14 +1010,45 @@ async function executeCanonicalList(args: {
       );
     }
   }
+  // Browsing memory returns the top accepted memories the member can read,
+  // recorded as a retrieval like a search so usefulness tracking still works.
   if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH) {
+    if (args.principalKind === "community_agent") {
+      return { ok: true, value: virtualDirectory({ path: absolutePath, searchable: true, writable: false }) };
+    }
+    const value = (await args.ctx.runMutation(
+      (internal as any).communityIntelligenceDirectory.searchCommunityMemoryInternal,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject,
+        communityId: target.communityId,
+        surface: args.evidenceSurface,
+        limit: 12,
+        forceMemberView: true,
+        ...trustedMemberArgs(args),
+      },
+    )) as Record<string, unknown>;
+    if (value?.ok !== true) {
+      return canonicalError(String(value?.code ?? "community_memory_list_failed"), String(value?.message ?? "Community memory could not be listed."));
+    }
+    const nodes = Array.isArray(value.nodes) ? (value.nodes as Array<Record<string, unknown>>) : [];
     return {
       ok: true,
-      value: virtualDirectory({
-        path: absolutePath,
-        searchable: true,
-        writable: false,
-      }),
+      value: {
+        ...virtualDirectory({
+          path: absolutePath,
+          entries: nodes.flatMap((node) => {
+            const nodeId = requiredString(node.node_id ?? node.id ?? node._id, 180);
+            return nodeId
+              ? [{ ...node, path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${nodeId}.md`), kind: "document", type: "memory" }]
+              : [];
+          }),
+          truncated: value.truncated === true,
+          searchable: true,
+          writable: false,
+        }),
+        retrieval_id: value.retrieval_log_id ?? null,
+      },
     };
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
@@ -1441,6 +1478,7 @@ async function executeCanonicalRead(args: {
           surface: args.evidenceSurface,
           nodeId: memoryMatch[1],
           forceMemberView: true,
+          ...trustedMemberArgs(args),
         },
       )) as Record<string, unknown>;
       if (value?.ok !== true) {
@@ -1685,6 +1723,7 @@ async function executeCanonicalSearch(args: {
           ...common,
           ...(requestedTypes.length ? { types: requestedTypes } : {}),
           forceMemberView: true,
+          ...trustedMemberArgs(args),
         },
       )) as Record<string, unknown>;
       if (value?.ok !== true) {
@@ -2343,6 +2382,7 @@ async function executeCanonicalCall(args: {
         nodeId: String(input.node_id ?? ""),
         resultStatus: candidate,
         ...(input.notes ? { notes: String(input.notes) } : {}),
+        ...trustedMemberArgs(args),
       },
     )) as Record<string, unknown>;
     const refusal = memoryOutcomeAcknowledgmentError(result);
