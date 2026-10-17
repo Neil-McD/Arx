@@ -2641,64 +2641,75 @@ async function requireTargetChannelAccess(args: {
   if (!interactionBelongsToChannel(args.target, channel)) throw new Error("community_channel_unavailable");
 }
 
-export const toggleCommunityInteractionReaction = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    targetType: v.union(v.literal("root"), v.literal("reply")),
-    targetId: v.string(),
-    emoji: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const emoji = String(args.emoji).trim().slice(0, 32);
-    if (!emoji) throw new Error("reaction_emoji_required");
-    const { target, communityId } = await loadCommunityInteractionTarget({
-      ctx,
+// Sets one member's reaction on a post or reply. `on` undefined toggles (the
+// web composer); true or false sets it, so retries are safe (the door).
+async function setCommunityInteractionReactionCore(ctx: any, args: {
+  targetType: "root" | "reply"; targetId: string; emoji: string; on?: boolean;
+}, userId: any) {
+  const emoji = String(args.emoji).trim().slice(0, 32);
+  if (!emoji) throw new Error("reaction_emoji_required");
+  const { target, communityId } = await loadCommunityInteractionTarget({
+    ctx,
+    targetType: args.targetType,
+    targetId: args.targetId,
+  });
+  assertLiveInteractionTarget(target);
+  await requireCommunityChatAccess({ ctx, communityId, userId });
+  await requireTargetChannelAccess({ ctx, target, userId });
+  const actorKey = normalizeIdValue(userId);
+  const nowMs = Date.now();
+  const existing = await ctx.db
+    .query("communityInteractionReactions" as any)
+    .withIndex(
+      args.targetType === "root" ? "by_root_actor_emoji" : "by_reply_actor_emoji",
+      (q: any) =>
+        q
+          .eq(args.targetType === "root" ? "rootId" : "replyId", target._id)
+          .eq("actorKey", actorKey)
+          .eq("emoji", emoji),
+    )
+    .first();
+  const reacted = args.on ?? !existing;
+  if (reacted === Boolean(existing)) {
+    return { reacted, reaction_summary: mapReactionSummary(target.reactionSummary) };
+  }
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  } else {
+    await ctx.db.insert("communityInteractionReactions" as any, {
+      communityId,
       targetType: args.targetType,
-      targetId: args.targetId,
+      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
+      actorType: "human",
+      actorKey,
+      actorUserId: userId,
+      emoji,
+      createdAt: nowMs,
     });
-    assertLiveInteractionTarget(target);
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId, userId });
-    await requireTargetChannelAccess({ ctx, target, userId });
-    const actorKey = normalizeIdValue(userId);
-    const nowMs = Date.now();
-    const existing = await ctx.db
-      .query("communityInteractionReactions" as any)
-      .withIndex(
-        args.targetType === "root" ? "by_root_actor_emoji" : "by_reply_actor_emoji",
-        (q: any) =>
-          q
-            .eq(args.targetType === "root" ? "rootId" : "replyId", target._id)
-            .eq("actorKey", actorKey)
-            .eq("emoji", emoji),
-      )
-      .first();
-    let reacted: boolean;
-    if (existing) {
-      await ctx.db.delete(existing._id);
-      reacted = false;
-    } else {
-      await ctx.db.insert("communityInteractionReactions" as any, {
-        communityId,
-        targetType: args.targetType,
-        ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
-        actorType: "human",
-        actorKey,
-        actorUserId: userId,
-        emoji,
-        createdAt: nowMs,
-      });
-      reacted = true;
-    }
-    const summary = applyReactionSummaryDelta(target.reactionSummary, emoji, reacted ? 1 : -1);
-    await ctx.db.patch(target._id, { reactionSummary: summary, updatedAt: nowMs });
-    return { reacted, reaction_summary: summary };
-  },
+  }
+  const summary = applyReactionSummaryDelta(target.reactionSummary, emoji, reacted ? 1 : -1);
+  await ctx.db.patch(target._id, { reactionSummary: summary, updatedAt: nowMs });
+  return { reacted, reaction_summary: summary };
+}
+
+const reactionTargetArgs = {
+  targetType: v.union(v.literal("root"), v.literal("reply")),
+  targetId: v.string(),
+  emoji: v.string(),
+};
+
+export const toggleCommunityInteractionReaction = mutation({
+  args: { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), ...reactionTargetArgs },
+  handler: async (ctx, { userId, authSubject, ...args }) =>
+    setCommunityInteractionReactionCore(ctx, args, await resolveUserIdForAuthenticatedRequest({
+      ctx, userId, authSubject: authSubject ?? null,
+    })),
+});
+
+// For the door: the member was already authenticated by the canonical executor.
+export const setCommunityInteractionReactionForTrustedUserInternal = internalMutation({
+  args: { ...reactionTargetArgs, on: v.boolean(), trustedUserId: v.id("users") },
+  handler: (ctx, { trustedUserId, ...args }) => setCommunityInteractionReactionCore(ctx, args, trustedUserId),
 });
 
 async function editCommunityInteractionTargetCore(args: {
@@ -2961,88 +2972,106 @@ export async function syncLegacyChatMessageDeleteToInteractionCore(args: {
   return { synced: true };
 }
 
-export const editCommunityInteractionMessage = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    targetType: v.union(v.literal("root"), v.literal("reply")),
-    targetId: v.string(),
-    text: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    if (!text) throw new Error("interaction_content_required");
-    const { target, communityId } = await loadCommunityInteractionTarget({
-      ctx,
-      targetType: args.targetType,
-      targetId: args.targetId,
-    });
-    assertLiveInteractionTarget(target);
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId, userId });
-    await requireTargetChannelAccess({ ctx, target, userId });
-    if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId)) {
-      throw new Error("interaction_edit_forbidden");
-    }
-    if (target.status !== "live") throw new Error("interaction_not_editable");
+async function editCommunityInteractionMessageCore(ctx: any, args: {
+  targetType: "root" | "reply"; targetId: string; text: string;
+}, userId: any) {
+  const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
+  if (!text) throw new Error("interaction_content_required");
+  const { target, communityId } = await loadCommunityInteractionTarget({
+    ctx,
+    targetType: args.targetType,
+    targetId: args.targetId,
+  });
+  assertLiveInteractionTarget(target);
+  await requireCommunityChatAccess({ ctx, communityId, userId });
+  await requireTargetChannelAccess({ ctx, target, userId });
+  if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId)) {
+    throw new Error("interaction_edit_forbidden");
+  }
+  if (target.status !== "live") throw new Error("interaction_not_editable");
 
-    await editCommunityInteractionTargetCore({
-      ctx,
-      targetType: args.targetType,
-      target,
-      communityId,
-      text,
-      actorUserId: userId,
-      nowMs: Date.now(),
-      syncLegacyMessage: true,
-    });
-    return { ok: true };
-  },
+  await editCommunityInteractionTargetCore({
+    ctx,
+    targetType: args.targetType,
+    target,
+    communityId,
+    text,
+    actorUserId: userId,
+    nowMs: Date.now(),
+    syncLegacyMessage: true,
+  });
+  return { ok: true };
+}
+
+const editTargetArgs = {
+  targetType: v.union(v.literal("root"), v.literal("reply")),
+  targetId: v.string(),
+  text: v.string(),
+};
+
+export const editCommunityInteractionMessage = mutation({
+  args: { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), ...editTargetArgs },
+  handler: async (ctx, { userId, authSubject, ...args }) =>
+    editCommunityInteractionMessageCore(ctx, args, await resolveUserIdForAuthenticatedRequest({
+      ctx, userId, authSubject: authSubject ?? null,
+    })),
 });
 
-export const deleteCommunityInteractionMessage = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    targetType: v.union(v.literal("root"), v.literal("reply")),
-    targetId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const { target, communityId } = await loadCommunityInteractionTarget({
-      ctx,
-      targetType: args.targetType,
-      targetId: args.targetId,
-    });
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId, userId });
-    await requireTargetChannelAccess({ ctx, target, userId });
-    const isOwner = normalizeIdValue(target.actorUserId) === normalizeIdValue(userId);
-    if (!isOwner) {
-      let isModerator = false;
+export const editCommunityInteractionMessageForTrustedUserInternal = internalMutation({
+  args: { ...editTargetArgs, trustedUserId: v.id("users") },
+  handler: (ctx, { trustedUserId, ...args }) => editCommunityInteractionMessageCore(ctx, args, trustedUserId),
+});
+
+// Authors delete their own posts; moderators may delete others' only when
+// `allowModerator` (Studio). The door deletes own posts only.
+async function deleteCommunityInteractionMessageCore(ctx: any, args: {
+  targetType: "root" | "reply"; targetId: string;
+}, userId: any, allowModerator: boolean) {
+  const { target, communityId } = await loadCommunityInteractionTarget({
+    ctx,
+    targetType: args.targetType,
+    targetId: args.targetId,
+  });
+  await requireCommunityChatAccess({ ctx, communityId, userId });
+  await requireTargetChannelAccess({ ctx, target, userId });
+  const isOwner = normalizeIdValue(target.actorUserId) === normalizeIdValue(userId);
+  if (!isOwner) {
+    let isModerator = false;
+    if (allowModerator) {
       try {
         await requireCommunityModerator({ ctx, communityId, userId });
         isModerator = true;
       } catch {
         isModerator = false;
       }
-      if (!isModerator) throw new Error("interaction_delete_forbidden");
     }
-    await tombstoneCommunityInteractionTargetCore({
-      ctx,
-      targetType: args.targetType,
-      target,
-      communityId,
-      actorUserId: userId,
-      nowMs: Date.now(),
-    });
-    return { ok: true };
-  },
+    if (!isModerator) throw new Error("interaction_delete_forbidden");
+  }
+  await tombstoneCommunityInteractionTargetCore({
+    ctx,
+    targetType: args.targetType,
+    target,
+    communityId,
+    actorUserId: userId,
+    nowMs: Date.now(),
+  });
+  return { ok: true };
+}
+
+const deleteTargetArgs = {
+  targetType: v.union(v.literal("root"), v.literal("reply")),
+  targetId: v.string(),
+};
+
+export const deleteCommunityInteractionMessage = mutation({
+  args: { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), ...deleteTargetArgs },
+  handler: async (ctx, { userId, authSubject, ...args }) =>
+    deleteCommunityInteractionMessageCore(ctx, args, await resolveUserIdForAuthenticatedRequest({
+      ctx, userId, authSubject: authSubject ?? null,
+    }), true),
+});
+
+export const deleteOwnCommunityInteractionMessageForTrustedUserInternal = internalMutation({
+  args: { ...deleteTargetArgs, trustedUserId: v.id("users") },
+  handler: (ctx, { trustedUserId, ...args }) => deleteCommunityInteractionMessageCore(ctx, args, trustedUserId, false),
 });

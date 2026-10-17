@@ -3,41 +3,76 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hello, community</title>
+  <title>Community</title>
   <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; padding: 24px 16px; max-width: 640px; }
-    button, a.button { padding: 8px 14px; border-radius: 8px; border: 1px solid #8884; cursor: pointer; text-decoration: none; color: inherit; display: inline-block; background: none; font: inherit; }
-    form { display: flex; gap: 8px; margin: 16px 0; }
-    input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #8884; font: inherit; }
-    ol { list-style: none; padding: 0; margin: 0; }
-    li { padding: 10px 0; border-bottom: 1px solid #8882; }
-    .who { font-weight: 600; margin-right: 6px; }
-    .when { opacity: .6; font-size: 12px; }
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; --line: #8883; --soft: #8881; --accent: #7c5cff; }
+    [hidden] { display: none !important; }
+    body { margin: 0; }
+    button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+    a.button { color: inherit; text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+    header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    header h1 { font-size: 16px; margin: 0; flex: 1; }
     .live { font-size: 12px; opacity: .7; }
+    main { display: grid; grid-template-columns: 180px 1fr; min-height: calc(100vh - 53px); }
+    main.thread-open { grid-template-columns: 180px 1fr 340px; }
+    nav { border-right: 1px solid var(--line); padding: 12px 8px; }
+    nav button { display: block; width: 100%; text-align: left; border: 0; margin-bottom: 2px; }
+    nav button.active { background: var(--soft); font-weight: 600; }
+    section { display: flex; flex-direction: column; min-width: 0; }
+    #thread { border-left: 1px solid var(--line); }
+    .pane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+    ol { list-style: none; margin: 0; padding: 8px 16px; flex: 1; overflow-y: auto; }
+    li { display: grid; grid-template-columns: 32px 1fr; gap: 10px; padding: 10px 0; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--soft); object-fit: cover; }
+    .who { font-weight: 600; margin-right: 6px; }
+    .meta { opacity: .6; font-size: 12px; }
+    .text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 2px 0 6px; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .row button { padding: 2px 8px; font-size: 13px; }
+    .row button.mine { border-color: var(--accent); }
+    form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+    input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); font: inherit; background: none; color: inherit; }
+    .signed-out { padding: 48px 16px; text-align: center; }
+    @media (max-width: 720px) {
+      main, main.thread-open { grid-template-columns: 1fr; }
+      nav { border-right: 0; border-bottom: 1px solid var(--line); display: flex; gap: 4px; overflow-x: auto; }
+      nav button { width: auto; white-space: nowrap; }
+      main.thread-open #channel { display: none; }
+      #thread { border-left: 0; }
+    }
   </style>
 </head>
 <body>
-  <h1>Hello, community</h1>
-  <p id="status">Checking your session…</p>
-  <p>
+  <header>
+    <h1 id="title">Community</h1>
+    <span class="live" id="live"></span>
     <a class="button" id="signin" href="/__polynet/auth/start?return=/" hidden>Sign in with Polynet</a>
     <button id="signout" hidden>Sign out</button>
-    <span class="live" id="live"></span>
-  </p>
-  <section id="room" hidden>
-    <h2># general</h2>
-    <form id="composer"><input id="text" placeholder="Say something" autocomplete="off" required /><button>Post</button></form>
-    <ol id="feed"></ol>
-  </section>
+  </header>
+  <p class="signed-out" id="signedOut" hidden>Sign in with your Polynet account to join the conversation.</p>
+  <main id="app" hidden>
+    <nav id="channels"></nav>
+    <section id="channel">
+      <div class="pane-head"><span id="channelName"></span></div>
+      <ol id="feed"></ol>
+      <form id="composer"><input id="text" placeholder="Message" autocomplete="off" required /><button>Send</button></form>
+    </section>
+    <section id="thread" hidden>
+      <div class="pane-head"><span>Thread</span><button id="closeThread">Close</button></div>
+      <ol id="threadFeed"></ol>
+      <form id="replyComposer"><input id="replyText" placeholder="Reply" autocomplete="off" required /><button>Reply</button></form>
+    </section>
+  </main>
   <script src="https://cdn.jsdelivr.net/npm/convex@1.42.1/dist/browser.bundle.js"></script>
   <script>
-    // Everything goes through the door at /__polynet/api, where this domain's
-    // Polynet edge adds the member session from an HttpOnly cookie. For live
-    // updates the page subscribes to a watch-only signal and re-reads on change.
-    const CHANNEL = "/communities/polynet/channels/general/";
+    // A Polynet community front end, built only on the door at /__polynet/api
+    // (list, read, write, call). This domain's Polynet edge adds the member
+    // session from an HttpOnly cookie. Live updates: subscribe to a watch-only
+    // signal for the open channel and re-read through the door when it changes.
+    const COMMUNITY = "/communities/polynet";
+    const REACTIONS = ["👍", "❤️", "😂"];
     const $ = (id) => document.getElementById(id);
-    let client = null;
+    const state = { live: null, client: null, unwatch: null, channel: null, thread: null };
 
     async function door(tool, input) {
       const res = await fetch("/__polynet/api", {
@@ -47,49 +82,136 @@
       });
       if (res.status === 401) { await refresh(); return null; }
       const body = await res.json();
+      if (!body.ok) console.warn(tool, body.code, body.message);
       return body.ok ? body.value : null;
     }
+    const key = () => crypto.randomUUID();
+    const el = (tag, props = {}, ...children) => {
+      const node = Object.assign(document.createElement(tag), props);
+      node.append(...children);
+      return node;
+    };
 
-    function render(entries) {
-      const feed = $("feed");
-      feed.replaceChildren(...entries.slice().reverse().map((entry) => {
-        const li = document.createElement("li");
-        const who = document.createElement("span");
-        who.className = "who";
-        const actor = entry.actor ?? {};
-        who.textContent = actor.display_name ?? actor.name ?? actor.handle ?? actor.kind ?? "member";
-        const when = document.createElement("span");
-        when.className = "when";
-        when.textContent = entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : "";
-        const text = document.createElement("div");
-        text.textContent = entry.snippet ?? entry.title ?? "";
-        li.append(who, when, text);
-        return li;
-      }));
+    function messageItem(entry, { inThread }) {
+      const actor = entry.actor ?? {};
+      const name = actor.display_name ?? actor.handle ?? (actor.type === "community_agent" ? "Community agent" : "Member");
+      const avatar = el("img", { className: "avatar", alt: "", src: actor.avatar_url ?? "" });
+      if (!actor.avatar_url) avatar.removeAttribute("src");
+      const meta = el("span", { className: "meta",
+        textContent: `${new Date(entry.created_at).toLocaleString()}${entry.edited_at ? " · edited" : ""}` });
+      const text = el("div", { className: "text", textContent: entry.snippet ?? "" });
+      const row = el("div", { className: "row" });
+      const counts = new Map((entry.reactions ?? []).map((r) => [r.emoji, r.count]));
+      for (const emoji of new Set([...REACTIONS, ...counts.keys()])) {
+        const mine = (entry.reacted_by_me ?? []).includes(emoji);
+        const count = counts.get(emoji) ?? 0;
+        const button = el("button", { className: mine ? "mine" : "", textContent: count ? `${emoji} ${count}` : emoji });
+        button.onclick = () => door("polynet_call", {
+          target: `${COMMUNITY}/capabilities/community.interaction.react.json`, operation: "community.interaction.react",
+          version: 1, idempotencyKey: key(), input: { ref: entry.ref, emoji, on: !mine },
+        });
+        row.append(button);
+      }
+      if (!inThread && entry.object_type === "root") {
+        const replies = el("button", { textContent: entry.reply_count ? `${entry.reply_count} replies` : "Reply" });
+        replies.onclick = () => openThread(entry);
+        row.append(replies);
+      }
+      if (entry.by_me) {
+        const edit = el("button", { textContent: "Edit" });
+        edit.onclick = async () => {
+          const next = prompt("Edit message", entry.snippet ?? "");
+          if (next && next.trim()) await door("polynet_write", { path: entry.path, mode: "update", content: { text: next.trim() }, idempotency_key: key() });
+        };
+        const remove = el("button", { textContent: "Delete" });
+        remove.onclick = async () => {
+          await door("polynet_write", { path: entry.path, mode: "delete", content: {}, idempotency_key: key() });
+          if (state.thread?.ref === entry.ref) closeThread();
+        };
+        row.append(edit, remove);
+      }
+      return el("li", {}, avatar, el("div", {}, el("span", { className: "who", textContent: name }), meta, text, row));
     }
 
     async function loadFeed() {
-      const value = await door("polynet_list", { path: CHANNEL });
-      if (value) render(value.entries ?? []);
+      if (!state.channel) return;
+      const value = await door("polynet_list", { path: state.channel.path, limit: 50 });
+      if (!value) return;
+      const roots = (value.entries ?? []).filter((entry) => entry.object_type === "root").reverse();
+      $("feed").replaceChildren(...roots.map((entry) => messageItem(entry, { inThread: false })));
+      $("feed").scrollTop = $("feed").scrollHeight;
     }
 
-    function startLive(live) {
-      client?.close();
-      client = new convex.ConvexClient(live.url);
-      client.onUpdate("communityLive:watch", { token: live.token, path: CHANNEL }, (result) => {
-        if (result?.ok) { $("live").textContent = "● live"; loadFeed(); }
+    async function loadThread() {
+      if (!state.thread) return;
+      const value = await door("polynet_list", { path: `${state.channel.path}${state.thread.ref}/` });
+      if (!value) { closeThread(); return; }
+      $("threadFeed").replaceChildren(...(value.entries ?? []).map((entry) => messageItem(entry, { inThread: true })));
+    }
+
+    function openThread(entry) {
+      state.thread = entry;
+      $("thread").hidden = false;
+      $("app").classList.add("thread-open");
+      loadThread();
+    }
+
+    function closeThread() {
+      state.thread = null;
+      $("thread").hidden = true;
+      $("app").classList.remove("thread-open");
+    }
+
+    function watchChannel() {
+      state.unwatch?.();
+      state.unwatch = state.client.onUpdate("communityLive:watch", { token: state.live.token, path: state.channel.path }, (result) => {
+        if (result?.ok) { $("live").textContent = "● live"; loadFeed(); loadThread(); }
         else { $("live").textContent = ""; if (result?.code === "session_invalid") refresh(); }
       });
     }
 
+    function selectChannel(channel) {
+      state.channel = channel;
+      closeThread();
+      $("channelName").textContent = `# ${channel.name}`;
+      $("text").placeholder = `Message #${channel.name}`;
+      for (const button of $("channels").children) button.classList.toggle("active", button.dataset.path === channel.path);
+      $("composer").hidden = channel.capabilities?.canPost === false;
+      watchChannel();
+    }
+
+    async function loadChannels() {
+      const value = await door("polynet_list", { path: `${COMMUNITY}/channels/` });
+      const channels = (value?.entries ?? []).filter((entry) => entry.type === "channel");
+      $("channels").replaceChildren(...channels.map((channel) => {
+        const button = el("button", { textContent: `# ${channel.name}` });
+        button.dataset.path = channel.path;
+        button.onclick = () => selectChannel(channel);
+        return button;
+      }));
+      const current = channels.find((channel) => channel.path === state.channel?.path) ?? channels.find((c) => c.is_general) ?? channels[0];
+      if (current) selectChannel(current);
+    }
+
     async function refresh() {
       const session = await (await fetch("/__polynet/auth/session")).json();
-      $("status").textContent = session.signed_in ? "Signed in with Polynet." : "Not signed in.";
       $("signin").hidden = session.signed_in;
       $("signout").hidden = !session.signed_in;
-      $("room").hidden = !session.signed_in;
-      if (session.signed_in && session.live) startLive(session.live);
-      else { client?.close(); client = null; $("live").textContent = ""; }
+      $("signedOut").hidden = session.signed_in;
+      $("app").hidden = !session.signed_in;
+      if (session.signed_in && session.live) {
+        if (state.live?.token !== session.live.token) {
+          state.client?.close();
+          state.live = session.live;
+          state.client = new convex.ConvexClient(session.live.url);
+        }
+        await loadChannels();
+      } else {
+        state.unwatch?.();
+        state.client?.close();
+        Object.assign(state, { live: null, client: null, unwatch: null, channel: null, thread: null });
+        $("live").textContent = "";
+      }
     }
 
     $("composer").onsubmit = async (event) => {
@@ -97,9 +219,16 @@
       const text = $("text").value.trim();
       if (!text) return;
       $("text").value = "";
-      await door("polynet_write", { path: CHANNEL, mode: "create", content: { text }, idempotency_key: crypto.randomUUID() });
+      await door("polynet_write", { path: state.channel.path, mode: "create", content: { text }, idempotency_key: key() });
     };
-
+    $("replyComposer").onsubmit = async (event) => {
+      event.preventDefault();
+      const text = $("replyText").value.trim();
+      if (!text || !state.thread) return;
+      $("replyText").value = "";
+      await door("polynet_write", { path: state.channel.path, mode: "append", content: { text, root_id: state.thread.root_id }, idempotency_key: key() });
+    };
+    $("closeThread").onclick = closeThread;
     $("signout").onclick = async () => {
       await fetch("/__polynet/auth/logout", { method: "POST" });
       refresh();

@@ -265,7 +265,7 @@ const WRITE_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     path: PATH_SCHEMA,
     mode: {
       type: "string",
-      enum: ["create", "append", "update"],
+      enum: ["create", "append", "update", "delete"],
     },
     content: WRITE_CONTENT_SCHEMA,
     expected_revision: {
@@ -305,6 +305,9 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     expected_activation_sequence: { type: "integer", minimum: 0 },
     review_ref: { type: "string", pattern: "^workflow-approval:v1:[a-f0-9]{64}$", maxLength: 100 },
     form_request_ref: { type: "string", pattern: "^form-request:[A-Za-z0-9]+$", maxLength: 180 },
+    ref: { type: "string", pattern: "^interaction:(root|reply):[A-Za-z0-9_-]+$", maxLength: 180 },
+    emoji: { type: "string", minLength: 1, maxLength: 32 },
+    on: { type: "boolean" },
     form_version_ref: { type: "string", pattern: "^form-version:[A-Za-z0-9]+$", maxLength: 180 },
     answers: { type: "object", additionalProperties: { anyOf: [{ type: "string", maxLength: 10_000 }, { type: "array", items: { type: "string" } }] } },
     request_ref: { type: "string", pattern: "^join-request:[A-Za-z0-9]+$", maxLength: 180 },
@@ -457,14 +460,14 @@ export const POLYNET_CANONICAL_TOOL_DEFINITIONS: Readonly<
     name: "polynet_write",
     title: "Write Polynet",
     description:
-      "Create, append, or update one naturally writable authorized Polynet object through its canonical domain owner.",
+      "Create, append, update or delete one naturally writable authorized Polynet object through its canonical domain owner. Update and delete apply only to your own posts.",
     inputSchema: WRITE_INPUT_SCHEMA,
     outputSchema: WRITE_OUTPUT_SCHEMA,
     annotations: {
       title: "Write Polynet",
       readOnlyHint: false,
       idempotentHint: true,
-      destructiveHint: false,
+      destructiveHint: true,
       openWorldHint: false,
     },
   },

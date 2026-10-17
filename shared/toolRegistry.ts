@@ -831,8 +831,8 @@ export function normalizeToolArguments(
       );
     }
     const mode = normalizeString(args.mode)?.toLowerCase();
-    if (mode !== "create" && mode !== "append" && mode !== "update") {
-      throw new Error("polynet_write mode must be create, append, or update.");
+    if (mode !== "create" && mode !== "append" && mode !== "update" && mode !== "delete") {
+      throw new Error("polynet_write mode must be create, append, update, or delete.");
     }
     if (
       !args.content ||

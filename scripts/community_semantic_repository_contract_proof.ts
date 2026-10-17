@@ -297,6 +297,12 @@ assert.equal(
   }).ok,
   true,
 );
+assert.deepEqual(parseCommunityChannelSemanticPath("/channels/wins/interaction:root:root_123/"), {
+  kind: "thread",
+  slug: "wins",
+  rootId: "root_123",
+});
+assert.equal(parseCommunityChannelSemanticPath("/channels/wins/interaction:reply:reply_123/"), null);
 assert.equal(parseCommunityChannelSemanticPath("/channels/Wins/"), null);
 
 const listed = listCommunitySemanticRoot({ path: "/" });

@@ -311,3 +311,70 @@ test("a front end watches a channel it can read and sees every change, until acc
   await f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, { token });
   expect(await watch(general)).toEqual({ ok: false, code: "session_invalid" });
 });
+
+test("a front end runs a full chat: names, threads, reactions, and edits or deletes only its member's own posts", async () => {
+  const f = await fixture();
+  await f.register();
+  const member = await f.signIn("apps-member");
+  const owner = await f.signIn("apps-owner");
+  const general = `${COMMUNITY}/channels/general/`;
+  const post = async (token: string, content: Record<string, unknown>, key: string) => {
+    const mode = content.root_id ? "append" : "create";
+    const result = await f.call(token, { tool: "polynet_write", input: { path: general, mode, content, idempotency_key: key } });
+    expect(result.body).toMatchObject({ ok: true });
+    return result.body.value.ref as string;
+  };
+  const write = (token: string, ref: string, mode: string, content: Record<string, unknown>, key: string) =>
+    f.call(token, { tool: "polynet_write", input: { path: `${general}${ref}.md`, mode, content, idempotency_key: key } });
+  const react = (token: string, ref: string, on: boolean, key: string) => f.call(token, {
+    tool: "polynet_call",
+    input: { target: `${COMMUNITY}/capabilities/community.interaction.react.json`, operation: "community.interaction.react",
+      version: 1, idempotencyKey: key, input: { ref, emoji: "👍", on } },
+  });
+  const list = async (token: string, path = general) => {
+    const result = await f.call(token, { tool: "polynet_list", input: { path, limit: 50 } });
+    if (!result.body.ok) throw new Error(`list ${path} failed: ${JSON.stringify(result.body)}`);
+    return result.body.value.entries as Array<Record<string, any>>;
+  };
+
+  const memberPost = await post(member, { text: "Member post" }, "m-1");
+  const ownerPost = await post(owner, { text: "Owner post" }, "o-1");
+  const rootId = memberPost.replace("interaction:root:", "");
+  const reply = await post(owner, { text: "Owner reply", root_id: rootId }, "o-2");
+
+  // Names and thread linkage in the channel listing.
+  const listed = await list(member);
+  const memberEntry = listed.find((entry) => entry.ref === memberPost)!;
+  expect(memberEntry.actor).toMatchObject({ display_name: "apps-member", avatar_url: "https://example.com/apps-member.png" });
+  expect(memberEntry).toMatchObject({ object_type: "root", reply_count: 1, reactions: [], reacted_by_me: [], by_me: true, edited_at: null });
+  expect(listed.find((entry) => entry.ref === ownerPost)).toMatchObject({ by_me: false });
+  expect(listed.find((entry) => entry.ref === reply)).toMatchObject({ object_type: "reply", root_id: rootId });
+
+  // Thread listing: the post, then its replies.
+  const thread = await list(member, `${general}${memberPost}/`);
+  expect(thread.map((entry) => entry.ref)).toEqual([memberPost, reply]);
+
+  // Reactions set and unset, retry-safe, with the viewer's own marked.
+  expect((await react(member, ownerPost, true, "r-1")).body).toMatchObject({ ok: true, value: { reacted: true } });
+  expect((await react(member, ownerPost, true, "r-2")).body).toMatchObject({ ok: true, value: { reacted: true } });
+  let ownerEntry = (await list(member)).find((entry) => entry.ref === ownerPost)!;
+  expect(ownerEntry).toMatchObject({ reactions: [{ emoji: "👍", count: 1 }], reacted_by_me: ["👍"] });
+  expect((await list(owner)).find((entry) => entry.ref === ownerPost)).toMatchObject({ reacted_by_me: [] });
+  expect((await react(member, ownerPost, false, "r-3")).body).toMatchObject({ ok: true, value: { reacted: false } });
+  ownerEntry = (await list(member)).find((entry) => entry.ref === ownerPost)!;
+  expect(ownerEntry.reactions).toEqual([]);
+  expect((await react(member, "interaction:root:missing", true, "r-4")).body).toMatchObject({ ok: false });
+
+  // Edit and delete own posts only, even for the community owner.
+  expect((await write(member, memberPost, "update", { text: "Member post, edited" }, "e-1")).body).toMatchObject({ ok: true });
+  expect((await list(member)).find((entry) => entry.ref === memberPost)).toMatchObject({ snippet: "Member post, edited" });
+  expect((await list(member)).find((entry) => entry.ref === memberPost)!.edited_at).toBeTruthy();
+  expect((await write(member, ownerPost, "update", { text: "hijack" }, "e-2")).body)
+    .toMatchObject({ ok: false, message: expect.stringContaining("interaction_edit_forbidden") });
+  expect((await write(owner, memberPost, "delete", {}, "d-1")).body)
+    .toMatchObject({ ok: false, message: expect.stringContaining("interaction_delete_forbidden") });
+  expect((await write(owner, reply, "delete", {}, "d-2")).body).toMatchObject({ ok: true });
+  expect((await list(member, `${general}${memberPost}/`)).map((entry) => entry.ref)).toEqual([memberPost]);
+  expect((await write(member, memberPost, "delete", {}, "d-3")).body).toMatchObject({ ok: true });
+  expect((await list(member)).some((entry) => entry.ref === memberPost)).toBe(false);
+});

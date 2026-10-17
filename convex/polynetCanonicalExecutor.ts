@@ -70,6 +70,7 @@ const ADMISSION_DENY_OPERATION = "community.admission.deny";
 const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
 const APPROVE_MILESTONE_OPERATION = "community.workflow.approve_milestone";
 const FORM_SUBMIT_OPERATION = "community.form.submit";
+const REACT_OPERATION = "community.interaction.react";
 const SELF_FORMS_DIRECTORY = "/members/me/forms/";
 const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 
@@ -176,9 +177,17 @@ function compactCommunityInteractionDirectoryEntry(args: {
     interaction_kind: args.result.interaction_kind,
     channel_slug: args.result.channel_slug,
     visibility_scope: args.result.visibility_scope,
+    object_type: args.result.object_type,
+    root_id: args.result.root_id,
     title: args.result.title,
     snippet: args.result.snippet,
+    snippet_truncated: args.result.snippet_truncated,
     actor: args.result.actor,
+    reactions: args.result.reactions,
+    reacted_by_me: args.result.reacted_by_me,
+    by_me: args.result.by_me,
+    reply_count: args.result.reply_count,
+    edited_at: args.result.edited_at,
     created_at: args.result.created_at,
     updated_at: args.result.updated_at,
   };
@@ -634,10 +643,12 @@ function capabilityDocument(args: {
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
   const isFormCapability = args.operation === FORM_SUBMIT_OPERATION &&
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+  const isReactCapability = args.operation === REACT_OPERATION &&
+    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
   const isWorkflowApprovalCapability = args.operation === APPROVE_MILESTONE_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability) {
+  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -648,7 +659,12 @@ function capabilityDocument(args: {
     authority_lane: isFunnelCapability || isAdmissionCapability || isWorkflowApprovalCapability ? "builder" : "member",
     idempotency_required: true,
   };
-  if (isWorkflowApprovalCapability) {
+  if (isReactCapability) {
+    operationDefinition.input = { required: ["ref", "emoji", "on"],
+      ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
+      emoji: "up to 32 characters", on: "true adds your reaction, false removes it",
+      effects: ["set_own_reaction"], forbidden_effects: ["react_as_someone_else"] };
+  } else if (isWorkflowApprovalCapability) {
     operationDefinition.input = { required: ["membership_ref", "expected_activation_sequence", "review_ref"],
       review_ref: "exact current workflow.approval observation from the private builder dossier",
       effects: ["approve_observed_milestone", "record_canonical_transition"],
@@ -889,6 +905,48 @@ async function executeCanonicalList(args: {
       );
     }
   }
+  if (channelPath?.kind === "thread") {
+    try {
+      const channel = await resolveRepositoryChannel({
+        ctx: args.ctx,
+        userId: args.userId,
+        principalKind: args.principalKind,
+        target,
+        slug: channelPath.slug,
+      });
+      if (!channel) {
+        return canonicalError("semantic_not_found", "Thread path not found or not accessible.");
+      }
+      const value = (await args.ctx.runQuery(
+        (internal as any).communityInteractionEvidence.listCommunityInteractionThreadInternal,
+        {
+          actorKind: channelActorKind(args.principalKind),
+          userId: args.userId,
+          communityId: target.communityId,
+          channelSlug: channel.slug,
+          rootId: channelPath.rootId,
+          ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
+        },
+      )) as { root: Record<string, unknown> | null; replies: Array<Record<string, unknown>>; next_cursor: string | null };
+      const entry = (result: Record<string, unknown>) => compactCommunityInteractionDirectoryEntry({
+        result,
+        path: mountedPath(target.communitySlug, `/channels/${channel.slug}/${String(result.ref)}.md`),
+      });
+      return {
+        ok: true,
+        value: virtualDirectory({
+          path: absolutePath,
+          entries: [...(value.root ? [entry(value.root)] : []), ...value.replies.map(entry)],
+          nextCursor: value.next_cursor,
+          truncated: value.next_cursor !== null,
+          searchable: false,
+          writable: target.authority.canWriteParticipation,
+        }),
+      };
+    } catch {
+      return canonicalError("semantic_not_found", "Thread path not found or not accessible.");
+    }
+  }
   if (target.localPath === POLYNET_EVENTS_DIRECTORY_PATH) {
     try {
       const value = (await args.ctx.runQuery(
@@ -957,7 +1015,7 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
-      ...[FORM_SUBMIT_OPERATION, APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS].filter(operation => capabilityDocument({ target, operation,
+      ...[REACT_OPERATION, FORM_SUBMIT_OPERATION, APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -1737,6 +1795,63 @@ async function executeCanonicalWrite(args: {
   const writableChannelPath = parseCommunityChannelSemanticPath(
     target.localPath,
   );
+  // Edit or delete your own post or reply. Moderating others' posts stays in Studio.
+  if (writableChannelPath?.kind === "document" && (mode === "update" || mode === "delete")) {
+    const ref = parseCommunityInteractionEvidenceRef(writableChannelPath.ref);
+    if (!ref || args.principalKind === "community_agent" || !target.authority.canWriteParticipation) {
+      return canonicalError("community_write_forbidden", "This principal cannot change this post.");
+    }
+    const text = String(content.text ?? content.body ?? "");
+    if (mode === "update" && !text.trim()) {
+      return canonicalError("invalid_tool_args", "Provide content.text to edit a post.");
+    }
+    const channel = await resolveRepositoryChannel({
+      ctx: args.ctx,
+      userId: args.userId,
+      principalKind: args.principalKind,
+      target,
+      slug: writableChannelPath.slug,
+    });
+    if (!channel) {
+      return canonicalError("semantic_not_found", "Channel path not found or not accessible.");
+    }
+    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey });
+    if (!reservation.ok) return reservation.result;
+    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+    try {
+      // The executor already authenticated this member, so both use the trusted variants.
+      const targetArgs = { targetType: ref.objectType, targetId: String(ref.objectId), trustedUserId: args.userId };
+      await args.ctx.runMutation(
+        mode === "update"
+          ? (internal as any).communityInteractions.editCommunityInteractionMessageForTrustedUserInternal
+          : (internal as any).communityInteractions.deleteOwnCommunityInteractionMessageForTrustedUserInternal,
+        mode === "update" ? { ...targetArgs, text } : targetArgs,
+      );
+      const responseValue = {
+        ok: true,
+        path: evidencePath({ communitySlug: target.communitySlug, channelSlug: channel.slug, sourceType: "interaction", ref: writableChannelPath.ref }),
+        ref: writableChannelPath.ref,
+        deduped: false,
+        receipt: canonicalReceipt({ toolName: "polynet_write", principalKind: args.principalKind, target, idempotencyKey, deduped: false }),
+      };
+      return {
+        ok: true,
+        value: await completeMutatingOperation({
+          ...args, target, toolName: "polynet_write", idempotencyKey,
+          requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken, value: responseValue,
+        }),
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "The post could not be changed.";
+      await failMutatingOperation({
+        ...args, target, toolName: "polynet_write", idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+        errorCode: "community_chat_write_failed", errorMessage,
+      });
+      return canonicalError("community_chat_write_failed", errorMessage);
+    }
+  }
+
   if (writableChannelPath?.kind === "directory") {
     if (!target.authority.canWriteParticipation) {
       return canonicalError(
@@ -2031,6 +2146,21 @@ async function executeCanonicalCall(args: {
         value.retryAfterMs ? { retry_after_ms: value.retryAfterMs } : undefined);
       return { ok: true, value };
     } catch { return canonicalError("workflow_approval_unavailable", "Observed milestone not available or approval not authorized."); }
+  }
+  if (operation === REACT_OPERATION) {
+    const ref = parseCommunityInteractionEvidenceRef(rawInput.ref);
+    const emoji = typeof rawInput.emoji === "string" ? rawInput.emoji.trim() : "";
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !ref ||
+        !emoji || emoji.length > 32 || typeof rawInput.on !== "boolean" ||
+        Object.keys(rawInput).some(key => !["ref", "emoji", "on"].includes(key)))
+      return canonicalError("invalid_tool_args", "An interaction ref, an emoji and on (true or false) are required.");
+    try {
+      // Setting (not toggling) makes retries safe without a receipt.
+      const value = await args.ctx.runMutation(
+        (internal as any).communityInteractions.setCommunityInteractionReactionForTrustedUserInternal,
+        { targetType: ref.objectType, targetId: String(ref.objectId), emoji, on: rawInput.on, trustedUserId: args.userId });
+      return { ok: true, value };
+    } catch { return canonicalError("interaction_unavailable", "That post is not available to react to."); }
   }
   if (operation === FORM_SUBMIT_OPERATION) {
     const request = typeof rawInput.form_request_ref === "string" ? /^form-request:([A-Za-z0-9]+)$/.exec(rawInput.form_request_ref) : null;
