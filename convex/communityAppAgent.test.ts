@@ -146,7 +146,10 @@ function fakeModel(reply: string) {
   return calls;
 }
 
-type StreamStep = { text: string } | { tool: string; args: Record<string, unknown>; preamble?: string };
+type StreamStep =
+  | { text: string }
+  | { tool: string; args: Record<string, unknown>; preamble?: string }
+  | { providerError: number };
 
 // Answers each streamed model request the way the Responses API does: output
 // text in token-sized deltas, then the whole response in response.completed.
@@ -156,6 +159,7 @@ function streamingModel(steps: StreamStep[]) {
     if (!String(url).startsWith("https://api.openai.com/v1/responses")) throw new Error(`unexpected fetch ${String(url)}`);
     calls.push(JSON.parse(String(init?.body ?? "{}")));
     const step = steps[Math.min(calls.length - 1, steps.length - 1)];
+    if ("providerError" in step) return Response.json({ error: { message: "upstream failed" } }, { status: step.providerError });
     const text = "text" in step ? step.text : step.preamble ?? "";
     const output = [
       ...(text ? [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }] : []),
@@ -228,6 +232,33 @@ test("a streamed preamble before a tool call does not become the reply", async (
   expect(done.data.full_content).toBe("Two channels are active.");
   const history = await (await f.post(COMMUNITY_APP_AGENT_MESSAGES_PATH, f.asEdge(token), {})).json() as any;
   expect(history.messages.at(-1)).toMatchObject({ role: "assistant", text: "Two channels are active." });
+});
+
+test("a failed turn after a streamed preamble ends with the failure answer, not the preamble", async () => {
+  const f = await fixture();
+  const token = await f.signIn("agent-member");
+  const lookAgain = { tool: "polynet_list", args: { path: "/communities/agent-community/channels/" }, preamble: "Let me look." };
+  // Recoverable stop: the model repeats the same call until the loop blocks it.
+  streamingModel([lookAgain]);
+  const stopped = sseEvents((await turn(f, token, "Which channels are active?", "preamble-stop")).stream);
+  const done = stopped.find((entry) => entry.event === "done");
+  if (!done) throw new Error(`turn did not finish: ${JSON.stringify(stopped.slice(-3))}`);
+  expect(stopped.filter((entry) => entry.event === "delta").map((entry) => entry.data.delta).join("")).toContain("Let me look.");
+  expect(done.data.full_content).toBeTruthy();
+  expect(done.data.full_content).not.toContain("Let me look.");
+  let history = await (await f.post(COMMUNITY_APP_AGENT_MESSAGES_PATH, f.asEdge(token), {})).json() as any;
+  expect(history.messages.at(-1)).toMatchObject({ role: "assistant", text: done.data.full_content });
+
+  // Provider failure on the model call after the tool.
+  vi.restoreAllMocks();
+  streamingModel([lookAgain, { providerError: 500 }]);
+  const failed = sseEvents((await turn(f, token, "Try again", "preamble-error")).stream);
+  expect(failed.some((entry) => entry.event === "error")).toBe(true);
+  history = await (await f.post(COMMUNITY_APP_AGENT_MESSAGES_PATH, f.asEdge(token), {})).json() as any;
+  const last = history.messages.at(-1);
+  expect(last.role).toBe("assistant");
+  expect(last.text).toBeTruthy();
+  expect(last.text).not.toContain("Let me look.");
 });
 
 test("a member talks to their personal agent from a community front end", async () => {

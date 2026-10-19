@@ -1336,7 +1336,8 @@ export async function handleRuntimeTurnRequest(args: {
           }
           const message = error instanceof Error ? error.message : String(error);
           await persistPartialAssistantMessageBestEffort({
-            content: streamedContent,
+            // Streamed text is at most a preamble; a failed turn gets the runtime-stop answer.
+            content: "",
             status: "error",
             reason: "agent_loop_unhandled",
             errorCode: "agent_loop_unhandled",
@@ -1408,7 +1409,8 @@ export async function handleRuntimeTurnRequest(args: {
           );
           const partialAssistant =
             await persistPartialAssistantMessageBestEffort({
-              content: streamedContent,
+              // Streamed text is at most a preamble; a failed turn gets the runtime-stop answer.
+              content: "",
               status: "error",
               reason: loopResult.code,
               errorCode: loopResult.code,
@@ -1438,7 +1440,7 @@ export async function handleRuntimeTurnRequest(args: {
               return;
             }
             const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
-              partialContent: streamedContent,
+              partialContent: "",
               status: "error",
               reason: loopResult.code,
               errorCode: loopResult.code,
@@ -1467,7 +1469,8 @@ export async function handleRuntimeTurnRequest(args: {
                 model_id: requestedModelId,
                 inference_source: streamedInferenceSource,
                 inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
-                full_content: streamedContent || finalContent,
+                // Replaces any streamed preamble on the client, as on success.
+                full_content: finalContent,
                 prompt_tokens: streamedPromptTokens,
                 completion_tokens: streamedCompletionTokens,
                 user_message_id: userMessageId,
