@@ -483,3 +483,20 @@ test("a front end browses, searches and reads community memory, never admin-only
   // It reaches the memory rules (no identity error); outcomes count only for memory an agent used.
   expect(outcome.body).toMatchObject({ ok: false, code: "community_intelligence_retrieval_node_not_injected" });
 });
+
+test("a front-end post that mentions the community agent asks it to reply", async () => {
+  const f = await fixture();
+  await f.register();
+  const token = await f.signIn();
+  // The community folder names the community; its agent is mentioned as @<name>.
+  const root = await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/` } });
+  expect(root.body.value.community).toEqual({ slug: "apps-community", name: "apps-community" });
+  const posted = await f.call(token, { tool: "polynet_write", input: {
+    path: `${COMMUNITY}/channels/general/`, mode: "create", idempotency_key: "ask-agent",
+    content: { text: `@${root.body.value.community.name} what's on this week?`, mentions: [{ agentKey: "community_agent" }] },
+  } });
+  expect(posted.body).toMatchObject({ ok: true });
+  const requests = await f.t.run((c) => c.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ communityId: f.ids.communityId });
+});

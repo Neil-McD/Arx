@@ -1178,3 +1178,13 @@ export const readCommunitySemanticRepositoryInternal = internalAction({
     }
   },
 });
+
+// The community's display identity for the root of its repository. The caller
+// already passed the community guard chain for this community.
+export const getCommunityRepositoryIdentityInternal = internalQuery({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    return community ? { slug: String(community.slug ?? ""), name: String(community.name ?? "") } : null;
+  },
+});

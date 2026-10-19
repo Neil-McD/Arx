@@ -85,7 +85,7 @@
       <div class="pane-head"><span id="channelName"></span></div>
       <ol id="feed"></ol>
       <div class="pending" id="pending"></div>
-      <form id="composer"><label class="attach" title="Attach files">📎<input id="files" type="file" multiple /></label><input id="text" placeholder="Message" autocomplete="off" /><button>Send</button></form>
+      <form id="composer"><label class="attach" title="Attach files">📎<input id="files" type="file" multiple /></label><button type="button" id="askAgent" title="Ask the community agent">✨</button><input id="text" placeholder="Message" autocomplete="off" /><button>Send</button></form>
     </section>
     <section id="page" hidden>
       <div class="pane-head"><span id="pageTitle"></span><button id="pageBack" hidden>Back</button></div>
@@ -107,7 +107,7 @@
     const COMMUNITY = "/communities/polynet";
     const REACTIONS = ["👍", "❤️", "😂"];
     const $ = (id) => document.getElementById(id);
-    const state = { live: null, client: null, unwatch: null, channel: null, thread: null, back: null };
+    const state = { live: null, client: null, unwatch: null, channel: null, thread: null, back: null, community: null };
 
     async function door(tool, input) {
       const res = await fetch("/__polynet/api", {
@@ -227,6 +227,21 @@
       watchChannel();
     }
 
+    async function loadCommunity() {
+      const value = await door("polynet_list", { path: `${COMMUNITY}/` });
+      state.community = value?.community ?? null;
+      const name = state.community?.name ?? "Community";
+      $("title").textContent = name;
+      document.title = name;
+      $("askAgent").title = `Ask the ${name} agent`;
+    }
+    $("askAgent").onclick = () => {
+      if (!state.community?.name) return;
+      const token = `@${state.community.name} `;
+      if (!$("text").value.includes(token.trim())) $("text").value = token + $("text").value;
+      $("text").focus();
+    };
+
     async function loadChannels() {
       const value = await door("polynet_list", { path: `${COMMUNITY}/channels/` });
       const channels = (value?.entries ?? []).filter((entry) => entry.type === "channel");
@@ -328,6 +343,7 @@
           state.live = session.live;
           state.client = new convex.ConvexClient(session.live.url);
         }
+        await loadCommunity();
         await loadChannels();
       } else {
         state.unwatch?.();
@@ -370,9 +386,15 @@
       if (!attachments) return;
       input.value = "";
       fileInput.value = "";
+      // Mentioning @<community name> asks the community agent; it replies in the channel.
+      const agentToken = state.community?.name ? `@${state.community.name}` : null;
+      const asksAgent = Boolean(agentToken && text.toLowerCase().includes(agentToken.toLowerCase()));
       await door("polynet_write", {
         path: state.channel.path, mode, idempotency_key: idempotencyKey,
-        content: { text, ...(rootId ? { root_id: rootId } : {}), ...(attachments.length ? { attachments } : {}) },
+        content: {
+          text, ...(rootId ? { root_id: rootId } : {}), ...(attachments.length ? { attachments } : {}),
+          ...(asksAgent ? { mentions: [{ agentKey: "community_agent" }] } : {}),
+        },
       });
     }
 
