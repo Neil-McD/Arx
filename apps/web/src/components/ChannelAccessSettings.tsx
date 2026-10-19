@@ -64,7 +64,7 @@ export function ChannelAccessSettings({ channelId }: { channelId: string }) {
         <option value="all_members">All community members</option><option value="restricted">Invite-only</option>
       </select>
     </label>
-    <p>Community owners and admins always have access. Personal agents follow their member’s access. Access changes save immediately.</p>
+    <p>Community owners and admins always have access. The community agent follows the member’s access in their private conversations. Access changes save immediately.</p>
     {pendingMode ? <div className="community-channel-access-confirm" role="status">
       <p>{pendingMode === "all_members" ? "All community members will be able to read this channel’s history and files."
         : "Only invited members and owners/admins will have future access. Previously shared messages, file links and copies cannot be recalled."}</p>

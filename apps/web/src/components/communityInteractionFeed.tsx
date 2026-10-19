@@ -43,14 +43,16 @@ export function actorLabel(
     actor_type: string;
     actor_user_id: string | null;
     actor_agent_key: string | null;
+    on_behalf_of_user_id?: string | null;
   },
   displayName: (userId: string) => string,
   communityAgentDisplayName?: string,
 ): string {
-  if (actor.actor_user_id) return displayName(actor.actor_user_id);
   if (actor.actor_type === "community_agent") {
-    return String(communityAgentDisplayName ?? "").trim() || "Community agent";
+    const agent = String(communityAgentDisplayName ?? "").trim() || "Community agent";
+    return actor.on_behalf_of_user_id ? `${agent} · for ${displayName(actor.on_behalf_of_user_id)}` : agent;
   }
+  if (actor.actor_user_id) return displayName(actor.actor_user_id);
   if (actor.actor_agent_key) return actor.actor_agent_key.replace(/_/g, " ");
   if (actor.actor_type === "personal_agent") return "Personal agent";
   if (actor.actor_type === "system") return "System";

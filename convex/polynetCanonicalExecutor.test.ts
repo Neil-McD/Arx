@@ -2048,8 +2048,11 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
   ).toBe(true);
   expect(rows.roots).toEqual(
     expect.arrayContaining([
+      // One agent per community: a write made for a member is the community
+      // agent's post attributed to that member; an @mention reply has no member.
       expect.objectContaining({
-        actorType: "personal_agent",
+        actorType: "community_agent",
+        actorAgentKey: "community_agent",
         actorUserId: fixture.memberId,
       }),
       expect.objectContaining({

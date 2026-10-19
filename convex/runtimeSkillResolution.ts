@@ -111,17 +111,6 @@ async function getSkillPackageById(
   return ((await ctx.db.get(skillPackageId)) as SkillPackageRow | null) ?? null;
 }
 
-async function listUserPlatformSkillInstallRows(
-  ctx: any,
-  userId: any,
-): Promise<UserPlatformSkillInstallRow[]> {
-  const rows = (await ctx.db
-    .query("userPlatformSkillInstalls")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect()) as UserPlatformSkillInstallRow[];
-  return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-}
-
 async function listCommunitySkillAttachmentRows(
   ctx: any,
   communityId: any,
@@ -269,61 +258,6 @@ async function resolveRuntimePlatformSkillScope(args: {
         : []),
     ],
     autoSelectedSkills,
-  };
-}
-
-async function resolveRuntimeUserPlatformSkillScope(args: {
-  ctx: any;
-  userId: any;
-  includeSelectedData: boolean;
-}): Promise<{
-  inventory: RuntimeUserPlatformSkillInventory[];
-  selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
-    "personal",
-    RuntimeSelectedUserPlatformSkill
-  >[];
-}> {
-  const installs = await listUserPlatformSkillInstallRows(args.ctx, args.userId);
-  const inventory: RuntimeUserPlatformSkillInventory[] = [];
-  const selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
-    "personal",
-    RuntimeSelectedUserPlatformSkill
-  >[] = [];
-  for (const install of installs) {
-    if (!install.enabled) continue;
-    const skill = await getSkillPackageById(args.ctx, install.skillPackageId);
-    const mentionToken = skill ? readSkillMentionToken(skill) : "";
-    if (!skill || !mentionToken) continue;
-    const inventoryItem: RuntimeUserPlatformSkillInventory = {
-      user_platform_skill_install_id: install._id,
-      skill_package_id: skill._id,
-      catalog_skill_id: skill.catalogSkillId ?? null,
-      name: skill.name,
-      mention_token: mentionToken,
-      description: skill.description ?? null,
-    };
-    inventory.push(inventoryItem);
-    if (!args.includeSelectedData) continue;
-    const activeInstructions = await getSkillPackageActiveInstructionsMd(
-      args.ctx,
-      skill,
-    );
-    if (!activeInstructions.instructionsMd) continue;
-    selectedCandidates.push({
-      scope: "personal",
-      mentionToken,
-      value: {
-        ...inventoryItem,
-        skill_revision_id: activeInstructions.revisionId,
-        instructions_md: activeInstructions.instructionsMd,
-        activation_route: "explicit_mention",
-        activation_reason: `user explicitly mentioned $${mentionToken}`,
-      },
-    });
-  }
-  return {
-    inventory,
-    selectedCandidates,
   };
 }
 
@@ -579,11 +513,11 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       communityId: args.communityId ?? null,
       userId,
     });
-    let userPlatformSkillScope = await resolveRuntimeUserPlatformSkillScope({
-      ctx,
-      userId,
-      includeSelectedData,
-    });
+    // One agent per community: members' personal skills no longer shape it.
+    let userPlatformSkillScope: {
+      inventory: RuntimeUserPlatformSkillInventory[];
+      selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<"personal", RuntimeSelectedUserPlatformSkill>[];
+    } = { inventory: [], selectedCandidates: [] };
     const platformSkillScope = await resolveRuntimePlatformSkillScope({
       ctx,
       communityId: args.communityId ?? null,

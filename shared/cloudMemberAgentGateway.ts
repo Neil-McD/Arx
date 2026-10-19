@@ -46,33 +46,3 @@ export async function startNewCloudCommunityAgentConversation(params: { session:
   const { client } = await bootstrapConvexAuthenticatedClient(params.session);
   return normalizeMemberAgentChannel(await client.mutation("threads:startNewCommunityAgentConversation" as any, { communityId: params.initialCommunityId, expectedActiveEpisodeId: params.expectedActiveEpisodeId }) as CloudMemberAgentChannel);
 }
-
-export async function ensureCloudMemberAgentGlobalChannel(params: {
-  session: AuthSessionLike;
-  initialCommunityId: string | null;
-}): Promise<CloudMemberAgentChannel> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const initialCommunityId = String(params.initialCommunityId ?? "").trim() || null;
-  const payload = (await client.mutation("threads:ensureMemberAgentGlobalChannel" as any, {
-    authSubject,
-    ...(initialCommunityId ? { initialCommunityId } : null),
-  })) as CloudMemberAgentChannel | null;
-  return normalizeMemberAgentChannel(payload);
-}
-
-export async function startNewCloudMemberAgentGlobalEpisode(params: {
-  session: AuthSessionLike;
-  initialCommunityId: string | null;
-  expectedActiveEpisodeId: string;
-}): Promise<CloudMemberAgentChannel> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const initialCommunityId = String(params.initialCommunityId ?? "").trim() || null;
-  const expectedActiveEpisodeId = String(params.expectedActiveEpisodeId ?? "").trim();
-  if (!expectedActiveEpisodeId) throw new Error("member_agent_active_episode_required");
-  const payload = (await client.mutation("threads:startNewMemberAgentGlobalEpisode" as any, {
-    authSubject,
-    ...(initialCommunityId ? { initialCommunityId } : null),
-    expectedActiveEpisodeId,
-  })) as CloudMemberAgentChannel | null;
-  return normalizeMemberAgentChannel(payload);
-}
