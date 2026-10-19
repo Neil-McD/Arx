@@ -80,6 +80,24 @@ test("feed returns posts oldest first; errors surface as PolynetError", async ()
   await expect(polynet.feed("missing")).rejects.toMatchObject({ name: "PolynetError", code: "semantic_not_found" });
 });
 
+test("channels follows every page of the listing", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true }], truncated: true, next_cursor: "page2" });
+      return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false } }], truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  expect(await polynet.channels()).toEqual([
+    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true },
+    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false },
+  ]);
+  expect(calls.filter((call) => call.url === "/__polynet/api").map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);
+});
+
 test("a signed-out member gets sign_in_required", async () => {
   stubFetch({
     "/__polynet/auth/session": () => Response.json({ signed_in: false, community: "run-club", join_url: "x" }),

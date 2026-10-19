@@ -74,6 +74,19 @@ const call = function (operation, input) {
   });
 };
 
+// Every entry in a folder, following pages (capped).
+async function listAll(path) {
+  let entries = [];
+  let cursor = null;
+  for (let page = 0; page < 20; page += 1) {
+    const value = await list(path, cursor ? { cursor: cursor } : {});
+    entries = entries.concat(value.entries || []);
+    if (!value.truncated || !value.next_cursor) break;
+    cursor = value.next_cursor;
+  }
+  return entries;
+}
+
 function channelPath(channel) {
   return root() + "channels/" + channel + "/";
 }
@@ -88,8 +101,7 @@ async function community() {
 }
 
 async function channels() {
-  const value = await list(root() + "channels/");
-  return (value.entries || [])
+  return (await listAll(root() + "channels/"))
     .filter(function (entry) { return entry.type === "channel"; })
     .map(function (entry) {
       return {
@@ -169,8 +181,7 @@ async function events(options) {
 
 // Courses (folders) and lessons (documents). Pass an entry's path to open a folder.
 async function resources(path) {
-  const value = await list(path || root() + "resources/");
-  return value.entries || [];
+  return listAll(path || root() + "resources/");
 }
 
 // A document's text (a lesson, a memory). JSON documents give their body text.
