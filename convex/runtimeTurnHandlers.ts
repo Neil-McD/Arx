@@ -1196,6 +1196,19 @@ export async function handleRuntimeTurnRequest(args: {
             },
           });
         };
+        let liveCompletionIndex: number | null = null;
+        const emitLiveAssistantDelta = (delta: string, completionIndex: number) => {
+          if (completionIndex === liveCompletionIndex) {
+            emitDelta(delta);
+            return;
+          }
+          const text = delta.trimStart();
+          if (!text) return;
+          // A later model turn after tool calls: keep its text apart from the preamble.
+          if (streamedContent) emitDelta("\n\n");
+          liveCompletionIndex = completionIndex;
+          emitDelta(text);
+        };
 
         const streamAppendRunEvent = async (event: {
           eventType: string;
@@ -1275,6 +1288,7 @@ export async function handleRuntimeTurnRequest(args: {
               await markCommunityFundingProviderStarted(communityFundingSession);
             },
             observeProviderResult: observeCommunityFundingProviderResult,
+            onAssistantTextDelta: emitLiveAssistantDelta,
           });
           await appendContextIntegrityCheckBestEffortForRun();
         } catch (error) {
@@ -1322,7 +1336,8 @@ export async function handleRuntimeTurnRequest(args: {
           }
           const message = error instanceof Error ? error.message : String(error);
           await persistPartialAssistantMessageBestEffort({
-            content: streamedContent,
+            // Streamed text is at most a preamble; a failed turn gets the runtime-stop answer.
+            content: "",
             status: "error",
             reason: "agent_loop_unhandled",
             errorCode: "agent_loop_unhandled",
@@ -1394,7 +1409,8 @@ export async function handleRuntimeTurnRequest(args: {
           );
           const partialAssistant =
             await persistPartialAssistantMessageBestEffort({
-              content: streamedContent,
+              // Streamed text is at most a preamble; a failed turn gets the runtime-stop answer.
+              content: "",
               status: "error",
               reason: loopResult.code,
               errorCode: loopResult.code,
@@ -1424,7 +1440,7 @@ export async function handleRuntimeTurnRequest(args: {
               return;
             }
             const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
-              partialContent: streamedContent,
+              partialContent: "",
               status: "error",
               reason: loopResult.code,
               errorCode: loopResult.code,
@@ -1453,7 +1469,8 @@ export async function handleRuntimeTurnRequest(args: {
                 model_id: requestedModelId,
                 inference_source: streamedInferenceSource,
                 inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
-                full_content: streamedContent || finalContent,
+                // Replaces any streamed preamble on the client, as on success.
+                full_content: finalContent,
                 prompt_tokens: streamedPromptTokens,
                 completion_tokens: streamedCompletionTokens,
                 user_message_id: userMessageId,
@@ -1502,10 +1519,16 @@ export async function handleRuntimeTurnRequest(args: {
         runtimeTurnStage = "assistant_emit";
         streamedPromptTokens = loopResult.promptTokens;
         streamedCompletionTokens = loopResult.completionTokens;
-        emitBufferedAssistantText({
-          content: loopResult.assistantText,
-          emitDelta,
-        });
+        const finalAssistantText = loopResult.assistantText;
+        if (finalAssistantText.startsWith(streamedContent)) {
+          emitBufferedAssistantText({
+            content: finalAssistantText.slice(streamedContent.length),
+            emitDelta,
+          });
+        }
+        // The reply is the final model turn. Any streamed preamble is replaced:
+        // `done` carries full_content and the stored message is the final text.
+        streamedContent = finalAssistantText;
 
         runtimeTurnStage = "assistant_persist";
         if (persistVisibleAssistantMessage) {

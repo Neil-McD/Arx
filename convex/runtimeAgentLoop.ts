@@ -172,6 +172,9 @@ type RuntimeProviderLifecycleHooks = {
     completionTokens: number | null;
     providerRequestUsage?: FounderProviderRequestUsage;
   }) => void;
+  // Output text as the model writes it. completionIndex tells model turns apart:
+  // text from a turn that ends in tool calls is a preamble, not the final reply.
+  onAssistantTextDelta?: (delta: string, completionIndex: number) => void;
 };
 
 class RuntimeProviderLifecycleHookError extends Error {
@@ -804,6 +807,7 @@ async function runProviderNativeToolCompletion(params: {
   apiKeyOverride?: string | null;
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
+  onTextDelta?: (delta: string) => void;
   onReasoningSummaryTextDelta?: (params: {
     delta: string;
     summaryIndex: number;
@@ -845,6 +849,7 @@ async function runProviderNativeToolCompletion(params: {
       apiKeyOverride: params.inferenceSource === "user_key" ? params.apiKeyOverride : null,
       parallelToolCalls: params.parallelToolCalls,
       toolChoice: params.toolChoice,
+      onTextDelta: params.onTextDelta,
       signal: params.signal,
     });
   }
@@ -1689,6 +1694,8 @@ async function executeRetrievalAgentLoop(
           summaryStreamId: `${params.runId}:tool_completion:${reasoningSummaryStreamCount}`,
           appendRunEvent: params.appendRunEvent,
         });
+        const completionIndex = reasoningSummaryStreamCount;
+        const onAssistantTextDelta = params.onAssistantTextDelta;
         reasoningSummaryStreamCount += 1;
         try {
           completion = await runAbortableWithRuntimeCancellation({
@@ -1722,6 +1729,9 @@ async function executeRetrievalAgentLoop(
                 parallelToolCalls:
                   providerToolChoice === "auto" && parallelReadToolsEnabled,
                 toolChoice: providerToolChoice,
+                onTextDelta: onAssistantTextDelta
+                  ? (delta) => onAssistantTextDelta(delta, completionIndex)
+                  : undefined,
                 requestMetadata: {
                   sessionId: chatgptCodexRequestId,
                   threadId: chatgptCodexRequestId,
