@@ -116,9 +116,10 @@ own rather than avatar_url (which is the member's).
 Each community has one AI agent. Members talk to it privately:
 - agentHistory() -> [{ role: "user" | "assistant", text, created_at }]
 - askAgent(text, { onDelta(textSoFar) }) -> the full reply (markdown).
-  The agent may use tools first, so the reply can take several seconds and
-  then arrive all at once: show a "thinking" state until it resolves.
-  onDelta, if given, runs as text arrives.
+  The reply streams: onDelta runs with the text so far as the agent writes.
+  The agent may use tools first, so the first words can take a few seconds:
+  show a "thinking" state until onDelta first runs. Render the last onDelta
+  (or the resolved reply) as the answer; it replaces anything shown before.
 It is the same conversation the member has on the community's Agent page in
 Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
 

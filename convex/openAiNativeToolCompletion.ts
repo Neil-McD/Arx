@@ -234,6 +234,68 @@ function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiRespon
   };
 }
 
+type OpenAiResponsesStreamResult =
+  | { response: Record<string, any> }
+  | { error: string; failedResponse?: Record<string, any> };
+
+// Reads a Responses API event stream, passing output text on as it arrives, and
+// returns the final response object: the same shape a non-streamed call returns,
+// so parsing and usage accounting stay one path.
+async function readOpenAiResponsesStream(
+  response: Response,
+  onTextDelta: (delta: string) => void,
+): Promise<OpenAiResponsesStreamResult> {
+  const reader = response.body?.getReader();
+  if (!reader) return { error: "OpenAI returned no streaming body." };
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: OpenAiResponsesStreamResult | null = null;
+  const handleEvent = (block: string) => {
+    const data = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (!data || data === "[DONE]") return;
+    let event: Record<string, any>;
+    try {
+      event = JSON.parse(data) as Record<string, any>;
+    } catch {
+      result = { error: "OpenAI returned invalid streaming JSON." };
+      return;
+    }
+    if (event.type === "response.output_text.delta") {
+      if (typeof event.delta !== "string" || !event.delta) return;
+      try {
+        onTextDelta(event.delta);
+      } catch {
+        // The listener going away must never fail a billable provider call.
+      }
+    } else if (event.type === "response.completed" || event.type === "response.incomplete") {
+      if (event.response && typeof event.response === "object") result = { response: event.response };
+    } else if (event.type === "response.failed" || event.type === "error") {
+      const message = event.response?.error?.message ?? event.error?.message ?? event.message;
+      result = {
+        error: typeof message === "string" && message.trim() ? message.trim() : "OpenAI inference failed.",
+        ...(event.response && typeof event.response === "object" ? { failedResponse: event.response } : {}),
+      };
+    }
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let boundary = buffer.search(/\r?\n\r?\n/);
+    while (boundary >= 0) {
+      handleEvent(buffer.slice(0, boundary));
+      buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, "");
+      boundary = buffer.search(/\r?\n\r?\n/);
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) handleEvent(buffer);
+  return result ?? { error: "OpenAI stream ended without a final response." };
+}
+
 export async function runOpenAiNativeToolCompletion(params: {
   modelId: string;
   messages: NativeToolAwareMessage[];
@@ -242,6 +304,8 @@ export async function runOpenAiNativeToolCompletion(params: {
   apiKeyOverride?: string | null;
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
+  // When set, the reply is streamed and its output text is passed on as it arrives.
+  onTextDelta?: (delta: string) => void;
   signal?: AbortSignal;
 }): Promise<
   | NativeToolAwareCompletionSuccess<string>
@@ -279,6 +343,7 @@ export async function runOpenAiNativeToolCompletion(params: {
       tool_choice: params.toolChoice ?? "auto",
       parallel_tool_calls: params.parallelToolCalls === true,
     };
+    if (params.onTextDelta) requestBody.stream = true;
     if (params.modelId === "gpt-6-luna") {
       requestBody.service_tier = "default";
       requestBody.reasoning = { effort: "low" };
@@ -314,12 +379,32 @@ export async function runOpenAiNativeToolCompletion(params: {
     };
   }
 
-  const raw = await response.text();
   let parsed: Record<string, any> | null = null;
-  try {
-    parsed = raw ? (JSON.parse(raw) as Record<string, any>) : null;
-  } catch {
-    parsed = null;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (response.ok && params.onTextDelta && contentType.includes("text/event-stream")) {
+    const streamed = await readOpenAiResponsesStream(response, params.onTextDelta);
+    if ("error" in streamed) {
+      return {
+        ok: false,
+        status: 502,
+        code: "provider_inference_error",
+        message: streamed.error,
+        ...(streamed.failedResponse
+          ? {
+              ...parseTokenUsage(streamed.failedResponse),
+              providerRequestUsage: parseFounderProviderRequestUsage(streamed.failedResponse),
+            }
+          : {}),
+      };
+    }
+    parsed = streamed.response;
+  } else {
+    const raw = await response.text();
+    try {
+      parsed = raw ? (JSON.parse(raw) as Record<string, any>) : null;
+    } catch {
+      parsed = null;
+    }
   }
 
   if (!response.ok) {

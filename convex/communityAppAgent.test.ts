@@ -146,6 +146,90 @@ function fakeModel(reply: string) {
   return calls;
 }
 
+type StreamStep = { text: string } | { tool: string; args: Record<string, unknown>; preamble?: string };
+
+// Answers each streamed model request the way the Responses API does: output
+// text in token-sized deltas, then the whole response in response.completed.
+function streamingModel(steps: StreamStep[]) {
+  const calls: Array<Record<string, any>> = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (!String(url).startsWith("https://api.openai.com/v1/responses")) throw new Error(`unexpected fetch ${String(url)}`);
+    calls.push(JSON.parse(String(init?.body ?? "{}")));
+    const step = steps[Math.min(calls.length - 1, steps.length - 1)];
+    const text = "text" in step ? step.text : step.preamble ?? "";
+    const output = [
+      ...(text ? [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }] : []),
+      ...("tool" in step ? [{ type: "function_call", id: `fc_${calls.length}`, call_id: `call_${calls.length}`, name: step.tool, arguments: JSON.stringify(step.args) }] : []),
+    ];
+    const events = [
+      ...(text.match(/\S+\s*/g) ?? []).map((delta) => ({ type: "response.output_text.delta", delta })),
+      { type: "response.completed", response: {
+        id: `resp_${calls.length}`, model: "gpt-6-luna", service_tier: "default", status: "completed", output,
+        usage: { input_tokens: 40, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 }, output_tokens: 8, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 48 },
+      } },
+    ];
+    return new Response(events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""), {
+      headers: { "content-type": "text/event-stream" },
+    });
+  });
+  return calls;
+}
+
+function sseEvents(stream: string) {
+  return stream.split("\n\n").filter(Boolean).map((block) => ({
+    event: /^event: (.*)$/m.exec(block)?.[1] ?? "",
+    data: JSON.parse(/^data: (.*)$/m.exec(block)?.[1] ?? "{}"),
+  }));
+}
+
+test("a tool-using agent reply streams token by token before done", async () => {
+  const f = await fixture();
+  const token = await f.signIn("agent-member");
+  const reply = "Here is what the community is talking about this week.";
+  const calls = streamingModel([
+    { tool: "polynet_list", args: { path: "/communities/agent-community/channels/" } },
+    { text: reply },
+  ]);
+  const result = await turn(f, token, "What is new?", "streamed-turn");
+  const events = sseEvents(result.stream);
+  const doneAt = events.findIndex((entry) => entry.event === "done");
+  if (doneAt < 0) throw new Error(`turn did not finish: ${result.status} ${result.stream.slice(-1500)}`);
+  expect(calls).toHaveLength(2);
+  expect(calls.every((call) => call.stream === true)).toBe(true);
+  const deltas = events.filter((entry) => entry.event === "delta");
+  expect(deltas.length).toBe(reply.split(" ").length);
+  expect(events.slice(0, doneAt).filter((entry) => entry.event === "delta")).toHaveLength(deltas.length);
+  expect(deltas.map((entry) => entry.data.delta).join("")).toBe(reply);
+  expect(events[doneAt].data.full_content).toBe(reply);
+
+  const history = await (await f.post(COMMUNITY_APP_AGENT_MESSAGES_PATH, f.asEdge(token), {})).json() as any;
+  expect(history.messages.at(-1)).toMatchObject({ role: "assistant", text: reply });
+  // Streamed replies still settle with complete provider usage.
+  const receipts = await f.t.run((c) => c.db.query("communityInferenceReceipts").collect());
+  expect(receipts).toHaveLength(1);
+  expect(receipts[0]).toMatchObject({ status: "settled", promptTokens: 80, completionTokens: 16 });
+  expect(receipts[0].failureCode).toBeUndefined();
+  expect(receipts[0].providerRequests).toHaveLength(2);
+});
+
+test("a streamed preamble before a tool call does not become the reply", async () => {
+  const f = await fixture();
+  const token = await f.signIn("agent-member");
+  streamingModel([
+    { tool: "polynet_list", args: { path: "/communities/agent-community/channels/" }, preamble: "Let me look." },
+    { text: "Two channels are active." },
+  ]);
+  const result = await turn(f, token, "Which channels are active?", "preamble-turn");
+  const events = sseEvents(result.stream);
+  const done = events.find((entry) => entry.event === "done");
+  if (!done) throw new Error(`turn did not finish: ${result.status} ${result.stream.slice(-1500)}`);
+  expect(events.filter((entry) => entry.event === "delta").map((entry) => entry.data.delta).join(""))
+    .toBe("Let me look.\n\nTwo channels are active.");
+  expect(done.data.full_content).toBe("Two channels are active.");
+  const history = await (await f.post(COMMUNITY_APP_AGENT_MESSAGES_PATH, f.asEdge(token), {})).json() as any;
+  expect(history.messages.at(-1)).toMatchObject({ role: "assistant", text: "Two channels are active." });
+});
+
 test("a member talks to their personal agent from a community front end", async () => {
   const f = await fixture();
   const token = await f.signIn("agent-member");
