@@ -342,6 +342,17 @@ export function getToolDefinitions(
   return names.map((name) => getToolDefinition(name));
 }
 
+// polynet_call's input is a union of per-operation inputs (form answers, funnel
+// content, references) that the canonical executor validates exactly. Strict
+// schema mode cannot represent it: OpenAI then returns an empty, incomplete
+// response for every turn that offers the tool. It is sent non-strict; every
+// other tool stays strict.
+const SERVER_VALIDATED_TOOL_NAMES: ReadonlySet<RetrievalToolName> = new Set(["polynet_call"]);
+
+export function isServerValidatedTool(name: RetrievalToolName): boolean {
+  return SERVER_VALIDATED_TOOL_NAMES.has(name);
+}
+
 export function buildOpenAiFunctionTools(
   names: readonly RetrievalToolName[],
 ): OpenAiFunctionTool[] {
@@ -351,7 +362,7 @@ export function buildOpenAiFunctionTools(
       name: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
-      strict: true,
+      strict: !isServerValidatedTool(tool.name),
     },
   }));
 }
@@ -665,7 +676,9 @@ export function buildResponsesApiFunctionTools(
   names: readonly RetrievalToolName[],
 ): ResponsesApiFunctionTool[] {
   return getToolDefinitions(names).map((tool) => {
-    const projection = projectResponsesApiToolSchema(tool.inputSchema);
+    const projection = isServerValidatedTool(tool.name)
+      ? { parameters: sanitizeResponsesApiSchema(tool.inputSchema), strict: false }
+      : projectResponsesApiToolSchema(tool.inputSchema);
     return {
       type: "function",
       name: tool.name,

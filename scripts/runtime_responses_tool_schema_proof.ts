@@ -70,6 +70,12 @@ function proveFixedToolSchemasAreStrictSafe() {
   const tools = buildResponsesApiFunctionTools(RETRIEVAL_TOOL_NAMES);
   assert.equal(tools.length, RETRIEVAL_TOOL_NAMES.length);
   for (const tool of tools) {
+    // polynet_call's per-operation input union is validated by the canonical
+    // executor; strict mode cannot represent it (the model returns nothing).
+    if (tool.name === "polynet_call") {
+      assert.equal(tool.strict, false, "expected polynet_call to be sent non-strict");
+      continue;
+    }
     assert.equal(tool.strict, true, `expected ${tool.name} to stay strict`);
     assertStrictObjectSchema(tool.parameters);
     assertNoLooseObjectSchemas(tool.parameters, tool.name);
