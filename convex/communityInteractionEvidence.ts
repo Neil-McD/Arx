@@ -211,6 +211,18 @@ async function chatPresentationFields(args: {
     .withIndex(args.objectType === "root" ? "by_root" : "by_reply", (q: any) =>
       q.eq(args.objectType === "root" ? "rootId" : "replyId", row._id))
     .take(8);
+  // The whole post, so a chat surface never has to guess from the 500-char snippet.
+  const blocks = await args.ctx.db
+    .query("communityInteractionContentBlocks" as any)
+    .withIndex(args.objectType === "root" ? "by_root_order" : "by_reply_order", (q: any) =>
+      q.eq(args.objectType === "root" ? "rootId" : "replyId", row._id))
+    .take(64);
+  const text = blocks
+    .filter((block: any) => (args.objectType === "root" ? !block.replyId : true) && typeof block.text === "string")
+    .sort((a: any, b: any) => a.blockOrder - b.blockOrder)
+    .map((block: any) => block.text.trim())
+    .filter(Boolean)
+    .join("\n\n") || String(row.contentSummary ?? "");
   return {
     actorProfile: row.actorUserId ? await actorProfile(args.ctx, row.actorUserId, args.presentation) : null,
     fields: {
@@ -219,6 +231,8 @@ async function chatPresentationFields(args: {
         : [],
       reacted_by_me: mine.map((reaction: any) => String(reaction.emoji)),
       by_me: Boolean(viewerKey) && normalizeIdValue(row.actorUserId) === viewerKey,
+      // Members delete anything posted for them but edit only what they wrote themselves.
+      can_edit: Boolean(viewerKey) && normalizeIdValue(row.actorUserId) === viewerKey && row.actorType === "human",
       reply_count: args.objectType === "root" ? Math.max(0, Math.floor(Number(row.replyCount) || 0)) : null,
       // Files are fetched by ref through the caller's own surface (the edge for front ends).
       attachments: files.filter((file: any) => file.status === "uploaded").map((file: any) => ({
@@ -226,7 +240,8 @@ async function chatPresentationFields(args: {
         kind: file.attachmentKind ?? "file", mime: file.mimeType ?? "application/octet-stream", size: Number(file.sizeBytes) || 0,
       })),
       edited_at: row.editedAt ? toIsoString(row.editedAt) : null,
-      snippet_truncated: String(row.contentSummary ?? "").length > EVIDENCE_SNIPPET_CHARS,
+      text,
+      snippet_truncated: text.replace(/\s+/g, " ").trim().length > EVIDENCE_SNIPPET_CHARS,
     },
   };
 }
@@ -286,7 +301,8 @@ async function mapEvidenceSearchItem(args: {
     title: normalizeOptionalText(args.root.title, 180),
     snippet: truncateText(args.row.contentSummary, EVIDENCE_SNIPPET_CHARS),
     actor: {
-      type: args.row.actorType,
+      // One agent per community: older posts by the retired personal agent read as the community agent.
+      type: chat && args.row.actorType === "personal_agent" ? "community_agent" : args.row.actorType,
       user_id: actorUserId,
       agent_key: args.row.actorAgentKey ?? null,
       ...(chat?.actorProfile ?? {}),

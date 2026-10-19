@@ -16,49 +16,98 @@ community's own domain, and it talks to Polynet only through the SDK below.
       const session = await polynet.session();
     </script>
 
-Always call polynet.session() first. Paths, sign-in state and live updates come
-from it. Errors throw PolynetError with .code and .status.
+Always await polynet.session() first: every other call builds on it.
 
-## Sign-in and joining
+## Who is here
 
-- session() returns { signed_in, community, join_url, live }.
-- signIn(returnPath?) sends the member to Polynet and back, signed in. If they
-  already use Polynet, it is one quick redirect.
-- signOut().
-- A visitor who is on Polynet but not a member comes back to "/?polynet=join".
-  Show a "Join" link to session.join_url (opens Polynet's join page: free,
-  approval or paid), then a "Sign in" button.
-- Everything except session() and signIn() needs a signed-in member. On
-  code "sign_in_required", show sign-in.
+session() -> {
+  signed_in,         // true when a member is signed in
+  community,         // the community's slug, e.g. "dawn-patrol"
+  community_name,    // its display name, e.g. "Dawn Patrol Run Club" (null when signed out)
+  member,            // { name, handle, avatar_url, role } when signed in, else null
+                     // role: "owner", "admin", "moderator" or "member"
+  join_url,          // Polynet's join page for this community
+  live               // used by watch(); ignore it
+}
+
+- Signed out: show the community's public face, a "Sign in" button that calls
+  polynet.signIn(), and a "Join" link to session.join_url.
+- signIn(returnPath?) sends the visitor to Polynet and back here signed in.
+  For someone already on Polynet it is one quick redirect.
+- Someone on Polynet who is not a member yet comes back to "/?polynet=join",
+  still signed out. Show "Join" (session.join_url opens the join page: free,
+  approval or paid), then "Sign in" again once they have joined.
+- signOut() signs out and refreshes session().
+- polynet.community() -> { name, slug } (the same name as community_name).
+
+## Errors
+
+Failed calls throw PolynetError with .code, .message and .status. Codes:
+- sign_in_required (status 401): the member is signed out or the session
+  expired. Show sign-in. session() then reads signed_in: false.
+- not_ready: you called something before awaiting session().
+- upload_failed, live_unavailable, agent_unavailable, agent_failed: show
+  .message and let the member retry.
+- any other code (for example a permission or rate limit): show .message.
 
 ## Chat
 
-- channels() -> [{ slug, name, path, isGeneral, canPost }]
-- feed(channelSlug) -> posts, oldest first. Each post has: ref, path, snippet,
-  snippet_truncated, actor { type, display_name, handle, avatar_url },
-  reactions [{ emoji, count }], reacted_by_me [emoji], by_me, reply_count,
-  edited_at, attachments [{ ref, name, kind, mime, size }], created_at.
-- thread(channelSlug, post.ref) -> the post, then its replies.
-- post(channelSlug, text, { replyTo: post.ref, files: [File], askAgent: true })
-  posts or replies. askAgent asks the community agent to answer in the channel.
-- edit(post, text) and remove(post) work only on the member's own posts
-  (by_me). Members cannot edit posts the agent made for them.
-- react(ref, emoji, on) sets the member's reaction (on: true adds, false removes).
-- fileUrl(attachment) -> a URL for <img src> (images) or a download link.
-- watch(channelSlug, onChange) -> stop(). onChange runs whenever anything in
-  the channel changes; call feed() again then. Use it instead of polling.
+- channels() -> [{ slug, name, path, isGeneral, canPost }]. Use the one with
+  isGeneral as the default. Hide the composer when canPost is false.
+- feed(channelSlug, { limit }) -> the newest posts (default 50), oldest first
+  (chat order; reverse() for newest-first). Older history isn't pageable yet.
+- thread(channelSlug, post.ref) -> the post, then its replies, oldest first.
 
-Author labels: actor.type "human" is a member. actor.type "community_agent" is
-the community's agent; when it has a display_name it acted for that member:
-show "<Community> agent · for <name>".
+Each post or reply has:
+  ref                 // "interaction:root:<id>" or "interaction:reply:<id>"
+  path
+  text                // the whole text (markdown); render this
+  snippet             // the first 500 characters; snippet_truncated says if cut
+  actor               // { type, display_name, handle, avatar_url }
+  reactions           // [{ emoji, count }]
+  reacted_by_me       // [emoji]
+  by_me               // posted by or for the signed-in member: they may remove() it
+  can_edit            // they may edit() it (their own words only)
+  reply_count         // a number (0 on replies)
+  root_ref            // on replies: the ref of their post
+  attachments         // [{ ref, name, kind, mime, size }], kind "image" | "video" | "file"
+  edited_at           // ISO time or null
+  created_at          // ISO time
+
+Writing:
+- post(channelSlug, text, { replyTo: post.ref, files: [File], askAgent: true })
+  posts, or replies when replyTo is set. Returns { ref, path, ... }.
+  askAgent asks the community agent to answer in the channel; Polynet puts
+  "@<community name> " in front of the text, which is how agent mentions read
+  everywhere.
+- edit(post, text) when post.can_edit; remove(post) when post.by_me.
+- react(ref, emoji, on) adds (on: true) or removes (on: false) the member's
+  reaction on a post or reply. Returns { reacted, reaction_summary }.
+- fileUrl(attachment) -> a URL for <img src>, <video src> or a download link.
+
+Live updates:
+- const stop = await watch(channelSlug, onChange). onChange runs once right
+  away and again whenever anything in the channel changes (posts, replies,
+  edits, deletes, reactions): call feed() or thread() again then. Use it
+  instead of polling. Needs a signed-in member. It loads its live client from
+  cdn.jsdelivr.net, so allow that if you add a Content-Security-Policy.
+
+Authors: actor.type "human" is a member. "community_agent" is the community's
+agent; when it has a display_name it acted for that member. Label it
+"<community_name> agent · for <display_name>", and show an agent mark of your
+own rather than avatar_url (which is the member's).
 
 ## Events, courses, knowledge
 
-- events() -> upcoming events: title, description_md, starts_at (ISO),
-  starts_at_zoned, timezone, location_label, url, recurrence_frequency.
+- events({ limit }) -> upcoming events (default 20). Fields: title,
+  description_md, starts_at and ends_at (ISO), timezone (IANA name),
+  location_type ("online", "physical" or "tbd"), location_label, url (a link the
+  organizer set, or null), recurrence_frequency, recurrence_interval.
+  Show times with new Date(starts_at).toLocaleString(undefined, { timeZone:
+  timezone }). Ignore starts_at_zoned (not readable by Date). No RSVP yet.
 - resources(path?) -> courses (kind "directory") and lessons (kind
   "document"). Pass a course's path to list its lessons.
-- readText(entry) -> a lesson's or memory's text (markdown).
+- readText(entry) -> the text of a lesson, a memory or a post (markdown).
 - knowledge(query?) -> what the community knows: top memories, or a search.
   Each has title, type, grade, applies_when.
 
@@ -66,9 +115,20 @@ show "<Community> agent · for <name>".
 
 Each community has one AI agent. Members talk to it privately:
 - agentHistory() -> [{ role: "user" | "assistant", text, created_at }]
-- askAgent(text, { onDelta(textSoFar) }) -> the full reply, streamed.
+- askAgent(text, { onDelta(textSoFar) }) -> the full reply (markdown).
+  The agent may use tools first, so the reply can take several seconds and
+  then arrive all at once: show a "thinking" state until it resolves.
+  onDelta, if given, runs as text arrives.
 It is the same conversation the member has on the community's Agent page in
 Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
+
+## Rendering
+
+- Escape everything you render from Polynet: set textContent, never
+  innerHTML with Polynet text.
+- Post text, agent replies and descriptions are markdown. Show them as plain
+  text, or convert with a markdown library and sanitize the HTML (for
+  example marked + DOMPurify) before inserting it.
 
 ## Rules
 
@@ -79,9 +139,10 @@ Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
   Polynet Studio; link there instead of rebuilding them.
 - Do not call Polynet servers directly. Use the SDK; everything goes through
   /__polynet/ on this domain.
-- Escape everything you render from Polynet (set textContent, not innerHTML).
 - Lower-level access, if you need it: polynet.door.list/read/search/write/call
-  over the community's paths (see /communities/<slug>/ via door.list).
+  over the community's paths (start with door.list("/communities/" +
+  session.community + "/")). door.read bodies can be JSON even when the path
+  ends in .md: prefer readText().
 
 ## Example: a minimal live feed
 
@@ -96,11 +157,11 @@ Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
         const posts = await polynet.feed(general.slug);
         document.getElementById("feed").replaceChildren(...posts.map((p) => {
           const li = document.createElement("li");
-          li.textContent = (p.actor.display_name ?? "Member") + ": " + p.snippet;
+          li.textContent = (p.actor.display_name ?? "Member") + ": " + p.text;
           return li;
         }));
       }
-      await polynet.watch(general.slug, render);
+      await polynet.watch(general.slug, render); // renders now, then on every change
       document.getElementById("say").onsubmit = async (e) => {
         e.preventDefault();
         await polynet.post(general.slug, document.getElementById("text").value);
