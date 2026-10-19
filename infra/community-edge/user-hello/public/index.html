@@ -134,9 +134,15 @@
 
     function messageItem(entry, { inThread }) {
       const actor = entry.actor ?? {};
-      const name = actor.display_name ?? actor.handle ?? (actor.type === "community_agent" ? "Community agent" : "Member");
-      const avatar = el("img", { className: "avatar", alt: "", src: actor.avatar_url ?? "" });
-      if (!actor.avatar_url) avatar.removeAttribute("src");
+      // The community agent's posts show as the agent, and who it acted for.
+      const agentName = `${state.community?.name ?? "Community"} agent`;
+      const memberName = actor.display_name ?? actor.handle;
+      const name = actor.type === "community_agent"
+        ? (memberName ? `${agentName} · for ${memberName}` : agentName)
+        : memberName ?? "Member";
+      const avatarUrl = actor.type === "community_agent" ? null : actor.avatar_url;
+      const avatar = el("img", { className: "avatar", alt: "", src: avatarUrl ?? "" });
+      if (!avatarUrl) avatar.removeAttribute("src");
       const meta = el("span", { className: "meta",
         textContent: `${new Date(entry.created_at).toLocaleString()}${entry.edited_at ? " · edited" : ""}` });
       const text = el("div", { className: "text", textContent: entry.snippet ?? "" });
@@ -164,7 +170,7 @@
         row.append(replies);
       }
       if (entry.by_me) {
-        const edit = el("button", { textContent: "Edit" });
+        const edit = el("button", { textContent: "Edit", hidden: actor.type !== "human" });
         edit.onclick = async () => {
           const next = prompt("Edit message", entry.snippet ?? "");
           if (next && next.trim()) await door("polynet_write", { path: entry.path, mode: "update", content: { text: next.trim() }, idempotency_key: key() });

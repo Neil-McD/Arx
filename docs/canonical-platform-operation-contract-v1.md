@@ -249,7 +249,7 @@ content checks are Studio's. Listings show files as
 page loads them from `/__polynet/files/<id>`: images inline, everything else
 as a download, only within the session's community.
 
-Personal agent: the edge forwards `POST /__polynet/agent` (`{ text,
+The community agent (Agent page): the edge forwards `POST /__polynet/agent` (`{ text,
 message_key }`) to `/runtime/app/agent` and `GET /__polynet/agent/messages`
 to `/runtime/app/agent_messages`, with the edge secret and session. A turn
 runs Studio's runtime harness on the member's own conversation for this
@@ -259,7 +259,9 @@ server-side, and the community's AI allowance pays as in Studio. Because the
 front end has no Convex identity, the turn runs on a context
 (`convex/communityAppAgentTurn.ts`) that sends exactly the identity-bound calls
 to internal twins carrying the authenticated member; any other identity-bound
-call fails closed. The agent stays in the member lane, even for owners.
+call fails closed. The agent stays in the member lane, even for owners. What it writes for the
+member is the community agent's post, attributed to that member
+(`on_behalf_of_user_id` in Studio's read model).
 
 Live updates: the edge's `/__polynet/auth/session` gives a signed-in page the
 Convex URL and a **watch-only token** (`pnw_`), derived from the session token

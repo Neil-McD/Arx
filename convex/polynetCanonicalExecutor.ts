@@ -1978,7 +1978,7 @@ async function executeCanonicalWrite(args: {
           ? mutationArgs
           : args.principalKind === "community_app"
             ? { ...mutationArgs, trustedUserId: args.userId }
-            : { ...mutationArgs, asPersonalAgent: true },
+            : { ...mutationArgs, asCommunityAgent: true },
       )) as Record<string, unknown>;
       const interaction =
         value.interaction && typeof value.interaction === "object"

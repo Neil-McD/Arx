@@ -19,8 +19,8 @@ This file is the execution contract for agents working in this repository.
 
 ### MVP North Star
 - A founder can create a community, share a funnel link, and onboard members through a gated flow.
-- Members can discover communities, join, chat/post/use voice, access resources, and use their personal agent under an authorized community lens.
-- Communities retain a separate community-owned agent for mentions and autonomous cognition.
+- Members can discover communities, join, chat/post/use voice, access resources, and talk privately with the community's agent on its Agent page.
+- Each community has exactly one agent: Agent-page conversations, @mention replies and autonomous cognition share its identity.
 - External agent harnesses can access authorized community context through the official Polynet MCP.
 
 ---
@@ -88,8 +88,8 @@ This file is the execution contract for agents working in this repository.
 
 These are protected and must not be removed in MVP simplification passes:
 
-- Member-facing personal-agent harness under explicit community context.
-- Separate community-owned agent and cognition runtime.
+- The community agent harness (Agent page and @mentions) under explicit community context.
+- The community cognition runtime (the agent's memory compiler).
 - Community compiler and cognition.
 - Community resources/memory systems.
 - Official Polynet MCP.
@@ -122,8 +122,9 @@ If a cleanup touches any of the above, require explicit human confirmation.
   Member, builder, and autonomous execution permissions remain separate.
   Existing global conversations remain historical data. See
   `docs/community-agent-conversations.md` for scope and acceptance boundaries.
-- Direct community-agent mentions and autonomous cognition use the separate community-owned agent identity.
-- Native member-agent and community-agent interactions are bound to one explicit community context.
+- One agent identity per community: Agent-page conversations, @mention replies and autonomous cognition are the same community agent. What it writes for a member is the agent's post, attributed to that member.
+- Access follows the surface: a private Agent-page conversation uses the requesting member's access (owners may also use builder drafting in Studio, which they approve); public replies use the channel audience's access; community front ends are member lane only.
+- Community-agent interactions are bound to one explicit community context.
 - External MCP requests select community context explicitly and server-validate it.
 - Context changes affect subsequent turns only and never retroactively mutate stored history.
 - Community context must fail closed if membership or entitlement is missing.

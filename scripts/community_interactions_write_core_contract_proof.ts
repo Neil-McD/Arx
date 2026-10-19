@@ -181,8 +181,8 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*resolveAuthorizedCommunityChannel\(\{[\s\S]*actor: channelActor[\s\S]*capability: "canPost"[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
-  "composer root writes should bind the authorized requested channel and retain explicit human or personal-agent attribution",
+  /const actorType = forMember \? "community_agent" : "human"[\s\S]*resolveAuthorizedCommunityChannel\(\{[\s\S]*actor: channelActor[\s\S]*capability: "canPost"[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
+  "composer root writes should bind the authorized requested channel and retain explicit human or community-agent-for-member attribution",
 );
 assert.match(
   createComposerMessage,

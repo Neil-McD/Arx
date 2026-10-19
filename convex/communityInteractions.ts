@@ -272,6 +272,12 @@ function normalizeBeforeNumber(raw: unknown): number | null {
   return Math.max(0, Math.floor(parsed));
 }
 
+function authorFields(actorType: string, userId: string | null) {
+  return actorType === "community_agent"
+    ? { actor_user_id: null, on_behalf_of_user_id: userId }
+    : { actor_user_id: userId, on_behalf_of_user_id: null };
+}
+
 function composerIdempotencyKey(
   idempotencyKey: string,
   kind: "root" | "reply",
@@ -825,7 +831,9 @@ async function mapRootBundle(
       community_id: normalizeIdValue(root.communityId),
       channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
       actor_type: root.actorType,
-      actor_user_id: publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null),
+      // The community agent's post made for a member: the agent is the author,
+      // the member is who it acted for.
+      ...authorFields(root.actorType, publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null)),
       actor_agent_key: root.actorAgentKey ?? null,
       kind: root.kind,
       status: root.status,
@@ -883,7 +891,7 @@ async function mapReplyBundle(
       root_id: normalizeIdValue(reply.rootId),
       seq: Math.max(0, Math.floor(reply.seq ?? 0)),
       actor_type: reply.actorType,
-      actor_user_id: publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null),
+      ...authorFields(reply.actorType, publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null)),
       actor_agent_key: reply.actorAgentKey ?? null,
       target_reply_id: reply.targetReplyId ? normalizeIdValue(reply.targetReplyId) : null,
       status: reply.status,
@@ -1675,6 +1683,9 @@ const communityInteractionComposerArgs = {
       ),
     ),
     attachments: v.optional(v.array(v.union(interactionAttachmentInputValidator, legacyInteractionAttachmentInputValidator))),
+    // The community's agent writing for this member (Agent page tool use).
+    // asPersonalAgent is the older name, still accepted from cached clients.
+    asCommunityAgent: v.optional(v.boolean()),
     asPersonalAgent: v.optional(v.boolean()),
   };
 
@@ -1691,9 +1702,11 @@ async function createCommunityInteractionComposerMessageCore(
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
+    // The agent acts within this member's access, so the channel checks are the member's.
+    const forMember = args.asCommunityAgent === true || args.asPersonalAgent === true;
     const channelActor = await resolveCommunityChannelActor({
       ctx, communityId: args.communityId, userId,
-      kind: args.asPersonalAgent ? "personal_agent" : "human",
+      kind: forMember ? "personal_agent" : "human",
     });
     await requireProfileSetupCompleteForUser(ctx, userId);
 
@@ -1716,10 +1729,10 @@ async function createCommunityInteractionComposerMessageCore(
         ]
       : [];
     const summary = composerContentSummary(contentBlocks, attachments);
-    const actorType = args.asPersonalAgent ? "personal_agent" : "human";
-    const actorAgentKey = args.asPersonalAgent
-      ? `personal_agent:${normalizeIdValue(userId)}`
-      : null;
+    // One agent per community: what it writes for a member is the community
+    // agent's post, attributed to the member it acted for (actorUserId).
+    const actorType = forMember ? "community_agent" : "human";
+    const actorAgentKey = forMember ? CANONICAL_COMMUNITY_AGENT_KEY : null;
     const mentionedUserIds = await resolveMentionedUserIdsForInteractionWrite({
       ctx,
       communityId: args.communityId,
@@ -2985,7 +2998,8 @@ async function editCommunityInteractionMessageCore(ctx: any, args: {
   assertLiveInteractionTarget(target);
   await requireCommunityChatAccess({ ctx, communityId, userId });
   await requireTargetChannelAccess({ ctx, target, userId });
-  if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId)) {
+  // The community agent's words stay its own, even in a post made for you.
+  if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId) || target.actorType !== "human") {
     throw new Error("interaction_edit_forbidden");
   }
   if (target.status !== "live") throw new Error("interaction_not_editable");

@@ -181,7 +181,7 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
   if (issue.reason === "provider_connection_required") {
     return "Community AI is unavailable for this turn. Ask the community owner to check Builder billing.";
   }
-  return issue.message?.trim() || "Your agent could not complete this turn. Try again.";
+  return issue.message?.trim() || "The community agent could not complete this turn. Try again.";
 }
 
 export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMemberAgentDockProps>(
@@ -453,7 +453,7 @@ function WebMemberAgentDock(props, ref) {
       targetThreadKey === threadKey && activeThreadContextRef.current
         ? {
             id: targetThreadKey,
-            title: "Your agent",
+            title: "Community agent",
             model_id: DEFAULT_ACTIVE_MODEL_ID,
             community_id: activeThreadContextRef.current.communityId,
             context_version: activeThreadContextRef.current.contextVersion,
@@ -581,7 +581,7 @@ function WebMemberAgentDock(props, ref) {
       } catch (error) {
         if (cancelled || !isCurrentScope(scope)) return;
         console.warn("member_agent_dock_open_failed", error);
-        setLocalError("Your agent could not open.");
+        setLocalError("The community agent could not open.");
       } finally {
         if (!cancelled && isCurrentScope(scope)) setIsPreparing(false);
       }
@@ -823,7 +823,7 @@ function WebMemberAgentDock(props, ref) {
           console.warn("member_agent_dock_new_chat_reconcile_failed", reconcileError);
         }
       }
-      setLocalError("Your agent could not start a new chat. Try again.");
+      setLocalError("The community agent could not start a new chat. Try again.");
     } finally {
       if (isCurrentScope(scope)) setIsStartingNewChat(false);
     }

@@ -792,13 +792,13 @@ assert.doesNotMatch(
 );
 assert.match(
   interactions,
-  /mapRootBundle[\s\S]*resolvePublicUserId\(ctx, root\.actorUserId[\s\S]*actor_user_id: publicActorUserId/,
-  "root read bundles should expose public actor user ids for UI profile hydration",
+  /mapRootBundle[\s\S]*resolvePublicUserId\(ctx, root\.actorUserId[\s\S]*authorFields\(root\.actorType, publicActorUserId/,
+  "root read bundles should expose public actor user ids (or the member a community agent post was for) for UI profile hydration",
 );
 assert.match(
   interactions,
-  /mapReplyBundle[\s\S]*resolvePublicUserId\(ctx, reply\.actorUserId[\s\S]*actor_user_id: publicActorUserId/,
-  "reply read bundles should expose public actor user ids for UI profile hydration",
+  /mapReplyBundle[\s\S]*resolvePublicUserId\(ctx, reply\.actorUserId[\s\S]*authorFields\(reply\.actorType, publicActorUserId/,
+  "reply read bundles should expose public actor user ids (or the member a community agent post was for) for UI profile hydration",
 );
 
 assert.match(
