@@ -185,10 +185,13 @@ function compactCommunityInteractionDirectoryEntry(args: {
     title: args.result.title,
     snippet: args.result.snippet,
     snippet_truncated: args.result.snippet_truncated,
+    // The whole post only when the snippet was cut, so listings stay small.
+    ...(args.result.snippet_truncated === true && typeof args.result.text === "string" ? { text: args.result.text } : {}),
     actor: args.result.actor,
     reactions: args.result.reactions,
     reacted_by_me: args.result.reacted_by_me,
     by_me: args.result.by_me,
+    can_edit: args.result.can_edit,
     reply_count: args.result.reply_count,
     attachments: args.result.attachments,
     edited_at: args.result.edited_at,
@@ -1223,17 +1226,21 @@ async function executeCanonicalList(args: {
         },
       ]
     : [];
-  const community = (await args.ctx.runQuery(
+  const memberViewer = args.principalKind !== "community_agent" && Boolean(args.userId);
+  const identity = (await args.ctx.runQuery(
     (internal as any).communityCapabilityContext.getCommunityRepositoryIdentityInternal,
-    { communityId: target.communityId },
-  )) as { slug: string; name: string } | null;
+    { communityId: target.communityId, ...(memberViewer ? { viewerUserId: args.userId } : {}) },
+  )) as { slug: string; name: string; viewer?: Record<string, unknown> } | null;
+  const { viewer, ...community } = identity ?? ({} as { slug: string; name: string; viewer?: Record<string, unknown> });
   return {
     ok: true,
     value: {
       ...value,
       entries: [...rawEntries, ...builderEntry],
       // Who this is: a front end's title, and the community agent's @mention token.
-      ...(community ? { community } : {}),
+      ...(identity ? { community } : {}),
+      // Who is asking: a front end's "signed in as".
+      ...(viewer ? { viewer: { ...viewer, role: target.authority.relation } } : {}),
       authority: {
         lane: target.authority.lane,
         relation: target.authority.relation,

@@ -95,7 +95,50 @@ test("channels follows every page of the listing", async () => {
     { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true },
     { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false },
   ]);
-  expect(calls.filter((call) => call.url === "/__polynet/api").map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);
+  const channelCalls = calls.filter((call) => call.body?.input?.path === "/communities/run-club/channels/");
+  expect(channelCalls.map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);
+});
+
+test("session names the community and the signed-in member", async () => {
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": () => ok({ entries: [], community: { slug: "run-club", name: "Dawn Patrol" },
+      viewer: { display_name: "Sam Rivera", handle: "sam", avatar_url: "https://x/sam.png", role: "member" } }),
+  });
+  const polynet = await loadSdk();
+  expect(await polynet.session()).toMatchObject({
+    signed_in: true, community: "run-club", community_name: "Dawn Patrol",
+    member: { name: "Sam Rivera", handle: "sam", avatar_url: "https://x/sam.png", role: "member" },
+  });
+});
+
+test("an expired session reads as signed out", async () => {
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": () => Response.json({ ok: false, code: "sign_in_required" }, { status: 401 }),
+  });
+  const polynet = await loadSdk();
+  expect(await polynet.session()).toMatchObject({ signed_in: false, member: null });
+});
+
+test("posts always carry their whole text; readText reads a post's blocks", async () => {
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (tool === "polynet_read") return ok({ body: JSON.stringify({ content_blocks: [{ text: "First part." }, { text: "Second part." }] }) });
+      if (input.path === "/communities/run-club/") return ok({ entries: [] });
+      return ok({ entries: [
+        { type: "interaction", ref: "interaction:root:1", object_type: "root", snippet: "Short", reply_count: 2, can_edit: true },
+        { type: "interaction", ref: "interaction:root:2", object_type: "root", snippet: "Long…", snippet_truncated: true, text: "Long and whole" },
+      ] });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const posts = await polynet.feed("general");
+  expect(posts.map((post: any) => [post.text, post.reply_count, post.can_edit])).toEqual([["Long and whole", 0, false], ["Short", 2, true]]);
+  expect(await polynet.readText({ path: "/communities/run-club/channels/general/interaction:root:9.md" })).toBe("First part.\n\nSecond part.");
 });
 
 test("a signed-out member gets sign_in_required", async () => {

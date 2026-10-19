@@ -135,7 +135,7 @@
       const avatar = el("img", { className: "avatar", alt: "" });
       if (avatarUrl) avatar.src = avatarUrl;
       const meta = el("span", { className: "meta", textContent: `${new Date(entry.created_at).toLocaleString()}${entry.edited_at ? " · edited" : ""}` });
-      const text = el("div", { className: "text", textContent: entry.snippet ?? "" });
+      const text = el("div", { className: "text", textContent: entry.text ?? "" });
       const files = el("div", { className: "files" }, ...(entry.attachments ?? []).map((file) => file.kind === "image"
         ? el("a", { href: polynet.fileUrl(file), target: "_blank", rel: "noopener" }, el("img", { src: polynet.fileUrl(file), alt: file.name, loading: "lazy" }))
         : el("a", { href: polynet.fileUrl(file), textContent: `📄 ${file.name}` })));
@@ -154,10 +154,10 @@
         row.append(replies);
       }
       if (entry.by_me) {
-        if (actor.type === "human") {
+        if (entry.can_edit) {
           const edit = el("button", { textContent: "Edit" });
           edit.onclick = () => {
-            const next = prompt("Edit message", entry.snippet ?? "");
+            const next = prompt("Edit message", entry.text ?? "");
             if (next && next.trim()) polynet.edit(entry, next.trim()).catch(fail);
           };
           row.append(edit);

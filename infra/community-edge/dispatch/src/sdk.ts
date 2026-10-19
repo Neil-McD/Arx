@@ -19,11 +19,32 @@ export class PolynetError extends Error {
 }
 
 let current = null;
+let communityInfo = null;
 
+// Who is here: { signed_in, community, community_name, member, join_url, live }.
+// member is { name, handle, avatar_url, role } when signed in, else null.
 async function session(options) {
   if (!current || (options && options.refresh)) {
     const res = await fetch("/__polynet/auth/session", { credentials: "same-origin" });
-    current = await res.json();
+    const edge = await res.json();
+    current = Object.assign({ community_name: null, member: null }, edge);
+    communityInfo = null;
+    if (current.signed_in) {
+      try {
+        const value = await list(root());
+        communityInfo = value.community || null;
+        current.community_name = communityInfo ? communityInfo.name : null;
+        if (value.viewer) {
+          current.member = {
+            name: value.viewer.display_name || value.viewer.handle || "Member",
+            handle: value.viewer.handle || null, avatar_url: value.viewer.avatar_url || null, role: value.viewer.role || "member",
+          };
+        }
+      } catch (error) {
+        // An expired session reads as signed out; anything else leaves member unknown.
+        if (error.code === "sign_in_required") current = Object.assign({}, edge, { signed_in: false, community_name: null, member: null, live: undefined });
+      }
+    }
   }
   return current;
 }
@@ -56,7 +77,7 @@ async function door(tool, input) {
   });
   const body = await res.json().catch(function () { return {}; });
   if (res.status === 401) {
-    current = null;
+    if (current) current.signed_in = false;
     throw new PolynetError("sign_in_required", "Sign in to this community.", 401);
   }
   if (!body.ok) throw new PolynetError(body.code || "request_failed", body.message, res.status);
@@ -95,9 +116,20 @@ function rootIdOf(ref) {
   return String(ref || "").replace("interaction:root:", "");
 }
 
+// The community: { name, slug }.
 async function community() {
-  const value = await list(root());
-  return value.community;
+  if (!communityInfo) communityInfo = (await list(root())).community;
+  return communityInfo;
+}
+
+// Every post and reply carries its whole text, and reply_count is a number.
+function normalize(entry) {
+  if (entry && entry.type === "interaction") {
+    if (typeof entry.text !== "string") entry.text = entry.snippet || "";
+    if (typeof entry.reply_count !== "number") entry.reply_count = 0;
+    if (typeof entry.can_edit !== "boolean") entry.can_edit = false;
+  }
+  return entry;
 }
 
 async function channels() {
@@ -115,13 +147,13 @@ async function channels() {
 // reacted_by_me, by_me, reply_count, attachments, created_at.
 async function feed(channel, options) {
   const value = await list(channelPath(channel), { limit: (options && options.limit) || 50 });
-  return (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse();
+  return (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize);
 }
 
 // A post and its replies, oldest first.
 async function thread(channel, postRef) {
   const value = await list(channelPath(channel) + postRef + "/");
-  return value.entries || [];
+  return (value.entries || []).map(normalize);
 }
 
 async function upload(file, options) {
@@ -184,13 +216,18 @@ async function resources(path) {
   return listAll(path || root() + "resources/");
 }
 
-// A document's text (a lesson, a memory). JSON documents give their body text.
+// A document's text: a lesson, a memory, or a post (posts from feed/thread already have .text).
 async function readText(entry) {
+  if (entry && entry.type === "interaction" && typeof entry.text === "string") return entry.text;
   const value = await read(entry.path || entry);
   let text = (value && value.body) || "";
   try {
     const parsed = JSON.parse(text);
-    text = parsed.body_md || parsed.bodyMd || text;
+    if (Array.isArray(parsed.content_blocks)) {
+      text = parsed.content_blocks.map(function (block) { return block.text || ""; }).filter(Boolean).join("\n\n");
+    } else {
+      text = parsed.body_md || parsed.bodyMd || text;
+    }
   } catch (error) {
     // Markdown documents are already text.
   }

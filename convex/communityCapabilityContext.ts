@@ -42,6 +42,7 @@ import {
   getUniqueUserProfileDetailByUserId,
 } from "./profileCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   listMemberSemanticDirectory,
   resolveMemberSemanticProfile,
@@ -1182,9 +1183,18 @@ export const readCommunitySemanticRepositoryInternal = internalAction({
 // The community's display identity for the root of its repository. The caller
 // already passed the community guard chain for this community.
 export const getCommunityRepositoryIdentityInternal = internalQuery({
-  args: { communityId: v.id("communities") },
+  args: { communityId: v.id("communities"), viewerUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
-    return community ? { slug: String(community.slug ?? ""), name: String(community.name ?? "") } : null;
+    if (!community) return null;
+    const identity = { slug: String(community.slug ?? ""), name: String(community.name ?? "") };
+    if (!args.viewerUserId) return identity;
+    // The signed-in member, as a front end greets them.
+    const [user, display] = await Promise.all([
+      ctx.db.get(args.viewerUserId),
+      resolveUserProfileDisplayProjection(ctx, args.viewerUserId),
+    ]);
+    const handle = typeof (user as any)?.handle === "string" ? (user as any).handle : null;
+    return { ...identity, viewer: { display_name: display.display_name, handle, avatar_url: display.avatar_url } };
   },
 });
