@@ -15,6 +15,7 @@ import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
 import { registerCommunityAttachmentRoutes } from "./httpCommunityAttachments";
 import { registerCommunityAppRoutes } from "./httpCommunityApps";
+import { sseResponseWithHeaders, type SseSource } from "./httpStreaming";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 import { normalizeEmailForVerification } from "./workosEmailVerification";
 
@@ -65,64 +66,8 @@ function optionsResponse(req: Request): Response {
   return new Response(null, { status: 204, headers: buildCorsHeaders(req) });
 }
 
-function encodeSse(event: string, data: Record<string, unknown>): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
-
-function sseResponse(
-  req: Request,
-  source:
-    | Array<{ event: string; data: Record<string, unknown> }>
-    | ((writer: {
-        send: (entry: { event: string; data: Record<string, unknown> }) => void;
-        close: () => void;
-      }) => Promise<void> | void),
-): Response {
-  const headers = buildCorsHeaders(req);
-  headers.set("Content-Type", "text/event-stream; charset=utf-8");
-  headers.set("Connection", "keep-alive");
-  if (Array.isArray(source)) {
-    const body = source.map((entry) => encodeSse(entry.event, entry.data)).join("");
-    return new Response(body, { status: 200, headers });
-  }
-
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let closed = false;
-      const writer = {
-        send(entry: { event: string; data: Record<string, unknown> }) {
-          if (closed) return;
-          controller.enqueue(encoder.encode(encodeSse(entry.event, entry.data)));
-        },
-        close() {
-          if (closed) return;
-          closed = true;
-          controller.close();
-        },
-      };
-      Promise.resolve(source(writer))
-        .then(() => {
-          writer.close();
-        })
-        .catch((error) => {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Stream failed.";
-          writer.send({
-            event: "error",
-            data: {
-              error: message || "Stream failed.",
-            },
-          });
-          writer.close();
-        });
-    },
-  });
-  return new Response(body, { status: 200, headers });
+function sseResponse(req: Request, source: SseSource): Response {
+  return sseResponseWithHeaders(buildCorsHeaders(req), source);
 }
 
 function hasBearerTokenHeader(req: Request): boolean {

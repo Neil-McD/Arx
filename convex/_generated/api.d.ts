@@ -39,6 +39,7 @@ import type * as communityAgentServiceWorkflowCore from "../communityAgentServic
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
 import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
+import type * as communityAppAgentTurn from "../communityAppAgentTurn.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
 import type * as communityApps from "../communityApps.js";
@@ -188,6 +189,7 @@ import type * as httpMemberAgentAttachments from "../httpMemberAgentAttachments.
 import type * as httpRuntimeRoutes from "../httpRuntimeRoutes.js";
 import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
+import type * as httpStreaming from "../httpStreaming.js";
 import type * as httpVoice from "../httpVoice.js";
 import type * as hubspotPilotContract from "../hubspotPilotContract.js";
 import type * as integrationVerificationPilot from "../integrationVerificationPilot.js";
@@ -287,6 +289,7 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
   communityAiFeedRetirement: typeof communityAiFeedRetirement;
+  communityAppAgentTurn: typeof communityAppAgentTurn;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
   communityApps: typeof communityApps;
@@ -436,6 +439,7 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeRoutes: typeof httpRuntimeRoutes;
   httpRuntimeSupport: typeof httpRuntimeSupport;
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
+  httpStreaming: typeof httpStreaming;
   httpVoice: typeof httpVoice;
   hubspotPilotContract: typeof hubspotPilotContract;
   integrationVerificationPilot: typeof integrationVerificationPilot;

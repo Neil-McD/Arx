@@ -30,6 +30,8 @@ const SESSION_COOKIE = "__polynet_session";
 const SIGNIN_COOKIE = "__polynet_signin";
 const MAX_API_BODY_BYTES = 64 * 1024;
 const UPLOAD_PATH = "/__polynet/upload";
+const AGENT_PATH = "/__polynet/agent";
+const AGENT_MESSAGES_PATH = "/__polynet/agent/messages";
 const FILES_PREFIX = "/__polynet/files/";
 // Largest attachment the backend accepts (video and audio); it enforces exact limits.
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -239,6 +241,30 @@ async function proxyFile(request: Request, url: URL, env: Env): Promise<Response
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
+// The member's personal agent: turns stream back as server-sent events.
+async function proxyAgent(request: Request, url: URL, env: Env): Promise<Response> {
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
+  const history = url.pathname === AGENT_MESSAGES_PATH;
+  if (request.method !== (history ? "GET" : "POST")) return json(405, { ok: false, code: "method_not_allowed" });
+  const body = history ? "{}" : await request.text();
+  if (body.length > MAX_API_BODY_BYTES) return json(413, { ok: false, code: "request_too_large" });
+  const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/${history ? "agent_messages" : "agent"}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, Authorization: `Bearer ${token}`,
+      "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+    },
+    body,
+  });
+  const headers = new Headers({
+    "Content-Type": upstream.headers.get("content-type") ?? "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  if (upstream.status === 401) headers.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -247,6 +273,9 @@ export default {
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
     if (url.pathname === API_PREFIX || url.pathname.startsWith(`${API_PREFIX}/`)) {
       return await proxyApi(request, url, env);
+    }
+    if (url.pathname === AGENT_PATH || url.pathname === AGENT_MESSAGES_PATH) {
+      return await proxyAgent(request, url, env);
     }
     if (url.pathname === UPLOAD_PATH || url.pathname.startsWith(FILES_PREFIX)) {
       return await proxyFile(request, url, env);
