@@ -139,6 +139,22 @@ test("uploads and files go to the backend with the session and edge secret only"
   expect(upstream).toHaveBeenCalledTimes(2);
 });
 
+test("agent turns stream through with the session and edge secret; history is read the same way", async () => {
+  const upstream = vi.fn(async () => new Response("event: done\ndata: {}\n\n", { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8" } }));
+  vi.stubGlobal("fetch", upstream);
+  const cookie = `__polynet_session=${TOKEN}`;
+  expect((await edge.fetch(request("/__polynet/agent", { method: "POST", body: "{}" }), env())).status).toBe(401);
+  const turn = await edge.fetch(request("/__polynet/agent", { method: "POST", headers: { cookie }, body: JSON.stringify({ text: "hi", message_key: "abcdefgh" }) }), env());
+  expect(turn.headers.get("content-type")).toContain("text/event-stream");
+  expect(await turn.text()).toContain("event: done");
+  const [turnUrl, turnInit] = upstream.mock.calls[0] as unknown as [string, RequestInit];
+  expect(turnUrl).toBe("https://api.example.convex.site/runtime/app/agent");
+  expect(turnInit.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}`, "x-polynet-edge-secret": "edge-secret", Origin: ORIGIN });
+  await edge.fetch(request("/__polynet/agent/messages", { headers: { cookie } }), env());
+  expect((upstream.mock.calls[1] as unknown as [string])[0]).toBe("https://api.example.convex.site/runtime/app/agent_messages");
+  expect((await edge.fetch(request("/__polynet/agent", { headers: { cookie } }), env())).status).toBe(405);
+});
+
 test("logout revokes the session and clears the cookie", async () => {
   const revoke = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
   vi.stubGlobal("fetch", revoke);

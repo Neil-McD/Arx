@@ -2,6 +2,9 @@ import { internal } from "./_generated/api";
 import type { PublicHttpAction } from "convex/server";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { storeCommunityAttachmentUpload } from "./httpCommunityAttachments";
+import { handleRuntimeTurnRequest } from "./runtimeTurnHandlers";
+import { trustedMemberTurnContext } from "./communityAppAgentTurn";
+import { sseResponseWithHeaders, type SseSource } from "./httpStreaming";
 import {
   COMMUNITY_APP_MAX_REQUEST_BYTES,
   generateCommunityAppHandoffCode,
@@ -20,6 +23,9 @@ import type { PolynetCanonicalToolName } from "../shared/polynetCanonicalToolCon
 export const COMMUNITY_APP_RUNTIME_PATH = "/runtime/app";
 export const COMMUNITY_APP_UPLOAD_PATH = "/runtime/app/upload";
 export const COMMUNITY_APP_FILE_PATH = "/runtime/app/file";
+export const COMMUNITY_APP_AGENT_PATH = "/runtime/app/agent";
+export const COMMUNITY_APP_AGENT_MESSAGES_PATH = "/runtime/app/agent_messages";
+const AGENT_MESSAGE_MAX_CHARS = 8_000;
 export const COMMUNITY_APP_HANDOFF_PATH = "/runtime/auth_bridge_community_handoff";
 export const COMMUNITY_EDGE_EXCHANGE_PATH = "/runtime/community_edge/session_exchange";
 export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revoke";
@@ -86,7 +92,115 @@ async function requireAppSession(ctx: any, req: Request): Promise<AppSession | R
   return session;
 }
 
+// The member's agent conversation for the session's community: the same one
+// Studio's agent dock shows for that community.
+async function ensureMemberAgentConversation(ctx: any, session: AppSession) {
+  return (await ctx.runMutation(internal.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
+    communityId: session.communityId as any,
+    trustedUserId: session.userId as any,
+  })) as { thread_id: string; thread_key: string };
+}
+
+const noStoreHeaders = () => new Headers({ "Cache-Control": "no-store" });
+
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
+  // A turn with the member's personal agent, pinned to this community's
+  // conversation and the member lane. The page sends only text; it cannot pick
+  // the thread, community, model or funding.
+  args.http.route({
+    path: COMMUNITY_APP_AGENT_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requireAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, AGENT_MESSAGE_MAX_CHARS * 4);
+      const text = typeof body?.text === "string" ? body.text.trim() : "";
+      const messageKey = typeof body?.message_key === "string" ? body.message_key.trim() : "";
+      if (!text || text.length > AGENT_MESSAGE_MAX_CHARS || !/^[A-Za-z0-9_-]{8,100}$/.test(messageKey)) {
+        return reply(400, { ok: false, code: "invalid_request", message: "Send text and a message_key." });
+      }
+      let conversation: { thread_id: string; thread_key: string };
+      try {
+        conversation = await ensureMemberAgentConversation(ctx, session);
+      } catch {
+        return reply(403, { ok: false, code: "not_a_member", message: "Join this community to use your agent here." });
+      }
+      const member = { userId: session.userId, authSubject: session.authSubject };
+      const turnCtx = trustedMemberTurnContext(ctx, member);
+      // The dock saves the member's message before the turn; so does a front end.
+      const userMessageKey = `community-app:${messageKey}`;
+      await turnCtx.runMutation(internal.threads.addCloudThreadMessageForTrustedOwnerInternal, {
+        trustedOwnerId: session.userId as any, threadId: conversation.thread_id as any,
+        messageKey: userMessageKey, role: "user", contentJson: { text },
+      });
+      const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal, {
+        authSubject: session.authSubject, userId: session.userId as any,
+      })) as { email: string | null; displayName: string | null; avatarUrl: string | null };
+      const community = (await ctx.runQuery(internal.communityCapabilityContext.getCommunityRepositoryIdentityInternal, {
+        communityId: session.communityId as any,
+      })) as { slug: string } | null;
+      if (!community?.slug) return reply(404, { ok: false, code: "community_unavailable" });
+      const turnRequest = new Request(req.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          thread_id: conversation.thread_key,
+          stream: true,
+          surface: "web",
+          invocation_surface: "member_agent_dock",
+          surface_context: { version: 1, kind: "community", community_slug: community.slug, section: "chat" },
+          requested_funding_source: "auto",
+          requested_agentic_tools: true,
+          idempotency_key: `community-app-run:${messageKey}`,
+          user_message_key: userMessageKey,
+        }),
+      });
+      return await handleRuntimeTurnRequest({
+        ctx: turnCtx,
+        req: turnRequest,
+        jsonResponse: (_req, status, payload) => reply(status, payload as Record<string, unknown>),
+        sseResponse: (_req, source) => sseResponseWithHeaders(noStoreHeaders(), source as SseSource),
+        requireAuthenticatedActor: async () => ({
+          ok: true,
+          actor: {
+            userId: String(session.userId), dbUserId: session.userId, authSubject: session.authSubject,
+            email: actor.email, displayName: actor.displayName, avatarUrl: actor.avatarUrl,
+          },
+        }),
+      });
+    }),
+  });
+
+  // The conversation so far, oldest first.
+  args.http.route({
+    path: COMMUNITY_APP_AGENT_MESSAGES_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requireAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      let conversation: { thread_id: string; thread_key: string };
+      try {
+        conversation = await ensureMemberAgentConversation(ctx, session);
+      } catch {
+        return reply(403, { ok: false, code: "not_a_member", message: "Join this community to use your agent here." });
+      }
+      const rows = (await ctx.runQuery(internal.threads.listNewestCloudThreadMessagesForTrustedOwnerInternal, {
+        trustedOwnerId: session.userId as any, threadId: conversation.thread_id as any, limit: 100,
+      })) as Array<{ messageKey?: string; role: string; contentJson: any; createdAt: number }>;
+      return reply(200, {
+        ok: true,
+        messages: rows
+          .filter((row) => row.role === "user" || row.role === "assistant")
+          .map((row) => ({
+            key: row.messageKey ?? null,
+            role: row.role,
+            text: typeof row.contentJson?.text === "string" ? row.contentJson.text : typeof row.contentJson === "string" ? row.contentJson : "",
+            created_at: new Date(row.createdAt).toISOString(),
+          })),
+      });
+    }),
+  });
+
   // A file for a post: stored under a reservation the post claims with the
   // same idempotency key. Same limits and checks as Studio's uploads.
   args.http.route({

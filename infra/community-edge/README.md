@@ -9,6 +9,7 @@ one edge Worker in front of every community front end.
                          │                      session also returns the live URL and watch-only token
                          ├─ /__polynet/api    → Polynet backend /runtime/app (server-side, edge secret + session cookie)
                          ├─ /__polynet/upload, /__polynet/files/<id> → /runtime/app/upload, /runtime/app/file
+                         ├─ /__polynet/agent, /__polynet/agent/messages → /runtime/app/agent, /runtime/app/agent_messages (streamed)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 

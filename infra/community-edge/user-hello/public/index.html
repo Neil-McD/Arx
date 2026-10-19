@@ -26,6 +26,10 @@
     .tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: 6px; opacity: .8; }
     .doc { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
     .search { display: flex; gap: 8px; margin-bottom: 12px; }
+    .chat { display: flex; flex-direction: column; gap: 10px; }
+    .bubble { max-width: 85%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bubble.user { align-self: flex-end; background: var(--soft); }
+    .bubble.assistant { align-self: flex-start; border: 1px solid var(--line); }
     section { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     #thread { border-left: 1px solid var(--line); }
     .pane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
@@ -80,6 +84,7 @@
       <button data-page="events">Events</button>
       <button data-page="resources">Resources</button>
       <button data-page="knowledge">Knowledge</button>
+      <button data-page="agent">My agent</button>
     </nav>
     <section id="channel">
       <div class="pane-head"><span id="channelName"></span></div>
@@ -320,10 +325,67 @@
       showPage("Knowledge", [form, ...(nodes.length ? nodes.map(memoryCard) : [empty(query ? "Nothing found." : "This community hasn't built shared knowledge yet.")])]);
     }
 
+    // Your personal agent, in this community: the same conversation as Studio's agent dock.
+    function bubble(role, text) {
+      return el("div", { className: `bubble ${role}`, textContent: text });
+    }
+
+    async function openAgent() {
+      const res = await fetch("/__polynet/agent/messages");
+      if (res.status === 401) { await refresh(); return; }
+      const history = await res.json().catch(() => ({}));
+      const chat = el("div", { className: "chat" }, ...(history.messages ?? []).map((m) => bubble(m.role, m.text)));
+      const input = el("input", { placeholder: `Ask your agent about ${state.community?.name ?? "this community"}` });
+      const form = el("form", { className: "search" }, input, el("button", { textContent: "Send" }));
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+        chat.append(bubble("user", text));
+        const answer = bubble("assistant", "…");
+        chat.append(answer);
+        await streamAgentTurn(text, answer);
+      };
+      showPage("My agent", [chat, form]);
+      input.focus();
+    }
+
+    // Reads the server-sent events of one turn: deltas as they arrive, then done.
+    async function streamAgentTurn(text, target) {
+      const res = await fetch("/__polynet/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, message_key: key().replace(/-/g, "") }),
+      });
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => ({}));
+        target.textContent = body.message ?? "Your agent isn't available right now.";
+        return;
+      }
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "", content = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const event = /^event: (.*)$/m.exec(block)?.[1];
+          const data = JSON.parse(/^data: (.*)$/m.exec(block)?.[1] ?? "{}");
+          if (event === "delta" && data.delta) { content += data.delta; target.textContent = content; }
+          if (event === "done") target.textContent = data.full_content || content || "…";
+          if (event === "error") target.textContent = data.message ?? data.error ?? "Something went wrong.";
+        }
+      }
+    }
+
     for (const button of document.querySelectorAll("nav button[data-page]")) {
       button.onclick = () => {
         setActive((candidate) => candidate === button);
-        ({ events: openEvents, resources: () => openResources(), knowledge: () => openKnowledge() })[button.dataset.page]();
+        ({ events: openEvents, resources: () => openResources(), knowledge: () => openKnowledge(), agent: openAgent })[button.dataset.page]();
       };
     }
     $("pageBack").onclick = () => state.back?.();

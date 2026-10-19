@@ -1,8 +1,9 @@
 /* Member ontology public surface — docs/member-ontology-contract-v1.md.
    Members approve facts, agents propose facts, admins transition nothing.
    Every read goes through readMemberFactsForLens (the shared predicate). */
-import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { v, type ObjectType } from "convex/values";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   communityMembershipRowIsActive,
@@ -185,18 +186,14 @@ async function hasPendingJoinRequest(ctx: any, communityId: any, userId: any): P
 /* The interview confirm card: one batch, one approval marker, community scope.
    Requires the subject to be in motion in that community — an active member,
    or an applicant whose interview rides the pending join request. */
-export const confirmMemberInterviewFacts = mutation({
-  args: {
+const confirmMemberInterviewFactsArgs = {
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     confirmMarker: v.optional(v.string()),
     facts: v.array(factDraftValidator),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
+  };
+
+async function confirmMemberInterviewFactsHandler(ctx: MutationCtx, args: ObjectType<typeof confirmMemberInterviewFactsArgs>, userId: Id<"users">) {
     await requireCommunityUserNotBlocked({
       ctx,
       communityId: args.communityId,
@@ -222,7 +219,18 @@ export const confirmMemberInterviewFacts = mutation({
       nowMs,
     });
     return { inserted: insertedIds.length };
-  },
+}
+
+export const confirmMemberInterviewFacts = mutation({
+  args: confirmMemberInterviewFactsArgs,
+  handler: async (ctx, args) => await confirmMemberInterviewFactsHandler(ctx, args, await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null })),
+});
+
+// For a turn from a community front end: the member was authenticated by the
+// front end's session, which has no Convex identity.
+export const confirmMemberInterviewFactsForTrustedUserInternal = internalMutation({
+  args: { ...confirmMemberInterviewFactsArgs, trustedUserId: v.id("users") },
+  handler: async (ctx, { trustedUserId, ...args }) => await confirmMemberInterviewFactsHandler(ctx, args, trustedUserId),
 });
 
 export const approveMemberFact = mutation({

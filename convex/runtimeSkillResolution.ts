@@ -553,6 +553,9 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    // Set only for a turn from a community front end, whose member was
+    // authenticated by its session without a Convex identity.
+    trustedUserId: v.optional(v.id("users")),
     communityId: v.optional(v.id("communities")),
     messages: v.array(
       v.object({
@@ -562,7 +565,7 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
     ),
   },
   handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
+    const userId = args.trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
