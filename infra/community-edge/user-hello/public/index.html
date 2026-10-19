@@ -65,7 +65,7 @@
   <header>
     <h1 id="title">Community</h1>
     <span class="live" id="live"></span>
-    <a class="button" id="signin" href="/__polynet/auth/start?return=/" hidden>Sign in with Polynet</a>
+    <button id="signin" hidden>Sign in with Polynet</button>
     <button id="signout" hidden>Sign out</button>
   </header>
   <div class="notice" id="signedOut" hidden>
@@ -84,7 +84,7 @@
       <button data-page="events">Events</button>
       <button data-page="resources">Resources</button>
       <button data-page="knowledge">Knowledge</button>
-      <button data-page="agent">My agent</button>
+      <button data-page="agent">Agent</button>
     </nav>
     <section id="channel">
       <div class="pane-head"><span id="channelName"></span></div>
@@ -103,102 +103,88 @@
       <form id="replyComposer"><label class="attach" title="Attach files">📎<input id="replyFiles" type="file" multiple /></label><input id="replyText" placeholder="Reply" autocomplete="off" /><button>Reply</button></form>
     </section>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/convex@1.42.1/dist/browser.bundle.js"></script>
-  <script>
-    // A Polynet community front end, built only on the door at /__polynet/api
-    // (list, read, write, call). This domain's Polynet edge adds the member
-    // session from an HttpOnly cookie. Live updates: subscribe to a watch-only
-    // signal for the open channel and re-read through the door when it changes.
-    const COMMUNITY = "/communities/polynet";
+  <script type="module">
+    // A Polynet community front end built only on the SDK. See /__polynet/llms.txt.
+    import polynet from "/__polynet/sdk.js";
+
     const REACTIONS = ["👍", "❤️", "😂"];
     const $ = (id) => document.getElementById(id);
-    const state = { live: null, client: null, unwatch: null, channel: null, thread: null, back: null, community: null };
-
-    async function door(tool, input) {
-      const res = await fetch("/__polynet/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tool, input }),
-      });
-      if (res.status === 401) { await refresh(); return null; }
-      const body = await res.json();
-      if (!body.ok) console.warn(tool, body.code, body.message);
-      return body.ok ? body.value : null;
-    }
-    const key = () => crypto.randomUUID();
     const el = (tag, props = {}, ...children) => {
       const node = Object.assign(document.createElement(tag), props);
       node.append(...children);
       return node;
     };
+    const state = { session: null, community: null, channel: null, thread: null, stopWatch: null, back: null, askAgent: false };
+    const fail = (error) => {
+      console.warn(error);
+      if (error?.code === "sign_in_required") refresh();
+    };
+
+    function authorName(actor = {}) {
+      const member = actor.display_name ?? actor.handle;
+      if (actor.type === "community_agent") {
+        const agent = `${state.community?.name ?? "Community"} agent`;
+        return member ? `${agent} · for ${member}` : agent;
+      }
+      return member ?? "Member";
+    }
 
     function messageItem(entry, { inThread }) {
       const actor = entry.actor ?? {};
-      // The community agent's posts show as the agent, and who it acted for.
-      const agentName = `${state.community?.name ?? "Community"} agent`;
-      const memberName = actor.display_name ?? actor.handle;
-      const name = actor.type === "community_agent"
-        ? (memberName ? `${agentName} · for ${memberName}` : agentName)
-        : memberName ?? "Member";
       const avatarUrl = actor.type === "community_agent" ? null : actor.avatar_url;
-      const avatar = el("img", { className: "avatar", alt: "", src: avatarUrl ?? "" });
-      if (!avatarUrl) avatar.removeAttribute("src");
-      const meta = el("span", { className: "meta",
-        textContent: `${new Date(entry.created_at).toLocaleString()}${entry.edited_at ? " · edited" : ""}` });
+      const avatar = el("img", { className: "avatar", alt: "" });
+      if (avatarUrl) avatar.src = avatarUrl;
+      const meta = el("span", { className: "meta", textContent: `${new Date(entry.created_at).toLocaleString()}${entry.edited_at ? " · edited" : ""}` });
       const text = el("div", { className: "text", textContent: entry.snippet ?? "" });
-      const files = el("div", { className: "files" }, ...(entry.attachments ?? []).map((file) => {
-        const src = `/__polynet/files/${file.ref.replace("attachment:", "")}`;
-        return file.kind === "image"
-          ? el("a", { href: src, target: "_blank", rel: "noopener" }, el("img", { src, alt: file.name, loading: "lazy" }))
-          : el("a", { href: src, textContent: `📄 ${file.name}` });
-      }));
+      const files = el("div", { className: "files" }, ...(entry.attachments ?? []).map((file) => file.kind === "image"
+        ? el("a", { href: polynet.fileUrl(file), target: "_blank", rel: "noopener" }, el("img", { src: polynet.fileUrl(file), alt: file.name, loading: "lazy" }))
+        : el("a", { href: polynet.fileUrl(file), textContent: `📄 ${file.name}` })));
       const row = el("div", { className: "row" });
       const counts = new Map((entry.reactions ?? []).map((r) => [r.emoji, r.count]));
       for (const emoji of new Set([...REACTIONS, ...counts.keys()])) {
         const mine = (entry.reacted_by_me ?? []).includes(emoji);
         const count = counts.get(emoji) ?? 0;
         const button = el("button", { className: mine ? "mine" : "", textContent: count ? `${emoji} ${count}` : emoji });
-        button.onclick = () => door("polynet_call", {
-          target: `${COMMUNITY}/capabilities/community.interaction.react.json`, operation: "community.interaction.react",
-          version: 1, idempotencyKey: key(), input: { ref: entry.ref, emoji, on: !mine },
-        });
+        button.onclick = () => polynet.react(entry.ref, emoji, !mine).catch(fail);
         row.append(button);
       }
-      if (!inThread && entry.object_type === "root") {
+      if (!inThread) {
         const replies = el("button", { textContent: entry.reply_count ? `${entry.reply_count} replies` : "Reply" });
         replies.onclick = () => openThread(entry);
         row.append(replies);
       }
       if (entry.by_me) {
-        const edit = el("button", { textContent: "Edit", hidden: actor.type !== "human" });
-        edit.onclick = async () => {
-          const next = prompt("Edit message", entry.snippet ?? "");
-          if (next && next.trim()) await door("polynet_write", { path: entry.path, mode: "update", content: { text: next.trim() }, idempotency_key: key() });
-        };
+        if (actor.type === "human") {
+          const edit = el("button", { textContent: "Edit" });
+          edit.onclick = () => {
+            const next = prompt("Edit message", entry.snippet ?? "");
+            if (next && next.trim()) polynet.edit(entry, next.trim()).catch(fail);
+          };
+          row.append(edit);
+        }
         const remove = el("button", { textContent: "Delete" });
         remove.onclick = async () => {
-          await door("polynet_write", { path: entry.path, mode: "delete", content: {}, idempotency_key: key() });
+          await polynet.remove(entry).catch(fail);
           if (state.thread?.ref === entry.ref) closeThread();
         };
-        row.append(edit, remove);
+        row.append(remove);
       }
-      return el("li", {}, avatar, el("div", {}, el("span", { className: "who", textContent: name }), meta, text, files, row));
+      return el("li", {}, avatar, el("div", {}, el("span", { className: "who", textContent: authorName(actor) }), meta, text, files, row));
     }
 
     async function loadFeed() {
       if (!state.channel) return;
-      const value = await door("polynet_list", { path: state.channel.path, limit: 50 });
-      if (!value) return;
-      const roots = (value.entries ?? []).filter((entry) => entry.object_type === "root").reverse();
-      $("feed").replaceChildren(...roots.map((entry) => messageItem(entry, { inThread: false })));
+      const posts = await polynet.feed(state.channel.slug).catch(fail);
+      if (!posts) return;
+      $("feed").replaceChildren(...posts.map((entry) => messageItem(entry, { inThread: false })));
       $("feed").scrollTop = $("feed").scrollHeight;
     }
 
     async function loadThread() {
       if (!state.thread) return;
-      const value = await door("polynet_list", { path: `${state.channel.path}${state.thread.ref}/` });
-      if (!value) { closeThread(); return; }
-      $("threadFeed").replaceChildren(...(value.entries ?? []).map((entry) => messageItem(entry, { inThread: true })));
+      const entries = await polynet.thread(state.channel.slug, state.thread.ref).catch(() => null);
+      if (!entries) { closeThread(); return; }
+      $("threadFeed").replaceChildren(...entries.map((entry) => messageItem(entry, { inThread: true })));
     }
 
     function openThread(entry) {
@@ -214,59 +200,37 @@
       $("app").classList.remove("thread-open");
     }
 
-    function watchChannel() {
-      state.unwatch?.();
-      state.unwatch = state.client.onUpdate("communityLive:watch", { token: state.live.token, path: state.channel.path }, (result) => {
-        if (result?.ok) { $("live").textContent = "● live"; loadFeed(); loadThread(); }
-        else { $("live").textContent = ""; if (result?.code === "session_invalid") refresh(); }
-      });
-    }
-
     function setActive(match) {
       for (const button of document.querySelectorAll("nav button")) button.classList.toggle("active", match(button));
     }
 
-    function selectChannel(channel) {
+    async function selectChannel(channel) {
       state.channel = channel;
       closeThread();
       $("page").hidden = true;
       $("channel").hidden = false;
       $("channelName").textContent = `# ${channel.name}`;
       $("text").placeholder = `Message #${channel.name}`;
-      setActive((button) => button.dataset.path === channel.path);
-      $("composer").hidden = channel.capabilities?.canPost === false;
-      watchChannel();
+      setActive((button) => button.dataset.slug === channel.slug);
+      $("composer").hidden = !channel.canPost;
+      state.stopWatch?.();
+      // Live: re-read the channel whenever anything in it changes.
+      state.stopWatch = await polynet.watch(channel.slug, () => { loadFeed(); loadThread(); }).catch((error) => { fail(error); return null; });
+      $("live").textContent = state.stopWatch ? "● live" : "";
     }
-
-    async function loadCommunity() {
-      const value = await door("polynet_list", { path: `${COMMUNITY}/` });
-      state.community = value?.community ?? null;
-      const name = state.community?.name ?? "Community";
-      $("title").textContent = name;
-      document.title = name;
-      $("askAgent").title = `Ask the ${name} agent`;
-    }
-    $("askAgent").onclick = () => {
-      if (!state.community?.name) return;
-      const token = `@${state.community.name} `;
-      if (!$("text").value.includes(token.trim())) $("text").value = token + $("text").value;
-      $("text").focus();
-    };
 
     async function loadChannels() {
-      const value = await door("polynet_list", { path: `${COMMUNITY}/channels/` });
-      const channels = (value?.entries ?? []).filter((entry) => entry.type === "channel");
+      const channels = await polynet.channels();
       $("channels").replaceChildren(...channels.map((channel) => {
         const button = el("button", { textContent: `# ${channel.name}` });
-        button.dataset.path = channel.path;
+        button.dataset.slug = channel.slug;
         button.onclick = () => selectChannel(channel);
         return button;
       }));
-      const current = channels.find((channel) => channel.path === state.channel?.path) ?? channels.find((c) => c.is_general) ?? channels[0];
-      if (current) selectChannel(current);
+      const current = channels.find((c) => c.slug === state.channel?.slug) ?? channels.find((c) => c.isGeneral) ?? channels[0];
+      if (current) await selectChannel(current);
     }
 
-    // Community pages: events, resources and knowledge, read through the door.
     function showPage(title, children, back = null) {
       closeThread();
       $("channel").hidden = true;
@@ -279,69 +243,56 @@
     const empty = (text) => el("p", { className: "meta", textContent: text });
 
     async function openEvents() {
-      const value = await door("polynet_list", { path: `${COMMUNITY}/events/`, limit: 20 });
-      const events = value?.entries ?? [];
+      const events = await polynet.events().catch(fail) ?? [];
       showPage("Events", events.length ? events.map((event) => el("div", { className: "card" },
         el("h3", { textContent: event.title ?? event.name }),
         el("div", { className: "meta", textContent: [
           new Date(event.starts_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }),
-          event.location_label, event.recurrence_frequency && event.recurrence_frequency !== "none" ? `repeats ${event.recurrence_frequency}` : null,
+          event.location_label,
+          event.recurrence_frequency && event.recurrence_frequency !== "none" ? `repeats ${event.recurrence_frequency}` : null,
         ].filter(Boolean).join(" · ") }),
         ...(event.description_md ? [el("div", { className: "doc", textContent: event.description_md })] : []),
         ...(event.url ? [el("a", { href: event.url, target: "_blank", rel: "noopener noreferrer", textContent: "Join link" })] : []),
       )) : [empty("No upcoming events.")]);
     }
 
-    async function readDocument(entry, back) {
-      const value = await door("polynet_read", { path: entry.path });
-      // Some documents (like memories) are JSON; show their text, not the JSON.
-      let text = value?.body ?? "This document isn't available.";
-      try { const parsed = JSON.parse(text); text = parsed?.body_md ?? parsed?.bodyMd ?? text; } catch {}
+    async function openDocument(entry, back) {
+      const text = await polynet.readText(entry).catch(() => "This document isn't available.");
       showPage(entry.title ?? entry.name ?? "Document", [el("div", { className: "doc", textContent: text })], back);
     }
 
-    async function openResources(path = `${COMMUNITY}/resources/`, title = "Resources") {
-      const value = await door("polynet_list", { path });
-      const entries = value?.entries ?? [];
-      const back = path === `${COMMUNITY}/resources/` ? null : () => openResources();
-      showPage(title, entries.length ? entries.map((entry) => {
-        const name = entry.title ?? entry.name ?? entry.path.split("/").filter(Boolean).pop();
-        const open = el("button", { className: "link", textContent: `${entry.kind === "directory" ? "📁" : "📄"} ${name}` });
-        open.onclick = () => entry.kind === "directory" ? openResources(entry.path, name) : readDocument(entry, () => openResources(path, title));
-        return el("div", { className: "card" }, open, ...(entry.summary ? [el("div", { className: "meta", textContent: entry.summary })] : []));
-      }) : [empty("No resources yet.")], back);
-    }
-
-    function memoryCard(node) {
-      const open = el("button", { className: "link", textContent: node.title ?? "Memory" });
-      open.onclick = () => readDocument(node, () => openKnowledge());
-      return el("div", { className: "card" }, open, el("span", { className: "tag", textContent: String(node.type ?? "").replace(/_/g, " ") }),
-        el("span", { className: "tag", textContent: node.grade ?? node.status ?? "" }),
-        ...(node.applies_when ? [el("div", { className: "meta", textContent: `When: ${node.applies_when}` })] : []));
+    async function openResources(entry = null) {
+      const entries = await polynet.resources(entry?.path).catch(fail) ?? [];
+      const title = entry ? entry.title ?? entry.name : "Resources";
+      showPage(title, entries.length ? entries.map((item) => {
+        const name = item.title ?? item.name ?? item.path.split("/").filter(Boolean).pop();
+        const open = el("button", { className: "link", textContent: `${item.kind === "directory" ? "📁" : "📄"} ${name}` });
+        open.onclick = () => item.kind === "directory" ? openResources(item) : openDocument(item, () => openResources(entry));
+        return el("div", { className: "card" }, open);
+      }) : [empty("No resources yet.")], entry ? () => openResources() : null);
     }
 
     async function openKnowledge(query = "") {
-      const value = query
-        ? await door("polynet_search", { path: `${COMMUNITY}/memory/`, query })
-        : await door("polynet_list", { path: `${COMMUNITY}/memory/` });
-      const nodes = (query ? value?.results : value?.entries) ?? [];
+      const nodes = await polynet.knowledge(query).catch(fail) ?? [];
       const input = el("input", { placeholder: "Search what this community knows", value: query });
       const form = el("form", { className: "search" }, input, el("button", { textContent: "Search" }));
       form.onsubmit = (event) => { event.preventDefault(); openKnowledge(input.value.trim()); };
-      showPage("Knowledge", [form, ...(nodes.length ? nodes.map(memoryCard) : [empty(query ? "Nothing found." : "This community hasn't built shared knowledge yet.")])]);
+      showPage("Knowledge", [form, ...(nodes.length ? nodes.map((node) => {
+        const open = el("button", { className: "link", textContent: node.title ?? "Memory" });
+        open.onclick = () => openDocument(node, () => openKnowledge(query));
+        return el("div", { className: "card" }, open,
+          el("span", { className: "tag", textContent: String(node.type ?? "").replace(/_/g, " ") }),
+          el("span", { className: "tag", textContent: node.grade ?? node.status ?? "" }),
+          ...(node.applies_when ? [el("div", { className: "meta", textContent: `When: ${node.applies_when}` })] : []));
+      }) : [empty(query ? "Nothing found." : "This community hasn't built shared knowledge yet.")])]);
     }
 
-    // Your personal agent, in this community: the same conversation as Studio's agent dock.
-    function bubble(role, text) {
-      return el("div", { className: `bubble ${role}`, textContent: text });
-    }
+    const bubble = (role, text) => el("div", { className: `bubble ${role}`, textContent: text });
 
     async function openAgent() {
-      const res = await fetch("/__polynet/agent/messages");
-      if (res.status === 401) { await refresh(); return; }
-      const history = await res.json().catch(() => ({}));
-      const chat = el("div", { className: "chat" }, ...(history.messages ?? []).map((m) => bubble(m.role, m.text)));
-      const input = el("input", { placeholder: `Ask your agent about ${state.community?.name ?? "this community"}` });
+      const history = await polynet.agentHistory().catch(fail) ?? [];
+      const chat = el("div", { className: "chat" }, ...history.map((m) => bubble(m.role, m.text)));
+      const input = el("input", { placeholder: `Ask the ${state.community?.name ?? "community"} agent` });
       const form = el("form", { className: "search" }, input, el("button", { textContent: "Send" }));
       form.onsubmit = async (event) => {
         event.preventDefault();
@@ -351,41 +302,11 @@
         chat.append(bubble("user", text));
         const answer = bubble("assistant", "…");
         chat.append(answer);
-        await streamAgentTurn(text, answer);
+        await polynet.askAgent(text, { onDelta: (soFar) => { answer.textContent = soFar; } })
+          .catch((error) => { answer.textContent = error.message; });
       };
-      showPage("My agent", [chat, form]);
+      showPage(`${state.community?.name ?? "Community"} agent`, [chat, form]);
       input.focus();
-    }
-
-    // Reads the server-sent events of one turn: deltas as they arrive, then done.
-    async function streamAgentTurn(text, target) {
-      const res = await fetch("/__polynet/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, message_key: key().replace(/-/g, "") }),
-      });
-      if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}));
-        target.textContent = body.message ?? "Your agent isn't available right now.";
-        return;
-      }
-      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-      let buffer = "", content = "";
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += value;
-        let boundary;
-        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-          const block = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          const event = /^event: (.*)$/m.exec(block)?.[1];
-          const data = JSON.parse(/^data: (.*)$/m.exec(block)?.[1] ?? "{}");
-          if (event === "delta" && data.delta) { content += data.delta; target.textContent = content; }
-          if (event === "done") target.textContent = data.full_content || content || "…";
-          if (event === "error") target.textContent = data.message ?? data.error ?? "Something went wrong.";
-        }
-      }
     }
 
     for (const button of document.querySelectorAll("nav button[data-page]")) {
@@ -397,7 +318,8 @@
     $("pageBack").onclick = () => state.back?.();
 
     async function refresh() {
-      const session = await (await fetch("/__polynet/auth/session")).json();
+      const session = await polynet.session({ refresh: true });
+      state.session = session;
       const joinNeeded = !session.signed_in && new URLSearchParams(location.search).get("polynet") === "join";
       for (const link of document.querySelectorAll(".joinLink")) link.href = session.join_url ?? "#";
       $("signin").hidden = session.signed_in || joinNeeded;
@@ -405,84 +327,59 @@
       $("signedOut").hidden = session.signed_in || joinNeeded;
       $("joinNeeded").hidden = !joinNeeded;
       $("app").hidden = !session.signed_in;
-      if (session.signed_in && session.live) {
-        if (state.live?.token !== session.live.token) {
-          state.client?.close();
-          state.live = session.live;
-          state.client = new convex.ConvexClient(session.live.url);
-        }
-        await loadCommunity();
-        await loadChannels();
-      } else {
-        state.unwatch?.();
-        state.client?.close();
-        Object.assign(state, { live: null, client: null, unwatch: null, channel: null, thread: null });
+      if (!session.signed_in) {
+        state.stopWatch?.();
+        Object.assign(state, { community: null, channel: null, thread: null, stopWatch: null });
         $("live").textContent = "";
+        return;
       }
+      state.community = await polynet.community();
+      $("title").textContent = state.community.name;
+      document.title = state.community.name;
+      $("askAgent").title = `Ask the ${state.community.name} agent`;
+      await loadChannels();
     }
 
-    // Files upload first under the post's idempotency key; the post then claims them.
-    async function upload(files, idempotencyKey, rootId, status) {
-      const attachments = [];
-      for (const file of files) {
-        status.textContent = `Uploading ${file.name}…`;
-        const res = await fetch("/__polynet/upload", {
-          method: "POST",
-          headers: {
-            "Content-Type": file.type || "application/octet-stream",
-            "x-polynet-file-name": encodeURIComponent(file.name),
-            "x-polynet-channel": state.channel.slug,
-            "x-polynet-idempotency-key": idempotencyKey,
-            ...(rootId ? { "x-polynet-root-id": rootId } : {}),
-          },
-          body: file,
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok || !body.attachment) { status.textContent = `Couldn't upload ${file.name}.`; return null; }
-        attachments.push({ attachmentId: body.attachment.attachmentId });
-      }
-      status.textContent = "";
-      return attachments;
-    }
-
-    async function send({ input, fileInput, status, mode, rootId }) {
+    // Files upload first; the post claims them.
+    async function send({ input, fileInput, status, replyTo }) {
       const text = input.value.trim();
       const files = [...fileInput.files];
       if (!text && !files.length) return;
-      const idempotencyKey = key();
-      const attachments = files.length ? await upload(files, idempotencyKey, rootId, status) : [];
-      if (!attachments) return;
-      input.value = "";
-      fileInput.value = "";
-      // Mentioning @<community name> asks the community agent; it replies in the channel.
-      const agentToken = state.community?.name ? `@${state.community.name}` : null;
-      const asksAgent = Boolean(agentToken && text.toLowerCase().includes(agentToken.toLowerCase()));
-      await door("polynet_write", {
-        path: state.channel.path, mode, idempotency_key: idempotencyKey,
-        content: {
-          text, ...(rootId ? { root_id: rootId } : {}), ...(attachments.length ? { attachments } : {}),
-          ...(asksAgent ? { mentions: [{ agentKey: "community_agent" }] } : {}),
-        },
-      });
+      status.textContent = files.length ? "Uploading…" : "";
+      const askAgent = state.askAgent && !replyTo;
+      try {
+        await polynet.post(state.channel.slug, text, { files, replyTo, askAgent });
+        input.value = "";
+        fileInput.value = "";
+        state.askAgent = false;
+        $("askAgent").classList.remove("mine");
+      } catch (error) {
+        fail(error);
+        status.textContent = error.message;
+        return;
+      }
+      status.textContent = "";
     }
 
+    $("askAgent").onclick = () => {
+      state.askAgent = !state.askAgent;
+      $("askAgent").classList.toggle("mine", state.askAgent);
+      $("text").focus();
+    };
     $("composer").onsubmit = (event) => {
       event.preventDefault();
-      send({ input: $("text"), fileInput: $("files"), status: $("pending"), mode: "create" });
+      send({ input: $("text"), fileInput: $("files"), status: $("pending") });
     };
     $("replyComposer").onsubmit = (event) => {
       event.preventDefault();
-      if (!state.thread) return;
-      send({ input: $("replyText"), fileInput: $("replyFiles"), status: $("replyPending"), mode: "append",
-        rootId: state.thread.ref.replace("interaction:root:", "") });
+      if (state.thread) send({ input: $("replyText"), fileInput: $("replyFiles"), status: $("replyPending"), replyTo: state.thread.ref });
     };
     $("closeThread").onclick = closeThread;
-    $("signout").onclick = async () => {
-      await fetch("/__polynet/auth/logout", { method: "POST" });
-      refresh();
-    };
+    $("signin").onclick = () => polynet.signIn("/");
+    $("signout").onclick = async () => { await polynet.signOut(); refresh(); };
+    for (const link of document.querySelectorAll('a[href^="/__polynet/auth/start"]')) {
+      link.onclick = (event) => { event.preventDefault(); polynet.signIn("/"); };
+    }
 
-    refresh();
+    refresh().catch(fail);
   </script>
-</body>
-</html>

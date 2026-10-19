@@ -107,10 +107,11 @@ test("the community's own Worker never receives Polynet's cookies", async () => 
 
 test("the session endpoint gives a signed-in page its watch-only token, matching the backend's", async () => {
   const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
-  expect(anonymous).toEqual({ signed_in: false, join_url: "https://polynet.example.com/c/apps-community" });
+  expect(anonymous).toEqual({ signed_in: false, community: "apps-community", join_url: "https://polynet.example.com/c/apps-community" });
   const signedIn = await (await edge.fetch(request("/__polynet/auth/session", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env())).json();
   expect(signedIn).toEqual({
     signed_in: true,
+    community: "apps-community",
     join_url: "https://polynet.example.com/c/apps-community",
     live: { url: "https://live.example.convex.cloud", token: await deriveCommunityAppWatchToken(TOKEN) },
   });
@@ -153,6 +154,15 @@ test("agent turns stream through with the session and edge secret; history is re
   await edge.fetch(request("/__polynet/agent/messages", { headers: { cookie } }), env());
   expect((upstream.mock.calls[1] as unknown as [string])[0]).toBe("https://api.example.convex.site/runtime/app/agent_messages");
   expect((await edge.fetch(request("/__polynet/agent", { headers: { cookie } }), env())).status).toBe(405);
+});
+
+test("the builder kit is served on every community's domain", async () => {
+  const sdk = await edge.fetch(request("/__polynet/sdk.js"), env());
+  expect(sdk.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  expect(await sdk.text()).toContain("export default polynet;");
+  const doc = await edge.fetch(request("/__polynet/llms.txt"), env());
+  expect(doc.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  expect(await doc.text()).toContain('import polynet from "/__polynet/sdk.js";');
 });
 
 test("logout revokes the session and clears the cookie", async () => {

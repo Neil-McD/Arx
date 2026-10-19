@@ -8,6 +8,9 @@
 // Front-end code never sees a token. Production reaches user Workers through a
 // Workers for Platforms dispatch namespace; local dev uses a service binding.
 
+import { SDK_SOURCE } from "./sdk";
+import { LLMS_TXT } from "./llms";
+
 type Fetcher = { fetch(request: Request): Promise<Response> };
 
 export interface Env {
@@ -168,8 +171,9 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
     const token = String(readCookie(request, SESSION_COOKIE) ?? "");
     // Joining (open, approval or paid) happens on Polynet's own join page.
     const joinUrl = new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
-    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, join_url: joinUrl });
-    return json(200, { signed_in: true, join_url: joinUrl, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
+    const community = route.community;
+    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, community, join_url: joinUrl });
+    return json(200, { signed_in: true, community, join_url: joinUrl, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
   }
 
   if (action === "logout" && request.method === "POST") {
@@ -271,6 +275,17 @@ export default {
     const route = await resolveRoute(url.hostname, env);
     if (!route) return new Response("Community not found", { status: 404 });
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
+    // The builder kit: the SDK every front end imports, and its doc.
+    if (url.pathname === "/__polynet/sdk.js" || url.pathname === "/__polynet/llms.txt") {
+      const sdk = url.pathname.endsWith(".js");
+      return new Response(sdk ? SDK_SOURCE : LLMS_TXT, {
+        headers: {
+          "Content-Type": sdk ? "text/javascript; charset=utf-8" : "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (url.pathname === API_PREFIX || url.pathname.startsWith(`${API_PREFIX}/`)) {
       return await proxyApi(request, url, env);
     }
