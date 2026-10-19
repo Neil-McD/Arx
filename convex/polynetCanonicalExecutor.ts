@@ -1223,11 +1223,17 @@ async function executeCanonicalList(args: {
         },
       ]
     : [];
+  const community = (await args.ctx.runQuery(
+    (internal as any).communityCapabilityContext.getCommunityRepositoryIdentityInternal,
+    { communityId: target.communityId },
+  )) as { slug: string; name: string } | null;
   return {
     ok: true,
     value: {
       ...value,
       entries: [...rawEntries, ...builderEntry],
+      // Who this is: a front end's title, and the community agent's @mention token.
+      ...(community ? { community } : {}),
       authority: {
         lane: target.authority.lane,
         relation: target.authority.relation,

@@ -225,6 +225,10 @@ Chat through the door, the same for every actor:
 - `polynet_write` with `update` or `delete` on a post's `.md` path edits or
   deletes the caller's own post only, even for owners; moderating others'
   posts stays in Studio.
+- Listing the community folder (`/communities/<slug>/`) returns
+  `community: { slug, name }`. A post whose text contains `@<name>` and whose
+  `content.mentions` include `{ agentKey: "community_agent" }` asks the
+  community agent, which replies in the channel (community-funded).
 - `polynet_call` `community.interaction.react` sets the caller's reaction
   (`ref`, `emoji`, `on`), so retries are safe.
 
