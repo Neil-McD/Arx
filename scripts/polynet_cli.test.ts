@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,4 +61,10 @@ test("sign-in uses PKCE", () => {
   expect(first.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
   expect(first.challenge).not.toBe(first.verifier);
   expect(pkce().state).not.toBe(first.state);
+});
+
+test("the published package is exactly the command, its library and README", () => {
+  const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json"], { cwd: join(__dirname, "../packages/polynet-cli"), encoding: "utf8" }))[0];
+  expect(packed.name).toBe("@polynet/cli");
+  expect(packed.files.map((file: { path: string }) => file.path).sort()).toEqual(["README.md", "bin/polynet.mjs", "lib.mjs", "package.json"]);
 });
