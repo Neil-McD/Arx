@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import edge, { safeReturnPath, type Env } from "./index";
+import edge, { resolveRoute, safeReturnPath, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
@@ -154,6 +154,27 @@ test("agent turns stream through with the session and edge secret; history is re
   await edge.fetch(request("/__polynet/agent/messages", { headers: { cookie } }), env());
   expect((upstream.mock.calls[1] as unknown as [string])[0]).toBe("https://api.example.convex.site/runtime/app/agent_messages");
   expect((await edge.fetch(request("/__polynet/agent", { headers: { cookie } }), env())).status).toBe(405);
+});
+
+test("community pages are served untransformed, so Cloudflare injects no scripts", async () => {
+  const page = (headers: HeadersInit) => ({ ...env(), DEV_USER_WORKER: { fetch: async () => new Response("<html></html>", { headers }) } });
+  const html = await edge.fetch(request("/"), page({ "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=0, must-revalidate" }));
+  expect(html.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate, no-transform");
+  expect(await html.text()).toBe("<html></html>");
+  const bare = await edge.fetch(request("/about"), page({ "content-type": "text/html" }));
+  expect(bare.headers.get("cache-control")).toBe("no-transform");
+  const css = await edge.fetch(request("/app.css"), page({ "content-type": "text/css", "cache-control": "public, max-age=3600" }));
+  expect(css.headers.get("cache-control")).toBe("public, max-age=3600");
+});
+
+test("hostname lookups read the routes map once, then use a short cache", async () => {
+  const get = vi.fn(async (key: string) => key === "host:cached.polynet.page" ? JSON.stringify({ script: "site-cached", community: "cached" }) : null);
+  const routes = { get };
+  expect(await resolveRoute("Cached.Polynet.Page", { ROUTES: routes } as any)).toEqual({ script: "site-cached", community: "cached" });
+  expect(await resolveRoute("cached.polynet.page", { ROUTES: routes } as any)).toEqual({ script: "site-cached", community: "cached" });
+  expect(await resolveRoute("unknown.polynet.page", { ROUTES: routes } as any)).toBeNull();
+  expect(await resolveRoute("unknown.polynet.page", { ROUTES: routes } as any)).toBeNull();
+  expect(get.mock.calls.map(([key]) => key)).toEqual(["host:cached.polynet.page", "host:unknown.polynet.page"]);
 });
 
 test("the builder kit is served on every community's domain", async () => {

@@ -47,9 +47,25 @@ const SIGNIN_TTL_SECONDS = 600;
 const TOKEN_PATTERN = /^pna_[A-Za-z0-9_-]{43}$/;
 const STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
+// Hostname lookups are cached briefly per isolate, so a page load costs one KV
+// read, not one per file. A new mapping reaches every isolate within this window.
+const ROUTE_CACHE_MS = 30_000;
+const ROUTE_CACHE_MAX = 5_000;
+const routeCache = new Map<string, { raw: string | null; until: number }>();
+
+async function readRoute(host: string, routes: NonNullable<Env["ROUTES"]>): Promise<string | null> {
+  const now = Date.now();
+  const cached = routeCache.get(host);
+  if (cached && cached.until > now) return cached.raw;
+  const raw = await routes.get(`host:${host}`);
+  if (routeCache.size >= ROUTE_CACHE_MAX) routeCache.clear();
+  routeCache.set(host, { raw, until: now + ROUTE_CACHE_MS });
+  return raw;
+}
+
 export async function resolveRoute(hostname: string, env: Env): Promise<Route | null> {
   const host = hostname.toLowerCase();
-  const raw = env.ROUTES ? await env.ROUTES.get(`host:${host}`) : env.DEV_ROUTES_JSON
+  const raw = env.ROUTES ? await readRoute(host, env.ROUTES) : env.DEV_ROUTES_JSON
     ? JSON.stringify((JSON.parse(env.DEV_ROUTES_JSON) as Record<string, Route>)[host] ?? null)
     : null;
   if (!raw) return null;
@@ -310,6 +326,17 @@ export default {
     }
     const worker = userWorker(route.script, env);
     if (!worker) return new Response("Community front end unavailable", { status: 503 });
-    return await worker.fetch(withoutPolynetCookies(request));
+    return untransformed(await worker.fetch(withoutPolynetCookies(request)));
   },
 };
+
+// Pages reach members exactly as the founder built them: no-transform stops
+// Cloudflare from rewriting HTML (for example injecting its analytics script),
+// so the only scripts a community page runs are its own and /__polynet/*.
+function untransformed(response: Response): Response {
+  if (!(response.headers.get("content-type") ?? "").includes("text/html")) return response;
+  const headers = new Headers(response.headers);
+  const cacheControl = headers.get("cache-control");
+  if (!/no-transform/i.test(cacheControl ?? "")) headers.set("cache-control", cacheControl ? `${cacheControl}, no-transform` : "no-transform");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}

@@ -1,7 +1,6 @@
 {
-  // Local spike config. POLYNET_EDGE_SECRET comes from .dev.vars (never committed).
-  // Production adds a dispatch_namespaces binding (DISPATCHER)
-  // and a KV namespace (ROUTES) instead of the DEV_* values below.
+  // Local dev (default) and the deployed staging edge (`--env staging`).
+  // POLYNET_EDGE_SECRET is never committed: .dev.vars locally, a Worker secret when deployed.
   "name": "polynet-community-edge",
   "main": "src/index.ts",
   // The live-updates client is served as text from /__polynet/live.js.
@@ -11,8 +10,23 @@
     "POLYNET_API_URL": "https://quick-porcupine-949.convex.site",
     "POLYNET_AUTH_URL": "https://polynet-staging.vercel.app",
     "POLYNET_LIVE_URL": "https://quick-porcupine-949.convex.cloud",
-    // Host -> { script, community }. Production uses the ROUTES KV namespace instead.
+    // Host -> { script, community }. Deployed edges use the ROUTES KV namespace instead.
     "DEV_ROUTES_JSON": "{\"hello.localhost\":{\"script\":\"hello\",\"community\":\"polynet\"}}"
   },
-  "services": [{ "binding": "DEV_USER_WORKER", "service": "polynet-community-hello" }]
+  "services": [{ "binding": "DEV_USER_WORKER", "service": "polynet-community-hello" }],
+  "env": {
+    // Every <community>.polynet.page site, served from the dispatch namespace, against staging.
+    "staging": {
+      "name": "polynet-edge-staging",
+      "workers_dev": false,
+      "routes": [{ "pattern": "*.polynet.page/*", "zone_name": "polynet.page" }],
+      "vars": {
+        "POLYNET_API_URL": "https://quick-porcupine-949.convex.site",
+        "POLYNET_AUTH_URL": "https://polynet-staging.vercel.app",
+        "POLYNET_LIVE_URL": "https://quick-porcupine-949.convex.cloud"
+      },
+      "dispatch_namespaces": [{ "binding": "DISPATCHER", "namespace": "polynet-sites-staging" }],
+      "kv_namespaces": [{ "binding": "ROUTES", "id": "1f354dc000c34b919cc2c69249363f9e" }]
+    }
+  }
 }
