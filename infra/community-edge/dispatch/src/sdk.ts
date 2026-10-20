@@ -344,12 +344,106 @@ async function account() {
   return body.account;
 }
 
+// Markdown (post text, replies, agent answers, descriptions) as DOM nodes, built
+// with createElement and textContent, never innerHTML, so Polynet text can't
+// inject markup. Paragraphs, line breaks, headings (#..### as h3..h5), lists
+// (- and 1.), quotes (>), code (inline and fenced), **bold**, *italic*, and
+// web links, labelled or bare (http and https only). Returns a DocumentFragment.
+const FENCE = "\x60\x60\x60";
+const INLINE = /(\x60[^\x60]+\x60)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*)|(\[[^\]]+\]\(https?:\/\/[^\s)]+\))|(https?:\/\/[^\s<]+[^\s<.,;:!?)])/g;
+const LIST_ITEM = /^\s*([-*]|\d+\.)\s+/;
+
+function markdownInline(text, parent) {
+  let last = 0;
+  for (const match of text.matchAll(INLINE)) {
+    if (match.index > last) parent.append(text.slice(last, match.index));
+    const token = match[0];
+    let node;
+    if (match[1]) {
+      node = document.createElement("code");
+      node.textContent = token.slice(1, -1);
+    } else if (match[2] || match[3]) {
+      const cut = match[2] ? 2 : 1;
+      node = document.createElement(match[2] ? "strong" : "em");
+      markdownInline(token.slice(cut, -cut), node);
+    } else {
+      const labelled = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/.exec(token);
+      node = document.createElement("a");
+      node.href = labelled ? labelled[2] : token;
+      node.textContent = labelled ? labelled[1] : token;
+      node.rel = "noopener noreferrer";
+      node.target = "_blank";
+    }
+    parent.append(node);
+    last = match.index + token.length;
+  }
+  if (last < text.length) parent.append(text.slice(last));
+}
+
+function markdown(source) {
+  const root = document.createDocumentFragment();
+  const lines = String(source == null ? "" : source).replace(/\r\n?/g, "\n").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i += 1; continue; }
+    if (line.startsWith(FENCE)) {
+      const block = [];
+      i += 1;
+      while (i < lines.length && !lines[i].startsWith(FENCE)) block.push(lines[i++]);
+      i += 1;
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = block.join("\n");
+      pre.append(code);
+      root.append(pre);
+      continue;
+    }
+    const heading = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (heading) {
+      const node = document.createElement("h" + (heading[1].length + 2));
+      markdownInline(heading[2], node);
+      root.append(node);
+      i += 1;
+      continue;
+    }
+    const item = LIST_ITEM.exec(line);
+    if (item) {
+      const list = document.createElement(/\d/.test(item[1]) ? "ol" : "ul");
+      while (i < lines.length && LIST_ITEM.test(lines[i])) {
+        const li = document.createElement("li");
+        markdownInline(lines[i++].replace(LIST_ITEM, ""), li);
+        list.append(li);
+      }
+      root.append(list);
+      continue;
+    }
+    if (line.startsWith(">")) {
+      const quote = document.createElement("blockquote");
+      const parts = [];
+      while (i < lines.length && lines[i].startsWith(">")) parts.push(lines[i++].replace(/^>\s?/, ""));
+      markdownInline(parts.join(" "), quote);
+      root.append(quote);
+      continue;
+    }
+    const paragraph = document.createElement("p");
+    const parts = [];
+    while (i < lines.length && lines[i].trim() && !lines[i].startsWith(FENCE) && !/^(#{1,3}\s|>)/.test(lines[i]) && !LIST_ITEM.test(lines[i])) parts.push(lines[i++]);
+    parts.forEach(function (part, index) {
+      if (index) paragraph.append(document.createElement("br"));
+      markdownInline(part, paragraph);
+    });
+    root.append(paragraph);
+  }
+  return root;
+}
+
 const polynet = {
   version: VERSION, PolynetError: PolynetError,
   session: session, signIn: signIn, signOut: signOut, community: community, account: account,
   channels: channels, feed: feed, thread: thread, post: post, edit: edit, remove: remove, react: react, fileUrl: fileUrl, watch: watch,
   events: events, resources: resources, readText: readText, knowledge: knowledge, members: members,
-  agentHistory: agentHistory, askAgent: askAgent,
+  agentHistory: agentHistory, askAgent: askAgent, markdown: markdown,
   door: { list: list, read: read, search: search, write: write, call: call },
 };
 

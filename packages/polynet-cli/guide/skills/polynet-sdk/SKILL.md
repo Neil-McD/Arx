@@ -1,71 +1,117 @@
 ---
 name: polynet-sdk
-description: Read and write a Polynet community's data from its site with the Polynet SDK (session, sign-in, channels, posts, reactions, live updates, events, courses, knowledge, members, the community agent). Use whenever site code needs community data or a member action.
+description: Read and write a Polynet community's data from its site with the Polynet SDK (session and sign-in, channels, posts, reactions, live updates, events, courses, knowledge, members, the community agent, safe markdown). Use whenever site code needs community data or a member action.
 ---
 
 # The Polynet SDK
 
 The full reference is served by every site:
-`https://<slug>.polynet.page/__polynet/llms.txt` (also
-`https://polynet.page/llms.txt`). Read it before using a method for the first
-time; it is the source of truth for names and fields. This skill is the
-short version and the traps.
+`https://<slug>.polynet.page/__polynet/llms.txt`. Read it before using a
+method for the first time; it is the source of truth for names and fields.
 
-## Load it
+The SDK brings data and behavior, never a look. These recipes fill markup you
+designed; class names and elements are yours.
+
+## Start
 
 ```js
 import polynet from "/__polynet/sdk.js";
 const session = await polynet.session(); // always first
 ```
 
-It only works on the live site (`<slug>.polynet.page`), not from a file or a
-local server: deploy to try anything.
+It only works on the live site (`<slug>.polynet.page`): deploy to try things.
 
-## Signed out vs signed in
+## Signed out, signed in
 
-- Signed out, only `session()` (with `community_name`, `community_one_liner`,
+```js
+if (!session.signed_in) {
+  document.querySelector("#sign-in").onclick = () => polynet.signIn();
+  document.querySelector("#join").href = session.join_url;
+}
+```
+
+- Signed out, only `session()` (`community_name`, `community_one_liner`,
   `community_about`, `member_count`, `join_url`) and `community()` work.
   Everything else throws `sign_in_required`.
-- `polynet.signIn()` sends the visitor to Polynet and back signed in.
-  Someone who isn't a member yet returns to `/?polynet=join`: show "Join"
-  (`session.join_url`), then "Sign in" again.
-- `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show a
-  "Manage" link to `session.studio_url` for owners and admins.
+- Someone not yet a member comes back to `/?polynet=join`: show "Join"
+  again, then "Sign in" once they've joined.
+- `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show
+  owners and admins a link to `session.studio_url`.
 
-## What's there
+## A live feed in your own markup
+
+```html
+<ol id="feed" role="log" aria-label="Club feed" aria-live="off"></ol>
+<template id="post">
+  <li><img class="avatar" alt=""><b class="who"></b> <time></time><div class="text"></div></li>
+</template>
+```
+
+```js
+const general = (await polynet.channels()).find((c) => c.isGeneral);
+const post = document.querySelector("#post");
+await polynet.watch(general.slug, async () => { // runs now, then on every change
+  const posts = await polynet.feed(general.slug, { limit: 30 });
+  document.querySelector("#feed").replaceChildren(...posts.map((p) => {
+    const node = post.content.cloneNode(true);
+    node.querySelector(".who").textContent = p.actor.display_name ?? "Member";
+    node.querySelector("time").textContent = new Date(p.created_at).toLocaleString();
+    node.querySelector(".text").append(polynet.markdown(p.text));
+    const avatar = node.querySelector(".avatar");
+    if (p.actor.avatar_url && p.actor.type !== "community_agent") avatar.src = p.actor.avatar_url;
+    else avatar.remove();
+    return node;
+  }));
+});
+```
+
+## Post, reply, react
+
+```js
+await polynet.post(general.slug, text);                          // a new post
+await polynet.post(general.slug, text, { replyTo: p.ref });      // a reply
+await polynet.post(general.slug, text, { askAgent: true });      // ask the agent in public
+await polynet.react(p.ref, "🔥", !p.reacted_by_me.includes("🔥")); // toggle a reaction
+const replies = await polynet.thread(general.slug, p.ref);       // the post, then its replies
+```
+
+Hide the composer when `channel.canPost` is false. `edit(p, text)` when
+`p.can_edit`; `remove(p)` when `p.by_me`. Attachments: `polynet.fileUrl(file)`.
+
+## Ask the agent, streaming
+
+```js
+status.textContent = "Thinking…";
+const reply = await polynet.askAgent(question, {
+  onDelta(textSoFar) { status.textContent = ""; answer.replaceChildren(polynet.markdown(textSoFar)); },
+});
+answer.replaceChildren(polynet.markdown(reply));
+```
+
+Each `onDelta` has the whole text so far: replace, don't append. The first
+words can take a few seconds while the agent uses tools.
+`agentHistory()` returns the member's earlier conversation.
+
+## Everything else
 
 | Need | Call |
 |---|---|
-| Channels | `channels()`; the one with `isGeneral` is the default; hide the composer when `canPost` is false |
-| Posts | `feed(slug, { limit })` oldest first; `thread(slug, post.ref)` |
-| Write | `post(slug, text, { replyTo, files, askAgent })`, `edit(post, text)` if `can_edit`, `remove(post)` if `by_me` |
-| Reactions | `react(ref, emoji, on)` |
-| Live | `const stop = await watch(slug, onChange)`; re-read inside `onChange`; never poll |
-| Files | `fileUrl(attachment)` for `<img>`, `<video>` or download links |
 | Events | `events({ limit })`; show times in the event's `timezone` |
-| Courses | `resources()` then `resources(course.path)`; `readText(lesson)` |
-| Knowledge | `knowledge(query?)` |
+| Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` |
+| What the community knows | `knowledge(query?)` |
 | Members | `members()` |
-| Agent | `agentHistory()`, `askAgent(text, { onDelta })` (streams) |
-| Account | `account()` (the shell already shows it) |
 
 ## Traps
 
 - Await `session()` before anything else, or calls throw `not_ready`.
-- Post text, replies and descriptions are markdown: render with `md.js`
-  (starter) or a sanitizing markdown library. Names and everything else:
-  `textContent`. Never `innerHTML` with Polynet text.
-- Catch `PolynetError`: on `sign_in_required` show sign-in (the session may
-  have ended); otherwise show `error.message` and let the member retry.
-- Agent replies can take a few seconds before the first `onDelta`: show a
-  "thinking" state. Each `onDelta` gives the whole text so far; replace,
-  don't append.
-- An agent's post has `actor.type === "community_agent"`. When it has a
+- Catch `PolynetError`: on `sign_in_required` show sign-in; otherwise show
+  `error.message` and let the member retry.
+- Markdown goes through `polynet.markdown(text)` (safe DOM nodes); everything
+  else through `textContent`. Never `innerHTML` with Polynet text.
+- An agent post has `actor.type === "community_agent"`. With a
   `display_name`, it acted for that member: label it
   "<community> agent · for <name>" with your own agent mark.
-- `avatar_url` images come from Polynet's storage host: a CSP needs
+- Member avatars come from Polynet's storage host: a CSP needs
   `img-src 'self' https:`.
-- The site acts as the signed-in member with member powers only. Admin
-  work happens in Polynet Studio.
-- The SDK file is cached for a few minutes; after Polynet changes it, a hard
-  refresh picks it up.
+- After Polynet updates the SDK, a hard refresh picks it up (it's cached for
+  a few minutes).

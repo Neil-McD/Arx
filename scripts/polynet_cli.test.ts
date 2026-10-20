@@ -66,7 +66,7 @@ test("sign-in uses PKCE", () => {
   expect(pkce().state).not.toBe(first.state);
 });
 
-test("the published package is exactly the command, its library and checks, README, the agent guide and the starter site", () => {
+test("the published package is exactly the command, its library and checks, README, and the agent guide (no site template)", () => {
   const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json"], { cwd: join(__dirname, "../packages/polynet-cli"), encoding: "utf8" }))[0];
   expect(packed.name).toBe("@polynet/cli");
   expect(packed.files.map((file: { path: string }) => file.path).sort()).toEqual([
@@ -74,11 +74,9 @@ test("the published package is exactly the command, its library and checks, READ
     "guide/AGENTS.md", "guide/CLAUDE.md",
     ...["accessibility", "build-site", "deploy-verify", "design", "sdk"].map((name) => `guide/skills/polynet-${name}/SKILL.md`),
     "lib.mjs", "package.json",
-    "starter/app.css", "starter/app.js", "starter/content.js", "starter/index.html", "starter/md.js", "starter/theme.css",
   ]);
 });
 
-const starterDir = join(__dirname, "../packages/polynet-cli/starter");
 const problems = (html: string, extra: Array<{ path: string; text: string }> = []) => {
   const result = checkSite([{ path: "/index.html", text: html }, ...extra]);
   return { errors: result.errors.map((p: any) => p.message).join("\n"), warnings: result.warnings.map((p: any) => p.message).join("\n") };
@@ -86,9 +84,13 @@ const problems = (html: string, extra: Array<{ path: string; text: string }> = [
 const GOOD = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">' +
   '<title>Run club</title><script type="module" src="/__polynet/ui.js"></script></head><body><polynet-account></polynet-account></body></html>';
 
-test("the starter site passes every check with no warnings", async () => {
-  const result = checkSite(await readCheckedFiles(await collectFiles(starterDir)));
-  expect(result).toEqual({ errors: [], warnings: [] });
+test("a page's files are read for the checks; others are skipped", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "polynet-check-"));
+  writeFileSync(join(dir, "index.html"), GOOD);
+  writeFileSync(join(dir, "logo.png"), "png");
+  const files = await readCheckedFiles(await collectFiles(dir));
+  expect(files.map((file: any) => file.path)).toEqual(["/index.html"]);
+  expect(checkSite(files)).toEqual({ errors: [], warnings: [] });
 });
 
 test("site checks block what is certain from the source", () => {
