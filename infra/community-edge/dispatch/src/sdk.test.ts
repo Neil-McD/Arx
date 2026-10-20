@@ -226,3 +226,16 @@ test("watch calls back when the session ends, so the re-read surfaces sign_in_re
   expect(changes).toBe(2);
   expect((await polynet.session()).signed_in).toBe(false);
 });
+
+test("account() reads the member's Polynet account; signed out it throws sign_in_required", async () => {
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": () => ok({ entries: [] }),
+    "/__polynet/account": () => Response.json({ ok: true, account: { member: { name: "Sam" }, communities: [{ slug: "run-club", current: true }], links: { discover: "d" } } }),
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  expect(await polynet.account()).toMatchObject({ member: { name: "Sam" }, links: { discover: "d" } });
+  stubFetch({ "/__polynet/account": () => Response.json({ ok: false, code: "sign_in_required" }, { status: 401 }) });
+  await expect(polynet.account()).rejects.toMatchObject({ code: "sign_in_required" });
+});

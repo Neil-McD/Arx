@@ -10,6 +10,7 @@
 
 import { SDK_SOURCE } from "./sdk";
 import { LLMS_TXT } from "./llms";
+import { UI_SOURCE } from "./ui";
 // The live-updates client, served from this domain so no community site loads a third-party script.
 import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
 
@@ -269,6 +270,25 @@ async function proxyApi(request: Request, url: URL, env: Env): Promise<Response>
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+// The member's Polynet account for the shell (who they are, their communities,
+// Polynet's links), read server-side with the member session.
+async function proxyAccount(request: Request, url: URL, env: Env): Promise<Response> {
+  if (request.method !== "GET") return json(405, { ok: false, code: "method_not_allowed" });
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
+  const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/account`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, Authorization: `Bearer ${token}`,
+      "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+    },
+    body: "{}",
+  });
+  const headers = new Headers({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+  if (upstream.status === 401) headers.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
 // Uploads and file downloads, forwarded server-side with the member session.
 async function proxyFile(request: Request, url: URL, env: Env): Promise<Response> {
   const token = readCookie(request, SESSION_COOKIE);
@@ -352,6 +372,16 @@ export default {
       return new Response(sdk ? SDK_SOURCE : LLMS_TXT, {
         headers: {
           "Content-Type": sdk ? "text/javascript; charset=utf-8" : "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+    if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
+    if (url.pathname === "/__polynet/ui.js") {
+      return new Response(UI_SOURCE, {
+        headers: {
+          "Content-Type": "text/javascript; charset=utf-8",
           "Cache-Control": "public, max-age=300",
           "X-Content-Type-Options": "nosniff",
         },
