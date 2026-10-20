@@ -1073,6 +1073,7 @@ async function executeRetrievalAgentLoop(
     communitySlug: params.communitySlug,
     communityOneLiner: params.communityOneLiner,
     communityAbout: params.communityAbout,
+    communityChannels: params.communityChannels,
     communitySystemPrompt: params.communitySystemPrompt,
     communityLensAuthority: params.communityLensAuthority,
     runtimeTurnContext,

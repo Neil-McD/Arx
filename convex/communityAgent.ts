@@ -1,5 +1,7 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveCommunityChannelActor } from "./communityChannelAccess";
+import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import {
   resolveAuthenticatedActorByTrustedSubject,
 } from "./authActor";
@@ -91,12 +93,27 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
   const communitySlug = String(community.slug ?? "").trim() || null;
   const communityOneLiner = String(community.oneLiner ?? "").trim() || null;
   const communityAbout = String(community.about ?? "").trim() || null;
+  // The member's map: shared channels they can read (private rooms stay discoverable via channels/).
+  let communityChannels: Array<{ slug: string; name: string }> = [];
+  try {
+    const actor = await resolveCommunityChannelActor({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
+    const page = await listAuthorizedCommunityChannelPage({
+      ctx: args.ctx, communityId: args.communityId, actor, section: "shared",
+      paginationOpts: { cursor: null, numItems: 20 },
+    });
+    communityChannels = page.page
+      .map((channel: any) => ({ slug: String(channel.slug ?? "").trim(), name: String(channel.name ?? "").trim() }))
+      .filter((channel) => channel.slug);
+  } catch {
+    // The map is a shortcut; the agent can still list channels/.
+  }
   return {
     community_id: String(args.communityId),
     community_name: communityName,
     community_slug: communitySlug,
     community_one_liner: communityOneLiner,
     community_about: communityAbout,
+    community_channels: communityChannels,
     community_system_prompt: config?.systemPrompt ?? null,
     community_lens_authority: communityLensAuthority,
     system_prompt: config?.systemPrompt ?? null,

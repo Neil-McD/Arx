@@ -284,6 +284,27 @@ async function turn(f: Awaited<ReturnType<typeof fixture>>, token: string, text:
   return { status: response.status, stream: await response.text() };
 }
 
+test("the agent starts with a map of the channels the member can read", async () => {
+  const f = await fixture();
+  const token = await f.signIn("agent-member");
+  await f.t.run(async (c) => {
+    const community = await c.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", "agent-community")).unique();
+    const base = { communityId: community!._id, postingPolicy: "members" as const, status: "active" as const, createdAt: 1, updatedAt: 1 };
+    await c.db.insert("communityChannels", { ...base, slug: "runs", name: "Runs", accessMode: "all_members", position: 1 });
+    await c.db.insert("communityChannels", { ...base, slug: "founders", name: "Founders", accessMode: "restricted", position: 2 });
+  });
+  const calls = fakeModel("Here's the map.");
+  const response = await f.post(COMMUNITY_APP_AGENT_PATH, f.asEdge(token), { text: "What's happening?", message_key: "map-turn" });
+  const stream = await response.text();
+  if (!stream.includes("event: done")) throw new Error(`turn did not finish: ${response.status} ${stream.slice(-1500)}`);
+  const sent = JSON.stringify(calls[0]);
+  expect(sent).toContain("#General: /communities/agent-community/channels/general/");
+  expect(sent).toContain("#Runs: /communities/agent-community/channels/runs/");
+  expect(sent).toContain("Events: /communities/agent-community/events/");
+  // A private room the member has no grant for stays off the map.
+  expect(sent).not.toContain("channels/founders/");
+});
+
 test("the front-end conversation is the member's own Studio conversation for this community", async () => {
   const f = await fixture();
   const token = await f.signIn("agent-member");

@@ -130,6 +130,7 @@ export type RuntimeTurnResolution = {
   runtimeCommunitySlug: string | null;
   runtimeCommunityOneLiner: string | null;
   runtimeCommunityAbout: string | null;
+  runtimeCommunityChannels: Array<{ slug: string; name: string }>;
   runtimeCommunitySystemPrompt: string | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   runtimeCommunityFunnelSlot: CommunityCustomFunnelSlot | null;
@@ -625,6 +626,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunitySlug: string | null = null;
   let runtimeCommunityOneLiner: string | null = null;
   let runtimeCommunityAbout: string | null = null;
+  let runtimeCommunityChannels: Array<{ slug: string; name: string }> = [];
   let runtimeCommunitySystemPrompt: string | null = null;
   let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
@@ -678,6 +680,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         community_slug?: unknown;
         community_one_liner?: unknown;
         community_about?: unknown;
+        community_channels?: unknown;
         community_system_prompt?: unknown;
         community_lens_authority?: unknown;
       } | null;
@@ -691,6 +694,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         String(resolvedCommunity?.community_one_liner ?? "").trim() || null;
       runtimeCommunityAbout =
         String(resolvedCommunity?.community_about ?? "").trim() || null;
+      runtimeCommunityChannels = Array.isArray(resolvedCommunity?.community_channels)
+        ? (resolvedCommunity.community_channels as Array<{ slug?: unknown; name?: unknown }>)
+            .map((channel) => ({ slug: String(channel?.slug ?? "").trim(), name: String(channel?.name ?? "").trim() }))
+            .filter((channel) => /^[a-z0-9][a-z0-9-]*$/.test(channel.slug))
+        : [];
       runtimeCommunitySystemPrompt =
         String(resolvedCommunity?.community_system_prompt ?? "").trim() || null;
       runtimeCommunityLensAuthority = normalizeCommunityLensAuthority(
@@ -844,6 +852,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunitySlug,
       runtimeCommunityOneLiner,
       runtimeCommunityAbout,
+      runtimeCommunityChannels,
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
       runtimeCommunityFunnelSlot,
