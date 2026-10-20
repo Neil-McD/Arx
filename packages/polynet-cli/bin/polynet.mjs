@@ -3,7 +3,8 @@
 // polynet login | logout                       sign in with Polynet (browser), or forget it
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -174,6 +175,31 @@ async function callPolynet(path, token, body) {
   return payload;
 }
 
+// polynet create [folder] --community <slug>: a complete starter site to make your own.
+async function create(args) {
+  const flag = args.indexOf("--community");
+  const community = (flag >= 0 ? args[flag + 1] : "")?.trim().toLowerCase();
+  if (!community) fail("Which community is this site for? Run: polynet create [folder] --community <slug>");
+  const folderArg = args.find((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--community");
+  const dir = resolve(folderArg ?? community + "-site");
+  const existing = await readdir(dir).catch(() => null);
+  if (existing && existing.length) fail(dir + " isn't empty. Choose a new folder.");
+  const starter = fileURLToPath(new URL("../starter/", import.meta.url));
+  await mkdir(dir, { recursive: true });
+  await cp(starter, dir, { recursive: true });
+  await writeFile(join(dir, "polynet.json"), JSON.stringify({ community }, null, 2) + "\n");
+  console.log([
+    "✓ Created a starter site for " + community + " in " + dir,
+    "",
+    "Next:",
+    "  1. Make it yours: theme.css (colors, type, shape) and content.js (words), then anything else.",
+    "  2. Deploy it:     cd " + (folderArg ?? community + "-site") + " && npx @polynet/cli deploy",
+    "  3. Open it:       https://" + community + ".polynet.page",
+    "",
+    "Guide for your AI: https://polynet.page/llms.txt",
+  ].join("\n"));
+}
+
 async function deploy(args) {
   const dirArg = args.find((arg) => !arg.startsWith("--") && args[args.indexOf(arg) - 1] !== "--community");
   const dir = resolve(dirArg ?? ".");
@@ -204,11 +230,14 @@ async function deploy(args) {
 const [command, ...rest] = process.argv.slice(2);
 try {
   if (command === "deploy") await deploy(rest);
+  else if (command === "create") await create(rest);
   else if (command === "login") await login();
   else if (command === "logout") { await saveAuth(null); console.log("✓ Signed out."); }
   else {
     console.log([
       "Usage:",
+      "  polynet create [folder] --community <slug>",
+      "      Start from Polynet's starter site: every page a community needs, ready to restyle.",
       "  polynet deploy [folder] [--community <slug>]",
       "      Put the folder (default: this one) live at https://<slug>.polynet.page.",
       "      You must be the community's owner or an admin. The community is saved",

@@ -63,8 +63,11 @@ test("sign-in uses PKCE", () => {
   expect(pkce().state).not.toBe(first.state);
 });
 
-test("the published package is exactly the command, its library and README", () => {
+test("the published package is exactly the command, its library, README and the starter site", () => {
   const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json"], { cwd: join(__dirname, "../packages/polynet-cli"), encoding: "utf8" }))[0];
   expect(packed.name).toBe("@polynet/cli");
-  expect(packed.files.map((file: { path: string }) => file.path).sort()).toEqual(["README.md", "bin/polynet.mjs", "lib.mjs", "package.json"]);
+  expect(packed.files.map((file: { path: string }) => file.path).sort()).toEqual([
+    "README.md", "bin/polynet.mjs", "lib.mjs", "package.json",
+    "starter/app.css", "starter/app.js", "starter/content.js", "starter/index.html", "starter/md.js", "starter/theme.css",
+  ]);
 });

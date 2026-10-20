@@ -241,6 +241,13 @@ async function readText(entry) {
   return text;
 }
 
+// The community's members: [{ name, role, ref, path }] ("owner", "admin", "moderator", "member").
+async function members() {
+  return (await listAll(root() + "members/"))
+    .filter(function (entry) { return entry.type === "member"; })
+    .map(function (entry) { return { name: entry.name || "Member", role: entry.role || "member", ref: entry.ref, path: entry.path }; });
+}
+
 // What the community knows: top memories, or a search.
 async function knowledge(query) {
   if (query) return (await search(root() + "memory/", query)).results || [];
@@ -341,7 +348,7 @@ const polynet = {
   version: VERSION, PolynetError: PolynetError,
   session: session, signIn: signIn, signOut: signOut, community: community, account: account,
   channels: channels, feed: feed, thread: thread, post: post, edit: edit, remove: remove, react: react, fileUrl: fileUrl, watch: watch,
-  events: events, resources: resources, readText: readText, knowledge: knowledge,
+  events: events, resources: resources, readText: readText, knowledge: knowledge, members: members,
   agentHistory: agentHistory, askAgent: askAgent,
   door: { list: list, read: read, search: search, write: write, call: call },
 };

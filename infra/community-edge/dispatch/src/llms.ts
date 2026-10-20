@@ -173,6 +173,8 @@ own rather than avatar_url (which is the member's).
 - resources(path?) -> courses (kind "directory") and lessons (kind
   "document"). Pass a course's path to list its lessons.
 - readText(entry) -> the text of a lesson, a memory or a post (markdown).
+- members() -> [{ name, role, ref, path }], role "owner", "admin",
+  "moderator" or "member".
 - knowledge(query?) -> what the community knows: top memories, or a search.
   Each has title, type, grade, applies_when.
 
