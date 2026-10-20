@@ -42,8 +42,35 @@ hostname map.
 | API GET | 405 at the edge |
 | Body over 64 KB | 413 at the edge |
 
+## Staging on polynet.page (October 20, 2026)
+
+Live: `https://<community>.polynet.page`, against the staging backend.
+
+| Piece | Value |
+| --- | --- |
+| Zone | `polynet.page` (registered at Namecheap, nameservers on Cloudflare) |
+| DNS | `*` A `192.0.2.0`, proxied (the edge answers; the address is a placeholder) |
+| Edge Worker | `polynet-edge-staging`, route `*.polynet.page/*` (`wrangler deploy --env staging` in `dispatch/`) |
+| Sites | Workers for Platforms namespace `polynet-sites-staging`, one user Worker per community (`site-<community>`) |
+| Hostname map | KV `polynet-routes-staging`: `host:<hostname>` → `{"script","community"}` |
+| Secret | `POLYNET_EDGE_SECRET` (`wrangler secret put --env staging`), equal to the backend's `POLYNET_COMMUNITY_EDGE_SECRET` |
+| Backend | origin registered with `communityApps:registerCommunityDomainInternal` |
+
+Add a community site by hand (until `polynet deploy` exists):
+
+```bash
+npx wrangler deploy -c user-hello/wrangler.jsonc --name site-<community> --dispatch-namespace polynet-sites-staging
+npx wrangler kv key put "host:<community>.polynet.page" '{"script":"site-<community>","community":"<slug>"}' --namespace-id 1f354dc000c34b919cc2c69249363f9e --remote
+npx convex run communityApps:registerCommunityDomainInternal '{"communityId":"<id>","origin":"https://<community>.polynet.page"}'
+```
+
+Verified on `https://polynet.polynet.page`: sign-in in one redirect, HttpOnly
+session (page JavaScript reads no cookies), live feed, post and delete
+updating live, the community agent streaming, and only `/__polynet/sdk.js` and
+`/__polynet/live.js` loaded (HTML is `no-transform`, so Cloudflare injects nothing).
+
 ## Not yet
 
-- Cloudflare resources (account, Workers for Platforms plan, namespace, KV, a
-  test hostname): needs approval and a paid plan.
-- Live updates beyond channels (presence, typing, events, resources), then the CLI.
+- `polynet deploy`: one command for founders (upload, map hostname, register origin).
+- Founders' own domains (Cloudflare for SaaS custom hostnames, `*/*` route).
+- A separate production edge and namespace before the production release.
