@@ -128,6 +128,7 @@ import type * as communityResourceEvidenceCore from "../communityResourceEvidenc
 import type * as communityResourceMemoryProjection from "../communityResourceMemoryProjection.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySemanticMembers from "../communitySemanticMembers.js";
+import type * as communitySites from "../communitySites.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communityText from "../communityText.js";
@@ -180,6 +181,7 @@ import type * as httpBilling from "../httpBilling.js";
 import type * as httpChatgpt from "../httpChatgpt.js";
 import type * as httpCommunityApps from "../httpCommunityApps.js";
 import type * as httpCommunityAttachments from "../httpCommunityAttachments.js";
+import type * as httpCommunitySites from "../httpCommunitySites.js";
 import type * as httpCommunitySourceIntegrations from "../httpCommunitySourceIntegrations.js";
 import type * as httpContext from "../httpContext.js";
 import type * as httpEmail from "../httpEmail.js";
@@ -378,6 +380,7 @@ declare const fullApi: ApiFromModules<{
   communityResourceMemoryProjection: typeof communityResourceMemoryProjection;
   communityResources: typeof communityResources;
   communitySemanticMembers: typeof communitySemanticMembers;
+  communitySites: typeof communitySites;
   communitySkillAttachments: typeof communitySkillAttachments;
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communityText: typeof communityText;
@@ -430,6 +433,7 @@ declare const fullApi: ApiFromModules<{
   httpChatgpt: typeof httpChatgpt;
   httpCommunityApps: typeof httpCommunityApps;
   httpCommunityAttachments: typeof httpCommunityAttachments;
+  httpCommunitySites: typeof httpCommunitySites;
   httpCommunitySourceIntegrations: typeof httpCommunitySourceIntegrations;
   httpContext: typeof httpContext;
   httpEmail: typeof httpEmail;

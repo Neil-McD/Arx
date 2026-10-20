@@ -7,6 +7,7 @@ import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
+import { registerCommunitySiteRoutes } from "./httpCommunitySites";
 import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
@@ -293,6 +294,8 @@ registerMemberAgentAttachmentRoutes({
 registerCommunityAttachmentRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
 
 registerCommunityAppRoutes({ http, httpAction });
+
+registerCommunitySiteRoutes({ http, httpAction, requireAuthenticatedActor });
 
 registerRuntimeContextRoutes({
   http,
