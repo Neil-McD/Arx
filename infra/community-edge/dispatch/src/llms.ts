@@ -71,6 +71,34 @@ the agent) needs a signed-in member and otherwise throws sign_in_required.
 - signOut() signs out and refreshes session().
 - polynet.community() -> { name, slug } (the same name as community_name).
 
+## The Polynet shell (required on every page)
+
+Every community site shows the Polynet account control, so members can always
+reach their account, their other communities, Discover, messages and settings:
+
+    <script type="module" src="/__polynet/ui.js"></script>
+    <polynet-account></polynet-account>
+
+Put it where your design wants it (usually the top-right of the header) and
+keep it visible on every page and at every width. Signed out it shows "Join"
+and "Sign in"; signed in, the member's avatar opens their account menu (with
+"Manage in Polynet" for owners and admins). Don't rebuild these yourself.
+
+Style it from your CSS to match the site; its structure and keyboard behavior
+are Polynet's:
+
+    polynet-account {
+      --polynet-accent: #c2410c;     /* buttons, focus rings, initials */
+      --polynet-on-accent: #fff;     /* text on the accent */
+      --polynet-surface: #111;       /* menu background (default: Canvas) */
+      --polynet-text: #f5f5f4;       /* menu text (default: CanvasText) */
+      --polynet-radius: 12px;
+      --polynet-font: inherit;
+    }
+
+Keep text/background contrast at least 4.5:1. Add align="start" if it sits at
+the left edge. polynet.account() returns the same data if you need it.
+
 ## Errors
 
 Failed calls throw PolynetError with .code, .message and .status. Codes:

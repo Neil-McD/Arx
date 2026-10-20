@@ -1,8 +1,11 @@
 import { useEffect } from "react";
 
+// ?dm=<conversation id> opens that conversation; ?dm=inbox (the community
+// sites' shell links here) opens the messages panel.
 export function useWebDirectMessageDeepLinkLifecycle(params: {
   isAuthenticated: boolean;
   openConversation: (conversationId: string) => void;
+  openInbox: () => void;
 }) {
   useEffect(() => {
     if (!params.isAuthenticated || typeof window === "undefined") return;
@@ -17,6 +20,7 @@ export function useWebDirectMessageDeepLinkLifecycle(params: {
       document.title,
       `${url.pathname}${url.search}${url.hash}`,
     );
-    params.openConversation(conversationId);
-  }, [params.isAuthenticated, params.openConversation]);
+    if (conversationId === "inbox") params.openInbox();
+    else params.openConversation(conversationId);
+  }, [params.isAuthenticated, params.openConversation, params.openInbox]);
 }

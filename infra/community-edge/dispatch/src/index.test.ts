@@ -179,6 +179,26 @@ test("community pages are served untransformed, so Cloudflare injects no scripts
   expect(css.headers.get("cache-control")).toBe("public, max-age=3600");
 });
 
+test("every site gets the shell (ui.js) and the member's account, read with their session", async () => {
+  resetEdgeCaches();
+  const ui = await edge.fetch(request("/__polynet/ui.js"), env());
+  expect(ui.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  const source = await ui.text();
+  expect(source).toContain('customElements.define("polynet-account"');
+  expect(source).toContain('import polynet from "/__polynet/sdk.js"');
+  expect(source).not.toContain("https://");
+
+  expect((await edge.fetch(request("/__polynet/account"), env())).status).toBe(401);
+  const upstream = vi.fn(async () => Response.json({ ok: true, account: { member: { name: "Sam" }, communities: [], links: {} } }));
+  vi.stubGlobal("fetch", upstream);
+  const res = await edge.fetch(request("/__polynet/account", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env());
+  expect(await res.json()).toMatchObject({ ok: true, account: { member: { name: "Sam" } } });
+  const [path, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
+  expect(path).toBe("https://api.example.convex.site/runtime/app/account");
+  expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+  expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBeTruthy();
+});
+
 test("polynet.page itself is the front door: a page and the builder guide", async () => {
   const e = { ...env(), POLYNET_SITES_DOMAIN: "polynet.page" };
   const page = await edge.fetch(new Request("https://polynet.page/"), e);

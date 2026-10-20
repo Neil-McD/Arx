@@ -2457,7 +2457,8 @@ export default defineSchema({
     communityId: v.id("communities"),
     origin: v.string(),
     createdAt: v.number(),
-  }).index("by_origin", ["origin"]),
+  }).index("by_origin", ["origin"])
+    .index("by_community", ["communityId"]),
 
   // Each published site deploy (polynet deploy): who put which files live where.
   communitySiteDeploys: defineTable({

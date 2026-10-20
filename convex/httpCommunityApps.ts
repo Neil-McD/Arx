@@ -30,6 +30,7 @@ export const COMMUNITY_APP_HANDOFF_PATH = "/runtime/auth_bridge_community_handof
 export const COMMUNITY_EDGE_EXCHANGE_PATH = "/runtime/community_edge/session_exchange";
 export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revoke";
 export const COMMUNITY_EDGE_PUBLIC_PATH = "/runtime/community_edge/public";
+export const COMMUNITY_APP_ACCOUNT_PATH = "/runtime/app/account";
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -374,6 +375,21 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       })) as { ok: true; expiresAt: number } | { ok: false; reason: string };
       if (!result.ok) return reply(403, { ok: false, code: result.reason });
       return reply(200, { ok: true, token, expires_at: new Date(result.expiresAt).toISOString() });
+    }),
+  });
+
+  // The signed-in member's Polynet account, for the shell every site shows.
+  args.http.route({
+    path: COMMUNITY_APP_ACCOUNT_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requireAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const account = await ctx.runQuery(internal.communityApps.getCommunityAppAccountInternal, {
+        userId: session.userId as any, currentCommunityId: session.communityId as any,
+      });
+      if (!account) return reply(401, { ok: false, code: "community_app_session_invalid", message: "Sign in to this community." });
+      return reply(200, { ok: true, account });
     }),
   });
 

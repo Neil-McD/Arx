@@ -6,6 +6,7 @@
   <title>Community</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; --line: #8883; --soft: #8881; --accent: #7c5cff; }
+    polynet-account { --polynet-accent: #5b3fd6; --polynet-radius: 12px; }
     [hidden] { display: none !important; }
     body { margin: 0; }
     button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
@@ -65,8 +66,7 @@
   <header>
     <h1 id="title">Community</h1>
     <span class="live" id="live"></span>
-    <button id="signin" hidden>Sign in with Polynet</button>
-    <button id="signout" hidden>Sign out</button>
+    <polynet-account></polynet-account>
   </header>
   <div class="notice" id="signedOut" hidden>
     <p>Sign in with your Polynet account to join the conversation.</p>
@@ -103,6 +103,7 @@
       <form id="replyComposer"><label class="attach" title="Attach files">📎<input id="replyFiles" type="file" multiple /></label><input id="replyText" placeholder="Reply" autocomplete="off" /><button>Reply</button></form>
     </section>
   </main>
+  <script type="module" src="/__polynet/ui.js"></script>
   <script type="module">
     // A Polynet community front end built only on the SDK. See /__polynet/llms.txt.
     import polynet from "/__polynet/sdk.js";
@@ -322,8 +323,6 @@
       state.session = session;
       const joinNeeded = !session.signed_in && new URLSearchParams(location.search).get("polynet") === "join";
       for (const link of document.querySelectorAll(".joinLink")) link.href = session.join_url ?? "#";
-      $("signin").hidden = session.signed_in || joinNeeded;
-      $("signout").hidden = !session.signed_in;
       $("signedOut").hidden = session.signed_in || joinNeeded;
       $("joinNeeded").hidden = !joinNeeded;
       $("app").hidden = !session.signed_in;
@@ -375,8 +374,6 @@
       if (state.thread) send({ input: $("replyText"), fileInput: $("replyFiles"), status: $("replyPending"), replyTo: state.thread.ref });
     };
     $("closeThread").onclick = closeThread;
-    $("signin").onclick = () => polynet.signIn("/");
-    $("signout").onclick = async () => { await polynet.signOut(); refresh(); };
     for (const link of document.querySelectorAll('a[href^="/__polynet/auth/start"]')) {
       link.onclick = (event) => { event.preventDefault(); polynet.signIn("/"); };
     }

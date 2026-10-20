@@ -323,9 +323,23 @@ async function watch(channel, onChange) {
   });
 }
 
+// The signed-in member's Polynet account, for the shell: { member, communities
+// [{ slug, name, role, current, site_url, studio_url }], links { discover,
+// settings, messages } }. Most sites use <polynet-account> instead.
+async function account() {
+  const res = await fetch("/__polynet/account", { credentials: "same-origin" });
+  const body = await res.json().catch(function () { return {}; });
+  if (res.status === 401) {
+    if (current) current.signed_in = false;
+    throw new PolynetError("sign_in_required", "Sign in to this community.", 401);
+  }
+  if (!res.ok || !body.ok) throw new PolynetError(body.code || "account_unavailable", body.message, res.status);
+  return body.account;
+}
+
 const polynet = {
   version: VERSION, PolynetError: PolynetError,
-  session: session, signIn: signIn, signOut: signOut, community: community,
+  session: session, signIn: signIn, signOut: signOut, community: community, account: account,
   channels: channels, feed: feed, thread: thread, post: post, edit: edit, remove: remove, react: react, fileUrl: fileUrl, watch: watch,
   events: events, resources: resources, readText: readText, knowledge: knowledge,
   agentHistory: agentHistory, askAgent: askAgent,

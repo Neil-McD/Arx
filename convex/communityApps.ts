@@ -3,6 +3,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { requireCommunityChatAccess } from "./communityCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive } from "../shared/communityLifecycle";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   COMMUNITY_APP_HANDOFF_TTL_MS,
   COMMUNITY_APP_SESSION_TTL_MS,
@@ -69,6 +70,58 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
       one_liner: text((community as any).oneLiner, 500),
       about: text((community as any).about, 4000),
       member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
+    };
+  },
+});
+
+// The member's Polynet account as every community site shows it (the shell):
+// who they are, every community they belong to (with its site, if it has one),
+// and where Polynet keeps the rest (Discover, settings, messages, Studio).
+export const getCommunityAppAccountInternal = internalQuery({
+  args: { userId: v.id("users"), currentCommunityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+    const display = await resolveUserProfileDisplayProjection(ctx, args.userId);
+    const roles = new Map<string, string>();
+    for (const community of await ctx.db.query("communities").withIndex("by_owner", (q) => q.eq("ownerId", args.userId)).take(100)) {
+      roles.set(String(community._id), "owner");
+    }
+    for (const membership of await ctx.db.query("communityMemberships").withIndex("by_user", (q) => q.eq("userId", args.userId)).take(500)) {
+      if (membership.active !== true || roles.has(String(membership.communityId))) continue;
+      roles.set(String(membership.communityId), membership.role);
+    }
+    let studioOrigin: string | null = null;
+    try {
+      studioOrigin = readCanonicalPublicAppOrigin();
+    } catch {
+      studioOrigin = null;
+    }
+    const studio = (path: string) => (studioOrigin ? `${studioOrigin}${path}` : null);
+    const communities: Array<Record<string, unknown>> = [];
+    for (const [communityId, role] of roles) {
+      const community = await ctx.db.get(communityId as any) as any;
+      if (!community || !communityIsActive(community)) continue;
+      const domain = await ctx.db.query("communityDomains").withIndex("by_community", (q) => q.eq("communityId", community._id)).first();
+      const slug = String(community.slug ?? "");
+      communities.push({
+        slug,
+        name: String(community.name ?? "").trim() || slug,
+        role,
+        current: String(community._id) === String(args.currentCommunityId),
+        site_url: domain?.origin ?? null,
+        studio_url: studio(`/c/${encodeURIComponent(slug)}`),
+      });
+    }
+    communities.sort((a, b) => Number(b.current) - Number(a.current) || String(a.name).localeCompare(String(b.name)));
+    return {
+      member: {
+        name: display.display_name ?? user.handle ?? "Member",
+        handle: typeof user.handle === "string" ? user.handle : null,
+        avatar_url: display.avatar_url ?? null,
+      },
+      communities,
+      links: { discover: studio("/discover"), settings: studio("/settings/profile"), messages: studio("/?dm=inbox") },
     };
   },
 });
