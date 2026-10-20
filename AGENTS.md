@@ -229,3 +229,17 @@ We call MVP ready only when:
 - Robustness: failure/retry paths are deterministic and recoverable.
 
 If a change harms these five dimensions, it is out of scope for launch.
+
+---
+
+## 9) Factory Workflow
+
+Polynet is built by the software factory. Shared playbooks live in [Neil-McD/factory](https://github.com/Neil-McD/factory) (`config/polynet.yaml` mirrors this section). This repo's rules above win over factory rules.
+
+- Linear team: `POL`. Every change starts from a Linear issue.
+- Branch: `<agent>/<issue>-<slug>`, e.g. `codex/POL-12-fix-edge-test`. Agents push only to `codex/` or `claude/` branches.
+- PR title: `<issue>: <user-visible outcome>`. Fill every section of `.github/pull_request_template.md`. Commit trailers: `Linear-Issue: <issue>` and `Built-By: <codex|claude>`.
+- Verify command: `npm run release:gate` (CI check `Release Gate`). Run it and paste the output in the PR.
+- Review: the model family that did not write the PR reviews it. Codex reviews `claude/` PRs; Claude reviews `codex/` PRs.
+- Risk-high areas (spec and human approval required): auth and sessions, billing and `checkout_finalize`, builder payouts, entitlements and membership gates, official Polynet MCP access, data migrations.
+- Forbidden for agents: merging, rebasing someone else's branch, `release:prod`, any Vercel CLI release command, weakening or skipping tests.
