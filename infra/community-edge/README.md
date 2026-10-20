@@ -83,6 +83,6 @@ updating live, the community agent streaming, and only `/__polynet/sdk.js` and
 
 ## Not yet
 
-- Publish `polynet-cli` to npm (needs an npm account), and switch its default to production at the production release.
+- Publish `@polynet/cli` to npm at the production release (switch its default API to production first; npm account `polynet` needs 2FA on).
 - Founders' own domains (Cloudflare for SaaS custom hostnames, `*/*` route).
 - A separate production edge and namespace before the production release.

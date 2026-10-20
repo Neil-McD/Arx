@@ -149,11 +149,11 @@ Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
 
 The site is a folder of static files with an index.html. From that folder:
 
-    npx polynet-cli deploy --community <community-slug>
+    npx @polynet/cli deploy --community <community-slug>
 
 The first run opens the browser to sign in with Polynet (the community's owner
 or an admin) and saves the community in polynet.json, so later deploys are just
-"npx polynet-cli deploy". Only changed files upload. The site is live at
+"npx @polynet/cli deploy". Only changed files upload. The site is live at
 https://<community-slug>.polynet.page within a minute. Every path that isn't a
 file serves index.html, so client-side routes work. No server code runs:
 everything dynamic comes from the SDK.
