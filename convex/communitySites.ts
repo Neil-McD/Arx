@@ -25,6 +25,18 @@ export function siteHostname(communitySlug: string, sitesDomain: string): string
   return `${slug}.${sitesDomain}`;
 }
 
+const SITE_MIME: Record<string, string> = {
+  html: "text/html", htm: "text/html", css: "text/css", js: "text/javascript", mjs: "text/javascript",
+  json: "application/json", txt: "text/plain", md: "text/markdown", xml: "application/xml", svg: "image/svg+xml",
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif",
+  ico: "image/x-icon", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf",
+  mp4: "video/mp4", webm: "video/webm", mp3: "audio/mpeg", pdf: "application/pdf", webmanifest: "application/manifest+json",
+};
+
+export function siteFileMimeType(path: string): string {
+  return SITE_MIME[/\.([^./]+)$/.exec(path)?.[1]?.toLowerCase() ?? ""] ?? "application/octet-stream";
+}
+
 export function siteScriptName(communitySlug: string): string {
   return `site-${communitySlug}`;
 }

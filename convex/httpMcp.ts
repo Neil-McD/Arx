@@ -7,6 +7,8 @@ import {
   isSupportedPolynetMcpProtocolVersion,
 } from "../shared/polynetMcp";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
+import { derivePolynetHumanAuthority } from "../shared/polynetAuthority";
+import { internal } from "./_generated/api";
 import {
   POLYNET_CANONICAL_TOOL_NAMES,
   type PolynetCanonicalToolName,
@@ -407,6 +409,32 @@ function buildToolTextContent(payload: Record<string, unknown>): Array<{ type: "
   ];
 }
 
+export const POLYNET_MCP_BUILDER_ONLY_MESSAGE =
+  "The Polynet MCP is for community builders (owners and admins). Members use their community's site and agent.";
+
+// The community a tool call targets, if any: the path (or, for polynet_call, the target).
+export function mcpTargetCommunitySlug(toolArgs: Record<string, unknown>): string | null {
+  const raw = typeof toolArgs.path === "string" ? toolArgs.path : typeof toolArgs.target === "string" ? toolArgs.target : "";
+  const match = /^\/communities\/([a-z0-9][a-z0-9-]*)(?:\/|$)/.exec(raw.trim());
+  return match ? match[1] : null;
+}
+
+// Builder-only: the caller must build some community, and any community it
+// touches must be one it owns or administers.
+async function mcpBuilderGate(ctx: any, authSubject: string, userId: any, toolArgs: Record<string, unknown>): Promise<boolean> {
+  const builderAnywhere = await ctx.runQuery((internal as any).communityCapabilityContext.isCommunityBuilderAnywhereInternal, { userId });
+  if (!builderAnywhere) return false;
+  const communitySlug = mcpTargetCommunitySlug(toolArgs);
+  if (!communitySlug) return true;
+  const resolved = (await ctx.runQuery(
+    (internal as any).communityCapabilityContext.resolveCommunityCapabilityContextForTrustedActorInternal,
+    { authSubject, userId, communitySlug },
+  )) as { ok: true; context: { access: Record<string, unknown> } } | { ok: false };
+  // An unknown or closed community is left to the door, which answers "not found".
+  if (!resolved.ok) return true;
+  return Boolean(derivePolynetHumanAuthority({ access: resolved.context.access, principalKind: "external_mcp" })?.canUseBuilderProjection);
+}
+
 async function handleToolCall(args: {
   ctx: any;
   authSubject: string;
@@ -421,6 +449,9 @@ async function handleToolCall(args: {
   if (
     (POLYNET_CANONICAL_TOOL_NAMES as readonly string[]).includes(toolName)
   ) {
+    if (!(await mcpBuilderGate(ctx, authSubject, actor.dbUserId, toolArgs))) {
+      return { ok: false, type: "tool", message: `builder_only: ${POLYNET_MCP_BUILDER_ONLY_MESSAGE}` };
+    }
     const execution = await executePolynetCanonicalTool({
       ctx,
       authSubject,
@@ -437,7 +468,10 @@ async function handleToolCall(args: {
         message: `${execution.code}: ${execution.message}`,
       };
     }
-    const structuredContent = execution.value;
+    // The communities directory lists only the communities the caller builds.
+    const structuredContent = toolName === "polynet_list" && String(toolArgs.path ?? "").replace(/\/+$/, "") === "/communities" && Array.isArray((execution.value as any).entries)
+      ? { ...execution.value, entries: (execution.value as any).entries.filter((entry: any) => entry?.role === "owner" || entry?.role === "admin") }
+      : execution.value;
     return {
       ok: true,
       result: {

@@ -1,4 +1,6 @@
 import { api, internal } from "./_generated/api";
+import { hashSiteFile, publishSite, readSitesConfig, startSiteUpload, uploadSiteFiles } from "./communitySiteDeploy";
+import { siteFileMimeType, siteHostname, siteScriptName, validateSiteManifest } from "./communitySites";
 import { executeCommunityIntegrationRead, type IntegrationReadDependencies } from "./communityIntegrationReadCore";
 import { renderCommunitySubmittedFormsMarkdown, renderCommunityMemberSuccessDossierMarkdown } from "../shared/communityMemberSuccessDossier";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
@@ -69,6 +71,10 @@ const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
 const ADMISSION_DENY_OPERATION = "community.admission.deny";
 const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
 const APPROVE_MILESTONE_OPERATION = "community.workflow.approve_milestone";
+// A builder's own agent publishes the community's site by handing over its files.
+const SITE_DEPLOY_OPERATION = "community.site.deploy";
+const SITE_DEPLOY_MAX_FILES = 200;
+const SITE_DEPLOY_MAX_BYTES = 5 * 1024 * 1024;
 const FORM_SUBMIT_OPERATION = "community.form.submit";
 const REACT_OPERATION = "community.interaction.react";
 const SELF_FORMS_DIRECTORY = "/members/me/forms/";
@@ -661,7 +667,10 @@ function capabilityDocument(args: {
   const isWorkflowApprovalCapability = args.operation === APPROVE_MILESTONE_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability) {
+  const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
+    args.evidenceSurface === "external_mcp" &&
+    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
+  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isSiteDeployCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -669,7 +678,7 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isFunnelCapability || isAdmissionCapability || isWorkflowApprovalCapability ? "builder" : "member",
+    authority_lane: isFunnelCapability || isAdmissionCapability || isWorkflowApprovalCapability || isSiteDeployCapability ? "builder" : "member",
     idempotency_required: true,
   };
   if (isReactCapability) {
@@ -677,6 +686,16 @@ function capabilityDocument(args: {
       ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
       emoji: "up to 32 characters", on: "true adds your reaction, false removes it",
       effects: ["set_own_reaction"], forbidden_effects: ["react_as_someone_else"] };
+  } else if (isSiteDeployCapability) {
+    operationDefinition.input = {
+      required: ["files"],
+      files: 'an object of "/path" -> { content, encoding }: the whole static site, with /index.html. encoding is "utf8" (default) or "base64" for images and fonts',
+      limits: { max_files: SITE_DEPLOY_MAX_FILES, max_total_bytes: SITE_DEPLOY_MAX_BYTES },
+      result: "{ url }: the live site, https://<slug>.<sites domain>",
+      guidance: "Build the site from the builder guide (polynet.page/llms.txt); larger sites deploy with npx @polynet/cli deploy.",
+      effects: ["publish_community_site"],
+      forbidden_effects: ["server_code", "change_access", "deploy_other_community"],
+    };
   } else if (isWorkflowApprovalCapability) {
     operationDefinition.input = { required: ["membership_ref", "expected_activation_sequence", "review_ref"],
       review_ref: "exact current workflow.approval observation from the private builder dossier",
@@ -1060,7 +1079,7 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
-      ...[REACT_OPERATION, FORM_SUBMIT_OPERATION, APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS].filter(operation => capabilityDocument({ target, operation,
+      ...[REACT_OPERATION, FORM_SUBMIT_OPERATION, APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -2239,6 +2258,9 @@ async function executeCanonicalCall(args: {
         : canonicalError("form_request_unavailable", "Form request not available or submission not authorized.");
     }
   }
+  if (operation === SITE_DEPLOY_OPERATION) {
+    return await executeSiteDeploy({ ...args, target, operation, rawInput, idempotencyKey });
+  }
   if (ADMISSION_OPERATIONS.includes(operation)) {
     if (args.principalKind !== "external_mcp") {
       return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
@@ -2446,6 +2468,86 @@ async function executeCanonicalCall(args: {
       errorMessage,
     });
     return canonicalError("polynet_call_failed", errorMessage);
+  }
+}
+
+// community.site.deploy: decode the files, upload only what Cloudflare lacks,
+// publish. The receipt records the manifest (paths, hashes, sizes), not contents.
+async function executeSiteDeploy(args: {
+  ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind;
+  evidenceSurface: CommunityEvidenceSurface; input: Record<string, unknown>;
+  target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const { target, rawInput } = args;
+  if (args.principalKind !== "external_mcp" || target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${args.operation}.json`) {
+    return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+  }
+  const rawFiles = rawInput.files && typeof rawInput.files === "object" && !Array.isArray(rawInput.files)
+    ? Object.entries(rawInput.files as Record<string, unknown>) : [];
+  if (rawFiles.length === 0 || rawFiles.length > SITE_DEPLOY_MAX_FILES) {
+    return canonicalError("invalid_tool_args", `Send files: 1 to ${SITE_DEPLOY_MAX_FILES} of "/path" -> { content, encoding }.`);
+  }
+  const decoded = new Map<string, { bytes: Uint8Array; mime: string }>();
+  const manifestInput: Record<string, { hash: string; size: number }> = {};
+  let totalBytes = 0;
+  for (const [path, value] of rawFiles) {
+    const file = value as { content?: unknown; encoding?: unknown } | null;
+    const content = typeof file?.content === "string" ? file.content : null;
+    const encoding = file?.encoding === "base64" ? "base64" : "utf8";
+    if (content === null || (file?.encoding !== undefined && file.encoding !== "utf8" && file.encoding !== "base64")) {
+      return canonicalError("invalid_tool_args", `Each file needs string content (utf8 or base64): ${path.slice(0, 80)}`);
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = encoding === "base64" ? Uint8Array.from(atob(content), (char) => char.charCodeAt(0)) : new TextEncoder().encode(content);
+    } catch {
+      return canonicalError("invalid_tool_args", `Invalid base64 content: ${path.slice(0, 80)}`);
+    }
+    totalBytes += bytes.length;
+    if (totalBytes > SITE_DEPLOY_MAX_BYTES) {
+      return canonicalError("site_too_large", "Deploys through the MCP are up to 5 MB; use npx @polynet/cli deploy for larger sites.");
+    }
+    const hash = await hashSiteFile(bytes, path);
+    manifestInput[path] = { hash, size: bytes.length };
+    decoded.set(hash, { bytes, mime: siteFileMimeType(path) });
+  }
+  if (!manifestInput["/index.html"]) return canonicalError("invalid_tool_args", "The site needs /index.html.");
+  const manifest = validateSiteManifest(manifestInput);
+  if (!manifest.ok) return canonicalError(manifest.code, manifest.message);
+  const config = readSitesConfig();
+  if (!config) return canonicalError("sites_unconfigured", "Site hosting isn't set up here.");
+  const hostname = siteHostname(target.communitySlug, config.domain);
+  if (!hostname) return canonicalError("site_name_unavailable", "This community's name can't be used as a site address.");
+
+  const receiptIdempotencyKey = `community-site:${args.idempotencyKey}`;
+  const receiptArgs = { ...args, input: { operation: args.operation, manifest: manifest.manifest }, target, toolName: "polynet_call" as const, idempotencyKey: receiptIdempotencyKey };
+  const reservation = await reserveMutatingOperation(receiptArgs);
+  if (!reservation.ok) return reservation.result;
+  if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+  const fail = async (code: string, message: string) => {
+    await failMutatingOperation({ ...receiptArgs, requestFingerprint: reservation.requestFingerprint,
+      attemptToken: reservation.attemptToken, errorCode: code, errorMessage: message });
+    return canonicalError(code, message);
+  };
+  try {
+    const site = { communityId: target.communityId, communitySlug: target.communitySlug, userId: args.userId,
+      hostname, script: siteScriptName(target.communitySlug) };
+    const upload = await startSiteUpload(config, site.script, manifest.manifest);
+    if (!upload) return await fail("upload_session_failed", "Couldn't start the upload. Try again.");
+    const completionJwt = await uploadSiteFiles(upload, decoded);
+    if (!completionJwt) return await fail("upload_failed", "Couldn't upload the site's files. Try again.");
+    const published = await publishSite({ ctx: args.ctx, config, site, completionJwt, files: manifest.fileCount, bytes: manifest.totalBytes });
+    if (!published.ok) return await fail(published.code, published.message);
+    const responseValue = {
+      ok: true, operation: args.operation,
+      result: { url: published.url, files: manifest.fileCount, bytes: manifest.totalBytes },
+      deduped: false,
+      receipt: canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, deduped: false }),
+    };
+    return { ok: true, value: await completeMutatingOperation({ ...receiptArgs, requestFingerprint: reservation.requestFingerprint,
+      attemptToken: reservation.attemptToken, value: responseValue }) };
+  } catch (error) {
+    return await fail("site_deploy_failed", error instanceof Error ? error.message : "Site deploy failed.");
   }
 }
 
