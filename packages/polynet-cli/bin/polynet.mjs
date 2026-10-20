@@ -1,13 +1,12 @@
 #!/usr/bin/env node
-// polynet create [dir] --community <slug>     the starter site, with guides for AI agents
+// polynet create [dir] --community <slug>     a site folder set up for your AI agent
 // polynet check [dir]                          the checks a site passes before going live
 // polynet deploy [dir] [--community <slug>]   check, then put a site live at <slug>.polynet.page
 // polynet skills [dir]                         add or update Polynet's skills for AI agents
 // polynet login | logout                       sign in with Polynet (browser), or forget it
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -180,7 +179,9 @@ async function callPolynet(path, token, body) {
   return payload;
 }
 
-// polynet create [folder] --community <slug>: a complete starter site to make your own.
+// polynet create [folder] --community <slug>: a folder ready for an AI agent to design and
+// build the site in: polynet.json, AGENTS.md, CLAUDE.md and Polynet's skills. No template:
+// every community's site starts from its own concept.
 async function create(args) {
   const flag = args.indexOf("--community");
   const community = (flag >= 0 ? args[flag + 1] : "")?.trim().toLowerCase();
@@ -189,20 +190,17 @@ async function create(args) {
   const dir = resolve(folderArg ?? community + "-site");
   const existing = await readdir(dir).catch(() => null);
   if (existing && existing.length) fail(dir + " isn't empty. Choose a new folder.");
-  const starter = fileURLToPath(new URL("../starter/", import.meta.url));
   await mkdir(dir, { recursive: true });
-  await cp(starter, dir, { recursive: true });
   await writeFile(join(dir, "polynet.json"), JSON.stringify({ community }, null, 2) + "\n");
   await installGuide(dir);
   console.log([
-    "✓ Created a starter site for " + community + " in " + dir,
+    "✓ Set up " + dir + " for " + community + "'s site",
     "",
-    "Next:",
-    "  1. Open the folder with your AI agent (Claude Code, Codex, Cursor…) and say what you want.",
-    "     It reads AGENTS.md and Polynet's skills, already in the folder.",
-    "  2. Or make it yours by hand: theme.css (colors, type, shape) and content.js (words).",
-    "  3. Deploy it: cd " + (folderArg ?? community + "-site") + " && npx @polynet/cli deploy",
-    "  4. Open it:   https://" + community + ".polynet.page",
+    "Next: open the folder with your AI agent (Claude Code, Codex, Cursor…) and say:",
+    "  \"Design our community's site.\"",
+    "It reads AGENTS.md and Polynet's skills: it will ask about your community, show you",
+    "three different directions live, then build the one you pick at",
+    "https://" + community + ".polynet.page",
   ].join("\n"));
 }
 
@@ -247,7 +245,7 @@ async function deploy(args) {
   if (!community) fail("Which community is this site for? Run: polynet deploy --community <slug>");
 
   const files = await collectFiles(dir);
-  if (!files.some((file) => file.path === "/index.html")) fail(`${dir} has no index.html.`);
+  if (!files.some((file) => file.path === "/index.html")) fail(`${dir} has no index.html yet. Ask your AI agent to design the site first.`);
   if (!(await runChecks(files))) process.exit(1);
   const site = await buildManifest(files);
   console.log(`Deploying ${site.files} files (${formatBytes(site.bytes)}) to ${community}…`);
@@ -276,8 +274,8 @@ try {
     console.log([
       "Usage:",
       "  polynet create [folder] --community <slug>",
-      "      Start from Polynet's starter site: every page a community needs, ready to",
-      "      restyle, with AGENTS.md and skills for your AI agent.",
+      "      Set up a folder for your AI agent to design and build the site in:",
+      "      AGENTS.md, CLAUDE.md and Polynet's skills. No template.",
       "  polynet check [folder]",
       "      Check the site: the Polynet shell and accessibility. Errors block deploys.",
       "  polynet deploy [folder] [--community <slug>]",

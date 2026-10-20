@@ -6,8 +6,9 @@ Put your community's site live on Polynet.
 > environment. Start at https://polynet.page.
 
 ```bash
-npx @polynet/cli create my-site --community <your-community-slug>   # a complete starter site
-cd my-site                                                          # make it yours: theme.css, content.js
+npx @polynet/cli create my-site --community <your-community-slug>   # a folder set up for your AI agent
+cd my-site                                                          # open it in Claude Code, Codex or Cursor:
+                                                                    # "Design our community's site."
 npx @polynet/cli deploy
 ```
 
@@ -18,11 +19,11 @@ npx @polynet/cli deploy
   community's owner or an admin. The community is saved in `polynet.json`, so
   later deploys are just `npx @polynet/cli deploy`.
 - Only changed files upload. The site is live at `https://<slug>.polynet.page`.
-- Building with an AI agent? `create` puts `AGENTS.md`, `CLAUDE.md` and
-  Polynet's skills (build-site, design, accessibility, sdk, deploy-verify) in
-  the folder, under `.agents/skills` and `.claude/skills`. Open the folder in
-  Claude Code, Codex or Cursor and say what you want. `polynet skills` adds or
-  updates them in any site folder.
+- There's no template: `create` puts `AGENTS.md`, `CLAUDE.md` and Polynet's
+  skills (build-site, design, sdk, accessibility, deploy-verify) in the
+  folder, under `.agents/skills` and `.claude/skills`. Your agent asks about
+  your community, shows you three directions live, and builds the one you
+  pick. `polynet skills` adds or updates the skills in any site folder.
 - `polynet check` checks the site: the Polynet shell on every page and the
   accessibility basics (language, title, zoom, image alt text, named buttons
   and links). `deploy` runs it first and stops on errors.

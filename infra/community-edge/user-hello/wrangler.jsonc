@@ -1,7 +1,7 @@
 {
-  // One community's front end (local dev): the starter site, served as Worker static assets.
+  // One community's front end (local dev): a minimal page, served as Worker static assets.
   // In production this is a user Worker uploaded into the dispatch namespace.
   "name": "polynet-community-hello",
   "compatibility_date": "2026-09-30",
-  "assets": { "directory": "../../../packages/polynet-cli/starter", "not_found_handling": "single-page-application" }
+  "assets": { "directory": "./public", "not_found_handling": "single-page-application" }
 }

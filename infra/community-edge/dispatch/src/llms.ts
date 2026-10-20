@@ -14,9 +14,11 @@ community's own domain, and it talks to Polynet only through the SDK below.
 
 1. Know the community's slug: it is in the community's Polynet address
    (.../c/<slug>). The person deploying must be its owner or an admin.
-2. Build the site in a folder with an index.html.
-3. Test it live. The SDK is served by the site's own address, so it only
-   works once deployed. From the folder:
+2. Design first (the next section): learn the community's world, show the
+   founder three directions, build the one they choose.
+3. Build the site in a folder with an index.html, and test it live. The SDK
+   is served by the site's own address, so it only works once deployed.
+   From the folder:
 
        npx @polynet/cli deploy --community <slug>
 
@@ -28,6 +30,42 @@ community's own domain, and it talks to Polynet only through the SDK below.
 
 Preview: during the preview, polynet.page sites run against Polynet's
 staging environment.
+
+## Design (before any code)
+
+There is no template: every site starts from its community's own world. Aim
+for the site members screenshot and send to friends. If it could be any
+community's site, it isn't done.
+
+1. Discover. Ask the founder once: who the members are and what brings them
+   together; where and when it happens and what that looks and feels like;
+   three words for the feeling and one thing it should feel like (a brand, a
+   magazine, a place); any logo, photos, colors or phrases to use. Collect
+   concrete nouns: "6:00 am, the river, coffee after".
+2. Explore three directions that differ in kind: different type, color
+   world, layout idea and voice. Make one feel risky. Give each a name, a
+   one-sentence idea, typefaces, a palette, a signature move and real copy.
+   Build each as one static page (concepts/a.html, b.html, c.html, each
+   with the shell), deploy, and let the founder pick or mix.
+3. Build the chosen one. Write each page's structure in HTML by hand and fill
+   it with live data from JavaScript. Design the loading, empty, error and
+   signed-out states in the concept's voice. Real words everywhere, never
+   test data. Delete the concept pages.
+4. Look at it at 390px and 1440px wide, twice: where is it timid (make the
+   hierarchy louder), where is it noisy (remove), what is misaligned. Fix,
+   deploy, look again.
+
+Craft: typefaces with character (Google Fonts or Fontshare) used at
+conviction-level scale (headlines at clamp(48px, 9vw, 140px) are normal); a
+committed color world with one sharp accent; texture with meaning (a gradient
+that is the dawn, grain, duotone photos, huge numerals); layouts with one
+unapologetically huge element; purposeful motion inside
+prefers-reduced-motion: no-preference; the community's own photos. Example
+of the bar: Dawn Patrol Run Club, "the city before sunrise": a night-navy
+page warming into an orange dawn gradient, Barlow Condensed at 88px,
+"Early miles. Good people." over "Every weekday · 6:00 am · Riverside
+boathouse", and stats like "Coffee after: Always". Bold and accessible are
+the same craft; make it accessible as the final pass.
 
 ## Load the SDK
 
@@ -96,7 +134,8 @@ are Polynet's:
       --polynet-font: inherit;
     }
 
-Keep text/background contrast at least 4.5:1. Add align="start" if it sits at
+It takes the page's font unless --polynet-font says otherwise. Keep
+text/background contrast at least 4.5:1. Add align="start" if it sits at
 the left edge. polynet.account() returns the same data if you need it.
 
 ## Errors
@@ -194,9 +233,10 @@ Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
 
 - Escape everything you render from Polynet: set textContent, never
   innerHTML with Polynet text.
-- Post text, agent replies and descriptions are markdown. Show them as plain
-  text, or convert with a markdown library and sanitize the HTML (for
-  example marked + DOMPurify) before inserting it.
+- Post text, agent replies and descriptions are markdown: render them with
+  polynet.markdown(text), which returns safe DOM nodes (a DocumentFragment)
+  to append. It handles paragraphs, headings, lists, quotes, code, bold,
+  italic and https links, and never interprets HTML.
 
 ## Rules
 
@@ -230,15 +270,17 @@ alt; a button or link with no text or aria-label. Warnings (unlabelled
 fields, removed focus outlines, animation without prefers-reduced-motion,
 innerHTML, positive tabindex) are printed but don't stop it.
 
-Skills for AI agents: "npx @polynet/cli create" puts AGENTS.md, CLAUDE.md and
-Polynet's skills (polynet-build-site, polynet-design, polynet-accessibility,
-polynet-sdk, polynet-deploy-verify) in the site folder; "npx @polynet/cli
-skills" adds or updates them in any folder. AGENTS.md, CLAUDE.md, polynet.json
-and dotfolders are never uploaded. Only changed files upload. The site is live at
+Only changed files upload. The site is live at
 https://<community-slug>.polynet.page within a minute. Opening or refreshing
 any path in the browser serves index.html, so client-side routes (/events)
 work; a script's fetch() of a path that isn't a file gets 404. No server code
 runs: everything dynamic comes from the SDK.
+
+Skills for AI agents: "npx @polynet/cli create --community <slug>" sets up a
+folder (no template) with AGENTS.md, CLAUDE.md and Polynet's skills
+(polynet-build-site, polynet-design, polynet-sdk, polynet-accessibility,
+polynet-deploy-verify); "npx @polynet/cli skills" adds or updates them in any
+folder. AGENTS.md, CLAUDE.md, polynet.json and dotfolders are never uploaded.
 
 If your agent can't run commands (for example claude.ai or ChatGPT with the
 Polynet MCP connected), it can deploy through the MCP instead: polynet_call
@@ -248,6 +290,8 @@ files and 5 MB. The same checks run there (site_checks_failed lists what to
 fix). The result has the live url.
 
 ## Example: a minimal live feed
+
+This shows behavior only. The markup and the look are yours to design.
 
     <ul id="feed"></ul>
     <form id="say"><input id="text"><button>Post</button></form>
@@ -260,7 +304,7 @@ fix). The result has the live url.
         const posts = await polynet.feed(general.slug);
         document.getElementById("feed").replaceChildren(...posts.map((p) => {
           const li = document.createElement("li");
-          li.textContent = (p.actor.display_name ?? "Member") + ": " + p.text;
+          li.append((p.actor.display_name ?? "Member") + ": ", polynet.markdown(p.text));
           return li;
         }));
       }

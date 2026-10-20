@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Community</title>
+  <script type="module" src="/__polynet/ui.js"></script>
+</head>
+<body>
+  <!-- Local edge development only: proves the edge serves a site, the SDK and the shell. -->
+  <header><polynet-account></polynet-account></header>
+  <main><h1 id="name">Community</h1><p id="who"></p></main>
+  <script type="module">
+    import polynet from "/__polynet/sdk.js";
+    const session = await polynet.session();
+    document.getElementById("name").textContent = session.community_name ?? session.community;
+    document.getElementById("who").textContent = session.signed_in ? "Signed in as " + session.member?.name : "Signed out";
+  </script>
+</body>
+</html>

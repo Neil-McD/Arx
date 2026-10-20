@@ -19,7 +19,8 @@ const STYLE = [
   "  --pa-border: var(--polynet-border, color-mix(in srgb, var(--pa-text) 16%, transparent));",
   "  --pa-hover: color-mix(in srgb, var(--pa-text) 8%, transparent);",
   "  --pa-radius: var(--polynet-radius, 12px); display: inline-block; position: relative;",
-  "  font: 14px/1.4 var(--polynet-font, system-ui, sans-serif); color: var(--pa-text); }",
+  // No --polynet-font: font-family inherits the page's font, so the shell never looks foreign.
+  "  font-size: 14px; line-height: 1.4; font-family: var(--polynet-font); color: var(--pa-text); }",
   "* { box-sizing: border-box; }",
   "button, a { font: inherit; color: inherit; }",
   ":focus-visible { outline: 2px solid var(--pa-accent); outline-offset: 2px; border-radius: 6px; }",

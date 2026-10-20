@@ -258,3 +258,39 @@ test("members() lists the community's members, following pages", async () => {
     { name: "Ava", role: "member", ref: "user:2", path: "/communities/run-club/members/ava.md" },
   ]);
 });
+
+// Just enough DOM to see what markdown() builds: elements, attributes, text.
+function fakeDocument() {
+  const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const make = (tag: string | null): any => {
+    const node: any = { tag, children: [] as any[], attrs: {} as Record<string, string>,
+      append(...items: any[]) { for (const item of items) node.children.push(item); },
+      set textContent(text: string) { node.children = [String(text)]; },
+      set href(value: string) { node.attrs.href = value; }, set rel(value: string) { node.attrs.rel = value; },
+      set target(value: string) { node.attrs.target = value; },
+      toString(): string {
+        const inner = node.children.map((child: any) => typeof child === "string" ? escape(child) : child.toString()).join("");
+        if (!tag) return inner;
+        const attrs = Object.entries(node.attrs).map(([key, value]) => ` ${key}="${value}"`).join("");
+        return tag === "br" ? "<br>" : `<${tag}${attrs}>${inner}</${tag}>`;
+      } };
+    return node;
+  };
+  return { createElement: (tag: string) => make(tag), createDocumentFragment: () => make(null) };
+}
+
+test("markdown builds safe DOM: no markup from Polynet text gets through", async () => {
+  vi.stubGlobal("document", fakeDocument());
+  const polynet = await loadSdk();
+  const html = (text: string) => String(polynet.markdown(text));
+  expect(html("Hello **run club** and *you*\nsecond line")).toBe("<p>Hello <strong>run club</strong> and <em>you</em><br>second line</p>");
+  expect(html("# Plan\n- one\n- two\n\n1. first\n> quoted")).toBe("<h3>Plan</h3><ul><li>one</li><li>two</li></ul><ol><li>first</li></ol><blockquote>quoted</blockquote>");
+  expect(html("Use \x60npm run\x60:\n\x60\x60\x60\nconst a = 1;\n\x60\x60\x60")).toBe("<p>Use <code>npm run</code>:</p><pre><code>const a = 1;</code></pre>");
+  expect(html("[route](https://maps.example/r) or https://club.example/join.")).toBe(
+    '<p><a href="https://maps.example/r" rel="noopener noreferrer" target="_blank">route</a> or ' +
+    '<a href="https://club.example/join" rel="noopener noreferrer" target="_blank">https://club.example/join</a>.</p>');
+  // Markup and script links stay text.
+  expect(html('<img src=x onerror="alert(1)"> [x](javascript:alert(1))')).toBe('<p>&lt;img src=x onerror="alert(1)"&gt; [x](javascript:alert(1))</p>');
+  expect(html("")).toBe("");
+  expect(html(null as any)).toBe("");
+});
