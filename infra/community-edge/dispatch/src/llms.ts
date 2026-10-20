@@ -220,7 +220,21 @@ The site is a folder of static files with an index.html. From that folder:
 
 The first run opens the browser to sign in with Polynet (the community's owner
 or an admin) and saves the community in polynet.json, so later deploys are just
-"npx @polynet/cli deploy". Only changed files upload. The site is live at
+"npx @polynet/cli deploy".
+
+Every deploy checks the site first ("npx @polynet/cli check" runs the same
+checks alone). These stop a deploy until fixed: a page without the shell
+(/__polynet/ui.js) or no <polynet-account> anywhere; a page without
+<html lang>, a <title> or a viewport that allows zooming; an <img> without
+alt; a button or link with no text or aria-label. Warnings (unlabelled
+fields, removed focus outlines, animation without prefers-reduced-motion,
+innerHTML, positive tabindex) are printed but don't stop it.
+
+Skills for AI agents: "npx @polynet/cli create" puts AGENTS.md, CLAUDE.md and
+Polynet's skills (polynet-build-site, polynet-design, polynet-accessibility,
+polynet-sdk, polynet-deploy-verify) in the site folder; "npx @polynet/cli
+skills" adds or updates them in any folder. AGENTS.md, CLAUDE.md, polynet.json
+and dotfolders are never uploaded. Only changed files upload. The site is live at
 https://<community-slug>.polynet.page within a minute. Opening or refreshing
 any path in the browser serves index.html, so client-side routes (/events)
 work; a script's fetch() of a path that isn't a file gets 404. No server code
@@ -230,7 +244,8 @@ If your agent can't run commands (for example claude.ai or ChatGPT with the
 Polynet MCP connected), it can deploy through the MCP instead: polynet_call
 community.site.deploy with input.files as "/path" -> { content, encoding }
 ("utf8", or "base64" for images and fonts), including /index.html, up to 200
-files and 5 MB. The result has the live url.
+files and 5 MB. The same checks run there (site_checks_failed lists what to
+fix). The result has the live url.
 
 ## Example: a minimal live feed
 

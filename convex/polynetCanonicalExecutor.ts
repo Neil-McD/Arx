@@ -39,6 +39,7 @@ import {
 } from "../shared/polynetSemanticRepositoryContract.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
+import { checkSite, formatProblems, isCheckedFile } from "../packages/polynet-cli/checks.mjs";
 import type { CommunityCustomFunnelSlot } from "../shared/communityTypes.ts";
 
 export type PolynetCanonicalExecutionResult =
@@ -693,6 +694,7 @@ function capabilityDocument(args: {
       limits: { max_files: SITE_DEPLOY_MAX_FILES, max_total_bytes: SITE_DEPLOY_MAX_BYTES },
       result: "{ url }: the live site, https://<slug>.<sites domain>",
       guidance: "Build the site from the builder guide (polynet.page/llms.txt); larger sites deploy with npx @polynet/cli deploy.",
+      checks: "The site is checked first, as npx @polynet/cli check does: errors (no Polynet shell, no lang, title or zoomable viewport, images without alt, unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
       effects: ["publish_community_site"],
       forbidden_effects: ["server_code", "change_access", "deploy_other_community"],
     };
@@ -2488,6 +2490,7 @@ async function executeSiteDeploy(args: {
     return canonicalError("invalid_tool_args", `Send files: 1 to ${SITE_DEPLOY_MAX_FILES} of "/path" -> { content, encoding }.`);
   }
   const decoded = new Map<string, { bytes: Uint8Array; mime: string }>();
+  const checkedTexts: Array<{ path: string; text: string }> = [];
   const manifestInput: Record<string, { hash: string; size: number }> = {};
   let totalBytes = 0;
   for (const [path, value] of rawFiles) {
@@ -2507,6 +2510,7 @@ async function executeSiteDeploy(args: {
     if (totalBytes > SITE_DEPLOY_MAX_BYTES) {
       return canonicalError("site_too_large", "Deploys through the MCP are up to 5 MB; use npx @polynet/cli deploy for larger sites.");
     }
+    if (isCheckedFile(path)) checkedTexts.push({ path, text: new TextDecoder().decode(bytes) });
     const hash = await hashSiteFile(bytes, path);
     manifestInput[path] = { hash, size: bytes.length };
     decoded.set(hash, { bytes, mime: siteFileMimeType(path) });
@@ -2514,6 +2518,12 @@ async function executeSiteDeploy(args: {
   if (!manifestInput["/index.html"]) return canonicalError("invalid_tool_args", "The site needs /index.html.");
   const manifest = validateSiteManifest(manifestInput);
   if (!manifest.ok) return canonicalError(manifest.code, manifest.message);
+  const checks = checkSite(checkedTexts);
+  if (checks.errors.length) {
+    return canonicalError("site_checks_failed",
+      `Fix before the site can go live:\n${formatProblems({ errors: checks.errors, warnings: [] }).join("\n")}`,
+      { errors: checks.errors, warnings: checks.warnings });
+  }
   const config = readSitesConfig();
   if (!config) return canonicalError("sites_unconfigured", "Site hosting isn't set up here.");
   const hostname = siteHostname(target.communitySlug, config.domain);
@@ -2540,7 +2550,8 @@ async function executeSiteDeploy(args: {
     if (!published.ok) return await fail(published.code, published.message);
     const responseValue = {
       ok: true, operation: args.operation,
-      result: { url: published.url, files: manifest.fileCount, bytes: manifest.totalBytes },
+      result: { url: published.url, files: manifest.fileCount, bytes: manifest.totalBytes,
+        ...(checks.warnings.length ? { warnings: formatProblems(checks) } : {}) },
       deduped: false,
       receipt: canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, deduped: false }),
     };
