@@ -6,6 +6,7 @@
     "dev": "wrangler dev -c dispatch/wrangler.jsonc -c user-hello/wrangler.jsonc --port 8787"
   },
   "devDependencies": {
+    "convex": "1.42.1",
     "wrangler": "4.151.1"
   }
 }

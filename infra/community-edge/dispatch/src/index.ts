@@ -10,6 +10,10 @@
 
 import { SDK_SOURCE } from "./sdk";
 import { LLMS_TXT } from "./llms";
+// The live-updates client, served from this domain so no community site loads a third-party script.
+import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
+
+const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
 
 type Fetcher = { fetch(request: Request): Promise<Response> };
 
@@ -275,7 +279,16 @@ export default {
     const route = await resolveRoute(url.hostname, env);
     if (!route) return new Response("Community not found", { status: 404 });
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
-    // The builder kit: the SDK every front end imports, and its doc.
+    // The builder kit: the SDK every front end imports, its live client, and its doc.
+    if (url.pathname === "/__polynet/live.js") {
+      return new Response(LIVE_CLIENT, {
+        headers: {
+          "Content-Type": "text/javascript; charset=utf-8",
+          "Cache-Control": "public, max-age=86400",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (url.pathname === "/__polynet/sdk.js" || url.pathname === "/__polynet/llms.txt") {
       const sdk = url.pathname.endsWith(".js");
       return new Response(sdk ? SDK_SOURCE : LLMS_TXT, {

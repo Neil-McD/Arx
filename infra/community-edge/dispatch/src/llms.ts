@@ -89,8 +89,8 @@ Live updates:
 - const stop = await watch(channelSlug, onChange). onChange runs once right
   away and again whenever anything in the channel changes (posts, replies,
   edits, deletes, reactions): call feed() or thread() again then. Use it
-  instead of polling. Needs a signed-in member. It loads its live client from
-  cdn.jsdelivr.net, so allow that if you add a Content-Security-Policy.
+  instead of polling. Needs a signed-in member. Everything the SDK loads comes
+  from this domain, so a Content-Security-Policy of 'self' works.
 
 Authors: actor.type "human" is a member. "community_agent" is the community's
 agent; when it has a display_name it acted for that member. Label it
