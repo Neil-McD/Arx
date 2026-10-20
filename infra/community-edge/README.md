@@ -44,7 +44,9 @@ hostname map.
 
 ## Staging on polynet.page (October 20, 2026)
 
-Live: `https://<community>.polynet.page`, against the staging backend.
+Live: `https://<community>.polynet.page`, against the staging backend. The front
+door `https://polynet.page` (a page, and the builder guide at `/llms.txt`) is where
+a founder's AI starts.
 
 | Piece | Value |
 | --- | --- |

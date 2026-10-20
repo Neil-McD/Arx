@@ -2,6 +2,9 @@
 
 Put your community's site live on Polynet.
 
+> Preview: until Polynet's production release, deploys go to Polynet's staging
+> environment. Start at https://polynet.page.
+
 ```bash
 cd my-site
 npx @polynet/cli deploy --community <your-community-slug>
