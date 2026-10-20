@@ -31,6 +31,13 @@ wrangler cannot run dispatch-namespace user Workers locally. In production the
 same code uses the `DISPATCHER` dispatch namespace and the `ROUTES` KV
 hostname map.
 
+## Tests
+
+The root test suite (`npm test`, `npm run release:gate`) runs `dispatch/src/*.test.ts`,
+which import this package's own locked `convex` browser bundle. Install this
+package's dependencies first: `npm --prefix infra/community-edge ci`. CI does this
+in the Release Gate job.
+
 ## Verified locally (October 16, 2026)
 
 | Check | Result |
