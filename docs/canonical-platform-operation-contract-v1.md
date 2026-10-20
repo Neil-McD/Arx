@@ -281,3 +281,26 @@ watch token cannot call the API and carries no content.
 API rate limits belong at the edge. Retrieval logs record these reads on the
 `external_mcp` surface; a dedicated surface is a follow-up.
 
+
+## The Polynet MCP is for builders
+
+The Polynet MCP (`/runtime/mcp`) is for community builders: the owners and
+admins of an active community, using their own agent harness (Claude Code,
+Codex, claude.ai, ChatGPT). Members use their community's site and its agent.
+
+- A caller who builds no active community gets `builder_only` for every tool.
+- A call that targets a community (`path`, or `target` for `polynet_call`)
+  must be one the caller builds; otherwise `builder_only` (or
+  `semantic_not_found` when the caller isn't in that community at all).
+- Listing `/communities/` returns only the communities the caller builds.
+
+The gate sits at the MCP entrance (`convex/httpMcp.ts`), so the door's shared
+authority rules, used by every principal, are unchanged.
+
+Builders publish their community's site with `polynet_call`
+`community.site.deploy` (`input.files`: `"/path" -> { content, encoding }`,
+`utf8` or `base64`, with `/index.html`; up to 200 files and 5 MB). It is the
+same deploy path as `npx @polynet/cli deploy` (`convex/communitySiteDeploy.ts`):
+Cloudflare receives only the files it lacks, the site goes live at
+`https://<slug>.<sites domain>`, and the receipt records the manifest (paths,
+hashes, sizes), not the contents.

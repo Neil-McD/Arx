@@ -1182,6 +1182,22 @@ export const readCommunitySemanticRepositoryInternal = internalAction({
 
 // The community's display identity for the root of its repository. The caller
 // already passed the community guard chain for this community.
+// The Polynet MCP is for community builders: owners and admins of an active community.
+export const isCommunityBuilderAnywhereInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const owned = await ctx.db.query("communities").withIndex("by_owner", (q) => q.eq("ownerId", args.userId)).take(100);
+    if (owned.some((community) => communityIsActive(community as any))) return true;
+    const memberships = await ctx.db.query("communityMemberships").withIndex("by_user", (q) => q.eq("userId", args.userId)).take(500);
+    for (const membership of memberships) {
+      if (membership.role !== "admin" || membership.active !== true) continue;
+      const community = await ctx.db.get(membership.communityId);
+      if (community && communityIsActive(community as any)) return true;
+    }
+    return false;
+  },
+});
+
 export const getCommunityRepositoryIdentityInternal = internalQuery({
   args: { communityId: v.id("communities"), viewerUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {

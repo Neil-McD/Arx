@@ -196,6 +196,12 @@ any path in the browser serves index.html, so client-side routes (/events)
 work; a script's fetch() of a path that isn't a file gets 404. No server code
 runs: everything dynamic comes from the SDK.
 
+If your agent can't run commands (for example claude.ai or ChatGPT with the
+Polynet MCP connected), it can deploy through the MCP instead: polynet_call
+community.site.deploy with input.files as "/path" -> { content, encoding }
+("utf8", or "base64" for images and fonts), including /index.html, up to 200
+files and 5 MB. The result has the live url.
+
 ## Example: a minimal live feed
 
     <ul id="feed"></ul>
