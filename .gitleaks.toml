@@ -1,0 +1,19 @@
+# Secret scanning for the factory CI check (gitleaks v8).
+# Extends the default rules. Provider-specific keys are always flagged;
+# only the noisy generic rule is relaxed for test fixtures and evidence files.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendored secret-scanner projects ship fake keys as test fixtures"
+paths = ['''^references/''']
+
+[[allowlists]]
+description = "Generic key-shaped strings in tests, receipts and artifacts are IDs, not secrets"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)(test|tests|__tests__|fixtures?)/''',
+  '''\.(test|spec)\.[cm]?[jt]sx?$''',
+  '''^docs/receipts/''',
+  '''^artifacts/''',
+]
