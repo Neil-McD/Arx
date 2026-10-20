@@ -4,6 +4,8 @@
   // and a KV namespace (ROUTES) instead of the DEV_* values below.
   "name": "polynet-community-edge",
   "main": "src/index.ts",
+  // The live-updates client is served as text from /__polynet/live.js.
+  "rules": [{ "type": "Text", "globs": ["**/*.bundle.js"], "fallthrough": true }],
   "compatibility_date": "2026-09-30",
   "vars": {
     "POLYNET_API_URL": "https://quick-porcupine-949.convex.site",

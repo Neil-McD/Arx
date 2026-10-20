@@ -163,6 +163,13 @@ test("the builder kit is served on every community's domain", async () => {
   const doc = await edge.fetch(request("/__polynet/llms.txt"), env());
   expect(doc.headers.get("content-type")).toBe("text/plain; charset=utf-8");
   expect(await doc.text()).toContain('import polynet from "/__polynet/sdk.js";');
+  // The live client comes from this domain too: no third-party script runs with a member's powers.
+  const live = await edge.fetch(request("/__polynet/live.js"), env());
+  expect(live.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  const liveSource = await live.text();
+  expect(liveSource).toContain("ConvexClient");
+  expect(liveSource).not.toContain("sourceMappingURL");
+  expect(await (await edge.fetch(request("/__polynet/sdk.js"), env())).text()).not.toContain("https://");
 });
 
 test("logout revokes the session and clears the cookie", async () => {

@@ -291,7 +291,7 @@ function loadConvex() {
   if (globalThis.convex) return Promise.resolve(globalThis.convex);
   return new Promise(function (resolve, reject) {
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/convex@1.42.1/dist/browser.bundle.js";
+    script.src = "/__polynet/live.js";
     script.onload = function () { resolve(globalThis.convex); };
     script.onerror = function () { reject(new PolynetError("live_unavailable", "Live updates couldn't load.")); };
     document.head.appendChild(script);
