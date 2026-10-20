@@ -2585,6 +2585,7 @@ export default function App() {
     isOpen: isDirectMessagesOpen,
     unreadCount: directMessagesUnreadCount,
     toggle: handleToggleDirectMessages,
+    open: handleOpenDirectMessages,
     openConversation: handleOpenDirectConversationById,
   });
   const standalonePublicRouteViewProps = buildWebStandalonePublicRouteViewProps({

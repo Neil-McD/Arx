@@ -1,5 +1,4 @@
 import { MessageCircle } from "lucide-react";
-import { useCallback, useRef } from "react";
 
 import { useDirectMessageWebNotifications } from "./useDirectMessageWebNotifications";
 import { useWebDirectMessageDeepLinkLifecycle } from "./useWebDirectMessageDeepLinkLifecycle";
@@ -9,12 +8,9 @@ export function useWebDirectMessagesChromeController(params: {
   isOpen: boolean;
   unreadCount: number;
   toggle: () => void;
+  open: () => void;
   openConversation: (conversationId: string) => void;
 }) {
-  const isOpenRef = useRef(params.isOpen);
-  isOpenRef.current = params.isOpen;
-  const toggleRef = useRef(params.toggle);
-  toggleRef.current = params.toggle;
   const notifications = useDirectMessageWebNotifications({
     isEnabled: params.isAuthenticated,
     unreadCount: params.unreadCount,
@@ -23,9 +19,7 @@ export function useWebDirectMessagesChromeController(params: {
   useWebDirectMessageDeepLinkLifecycle({
     isAuthenticated: params.isAuthenticated,
     openConversation: params.openConversation,
-    openInbox: useCallback(() => {
-      if (!isOpenRef.current) toggleRef.current();
-    }, []),
+    openInbox: params.open,
   });
 
   const unreadLabel =
