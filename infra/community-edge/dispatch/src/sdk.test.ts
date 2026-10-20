@@ -239,3 +239,22 @@ test("account() reads the member's Polynet account; signed out it throws sign_in
   stubFetch({ "/__polynet/account": () => Response.json({ ok: false, code: "sign_in_required" }, { status: 401 }) });
   await expect(polynet.account()).rejects.toMatchObject({ code: "sign_in_required" });
 });
+
+test("members() lists the community's members, following pages", async () => {
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (input.path === "/communities/run-club/") return ok({ entries: [] });
+      if (!input.cursor) return ok({ entries: [{ type: "member_self_context", path: "/communities/run-club/members/me/" },
+        { type: "member", name: "Sam", role: "owner", ref: "user:1", path: "/communities/run-club/members/sam.md" }], truncated: true, next_cursor: "p2" });
+      return ok({ entries: [{ type: "member", name: "Ava", ref: "user:2", path: "/communities/run-club/members/ava.md" }] });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  expect(await polynet.members()).toEqual([
+    { name: "Sam", role: "owner", ref: "user:1", path: "/communities/run-club/members/sam.md" },
+    { name: "Ava", role: "member", ref: "user:2", path: "/communities/run-club/members/ava.md" },
+  ]);
+});

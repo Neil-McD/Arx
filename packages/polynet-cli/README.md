@@ -6,8 +6,9 @@ Put your community's site live on Polynet.
 > environment. Start at https://polynet.page.
 
 ```bash
-cd my-site
-npx @polynet/cli deploy --community <your-community-slug>
+npx @polynet/cli create my-site --community <your-community-slug>   # a complete starter site
+cd my-site                                                          # make it yours: theme.css, content.js
+npx @polynet/cli deploy
 ```
 
 - Your site is a folder of static files with an `index.html` (HTML, CSS,
