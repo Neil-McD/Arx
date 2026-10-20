@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-// polynet deploy [dir] [--community <slug>]   put a site live at <slug>.polynet.page
+// polynet create [dir] --community <slug>     the starter site, with guides for AI agents
+// polynet check [dir]                          the checks a site passes before going live
+// polynet deploy [dir] [--community <slug>]   check, then put a site live at <slug>.polynet.page
+// polynet skills [dir]                         add or update Polynet's skills for AI agents
 // polynet login | logout                       sign in with Polynet (browser), or forget it
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -8,8 +11,10 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  CALLBACK_PORT, DEFAULT_API_URL, REDIRECT_URI, buildManifest, collectFiles, formatBytes, isDirectory, pkce, uploadBuckets,
+  CALLBACK_PORT, DEFAULT_API_URL, REDIRECT_URI, buildManifest, collectFiles, formatBytes, installGuide, isDirectory, pkce,
+  readCheckedFiles, uploadBuckets,
 } from "../lib.mjs";
+import { checkSite, formatProblems } from "../checks.mjs";
 
 const API_URL = (process.env.POLYNET_API_URL || DEFAULT_API_URL).replace(/\/+$/, "");
 const AUTH_FILE = join(homedir(), ".polynet", "auth.json");
@@ -188,21 +193,52 @@ async function create(args) {
   await mkdir(dir, { recursive: true });
   await cp(starter, dir, { recursive: true });
   await writeFile(join(dir, "polynet.json"), JSON.stringify({ community }, null, 2) + "\n");
+  await installGuide(dir);
   console.log([
     "✓ Created a starter site for " + community + " in " + dir,
     "",
     "Next:",
-    "  1. Make it yours: theme.css (colors, type, shape) and content.js (words), then anything else.",
-    "  2. Deploy it:     cd " + (folderArg ?? community + "-site") + " && npx @polynet/cli deploy",
-    "  3. Open it:       https://" + community + ".polynet.page",
-    "",
-    "Guide for your AI: https://polynet.page/llms.txt",
+    "  1. Open the folder with your AI agent (Claude Code, Codex, Cursor…) and say what you want.",
+    "     It reads AGENTS.md and Polynet's skills, already in the folder.",
+    "  2. Or make it yours by hand: theme.css (colors, type, shape) and content.js (words).",
+    "  3. Deploy it: cd " + (folderArg ?? community + "-site") + " && npx @polynet/cli deploy",
+    "  4. Open it:   https://" + community + ".polynet.page",
   ].join("\n"));
 }
 
+function siteDir(args) {
+  const dirArg = args.find((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--community");
+  return resolve(dirArg ?? ".");
+}
+
+// Prints the problems; returns false when an error must be fixed first.
+async function runChecks(files) {
+  const result = checkSite(await readCheckedFiles(files));
+  for (const line of formatProblems(result)) console.log(line);
+  if (result.errors.length) {
+    console.log(`\n${result.errors.length} problem${result.errors.length === 1 ? "" : "s"} to fix before the site can go live.` +
+      " The polynet-accessibility skill explains each one.");
+    return false;
+  }
+  return true;
+}
+
+async function check(args) {
+  const dir = siteDir(args);
+  if (!(await isDirectory(dir))) fail(`${dir} isn't a folder.`);
+  const files = await collectFiles(dir);
+  if (!(await runChecks(files))) process.exit(1);
+  console.log(`✓ Checked ${files.length} files.`);
+}
+
+async function skills(args) {
+  const dir = siteDir(args);
+  if (!(await isDirectory(dir))) fail(`${dir} isn't a folder.`);
+  for (const line of await installGuide(dir)) console.log(`✓ ${line}`);
+}
+
 async function deploy(args) {
-  const dirArg = args.find((arg) => !arg.startsWith("--") && args[args.indexOf(arg) - 1] !== "--community");
-  const dir = resolve(dirArg ?? ".");
+  const dir = siteDir(args);
   if (!(await isDirectory(dir))) fail(`${dir} isn't a folder.`);
   const configPath = join(dir, "polynet.json");
   const config = (await readJson(configPath)) ?? {};
@@ -212,6 +248,7 @@ async function deploy(args) {
 
   const files = await collectFiles(dir);
   if (!files.some((file) => file.path === "/index.html")) fail(`${dir} has no index.html.`);
+  if (!(await runChecks(files))) process.exit(1);
   const site = await buildManifest(files);
   console.log(`Deploying ${site.files} files (${formatBytes(site.bytes)}) to ${community}…`);
 
@@ -231,17 +268,24 @@ const [command, ...rest] = process.argv.slice(2);
 try {
   if (command === "deploy") await deploy(rest);
   else if (command === "create") await create(rest);
+  else if (command === "check") await check(rest);
+  else if (command === "skills") await skills(rest);
   else if (command === "login") await login();
   else if (command === "logout") { await saveAuth(null); console.log("✓ Signed out."); }
   else {
     console.log([
       "Usage:",
       "  polynet create [folder] --community <slug>",
-      "      Start from Polynet's starter site: every page a community needs, ready to restyle.",
+      "      Start from Polynet's starter site: every page a community needs, ready to",
+      "      restyle, with AGENTS.md and skills for your AI agent.",
+      "  polynet check [folder]",
+      "      Check the site: the Polynet shell and accessibility. Errors block deploys.",
       "  polynet deploy [folder] [--community <slug>]",
-      "      Put the folder (default: this one) live at https://<slug>.polynet.page.",
-      "      You must be the community's owner or an admin. The community is saved",
-      "      in polynet.json; dotfiles and node_modules aren't uploaded.",
+      "      Check, then put the folder (default: this one) live at https://<slug>.polynet.page.",
+      "      You must be the community's owner or an admin. The community is saved in",
+      "      polynet.json; dotfiles, node_modules, AGENTS.md and CLAUDE.md aren't uploaded.",
+      "  polynet skills [folder]",
+      "      Add or update Polynet's skills for AI agents (.agents/skills, .claude/skills).",
       "  polynet login     Sign in with Polynet in the browser.",
       "  polynet logout    Forget the sign-in (kept in ~/.polynet/auth.json).",
       "",

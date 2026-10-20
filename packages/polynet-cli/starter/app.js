@@ -474,7 +474,10 @@ async function viewKnowledge(main, current) {
 
 async function viewMembers(main) {
   const page = el("div", { class: "page" });
+  const loading = el("p", { class: "muted", role: "status", text: "Loading members…" });
   main.append(topbar(content.nav.members), page);
+  page.setAttribute("aria-busy", "true");
+  page.append(loading);
   try {
     const members = await polynet.members();
     page.append(el("p", { class: "page-intro", text: members.length + (members.length === 1 ? " member" : " members") }),
@@ -484,6 +487,8 @@ async function viewMembers(main) {
   } catch (error) {
     page.append(errorView(error));
   }
+  loading.remove();
+  page.removeAttribute("aria-busy");
 }
 
 // ---------- the community agent ----------

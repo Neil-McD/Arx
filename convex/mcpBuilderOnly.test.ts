@@ -117,6 +117,10 @@ test("the targeted community comes from the path or the call target", () => {
   expect(mcpTargetCommunitySlug({ path: "/users/me" })).toBeNull();
 });
 
+// A page that passes the site checks: language, title, zoomable viewport, the shell.
+const PAGE = '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Run club</title>' +
+  '<script type="module" src="/__polynet/ui.js"></script><polynet-account></polynet-account></html>';
+
 const deploy = (files: Record<string, unknown>, key = "deploy-1") => ({
   target: "/communities/run-club/capabilities/community.site.deploy.json", operation: "community.site.deploy",
   version: 1, idempotencyKey: key, input: { files },
@@ -129,7 +133,7 @@ test("a builder's agent deploys the community's site by handing over its files",
   expect(JSON.stringify(listed.structuredContent)).toContain("community.site.deploy");
 
   const files = {
-    "/index.html": { content: "<!doctype html><title>Run club</title>" },
+    "/index.html": { content: PAGE },
     "/logo.png": { content: btoa("\x89PNG fake"), encoding: "base64" },
   };
   const done = await f.call("owner", "polynet_call", deploy(files));
@@ -142,7 +146,7 @@ test("a builder's agent deploys the community's site by handing over its files",
     `PUT /storage/kv/namespaces/routes/values/${encodeURIComponent("host:run-club.polynet.page")}`,
   ]);
   // Files go up as base64 under their content hash, with their type.
-  expect(Object.values(calls[1].body)).toContain(btoa("<!doctype html><title>Run club</title>"));
+  expect(Object.values(calls[1].body)).toContain(btoa(PAGE));
 
   // The same request again replays the receipt without touching Cloudflare.
   const again = await f.call("owner", "polynet_call", deploy(files));
@@ -159,6 +163,11 @@ test("site deploys through the MCP are bounded static sites", async () => {
   expect(await error({ "/index.html": { content: "x".repeat(5 * 1024 * 1024 + 1) } }, "k3")).toContain("site_too_large");
   expect(await error({ "/index.html": { content: 42 } }, "k4")).toContain("invalid_tool_args");
   expect(await error({ "/index.html": { content: "x" }, "/../x": { content: "x" } }, "k5")).toContain("manifest_path_invalid");
+  // The site checks run too: errors stop the deploy and say what to fix.
+  const failed = await f.call("owner", "polynet_call", deploy({ "/index.html": { content: "<html><title>Run club</title></html>" } }, "k7"));
+  expect(failed.content[0].text).toContain("site_checks_failed");
+  expect(failed.content[0].text).toContain("polynet-account");
+  expect(failed.content[0].text).toContain("lang");
   expect(calls).toEqual([]);
   // A member's agent can't deploy: the MCP is builder-only.
   expect((await f.call("member", "polynet_call", deploy({ "/index.html": { content: "x" } }, "k6"))).content[0].text).toContain("builder_only");

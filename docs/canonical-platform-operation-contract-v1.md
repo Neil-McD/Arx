@@ -304,3 +304,12 @@ same deploy path as `npx @polynet/cli deploy` (`convex/communitySiteDeploy.ts`):
 Cloudflare receives only the files it lacks, the site goes live at
 `https://<slug>.<sites domain>`, and the receipt records the manifest (paths,
 hashes, sizes), not the contents.
+
+Both paths first run the site checks in `packages/polynet-cli/checks.mjs`
+(the same module `polynet check` uses). Errors stop the deploy
+(`site_checks_failed` on the MCP): a page without the Polynet shell
+(`/__polynet/ui.js`) or no `<polynet-account>` anywhere, a page without
+`<html lang>`, a `<title>` or a zoomable viewport, an `<img>` without `alt`, a
+button or link without a name. Warnings come back with the result. The checks
+are a guardrail for agents, not a security boundary: the CLI runs them
+locally.
