@@ -2459,6 +2459,16 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_origin", ["origin"]),
 
+  // Each published site deploy (polynet deploy): who put which files live where.
+  communitySiteDeploys: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    hostname: v.string(),
+    fileCount: v.number(),
+    totalBytes: v.number(),
+    createdAt: v.number(),
+  }).index("by_community_createdAt", ["communityId", "createdAt"]),
+
   // A member's session on a community's domain, held by the community edge in
   // an HttpOnly cookie. Only the SHA-256 of the token is stored.
   communityAppSessions: defineTable({

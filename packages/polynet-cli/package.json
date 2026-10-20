@@ -1,0 +1,11 @@
+{
+  "name": "polynet-cli",
+  "version": "0.1.0",
+  "description": "Put a community site live on Polynet: polynet deploy",
+  "type": "module",
+  "bin": { "polynet": "bin/polynet.mjs" },
+  "files": ["bin", "lib.mjs"],
+  "engines": { "node": ">=20" },
+  "license": "UNLICENSED",
+  "private": true
+}

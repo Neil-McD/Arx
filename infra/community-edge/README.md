@@ -56,7 +56,19 @@ Live: `https://<community>.polynet.page`, against the staging backend.
 | Secret | `POLYNET_EDGE_SECRET` (`wrangler secret put --env staging`), equal to the backend's `POLYNET_COMMUNITY_EDGE_SECRET` |
 | Backend | origin registered with `communityApps:registerCommunityDomainInternal` |
 
-Add a community site by hand (until `polynet deploy` exists):
+Deploy a community site (owner or admin; signs in through the browser once):
+
+```bash
+cd my-site && POLYNET_API_URL=https://quick-porcupine-949.convex.site node <repo>/packages/polynet-cli/bin/polynet.mjs deploy --community <slug>
+```
+
+The backend (`convex/httpCommunitySites.ts`) checks builder authority, gets a
+Cloudflare upload pass for only the changed files, publishes `site-<slug>`, maps
+`<slug>.polynet.page` and registers the origin. It needs `CLOUDFLARE_API_TOKEN`
+(Workers Scripts Edit + Workers KV Storage Edit), `CLOUDFLARE_ACCOUNT_ID`,
+`POLYNET_SITES_NAMESPACE`, `POLYNET_SITES_ROUTES_KV_ID` and `POLYNET_SITES_DOMAIN`.
+
+By hand, the same three steps:
 
 ```bash
 npx wrangler deploy -c user-hello/wrangler.jsonc --name site-<community> --dispatch-namespace polynet-sites-staging
@@ -71,6 +83,6 @@ updating live, the community agent streaming, and only `/__polynet/sdk.js` and
 
 ## Not yet
 
-- `polynet deploy`: one command for founders (upload, map hostname, register origin).
+- Publish `polynet-cli` to npm (needs an npm account), and switch its default to production at the production release.
 - Founders' own domains (Cloudflare for SaaS custom hostnames, `*/*` route).
 - A separate production edge and namespace before the production release.
