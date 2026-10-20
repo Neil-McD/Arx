@@ -167,6 +167,22 @@ test("community pages are served untransformed, so Cloudflare injects no scripts
   expect(css.headers.get("cache-control")).toBe("public, max-age=3600");
 });
 
+test("polynet.page itself is the front door: a page and the builder guide", async () => {
+  const e = { ...env(), POLYNET_SITES_DOMAIN: "polynet.page" };
+  const page = await edge.fetch(new Request("https://polynet.page/"), e);
+  expect(page.status).toBe(200);
+  expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  const html = await page.text();
+  expect(html).toContain("Read https://polynet.page/llms.txt first.");
+  expect(html).not.toContain("{{");
+  const guide = await edge.fetch(new Request("https://polynet.page/llms.txt"), e);
+  expect(await guide.text()).toContain("npx @polynet/cli deploy --community <slug>");
+  expect((await edge.fetch(new Request("https://www.polynet.page/llms.txt"), e)).headers.get("location")).toBe("https://polynet.page/llms.txt");
+  expect((await edge.fetch(new Request("https://polynet.page/anything"), e)).status).toBe(404);
+  // Community sites are unaffected.
+  expect(await (await edge.fetch(request("/"), e)).text()).toBe("front end");
+});
+
 test("hostname lookups read the routes map once, then use a short cache", async () => {
   const get = vi.fn(async (key: string) => key === "host:cached.polynet.page" ? JSON.stringify({ script: "site-cached", community: "cached" }) : null);
   const routes = { get };

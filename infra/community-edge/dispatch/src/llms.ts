@@ -1,5 +1,6 @@
-// The builder doc served at /__polynet/llms.txt: everything an AI (or a person)
-// needs to build this community's front end on Polynet. Kept beside the SDK so
+// The builder doc, served at https://polynet.page/llms.txt (the front door) and
+// /__polynet/llms.txt on every community site: everything an AI (or a person)
+// needs to build and deploy a community's front end. Kept beside the SDK so
 // they change together.
 export const LLMS_TXT = String.raw`# Polynet community front end
 
@@ -8,6 +9,25 @@ hosts everything hard: accounts, members, permissions, payments, posts,
 events, courses, memory and the community's AI agent. Your site is the look
 and the experience. It is a static site (HTML, CSS, JavaScript) served on the
 community's own domain, and it talks to Polynet only through the SDK below.
+
+## Workflow (start here)
+
+1. Know the community's slug: it is in the community's Polynet address
+   (.../c/<slug>). The person deploying must be its owner or an admin.
+2. Build the site in a folder with an index.html.
+3. Test it live. The SDK is served by the site's own address, so it only
+   works once deployed. From the folder:
+
+       npx @polynet/cli deploy --community <slug>
+
+   Then open https://<slug>.polynet.page. A deploy takes seconds: change,
+   deploy, refresh, repeat. The first deploy opens a browser to sign in with
+   Polynet; later deploys reuse it.
+4. Signed out, the site shows its public face. Sign in on the site to see
+   member features.
+
+Preview: during the preview, polynet.page sites run against Polynet's
+staging environment.
 
 ## Load the SDK
 

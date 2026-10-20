@@ -25,6 +25,8 @@ export interface Env {
   POLYNET_LIVE_URL: string;
   DISPATCHER?: { get(scriptName: string): Fetcher };
   ROUTES?: { get(key: string): Promise<string | null> };
+  // The sites domain (e.g. polynet.page): its apex and www are the front door.
+  POLYNET_SITES_DOMAIN?: string;
   DEV_ROUTES_JSON?: string;
   DEV_USER_WORKER?: Fetcher;
 }
@@ -292,6 +294,8 @@ async function proxyAgent(request: Request, url: URL, env: Env): Promise<Respons
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const frontDoorResponse = frontDoor(url, env);
+    if (frontDoorResponse) return frontDoorResponse;
     const route = await resolveRoute(url.hostname, env);
     if (!route) return new Response("Community not found", { status: 404 });
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
@@ -329,6 +333,50 @@ export default {
     return untransformed(await worker.fetch(withoutPolynetCookies(request)));
   },
 };
+
+// polynet.page itself: where a founder's AI starts. The guide, and a page that says how.
+export function frontDoor(url: URL, env: Env): Response | null {
+  const domain = (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase();
+  const host = url.hostname.toLowerCase();
+  if (!domain || (host !== domain && host !== `www.${domain}`)) return null;
+  if (host !== domain) return Response.redirect(`https://${domain}${url.pathname}${url.search}`, 301);
+  if (url.pathname === "/llms.txt" || url.pathname === "/__polynet/llms.txt") {
+    return new Response(LLMS_TXT, { headers: {
+      "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
+  }
+  if (url.pathname !== "/") return new Response("Not found", { status: 404 });
+  const studio = env.POLYNET_AUTH_URL.replace(/\/+$/, "");
+  return new Response(FRONT_DOOR_HTML.replaceAll("{{DOMAIN}}", domain).replaceAll("{{STUDIO}}", studio), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300, no-transform",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+const FRONT_DOOR_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polynet sites</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fbfaf7; --text: #1c1b19; --muted: #6b6760; --card: #ffffff; --line: #e6e2da; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #131312; --text: #f1efe9; --muted: #a29d93; --card: #1c1b19; --line: #2c2a27; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 64px 20px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 12px; }
+  p { color: var(--muted); margin: 0 0 20px; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; white-space: pre-wrap; font: 15px/1.5 ui-monospace, monospace; color: var(--text); }
+  a { color: inherit; }
+</style></head>
+<body><main>
+  <h1>Every Polynet community gets its own site.</h1>
+  <p>Your community runs on Polynet: members, payments, posts, events, courses, memory and its AI agent. Its site is yours to design, at <strong>your-community.{{DOMAIN}}</strong>.</p>
+  <p>Build it with your AI. Tell it:</p>
+  <pre>Build my community's site for &lt;your community slug&gt;.
+Read https://{{DOMAIN}}/llms.txt first.</pre>
+  <p>Your AI deploys it with <code>npx @polynet/cli deploy</code>. You sign in once, as the community's owner or an admin.</p>
+  <p><a href="/llms.txt">The builder guide</a> · <a href="{{STUDIO}}">Polynet</a></p>
+</main></body></html>
+`;
 
 // Pages reach members exactly as the founder built them: no-transform stops
 // Cloudflare from rewriting HTML (for example injecting its analytics script),
