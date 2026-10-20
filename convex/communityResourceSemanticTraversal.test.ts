@@ -1389,3 +1389,47 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     ok: false,
   });
 });
+
+test("member directory skips a member with broken identity rows instead of failing", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  // A second user claiming the peer's handle makes the peer's handle ambiguous.
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      authSubject: "resource-semantic-handle-duplicate",
+      displayName: "Handle duplicate",
+      handle: "semantic-peer",
+      normalizedHandle: "semantic-peer",
+      createdAt: 1_750_000_000_000,
+      updatedAt: 1_750_000_000_000,
+    });
+  });
+  const directory = await t
+    .withIdentity({ subject: fixture.memberSubject })
+    .query(
+      internal.communityCapabilityContext
+        .resolveCommunitySemanticRepositoryInternal,
+      {
+        authSubject: fixture.memberSubject,
+        userId: fixture.memberId,
+        communityId: fixture.communityId,
+        operation: "list",
+        path: "/members/",
+        limit: 10,
+      },
+    );
+  expect(directory).toMatchObject({
+    ok: true,
+    result: { path: "/members/", skipped_incomplete: 1 },
+  });
+  if (!directory.ok || !("result" in directory) || !("entries" in directory.result)) {
+    throw new Error("semantic_member_directory_result_missing");
+  }
+  expect(directory.result.entries.map((entry) => entry.path)).not.toContain(
+    "/members/semantic-peer.md",
+  );
+  expect(directory.result.entries.map((entry) => entry.path)).toContain(
+    "/members/semantic-owner.md",
+  );
+});
