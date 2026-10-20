@@ -37,6 +37,11 @@ jobs:
       - name: Install web dependencies
         run: npm --prefix apps/web ci
 
+      - name: Install community edge dependencies
+        # The root suite runs infra/community-edge tests, which import the
+        # edge's own locked convex browser bundle.
+        run: npm --prefix infra/community-edge ci
+
       - name: Install matching Playwright Chromium
         run: npx playwright install --with-deps chromium
 
