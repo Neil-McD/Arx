@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { requireCommunityChatAccess } from "./communityCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { communityIsActive } from "../shared/communityLifecycle";
 import {
   COMMUNITY_APP_HANDOFF_TTL_MS,
   COMMUNITY_APP_SESSION_TTL_MS,
@@ -51,6 +52,27 @@ export const registerCommunityDomainInternal = internalMutation({
 });
 
 // Removing a domain ends its sign-in immediately; its sessions stop resolving.
+// What anyone may see about a community on its own site, signed in or not: the
+// same identity its public join page shows. Members, posts and events stay private.
+export const getCommunityPublicIdentityByOriginInternal = internalQuery({
+  args: { origin: v.string() },
+  handler: async (ctx, args) => {
+    const origin = normalizeCommunityAppOrigin(args.origin);
+    if (!origin) return null;
+    const domain = await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", origin)).first();
+    const community = domain ? await ctx.db.get(domain.communityId) : null;
+    if (!community || !communityIsActive(community as any)) return null;
+    const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+    return {
+      slug: String(community.slug ?? ""),
+      name: text(community.name, 120) ?? String(community.slug ?? ""),
+      one_liner: text((community as any).oneLiner, 500),
+      about: text((community as any).about, 4000),
+      member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
+    };
+  },
+});
+
 export const removeCommunityDomainInternal = internalMutation({
   args: { origin: v.string() },
   handler: async (ctx, args) => {

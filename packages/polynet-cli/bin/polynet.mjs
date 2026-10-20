@@ -207,8 +207,18 @@ try {
   else if (command === "login") await login();
   else if (command === "logout") { await saveAuth(null); console.log("✓ Signed out."); }
   else {
-    console.log("Usage:\n  polynet deploy [folder] [--community <slug>]\n  polynet login\n  polynet logout");
-    process.exit(command ? 1 : 0);
+    console.log([
+      "Usage:",
+      "  polynet deploy [folder] [--community <slug>]",
+      "      Put the folder (default: this one) live at https://<slug>.polynet.page.",
+      "      You must be the community's owner or an admin. The community is saved",
+      "      in polynet.json; dotfiles and node_modules aren't uploaded.",
+      "  polynet login     Sign in with Polynet in the browser.",
+      "  polynet logout    Forget the sign-in (kept in ~/.polynet/auth.json).",
+      "",
+      "Guide: https://polynet.page/llms.txt",
+    ].join("\n"));
+    process.exit(command && !["help", "--help", "-h"].includes(command) ? 1 : 0);
   }
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));

@@ -183,3 +183,46 @@ test("watch subscribes to this channel's live signal with the watch token", asyn
   expect(subscriptions).toEqual([{ name: "communityLive:watch", args: { token: "pnw_x", path: "/communities/run-club/channels/general/" } }]);
   expect(changes).toBe(1);
 });
+
+test("signed out, the page still knows the community's public identity", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": () => Response.json({
+      signed_in: false, community: "run-club", community_name: "Dawn Patrol", community_one_liner: "We run early.",
+      community_about: null, member_count: 40, join_url: "j", studio_url: "j",
+    }),
+  });
+  const polynet = await loadSdk();
+  expect(await polynet.session()).toMatchObject({ signed_in: false, community_name: "Dawn Patrol", community_one_liner: "We run early.", member_count: 40, member: null });
+  expect(await polynet.community()).toEqual({ name: "Dawn Patrol", slug: "run-club" });
+  expect(calls.map((call) => call.url)).toEqual(["/__polynet/auth/session"]);
+});
+
+test("every post's actor has the same keys; the agent's are null", async () => {
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (input.path === "/communities/run-club/") return ok({ entries: [] });
+      return ok({ entries: [{ type: "interaction", ref: "interaction:root:1", object_type: "root", snippet: "Hi", actor: { type: "community_agent", agent_key: "community_agent", user_id: null } }] });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  expect((await polynet.feed("general"))[0].actor).toEqual({ type: "community_agent", agent_key: "community_agent", user_id: null, display_name: null, handle: null, avatar_url: null });
+});
+
+test("watch calls back when the session ends, so the re-read surfaces sign_in_required", async () => {
+  stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ entries: [] }) });
+  let push: (result: unknown) => void = () => undefined;
+  vi.stubGlobal("convex", { ConvexClient: class {
+    onUpdate(_name: string, _args: unknown, callback: (result: unknown) => void) { push = callback; return () => undefined; }
+    close() {}
+  } });
+  const polynet = await loadSdk();
+  let changes = 0;
+  await polynet.watch("general", () => { changes += 1; });
+  push({ ok: true, version: 1 });
+  push({ ok: false, code: "session_invalid" });
+  expect(changes).toBe(2);
+  expect((await polynet.session()).signed_in).toBe(false);
+});

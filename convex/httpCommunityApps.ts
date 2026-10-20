@@ -29,6 +29,7 @@ const AGENT_MESSAGE_MAX_CHARS = 8_000;
 export const COMMUNITY_APP_HANDOFF_PATH = "/runtime/auth_bridge_community_handoff";
 export const COMMUNITY_EDGE_EXCHANGE_PATH = "/runtime/community_edge/session_exchange";
 export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revoke";
+export const COMMUNITY_EDGE_PUBLIC_PATH = "/runtime/community_edge/public";
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -373,6 +374,21 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       })) as { ok: true; expiresAt: number } | { ok: false; reason: string };
       if (!result.ok) return reply(403, { ok: false, code: result.reason });
       return reply(200, { ok: true, token, expires_at: new Date(result.expiresAt).toISOString() });
+    }),
+  });
+
+  // The community's public identity for its site, signed in or not.
+  args.http.route({
+    path: COMMUNITY_EDGE_PUBLIC_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
+      const body = await readJsonObject(req, 4096);
+      const origin = normalizeCommunityAppOrigin(typeof body?.origin === "string" ? body.origin : "");
+      if (!origin) return reply(400, { ok: false, code: "invalid_request" });
+      const community = await ctx.runQuery(internal.communityApps.getCommunityPublicIdentityByOriginInternal, { origin });
+      if (!community) return reply(404, { ok: false, code: "community_unavailable" });
+      return reply(200, { ok: true, community });
     }),
   });
 

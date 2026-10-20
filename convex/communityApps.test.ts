@@ -8,6 +8,7 @@ import {
   COMMUNITY_APP_RUNTIME_PATH,
   COMMUNITY_APP_HANDOFF_PATH,
   COMMUNITY_EDGE_EXCHANGE_PATH,
+  COMMUNITY_EDGE_PUBLIC_PATH,
   COMMUNITY_EDGE_REVOKE_PATH,
   COMMUNITY_APP_UPLOAD_PATH,
   COMMUNITY_APP_FILE_PATH,
@@ -509,4 +510,16 @@ test("a front-end post that mentions the community agent asks it to reply", asyn
   const requests = await f.t.run((c) => c.db.query("communityAgentServeRequests").collect());
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({ communityId: f.ids.communityId });
+});
+
+test("a community's site shows its public identity to anyone, through the edge only", async () => {
+  const f = await fixture();
+  await f.register();
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { oneLiner: "We build apps.", about: "Long about." } as any));
+  const edgeHeaders = { "x-polynet-edge-secret": EDGE_SECRET };
+  expect(await f.post(COMMUNITY_EDGE_PUBLIC_PATH, edgeHeaders, { origin: ORIGIN })).toEqual({ status: 200, body: { ok: true, community: {
+    slug: "apps-community", name: "apps-community", one_liner: "We build apps.", about: "Long about.", member_count: 2,
+  } } });
+  expect((await f.post(COMMUNITY_EDGE_PUBLIC_PATH, {}, { origin: ORIGIN })).status).toBe(401);
+  expect(await f.post(COMMUNITY_EDGE_PUBLIC_PATH, edgeHeaders, { origin: "https://unknown.example.com" })).toMatchObject({ status: 404, body: { code: "community_unavailable" } });
 });

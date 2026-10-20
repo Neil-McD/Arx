@@ -21,8 +21,10 @@ export class PolynetError extends Error {
 let current = null;
 let communityInfo = null;
 
-// Who is here: { signed_in, community, community_name, member, join_url, live }.
-// member is { name, handle, avatar_url, role } when signed in, else null.
+// Who is here: { signed_in, community, community_name, community_one_liner,
+// community_about, member_count, member, join_url, studio_url, live }.
+// The community fields are public; member is { name, handle, avatar_url, role }
+// when signed in, else null.
 async function session(options) {
   if (!current || (options && options.refresh)) {
     const res = await fetch("/__polynet/auth/session", { credentials: "same-origin" });
@@ -33,7 +35,7 @@ async function session(options) {
       try {
         const value = await list(root());
         communityInfo = value.community || null;
-        current.community_name = communityInfo ? communityInfo.name : null;
+        if (communityInfo) current.community_name = communityInfo.name;
         if (value.viewer) {
           current.member = {
             name: value.viewer.display_name || value.viewer.handle || "Member",
@@ -42,7 +44,7 @@ async function session(options) {
         }
       } catch (error) {
         // An expired session reads as signed out; anything else leaves member unknown.
-        if (error.code === "sign_in_required") current = Object.assign({}, edge, { signed_in: false, community_name: null, member: null, live: undefined });
+        if (error.code === "sign_in_required") current = Object.assign({ community_name: null }, edge, { signed_in: false, member: null, live: undefined });
       }
     }
   }
@@ -116,9 +118,12 @@ function rootIdOf(ref) {
   return String(ref || "").replace("interaction:root:", "");
 }
 
-// The community: { name, slug }.
+// The community: { name, slug }. Works signed out (from the public identity).
 async function community() {
-  if (!communityInfo) communityInfo = (await list(root())).community;
+  if (communityInfo) return communityInfo;
+  const s = await session();
+  if (!s.signed_in && s.community_name) return { name: s.community_name, slug: s.community };
+  communityInfo = (await list(root())).community;
   return communityInfo;
 }
 
@@ -128,6 +133,8 @@ function normalize(entry) {
     if (typeof entry.text !== "string") entry.text = entry.snippet || "";
     if (typeof entry.reply_count !== "number") entry.reply_count = 0;
     if (typeof entry.can_edit !== "boolean") entry.can_edit = false;
+    // Every actor has the same keys; the agent's are null.
+    entry.actor = Object.assign({ type: "human", display_name: null, handle: null, avatar_url: null }, entry.actor || {});
   }
   return entry;
 }
@@ -299,7 +306,8 @@ function loadConvex() {
 }
 
 // Live updates: onChange() runs whenever anything in the channel changes (posts,
-// replies, edits, deletions, reactions). Re-read the channel then. Returns stop().
+// replies, edits, deletions, reactions), and also when the session ends, so the
+// re-read surfaces sign_in_required. Re-read the channel then. Returns stop().
 async function watch(channel, onChange) {
   const s = await session();
   if (!s.signed_in || !s.live) throw new PolynetError("sign_in_required", "Sign in to watch this community.");
@@ -310,7 +318,8 @@ async function watch(channel, onChange) {
     liveToken = s.live.token;
   }
   return liveClient.onUpdate("communityLive:watch", { token: s.live.token, path: channelPath(channel) }, function (result) {
-    if (result && result.ok) onChange();
+    if ((!result || !result.ok) && current) current.signed_in = false;
+    onChange();
   });
 }
 
