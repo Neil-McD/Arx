@@ -40,6 +40,7 @@ const STYLE = [
   ".muted { color: var(--pa-muted); font-size: 13px; }",
   "h2 { font-size: 12px; font-weight: 650; letter-spacing: .02em; color: var(--pa-muted); margin: 10px 8px 4px; }",
   "ul { list-style: none; margin: 0; padding: 0; }",
+  ".communities { max-height: 240px; overflow: auto; }",
   ".item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 8px; border-radius: 8px; text-decoration: none; background: none; border: 0; cursor: pointer; min-height: 44px; }",
   ".item:hover { background: var(--pa-hover); }",
   ".item .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
@@ -87,10 +88,12 @@ class PolynetAccount extends HTMLElement {
     this.panelId = "polynet-account-panel-" + (++counter);
     this.state = { session: null, account: null, loading: false, error: null, open: false };
     this.onDocumentPointer = (event) => { if (this.state.open && !event.composedPath().includes(this)) this.close(false); };
+    this.onDocumentKey = (event) => { if (event.key === "Escape" && this.state.open) this.close(true); };
   }
 
   async connectedCallback() {
     document.addEventListener("pointerdown", this.onDocumentPointer, true);
+    document.addEventListener("keydown", this.onDocumentKey);
     this.render();
     try {
       this.state.session = await polynet.session();
@@ -102,6 +105,7 @@ class PolynetAccount extends HTMLElement {
 
   disconnectedCallback() {
     document.removeEventListener("pointerdown", this.onDocumentPointer, true);
+    document.removeEventListener("keydown", this.onDocumentKey);
   }
 
   items() {
@@ -190,14 +194,18 @@ class PolynetAccount extends HTMLElement {
     }
     if (account) {
       const current = account.communities.find((community) => community.current);
+      const links = account.links || {};
+      const everyday = [];
       if (current && (current.role === "owner" || current.role === "admin") && current.studio_url) {
-        children.push(h("a", { class: "item", href: current.studio_url, part: "item" }, [
-          h("span", { class: "label", text: "Manage " + current.name + " in Polynet" }),
-        ]));
-        children.push(h("hr", { class: "sep" }));
+        everyday.push([current.studio_url, "Manage this community"]);
       }
+      everyday.push([links.messages, "Messages"], [links.discover, "Discover communities"], [links.settings, "Settings"]);
+      for (const [href, label] of everyday) {
+        if (href) children.push(h("a", { class: "item", href: href, part: "item" }, [h("span", { class: "label", text: label })]));
+      }
+      children.push(h("hr", { class: "sep" }));
       children.push(h("h2", { id: this.panelId + "-communities", text: "Your communities" }));
-      children.push(h("ul", { "aria-labelledby": this.panelId + "-communities" }, account.communities.map((community) => h("li", {}, [
+      children.push(h("ul", { class: "communities", "aria-labelledby": this.panelId + "-communities" }, account.communities.map((community) => h("li", {}, [
         h("a", {
           class: "item", part: "item", href: community.site_url || community.studio_url || "#",
           "aria-current": community.current ? "page" : null,
@@ -207,11 +215,6 @@ class PolynetAccount extends HTMLElement {
           community.current ? h("span", { class: "badge", text: "Here" }) : null,
         ]),
       ]))));
-      children.push(h("hr", { class: "sep" }));
-      const links = account.links || {};
-      for (const [href, label] of [[links.discover, "Discover communities"], [links.messages, "Messages"], [links.settings, "Settings"]]) {
-        if (href) children.push(h("a", { class: "item", href: href, part: "item" }, [h("span", { class: "label", text: label })]));
-      }
     }
     children.push(h("hr", { class: "sep" }));
     children.push(h("button", { class: "item", type: "button", part: "item", onclick: () => this.signOut() }, [h("span", { class: "label", text: "Sign out" })]));
@@ -234,7 +237,15 @@ class PolynetAccount extends HTMLElement {
         "aria-expanded": this.state.open ? "true" : "false", "aria-controls": this.panelId,
         "aria-label": "Your account" + (member.name ? ", " + member.name : ""),
         onclick: () => (this.state.open ? this.close(false) : this.open(false)),
-        onkeydown: (event) => { if (event.key === "ArrowDown" && !this.state.open) { event.preventDefault(); this.open(true); } },
+        onkeydown: (event) => {
+          if (event.key === "Escape" && this.state.open) { event.preventDefault(); this.close(true); return; }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            if (!this.state.open) { this.open(true); return; }
+            const items = this.items();
+            if (items.length) items[event.key === "ArrowDown" ? 0 : items.length - 1].focus();
+          }
+        },
       }, [avatar(member.avatar_url, member.name), h("span", { class: "chevron", "aria-hidden": "true" })]));
       nodes.push(h("div", { class: "backdrop", hidden: !this.state.open, onclick: () => this.close(true) }));
       nodes.push(this.renderPanel(session));
