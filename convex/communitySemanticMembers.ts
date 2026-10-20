@@ -163,13 +163,16 @@ export async function listMemberSemanticDirectory(args: {
   const entries: MemberSemanticDirectorySource["entries"] = [];
   let skippedIncomplete = 0;
   for (const candidate of candidates) {
+    // A member whose identity rows are broken (missing user, ambiguous handle
+    // or profile) is skipped and counted, so one bad row never hides the
+    // whole directory.
     const mapped = await buildMemberDirectoryEntry({
       ctx: args.ctx,
       actorUserId: args.actorUserId,
       communityId,
       userId: candidate.userId,
       role: candidate.role,
-    });
+    }).catch(() => ({ entry: null, skippedIncomplete: true }));
     if (mapped.entry) entries.push(mapped.entry);
     if (mapped.skippedIncomplete) skippedIncomplete += 1;
   }
