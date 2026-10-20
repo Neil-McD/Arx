@@ -15,6 +15,7 @@ import {
   subscribeCloudCommunityActivityEvents,
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
+import { applyLiveRootWindow, mergeOlderRootPage } from "./communityRootWindows";
 import type { CommunityActivityEvent } from "../../../../shared/communityTypes";
 import {
   subscribeCloudCommunityAgentServeIssue,
@@ -265,27 +266,6 @@ function appendPendingReplies<AttachmentT extends OptimisticAttachment>(
   return optimistic.length > 0 ? [...replies, ...optimistic] : replies;
 }
 
-function rootCreatedAtMs(bundle: CommunityInteractionRootBundle): number {
-  const milliseconds = Date.parse(bundle.root.created_at);
-  return Number.isFinite(milliseconds) ? milliseconds : 0;
-}
-
-function mergeRootWindows(
-  current: CommunityInteractionRootBundle[],
-  incoming: CommunityInteractionRootBundle[],
-): CommunityInteractionRootBundle[] {
-  if (current.length === 0) {
-    return [...incoming].sort((left, right) => rootCreatedAtMs(right) - rootCreatedAtMs(left));
-  }
-  if (incoming.length === 0) return current;
-  const rootsById = new Map<string, CommunityInteractionRootBundle>();
-  for (const bundle of current) rootsById.set(bundle.root.id, bundle);
-  for (const bundle of incoming) rootsById.set(bundle.root.id, bundle);
-  return Array.from(rootsById.values()).sort(
-    (left, right) => rootCreatedAtMs(right) - rootCreatedAtMs(left),
-  );
-}
-
 function rootMatchesChannel(
   bundle: CommunityInteractionRootBundle,
   communityId: string,
@@ -532,7 +512,7 @@ export function useWebCommunityInteractionProjection<
       ) return;
       setRootChangeReason("older");
       setRoots((current) =>
-        mergeRootWindows(
+        mergeOlderRootPage(
           current.filter((bundle) => rootMatchesChannel(bundle, communityId, channelId)),
           page.roots,
         ),
@@ -588,9 +568,10 @@ export function useWebCommunityInteractionProjection<
             );
             setRootChangeReason(hadLoadedRoots ? "newer" : "initial");
             setRoots((current) =>
-              mergeRootWindows(
+              applyLiveRootWindow(
                 current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
                 incomingRoots,
+                COMMUNITY_INTERACTION_ROOT_LIMIT,
               ),
             );
             setIsLoadingRoots(false);
