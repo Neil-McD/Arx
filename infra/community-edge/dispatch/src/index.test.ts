@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import edge, { resolveRoute, safeReturnPath, type Env } from "./index";
+import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
@@ -105,16 +105,28 @@ test("the community's own Worker never receives Polynet's cookies", async () => 
   expect(seen).toEqual(["theme=dark", ""]);
 });
 
-test("the session endpoint gives a signed-in page its watch-only token, matching the backend's", async () => {
+test("the session endpoint gives every visitor the community's public identity, and a signed-in page its watch-only token", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json({ ok: true, community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12 } }));
+  vi.stubGlobal("fetch", backend);
+  const identity = {
+    community: "apps-community", community_name: "Apps Club", community_one_liner: "We build.", community_about: "About us.", member_count: 12,
+    join_url: "https://polynet.example.com/c/apps-community", studio_url: "https://polynet.example.com/c/apps-community",
+  };
   const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
-  expect(anonymous).toEqual({ signed_in: false, community: "apps-community", join_url: "https://polynet.example.com/c/apps-community" });
+  expect(anonymous).toEqual({ signed_in: false, ...identity });
   const signedIn = await (await edge.fetch(request("/__polynet/auth/session", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env())).json();
   expect(signedIn).toEqual({
     signed_in: true,
-    community: "apps-community",
-    join_url: "https://polynet.example.com/c/apps-community",
+    ...identity,
     live: { url: "https://live.example.convex.cloud", token: await deriveCommunityAppWatchToken(TOKEN) },
   });
+  // The identity comes from the backend once (edge secret, by the site's origin), then from the cache.
+  expect(backend).toHaveBeenCalledTimes(1);
+  const [path, init] = backend.mock.calls[0] as unknown as [string, RequestInit];
+  expect(path).toBe("https://api.example.convex.site/runtime/community_edge/public");
+  expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBeTruthy();
+  expect(JSON.parse(String(init.body))).toEqual({ origin: "https://hello.example.com" });
   expect(JSON.stringify(signedIn)).not.toContain(TOKEN);
 });
 
@@ -181,6 +193,15 @@ test("polynet.page itself is the front door: a page and the builder guide", asyn
   expect((await edge.fetch(new Request("https://polynet.page/anything"), e)).status).toBe(404);
   // Community sites are unaffected.
   expect(await (await edge.fetch(request("/"), e)).text()).toBe("front end");
+});
+
+test("an address on the sites domain with nothing deployed says how to deploy", async () => {
+  resetEdgeCaches();
+  const e = { ...env(), POLYNET_SITES_DOMAIN: "polynet.page", DEV_ROUTES_JSON: "{}" };
+  const res = await edge.fetch(new Request("https://new-club.polynet.page/"), e);
+  expect(res.status).toBe(404);
+  expect(await res.text()).toContain("npx @polynet/cli deploy --community new-club");
+  expect(await (await edge.fetch(new Request("https://elsewhere.example/"), e)).text()).toBe("Community not found");
 });
 
 test("hostname lookups read the routes map once, then use a short cache", async () => {

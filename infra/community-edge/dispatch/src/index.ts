@@ -137,6 +137,34 @@ export function safeReturnPath(raw: string | null): string {
   return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
 }
 
+type PublicIdentity = { name: string; one_liner: string | null; about: string | null; member_count: number };
+const IDENTITY_CACHE_MS = 60_000;
+const identityCache = new Map<string, { identity: PublicIdentity | null; until: number }>();
+
+// The community's public identity (name, one-liner, about, member count), cached
+// briefly per isolate. A failure just leaves the fields null.
+async function publicIdentity(env: Env, origin: string): Promise<PublicIdentity | null> {
+  const cached = identityCache.get(origin);
+  if (cached && cached.until > Date.now()) return cached.identity;
+  let identity: PublicIdentity | null = null;
+  try {
+    const res = await backend(env, "/runtime/community_edge/public", { origin }, origin);
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; community?: PublicIdentity } | null;
+    identity = res.ok && body?.ok && body.community ? body.community : null;
+  } catch {
+    identity = null;
+  }
+  if (identityCache.size >= ROUTE_CACHE_MAX) identityCache.clear();
+  identityCache.set(origin, { identity, until: Date.now() + IDENTITY_CACHE_MS });
+  return identity;
+}
+
+// Tests start each case with empty per-isolate caches.
+export function resetEdgeCaches(): void {
+  identityCache.clear();
+  routeCache.clear();
+}
+
 function backend(env: Env, path: string, body: Record<string, unknown>, origin: string): Promise<Response> {
   return fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}${path}`, {
     method: "POST",
@@ -191,11 +219,21 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
 
   if (action === "session" && request.method === "GET") {
     const token = String(readCookie(request, SESSION_COOKIE) ?? "");
-    // Joining (open, approval or paid) happens on Polynet's own join page.
+    // Joining (open, approval or paid) happens on Polynet's own join page, which
+    // is also where owners and admins manage the community (Polynet Studio).
     const joinUrl = new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
-    const community = route.community;
-    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, community, join_url: joinUrl });
-    return json(200, { signed_in: true, community, join_url: joinUrl, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
+    const identity = await publicIdentity(env, url.origin);
+    const base = {
+      community: route.community,
+      community_name: identity?.name ?? null,
+      community_one_liner: identity?.one_liner ?? null,
+      community_about: identity?.about ?? null,
+      member_count: identity?.member_count ?? null,
+      join_url: joinUrl,
+      studio_url: joinUrl,
+    };
+    if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, ...base });
+    return json(200, { signed_in: true, ...base, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
   }
 
   if (action === "logout" && request.method === "POST") {
@@ -297,7 +335,7 @@ export default {
     const frontDoorResponse = frontDoor(url, env);
     if (frontDoorResponse) return frontDoorResponse;
     const route = await resolveRoute(url.hostname, env);
-    if (!route) return new Response("Community not found", { status: 404 });
+    if (!route) return noSiteYet(url, env);
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
     // The builder kit: the SDK every front end imports, its live client, and its doc.
     if (url.pathname === "/__polynet/live.js") {
@@ -333,6 +371,17 @@ export default {
     return untransformed(await worker.fetch(withoutPolynetCookies(request)));
   },
 };
+
+// An address on the sites domain with nothing deployed yet says how to deploy;
+// anything else is simply not found.
+function noSiteYet(url: URL, env: Env): Response {
+  const domain = (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase();
+  const host = url.hostname.toLowerCase();
+  if (!domain || !host.endsWith(`.${domain}`)) return new Response("Community not found", { status: 404 });
+  const slug = host.slice(0, -(domain.length + 1));
+  const text = `No site is published at ${host} yet.\n\nIf this is your community, build its site and deploy it:\n  npx @polynet/cli deploy --community ${slug}\n\nStart here: https://${domain}/llms.txt\n`;
+  return new Response(text, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+}
 
 // polynet.page itself: where a founder's AI starts. The guide, and a page that says how.
 export function frontDoor(url: URL, env: Env): Response | null {

@@ -41,17 +41,28 @@ Always await polynet.session() first: every other call builds on it.
 ## Who is here
 
 session() -> {
-  signed_in,         // true when a member is signed in
-  community,         // the community's slug, e.g. "dawn-patrol"
-  community_name,    // its display name, e.g. "Dawn Patrol Run Club" (null when signed out)
-  member,            // { name, handle, avatar_url, role } when signed in, else null
-                     // role: "owner", "admin", "moderator" or "member"
-  join_url,          // Polynet's join page for this community
-  live               // used by watch(); ignore it
+  signed_in,           // true when a member is signed in
+  community,           // the community's slug, e.g. "dawn-patrol"
+  community_name,      // public: its display name, e.g. "Dawn Patrol Run Club"
+  community_one_liner, // public: its one-line promise (or null)
+  community_about,     // public: its longer description (or null)
+  member_count,        // public: how many members it has
+  member,              // { name, handle, avatar_url, role } when signed in, else null
+                       // role: "owner", "admin", "moderator" or "member"
+  join_url,            // Polynet's join page for this community
+  studio_url,          // where owners and admins manage it in Polynet Studio
+  live                 // used by watch(); ignore it
 }
 
-- Signed out: show the community's public face, a "Sign in" button that calls
-  polynet.signIn(), and a "Join" link to session.join_url.
+What works signed out: session() (with the public fields above) and
+community(). Everything else (channels, posts, events, courses, knowledge,
+the agent) needs a signed-in member and otherwise throws sign_in_required.
+
+- Signed out: show the community's public face from the public fields, a
+  "Sign in" button that calls polynet.signIn(), and a "Join" link to
+  session.join_url. Anything else on the public page is yours to write.
+- For an owner or admin (member.role), link to session.studio_url for what the
+  site can't do: creating events and courses, settings, members, billing.
 - signIn(returnPath?) sends the visitor to Polynet and back here signed in.
   For someone already on Polynet it is one quick redirect.
 - Someone on Polynet who is not a member yet comes back to "/?polynet=join",
@@ -83,7 +94,8 @@ Each post or reply has:
   path
   text                // the whole text (markdown); render this
   snippet             // the first 500 characters; snippet_truncated says if cut
-  actor               // { type, display_name, handle, avatar_url }
+  actor               // { type, display_name, handle, avatar_url, user_id, agent_key }
+                      // all keys always present; the agent's name fields are null
   reactions           // [{ emoji, count }]
   reacted_by_me       // [emoji]
   by_me               // posted by or for the signed-in member: they may remove() it
@@ -99,7 +111,8 @@ Writing:
   posts, or replies when replyTo is set. Returns { ref, path, ... }.
   askAgent asks the community agent to answer in the channel; Polynet puts
   "@<community name> " in front of the text, which is how agent mentions read
-  everywhere.
+  everywhere. Editing that post later doesn't ask the agent again; keep the
+  prefix in the edit box.
 - edit(post, text) when post.can_edit; remove(post) when post.by_me.
 - react(ref, emoji, on) adds (on: true) or removes (on: false) the member's
   reaction on a post or reply. Returns { reacted, reaction_summary }.
@@ -109,8 +122,12 @@ Live updates:
 - const stop = await watch(channelSlug, onChange). onChange runs once right
   away and again whenever anything in the channel changes (posts, replies,
   edits, deletes, reactions): call feed() or thread() again then. Use it
-  instead of polling. Needs a signed-in member. Everything the SDK loads comes
-  from this domain, so a Content-Security-Policy of 'self' works.
+  instead of polling. Needs a signed-in member. When the session ends
+  (signed out elsewhere, expired), onChange runs once more and the re-read
+  throws sign_in_required: show sign-in then.
+- Content-Security-Policy: scripts, styles and the SDK's connections come from
+  this domain ('self'), but avatar_url images come from Polynet's storage
+  host, so allow img-src 'self' https:.
 
 Authors: actor.type "human" is a member. "community_agent" is the community's
 agent; when it has a display_name it acted for that member. Label it
@@ -174,9 +191,10 @@ The site is a folder of static files with an index.html. From that folder:
 The first run opens the browser to sign in with Polynet (the community's owner
 or an admin) and saves the community in polynet.json, so later deploys are just
 "npx @polynet/cli deploy". Only changed files upload. The site is live at
-https://<community-slug>.polynet.page within a minute. Every path that isn't a
-file serves index.html, so client-side routes work. No server code runs:
-everything dynamic comes from the SDK.
+https://<community-slug>.polynet.page within a minute. Opening or refreshing
+any path in the browser serves index.html, so client-side routes (/events)
+work; a script's fetch() of a path that isn't a file gets 404. No server code
+runs: everything dynamic comes from the SDK.
 
 ## Example: a minimal live feed
 
