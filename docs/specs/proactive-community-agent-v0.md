@@ -1,7 +1,8 @@
 # Proactive community agent (v0 spec)
 
-Status: draft for Neil's review. Replaces member workflows' rule builder and
-forms builder with one proactive community agent. Nothing here is built yet.
+Status: approved by Neil on 2026-10-26. Replaces member workflows' rule
+builder and forms builder with one proactive community agent. Slice A (the
+founder brief) is next.
 
 ## Why
 
@@ -140,17 +141,16 @@ with realistic simulated members and activity.
 - Access, money, public posts in the founder's name and sensitive topics always
   need an approval card.
 
-## Open questions for Neil
+## Decided at review (Oct 26)
 
-1. **Which thread is "the" member thread?** Today a member has two private
-   surfaces with the agent: the Agent page conversation and the workflow's
-   private service channel. Proposal: the Agent page conversation becomes the
-   one thread; service channels retire with the rule builder.
-2. **Can the founder read members' replies to outreach?** Proposal: the brief
-   shows outcomes (replied, acted, muted) and the agent's summary, not the
-   member's words, unless the member shares them.
-3. **Proactive budget:** a default monthly amount included in the founder plan,
-   with the founder able to raise it. Needs a number.
+1. **The one thread is the Agent page conversation.** The workflow's private
+   service channels retire with the rule builder.
+2. **Founders see outcomes, not members' words.** The brief shows replied,
+   acted or muted and the agent's summary; a member's own words reach the
+   founder only when the member shares them.
+3. **Proactive budget:** a default monthly amount in the founder plan, raisable
+   by the founder. The number is set after slice A measures the real cost of a
+   brief.
 
 ## Not in v0
 
