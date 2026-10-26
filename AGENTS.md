@@ -242,4 +242,5 @@ Polynet is built by the software factory. Shared playbooks live in [Neil-McD/fac
 - Verify command: `npm run release:gate` (CI check `Release Gate`). Run it and paste the output in the PR.
 - Review: the model family that did not write the PR reviews it. Codex reviews `claude/` PRs; Claude reviews `codex/` PRs.
 - Risk-high areas (spec and human approval required): auth and sessions, billing and `checkout_finalize`, builder payouts, entitlements and membership gates, official Polynet MCP access, data migrations.
-- Forbidden for agents: merging, rebasing someone else's branch, `release:prod`, any Vercel CLI release command, weakening or skipping tests.
+- Merging (Neil, 2026-10-26): the orchestrator session merges a PR to `main` when CI is green, the other model's review has no open P0/P1 findings, and every review thread is resolved. Risk-high PRs also need Neil's explicit approval. Worker sessions never merge; `main` is not prod.
+- Forbidden for agents: merging outside that rule, rebasing someone else's branch, `release:prod` unless Neil asks for it in chat, any Vercel CLI release command, weakening or skipping tests.
