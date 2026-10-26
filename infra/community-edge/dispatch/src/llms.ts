@@ -255,7 +255,8 @@ Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
   powers only. Admin, settings, analytics, billing and direct messages stay in
   Polynet Studio; link there instead of rebuilding them.
 - Do not call Polynet servers directly. Use the SDK; everything goes through
-  /__polynet/ on this domain.
+  /__polynet/ on this domain, and only this site's own pages can call it
+  (another site gets 403 cross_site_request).
 - Lower-level access, if you need it: polynet.door.list/read/search/write/call
   over the community's paths (start with door.list("/communities/" +
   session.community + "/")). door.read bodies can be JSON even when the path

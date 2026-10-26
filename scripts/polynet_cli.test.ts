@@ -62,9 +62,10 @@ test("only the files Cloudflare asks for are uploaded, with the upload pass", as
 test("deploying a build folder keeps polynet.json in the project, where builds don't wipe it", () => {
   const project = "/work/club-site";
   expect(siteConfigPaths(project, project)).toEqual({ read: [`${project}/polynet.json`], save: `${project}/polynet.json` });
-  // polynet deploy dist: read dist/ first (older deploys saved there), then the project; save in the project.
+  // polynet deploy dist: the project's polynet.json wins, so a stale dist/polynet.json (from an older
+  // deploy) never redirects a deploy to another community; it's read only when the project has none.
   expect(siteConfigPaths(`${project}/dist`, project)).toEqual({
-    read: [`${project}/dist/polynet.json`, `${project}/polynet.json`], save: `${project}/polynet.json`,
+    read: [`${project}/polynet.json`, `${project}/dist/polynet.json`], save: `${project}/polynet.json`,
   });
   // A folder outside the current one keeps its own polynet.json and never borrows this one.
   expect(siteConfigPaths("/elsewhere/site", project)).toEqual({ read: ["/elsewhere/site/polynet.json"], save: "/elsewhere/site/polynet.json" });

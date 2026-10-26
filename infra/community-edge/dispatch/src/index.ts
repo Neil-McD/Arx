@@ -119,6 +119,28 @@ export async function deriveWatchToken(sessionToken: string): Promise<string> {
   return `pnw_${base64Url(new Uint8Array(digest))}`;
 }
 
+// Every community shares the sites domain, which isn't a public suffix, so a
+// browser counts sibling sites as the same site and sends this site's SameSite
+// cookies with their requests. The member endpoints answer only this site's own
+// pages: a sibling can't post, ask the agent, upload or sign out as the member.
+const MEMBER_PATHS = new Set([`${AUTH_PREFIX}session`, `${AUTH_PREFIX}logout`, "/__polynet/account", API_PREFIX, AGENT_PATH, AGENT_MESSAGES_PATH, UPLOAD_PATH]);
+
+function isMemberEndpoint(pathname: string): boolean {
+  return MEMBER_PATHS.has(pathname) || pathname.startsWith(`${API_PREFIX}/`) || pathname.startsWith(FILES_PREFIX);
+}
+
+export function fromThisSite(request: Request, url: URL): boolean {
+  const readOnly = request.method === "GET" || request.method === "HEAD";
+  // Opening a file link is a navigation: the page that started it can't read the file.
+  if (readOnly && url.pathname.startsWith(FILES_PREFIX) && request.headers.get("sec-fetch-mode") === "navigate") return true;
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  // Browsers without Fetch Metadata still send Origin on every write.
+  const origin = request.headers.get("origin");
+  if (origin) return origin === url.origin;
+  return readOnly;
+}
+
 // The front end's own Worker never receives Polynet's cookies.
 export function withoutPolynetCookies(request: Request): Request {
   const kept = (request.headers.get("cookie") ?? "")
@@ -129,6 +151,21 @@ export function withoutPolynetCookies(request: Request): Request {
   if (kept.length) headers.set("cookie", kept.join("; "));
   else headers.delete("cookie");
   return new Request(request, { headers });
+}
+
+// ...and can never set them: a site's response that names a Polynet cookie loses that Set-Cookie.
+function isPolynetCookie(setCookie: string): boolean {
+  const name = setCookie.split("=", 1)[0].trim().toLowerCase();
+  return name.startsWith("__host-polynet_") || name.startsWith(LEGACY_COOKIE_PREFIX);
+}
+
+export function withoutPolynetSetCookies(response: Response): Response {
+  const cookies = response.headers.getSetCookie();
+  if (!cookies.some(isPolynetCookie)) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("set-cookie");
+  for (const value of cookies) if (!isPolynetCookie(value)) headers.append("set-cookie", value);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 // Host-only (no Domain attribute), so one community can never read another's.
@@ -372,6 +409,9 @@ export default {
     if (frontDoorResponse) return frontDoorResponse;
     const route = await resolveRoute(url.hostname, env);
     if (!route) return noSiteYet(url, env);
+    if (isMemberEndpoint(url.pathname) && !fromThisSite(request, url)) {
+      return json(403, { ok: false, code: "cross_site_request", message: "Call this from the community's own site." });
+    }
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
     // The builder kit: the SDK every front end imports, its live client, and its doc.
     if (url.pathname === "/__polynet/live.js") {
@@ -414,7 +454,7 @@ export default {
     }
     const worker = userWorker(route.script, env);
     if (!worker) return new Response("Community front end unavailable", { status: 503 });
-    return withShell(untransformed(await worker.fetch(withoutPolynetCookies(request))));
+    return withShell(untransformed(withoutPolynetSetCookies(await worker.fetch(withoutPolynetCookies(request)))));
   },
 };
 

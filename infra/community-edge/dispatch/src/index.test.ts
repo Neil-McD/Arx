@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, withShell, type Env } from "./index";
+import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, withShell, withoutPolynetSetCookies, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
@@ -16,8 +16,11 @@ function env(): Env {
   };
 }
 
+// The site's own page calling its edge, as a browser marks it.
 function request(path: string, init: RequestInit = {}) {
-  return new Request(`${ORIGIN}${path}`, init);
+  const headers = new Headers(init.headers);
+  if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin");
+  return new Request(`${ORIGIN}${path}`, { ...init, headers });
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -116,6 +119,67 @@ test("a cookie a sibling site plants on the parent domain is never read as the m
     headers: { cookie: `__polynet_signin=${state}.%2F` },
   }), env());
   expect(callback.status).toBe(400);
+});
+
+test("a sibling site can't use the member's session: member endpoints answer only this site's own pages", async () => {
+  // Sibling sites share the sites domain, so the browser sends this site's cookies with their requests.
+  const upstream = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", upstream);
+  const cookie = `__Host-polynet_session=${TOKEN}`;
+  const sibling = { cookie, "sec-fetch-site": "same-site", origin: "https://sibling.example.com" };
+  const forged: Array<[string, RequestInit]> = [
+    ["/__polynet/auth/logout", { method: "POST" }],
+    ["/__polynet/api", { method: "POST", body: "{}" }],
+    ["/__polynet/api/anything", { method: "POST", body: "{}" }],
+    ["/__polynet/agent", { method: "POST", body: "{}" }],
+    ["/__polynet/upload", { method: "POST", body: "x" }],
+    ["/__polynet/agent/messages", {}],
+    ["/__polynet/account", {}],
+    ["/__polynet/auth/session", {}],
+    ["/__polynet/files/j97y81p9dam48njv1jqnm1wv4s8gfm67", {}],
+  ];
+  for (const [path, init] of forged) {
+    for (const site of ["same-site", "cross-site", "none"]) {
+      const res = await edge.fetch(request(path, { ...init, headers: { ...sibling, "sec-fetch-site": site } }), env());
+      expect(res.status, `${site} ${path}`).toBe(403);
+      expect(await res.json()).toMatchObject({ ok: false, code: "cross_site_request" });
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+  }
+  expect(upstream).not.toHaveBeenCalled();
+
+  // Browsers without Fetch Metadata: a write needs this site's Origin; a plain read passes (CORS keeps it unreadable).
+  const old = (path: string, init: RequestInit, origin?: string) => edge.fetch(new Request(`${ORIGIN}${path}`, {
+    ...init, headers: { cookie, ...(origin ? { origin } : {}) },
+  }), env());
+  expect((await old("/__polynet/api", { method: "POST", body: "{}" }, "https://sibling.example.com")).status).toBe(403);
+  expect((await old("/__polynet/api", { method: "POST", body: "{}" })).status).toBe(403);
+  expect((await old("/__polynet/api", { method: "POST", body: "{}" }, ORIGIN)).status).toBe(200);
+  expect((await old("/__polynet/account", {})).status).toBe(200);
+
+  // Opening a file link is a navigation, which the opener can't read.
+  const opened = await edge.fetch(new Request(`${ORIGIN}/__polynet/files/j97y81p9dam48njv1jqnm1wv4s8gfm67`, {
+    headers: { cookie, "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate" },
+  }), env());
+  expect(opened.status).toBe(200);
+  // The SDK on the site's own page is unaffected; sign-in start and the public kit need no check.
+  expect((await edge.fetch(request("/__polynet/api", { method: "POST", headers: { cookie }, body: "{}" }), env())).status).toBe(200);
+  for (const path of ["/__polynet/auth/start", "/__polynet/sdk.js", "/__polynet/ui.js", "/__polynet/llms.txt"]) {
+    expect((await edge.fetch(request(path, { headers: { "sec-fetch-site": "cross-site" } }), env())).status, path).not.toBe(403);
+  }
+});
+
+test("a site's own responses can't set Polynet's cookies", async () => {
+  const headers = new Headers({ "content-type": "text/html" });
+  headers.append("set-cookie", `__Host-polynet_session=${TOKEN}; Path=/; Secure`);
+  headers.append("set-cookie", "__HOST-Polynet_signin=x; Path=/; Secure");
+  headers.append("set-cookie", "__polynet_session=y; Domain=polynet.page");
+  headers.append("set-cookie", "theme=dark; Path=/");
+  const e = { ...env(), DEV_USER_WORKER: { fetch: async () => new Response("<p>hi</p>", { headers }) } };
+  const res = await edge.fetch(request("/"), e);
+  expect(res.headers.getSetCookie()).toEqual(["theme=dark; Path=/"]);
+  const plain = new Response("ok", { headers: { "set-cookie": "theme=dark" } });
+  expect(withoutPolynetSetCookies(plain)).toBe(plain);
 });
 
 test("the community's own Worker never receives Polynet's cookies", async () => {

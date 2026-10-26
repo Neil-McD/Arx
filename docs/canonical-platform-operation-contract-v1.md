@@ -201,7 +201,16 @@ Sign-in is invisible when the member is already signed in to Polynet:
    `__Host-` prefix (Secure, `Path=/`, no `Domain`), because every community
    shares the sites domain and that domain is not a public suffix: a sibling
    site can set `Domain=polynet.page` cookies, but never a `__Host-` one, so it
-   cannot shadow a member's session or fixate them into its own.
+   cannot shadow a member's session or fixate them into its own. For the same
+   reason (sibling sites count as the same site, so the browser sends this
+   site's `SameSite=Lax` cookies with their requests) the edge answers the
+   member endpoints (`/__polynet/api`, `/agent`, `/agent/messages`, `/upload`,
+   `/files/*`, `/account`, `/auth/session`, `/auth/logout`) only for the site's
+   own pages: `Sec-Fetch-Site: same-origin`, or, from a browser without Fetch
+   Metadata, a matching `Origin` on writes. Anything else gets 403
+   `cross_site_request`; opening a file link (a navigation) still works. A
+   site's own responses can't set Polynet's cookies: the edge drops any
+   `Set-Cookie` naming one.
 
 The edge forwards `/__polynet/api` to `POST /runtime/app` with the edge secret
 and the session; the backend answers nothing else, so a token is useless

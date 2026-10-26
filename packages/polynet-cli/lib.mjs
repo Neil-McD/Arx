@@ -131,13 +131,14 @@ export async function isDirectory(path) {
 
 // Where polynet.json is read from and saved to. Deploying a build folder inside
 // the project (polynet deploy dist) keeps it in the project folder, because a
-// build wipes dist/. It is read from the deploy folder first, then the project.
+// build wipes dist/. The project's copy wins; one left in dist/ by an older
+// deploy is read only when the project has none, then moves to the project.
 export function siteConfigPaths(dir, cwd = process.cwd()) {
   const inDir = join(dir, "polynet.json");
   const below = relative(cwd, dir);
   if (!below || below.startsWith("..") || isAbsolute(below)) return { read: [inDir], save: inDir };
   const inCwd = join(cwd, "polynet.json");
-  return { read: [inDir, inCwd], save: inCwd };
+  return { read: [inCwd, inDir], save: inCwd };
 }
 
 export function formatBytes(bytes) {
