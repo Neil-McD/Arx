@@ -112,7 +112,7 @@ the agent) needs a signed-in member and otherwise throws sign_in_required.
 ## The Polynet shell (required on every page)
 
 Every community site shows the Polynet account control, so members can always
-reach their account, their other communities, Discover, messages and settings:
+reach their account, their communities, Discover, messages and settings:
 
     <script type="module" src="/__polynet/ui.js"></script>
     <polynet-account></polynet-account>
@@ -120,7 +120,13 @@ reach their account, their other communities, Discover, messages and settings:
 Put it where your design wants it (usually the top-right of the header) and
 keep it visible on every page and at every width. Signed out it shows "Join"
 and "Sign in"; signed in, the member's avatar opens their account menu (with
-"Manage in Polynet" for owners and admins). Don't rebuild these yourself.
+"Manage this community" for owners and admins, and "Your communities", which
+opens Polynet). Don't rebuild these yourself.
+
+Polynet adds the ui.js script to every page that doesn't load it, and if a
+page has no <polynet-account> shortly after it loads, ui.js puts one in the
+top-right corner. That fallback is a safety net, not a design: place the
+shell yourself.
 
 Style it from your CSS to match the site; its structure and keyboard behavior
 are Polynet's:
@@ -136,7 +142,10 @@ are Polynet's:
 
 It takes the page's font unless --polynet-font says otherwise. Keep
 text/background contrast at least 4.5:1. Add align="start" if it sits at
-the left edge. polynet.account() returns the same data if you need it.
+the left edge. polynet.account() returns what the menu shows, for this
+community only: { member { name, handle, avatar_url }, community { slug,
+name, role, studio_url }, links { communities, discover, settings, messages } }.
+The member's other communities are never readable from a site.
 
 ## Errors
 
@@ -263,8 +272,7 @@ or an admin) and saves the community in polynet.json, so later deploys are just
 "npx @polynet/cli deploy".
 
 Every deploy checks the site first ("npx @polynet/cli check" runs the same
-checks alone). These stop a deploy until fixed: a page without the shell
-(/__polynet/ui.js) or no <polynet-account> anywhere; a page without
+checks alone). These stop a deploy until fixed: a page without
 <html lang>, a <title> or a viewport that allows zooming; an <img> without
 alt; a button or link with no text or aria-label. Warnings (unlabelled
 fields, removed focus outlines, animation without prefers-reduced-motion,
@@ -275,6 +283,17 @@ https://<community-slug>.polynet.page within a minute. Opening or refreshing
 any path in the browser serves index.html, so client-side routes (/events)
 work; a script's fetch() of a path that isn't a file gets 404. No server code
 runs: everything dynamic comes from the SDK.
+
+Using a bundler (Vite, Rollup, esbuild): the SDK and shell are served by the
+site, so mark /__polynet/ imports external, never bundle them. For Vite:
+
+    // vite.config.js
+    export default { build: { rollupOptions: { external: [/^\/__polynet\//] } } };
+
+Then deploy the build folder: "npx @polynet/cli deploy dist". polynet.json
+stays in the project folder (the one you run the command from), so a clean
+build doesn't lose it. If the bundler moves the ui.js script into its own
+bundle, that's fine: Polynet adds it to every page anyway.
 
 Skills for AI agents: "npx @polynet/cli create --community <slug>" sets up a
 folder (no template) with AGENTS.md, CLAUDE.md and Polynet's skills

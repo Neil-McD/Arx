@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, type Env } from "./index";
+import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, withShell, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
@@ -27,7 +27,7 @@ test("unknown community hosts are not served", async () => {
   expect(res.status).toBe(404);
 });
 
-test("start sends the member to Polynet sign-in with a state cookie scoped to the auth path", async () => {
+test("start sends the member to Polynet sign-in with a __Host- state cookie", async () => {
   const res = await edge.fetch(request("/__polynet/auth/start?return=/lessons/3"), env());
   expect(res.status).toBe(302);
   const location = new URL(res.headers.get("location")!);
@@ -37,9 +37,9 @@ test("start sends the member to Polynet sign-in with a state cookie scoped to th
   const state = location.searchParams.get("state")!;
   expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/);
   const setCookie = res.headers.get("set-cookie")!;
-  expect(setCookie).toContain(`__polynet_signin=${state}.${encodeURIComponent("/lessons/3")}`);
+  expect(setCookie).toContain(`__Host-polynet_signin=${state}.${encodeURIComponent("/lessons/3")}`);
   expect(setCookie).toMatch(/HttpOnly/);
-  expect(setCookie).toMatch(/Path=\/__polynet\/auth\//);
+  expect(setCookie).toMatch(/^__Host-polynet_signin=[^;]+; Path=\/; HttpOnly; SameSite=Lax; Max-Age=600; Secure$/);
   expect(setCookie).not.toMatch(/Domain=/i);
 });
 
@@ -47,7 +47,7 @@ test("callback refuses a state mismatch without calling the backend", async () =
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
   const res = await edge.fetch(request(`/__polynet/auth/callback?code=pnh_x&state=${"b".repeat(43)}`, {
-    headers: { cookie: `__polynet_signin=${"a".repeat(43)}.%2F` },
+    headers: { cookie: `__Host-polynet_signin=${"a".repeat(43)}.%2F` },
   }), env());
   expect(res.status).toBe(400);
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -60,7 +60,7 @@ test("callback swaps the code for an HttpOnly, host-only session and returns to 
   }), { status: 200 }));
   vi.stubGlobal("fetch", fetchSpy);
   const res = await edge.fetch(request(`/__polynet/auth/callback?code=pnh_x&state=${state}`, {
-    headers: { cookie: `__polynet_signin=${state}.${encodeURIComponent("//evil.example.com")}` },
+    headers: { cookie: `__Host-polynet_signin=${state}.${encodeURIComponent("//evil.example.com")}` },
   }), env());
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("/");
@@ -69,9 +69,9 @@ test("callback swaps the code for an HttpOnly, host-only session and returns to 
   expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBe("edge-secret");
   expect(JSON.parse(String(init.body))).toEqual({ code: "pnh_x", state, origin: ORIGIN });
   const cookies = res.headers.get("set-cookie")!;
-  expect(cookies).toContain(`__polynet_session=${TOKEN}`);
+  expect(cookies).toContain(`__Host-polynet_session=${TOKEN}`);
   expect(cookies).toMatch(/HttpOnly/);
-  expect(cookies).toMatch(/Secure/);
+  expect(cookies).toMatch(new RegExp(`^__Host-polynet_session=${TOKEN}; Path=/; HttpOnly; SameSite=Lax; Max-Age=\\d+; Secure, __Host-polynet_signin=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure$`));
   expect(cookies).not.toMatch(/Domain=/i);
 });
 
@@ -87,21 +87,42 @@ test("API calls use only the session cookie and clear it when the backend reject
   const upstream = vi.fn(async () => new Response(JSON.stringify({ ok: false }), { status: 401 }));
   vi.stubGlobal("fetch", upstream);
   const rejected = await edge.fetch(request("/__polynet/api", {
-    method: "POST", headers: { cookie: `__polynet_session=${TOKEN}`, authorization: "Bearer pna_forged" }, body: "{}",
+    method: "POST", headers: { cookie: `__Host-polynet_session=${TOKEN}`, authorization: "Bearer pna_forged" }, body: "{}",
   }), env());
   const [, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
   expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
   expect((init.headers as Record<string, string>).Origin).toBe(ORIGIN);
   expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBe("edge-secret");
   expect(rejected.status).toBe(401);
-  expect(rejected.headers.get("set-cookie")).toMatch(/__polynet_session=; .*Max-Age=0/);
+  expect(rejected.headers.get("set-cookie")).toMatch(/__Host-polynet_session=; .*Max-Age=0/);
+});
+
+test("a cookie a sibling site plants on the parent domain is never read as the member's session", async () => {
+  // Any site on the sites domain can set Domain=polynet.page cookies. Only __Host- names count.
+  const upstream = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", upstream);
+  const planted = `pna_${"z".repeat(43)}`;
+  const legacyOnly = await edge.fetch(request("/__polynet/api", { method: "POST", headers: { cookie: `__polynet_session=${planted}` }, body: "{}" }), env());
+  expect(legacyOnly.status).toBe(401);
+  expect(upstream).not.toHaveBeenCalled();
+  await edge.fetch(request("/__polynet/api", {
+    method: "POST", headers: { cookie: `__polynet_session=${planted}; __Host-polynet_session=${TOKEN}` }, body: "{}",
+  }), env());
+  const [, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
+  expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+  // A planted sign-in state can't complete someone else's sign-in either.
+  const state = "d".repeat(43);
+  const callback = await edge.fetch(request(`/__polynet/auth/callback?code=pnh_x&state=${state}`, {
+    headers: { cookie: `__polynet_signin=${state}.%2F` },
+  }), env());
+  expect(callback.status).toBe(400);
 });
 
 test("the community's own Worker never receives Polynet's cookies", async () => {
   const seen: string[] = [];
   const e = { ...env(), DEV_USER_WORKER: { fetch: async (req: Request) => { seen.push(req.headers.get("cookie") ?? ""); return new Response("ok"); } } };
-  await edge.fetch(request("/", { headers: { cookie: `theme=dark; __polynet_session=${TOKEN}; __polynet_signin=x.%2F` } }), e);
-  await edge.fetch(request("/", { headers: { cookie: `__polynet_session=${TOKEN}` } }), e);
+  await edge.fetch(request("/", { headers: { cookie: `theme=dark; __Host-polynet_session=${TOKEN}; __Host-polynet_signin=x.%2F; __polynet_session=${TOKEN}` } }), e);
+  await edge.fetch(request("/", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), e);
   expect(seen).toEqual(["theme=dark", ""]);
 });
 
@@ -115,7 +136,7 @@ test("the session endpoint gives every visitor the community's public identity, 
   };
   const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
   expect(anonymous).toEqual({ signed_in: false, ...identity });
-  const signedIn = await (await edge.fetch(request("/__polynet/auth/session", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env())).json();
+  const signedIn = await (await edge.fetch(request("/__polynet/auth/session", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), env())).json();
   expect(signedIn).toEqual({
     signed_in: true,
     ...identity,
@@ -133,7 +154,7 @@ test("the session endpoint gives every visitor the community's public identity, 
 test("uploads and files go to the backend with the session and edge secret only", async () => {
   const upstream = vi.fn(async () => new Response("ok", { status: 200, headers: { "content-type": "image/png", "x-secret": "no" } }));
   vi.stubGlobal("fetch", upstream);
-  const cookie = `__polynet_session=${TOKEN}`;
+  const cookie = `__Host-polynet_session=${TOKEN}`;
   expect((await edge.fetch(request("/__polynet/upload", { method: "POST", body: "x" }), env())).status).toBe(401);
   await edge.fetch(request("/__polynet/upload", { method: "POST", body: "png", headers: {
     cookie, "content-type": "image/png", "x-polynet-channel": "general", "x-polynet-idempotency-key": "k", authorization: "Bearer pna_forged",
@@ -155,7 +176,7 @@ test("uploads and files go to the backend with the session and edge secret only"
 test("agent turns stream through with the session and edge secret; history is read the same way", async () => {
   const upstream = vi.fn(async () => new Response("event: done\ndata: {}\n\n", { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8" } }));
   vi.stubGlobal("fetch", upstream);
-  const cookie = `__polynet_session=${TOKEN}`;
+  const cookie = `__Host-polynet_session=${TOKEN}`;
   expect((await edge.fetch(request("/__polynet/agent", { method: "POST", body: "{}" }), env())).status).toBe(401);
   const turn = await edge.fetch(request("/__polynet/agent", { method: "POST", headers: { cookie }, body: JSON.stringify({ text: "hi", message_key: "abcdefgh" }) }), env());
   expect(turn.headers.get("content-type")).toContain("text/event-stream");
@@ -179,6 +200,59 @@ test("community pages are served untransformed, so Cloudflare injects no scripts
   expect(css.headers.get("cache-control")).toBe("public, max-age=3600");
 });
 
+// Stands in for Cloudflare's HTMLRewriter (absent outside Workers) over a whole document.
+class FakeRewriter {
+  scripts?: (element: any) => void;
+  body?: (element: any) => void;
+  docEnd?: (end: any) => void;
+  on(selector: string, handlers: { element(element: any): void }) {
+    if (selector === "script[src]") this.scripts = handlers.element;
+    if (selector === "body") this.body = handlers.element;
+    return this;
+  }
+  onDocument(handlers: { end(end: any): void }) { this.docEnd = handlers.end; return this; }
+  transform(response: Response) {
+    const run = async () => {
+      let html = await response.text();
+      for (const m of html.matchAll(/<script\b[^>]*\bsrc="([^"]*)"/g)) this.scripts!({ getAttribute: () => m[1] });
+      let endTag: ((tag: any) => void) | undefined;
+      if (/<body\b/.test(html)) this.body!({ onEndTag: (handler: (tag: any) => void) => { endTag = handler; } });
+      if (endTag && html.includes("</body>")) {
+        const at = html.lastIndexOf("</body>");
+        endTag({ before: (content: string) => { html = html.slice(0, at) + content + html.slice(at); } });
+      }
+      this.docEnd!({ append: (content: string) => { html += content; } });
+      return html;
+    };
+    return new Response(new ReadableStream({ async start(c) { c.enqueue(new TextEncoder().encode(await run())); c.close(); } }), { headers: response.headers });
+  }
+}
+
+test("the edge adds the shell to every page that doesn't load it, and leaves everything else alone", async () => {
+  const tag = '<script type="module" src="/__polynet/ui.js"></script>';
+  const page = (html: string, type = "text/html; charset=utf-8") => withShell(new Response(html, { headers: { "content-type": type } }), FakeRewriter as any);
+  // A bundled site: Vite moved the ui.js import into its own module.
+  expect(await page('<html><body><script type="module" src="/assets/index-abc.js"></script></body></html>').text())
+    .toBe(`<html><body><script type="module" src="/assets/index-abc.js"></script>${tag}</body></html>`);
+  const already = `<html><head>${tag}</head><body><polynet-account></polynet-account></body></html>`;
+  expect(await page(already).text()).toBe(already);
+  expect(await page('<html><body><script type="module" src="/__polynet/ui.js?v=2"></script></body></html>').text()).not.toContain(tag);
+  expect(await page("<!doctype html><title>Hi</title><p>No body tag").text()).toBe(`<!doctype html><title>Hi</title><p>No body tag${tag}`);
+  expect(await page("body { color: red }", "text/css").text()).toBe("body { color: red }");
+  // Outside Workers there's no rewriter: the page passes through untouched.
+  expect(await withShell(new Response("<html></html>", { headers: { "content-type": "text/html" } })).text()).toBe("<html></html>");
+});
+
+test("ui.js puts a shell in the corner of a page that has none, and gives way to one the page places", async () => {
+  const source = await (await edge.fetch(request("/__polynet/ui.js"), env())).text();
+  expect(source).toContain('shell.setAttribute("data-polynet-fallback", "")');
+  expect(source).toContain('document.querySelectorAll("polynet-account[data-polynet-fallback]")');
+  expect(source).toContain("position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));");
+  // It links out to the member's communities; it never lists them in the page.
+  expect(source).toContain('[links.communities, "Your communities"]');
+  expect(source).not.toContain("account.communities");
+});
+
 test("every site gets the shell (ui.js) and the member's account, read with their session", async () => {
   resetEdgeCaches();
   const ui = await edge.fetch(request("/__polynet/ui.js"), env());
@@ -189,9 +263,9 @@ test("every site gets the shell (ui.js) and the member's account, read with thei
   expect(source).not.toContain("https://");
 
   expect((await edge.fetch(request("/__polynet/account"), env())).status).toBe(401);
-  const upstream = vi.fn(async () => Response.json({ ok: true, account: { member: { name: "Sam" }, communities: [], links: {} } }));
+  const upstream = vi.fn(async () => Response.json({ ok: true, account: { member: { name: "Sam" }, community: { slug: "apps-community", role: "member" }, links: {} } }));
   vi.stubGlobal("fetch", upstream);
-  const res = await edge.fetch(request("/__polynet/account", { headers: { cookie: `__polynet_session=${TOKEN}` } }), env());
+  const res = await edge.fetch(request("/__polynet/account", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), env());
   expect(await res.json()).toMatchObject({ ok: true, account: { member: { name: "Sam" } } });
   const [path, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
   expect(path).toBe("https://api.example.convex.site/runtime/app/account");
@@ -253,10 +327,10 @@ test("the builder kit is served on every community's domain", async () => {
 test("logout revokes the session and clears the cookie", async () => {
   const revoke = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
   vi.stubGlobal("fetch", revoke);
-  const res = await edge.fetch(request("/__polynet/auth/logout", { method: "POST", headers: { cookie: `__polynet_session=${TOKEN}` } }), env());
+  const res = await edge.fetch(request("/__polynet/auth/logout", { method: "POST", headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), env());
   expect(res.status).toBe(200);
   expect(JSON.parse(String((revoke.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toEqual({ token: TOKEN });
-  expect(res.headers.get("set-cookie")).toMatch(/__polynet_session=; .*Max-Age=0/);
+  expect(res.headers.get("set-cookie")).toMatch(/__Host-polynet_session=; .*Max-Age=0/);
 });
 
 test("return paths stay on the community's own site", () => {

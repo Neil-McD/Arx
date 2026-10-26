@@ -525,12 +525,12 @@ test("a community's site shows its public identity to anyone, through the edge o
   expect(await f.post(COMMUNITY_EDGE_PUBLIC_PATH, edgeHeaders, { origin: "https://unknown.example.com" })).toMatchObject({ status: 404, body: { code: "community_unavailable" } });
 });
 
-test("the shell shows the member's account: their communities, sites and where Polynet keeps the rest", async () => {
+test("the shell shows the member's account: who they are, their role here, and links out, never their other communities", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://studio.example.com");
   const f = await fixture();
   await f.register();
   await f.register("https://other.example.com", f.ids.otherCommunityId);
-  // The member also belongs to apps-other (no current session there).
+  // The member also belongs to apps-other; this site must not learn that.
   await f.t.run((c) => c.db.insert("communityMemberships", {
     communityId: f.ids.otherCommunityId, userId: f.ids.memberId, role: "admin", accessSource: "free_grant", active: true,
     activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1,
@@ -539,12 +539,13 @@ test("the shell shows the member's account: their communities, sites and where P
   const account = await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: ORIGIN, "x-polynet-edge-secret": EDGE_SECRET, authorization: `Bearer ${token}` }, {});
   expect(account).toEqual({ status: 200, body: { ok: true, account: {
     member: { name: "apps-member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png" },
-    communities: [
-      { slug: "apps-community", name: "apps-community", role: "member", current: true, site_url: ORIGIN, studio_url: "https://studio.example.com/c/apps-community" },
-      { slug: "apps-other", name: "apps-other", role: "admin", current: false, site_url: "https://other.example.com", studio_url: "https://studio.example.com/c/apps-other" },
-    ],
-    links: { discover: "https://studio.example.com/discover", settings: "https://studio.example.com/settings/profile", messages: "https://studio.example.com/?dm=inbox" },
+    community: { slug: "apps-community", name: "apps-community", role: "member", studio_url: "https://studio.example.com/c/apps-community" },
+    links: {
+      communities: "https://studio.example.com/", discover: "https://studio.example.com/discover",
+      settings: "https://studio.example.com/settings/profile", messages: "https://studio.example.com/?dm=inbox",
+    },
   } } });
+  expect(JSON.stringify(account)).not.toContain("apps-other");
   // Only the edge, with a session.
   expect((await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: ORIGIN, authorization: `Bearer ${token}` }, {})).status).toBe(401);
   expect((await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: ORIGIN, "x-polynet-edge-secret": EDGE_SECRET }, {})).status).toBe(401);

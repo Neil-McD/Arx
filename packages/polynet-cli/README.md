@@ -18,13 +18,16 @@ npx @polynet/cli deploy
 - The first run opens your browser to sign in with Polynet. You must be the
   community's owner or an admin. The community is saved in `polynet.json`, so
   later deploys are just `npx @polynet/cli deploy`.
+- Built with a bundler? Mark `/__polynet/` imports external and deploy the
+  build folder: `npx @polynet/cli deploy dist`. `polynet.json` stays in the
+  folder you run the command from, so a clean build doesn't lose it.
 - Only changed files upload. The site is live at `https://<slug>.polynet.page`.
 - There's no template: `create` puts `AGENTS.md`, `CLAUDE.md` and Polynet's
   skills (build-site, design, sdk, accessibility, deploy-verify) in the
   folder, under `.agents/skills` and `.claude/skills`. Your agent asks about
   your community, shows you three directions live, and builds the one you
   pick. `polynet skills` adds or updates the skills in any site folder.
-- `polynet check` checks the site: the Polynet shell on every page and the
+- `polynet check` checks the site's
   accessibility basics (language, title, zoom, image alt text, named buttons
   and links). `deploy` runs it first and stops on errors.
 - Agent guides, `polynet.json`, dotfiles and `node_modules` are never uploaded.

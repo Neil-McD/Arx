@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { extname, join, relative, sep } from "node:path";
+import { extname, isAbsolute, join, relative, sep } from "node:path";
 import { isCheckedFile } from "./checks.mjs";
 
 // Until the production release, the only Polynet with site hosting is staging.
@@ -127,6 +127,17 @@ export async function isDirectory(path) {
   } catch {
     return false;
   }
+}
+
+// Where polynet.json is read from and saved to. Deploying a build folder inside
+// the project (polynet deploy dist) keeps it in the project folder, because a
+// build wipes dist/. It is read from the deploy folder first, then the project.
+export function siteConfigPaths(dir, cwd = process.cwd()) {
+  const inDir = join(dir, "polynet.json");
+  const below = relative(cwd, dir);
+  if (!below || below.startsWith("..") || isAbsolute(below)) return { read: [inDir], save: inDir };
+  const inCwd = join(cwd, "polynet.json");
+  return { read: [inDir, inCwd], save: inCwd };
 }
 
 export function formatBytes(bytes) {
