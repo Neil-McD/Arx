@@ -8,6 +8,7 @@ import {
   briefMarkdown,
   deterministicBrief,
   localDateAndHour,
+  nextOccurrenceMs,
   parseBrief,
   snapshotIsQuiet,
   type FounderBriefSnapshot,
@@ -16,6 +17,7 @@ import {
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts", "./_generated/**/*.*s"]);
 const internalRefs = internal as any;
 const HOUR_MS = 60 * 60 * 1000;
+const DAY = 24 * HOUR_MS;
 const originalPublicAppUrl = process.env.ARX_PUBLIC_APP_URL;
 
 beforeAll(() => {
@@ -127,22 +129,57 @@ describe("founder brief delivery", () => {
     await expect(set({})).resolves.toEqual({ ok: true });
   });
 
-  it("is due once the founder's local hour arrives, once per day", async () => {
+  it("schedules the next brief at the founder's next local hour", () => {
+    expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T08:30:00.000Z"), 8, "UTC")).toISOString()).toBe("2026-10-27T08:00:00.000Z");
+    expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T13:30:00.000Z"), 8, "America/New_York")).toISOString()).toBe("2026-10-27T12:00:00.000Z");
+    // Across the US daylight-saving change, 8am moves from 12:00 to 13:00 UTC.
+    expect(new Date(nextOccurrenceMs(Date.parse("2026-10-31T13:00:00.000Z"), 8, "America/New_York")).toISOString()).toBe("2026-11-01T13:00:00.000Z");
+  });
+
+  it("is due at its time, retries failures twice, then waits for tomorrow", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, Date.now());
-    await t.mutation(internalRefs.communityFounderBrief.setFounderBriefSettingsInternal, {
-      communityId: f.communityId, enabled: true, localHour: 8, timeZone: "UTC", actorUserId: f.ownerId,
-    });
-    const at = (iso: string) => t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: Date.parse(iso) });
-    expect(await at("2026-10-26T07:59:00.000Z")).toEqual([]);
-    expect(await at("2026-10-26T08:00:00.000Z")).toEqual([{ communityId: f.communityId, briefDate: "2026-10-26" }]);
-    await t.mutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, {
-      communityId: f.communityId, briefDate: "2026-10-26", nowMs: Date.parse("2026-10-26T08:00:00.000Z"),
-    });
-    // Claimed and still leased: not due again.
-    expect(await at("2026-10-26T08:05:00.000Z")).toEqual([]);
-    // A crashed run's lease expires and the brief becomes due again.
-    expect(await at("2026-10-26T08:30:00.000Z")).toHaveLength(1);
+    const T = Date.parse("2026-10-26T08:00:00.000Z");
+    await t.run((ctx) => ctx.db.insert("communityFounderBriefSettings", {
+      communityId: f.communityId, enabled: true, localHour: 8, timeZone: "UTC", nextDueAt: T,
+      updatedByUserId: f.ownerId, createdAt: T, updatedAt: T,
+    }));
+    const due = (nowMs: number) => t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs });
+    const nextDueAt = async () => (await t.run((ctx) => ctx.db.query("communityFounderBriefSettings").first()))!.nextDueAt;
+    const claim = (nowMs: number) => t.mutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, { communityId: f.communityId, briefDate: "2026-10-26", nowMs });
+    const finish = (claimed: any, status: "sent" | "failed", nowMs: number) =>
+      t.mutation(internalRefs.communityFounderBrief.finishFounderBriefInternal, { briefId: claimed.briefId, status, nowMs });
+
+    expect(await due(T - 1)).toEqual([]);
+    expect(await due(T)).toEqual([{ communityId: f.communityId, briefDate: "2026-10-26" }]);
+    let claimed = await claim(T);
+    expect(await due(T + 60_000)).toEqual([]); // held while it runs
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await finish(claimed, "failed", T + attempt * 1000);
+      if (attempt < 3) {
+        expect(await nextDueAt()).toBe(T + attempt * 1000 + 30 * 60_000);
+        claimed = await claim(await nextDueAt());
+        expect(claimed).not.toBeNull();
+      }
+    }
+    // Three failed attempts: done for today, due again tomorrow at 8.
+    expect(await nextDueAt()).toBe(Date.parse("2026-10-27T08:00:00.000Z"));
+    expect(await claim(T + DAY)).toBeNull();
+  });
+
+  it("a sent brief isn't sent again, and the schedule moves on", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const T = Date.parse("2026-10-26T08:00:00.000Z");
+    await t.run((ctx) => ctx.db.insert("communityFounderBriefSettings", {
+      communityId: f.communityId, enabled: true, localHour: 8, timeZone: "UTC", nextDueAt: T,
+      updatedByUserId: f.ownerId, createdAt: T, updatedAt: T,
+    }));
+    const claimed = await t.mutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, { communityId: f.communityId, briefDate: "2026-10-26", nowMs: T });
+    await t.mutation(internalRefs.communityFounderBrief.finishFounderBriefInternal, { briefId: claimed.briefId, status: "sent", nowMs: T + 1000 });
+    expect(await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: T + HOUR_MS })).toEqual([]);
+    expect(await t.mutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, { communityId: f.communityId, briefDate: "2026-10-26", nowMs: T + HOUR_MS })).toBeNull();
+    expect(await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: Date.parse("2026-10-27T08:00:00.000Z") })).toHaveLength(1);
   });
 
   it("delivers today's brief to the founder's agent thread and email, once", async () => {

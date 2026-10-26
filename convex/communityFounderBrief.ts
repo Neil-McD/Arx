@@ -243,6 +243,36 @@ export function briefMarkdown(brief: FounderBrief): string {
 
 // ---------- scheduling ----------
 
+const MAX_ATTEMPTS = 3;
+const RETRY_AFTER_MS = 30 * 60 * 1000;
+
+// The next top of the hour after afterMs whose local hour is localHour.
+export function nextOccurrenceMs(afterMs: number, localHour: number, timeZone: string): number {
+  let at = Math.floor(afterMs / HOUR_MS) * HOUR_MS + HOUR_MS;
+  for (let step = 0; step < 50; step += 1, at += HOUR_MS) {
+    if (localDateAndHour(at, timeZone).hour === localHour) return at;
+  }
+  return afterMs + DAY_MS;
+}
+
+// Due now when today's hour has already come, otherwise at the next one.
+function firstDueAtMs(nowMs: number, localHour: number, timeZone: string): number {
+  return localDateAndHour(nowMs, timeZone).hour >= localHour ? nowMs : nextOccurrenceMs(nowMs, localHour, timeZone);
+}
+
+async function readSettings(ctx: any, communityId: any) {
+  return await ctx.db.query("communityFounderBriefSettings")
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId)).unique();
+}
+
+async function scheduleNext(ctx: any, communityId: any, nowMs: number, retry: boolean) {
+  const settings = await readSettings(ctx, communityId);
+  if (!settings) return;
+  await ctx.db.patch(settings._id, {
+    nextDueAt: retry ? nowMs + RETRY_AFTER_MS : nextOccurrenceMs(nowMs, settings.localHour, settings.timeZone),
+  });
+}
+
 export const setFounderBriefSettingsInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -257,31 +287,26 @@ export const setFounderBriefSettingsInternal = internalMutation({
     if (!Number.isInteger(args.localHour) || args.localHour < 0 || args.localHour > 23) throw new Error("founder_brief_hour_invalid");
     if (!validTimeZone(args.timeZone)) throw new Error("founder_brief_time_zone_invalid");
     const nowMs = Date.now();
-    const existing = await ctx.db.query("communityFounderBriefSettings")
-      .withIndex("by_community", (q) => q.eq("communityId", args.communityId)).unique();
-    const fields = { enabled: args.enabled, localHour: args.localHour, timeZone: args.timeZone, updatedByUserId: args.actorUserId, updatedAt: nowMs };
+    const existing = await readSettings(ctx, args.communityId);
+    const fields = {
+      enabled: args.enabled, localHour: args.localHour, timeZone: args.timeZone, updatedByUserId: args.actorUserId,
+      nextDueAt: firstDueAtMs(nowMs, args.localHour, args.timeZone), updatedAt: nowMs,
+    };
     if (existing) await ctx.db.patch(existing._id, fields);
     else await ctx.db.insert("communityFounderBriefSettings", { communityId: args.communityId, ...fields, createdAt: nowMs });
     return { ok: true };
   },
 });
 
+// Enabled communities whose next brief is due, oldest first. Every claim moves
+// nextDueAt forward, so a bounded scan still reaches every community.
 export const listDueFounderBriefsInternal = internalQuery({
   args: { nowMs: v.number() },
   handler: async (ctx, args) => {
     const settings = await ctx.db.query("communityFounderBriefSettings")
-      .withIndex("by_enabled", (q) => q.eq("enabled", true)).take(500);
-    const due: Array<{ communityId: any; briefDate: string }> = [];
-    for (const row of settings) {
-      if (due.length >= MAX_BRIEFS_PER_RUN) break;
-      const local = localDateAndHour(args.nowMs, row.timeZone);
-      if (local.hour < row.localHour) continue;
-      const existing = await ctx.db.query("communityFounderBriefs")
-        .withIndex("by_community_date", (q) => q.eq("communityId", row.communityId).eq("briefDate", local.date)).unique();
-      if (existing && !(existing.status === "running" && existing.leaseExpiresAt < args.nowMs)) continue;
-      due.push({ communityId: row.communityId, briefDate: local.date });
-    }
-    return due;
+      .withIndex("by_enabled_nextDueAt", (q) => q.eq("enabled", true).lte("nextDueAt", args.nowMs))
+      .take(MAX_BRIEFS_PER_RUN);
+    return settings.map((row) => ({ communityId: row.communityId, briefDate: localDateAndHour(args.nowMs, row.timeZone).date }));
   },
 });
 
@@ -292,7 +317,14 @@ export const claimFounderBriefInternal = internalMutation({
     if (!community || !communityIsActive(community)) return null;
     const existing = await ctx.db.query("communityFounderBriefs")
       .withIndex("by_community_date", (q) => q.eq("communityId", args.communityId).eq("briefDate", args.briefDate)).unique();
-    if (existing && !(existing.status === "running" && existing.leaseExpiresAt < args.nowMs)) return null;
+    if (existing) {
+      const leased = existing.status === "running" && existing.leaseExpiresAt >= args.nowMs;
+      if (leased) return null;
+      if (existing.status === "sent" || existing.attempts >= MAX_ATTEMPTS) {
+        await scheduleNext(ctx, args.communityId, args.nowMs, false);
+        return null;
+      }
+    }
     const previous = await ctx.db.query("communityFounderBriefs")
       .withIndex("by_community_status_windowEnd", (q) => q.eq("communityId", args.communityId).eq("status", "sent"))
       .order("desc").first();
@@ -301,12 +333,18 @@ export const claimFounderBriefInternal = internalMutation({
       status: "running" as const, windowStartMs, windowEndMs: args.nowMs,
       leaseExpiresAt: args.nowMs + CLAIM_LEASE_MS, updatedAt: args.nowMs,
     };
-    const briefId = existing
-      ? (await ctx.db.patch(existing._id, fields), existing._id)
-      : await ctx.db.insert("communityFounderBriefs", {
+    let briefId;
+    if (existing) {
+      briefId = existing._id;
+      await ctx.db.patch(existing._id, { ...fields, attempts: existing.attempts + 1, errorCode: undefined });
+    } else {
+      briefId = await ctx.db.insert("communityFounderBriefs", {
         communityId: args.communityId, ownerUserId: community.ownerId, briefDate: args.briefDate,
-        ...fields, createdAt: args.nowMs,
+        ...fields, attempts: 1, createdAt: args.nowMs,
       });
+    }
+    // Hold the schedule while this attempt runs; finishing sets the next time.
+    await scheduleNext(ctx, args.communityId, args.nowMs, true);
     return { briefId, ownerUserId: community.ownerId, windowStartMs, windowEndMs: args.nowMs };
   },
 });
@@ -335,15 +373,59 @@ export const finishFounderBriefInternal = internalMutation({
     nowMs: v.number(),
   },
   handler: async (ctx, { briefId, nowMs, ...fields }) => {
+    const brief = await ctx.db.get(briefId);
+    if (!brief) return;
     await ctx.db.patch(briefId, {
       ...fields, updatedAt: nowMs, leaseExpiresAt: nowMs,
       ...(fields.status === "sent" ? { sentAt: nowMs } : {}),
     });
+    // A failed attempt retries in 30 minutes, up to three attempts a day.
+    await scheduleNext(ctx, brief.communityId, nowMs, fields.status === "failed" && brief.attempts < MAX_ATTEMPTS);
   },
 });
 
+// Asks the model for the brief. Null when funding, the provider or the reply
+// isn't usable: the caller then sends the plain brief.
+async function writeWithModel(ctx: any, claim: any, communityId: any, briefDate: string, snapshot: FounderBriefSnapshot, stats: Record<string, number>) {
+  const funding = await resolveCommunityInferenceFundingForAction(ctx, communityId);
+  if (!funding.ok) return null;
+  let run;
+  try {
+    run = await startFundedInferenceRun({
+      ctx, communityId, actorUserId: claim.ownerUserId, surface: "community_founder_brief",
+      receiptKey: `community_founder_brief:${String(communityId)}:${briefDate}:${claim.windowEndMs}`,
+      sourceRunId: `community-founder-brief:${String(claim.briefId)}`, admission: funding,
+    });
+  } catch {
+    // Usage exhausted, rate limited or funding changed: no model today.
+    return null;
+  }
+  try {
+    const response = await run.request({
+      messages: [
+        { role: "system", content: FOUNDER_BRIEF_PROMPT },
+        { role: "user", content: JSON.stringify(snapshot) },
+      ],
+      maxTokens: BRIEF_MAX_OUTPUT_TOKENS,
+      tools: [],
+    });
+    if (!response.ok || response.type !== "assistant") {
+      await run.fail(response.ok ? "invalid_model_output" : response.code);
+      return null;
+    }
+    const settled = await run.settle("provider_completed");
+    stats.promptTokens = Number(response.promptTokens ?? 0);
+    stats.completionTokens = Number(response.completionTokens ?? 0);
+    return settled ? parseBrief(response.assistantText) : null;
+  } catch (error) {
+    await run.fail(error instanceof Error ? error.message.slice(0, 120) : "founder_brief_provider_failed").catch(() => {});
+    return null;
+  }
+}
+
 // Writes the brief (model when there is something to say and funding allows,
 // plain otherwise) and delivers it to the founder's agent thread and email.
+// The thread message and email are keyed by date, so a retry never doubles them.
 async function writeAndDeliver(ctx: any, args: { communityId: any; briefDate: string; nowMs: number }) {
   const claim = await ctx.runMutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, args);
   if (!claim) return "skipped";
@@ -358,45 +440,15 @@ async function writeAndDeliver(ctx: any, args: { communityId: any; briefDate: st
       return "failed";
     }
     const snapshot = read.snapshot as FounderBriefSnapshot;
-    let brief: FounderBrief | null = null;
-    let writer: "model" | "deterministic" = "deterministic";
     const stats: Record<string, number> = {
       newMembers: snapshot.newMembers.count, posts: snapshot.activity.posts, replies: snapshot.activity.replies,
       unanswered: snapshot.unanswered.length, quietNewcomers: snapshot.quietNewcomers.count,
       joinRequests: snapshot.joinRequestsPending, upcomingEvents: snapshot.upcomingEvents.length,
     };
-    if (!snapshotIsQuiet(snapshot)) {
-      const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
-      if (funding.ok) {
-        const run = await startFundedInferenceRun({
-          ctx, communityId: args.communityId, actorUserId: claim.ownerUserId, surface: "community_founder_brief",
-          receiptKey: `community_founder_brief:${String(args.communityId)}:${args.briefDate}:${claim.windowEndMs}`,
-          sourceRunId: `community-founder-brief:${String(claim.briefId)}`, admission: funding,
-        });
-        try {
-          const response = await run.request({
-            messages: [
-              { role: "system", content: FOUNDER_BRIEF_PROMPT },
-              { role: "user", content: JSON.stringify(snapshot) },
-            ],
-            maxTokens: BRIEF_MAX_OUTPUT_TOKENS,
-            tools: [],
-          });
-          if (response.ok && response.type === "assistant") {
-            const settled = await run.settle("provider_completed");
-            brief = settled ? parseBrief(response.assistantText) : null;
-            stats.promptTokens = Number(response.promptTokens ?? 0);
-            stats.completionTokens = Number(response.completionTokens ?? 0);
-          } else {
-            await run.fail(response.ok ? "invalid_model_output" : response.code);
-          }
-        } catch (error) {
-          await run.fail(error instanceof Error ? error.message.slice(0, 120) : "founder_brief_provider_failed").catch(() => {});
-        }
-        if (brief) writer = "model";
-      }
-    }
-    brief ??= deterministicBrief(snapshot);
+    const modelBrief = snapshotIsQuiet(snapshot)
+      ? null : await writeWithModel(ctx, claim, args.communityId, args.briefDate, snapshot, stats);
+    const writer: "model" | "deterministic" = modelBrief ? "model" : "deterministic";
+    const brief = modelBrief ?? deterministicBrief(snapshot);
 
     const conversation = await ctx.runMutation(internalRefs.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
       communityId: args.communityId, trustedUserId: claim.ownerUserId,

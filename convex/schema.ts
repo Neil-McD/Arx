@@ -1270,11 +1270,12 @@ export default defineSchema({
     enabled: v.boolean(),
     localHour: v.number(),
     timeZone: v.string(),
+    nextDueAt: v.number(),
     updatedByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"])
-    .index("by_enabled", ["enabled"]),
+    .index("by_enabled_nextDueAt", ["enabled", "nextDueAt"]),
 
   communityFounderBriefs: defineTable({
     communityId: v.id("communities"),
@@ -1284,6 +1285,7 @@ export default defineSchema({
     windowStartMs: v.number(),
     windowEndMs: v.number(),
     leaseExpiresAt: v.number(),
+    attempts: v.number(),
     writer: v.optional(v.union(v.literal("model"), v.literal("deterministic"))),
     stats: v.optional(v.record(v.string(), v.number())),
     threadMessageKey: v.optional(v.string()),
