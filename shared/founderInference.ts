@@ -51,6 +51,7 @@ export const COMMUNITY_INFERENCE_SURFACES = [
   "community_autonomous_cognition",
   "community_workflow_action",
   "community_setup_generation",
+  "community_founder_brief",
 ] as const;
 
 export type CommunityInferenceSurface = (typeof COMMUNITY_INFERENCE_SURFACES)[number];
