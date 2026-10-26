@@ -74,7 +74,7 @@ assert.equal(
 );
 assert.equal(
   webLock.packages?.["node_modules/dompurify"]?.version,
-  "3.4.16",
+  "3.4.17",
   "web lock must resolve the patched DOMPurify release",
 );
 
