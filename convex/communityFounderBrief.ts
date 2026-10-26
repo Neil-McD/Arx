@@ -85,12 +85,16 @@ async function displayName(ctx: any, userId: unknown, cache: Map<string, string>
 async function buildSnapshot(ctx: any, community: any, windowStartMs: number, nowMs: number): Promise<FounderBriefSnapshot> {
   const names = new Map<string, string>();
   const ownerId = String(community.ownerId);
-  const [roots, replies, memberships, joinRequests, events] = await Promise.all([
+  const memberRows = (from: number, to: number) => ctx.db.query("communityMemberships")
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id).gte("createdAt", from).lt("createdAt", to))
+    .order("desc").take(SCAN_LIMIT);
+  const [roots, replies, recentJoins, newcomerRows, joinRequests, events] = await Promise.all([
     listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionRoots", communityId: community._id, limit: SCAN_LIMIT }),
     listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionReplies", communityId: community._id, limit: SCAN_LIMIT }),
-    ctx.db.query("communityMemberships")
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id).gte("createdAt", nowMs - 14 * DAY_MS))
-      .take(SCAN_LIMIT),
+    // Joins in the reporting window, and newcomers who joined 3 to 14 days ago,
+    // read separately so a busy fortnight can't hide yesterday's joins.
+    memberRows(windowStartMs, nowMs),
+    memberRows(nowMs - 14 * DAY_MS, nowMs - 3 * DAY_MS),
     ctx.db.query("communityJoinRequests")
       .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", community._id).eq("status", "pending"))
       .take(SCAN_LIMIT),
@@ -109,14 +113,12 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     [...windowRoots, ...windowReplies].filter(human).map((row: any) => String(row.actorUserId)),
   );
 
-  const activeMembers = memberships.filter((row: any) => row.active !== false && typeof row.revokedAt !== "number"
-    && String(row.userId) !== ownerId);
-  const joined = activeMembers.filter(inWindow);
+  const activeMember = (row: any) => row.active !== false && typeof row.revokedAt !== "number" && String(row.userId) !== ownerId;
+  const joined = recentJoins.filter(activeMember);
 
   // Anyone who has posted or replied in the recent scan is not quiet.
   const everActive = new Set([...roots, ...replies].filter(human).map((row: any) => String(row.actorUserId)));
-  const quiet = activeMembers.filter((row: any) =>
-    Number(row.createdAt) <= nowMs - 3 * DAY_MS && !everActive.has(String(row.userId)));
+  const quiet = newcomerRows.filter((row: any) => activeMember(row) && !everActive.has(String(row.userId)));
 
   const unansweredRows = roots
     .filter((row: any) => live(row) && human(row) && String(row.actorUserId) !== ownerId
@@ -314,7 +316,11 @@ export const claimFounderBriefInternal = internalMutation({
   args: { communityId: v.id("communities"), briefDate: v.string(), nowMs: v.number() },
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
-    if (!community || !communityIsActive(community)) return null;
+    if (!community || !communityIsActive(community)) {
+      // An archived community waits a day at a time, so it never blocks the queue.
+      await scheduleNext(ctx, args.communityId, args.nowMs, false);
+      return null;
+    }
     const existing = await ctx.db.query("communityFounderBriefs")
       .withIndex("by_community_date", (q) => q.eq("communityId", args.communityId).eq("briefDate", args.briefDate)).unique();
     if (existing) {

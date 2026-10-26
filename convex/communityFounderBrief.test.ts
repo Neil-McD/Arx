@@ -167,6 +167,37 @@ describe("founder brief delivery", () => {
     expect(await claim(T + DAY)).toBeNull();
   });
 
+  it("an archived community moves to tomorrow instead of blocking the queue", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const T = Date.parse("2026-10-26T08:00:00.000Z");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityFounderBriefSettings", {
+        communityId: f.communityId, enabled: true, localHour: 8, timeZone: "UTC", nextDueAt: T,
+        updatedByUserId: f.ownerId, createdAt: T, updatedAt: T,
+      });
+      await ctx.db.patch(f.communityId, { lifecycleStatus: "archived" } as any);
+    });
+    expect(await t.mutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, { communityId: f.communityId, briefDate: "2026-10-26", nowMs: T })).toBeNull();
+    expect(await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: T + HOUR_MS })).toEqual([]);
+  });
+
+  it("counts yesterday's joins even after a busy fortnight", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 210; index += 1) {
+        const userId = await ctx.db.insert("users", { authSubject: `bulk-${index}`, displayName: `Bulk ${index}`, createdAt: nowMs, updatedAt: nowMs } as any);
+        await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant", active: true, createdAt: nowMs - 10 * DAY + index, updatedAt: nowMs } as any);
+      }
+    });
+    const read = await t.query(internalRefs.communityFounderBrief.readFounderBriefSnapshotInternal, {
+      communityId: f.communityId, windowStartMs: nowMs - DAY, nowMs,
+    });
+    expect(read.snapshot.newMembers).toMatchObject({ count: 1, names: ["Ana"] });
+  });
+
   it("a sent brief isn't sent again, and the schedule moves on", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, Date.now());
