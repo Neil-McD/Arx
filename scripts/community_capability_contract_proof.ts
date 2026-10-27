@@ -257,11 +257,6 @@ assert.ok(
   ),
   "the shared executor should revalidate canonical community access per call",
 );
-const communityReadKernelSource = read("convex/communityReadKernel.ts");
-assert.ok(
-  communityReadKernelSource.includes("resolveCommunityCapabilityContextInternal"),
-  "community read kernel should use the atomic internal community context resolver",
-);
 assert.match(mcpSource, /executePolynetCanonicalTool/);
 assert.doesNotMatch(mcpSource, /workspace_context|polynet_workspace_/);
 assert.deepEqual(

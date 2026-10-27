@@ -9,8 +9,9 @@ Status: written October 27, 2026 from `main` at `d63eb4a63`. Code paths are
 `convex/<module>.ts` unless shown otherwise.
 
 **Status column:** **Keep** (core), **Going** (removal planned), **Decide**
-(waiting on Neil), **Dead** (no reference anywhere outside tests and proof
-scripts, checked by hand on Oct 27; remove with its tests).
+(waiting on Neil), **Dead** (no first-party caller; the gate's
+`no_orphan_modules_proof` fails on any new one). **Hand-run** modules have no
+code caller on purpose and are named, with a reason, in that proof's exceptions.
 
 ## The shape
 
@@ -25,6 +26,8 @@ Members and founders
                                       Stripe · WorkOS · OpenAI · Resend · Cloudflare API ◀────┘
 ```
 
+Entry files: `http` (the HTTP router), `crons`, `schema`, `auth.config`.
+
 Three ways in, one backend. Every door reaches the same domain owners with the
 same authorization ([core-contract.md](core-contract.md), invariant 3).
 
@@ -35,7 +38,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** one Polynet identity everywhere; sessions; profiles.
 - **Code:** `auth`, `authIdentity`, `authActor`, `authSessions`, `authSessionLifecycleCore`,
   `authSessionMaintenanceCore`, `httpAuth`, `httpAuthBridge`, `workosEmailVerification`,
-  `profiles`, `profileCore`, `accountSetupCore`, `legalAcceptances`; Vercel `api/auth/*`
+  `profiles`, `profileCore`, `profileRelationshipCore`, `userProfileProjection`,
+  `account`, `accountSetupCore`, `legalAcceptances`; Vercel `api/auth/*`
   (HttpOnly `__Host-` cookies, return-path checks).
 - **Reached by:** Studio sign-in (WorkOS AuthKit, Google), `/runtime/auth_*`,
   `/runtime/auth_bridge_session_*`, `/user_management/`.
@@ -43,7 +47,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [auth-runtime-setup-workos-authkit.md](auth-runtime-setup-workos-authkit.md),
   [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
   [auth-money-access-matrix.md](auth-money-access-matrix.md).
-- **Dead:** `anonymousUserCleanup`, `emailVerificationRepair`.
+- **Hand-run:** `anonymousUserCleanup` (data deletion).
 
 ### 2. Communities, membership and joining — Keep
 
@@ -52,7 +56,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
-  `platformHomeCommunity`.
+  `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
+  `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
+  `memberEntryDestination`, `gates`, `platformHomeCommunity`.
 - **Reached by:** Studio; site join links go to Polynet's `/c/<slug>` join page.
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
@@ -61,12 +67,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [community-member-arrival-v1.md](community-member-arrival-v1.md),
   [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),
   [url-routing-contract-v1.md](url-routing-contract-v1.md).
-- **Decide:** the funnel editor (`communityFunnel`, `communityFunnels` table,
+- **Decide:** the funnel editor (`communityFunnel`, `communityFunnelValidators`,
+  `communityFunnels` table,
   Studio funnel editor). Community sites are now the front door; keep only a
   plain join and checkout page?
-- **Dead:** `communityFeatured`, `communityLaunchSetup`, `communityMaintenance`,
-  `communityReadKernel`, `communityOnboarding`; `communityOnboardingSessions` table
-  (no writers).
+- **Hand-run:** `communityMaintenance` (purges orphaned user artifacts).
+- **Retiring tables:** `communityOnboardingSessions` (no writers),
+  `communityOnboardingConfigs`. Deleted Oct 27: `communityFeatured`,
+  `communityLaunchSetup`, `communityReadKernel`, `communityOnboarding`.
 
 ### 3. Chat — Keep
 
@@ -74,11 +82,18 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   read cursors. One canonical interaction substrate.
 - **Code:** `communityInteractions`, `communityChannels`, `communityChannelCore`,
   `communityChannelAccess`, `communityChannelParticipants`, `communityMention*`,
-  `communityAttachmentUploads`, `httpCommunityAttachments`, `communityAttention`;
+  `communityAttachmentUploads`, `communityAttachmentDownloads`,
+  `communityLegacyAttachmentUploads`, `communityInteractionAttachmentBridge`,
+  `communityInteractionLegacyAttachments`, `communityInteractionEvidence`,
+  `communityInteractionEvidenceCore`, `communityChannelValidators`,
+  `communityComposerReplay`, `communityTypingPresenceCore`, `communityReadCursorCore`,
+  `communityActivity`, `communityText`, `httpCommunityAttachments`, `communityAttention`;
   legacy bridge `communityChat`, `communityInteractionLegacyBridge`.
 - **Tables:** `communityChannels`, `communityChannelParticipants`,
-  `communityInteractionRoots`, `…Replies`, `…Attachments`, `…Embeds`,
-  `…ContentBlocks`, `…Mentions`, `…Reactions`, `…ModerationEvents`,
+  `communityInteractionRoots`, `communityInteractionReplies`,
+  `communityInteractionAttachments`, `communityInteractionEmbeds`,
+  `communityInteractionContentBlocks`, `communityInteractionMentions`,
+  `communityInteractionReactions`, `communityInteractionModerationEvents`,
   `communityMentionBroadcasts`, `communityTypingPresence`, `communityReadCursors`,
   `communityActivityEvents`.
 - **Contracts:** [community-interaction-substrate-contract-v1.md](community-interaction-substrate-contract-v1.md),
@@ -89,12 +104,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityFeaturedMessages`). Studio no longer calls its write path (the newest
   staging row is from late June 2026); the legacy bridge still reads it. Prove
   production matches, then retire.
-- **Dead:** `communityInteractionBackfill`, `communityChannelAudit`,
-  `communityChannelBackfill`.
+- **Hand-run:** `communityInteractionBackfill` (needed to finish the legacy chat
+  retirement); `communityChannelAudit`, `communityChannelBackfill` (General channel
+  migration: delete after two clean production audits, residue map R-009).
 
 ### 4. Direct messages — Keep (Studio only)
 
-- **Code:** `directMessages`, `directMessageReadCore`.
+- **Code:** `directMessages`, `directMessageReadCore`, `directMessageEmails`.
 - **Tables:** `dmConversations`, `dmParticipants`, `dmMessages`, `dmBlocks`,
   `dmRateCounters`, `dmTypingPresence`.
 
@@ -103,7 +119,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** courses, lessons, files and source material a community learns from.
 - **Code:** `communityResources` (10k lines, a known hot spot),
   `communityResourceContent`, `communityResourceEvidence*`,
-  `communityResourceMemoryProjection`; Vercel `api/source-url-fetch.js`.
+  `communityResourceMemoryProjection`, `communitySourceUrlPolicy`,
+  `communityBuilderKnowledgeSetup`; Vercel `api/source-url-fetch.js`.
 - **Tables:** `communityResourceModules`, `communityResources`,
   `communityResourceContents`, `communitySourceUnits`, `communitySourceUnitContents`,
   `communitySourceCrawlJobs`, `communityResourceBuilderChangesets`.
@@ -118,23 +135,28 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** turns activity into cited, accepted community memory; member facts.
 - **Code:** `communityCompiler*`, `communityIntelligenceDirectory`,
   `communityEvidence*`, `communityCognitionLifecycle`, `communityCognitionCleanupCore`,
-  `communityMemoryWorkKey`, `communityMemoryMetabolizer`, `memberOntology`,
+  `communityMemoryWorkKey`, `communityMemoryMetabolizer`, `communityWikiArchitect`,
+  `memberOntology`,
   `memberOntologyCore`; cron "community
   memory sweep" (`communityAgentHeartbeat`, every 6 hours).
 - **Tables:** `communitySourceTraces`, `communityEvidenceCitations`,
-  `communityEvidenceRetrievalLogs`, `communityIntelligenceNodes`, `…Edges`,
-  `…Mutations`, `…ChangeRequests`, `…RetrievalLogs`, `communityOutcomeObservations`,
+  `communityEvidenceRetrievalLogs`, `communityIntelligenceNodes`,
+  `communityIntelligenceEdges`, `communityIntelligenceMutations`,
+  `communityIntelligenceChangeRequests`, `communityIntelligenceRetrievalLogs`,
+  `communityOutcomeObservations`,
   `communityCompilerDigests`, `communityMemoryMetabolizerRuns`, `memberFacts`,
   `memberProfileSpines`.
 - **Contracts:** [community-agent-cognition-contract-v1.md](community-agent-cognition-contract-v1.md),
   [community-lineage-ontology-contract-v0.md](community-lineage-ontology-contract-v0.md),
   [community-evidence-integrity-contract-v1.md](community-evidence-integrity-contract-v1.md),
   [member-ontology-contract-v1.md](member-ontology-contract-v1.md).
-- **Going:** `personalMemory` and `personalMemoryItems` (personal-agent era);
+- **Going:** `personalMemory`, `personalMemoryItems` and `userMemorySettings`
+  (personal-agent era);
   `communityAiFeed*` tables and `communityAiFeedRetirement` (feature retired).
-- **Dead:** `communityAiFeedEvidence`, `communityCognitionCleanup`,
-  `communityMemoryHealth`; `communityArchiveDocuments` table (no writers).
-  (`communityMemoryMetabolizer` is live: the memory sweep calls it.)
+- **Hand-run:** `communityCognitionCleanup` (drains a deleted community's cognition
+  data).
+- **Retiring tables:** `communityArchiveDocuments` (no writers). Deleted Oct 27:
+  `communityAiFeedEvidence`, `communityMemoryHealth`.
 
 ### 8. Community agent runtime — Keep (protected)
 
@@ -147,10 +169,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
   `communityAgentServeWorker`, `communityAppAgentTurn`, `httpRuntimeRoutes`,
   `httpStreaming`, `modelRegistry`, `fundedInferenceGateway`, `founderInference*`,
-  `chatgptResponsesTransport`, `openAiNativeToolCompletion`, web research transports.
+  `chatgptResponsesTransport`, `openAiNativeToolCompletion`, `httpContext`,
+  `httpInferenceConfig`, `httpMemberAgentAttachments`, `httpRuntimeSupport`,
+  `httpRuntimeTurnState`, `runtimeCancellation`, `runtimeHarnessTelemetry`,
+  `runtimeReasoningSummaryEvents`, `runtimeToolCallEvents`; web research:
+  `webResearchTools`, `webSearchTypes`, `openAiWebSearchTransport`,
+  `fallbackHtmlSearchTransport`.
 - **Reached by:** `/runtime/runtime_turn`, `/runtime/runtime_cancel`, streaming;
   `/runtime/app/agent` from sites; mention serve requests.
 - **Tables:** `threads`, `cloudMessages`, `cloudThreadAttachments`,
+  `cloudThreadAttachmentUploadTickets`,
   `runtimeRuns`, `runtimeRunEvents`, `communityAgentConfigs`, `communityAgentRuns`,
   `communityAgentRunEvents`, `communityAgentServeRequests`, `memberAgentChannels`,
   `memberAgentEpisodes`.
@@ -163,18 +191,22 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   community agent; `openRouterNativeTransport`, `xAiSearchTransport` (POL-10).
 - **Decide:** skills inside the harness (`runtimeSkillResolution`, which reads
   `communitySkillAttachments`).
-- **Dead:** `harnessMounts`, `harnessSkills`. (`runtimeHarnessComposition` and
-  `communityAgentFilesystem` are live.)
+- **Decide too:** `harnessMounts`, `harnessSkills` (no caller; kept until the
+  skills decision).
 
 ### 9. Proactive agent — Keep, growing
 
 - **Does:** the founder's daily brief today; member outreach, journey board and
   programs next ([spec](specs/proactive-community-agent-v0.md)).
-- **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes).
+- **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes);
+  `stagingSeedBriefLab` (hand-run staging seed).
 - **Tables:** `communityFounderBriefSettings`, `communityFounderBriefs`.
 - **Going:** member workflows and forms (Studio Workflows tab, rule editor, forms):
-  `communityMemberWorkflow*`, `communityWorkflow*`, `communityForm*`; tables
-  `communityMemberWorkflows`, `…MemberMilestones`, `…Timers`, `…Runs`, `…Transitions`,
+  `communityMemberWorkflow*`, `communityWorkflow*`, `communityForm*`,
+  `communityAgentServiceWorkflowCore`, `communityMemberServiceChannelCore`; tables
+  `communityMemberWorkflows`, `communityMemberWorkflowMemberMilestones`,
+  `communityMemberWorkflowTimers`, `communityMemberWorkflowRuns`,
+  `communityMemberWorkflowTransitions`,
   `communityForms`, `communityFormVersions`, `communityFormRequests`; cron "advance due
   workflow milestones". The journey-stage idea moves into the agent's board.
 
@@ -218,7 +250,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Tables:** `founderSubscriptions`, `founderUsageCycles`, `checkoutSessions`,
   `purchaseClaims`, `userStripeCustomers`, `communityStripeCustomers`,
   `userStripeConnectAccounts`, `communityPricePoints`, `communitySubscriptions`,
-  `communityApplicationFeeRefunds`, `…RefundLocks`, `communityInferenceReceipts`,
+  `communityApplicationFeeRefunds`, `communityApplicationFeeRefundLocks`,
+  `communityInferenceReceipts`,
   `communityPaidToolReceipts`, `providerCostEntries`, `userEntitlements`.
 - **Contracts:** [auth-money-access-matrix.md](auth-money-access-matrix.md),
   [platform-cost-safety-contract-v1.md](platform-cost-safety-contract-v1.md),
@@ -229,11 +262,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Decide:** retired Workspace money tables (`workspaceCreditBalances`,
   `workspaceComputeCharges`, `workspaceUsageCollections`, `creditLedgerEntries`,
   `legacyProgramGrants`, `workspaceCredits` module); no writers found.
-- **Dead:** `entitlements`.
+- **Deleted Oct 27:** `entitlements`.
 
 ### 13. Email — Keep
 
-- **Code:** `email`, `emailCore`, `emailEvents`, `httpEmail` (Resend webhook),
+- **Code:** `email`, `emailCore`, `emailEvents`, `emailDiagnostics`, `httpEmail`
+  (Resend webhook),
   `communityWeeklyDigest*`, `communityMentionEmails`, `communityMentionEmailDelivery`.
 - **Crons:** "process pending email outbox" (5 min), "process pending mention
   emails" (15 min), weekly digest.
@@ -248,7 +282,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `operatorAccess`, `operatorDashboard`, `operatorEntitlementsCore`,
   `operatorGrantUsageCore`, `operatorIntelligence`, `operatorSentryDiagnostics`,
   `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (cron),
-  `criticalAudit`, `errorLogging`.
+  `criticalAudit`, `errorLogging`, `probe` (health check).
 - **Tables:** `operatorRoles`, `operatorGrantUsageCycles`, `platformDiagnosticEvents`,
   `criticalAuditEvents`, `communityAnalyticsEvents`, `platformBusinessVisits`,
   `distributionAttributionDeliveries`.
@@ -259,6 +293,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityIntegration*`, `providerConnections`, `providerConnectionProbes`,
   `httpCommunitySourceIntegrations` (GitHub and Google Drive callbacks),
   `composioConnectionAdapter`, `hubspotPilotContract`, `integrationVerificationPilot`,
+  `chatgptAuth`, `httpChatgpt` (ChatGPT account connection),
   `skillCore`, `skillPackages`, `userPlatformSkills`, `platformSkillRuntime`,
   `communitySkillAttachments`.
 - **Tables:** `userProviderConnections`, `userProviderAuthStates`,
@@ -267,9 +302,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`,
   `communitySkillAttachments`.
 - **Contracts:** [skill-harness-contract.md](skill-harness-contract.md).
-- **Dead:** `providerConnectionProbes`, `userPlatformSkills`. (The
-  `communityIntegrationConnections` module is live: Studio's integration page
-  calls it.)
+- **Decide too:** `userPlatformSkills`, `skillPackages` (no caller; kept until the
+  skills decision). Deleted Oct 27: `providerConnectionProbes`.
 
 ### 16. Voice — Keep
 
@@ -280,7 +314,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** founders' admin (settings, members, billing, analytics), DMs, the
   Agent page, and today's member experience inside Polynet.
 - **Code:** `apps/web` (React, Vite: `App.tsx`, `components/`, `controllers/`),
-  `shared/` (gateways and shared UI), `api/` (Vercel functions).
+  `shared/` (gateways and shared UI), `api/` (Vercel functions); backend helper
+  `publicAppUrl`.
 - **Hosting:** Vercel `polynet` (production, www.polynet.ai) and `polynet-staging`.
 - **Known hot spot:** `App.tsx` (3,100 lines).
 
@@ -307,9 +342,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ## Cleanup plan this map drives
 
-1. **Dead code:** delete the modules marked Dead with their tests, plus the
-   personal-agent leftovers. A gate test then keeps orphans and unmapped modules
-   out.
+1. **Dead code:** done Oct 27 (POL-17). `no_orphan_modules_proof` and
+   `system_map_coverage_proof` keep orphans and unmapped modules and tables out.
+   Next: the personal-agent leftovers.
 2. **Workflows and forms:** remove after a read-only production usage check;
    tables retire over two releases.
 3. **One agent name:** rename `personal_agent` and "member agent" in code.
