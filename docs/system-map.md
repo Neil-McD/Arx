@@ -295,7 +295,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityIntegration*`, `providerConnections`, `providerConnectionProbes`,
   `httpCommunitySourceIntegrations` (GitHub and Google Drive callbacks),
   `composioConnectionAdapter`, `hubspotPilotContract`, `integrationVerificationPilot`,
-  `chatgptAuth`, `httpChatgpt` (ChatGPT account connection),
   `skillCore`, `skillPackages`, `userPlatformSkills`, `platformSkillRuntime`,
   `communitySkillAttachments`.
 - **Tables:** `userProviderConnections`, `userProviderAuthStates`,
@@ -304,7 +303,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`,
   `communitySkillAttachments`.
 - **Contracts:** [skill-harness-contract.md](skill-harness-contract.md).
-- **Going:** all of this area, including the Studio integrations page.
+- **Keep (Neil, Oct 20):** bring-your-own OpenAI key and ChatGPT account
+  (`chatgptAuth`, `httpChatgpt`, and the OpenAI and ChatGPT parts of
+  `providerConnections`). Whether they survive the "agent paid" pricing is a
+  question for the pricing spec.
+- **Going:** the OpenRouter part of `providerConnections` (POL-10).
+- **Going (Neil, Oct 27):** everything else in this area, including the Studio
+  integrations page.
   Production still calls `communityIntegrationActions:verifyConnection` and the
   funnel operations, so the web and backend removals ship in one release.
   Deleted Oct 27: `providerConnectionProbes`.
