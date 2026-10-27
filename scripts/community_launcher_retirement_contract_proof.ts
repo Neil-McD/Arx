@@ -40,6 +40,8 @@ const funnel = read("apps/web/src/components/WebCommunityFunnelSection.tsx");
 const protectedResources = read("convex/communityResources.ts");
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
 const retiredRuntimePaths = [
+  "convex/communityLaunchSetup.ts",
+  "shared/communityLaunchSetup.ts",
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
   "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
   "apps/web/src/components/webCommunityLaunchSetupLifecycleModel.ts",
@@ -67,21 +69,10 @@ assert.doesNotMatch(
 assert.doesNotMatch(
   sourceFiles("apps/web/src")
     .concat(sourceFiles("shared"))
-    .filter((path) => path !== "shared/communityLaunchSetup.ts")
     .map(read)
     .join("\n"),
   /getCommunityLaunchSetupStatus|saveCommunityLaunchProfile|cloudCommunityLaunchSetupGateway/,
-  "first-party web and shared client code must not call the rolling launcher compatibility RPCs",
-);
-assert.equal(
-  existsSync(join(root, "convex/communityLaunchSetup.ts")),
-  true,
-  "the server-only launch status compatibility query must remain during the rolling transition",
-);
-assert.equal(
-  existsSync(join(root, "shared/communityLaunchSetup.ts")),
-  true,
-  "the server-only launch status compatibility model must remain during the rolling transition",
+  "first-party web and shared client code must not call the retired launcher RPCs",
 );
 assert.equal(
   existsSync(join(root, "convex/community.ts")),

@@ -15,7 +15,6 @@ function read(path: string): string {
 const modelCatalog = read("shared/modelCatalog.ts");
 const inferenceConfig = read("convex/httpInferenceConfig.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
-const providerProbes = read("convex/providerConnectionProbes.ts");
 
 assert.equal(DEFAULT_ACTIVE_MODEL_ID, "gpt-5.6-sol");
 assert.equal(DEFAULT_ACTIVE_MODEL_LABEL, "GPT 5.6 Sol");
@@ -57,10 +56,10 @@ assert.match(
   /platformMap\[DEFAULT_ACTIVE_MODEL_ID\][\s\S]*platformMap\["gpt-5\.5"\]/,
   "runtime provider fallback must prefer Sol before legacy GPT-5.5",
 );
-assert.match(
-  providerProbes,
-  /normalizeString\(args\.modelId\) \|\| DEFAULT_ACTIVE_MODEL_ID/,
-  "ChatGPT connection probes must default to Sol",
+assert.equal(
+  existsSync("convex/providerConnectionProbes.ts"),
+  false,
+  "the unused ChatGPT connection probe must stay deleted",
 );
 assert.equal(
   existsSync("shared/cloudProviderConnectionsGateway.ts"),

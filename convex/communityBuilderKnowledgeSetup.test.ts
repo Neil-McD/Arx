@@ -14,7 +14,6 @@ const modules = import.meta.glob([
   "./communityInteractionEvidence.ts",
   "./communityAgentConcierge.ts",
   "./communityAgentServeWorker.ts",
-  "./communityOnboarding.ts",
   "./_generated/**/*.*s",
 ]);
 

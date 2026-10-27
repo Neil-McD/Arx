@@ -52,7 +52,7 @@ No scheduler, poller, inference, notification, concierge welcome, founder
 setting, workflow execution, forced introduction, onboarding preview, or MCP
 handoff is part of member entry.
 
-The retained `communityOnboarding` operations are authenticated, stateless
-compatibility tombstones for cached clients. They never read or write the
-retired onboarding tables. The tables remain temporarily only as rollback and
-bounded data-retirement substrate; they are not product authority.
+The `communityOnboarding` operations were deleted on October 27, 2026: the
+cached-client compatibility period is over. The onboarding tables remain
+temporarily only as bounded data-retirement substrate; they are not product
+authority.

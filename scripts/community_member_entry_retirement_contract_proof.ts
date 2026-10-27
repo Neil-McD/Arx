@@ -9,6 +9,7 @@ function read(path: string): string {
 }
 
 const deletedFirstPartyFiles = [
+  "convex/communityOnboarding.ts",
   "convex/communityOnboardingCore.ts",
   "shared/communityOnboarding.ts",
   "shared/communityOnboardingCopy.ts",
@@ -27,7 +28,6 @@ for (const path of deletedFirstPartyFiles) {
 const lifecycle = read("convex/communityMembershipLifecycle.ts");
 const interactions = read("convex/communityInteractions.ts");
 const runtime = read("convex/runtimeTurnHandlers.ts");
-const compatibility = read("convex/communityOnboarding.ts");
 const schema = read("convex/schema.ts");
 const app = read("apps/web/src/App.tsx");
 const composition = read("apps/web/src/components/WebAppCompositionRoot.tsx");
@@ -63,14 +63,8 @@ assert.deepEqual(
   { kind: "community_chat", slug: "polynet", channelSlug: null },
 );
 
-assert.match(compatibility, /requireCommunityManager/);
-assert.match(compatibility, /requireCommunityChatAccess/);
-assert.match(compatibility, /enabled: false/);
-assert.doesNotMatch(compatibility, /getMyCommunityOnboardingSession/);
-assert.doesNotMatch(compatibility, /ctx\.db|\.query\("communityOnboarding|\.insert\(|\.patch\(/);
 assert.match(schema, /communityOnboardingConfigs: defineTable/);
 assert.match(schema, /communityOnboardingSessions: defineTable/);
 assert.match(contract, /does not create a separate onboarding\s+session/);
-assert.match(contract, /authenticated, stateless[\s\S]*compatibility tombstones/);
 
 console.log("community member entry retirement contract: PASS");

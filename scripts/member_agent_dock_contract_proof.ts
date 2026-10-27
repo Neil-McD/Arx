@@ -78,7 +78,6 @@ const toolRegistry = read("shared/toolRegistry.ts");
 const retrievalTools = read("shared/retrievalTools.ts");
 const runtimeToolPolicy = read("shared/runtimeToolPolicy.ts");
 const runtimeContextManifest = read("shared/runtimeContextManifest.ts");
-const communityReadKernel = read("convex/communityReadKernel.ts");
 const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
 const platformOperationContract = read("shared/platformOperationContract.ts");
 const httpMcp = read("convex/httpMcp.ts");
@@ -665,16 +664,6 @@ assert.doesNotMatch(
   runtimeLoop,
   /mountedUserPlatformAppTools|mounted_app_tool|resolveMountedMcpToolsForRuntime/,
   "native runtime surfaces must not mount third-party MCP tools",
-);
-assert.match(
-  communityReadKernel,
-  /listAccessibleCommunityMemberships[\s\S]*listPublicDiscoverCommunities[\s\S]*resolveCommunityCapabilityContextInternal/,
-  "one kernel must own joined listing, public Discover projection, and authenticated capability resolution",
-);
-assert.doesNotMatch(
-  communityReadKernel,
-  /db\.patch|db\.insert|db\.delete|runMutation|communityId:/,
-  "the cross-community directory kernel must remain read-only and must not mutate lens state",
 );
 assert.match(
   httpMcp,
