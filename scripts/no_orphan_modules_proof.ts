@@ -66,23 +66,29 @@ function referencePattern(name: string): RegExp {
   );
 }
 
-// A reference only counts when it comes from live code, so repeat until
-// modules reached only by other orphans are found too.
-let orphans: string[] = [];
-for (;;) {
-  const dead = new Set(orphans.map((name) => `convex/${name}.ts`));
-  const next = modules.filter((name) => {
-    if (ENTRY_MODULES.has(name) || ALLOWED.has(name)) return false;
-    const own = `convex/${name}.ts`;
+// Reachability from live roots: code outside convex/ (web app, edge, Vercel
+// functions, CLI, shared), the entry modules and the named exceptions. A module
+// is live only when live code references it, so dead modules that reference
+// each other cannot keep each other alive.
+const moduleFile = (name: string) => `convex/${name}.ts`;
+const live = new Set(modules.filter((name) => ENTRY_MODULES.has(name) || ALLOWED.has(name)));
+const liveSources = () =>
+  [...text].filter(
+    ([path]) => !path.startsWith("convex/") || live.has(path.slice("convex/".length, -".ts".length)),
+  );
+for (let grew = true; grew; ) {
+  grew = false;
+  const sourcesNow = liveSources();
+  for (const name of modules) {
+    if (live.has(name)) continue;
     const pattern = referencePattern(name);
-    for (const [path, source] of text) {
-      if (path !== own && !dead.has(path) && pattern.test(source)) return false;
+    if (sourcesNow.some(([path, source]) => path !== moduleFile(name) && pattern.test(source))) {
+      live.add(name);
+      grew = true;
     }
-    return true;
-  });
-  if (next.length === orphans.length) break;
-  orphans = next;
+  }
 }
+const orphans = modules.filter((name) => !live.has(name));
 
 assert.deepEqual(
   orphans,
