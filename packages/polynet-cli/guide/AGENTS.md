@@ -26,15 +26,16 @@ SDK reference: `https://<slug>.polynet.page/__polynet/llms.txt`.
 
 ## Commands
 
-    npx @polynet/cli check     # the shell on every page, accessibility basics
+    npx @polynet/cli check     # accessibility basics
     npx @polynet/cli deploy    # check, then live in seconds
     npx @polynet/cli skills    # update these skills
 
 ## Rules
 
-1. Every page loads `/__polynet/ui.js` and shows `<polynet-account>`: members'
-   account, communities, Discover, messages and settings. Style it into the
-   design; never remove or rebuild it.
+1. Every page shows `<polynet-account>`: members' account, communities,
+   Discover, messages and settings. Polynet adds `/__polynet/ui.js` to every
+   page and a corner fallback where a page has none; place and style it into
+   the design yourself, and never hide or rebuild it.
 2. Community data comes only through the SDK. No passwords, tokens or keys
    in the site, ever.
 3. Polynet text renders through `textContent` or `polynet.markdown()`, never

@@ -18,8 +18,6 @@ work for every member.
 | `<html>` has no `lang` | `<html lang="en">` (the site's language) |
 | No `<title>` | A title with the community's name; update it per view |
 | No viewport, or zoom blocked | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or `maximum-scale=1` |
-| A page doesn't load the shell | `<script type="module" src="/__polynet/ui.js"></script>` |
-| No `<polynet-account>` anywhere | Put it in the header of every page |
 | `<img>` without `alt` | Describe it, or `alt=""` if decorative |
 | A button or link with no name | Visible text, or `aria-label` for icon-only controls |
 

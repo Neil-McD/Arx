@@ -330,9 +330,11 @@ async function watch(channel, onChange) {
   });
 }
 
-// The signed-in member's Polynet account, for the shell: { member, communities
-// [{ slug, name, role, current, site_url, studio_url }], links { discover,
-// settings, messages } }. Most sites use <polynet-account> instead.
+// The signed-in member's Polynet account, for the shell: { member { name,
+// handle, avatar_url }, community { slug, name, role, studio_url }, links {
+// communities, discover, settings, messages } }. It covers this community only;
+// links.communities opens the member's own list in Polynet. Most sites use
+// <polynet-account> instead.
 async function account() {
   const res = await fetch("/__polynet/account", { credentials: "same-origin" });
   const body = await res.json().catch(function () { return {}; });

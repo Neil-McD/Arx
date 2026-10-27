@@ -43,8 +43,8 @@ For each, decide:
 - **Voice**: the headline and two lines of copy, in the community's words.
 
 Build each as one static page showing the home view with real copy:
-`concepts/a.html`, `concepts/b.html`, `concepts/c.html`. Each loads
-`/__polynet/ui.js` and shows `<polynet-account>`, so it passes the checks.
+`concepts/a.html`, `concepts/b.html`, `concepts/c.html`. Each places
+`<polynet-account>` where that design wants it, styled to match.
 Deploy, then send the founder the three links, each with its name and idea.
 They pick one, or mix ("b's type with a's color").
 

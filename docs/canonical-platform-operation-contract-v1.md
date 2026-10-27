@@ -197,7 +197,20 @@ Sign-in is invisible when the member is already signed in to Polynet:
 3. The edge swaps the code server to server (edge secret) for a 30-day session
    kept in an HttpOnly, host-only cookie on the community's domain. Page code
    and the community's own Worker never see it. When it expires, the same hop
-   signs the member in again.
+   signs the member in again. The session and sign-in-state cookies use the
+   `__Host-` prefix (Secure, `Path=/`, no `Domain`), because every community
+   shares the sites domain and that domain is not a public suffix: a sibling
+   site can set `Domain=polynet.page` cookies, but never a `__Host-` one, so it
+   cannot shadow a member's session or fixate them into its own. For the same
+   reason (sibling sites count as the same site, so the browser sends this
+   site's `SameSite=Lax` cookies with their requests) the edge answers the
+   member endpoints (`/__polynet/api`, `/agent`, `/agent/messages`, `/upload`,
+   `/files/*`, `/account`, `/auth/session`, `/auth/logout`) only for the site's
+   own pages: `Sec-Fetch-Site: same-origin`, or, from a browser without Fetch
+   Metadata, a matching `Origin` on writes. Anything else gets 403
+   `cross_site_request`; opening a file link (a navigation) still works. A
+   site's own responses can't set Polynet's cookies: the edge drops any
+   `Set-Cookie` naming one.
 
 The edge forwards `/__polynet/api` to `POST /runtime/app` with the edge secret
 and the session; the backend answers nothing else, so a token is useless
@@ -307,9 +320,14 @@ hashes, sizes), not the contents.
 
 Both paths first run the site checks in `packages/polynet-cli/checks.mjs`
 (the same module `polynet check` uses). Errors stop the deploy
-(`site_checks_failed` on the MCP): a page without the Polynet shell
-(`/__polynet/ui.js`) or no `<polynet-account>` anywhere, a page without
+(`site_checks_failed` on the MCP): a page without
 `<html lang>`, a `<title>` or a zoomable viewport, an `<img>` without `alt`, a
 button or link without a name. Warnings come back with the result. The checks
 are a guardrail for agents, not a security boundary: the CLI runs them
-locally.
+locally. The Polynet shell isn't checked because the edge guarantees it: it
+adds `/__polynet/ui.js` to every HTML page that doesn't load it, and `ui.js`
+mounts a fixed top-right `<polynet-account>` on a page that has none shortly
+after load. The shell's account data (`/__polynet/account`) is readable by any
+script on the site, so it covers the current community only (member name,
+handle, avatar, role here) and links out to Polynet for the member's other
+communities; it never lists them.

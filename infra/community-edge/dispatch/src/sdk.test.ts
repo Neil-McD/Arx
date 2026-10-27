@@ -231,11 +231,11 @@ test("account() reads the member's Polynet account; signed out it throws sign_in
   stubFetch({
     "/__polynet/auth/session": signedIn,
     "/__polynet/api": () => ok({ entries: [] }),
-    "/__polynet/account": () => Response.json({ ok: true, account: { member: { name: "Sam" }, communities: [{ slug: "run-club", current: true }], links: { discover: "d" } } }),
+    "/__polynet/account": () => Response.json({ ok: true, account: { member: { name: "Sam" }, community: { slug: "run-club", role: "member" }, links: { communities: "c", discover: "d" } } }),
   });
   const polynet = await loadSdk();
   await polynet.session();
-  expect(await polynet.account()).toMatchObject({ member: { name: "Sam" }, links: { discover: "d" } });
+  expect(await polynet.account()).toMatchObject({ member: { name: "Sam" }, community: { role: "member" }, links: { communities: "c", discover: "d" } });
   stubFetch({ "/__polynet/account": () => Response.json({ ok: false, code: "sign_in_required" }, { status: 401 }) });
   await expect(polynet.account()).rejects.toMatchObject({ code: "sign_in_required" });
 });

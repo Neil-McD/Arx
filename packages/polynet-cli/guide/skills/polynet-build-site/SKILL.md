@@ -34,9 +34,11 @@ for a new one.
 Every Polynet community is navigable the same way, however it looks. Design
 these into the concept; never drop them:
 
-- **The shell**: `/__polynet/ui.js` and a visible `<polynet-account>` on every
-  page and at every width. It gives members their account, their other
-  communities, Discover, messages and settings. Never rebuild those.
+- **The shell**: a visible `<polynet-account>` on every page and at every
+  width. It gives members their account, their communities, Discover,
+  messages and settings. Never rebuild those. Polynet adds
+  `/__polynet/ui.js` to every page, and puts the shell in the top-right
+  corner of any page that doesn't place it; place it yourself so it fits.
 - **A public face** for visitors: who it's for, why it's worth joining,
   "Sign in" (`polynet.signIn()`) and "Join" (`session.join_url`).
 - **The community's life for members**: the conversation (channels, threads,
