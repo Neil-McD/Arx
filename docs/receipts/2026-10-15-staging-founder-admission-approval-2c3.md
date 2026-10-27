@@ -3,7 +3,7 @@
 **Scoped staging acceptance passed October 15, 2026. Production was untouched.**
 
 [Structured evidence](evidence/2026-10-15-staging-founder-admission-approval-2c3.json).
-[Approved scope](../polynet-staging-founder-admission-approval-2c3.md).
+[Approved scope](../archive/polynet-staging-founder-admission-approval-2c3.md).
 [Draft PR #173](https://github.com/Neil-McD/Arx/pull/173), stacked on #172.
 
 ## Release identity and checks

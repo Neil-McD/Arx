@@ -76,7 +76,7 @@ const directory = read(directoryPath);
   "community chat does not invoke an interaction-preview mode",
 ].forEach((needle) => assertIncludes(contractPath, contract, needle));
 
-const corePath = "docs/irreducible-core-contract.md";
+const corePath = "docs/core-contract.md";
 const core = read(corePath);
 assertIncludes(
   corePath,

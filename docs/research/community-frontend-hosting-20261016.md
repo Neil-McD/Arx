@@ -1,7 +1,7 @@
 # Hosting community front ends: research and decision
 
 October 16, 2026. Research note, not yet a contract. Builds on
-[invariant-core.md](../invariant-core.md) (#182).
+[invariant-core.md](../core-contract.md) (#182; now the core contract).
 
 ## Decision (October 16, 2026)
 

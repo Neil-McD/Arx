@@ -1,236 +1,193 @@
-# Polynet.ai — MVP Agent Contract (v1)
+# Polynet — agent contract
 
-Polynet.ai is the first collective intelligence platform that lets anyone build their own collective intelligence.
+Polynet is a managed backend for communities with one built-in AI agent per
+community. This file is the contract for everyone working in this repository,
+people and AI agents alike. Read it first, then [docs/system-map.md](docs/system-map.md)
+for where everything lives and [docs/core-contract.md](docs/core-contract.md) for
+the invariants.
 
-This file is the execution contract for agents working in this repository.
+## 1) What Polynet is
 
-## 0) Vision and Philosophy
+Three layers:
 
-### Product Vision
-- Build communities that can think, remember, and act with AI.
-- Give founders a simple way to launch a community intelligence system.
-- Keep the system understandable: explicit memory, explicit access, explicit payment state.
+1. **The managed core.** Identity, communities, membership and joining, chat,
+   DMs, courses, events, payments, and the community's cited memory. Polynet runs
+   it; founders never rebuild it.
+2. **The community agent.** One agent per community. Members talk to it
+   privately on the Agent page and publicly by @mention; it remembers the
+   community and keeps the founder briefed. It is becoming proactive: one
+   private thread per member, a daily founder brief, approval cards, and a
+   Linear-style board where members are the cards
+   ([spec](docs/specs/proactive-community-agent-v0.md)).
+3. **The founder's own surface.** Each community gets its own vibe-coded site on
+   `<slug>.polynet.page`, built by the founder's AI agent with `@polynet/cli`
+   and served by Polynet's Cloudflare edge. Polynet Studio (this repo's web app)
+   is where founders run everything else: settings, members, billing, messages,
+   analytics.
 
-### Product Philosophy
-- Simplicity is a feature: fewer surfaces, fewer flows, fewer hidden states.
-- Reliability over cleverness: deterministic behavior beats magic.
-- Security and trust by default: fail closed on permission boundaries.
-- Community value first: optimize creator setup + member participation loop.
+Builders' own AI agents (Claude, Codex, Cursor) reach the core through the
+official Polynet MCP.
 
-### MVP North Star
-- A founder can create a community, share a funnel link, and onboard members through a gated flow.
-- Members can discover communities, join, chat/post/use voice, access resources, and talk privately with the community's agent on its Agent page.
-- Each community has exactly one agent: Agent-page conversations, @mention replies and autonomous cognition share its identity.
-- External agent harnesses can access authorized community context through the official Polynet MCP.
+**Business model.** Today: one founder plan, $79 a month per community with a
+$20 model allowance, plus a 2.9% fee on paid-member revenue. **Agreed direction
+(Oct 27, pending its spec):** the community is free; the agent is paid (about $49
+a month with an included budget). Do not change pricing code before that spec
+is approved.
 
----
+## 2) Philosophy
 
-## 1) MVP In Scope (Must Keep)
+- **Irreducible simplicity.** Keep only the structures needed for it to work.
+  Fewer surfaces, fewer flows, fewer hidden states. Prefer deletion over
+  partial deprecation.
+- **Reliability over cleverness.** Deterministic code protects authority, money,
+  privacy, idempotency and side effects; the model supplies intelligence.
+- **Fail closed** on every permission boundary.
+- **Founders compose, Polynet guarantees.** Sites and agent programs are the
+  founder's; the core's guarantees are not.
+
+## 3) Protected core (ask Neil before removing)
+
+- The community agent harness (Agent page, @mentions, site conversations) under
+  explicit community context.
+- Community cognition: the memory compiler, accepted memory, member knowledge.
+- Community resources and memory systems.
+- The official Polynet MCP.
+- Community sites: the edge, sign-in with Polynet, the SDK, the shell, the CLI,
+  deploys.
+- The founder brief and the proactive agent's pipeline.
+- The release gate and receipts.
+- Required references and research context (`references/`, `docs/research/`).
+
+Harness, skills and execution components outside this list are protected only
+when a demonstrated first-party dependency makes them load-bearing. Ask before
+deleting them; their existence does not restore the standalone Workspace
+product.
+
+## 4) In scope
 
 - Auth and session lifecycle.
-- Community creation and management.
-- Community visibility model simplified to `Published` and `Unlisted`.
-- Discover is a communities-only surface using simplified visibility semantics.
-- Gated community access model (including for `Published` communities).
-- One canonical Polynet join/checkout gate per community, with an optional
-  builder-owned HTTPS marketing website linked from Discover. The existing
-  published custom-funnel lifecycle remains available during migration;
-  do not delete live content without a production usage review.
-- Core member UX: join, navigate, post/chat, and voice.
-- One founder plan: $79 monthly for one specific managed community, including
-  up to $20 of raw GPT 6 Luna model cost per billing cycle.
-- A paying founder may own an unlimited number of communities. There is no
-  account-level numeric cap; each additional community requires its own current
-  funding, and a founder cannot stack multiple unfunded drafts.
-- Paid-member community commerce through Stripe Connect with one 2.9% Polynet
-  application fee, connected-account payouts, and proportional fee reversals
-  for successful refunds.
-- Grandfathered operation for existing communities and role-backed
-  platform-owner complimentary funding. Grandfathering preserves the
-  community, not hosted AI. There is no personal paid plan or commercial
-  account tier.
-- Provider-cost evidence, usage receipts, and rate/provider-quota enforcement.
+- Community creation and management; visibility is only `Published` or
+  `Unlisted`, and `Published` never means ungated.
+- Joining: open, approval or paid, through one canonical Polynet join and
+  checkout page per community (`/c/:slug`). A site links to it and cannot grant
+  access.
+- Discover: communities only.
+- Core member experience: channels, posts, replies, reactions, attachments,
+  mentions, DMs, voice, courses, events.
+- Community sites on `polynet.page` through the edge, SDK, shell and CLI.
+- The community agent, including the founder brief and the proactive work in
+  its spec.
 - Weekly community digest email automation with indexed due-work, bounded
   fanout, recipient preferences, and idempotent delivery.
-- Community-scoped AI agent interactions embedded in community surfaces.
-- Official Polynet MCP access for external agent harnesses.
-- One authenticated capability surface; tool/provider usage is platform-funded
-  and remains rate-limited and cost-audited.
-- Existing thread and execution substrate retained only where current Polynet capabilities depend on it; it is not a standalone MVP destination.
-- Ongoing `App.tsx` decomposition and cleanup required for launch stability.
+- Founder funding and paid-member commerce through Stripe Connect with one 2.9%
+  Polynet application fee, connected-account payouts and proportional fee
+  reversals for refunds.
+- Provider-cost evidence, usage receipts and quota enforcement.
+- The official Polynet MCP for builders.
 
----
+## 5) Not now
 
-## 2) Deferred (Must Not Expand During MVP)
+Do not build or expand these:
 
-- Affiliate system as a launch requirement.
-- Automated affiliate payouts.
-- Advanced automations/workflow depth beyond minimal alpha.
-- New investment in the AI-assisted community-funnel composer or a
-  general-purpose landing-page builder. Existing published funnels remain
-  readable until their use and migration path are verified.
-- Standalone general-purpose personal-agent Workspace or multi-agent canvas.
-- Public Apps and Skills catalogs inside Discover.
-- Third-party MCP server catalogs, connections, mounts, credentials, and
-  runtime tool projection inside Polynet. The official Polynet MCP provider
-  remains in scope.
-- Duplicate/legacy UI surfaces not required for MVP journeys.
-- Extra inference-gating complexity beyond minimal tier limits.
-- Personal Premium subscriptions, personal tool credits or top-ups, card-backed
-  usage collection, auto-recharge, and Free-versus-Premium capability gates.
-- Community BYOK and requester-ChatGPT funding. Historical credential and grant
-  records are migration or audit evidence only and authorize no community AI.
-- Nice-to-have platform expansions not directly improving creator setup + member participation.
+- Member workflows' rule builder and forms (being removed; the proactive agent
+  replaces them).
+- The funnel editor and AI funnel composer.
+- A Polynet-hosted personal agent, a standalone Workspace or a multi-agent
+  canvas.
+- Third-party MCP catalogs, connections, mounts or credentials inside Polynet.
+- Public Apps or Skills catalogs in Discover.
+- Affiliates and affiliate payouts.
+- Personal subscriptions, personal credits or top-ups, auto-recharge, and
+  community BYOK.
+- Agent channels beyond the web (SMS, phone, Slack, email) until they have a
+  spec.
 
----
+## 6) Architecture invariants
 
-## 3) Do-Not-Delete Platform Core
+The full list is in [docs/core-contract.md](docs/core-contract.md). The ones
+every change must respect:
 
-These are protected and must not be removed in MVP simplification passes:
+### Data and authority
+- Convex is canonical for users, communities, memberships and entitlements,
+  billing state, threads and messages, and memory. Runtime events are evidence,
+  not product truth.
+- Authority is re-derived from stored state on every request; tokens identify,
+  they never grant.
+- Studio, sites, the SDK, the CLI, the MCP and the agent reach the same domain
+  owners with the same authorization.
 
-- The community agent harness (Agent page and @mentions) under explicit community context.
-- The community cognition runtime (the agent's memory compiler).
-- Community compiler and cognition.
-- Community resources/memory systems.
-- Official Polynet MCP.
-- Required references and research context.
+### The community agent
+- One agent per community: Agent-page conversations, @mention replies, site
+  conversations and proactive work share its identity. What it writes for a
+  member is the agent's post, attributed to that member.
+- Access follows the surface: a private conversation uses the requesting
+  member's access (owners may also use builder drafting in Studio, which they
+  approve); public replies use the channel audience's access; sites are member
+  lane only; the MCP is builder only.
+- Every turn is bound to one explicit, server-validated community context, fails
+  closed without membership or entitlement, and is auditable from stored
+  records. Context changes affect later turns only.
+- Anything the agent sends, publishes, spends or changes durably is checked by
+  code when it happens, never only by a prompt. Founders see outcomes, not
+  members' private words.
 
-Coding, thread, project, workspace, and execution components are protected only
-when a demonstrated first-party Polynet dependency makes them load-bearing.
-Their existence does not restore the standalone Workspace product.
+### Money
+- Redirects are UX only; Stripe webhooks are authoritative.
+- `checkout_finalize` stays idempotent.
+- Each active founder subscription funds exactly one community. The operator
+  grant (one active `operatorRoles.owner` row) is the only complimentary
+  funding. Historical BYOK grants and credentials grant nothing.
+- A founder may own any number of communities: no account-level cap, each
+  community needs its own funding, and unfunded drafts cannot stack.
+- Every paid-member charge carries the same 2.9% application fee; Stripe
+  processing fees are separate.
 
-If a cleanup touches any of the above, require explicit human confirmation.
-
----
-
-## 4) Architecture Invariants (Non-Negotiable)
-
-### Canonical Data
-- Cloud is canonical for users, communities, memberships/entitlements, billing state, threads/messages, and memory records.
-- Runtime event storage is operational evidence and agent policy state; it is not the product source of truth.
-
-### Community Access + Visibility
-- Visibility has only two states: `Published` and `Unlisted`.
-- `Published` does not mean ungated access; entitlement and membership checks still apply.
-- `/c/:slug` is the single canonical Polynet join/gate surface. An external
-  marketing website may link back to it but cannot grant access.
-
-### Member Agent, Community Agent + External Harness Context
-- One community-provided Agent page uses private member-and-community-bound
-  conversations and the existing harness. Desktop and mobile use their existing
-  page presentations; the retired floating launcher is not a supported surface.
-  Member, builder, and autonomous execution permissions remain separate.
-  Existing global conversations remain historical data. See
-  `docs/community-agent-conversations.md` for scope and acceptance boundaries.
-- One agent identity per community: Agent-page conversations, @mention replies and autonomous cognition are the same community agent. What it writes for a member is the agent's post, attributed to that member.
-- Access follows the surface: a private Agent-page conversation uses the requesting member's access (owners may also use builder drafting in Studio, which they approve); public replies use the channel audience's access; community front ends are member lane only.
-- Community-agent interactions are bound to one explicit community context.
-- External MCP requests select community context explicitly and server-validate it.
-- Context changes affect subsequent turns only and never retroactively mutate stored history.
-- Community context must fail closed if membership or entitlement is missing.
-- Context used for each turn must be auditable from stored thread records/events.
-- Threads and messages may remain internal persistence primitives without being user-facing navigation.
-
-### Payments and Entitlements
-- Redirects are UX only; provider/webhook verification is authoritative.
-- `checkout_finalize` must remain idempotent.
-- Access decisions are entitlement-driven and evaluated per request.
-- Each active $79 founder subscription authorizes exactly one attached managed
-  community and carries a $20 raw Luna-cost allowance for that community.
-- Community creation has no numeric owner limit. A non-operator pays first;
-  verified checkout authority is attached while creating the community. Each
-  community requires its own subscription; the operator grant is the only
-  complimentary creation authority.
-- Every paid-member community charge uses the same 2.9% application fee,
-  independent of founder funding mode. Stripe processing fees remain separate.
-- Stripe Connect onboarding, connected-account subscription lifecycle, payouts,
-  disputes, and proportional application-fee refunds remain active for MVP.
-- Platform-owner complimentary funding derives only from one active canonical
-  `operatorRoles.owner` row. Historical BYOK grants, funding-policy rows, and
-  user credentials grant no community AI authority.
-- Personal Premium, tool-balance purchases, auto-recharge, and card-backed tool
-  collection are retired. Historical financial rows remain canonical audit and
-  reconciliation evidence until explicitly migrated; they grant no access.
-
-### Security and Tool Boundaries
-- Web runtime cannot execute local filesystem/shell tools.
+### Security
+- The web runtime cannot run local filesystem or shell tools.
 - Cloud tools are provider-bounded and approval-gated.
-- Path traversal and symlink escape must fail closed.
+- Path traversal and symlink escape fail closed.
+- Sites never see Polynet cookies; the edge strips them.
 
----
+## 7) How to change things
 
-## 5) Irreducibility Rules for Repo Simplification
+- Default mode is `BUILD`; `EXPLORE` only when asked.
+- Keep changes small, reversible and verifiable. Don't widen scope.
+- Update the system map, the core contract or the relevant contract in the same
+  PR when behavior changes.
+- Keep vs. delete: keep only what supports the scope above. No first-party call
+  path means delete candidate. One canonical flow per job. No "just in case"
+  duplicates. Classify every candidate as `KEEP`, `DELETE` or `DECISION REQUIRED`
+  (Neil).
+- Tables retire over two releases: stop writing, release, then delete data with
+  Neil's approval.
+- A change is done when the release gate passes, the behavior is verified on
+  staging, docs match, and nothing in §3 lost coverage.
 
-When deciding keep vs delete:
+## 8) Release workflow
 
-1. Keep only what directly supports MVP scope above.
-2. If there is no first-party call path, mark as delete candidate.
-3. Prefer one canonical flow per job (one funnel path, one gate path, one checkout completion path).
-4. Remove dead docs/contracts/migrations for deferred systems once replacement truth exists.
-5. Do not keep duplicate “just in case” surfaces.
-
-Classification buckets for every candidate:
-- `KEEP (MVP core)`
-- `DELETE (deferred/dead)`
-- `DECISION REQUIRED (user confirmation)`
-
----
-
-## 6) Agent Execution Rules
-
-- Default mode: `BUILD`.
-- Use `EXPLORE` only when explicitly requested.
-- Do not add new deferred features.
-- Do not widen scope while fixing MVP issues.
-- Keep changes small, reversible, and verifiable.
-- Update docs/contracts in the same PR when behavior changes.
-- Prefer deletion over partial deprecation for non-MVP paths.
-
----
-
-## 6.5) Canonical Release Workflow
-
-- Active development worktree: `/Users/neilmcdevitt/code/arx`.
-- Legacy workspace-provider worktree snapshots are historical only and are not canonical or active.
-- Canonical Git release branch: `origin/main`.
-- Canonical production app: Vercel project `polynet`; canonical production backend: Convex `prod:wry-hawk-715`.
-- Legacy Vercel project `arx` is not a production target.
-- The only production release path is `npm run release:prod`, run locally from a clean checkout whose `HEAD` is exactly `origin/main`. It runs the release gate, deploys Convex first and the web app second with pinned production authority, proves the live build, and writes a receipt to `docs/receipts/`.
-- `npm run release:verify` runs the same guards, gate, and preflight without deploying. `npm run release:rollback -- <deployment-id>` is the only web rollback path.
-- Merging to `main` does not deploy: Vercel Git auto-deploy from `main` is disabled in `vercel.json`, and the release command refuses to run if it is re-enabled.
-- Do not run `vercel deploy`, `vercel --prod`, `vercel promote`, `vercel alias`, `vercel rollback`, or `npm run convex:deploy` directly against production; the release command owns them.
+- Work from a clean checkout or worktree at `origin/main`. The root checkout
+  `/Users/neilmcdevitt/code/arx` is a stale July branch; do not use or reset it.
+- Canonical Git release branch: `origin/main`. Staging deploys from the
+  `staging` branch (Vercel `polynet-staging`, Convex `quick-porcupine-949`) and
+  the staging edge (`polynet-edge-staging`).
+- Canonical production app: Vercel project `polynet`; canonical production
+  backend: Convex `prod:wry-hawk-715`. Legacy Vercel project `arx` is not a
+  production target.
+- The only production release path is `npm run release:prod`, run locally from a
+  clean checkout whose `HEAD` is exactly `origin/main`. It runs the release gate,
+  deploys Convex first and the web app second with pinned production authority,
+  proves the live build, and writes a receipt to `docs/receipts/`.
+- `npm run release:verify` runs the same guards, gate and preflight without
+  deploying. `npm run release:rollback -- <deployment-id>` is the only web
+  rollback path.
+- Merging to `main` does not deploy: Vercel Git auto-deploy from `main` is
+  disabled in `vercel.json`, and the release command refuses to run if it is
+  re-enabled.
+- Do not run `vercel deploy`, `vercel --prod`, `vercel promote`, `vercel alias`,
+  `vercel rollback`, or `npm run convex:deploy` directly against production; the
+  release command owns them.
 - GitHub Actions is advisory and never required to release.
-- Follow [/Users/neilmcdevitt/code/arx/docs/alpha-release-workflow.md](/Users/neilmcdevitt/code/arx/docs/alpha-release-workflow.md) for the operational runbook.
-
----
-
-## 7) MVP Acceptance Checklist
-
-All must be demonstrably true:
-
-- Auth/session works across the canonical web surface.
-- Founder can create/manage community and share funnel link.
-- Member can discover/open funnel, pass gate, and join community.
-- Community usage loop works: navigate, post/chat, voice, resources.
-- Community-agent and external MCP context are explicit, authorized, and auditable.
-- Billing flow reaches entitlement correctly; builder payouts continue.
-- No deferred feature is required to complete primary MVP journeys.
-
----
-
-## 8) Definition of Done for “8/10 MVP”
-
-We call MVP ready only when:
-
-- Simplicity: no major duplicate surfaces; MVP boundary enforced.
-- Scalability: modular boundaries improve and monolith concentration is reducing.
-- Reliability: core join/chat/lens/billing flows are covered by automated contract tests.
-- Security: permission and scope boundaries fail closed.
-- Robustness: failure/retry paths are deterministic and recoverable.
-
-If a change harms these five dimensions, it is out of scope for launch.
-
----
+- Runbook: [docs/alpha-release-workflow.md](docs/alpha-release-workflow.md).
 
 ## 9) Factory Workflow
 

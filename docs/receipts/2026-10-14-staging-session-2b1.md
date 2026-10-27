@@ -5,7 +5,7 @@
 Deployed runtime: `7d8eb5693092692ed4c44e74505f5b8f04cfde1f`.
 [Machine-readable evidence](evidence/2026-10-14-staging-session-2b1.json) records
 the exact-commit gate, deployments, public boundaries, canonical metadata and
-local screenshot hashes. [Runbook](../polynet-staging-session-lifecycle.md).
+local screenshot hashes. [Runbook](../archive/polynet-staging-session-lifecycle.md).
 
 ## Resulting behavior
 

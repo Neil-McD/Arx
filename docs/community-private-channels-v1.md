@@ -177,7 +177,7 @@ triggers, per-channel knowledge ingestion, or public access without membership.
 ### Production migration preparation
 
 Before production deployment, use the staged bridge sequence in
-[attachment-compatibility-and-channel-migration-20260916.md](attachment-compatibility-and-channel-migration-20260916.md).
+[attachment-compatibility-and-channel-migration-20260916.md](archive/attachment-compatibility-and-channel-migration-20260916.md).
 `inspectChannelNamesInternal` is read-only and paginated; aggregate every page with
 `scripts/channelNameMigrationPreflight.ts` before authorizing the backfill.
 Installing the full candidate before backfill is not the migration bridge.

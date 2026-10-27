@@ -2,7 +2,7 @@
 
 Status: passed on staging after the founder's explicit go. One labeled synthetic
 contribution is retained; no runtime source or deployment changed. See the
-[dated receipt](receipts/2026-10-14-staging-founder-contribution-2c1.md).
+[dated receipt](../receipts/2026-10-14-staging-founder-contribution-2c1.md).
 
 ## Ground truth and 2B3 review
 
@@ -23,11 +23,11 @@ helper retains the ten-second deadline through body consumption and clears it
 in `finally`; HTTP classification, confirmed-only logout and the reused origin
 guard retain their behavior. Dead wiring is deleted rather than deprecated.
 The backend tree is unchanged. See the
-[2B3 receipt](receipts/2026-10-14-staging-auth-cleanup-2b3.md).
+[2B3 receipt](../receipts/2026-10-14-staging-auth-cleanup-2b3.md).
 
 Evidence remains bounded: stalled-network/retry tests are local simulations;
 normal web login, expiry/refresh and canonical revocation were observed live.
-The [2B2 receipt](receipts/2026-10-14-staging-external-oauth-2b2.md) proves native
+The [2B2 receipt](../receipts/2026-10-14-staging-external-oauth-2b2.md) proves native
 external OAuth enrollment/continuity on the inherited backend, not content
 writes. Its test credentials were removed, so a new test alias must enroll.
 CI success is not an independent human/code review; PR #170 remains draft.

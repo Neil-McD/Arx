@@ -4,7 +4,7 @@ Date: 2026-10-14. Algorithm step: **1 — question and rank requirements**.
 This is a proposed approach, not a deployment or runtime change.
 
 Current progress and remaining acceptance boundaries are maintained in the
-[staging coverage ledger](../polynet-staging-coverage-ledger.md). The source refs,
+[staging coverage ledger](../archive/polynet-staging-coverage-ledger.md). The source refs,
 findings and proposed order below describe the original October 14 assessment.
 
 ## Trunk: the product promise

@@ -4,7 +4,7 @@
 native denial checks are now complete. Production was untouched.**
 
 [Structured evidence](evidence/2026-10-15-staging-founder-admission-queue-2c2.json).
-[Approved scope](../polynet-staging-founder-admission-queue-2c2.md).
+[Approved scope](../archive/polynet-staging-founder-admission-queue-2c2.md).
 [Draft PR #172](https://github.com/Neil-McD/Arx/pull/172).
 
 ## Runtime and verification

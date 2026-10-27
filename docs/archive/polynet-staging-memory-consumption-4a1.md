@@ -2,8 +2,8 @@
 
 Date: October 15, 2026. Algorithm step **1 — question and rank requirements**.
 Status: bounded staging acceptance passed October 15, 2026.
-[Receipt](receipts/2026-10-15-staging-memory-consumption-4a1.md) and
-[structured evidence](receipts/evidence/2026-10-15-staging-memory-consumption-4a1.json).
+[Receipt](../receipts/2026-10-15-staging-memory-consumption-4a1.md) and
+[structured evidence](../receipts/evidence/2026-10-15-staging-memory-consumption-4a1.json).
 The approved scope below was implemented and verified. Production remained untouched.
 
 ## 3A2 review and current baseline
@@ -27,7 +27,7 @@ work share the same domain transaction. First-party approval compatibility remai
 | Source proofs | Memory consumption parity, retrieval receipt, compiler candidates, compiler evidence diet and lineage ontology passed |
 | Live preservation | Entire bounded 3A2, 3A1 and retained 2A/2C snapshots still match the completed receipts |
 
-The [3A2 receipt](receipts/2026-10-15-staging-founder-progress-approval-3a2.md)
+The [3A2 receipt](../receipts/2026-10-15-staging-founder-progress-approval-3a2.md)
 records the earlier complete clean-candidate gate: 1,836 tests / 194 files, both
 typechecks and dependency audits zero. This review reran affected checks and
 read-only staging observations; it did not repeat the approval or full gate.
@@ -86,7 +86,7 @@ adapters.
 citation-backed memory and report one explicitly synthetic observation. A refusal
 must be an error, and recovery must preserve exactly one observation.**
 
-This begins package 6 of the [trunk-down plan](research/headless-trunk-down-approach-20261014.md).
+This begins package 6 of the [trunk-down plan](../research/headless-trunk-down-approach-20261014.md).
 Package 5 now has bounded automatic and founder-approved progress proofs. Package
 4 has selected admission proofs, not comprehensive create/fund/channel/role parity.
 Do not relabel those bounded achievements as a fully headless platform.

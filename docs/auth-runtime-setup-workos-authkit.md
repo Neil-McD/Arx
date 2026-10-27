@@ -146,7 +146,7 @@ does not certify upstream grant revocation, rejection of already-issued JWTs,
 or logout of other clients. Web-session logout is a separate lifecycle.
 
 For a staging-only execution and receipt, see
-[slice 2B2](polynet-staging-external-oauth-2b2.md).
+[slice 2B2](archive/polynet-staging-external-oauth-2b2.md).
 
 ## 5) Redirect URI
 

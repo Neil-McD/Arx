@@ -1,8 +1,8 @@
 # Slice 3A2: one founder-approved evidence-backed progress decision
 
 Status: bounded staging acceptance passed October 15, 2026.
-[Receipt](receipts/2026-10-15-staging-founder-progress-approval-3a2.md) and
-[structured evidence](receipts/evidence/2026-10-15-staging-founder-progress-approval-3a2.json).
+[Receipt](../receipts/2026-10-15-staging-founder-progress-approval-3a2.md) and
+[structured evidence](../receipts/evidence/2026-10-15-staging-founder-progress-approval-3a2.json).
 The approved scope below was implemented and verified. Production remained untouched.
 
 ## 3A1 review and present ground truth
@@ -26,7 +26,7 @@ pending. The special funnel-builder discovery fence is present.
 | Fresh focused review | 380 tests / eight files passed; canonical-operation and semantic-repository proofs passed |
 | Retained live fixture | Workflow revision 5, no pending forms, two submitted rows including the historical one, one terminal transition; new request, state, transition and configuration match the receipt |
 
-The [3A1 receipt](receipts/2026-10-15-staging-member-progress-3a1.md) records the
+The [3A1 receipt](../receipts/2026-10-15-staging-member-progress-3a1.md) records the
 actual native member submit, discarded application acknowledgment, process
 restart, identical replay, founder/member private read-back and cleanup. Its final
 clean-candidate gate recorded 1,806 tests / 193 files and both audits zero. This
@@ -54,7 +54,7 @@ Nonblocking review debt:
 that exact current stage through the existing external harness, and recover an
 uncertain response without approving twice or applying an old decision to a new
 visit.** This extends package 5 / C17 and one C22 adapter from the
-[trunk-down plan](research/headless-trunk-down-approach-20261014.md).
+[trunk-down plan](../research/headless-trunk-down-approach-20261014.md).
 
 3A1 proves automatic completion of one configured form requirement. The existing
 human-approval transition remains a first-party-only operation. This is a direct
