@@ -24,7 +24,7 @@ import { createFounderInferenceUsageTotals, recordFounderProviderSuccess } from 
 const modules = import.meta.glob([
   "./founderInference.ts",
   "./founderBilling.ts",
-  "./providerConnections.ts",
+  "./secretCrypto.ts",
   "./_generated/**/*.*s",
 ]);
 

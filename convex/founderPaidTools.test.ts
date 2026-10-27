@@ -14,7 +14,7 @@ const modules = import.meta.glob([
   "./providerCostCore.ts",
   "./founderInference.ts",
   "./founderBilling.ts",
-  "./providerConnections.ts",
+  "./secretCrypto.ts",
   "./_generated/**/*.*s",
 ]);
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});

@@ -15,7 +15,7 @@ const modules = import.meta.glob([
   "./authSessions.ts",
   "./authSessionLifecycleCore.ts",
   "./authSessionMaintenanceCore.ts",
-  "./providerConnections.ts",
+  "./secretCrypto.ts",
   "./platformDiagnostics.ts",
   "./_generated/**/*.*s",
 ]);
