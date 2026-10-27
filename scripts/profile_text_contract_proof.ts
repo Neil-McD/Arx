@@ -31,7 +31,7 @@ assert.deepEqual(validateProfileBio("b".repeat(PROFILE_BIO_MAX_CHARS + 1)), {
 });
 
 const profiles = read("convex/profiles.ts");
-const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
+const onboarding = read("apps/web/src/components/WebAccountSetupForm.tsx");
 const settings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const errors = read("shared/profileMutationErrors.ts");
 
@@ -54,8 +54,8 @@ assert.match(mutationHandler, /profile_bio_too_long/);
 
 for (const surface of [onboarding, settings]) {
   assert.match(surface, /maxLength=\{PROFILE_DISPLAY_NAME_MAX_CHARS\}/);
-  assert.match(surface, /maxLength=\{PROFILE_BIO_MAX_CHARS\}/);
 }
+assert.match(settings, /maxLength=\{PROFILE_BIO_MAX_CHARS\}/);
 assert.match(errors, /profile_display_name_too_long: "Display name must be 120 characters or less\."/);
 assert.match(errors, /profile_bio_too_long: "Bio must be 500 characters or less\."/);
 

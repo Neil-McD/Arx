@@ -166,62 +166,6 @@ function proveOverlayInventoriesStayBounded() {
   console.log("PASS: overlay skill inventories are bounded by default");
 }
 
-function proveComposedHarnessUsesOneGlobalSkillInventoryBudget() {
-  const platformSkills = Array.from({ length: 500 }, (_, index) => ({
-    platform_skill_id: `platform:skill-${index}`,
-    catalog_skill_id: `platform-skill-${index}`,
-    name: `Platform Skill ${index}`,
-    mention_token: `platform-skill-${index}`,
-    description: "Long platform routing description. ".repeat(50),
-    requires_capability: "community_resources_manage",
-  }));
-  const personalSkills = Array.from({ length: 500 }, (_, index) => ({
-    user_platform_skill_install_id: `personal-install-${index}`,
-    skill_package_id: `personal-skill-${index}`,
-    catalog_skill_id: `personal-skill-${index}`,
-    name: `Personal Skill ${index}`,
-    mention_token: `personal-skill-${index}`,
-    description: "Long personal routing description. ".repeat(50),
-  }));
-  const communitySkills = Array.from({ length: 500 }, (_, index) => ({
-    community_skill_attachment_id: `community-attachment-${index}`,
-    skill_package_id: `community-skill-${index}`,
-    catalog_skill_id: `community-skill-${index}`,
-    name: `Community Skill ${index}`,
-    mention_token: `community-skill-${index}`,
-    description: "Long community routing description. ".repeat(50),
-  }));
-
-  const resolved = composeResolvedRuntimeHarness({
-    skillResolution: {
-      requested_mention_tokens: [],
-      ambiguous_mention_tokens: [],
-      community_resource_lane: {
-        lane: "builder",
-        can_read_live_resources: true,
-        can_use_resource_builder: true,
-      },
-      platform_skill_inventory: platformSkills,
-      selected_platform_skills: [],
-      user_platform_skill_inventory: personalSkills,
-      selected_user_platform_skills: [],
-      community_skill_inventory: communitySkills,
-      selected_community_skills: [],
-    },
-  });
-
-  assert.ok(
-    promptCharLength(resolved.systemPromptSuffix) <=
-      DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS,
-    "expected composed platform/community/personal skill inventory to share one global budget",
-  );
-  assertIncludes(
-    resolved.systemPromptSuffix,
-    "PLATFORM_WORKFLOW_CONTEXT",
-    "global skill budget priority keeps platform inventory first",
-  );
-  console.log("PASS: composed harness skill inventory uses one global budget");
-}
 
 function proveSelectedPayloadsRemainPayloadOnDemand() {
   const platformSkill: PlatformOverlaySelectedSkill = {
@@ -312,7 +256,9 @@ function main() {
   proveDescriptionsTruncateBeforeOmission();
   proveSkillsOmitOnlyAfterMinimumIdentityCannotFit();
   proveOverlayInventoriesStayBounded();
-  proveComposedHarnessUsesOneGlobalSkillInventoryBudget();
+  // The combined platform/community/personal inventory budget retired: platform and
+// community skill prompts are separate sections now, and community and personal
+// skills are removed in slice 2 (Neil, Oct 27).
   proveSelectedPayloadsRemainPayloadOnDemand();
   console.log("PASS: runtime skill inventory budget contract holds.");
 }

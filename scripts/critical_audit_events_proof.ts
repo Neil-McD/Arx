@@ -101,12 +101,16 @@ for (const [fileName, source, eventTypes] of [
     httpBilling,
     ["stripe_webhook_received", "stripe_webhook_processed", "stripe_webhook_failed"],
   ],
-  ["convex/account.ts", account, ["account_delete_blocked", "account_delete_completed"]],
 ] as const) {
   assertContains(source, /recordCriticalAudit/, `${fileName} must use critical audit recording`);
   for (const eventType of eventTypes) {
     assertContains(source, new RegExp(`eventType: "${eventType}"`), `${fileName} missing ${eventType}`);
   }
 }
+
+// Account deletion is quarantined (docs/destructive-lifecycle-quarantine-contract-v1.md)
+// until deletion v1 ships with its own audit events. Until then it must have no effects.
+assertContains(account, /account_delete_lifecycle_migration_blocked/, "account deletion stays quarantined");
+assert.doesNotMatch(account, /ctx\.db\.(insert|patch|replace|delete)|scheduler/, "quarantined account deletion must have no effects");
 
 console.log("critical_audit_events_proof: ok");

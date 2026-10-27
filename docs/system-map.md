@@ -334,8 +334,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 18. Release, CI and the factory — Keep
 
-- **Code:** `scripts/release_gate.mjs` (the release gate: guards and contract
-  proofs), `scripts/` (proofs), `.github/workflows/` (`mvp-guards.yml`,
+- **Code:** `scripts/release_gate.mjs` (the release gate: guards, contract
+  proofs, every unit test, and `scripts/run_all_checks.mjs` for every remaining
+  `check:*` script), `scripts/` (proofs), `.github/workflows/` (`mvp-guards.yml`,
   `secret-scan.yml`, `cla.yml`), `docs/receipts/`.
 - **Contracts:** [alpha-release-workflow.md](alpha-release-workflow.md); factory
   rules in [AGENTS.md](../AGENTS.md) §9.

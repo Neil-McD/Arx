@@ -98,7 +98,7 @@ assert.match(
 );
 assert.match(
   memberOntology,
-  /confirmMemberInterviewFacts = mutation\([\s\S]*?requireCommunityUserNotBlocked\([\s\S]*?loadActiveMembership[\s\S]*?hasPendingJoinRequest/,
+  /async function confirmMemberInterviewFactsHandler\([\s\S]*?requireCommunityUserNotBlocked\([\s\S]*?loadActiveMembership[\s\S]*?hasPendingJoinRequest/,
   "a block must supersede both membership and pending-request authority for interview facts",
 );
 assert.match(

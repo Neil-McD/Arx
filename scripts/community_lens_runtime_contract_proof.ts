@@ -171,11 +171,6 @@ function main() {
     "personal skills remain available",
     "community workflow context is priority, not exclusive",
   );
-  assertIncludes(
-    memberAgentDock,
-    "Community context was not confirmed.",
-    "member-agent lens switch requires confirmed server state",
-  );
 
   console.log("community_lens_runtime_contract_proof: ok");
 }

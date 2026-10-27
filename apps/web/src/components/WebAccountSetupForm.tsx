@@ -3,6 +3,7 @@ import { Camera } from "lucide-react";
 
 import type { AccountSetupStatus } from "../../../../shared/accountSetup";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
+import { PROFILE_DISPLAY_NAME_MAX_CHARS } from "../../../../shared/profileText";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
@@ -175,6 +176,7 @@ export function WebAccountSetupForm(props: WebAccountSetupFormProps) {
             <input
               className={isMissing("name") ? "is-missing" : ""}
               value={identity.displayName}
+              maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
               placeholder="Your name"
               autoComplete="name"
               disabled={submission.isSaving}
