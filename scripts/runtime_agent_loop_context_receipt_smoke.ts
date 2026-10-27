@@ -10,7 +10,6 @@ import {
   type RuntimeProviderContextAttestationV1,
 } from "../shared/runtimeProviderContextAttestation.ts";
 
-process.env.OPENROUTER_API_KEY = "";
 process.env.OPENAI_API_KEY = "";
 
 const { executeChatToolsAgentLoop } = await import("../convex/runtimeAgentLoop.ts");
