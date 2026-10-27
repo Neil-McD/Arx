@@ -9,7 +9,8 @@ Status: written October 27, 2026 from `main` at `d63eb4a63`. Code paths are
 `convex/<module>.ts` unless shown otherwise.
 
 **Status column:** **Keep** (core), **Going** (removal planned), **Decide**
-(waiting on Neil), **Dead** (no first-party caller found; verify, then delete).
+(waiting on Neil), **Dead** (no reference anywhere outside tests and proof
+scripts, checked by hand on Oct 27; remove with its tests).
 
 ## The shape
 
@@ -64,8 +65,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   Studio funnel editor). Community sites are now the front door; keep only a
   plain join and checkout page?
 - **Dead:** `communityFeatured`, `communityLaunchSetup`, `communityMaintenance`,
-  `communityReadKernel`, `communityRepositorySearch`; `communityOnboarding` (tests
-  only); `communityOnboardingSessions` table (no writers).
+  `communityReadKernel`, `communityOnboarding`; `communityOnboardingSessions` table
+  (no writers).
 
 ### 3. Chat — Keep
 
@@ -83,12 +84,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [community-interaction-substrate-contract-v1.md](community-interaction-substrate-contract-v1.md),
   [community-interaction-migration-residue-map.md](community-interaction-migration-residue-map.md),
   [community-private-channels-v1.md](community-private-channels-v1.md).
-- **Known duplicate:** legacy chat tables (`communityChatThreads`,
-  `communityChatMessages`, `communityMessageReactions`,
-  `communityInteractionLegacyChatLinks`, `communityFeaturedMessages`) are still
-  written by the legacy bridge. Prove callers, migrate, then retire.
-- **Dead:** `communityInteractionBackfill`; `communityChannelAudit`,
-  `communityChannelBackfill` (tests only).
+- **Going:** legacy chat (`communityChatThreads`, `communityChatMessages`,
+  `communityMessageReactions`, `communityInteractionLegacyChatLinks`,
+  `communityFeaturedMessages`). Studio no longer calls its write path (the newest
+  staging row is from late June 2026); the legacy bridge still reads it. Prove
+  production matches, then retire.
+- **Dead:** `communityInteractionBackfill`, `communityChannelAudit`,
+  `communityChannelBackfill`.
 
 ### 4. Direct messages — Keep (Studio only)
 
@@ -116,12 +118,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** turns activity into cited, accepted community memory; member facts.
 - **Code:** `communityCompiler*`, `communityIntelligenceDirectory`,
   `communityEvidence*`, `communityCognitionLifecycle`, `communityCognitionCleanupCore`,
-  `communityMemoryWorkKey`, `memberOntology`, `memberOntologyCore`; cron "community
+  `communityMemoryWorkKey`, `communityMemoryMetabolizer`, `memberOntology`,
+  `memberOntologyCore`; cron "community
   memory sweep" (`communityAgentHeartbeat`, every 6 hours).
 - **Tables:** `communitySourceTraces`, `communityEvidenceCitations`,
   `communityEvidenceRetrievalLogs`, `communityIntelligenceNodes`, `…Edges`,
   `…Mutations`, `…ChangeRequests`, `…RetrievalLogs`, `communityOutcomeObservations`,
-  `communityCompilerDigests`, `memberFacts`, `memberProfileSpines`.
+  `communityCompilerDigests`, `communityMemoryMetabolizerRuns`, `memberFacts`,
+  `memberProfileSpines`.
 - **Contracts:** [community-agent-cognition-contract-v1.md](community-agent-cognition-contract-v1.md),
   [community-lineage-ontology-contract-v0.md](community-lineage-ontology-contract-v0.md),
   [community-evidence-integrity-contract-v1.md](community-evidence-integrity-contract-v1.md),
@@ -129,15 +133,17 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Going:** `personalMemory` and `personalMemoryItems` (personal-agent era);
   `communityAiFeed*` tables and `communityAiFeedRetirement` (feature retired).
 - **Dead:** `communityAiFeedEvidence`, `communityCognitionCleanup`,
-  `communityMemoryHealth`, `communityMemoryMetabolizer` (+ `communityMemoryMetabolizerRuns`);
-  `communityArchiveDocuments` table (no writers).
+  `communityMemoryHealth`; `communityArchiveDocuments` table (no writers).
+  (`communityMemoryMetabolizer` is live: the memory sweep calls it.)
 
 ### 8. Community agent runtime — Keep (protected)
 
 - **Does:** the one community agent: Agent-page conversations, @mention replies,
   site conversations; tools, streaming, model calls, receipts.
 - **Code:** `runtimeAgentLoop`, `runtimeTurn*`, `runtimeContextIntegrity`,
-  `runtimeHarnessShaping`, `polynetCanonicalExecutor`, `threads`, `communityAgent`,
+  `runtimeHarnessShaping`, `runtimeHarnessComposition`, `polynetCanonicalExecutor`,
+  `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
+  `communityAgentFilesystem`,
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
   `communityAgentServeWorker`, `communityAppAgentTurn`, `httpRuntimeRoutes`,
   `httpStreaming`, `modelRegistry`, `fundedInferenceGateway`, `founderInference*`,
@@ -155,9 +161,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `/runtime/list_personal_memory_items`, personal skills, the `asPersonalAgent`
   alias); internal `personal_agent` and "member agent" names, renamed to the
   community agent; `openRouterNativeTransport`, `xAiSearchTransport` (POL-10).
-- **Decide:** harness mounts and skills (`harnessMounts`, `harnessSkills`,
-  `runtimeHarnessComposition`, `runtimeSkillResolution`).
-- **Dead:** `communityAgentFilesystem`.
+- **Decide:** skills inside the harness (`runtimeSkillResolution`, which reads
+  `communitySkillAttachments`).
+- **Dead:** `harnessMounts`, `harnessSkills`. (`runtimeHarnessComposition` and
+  `communityAgentFilesystem` are live.)
 
 ### 9. Proactive agent — Keep, growing
 
@@ -222,8 +229,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Decide:** retired Workspace money tables (`workspaceCreditBalances`,
   `workspaceComputeCharges`, `workspaceUsageCollections`, `creditLedgerEntries`,
   `legacyProgramGrants`, `workspaceCredits` module); no writers found.
-- **Dead:** `entitlements`; `communityApplicationFeeRefunds` (tests only; the core
-  module is live).
+- **Dead:** `entitlements`.
 
 ### 13. Email — Keep
 
@@ -233,6 +239,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   emails" (15 min), weekly digest.
 - **Tables:** `emailOutbox`, `emailDeliveries`, `emailPreferences`,
   `communityWeeklyDigestSchedules`.
+- **Dormant by design:** the weekly digest worker
+  (`processDueCommunityWeeklyDigestsInternal`) has no cron; schedules are kept
+  but nothing sends until a cron is added.
 
 ### 14. Operator and diagnostics — Keep (internal)
 
@@ -258,8 +267,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`,
   `communitySkillAttachments`.
 - **Contracts:** [skill-harness-contract.md](skill-harness-contract.md).
-- **Dead:** `communityIntegrationConnections` module, `communitySkillAttachments`
-  module, `providerConnectionProbes`, `userPlatformSkills`.
+- **Dead:** `providerConnectionProbes`, `userPlatformSkills`. (The
+  `communityIntegrationConnections` module is live: Studio's integration page
+  calls it.)
 
 ### 16. Voice — Keep
 
@@ -297,8 +307,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ## Cleanup plan this map drives
 
-1. **Dead code:** delete the modules marked Dead after checking each one by hand
-   (some may be operator tools run by hand), plus the personal-agent leftovers.
+1. **Dead code:** delete the modules marked Dead with their tests, plus the
+   personal-agent leftovers. A gate test then keeps orphans and unmapped modules
+   out.
 2. **Workflows and forms:** remove after a read-only production usage check;
    tables retire over two releases.
 3. **One agent name:** rename `personal_agent` and "member agent" in code.
