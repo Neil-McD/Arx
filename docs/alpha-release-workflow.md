@@ -63,11 +63,14 @@ This is the canonical path. Do not rely on branch names, preview URLs, or old Ve
 
 Removing Polynet's third-party MCP consumer is a two-release data migration:
 
-Status (2026-10-16): the first release is in production. Staging
-(`dev:quick-porcupine-949`) was emptied with the batch mutation (287 rows across
-the seven tables; all counts zero), and the second-release code is on branch
-`claude/retire-app-mounts-20261016`. **Production steps 3-5 have not run.** Do
-not release the second release to production until they have.
+Status (2026-10-27): complete through step 5. The first release is in
+production (`91d28dc2c`). Staging was emptied on 2026-10-16 (287 rows). On
+production, steps 3-5 ran on 2026-10-27 with Neil's approval: 1,692 rows across
+the seven tables were deleted in batches and re-inspection shows every count at
+zero. A production backup was taken first, outside the repository
+(`~/polynet-backups/polynet-prod-pre-app-retirement-20261027.zip`, SHA-256
+`6d7862b8f0e09505a9452c218a1ee70d153066982a8b7979a44707a120ac2c2b`). The second
+release (schema removal) can now go to production.
 
 1. First release the code that severs all catalog, connect, OAuth, mount,
    runtime, worker, UI, and fanout paths while retaining the seven retired
