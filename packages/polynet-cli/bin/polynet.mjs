@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   CALLBACK_PORT, DEFAULT_API_URL, REDIRECT_URI, buildManifest, collectFiles, formatBytes, installGuide, isDirectory, pkce,
-  readCheckedFiles, uploadBuckets,
+  readCheckedFiles, siteConfigPaths, uploadBuckets,
 } from "../lib.mjs";
 import { checkSite, formatProblems } from "../checks.mjs";
 
@@ -238,8 +238,12 @@ async function skills(args) {
 async function deploy(args) {
   const dir = siteDir(args);
   if (!(await isDirectory(dir))) fail(`${dir} isn't a folder.`);
-  const configPath = join(dir, "polynet.json");
-  const config = (await readJson(configPath)) ?? {};
+  const paths = siteConfigPaths(dir);
+  let config = {};
+  for (const path of paths.read) {
+    const found = await readJson(path);
+    if (found) { config = found; break; }
+  }
   const flag = args.indexOf("--community");
   const community = (flag >= 0 ? args[flag + 1] : config.community)?.trim().toLowerCase();
   if (!community) fail("Which community is this site for? Run: polynet deploy --community <slug>");
@@ -258,7 +262,8 @@ async function deploy(args) {
   const published = await callPolynet("/runtime/sites/deploy/publish", token, {
     community, completion_jwt: completion, files: site.files, bytes: site.bytes,
   });
-  if (config.community !== community) await writeFile(configPath, JSON.stringify({ ...config, community }, null, 2) + "\n");
+  const saved = (await readJson(paths.save)) ?? {};
+  if (saved.community !== community) await writeFile(paths.save, JSON.stringify({ ...config, ...saved, community }, null, 2) + "\n");
   console.log(`✓ Live: ${published.url}`);
 }
 
@@ -277,11 +282,12 @@ try {
       "      Set up a folder for your AI agent to design and build the site in:",
       "      AGENTS.md, CLAUDE.md and Polynet's skills. No template.",
       "  polynet check [folder]",
-      "      Check the site: the Polynet shell and accessibility. Errors block deploys.",
+      "      Check the site's accessibility basics. Errors block deploys.",
       "  polynet deploy [folder] [--community <slug>]",
       "      Check, then put the folder (default: this one) live at https://<slug>.polynet.page.",
       "      You must be the community's owner or an admin. The community is saved in",
-      "      polynet.json; dotfiles, node_modules, AGENTS.md and CLAUDE.md aren't uploaded.",
+      "      polynet.json (in this folder when you deploy a build folder like dist);",
+      "      dotfiles, node_modules, AGENTS.md and CLAUDE.md aren't uploaded.",
       "  polynet skills [folder]",
       "      Add or update Polynet's skills for AI agents (.agents/skills, .claude/skills).",
       "  polynet login     Sign in with Polynet in the browser.",

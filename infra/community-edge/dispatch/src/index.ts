@@ -18,6 +18,16 @@ const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/
 
 type Fetcher = { fetch(request: Request): Promise<Response> };
 
+// Cloudflare's streaming HTML rewriter (a Workers global), as far as the edge uses it.
+type RewriterText = { before(content: string, options?: { html?: boolean }): unknown; append(content: string, options?: { html?: boolean }): unknown };
+type RewriterElement = { getAttribute(name: string): string | null; onEndTag(handler: (tag: RewriterText) => void): void };
+interface Rewriter {
+  on(selector: string, handlers: { element(element: RewriterElement): void }): Rewriter;
+  onDocument(handlers: { end(end: RewriterText): void }): Rewriter;
+  transform(response: Response): Response;
+}
+declare const HTMLRewriter: { new (): Rewriter } | undefined;
+
 export interface Env {
   POLYNET_API_URL: string;
   POLYNET_AUTH_URL: string;
@@ -36,8 +46,13 @@ type Route = { script: string; community: string };
 
 const API_PREFIX = "/__polynet/api";
 const AUTH_PREFIX = "/__polynet/auth/";
-const SESSION_COOKIE = "__polynet_session";
-const SIGNIN_COOKIE = "__polynet_signin";
+// __Host- cookies are Secure, Path=/ and host-only, and a browser refuses any
+// other kind under these names. No sibling site on the sites domain (one that
+// sets Domain=polynet.page) can shadow a member's session or fixate them into its own.
+const SESSION_COOKIE = "__Host-polynet_session";
+const SIGNIN_COOKIE = "__Host-polynet_signin";
+// Names the edge used before, and any a sibling site plants: never read, never passed on.
+const LEGACY_COOKIE_PREFIX = "__polynet_";
 const MAX_API_BODY_BYTES = 64 * 1024;
 const UPLOAD_PATH = "/__polynet/upload";
 const AGENT_PATH = "/__polynet/agent";
@@ -104,22 +119,60 @@ export async function deriveWatchToken(sessionToken: string): Promise<string> {
   return `pnw_${base64Url(new Uint8Array(digest))}`;
 }
 
+// Every community shares the sites domain, which isn't a public suffix, so a
+// browser counts sibling sites as the same site and sends this site's SameSite
+// cookies with their requests. The member endpoints answer only this site's own
+// pages: a sibling can't post, ask the agent, upload or sign out as the member.
+const MEMBER_PATHS = new Set([`${AUTH_PREFIX}session`, `${AUTH_PREFIX}logout`, "/__polynet/account", API_PREFIX, AGENT_PATH, AGENT_MESSAGES_PATH, UPLOAD_PATH]);
+
+function isMemberEndpoint(pathname: string): boolean {
+  return MEMBER_PATHS.has(pathname) || pathname.startsWith(`${API_PREFIX}/`) || pathname.startsWith(FILES_PREFIX);
+}
+
+export function fromThisSite(request: Request, url: URL): boolean {
+  const readOnly = request.method === "GET" || request.method === "HEAD";
+  // Opening a file link is a navigation: the page that started it can't read the file.
+  if (readOnly && url.pathname.startsWith(FILES_PREFIX) && request.headers.get("sec-fetch-mode") === "navigate") return true;
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  // Browsers without Fetch Metadata still send Origin on every write.
+  const origin = request.headers.get("origin");
+  if (origin) return origin === url.origin;
+  return readOnly;
+}
+
 // The front end's own Worker never receives Polynet's cookies.
 export function withoutPolynetCookies(request: Request): Request {
   const kept = (request.headers.get("cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
-    .filter((part) => part && !part.startsWith(`${SESSION_COOKIE}=`) && !part.startsWith(`${SIGNIN_COOKIE}=`));
+    .filter((part) => part && !part.startsWith(`${SESSION_COOKIE}=`) && !part.startsWith(`${SIGNIN_COOKIE}=`) && !part.startsWith(LEGACY_COOKIE_PREFIX));
   const headers = new Headers(request.headers);
   if (kept.length) headers.set("cookie", kept.join("; "));
   else headers.delete("cookie");
   return new Request(request, { headers });
 }
 
+// ...and can never set them: a site's response that names a Polynet cookie loses that Set-Cookie.
+function isPolynetCookie(setCookie: string): boolean {
+  const name = setCookie.split("=", 1)[0].trim().toLowerCase();
+  return name.startsWith("__host-polynet_") || name.startsWith(LEGACY_COOKIE_PREFIX);
+}
+
+export function withoutPolynetSetCookies(response: Response): Response {
+  const cookies = response.headers.getSetCookie();
+  if (!cookies.some(isPolynetCookie)) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("set-cookie");
+  for (const value of cookies) if (!isPolynetCookie(value)) headers.append("set-cookie", value);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 // Host-only (no Domain attribute), so one community can never read another's.
-function cookie(url: URL, name: string, value: string, maxAgeSeconds: number, path = "/"): string {
-  const secure = url.protocol === "https:" ? "; Secure" : "";
-  return `${name}=${value}; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}${secure}`;
+// The __Host- prefix needs exactly this: Secure, Path=/, no Domain (browsers
+// accept Secure on http://localhost too, so local dev works).
+function cookie(name: string, value: string, maxAgeSeconds: number): string {
+  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}; Secure`;
 }
 
 function base64Url(bytes: Uint8Array): string {
@@ -189,7 +242,7 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
       headers: {
         Location: login.toString(),
         "Cache-Control": "no-store",
-        "Set-Cookie": cookie(url, SIGNIN_COOKIE, `${state}.${encodeURIComponent(returnPath)}`, SIGNIN_TTL_SECONDS, AUTH_PREFIX),
+        "Set-Cookie": cookie(SIGNIN_COOKIE, `${state}.${encodeURIComponent(returnPath)}`, SIGNIN_TTL_SECONDS),
       },
     });
   }
@@ -198,7 +251,7 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
     const [expectedState, encodedReturn] = String(readCookie(request, SIGNIN_COOKIE) ?? "").split(".");
     const state = url.searchParams.get("state") ?? "";
     const code = url.searchParams.get("code") ?? "";
-    const clearSignin = cookie(url, SIGNIN_COOKIE, "", 0, AUTH_PREFIX);
+    const clearSignin = cookie(SIGNIN_COOKIE, "", 0);
     if (!STATE_PATTERN.test(state) || state !== expectedState || !code) {
       return new Response("Sign-in could not be completed. Try again.", {
         status: 400, headers: { "Cache-Control": "no-store", "Set-Cookie": clearSignin },
@@ -213,7 +266,7 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
     }
     const maxAge = (Date.parse(String(payload.expires_at)) - Date.now()) / 1000;
     const headers = new Headers({ Location: safeReturnPath(decodeURIComponent(encodedReturn ?? "/")), "Cache-Control": "no-store" });
-    headers.append("Set-Cookie", cookie(url, SESSION_COOKIE, payload.token as string, maxAge));
+    headers.append("Set-Cookie", cookie(SESSION_COOKIE, payload.token as string, maxAge));
     headers.append("Set-Cookie", clearSignin);
     return new Response(null, { status: 302, headers });
   }
@@ -242,7 +295,7 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
     if (token && TOKEN_PATTERN.test(token)) {
       await backend(env, "/runtime/community_edge/session_revoke", { token }, url.origin).catch(() => null);
     }
-    return json(200, { ok: true }, { "Set-Cookie": cookie(url, SESSION_COOKIE, "", 0) });
+    return json(200, { ok: true }, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
   }
 
   return json(404, { ok: false, code: "not_found" });
@@ -266,7 +319,7 @@ async function proxyApi(request: Request, url: URL, env: Env): Promise<Response>
     body,
   });
   const headers = new Headers({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-  if (upstream.status === 401) headers.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  if (upstream.status === 401) headers.append("Set-Cookie", cookie(SESSION_COOKIE, "", 0));
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
@@ -285,7 +338,7 @@ async function proxyAccount(request: Request, url: URL, env: Env): Promise<Respo
     body: "{}",
   });
   const headers = new Headers({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-  if (upstream.status === 401) headers.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  if (upstream.status === 401) headers.append("Set-Cookie", cookie(SESSION_COOKIE, "", 0));
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
@@ -321,7 +374,7 @@ async function proxyFile(request: Request, url: URL, env: Env): Promise<Response
     const value = upstream.headers.get(name);
     if (value) out.set(name, value);
   }
-  if (upstream.status === 401) out.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  if (upstream.status === 401) out.append("Set-Cookie", cookie(SESSION_COOKIE, "", 0));
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
@@ -345,7 +398,7 @@ async function proxyAgent(request: Request, url: URL, env: Env): Promise<Respons
     "Content-Type": upstream.headers.get("content-type") ?? "application/json; charset=utf-8",
     "Cache-Control": "no-store",
   });
-  if (upstream.status === 401) headers.append("Set-Cookie", cookie(url, SESSION_COOKIE, "", 0));
+  if (upstream.status === 401) headers.append("Set-Cookie", cookie(SESSION_COOKIE, "", 0));
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
@@ -356,6 +409,9 @@ export default {
     if (frontDoorResponse) return frontDoorResponse;
     const route = await resolveRoute(url.hostname, env);
     if (!route) return noSiteYet(url, env);
+    if (isMemberEndpoint(url.pathname) && !fromThisSite(request, url)) {
+      return json(403, { ok: false, code: "cross_site_request", message: "Call this from the community's own site." });
+    }
     if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
     // The builder kit: the SDK every front end imports, its live client, and its doc.
     if (url.pathname === "/__polynet/live.js") {
@@ -398,7 +454,7 @@ export default {
     }
     const worker = userWorker(route.script, env);
     if (!worker) return new Response("Community front end unavailable", { status: 503 });
-    return untransformed(await worker.fetch(withoutPolynetCookies(request)));
+    return withShell(untransformed(withoutPolynetSetCookies(await worker.fetch(withoutPolynetCookies(request)))));
   },
 };
 
@@ -466,4 +522,27 @@ function untransformed(response: Response): Response {
   const cacheControl = headers.get("cache-control");
   if (!/no-transform/i.test(cacheControl ?? "")) headers.set("cache-control", cacheControl ? `${cacheControl}, no-transform` : "no-transform");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+const SHELL_SRC = /^\/__polynet\/ui\.js(\?.*)?$/;
+const SHELL_TAG = '<script type="module" src="/__polynet/ui.js"></script>';
+
+// Every page carries the Polynet shell, including one whose bundler moved the
+// ui.js import into its own script (a second load is free: modules run once).
+// ui.js then puts <polynet-account> in the corner if the page has none.
+export function withShell(response: Response, Rewriter = typeof HTMLRewriter === "undefined" ? undefined : HTMLRewriter): Response {
+  if (!Rewriter || !response.body || !(response.headers.get("content-type") ?? "").includes("text/html")) return response;
+  let present = false;
+  let added = false;
+  const add = (at: RewriterText, where: "before" | "append") => {
+    if (present || added) return;
+    added = true;
+    at[where](SHELL_TAG, { html: true });
+  };
+  return new Rewriter()
+    .on("script[src]", { element(element) { if (SHELL_SRC.test(element.getAttribute("src") ?? "")) present = true; } })
+    .on("body", { element(element) { element.onEndTag((end) => add(end, "before")); } })
+    // A page with no </body> gets it at the very end, which browsers still read as the body.
+    .onDocument({ end(end) { add(end, "append"); } })
+    .transform(response);
 }

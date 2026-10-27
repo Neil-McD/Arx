@@ -1,12 +1,12 @@
 // The Polynet shell, served at /__polynet/ui.js on every community site:
-// <polynet-account>, the member's way to their account, their other
+// <polynet-account>, the member's way to their account, their
 // communities, Discover, messages and settings. Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
 // CSS custom properties. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
 export const UI_SOURCE = String.raw`// Polynet shell: <polynet-account>. Usage:
-//   <script type="module" src="/__polynet/ui.js"></script>
-//   <polynet-account></polynet-account>
+//   <script type="module" src="/__polynet/ui.js"></script>   (Polynet adds this to every page)
+//   <polynet-account></polynet-account>                      (or Polynet adds one, top-right)
 // Theme it from the site's CSS (all optional):
 //   polynet-account { --polynet-accent: #c2410c; --polynet-surface: #111; --polynet-text: #f5f5f4;
 //                     --polynet-radius: 12px; --polynet-font: inherit; }
@@ -31,7 +31,6 @@ const STYLE = [
   ".trigger:hover { background: var(--pa-hover); }",
   ".chevron { width: 10px; height: 10px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); opacity: .7; margin: 0 4px; }",
   ".avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; background: var(--pa-accent); color: var(--pa-on-accent); font-weight: 700; font-size: 13px; }",
-  ".avatar.small { width: 28px; height: 28px; font-size: 12px; border-radius: 8px; }",
   ".panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 2147483000; width: min(340px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 96px)); overflow: auto;",
   "  background: var(--pa-surface); color: var(--pa-text); border: 1px solid var(--pa-border); border-radius: var(--pa-radius); box-shadow: 0 12px 32px rgba(0,0,0,.24); padding: 8px; }",
   ":host([align=start]) .panel { right: auto; left: 0; }",
@@ -39,13 +38,9 @@ const STYLE = [
   ".who { padding: 10px 8px 12px; border-bottom: 1px solid var(--pa-border); margin-bottom: 6px; }",
   ".name { font-weight: 650; }",
   ".muted { color: var(--pa-muted); font-size: 13px; }",
-  "h2 { font-size: 12px; font-weight: 650; letter-spacing: .02em; color: var(--pa-muted); margin: 10px 8px 4px; }",
-  "ul { list-style: none; margin: 0; padding: 0; }",
-  ".communities { max-height: 240px; overflow: auto; }",
   ".item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 8px; border-radius: 8px; text-decoration: none; background: none; border: 0; cursor: pointer; min-height: 44px; }",
   ".item:hover { background: var(--pa-hover); }",
   ".item .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
-  ".badge { font-size: 12px; color: var(--pa-muted); }",
   ".sep { height: 1px; background: var(--pa-border); margin: 6px 0; border: 0; }",
   ".status { padding: 12px 8px; }",
   ".backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 2147482999; }",
@@ -75,9 +70,9 @@ function initials(name) {
   return ((parts[0] || "?")[0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-function avatar(url, name, small) {
-  if (url) return h("img", { class: small ? "avatar small" : "avatar", src: url, alt: "" });
-  return h("span", { class: small ? "avatar small" : "avatar", "aria-hidden": "true", text: initials(name) });
+function avatar(url, name) {
+  if (url) return h("img", { class: "avatar", src: url, alt: "" });
+  return h("span", { class: "avatar", "aria-hidden": "true", text: initials(name) });
 }
 
 let counter = 0;
@@ -93,6 +88,10 @@ class PolynetAccount extends HTMLElement {
   }
 
   async connectedCallback() {
+    // A shell the page placed itself replaces the fallback one.
+    if (!this.hasAttribute("data-polynet-fallback")) {
+      for (const fallback of document.querySelectorAll("polynet-account[data-polynet-fallback]")) fallback.remove();
+    }
     document.addEventListener("pointerdown", this.onDocumentPointer, true);
     document.addEventListener("keydown", this.onDocumentKey);
     this.render();
@@ -194,28 +193,15 @@ class PolynetAccount extends HTMLElement {
       ]));
     }
     if (account) {
-      const current = account.communities.find((community) => community.current);
+      // Only this community: the member's other communities live in Polynet, one link away.
+      const here = account.community || {};
       const links = account.links || {};
       const everyday = [];
-      if (current && (current.role === "owner" || current.role === "admin") && current.studio_url) {
-        everyday.push([current.studio_url, "Manage this community"]);
-      }
-      everyday.push([links.messages, "Messages"], [links.discover, "Discover communities"], [links.settings, "Settings"]);
+      if ((here.role === "owner" || here.role === "admin") && here.studio_url) everyday.push([here.studio_url, "Manage this community"]);
+      everyday.push([links.messages, "Messages"], [links.communities, "Your communities"], [links.discover, "Discover communities"], [links.settings, "Settings"]);
       for (const [href, label] of everyday) {
         if (href) children.push(h("a", { class: "item", href: href, part: "item" }, [h("span", { class: "label", text: label })]));
       }
-      children.push(h("hr", { class: "sep" }));
-      children.push(h("h2", { id: this.panelId + "-communities", text: "Your communities" }));
-      children.push(h("ul", { class: "communities", "aria-labelledby": this.panelId + "-communities" }, account.communities.map((community) => h("li", {}, [
-        h("a", {
-          class: "item", part: "item", href: community.site_url || community.studio_url || "#",
-          "aria-current": community.current ? "page" : null,
-        }, [
-          avatar(null, community.name, true),
-          h("span", { class: "label", text: community.name }),
-          community.current ? h("span", { class: "badge", text: "Here" }) : null,
-        ]),
-      ]))));
     }
     children.push(h("hr", { class: "sep" }));
     children.push(h("button", { class: "item", type: "button", part: "item", onclick: () => this.signOut() }, [h("span", { class: "label", text: "Sign out" })]));
@@ -261,4 +247,17 @@ class PolynetAccount extends HTMLElement {
 }
 
 if (!customElements.get("polynet-account")) customElements.define("polynet-account", PolynetAccount);
+
+// Every page shows the shell. If the page hasn't placed one shortly after it
+// loads, Polynet puts it in the top-right corner.
+function ensureShell() {
+  if (!document.body || document.querySelector("polynet-account")) return;
+  const shell = document.createElement("polynet-account");
+  shell.setAttribute("data-polynet-fallback", "");
+  shell.style.cssText = "position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 2147483000;";
+  document.body.append(shell);
+}
+const FALLBACK_DELAY_MS = 1500;
+if (document.readyState === "complete") setTimeout(ensureShell, FALLBACK_DELAY_MS);
+else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELAY_MS), { once: true });
 `;

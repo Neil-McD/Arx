@@ -694,7 +694,7 @@ function capabilityDocument(args: {
       limits: { max_files: SITE_DEPLOY_MAX_FILES, max_total_bytes: SITE_DEPLOY_MAX_BYTES },
       result: "{ url }: the live site, https://<slug>.<sites domain>",
       guidance: "Build the site from the builder guide (polynet.page/llms.txt); larger sites deploy with npx @polynet/cli deploy.",
-      checks: "The site is checked first, as npx @polynet/cli check does: errors (no Polynet shell, no lang, title or zoomable viewport, images without alt, unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
+      checks: "The site is checked first, as npx @polynet/cli check does: errors (no lang, title or zoomable viewport, images without alt, unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
       effects: ["publish_community_site"],
       forbidden_effects: ["server_code", "change_access", "deploy_other_community"],
     };

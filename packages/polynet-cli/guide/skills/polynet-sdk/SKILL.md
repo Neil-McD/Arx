@@ -101,6 +101,21 @@ words can take a few seconds while the agent uses tools.
 | What the community knows | `knowledge(query?)` |
 | Members | `members()` |
 
+## Using a bundler
+
+Vite, Rollup, esbuild and the like work. The SDK and shell are served by the
+site itself, so mark `/__polynet/` imports external and never bundle them:
+
+```js
+// vite.config.js
+export default { build: { rollupOptions: { external: [/^\/__polynet\//] } } };
+```
+
+Deploy the build folder (`npx @polynet/cli deploy dist`); `polynet.json`
+stays in the project folder, so a clean build doesn't lose it. Polynet adds
+`/__polynet/ui.js` to every page, so it's fine if the bundler moves it into
+its own script.
+
 ## Traps
 
 - Await `session()` before anything else, or calls throw `not_ready`.
