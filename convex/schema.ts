@@ -1289,6 +1289,14 @@ export default defineSchema({
     writer: v.optional(v.union(v.literal("model"), v.literal("deterministic"))),
     stats: v.optional(v.record(v.string(), v.number())),
     threadMessageKey: v.optional(v.string()),
+    // Saved before delivery starts: a retry re-sends exactly this, to the same thread.
+    delivery: v.optional(v.object({
+      threadId: v.string(),
+      markdown: v.string(),
+      emailPayload: v.any(),
+      communityLifecycleGeneration: v.number(),
+      writer: v.union(v.literal("model"), v.literal("deterministic")),
+    })),
     errorCode: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

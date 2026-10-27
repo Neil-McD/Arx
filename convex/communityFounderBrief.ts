@@ -335,8 +335,13 @@ export const claimFounderBriefInternal = internalMutation({
       .withIndex("by_community_status_windowEnd", (q) => q.eq("communityId", args.communityId).eq("status", "sent"))
       .order("desc").first();
     const windowStartMs = Math.max(args.nowMs - MAX_WINDOW_MS, previous?.windowEndMs ?? args.nowMs - DAY_MS);
+    // Once delivery has started, the window and content are fixed: a retry
+    // finishes delivering the same brief.
+    const delivery = existing?.delivery ?? null;
     const fields = {
-      status: "running" as const, windowStartMs, windowEndMs: args.nowMs,
+      status: "running" as const,
+      windowStartMs: delivery ? existing!.windowStartMs : windowStartMs,
+      windowEndMs: delivery ? existing!.windowEndMs : args.nowMs,
       leaseExpiresAt: args.nowMs + CLAIM_LEASE_MS, updatedAt: args.nowMs,
     };
     let briefId;
@@ -351,7 +356,21 @@ export const claimFounderBriefInternal = internalMutation({
     }
     // Hold the schedule while this attempt runs; finishing sets the next time.
     await scheduleNext(ctx, args.communityId, args.nowMs, true);
-    return { briefId, ownerUserId: community.ownerId, windowStartMs, windowEndMs: args.nowMs };
+    return { briefId, ownerUserId: community.ownerId, windowStartMs: fields.windowStartMs, windowEndMs: fields.windowEndMs, delivery };
+  },
+});
+
+export const recordFounderBriefDeliveryInternal = internalMutation({
+  args: {
+    briefId: v.id("communityFounderBriefs"),
+    delivery: v.object({
+      threadId: v.string(), markdown: v.string(), emailPayload: v.any(),
+      communityLifecycleGeneration: v.number(),
+      writer: v.union(v.literal("model"), v.literal("deterministic")),
+    }),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.briefId, { delivery: args.delivery, updatedAt: Date.now() });
   },
 });
 
@@ -438,47 +457,60 @@ async function writeAndDeliver(ctx: any, args: { communityId: any; briefDate: st
   const finish = (status: "sent" | "failed", extra: Record<string, unknown>) =>
     ctx.runMutation(internalRefs.communityFounderBrief.finishFounderBriefInternal, { briefId: claim.briefId, status, nowMs: Date.now(), ...extra });
   try {
-    const read = await ctx.runQuery(internalRefs.communityFounderBrief.readFounderBriefSnapshotInternal, {
-      communityId: args.communityId, windowStartMs: claim.windowStartMs, nowMs: claim.windowEndMs,
-    });
-    if (!read) {
-      await finish("failed", { errorCode: "community_unavailable" });
-      return "failed";
-    }
-    const snapshot = read.snapshot as FounderBriefSnapshot;
-    const stats: Record<string, number> = {
-      newMembers: snapshot.newMembers.count, posts: snapshot.activity.posts, replies: snapshot.activity.replies,
-      unanswered: snapshot.unanswered.length, quietNewcomers: snapshot.quietNewcomers.count,
-      joinRequests: snapshot.joinRequestsPending, upcomingEvents: snapshot.upcomingEvents.length,
-    };
-    const modelBrief = snapshotIsQuiet(snapshot)
-      ? null : await writeWithModel(ctx, claim, args.communityId, args.briefDate, snapshot, stats);
-    const writer: "model" | "deterministic" = modelBrief ? "model" : "deterministic";
-    const brief = modelBrief ?? deterministicBrief(snapshot);
-
-    const conversation = await ctx.runMutation(internalRefs.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
-      communityId: args.communityId, trustedUserId: claim.ownerUserId,
-    }) as { thread_id: string };
     const threadMessageKey = `founder-brief:${String(args.communityId)}:${args.briefDate}`;
+    let delivery = claim.delivery as null | {
+      threadId: string; markdown: string; emailPayload: any; communityLifecycleGeneration: number; writer: "model" | "deterministic";
+    };
+    let stats: Record<string, number> | undefined;
+    if (!delivery) {
+      const read = await ctx.runQuery(internalRefs.communityFounderBrief.readFounderBriefSnapshotInternal, {
+        communityId: args.communityId, windowStartMs: claim.windowStartMs, nowMs: claim.windowEndMs,
+      });
+      if (!read) {
+        await finish("failed", { errorCode: "community_unavailable" });
+        return "failed";
+      }
+      const snapshot = read.snapshot as FounderBriefSnapshot;
+      stats = {
+        newMembers: snapshot.newMembers.count, posts: snapshot.activity.posts, replies: snapshot.activity.replies,
+        unanswered: snapshot.unanswered.length, quietNewcomers: snapshot.quietNewcomers.count,
+        joinRequests: snapshot.joinRequestsPending, upcomingEvents: snapshot.upcomingEvents.length,
+      };
+      const modelBrief = snapshotIsQuiet(snapshot)
+        ? null : await writeWithModel(ctx, claim, args.communityId, args.briefDate, snapshot, stats);
+      const brief = modelBrief ?? deterministicBrief(snapshot);
+      const conversation = await ctx.runMutation(internalRefs.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
+        communityId: args.communityId, trustedUserId: claim.ownerUserId,
+      }) as { thread_id: string };
+      const agentPath = buildCommunityTabPath(read.communitySlug, "agent" as any);
+      delivery = {
+        threadId: String(conversation.thread_id),
+        markdown: briefMarkdown(brief),
+        writer: modelBrief ? "model" : "deterministic",
+        communityLifecycleGeneration: read.communityLifecycleGeneration,
+        emailPayload: {
+          communityName: snapshot.communityName, dateLabel: args.briefDate, headline: brief.headline,
+          sections: brief.sections, nextStep: brief.nextStep,
+          actionUrl: agentPath ? `${readCanonicalPublicAppOrigin()}${agentPath}` : readCanonicalPublicAppOrigin(),
+        },
+      };
+      await ctx.runMutation(internalRefs.communityFounderBrief.recordFounderBriefDeliveryInternal, { briefId: claim.briefId, delivery });
+    }
+    const writer = delivery.writer;
     await ctx.runMutation(internalRefs.threads.addCloudThreadMessageForTrustedOwnerInternal, {
-      trustedOwnerId: claim.ownerUserId, threadId: conversation.thread_id, messageKey: threadMessageKey, role: "assistant",
-      contentJson: { text: briefMarkdown(brief), meta: { kind: "founder_brief", brief_date: args.briefDate, writer } },
+      trustedOwnerId: claim.ownerUserId, threadId: delivery.threadId, messageKey: threadMessageKey, role: "assistant",
+      contentJson: { text: delivery.markdown, meta: { kind: "founder_brief", brief_date: args.briefDate, writer } },
     });
-    const agentPath = buildCommunityTabPath(read.communitySlug, "agent" as any);
     await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
       kind: "founder_daily_brief",
       communityId: args.communityId,
-      communityLifecycleGeneration: read.communityLifecycleGeneration,
+      communityLifecycleGeneration: delivery.communityLifecycleGeneration,
       recipientUserId: claim.ownerUserId,
       templateKey: "founder_daily_brief",
-      payload: {
-        communityName: snapshot.communityName, dateLabel: args.briefDate, headline: brief.headline,
-        sections: brief.sections, nextStep: brief.nextStep,
-        actionUrl: agentPath ? `${readCanonicalPublicAppOrigin()}${agentPath}` : readCanonicalPublicAppOrigin(),
-      },
+      payload: delivery.emailPayload,
       dedupeKey: threadMessageKey,
     });
-    await finish("sent", { writer, stats, threadMessageKey });
+    await finish("sent", { writer, ...(stats ? { stats } : {}), threadMessageKey });
     return "sent";
   } catch (error) {
     await finish("failed", { errorCode: error instanceof Error ? error.message.slice(0, 120) : "founder_brief_failed" });

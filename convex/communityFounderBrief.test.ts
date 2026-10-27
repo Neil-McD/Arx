@@ -239,6 +239,35 @@ describe("founder brief delivery", () => {
   });
 });
 
+describe("founder brief retries after a partial delivery", () => {
+  it("re-sends the saved brief to the saved thread and keeps the original window", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const today = localDateAndHour(Date.now(), "UTC").date;
+    const conversation = await t.mutation(internalRefs.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
+      communityId: f.communityId, trustedUserId: f.ownerId,
+    });
+    const windowEndMs = Date.now() - 2 * HOUR_MS;
+    await t.run((ctx) => ctx.db.insert("communityFounderBriefs", {
+      communityId: f.communityId, ownerUserId: f.ownerId, briefDate: today, status: "failed", attempts: 1,
+      windowStartMs: windowEndMs - DAY, windowEndMs, leaseExpiresAt: 0, createdAt: windowEndMs, updatedAt: windowEndMs,
+      delivery: {
+        threadId: String(conversation.thread_id), markdown: "**The saved brief**", writer: "deterministic",
+        communityLifecycleGeneration: 0,
+        emailPayload: { communityName: "Dawn Patrol", headline: "The saved brief", sections: [], nextStep: null, actionUrl: "https://polynet.test" },
+      },
+    } as any));
+    expect(await t.action(internalRefs.communityFounderBrief.sendFounderBriefNowInternal, { communityId: f.communityId })).toBe("sent");
+    const state = await t.run(async (ctx) => ({
+      brief: await ctx.db.query("communityFounderBriefs").first(),
+      message: (await ctx.db.query("cloudMessages" as any).collect()).find((row: any) => row.contentJson?.meta?.kind === "founder_brief"),
+    }));
+    expect(state.brief).toMatchObject({ status: "sent", attempts: 2, windowEndMs });
+    expect((state.message as any).contentJson.text).toBe("**The saved brief**");
+    expect(String((state.message as any).threadId)).toBe(String(conversation.thread_id));
+  });
+});
+
 describe("staging seed for the brief", () => {
   it("refuses without POLYNET_ALLOW_SEED, then seeds a run club the brief can read, and re-seeds cleanly", async () => {
     const t = convexTest(schema, modules);
