@@ -1,0 +1,112 @@
+name: CLA
+
+# Every contributor signs the Contributor License Agreement (CLA.md) once, by
+# commenting the sign phrase on their pull request. Signatures are kept in
+# signatures/cla.json on the cla-signatures branch.
+#
+# Safe on a public repository: this workflow never checks out or runs a pull
+# request's code. It reads PR metadata through the API and compares comments
+# against one exact phrase.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+
+# No concurrency group: a queued run would replace another queued run and drop a
+# signing comment. Signature writes are optimistic (file sha) and retried instead.
+
+jobs:
+  cla:
+    name: CLA
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+        (github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA' ||
+         github.event.comment.body == 'recheck'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check CLA signatures
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const SIGN = "I have read the CLA Document and I hereby sign the CLA";
+            const BRANCH = "cla-signatures";
+            const FILE = "signatures/cla.json";
+            const CLA_URL = "https://github.com/Neil-McD/Arx/blob/main/CLA.md";
+            const MARKER = "<!-- polynet-cla -->";
+            const ALLOW = new Set(["neil-mcd"]);
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request?.number ?? context.payload.issue.number;
+            const pr = (await github.rest.pulls.get({ owner, repo, pull_number: number })).data;
+
+            // Everyone who wrote a commit in this PR, plus its author.
+            const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: number, per_page: 100 });
+            const people = new Map();
+            const unlinked = [];
+            const add = (user) => { if (user?.login) people.set(user.login.toLowerCase(), { login: user.login, id: user.id }); };
+            add(pr.user);
+            for (const commit of commits) {
+              if (commit.author?.login) add(commit.author);
+              else unlinked.push(commit.sha.slice(0, 7)); // never echo author-controlled text
+            }
+            const needs = [...people.values()].filter((p) => !ALLOW.has(p.login.toLowerCase()) && !p.login.endsWith("[bot]"));
+
+            async function readSignatures() {
+              const file = await github.rest.repos.getContent({ owner, repo, path: FILE, ref: BRANCH });
+              return { sha: file.data.sha, data: JSON.parse(Buffer.from(file.data.content, "base64").toString("utf8")) };
+            }
+
+            // Record a signature when someone in this PR comments the exact phrase.
+            const comment = context.payload.comment;
+            if (context.eventName === "issue_comment" && comment.body.trim() === SIGN) {
+              const signer = needs.find((p) => p.login.toLowerCase() === comment.user.login.toLowerCase());
+              for (let attempt = 0; signer && attempt < 3; attempt += 1) {
+                const { sha, data } = await readSignatures();
+                if (data.signatures.some((s) => s.id === signer.id)) break;
+                data.signatures.push({ login: signer.login, id: signer.id, signedAt: new Date().toISOString(),
+                  pullRequest: number, commentId: comment.id, claDocument: CLA_URL });
+                try {
+                  await github.rest.repos.createOrUpdateFileContents({ owner, repo, path: FILE, branch: BRANCH, sha,
+                    message: `CLA signed by @${signer.login} in #${number}`,
+                    content: Buffer.from(JSON.stringify(data, null, 2) + "\n").toString("base64") });
+                  break;
+                } catch (error) {
+                  if (error.status !== 409 || attempt === 2) throw error;
+                }
+              }
+            }
+
+            const signedIds = new Set((await readSignatures()).data.signatures.map((s) => s.id));
+            const missing = needs.filter((p) => !signedIds.has(p.id));
+            const ok = missing.length === 0 && unlinked.length === 0;
+
+            await github.rest.repos.createCommitStatus({ owner, repo, sha: pr.head.sha, context: "CLA",
+              state: ok ? "success" : "failure",
+              description: ok ? "All contributors have signed the CLA." : "Contributors need to sign the CLA.",
+              target_url: CLA_URL });
+
+            const lines = ok
+              ? ["All contributors have signed the [CLA](" + CLA_URL + "). Thank you!"]
+              : [
+                  "Thanks for contributing to Polynet! Before we can merge, every contributor needs to sign our [Contributor License Agreement](" + CLA_URL + ") once. You keep the copyright in your work.",
+                  "",
+                  ...(missing.length ? ["To sign, comment exactly:", "", "```", SIGN, "```", "", "Still to sign: " + missing.map((p) => "@" + p.login).join(", ")] : []),
+                  ...(unlinked.length ? ["", "Some commits aren't linked to a GitHub account (" + unlinked.map((sha) => "`" + sha + "`").join(", ") + "). Add their author email to your GitHub account, then comment `recheck`."] : []),
+                ];
+            const body = MARKER + "\n" + lines.join("\n");
+            const existing = (await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 }))
+              .find((c) => c.user?.type === "Bot" && c.body?.startsWith(MARKER));
+            if (existing) {
+              if (existing.body !== body) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else if (!ok) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
+            }
+            if (!ok) core.setFailed("Contributors need to sign the CLA: " + [...missing.map((p) => p.login), ...unlinked].join(", "));

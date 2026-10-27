@@ -24,8 +24,8 @@ simple.
    ```
 
 4. Fill in every section of the pull request template.
-5. Sign the [Contributor License Agreement](CLA.md) when the CLA bot asks. It
-   takes one click on your first pull request.
+5. Sign the [Contributor License Agreement](CLA.md) when the CLA bot asks: reply
+   to its comment with the sign phrase, once, on your first pull request.
 
 ## Review
 
