@@ -258,7 +258,11 @@ assert.doesNotMatch(`${publicLanding}\n${publicLandingStyles}`, /premium-simplif
 assert.match(envExample, /POLYNET_FOUNDER_STRIPE_PRICE_ID=/);
 assert.doesNotMatch(envExample, /STRIPE_BUILDER_PLAN_(?:BUILDER|PRO)_PRICE_ID/);
 assert.doesNotMatch(modelCatalog, /PREMIUM_MODELS|PremiumModelCatalogEntry|getPremiumModelCatalog/);
-assert.match(modelCatalog, /CONNECTED_PROVIDER_MODELS/);
+assert.doesNotMatch(
+  modelCatalog,
+  /CONNECTED_PROVIDER_MODELS|FREE_MODELS|supportedFundingSources/,
+  "there is no model catalog to sell or connect: every turn runs the founder-funded community model",
+);
 assert.doesNotMatch(
   retiredPremiumStyles,
   /premium-gate-|premium-locked|premium-member-badge|billing-plan-col--premium/,
