@@ -85,6 +85,7 @@ const communityInferenceSurfaceValidator = v.union(
   v.literal("community_autonomous_cognition"),
   v.literal("community_workflow_action"),
   v.literal("community_setup_generation"),
+  v.literal("community_founder_brief"),
 );
 
 function normalizedId(value: unknown): string {

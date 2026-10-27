@@ -8,6 +8,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "event_reminder",
   "mention_notification",
   "dm_message_notification",
+  "founder_daily_brief",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -131,6 +132,24 @@ function renderDigestItems(items: DigestItem[]): { html: string; text: string } 
         .filter(Boolean)
         .join("\n"),
     )
+    .join("\n\n");
+  return { html, text };
+}
+
+function renderBriefSections(sections: Array<{ title: string; items: string[] }>): { html: string; text: string } {
+  if (sections.length === 0) return { html: "", text: "" };
+  const html = sections
+    .map((section) => `
+        <div style="margin:0 0 18px;">
+          <div style="font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#b3ad9f;">${escapeHtml(section.title)}</div>
+          <ul style="margin:8px 0 0;padding-left:18px;font-size:15px;line-height:1.55;color:#d6d0c6;">
+            ${section.items.map((item) => `<li style="margin:0 0 6px;">${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </div>
+      `)
+    .join("");
+  const text = sections
+    .map((section) => [section.title.toUpperCase(), ...section.items.map((item) => `- ${item}`)].join("\n"))
     .join("\n\n");
   return { html, text };
 }
@@ -300,6 +319,32 @@ export function renderEmailTemplate(params: {
             : "Open Polynet to read it.",
         "Open message",
       );
+    }
+    case "founder_daily_brief": {
+      const sections = readArray(payload.sections)
+        .map((section) => asRecord(section))
+        .map((section) => ({
+          title: readString(section.title),
+          items: readArray(section.items).map(readString).filter(Boolean),
+        }))
+        .filter((section) => section.title && section.items.length);
+      const rendered = renderBriefSections(sections);
+      const nextStep = readString(payload.nextStep);
+      const shell = buildEmailShell({
+        title: readString(payload.headline) || `Your ${communityName} brief`,
+        subtitle: dateLabel ? `${communityName} · ${dateLabel}` : communityName,
+        bodyHtml: rendered.html + (nextStep
+          ? `<div style="margin-top:4px;font-size:15px;line-height:1.55;color:#fcf8f0;"><strong>Suggested next step:</strong> ${escapeHtml(nextStep)}</div>`
+          : ""),
+        ctaLabel: "Open your agent",
+        ctaUrl: readString(payload.actionUrl),
+        footerNote: "Your community agent writes this brief each morning from your community's activity. It never includes what members say to the agent privately.",
+      });
+      return {
+        subject: `Your ${communityName} brief${dateLabel ? ` · ${dateLabel}` : ""}`,
+        html: shell.html,
+        text: [shell.text, rendered.text, nextStep ? `Suggested next step: ${nextStep}` : ""].filter(Boolean).join("\n\n"),
+      };
     }
     case "event_reminder":
       return renderTransactionalTemplate(
