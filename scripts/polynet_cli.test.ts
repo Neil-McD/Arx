@@ -83,7 +83,7 @@ test("the published package is exactly the command, its library and checks, READ
   const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json"], { cwd: join(__dirname, "../packages/polynet-cli"), encoding: "utf8" }))[0];
   expect(packed.name).toBe("@polynet/cli");
   expect(packed.files.map((file: { path: string }) => file.path).sort()).toEqual([
-    "README.md", "bin/polynet.mjs", "checks.mjs",
+    "LICENSE", "README.md", "bin/polynet.mjs", "checks.mjs",
     "guide/AGENTS.md", "guide/CLAUDE.md",
     ...["accessibility", "build-site", "deploy-verify", "design", "sdk"].map((name) => `guide/skills/polynet-${name}/SKILL.md`),
     "lib.mjs", "package.json",

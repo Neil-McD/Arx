@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT (see LICENSING.md and ./LICENSE-MIT)
 // The builder doc, served at https://polynet.page/llms.txt (the front door) and
 // /__polynet/llms.txt on every community site: everything an AI (or a person)
 // needs to build and deploy a community's front end. Kept beside the SDK so
