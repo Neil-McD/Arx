@@ -203,7 +203,6 @@ import type * as operatorEntitlementsCore from "../operatorEntitlementsCore.js";
 import type * as operatorGrantUsageCore from "../operatorGrantUsageCore.js";
 import type * as operatorIntelligence from "../operatorIntelligence.js";
 import type * as operatorSentryDiagnostics from "../operatorSentryDiagnostics.js";
-import type * as personalMemory from "../personalMemory.js";
 import type * as platformDiagnostics from "../platformDiagnostics.js";
 import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as platformOperationExecutor from "../platformOperationExecutor.js";
@@ -449,7 +448,6 @@ declare const fullApi: ApiFromModules<{
   operatorGrantUsageCore: typeof operatorGrantUsageCore;
   operatorIntelligence: typeof operatorIntelligence;
   operatorSentryDiagnostics: typeof operatorSentryDiagnostics;
-  personalMemory: typeof personalMemory;
   platformDiagnostics: typeof platformDiagnostics;
   platformHomeCommunity: typeof platformHomeCommunity;
   platformOperationExecutor: typeof platformOperationExecutor;

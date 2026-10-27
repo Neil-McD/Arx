@@ -8,8 +8,8 @@ row changes.
 Status: written October 27, 2026 from `main` at `d63eb4a63`. Code paths are
 `convex/<module>.ts` unless shown otherwise.
 
-**Status column:** **Keep** (core), **Going** (removal planned), **Decide**
-(waiting on Neil), **Dead** (no first-party caller; the gate's
+**Status column:** **Keep** (core), **Going** (removal planned; Neil decided
+Oct 27), **Dead** (no first-party caller; the gate's
 `no_orphan_modules_proof` fails on any new one). **Hand-run** modules have no
 code caller on purpose and are named, with a reason, in that proof's exceptions.
 
@@ -67,10 +67,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [community-member-arrival-v1.md](community-member-arrival-v1.md),
   [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),
   [url-routing-contract-v1.md](url-routing-contract-v1.md).
-- **Decide:** the funnel editor (`communityFunnel`, `communityFunnelValidators`,
-  `communityFunnels` table,
-  Studio funnel editor). Community sites are now the front door; keep only a
-  plain join and checkout page?
+- **Going (Neil, Oct 27):** the funnel editor and AI composer (`communityFunnel`,
+  `communityFunnelValidators`, `communityFunnels` table, Studio funnel editor).
+  Community sites are the front door; only a plain join and checkout page stays.
 - **Hand-run:** `communityMaintenance` (purges orphaned user artifacts).
 - **Retiring tables:** `communityOnboardingSessions` (no writers),
   `communityOnboardingConfigs`. Deleted Oct 27: `communityFeatured`,
@@ -150,8 +149,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [community-lineage-ontology-contract-v0.md](community-lineage-ontology-contract-v0.md),
   [community-evidence-integrity-contract-v1.md](community-evidence-integrity-contract-v1.md),
   [member-ontology-contract-v1.md](member-ontology-contract-v1.md).
-- **Going:** `personalMemory`, `personalMemoryItems` and `userMemorySettings`
-  (personal-agent era);
+- **Going:** `personalMemoryItems` and `userMemorySettings` tables (personal-agent
+  era; the `personalMemory` module was deleted Oct 27);
   `communityAiFeed*` tables and `communityAiFeedRetirement` (feature retired).
 - **Hand-run:** `communityCognitionCleanup` (drains a deleted community's cognition
   data).
@@ -185,14 +184,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [native-agent-runtime-context-contract-v1.md](native-agent-runtime-context-contract-v1.md),
   [community-agent-conversations.md](community-agent-conversations.md),
   [community-agent-conversation-end-state-v1.md](community-agent-conversation-end-state-v1.md).
-- **Going:** personal-agent leftovers (global member-agent channel,
-  `/runtime/list_personal_memory_items`, personal skills, the `asPersonalAgent`
-  alias); internal `personal_agent` and "member agent" names, renamed to the
-  community agent; `openRouterNativeTransport`, `xAiSearchTransport` (POL-10).
-- **Decide:** skills inside the harness (`runtimeSkillResolution`, which reads
-  `communitySkillAttachments`).
-- **Decide too:** `harnessMounts`, `harnessSkills` (no caller; kept until the
-  skills decision).
+- **Deleted Oct 27 (POL-19):** the global member-agent channel functions
+  (`ensureMemberAgentGlobalChannel`, `startNewMemberAgentGlobalEpisode`) and
+  `/runtime/list_personal_memory_items`. Stored global conversations stay readable
+  as history; `memberAgentChannels` and `memberAgentEpisodes` stay (community
+  conversations use them).
+- **Going:** the `asPersonalAgent` argument alias (with the rename; old-client
+  contract first); internal `personal_agent` and "member agent" names, renamed to
+  the community agent; `openRouterNativeTransport`, `xAiSearchTransport` (POL-10).
+- **Going (Neil, Oct 27):** skills and harness: `harnessMounts`, `harnessSkills`,
+  personal skills, and the skill path in `runtimeSkillResolution`.
 
 ### 9. Proactive agent — Keep, growing
 
@@ -259,9 +260,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [legal/](legal/).
 - **Direction:** community free, agent paid (about $49 a month with an included
   budget), pending its spec. Today's code still sells the $79 founder plan.
-- **Decide:** retired Workspace money tables (`workspaceCreditBalances`,
+- **Going (Neil, Oct 27):** retired Workspace money tables (`workspaceCreditBalances`,
   `workspaceComputeCharges`, `workspaceUsageCollections`, `creditLedgerEntries`,
-  `legacyProgramGrants`, `workspaceCredits` module); no writers found.
+  `legacyProgramGrants`, `workspaceCredits` module); no writers found. Production
+  backup first; Neil signs off on the data deletion.
 - **Deleted Oct 27:** `entitlements`.
 
 ### 13. Email — Keep
@@ -288,7 +290,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `distributionAttributionDeliveries`.
 - **Contracts:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md).
 
-### 15. Integrations and skills — Decide
+### 15. Integrations and skills — Going (Neil, Oct 27)
 
 - **Code:** `communityIntegration*`, `providerConnections`, `providerConnectionProbes`,
   `httpCommunitySourceIntegrations` (GitHub and Google Drive callbacks),
@@ -302,8 +304,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`,
   `communitySkillAttachments`.
 - **Contracts:** [skill-harness-contract.md](skill-harness-contract.md).
-- **Decide too:** `userPlatformSkills`, `skillPackages` (no caller; kept until the
-  skills decision). Deleted Oct 27: `providerConnectionProbes`.
+- **Going:** all of this area, including the Studio integrations page.
+  Production still calls `communityIntegrationActions:verifyConnection` and the
+  funnel operations, so the web and backend removals ship in one release.
+  Deleted Oct 27: `providerConnectionProbes`.
 
 ### 16. Voice — Keep
 
@@ -344,9 +348,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 1. **Dead code:** done Oct 27 (POL-17). `no_orphan_modules_proof` and
    `system_map_coverage_proof` keep orphans and unmapped modules and tables out.
-   Next: the personal-agent leftovers.
-2. **Workflows and forms:** remove after a read-only production usage check;
-   tables retire over two releases.
-3. **One agent name:** rename `personal_agent` and "member agent" in code.
-4. **Decisions:** funnel editor, harness and skills, Workspace money tables,
-   integrations.
+   Personal-agent leftovers: done Oct 27 (POL-19).
+2. **Old features:** Workflows and Forms, the funnel editor, skills and harness,
+   integrations. Read-only production usage check first; tables retire over two
+   releases.
+3. **Legacy chat** retirement.
+4. **One agent name:** rename `personal_agent` and "member agent" in code.
+5. **Data deletion release:** production backup, then Neil signs off on each
+   table's deletion.

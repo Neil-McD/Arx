@@ -2,7 +2,6 @@ import { api } from "./_generated/api";
 import type { PublicHttpAction } from "convex/server";
 import {
   loadPlatformModelMap,
-  normalizePositiveInt,
   parseBoolish,
   parseOptionalString,
   parseProviderModelRef,
@@ -12,13 +11,6 @@ type RuntimeModelRegistryInput = {
   id?: unknown;
   model_id?: unknown;
   enabled?: unknown;
-};
-
-type RuntimePersonalMemoryInput = {
-  user_id?: unknown;
-  scope?: unknown;
-  scope_id?: unknown;
-  limit?: unknown;
 };
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
@@ -46,20 +38,6 @@ type RegisterRuntimeContextRoutesArgs = {
   requireAuthenticatedSubject: RequireAuthenticatedSubject;
 };
 
-function parseIsoToEpochSeconds(raw: unknown): number | null {
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    return Math.floor(raw);
-  }
-  if (typeof raw !== "string") return null;
-  const value = raw.trim();
-  if (!value) return null;
-  const asNumber = Number(value);
-  if (Number.isFinite(asNumber)) return Math.floor(asNumber);
-  const parsedMs = Date.parse(value);
-  if (!Number.isFinite(parsedMs)) return null;
-  return Math.floor(parsedMs / 1000);
-}
-
 export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesArgs): void {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedSubject } = args;
 
@@ -69,11 +47,6 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
     handler: httpAction(async (_ctx, req) => optionsResponse(req)),
   });
 
-  http.route({
-    path: "/runtime/list_personal_memory_items",
-    method: "OPTIONS",
-    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
-  });
 
   http.route({
     path: "/runtime/list_enabled_model_registry",
@@ -137,54 +110,4 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
     }),
   });
 
-  http.route({
-    path: "/runtime/list_personal_memory_items",
-    method: "POST",
-    handler: httpAction(async (ctx, req) => {
-      let input: RuntimePersonalMemoryInput = {};
-      try {
-        input = (await req.json()) as RuntimePersonalMemoryInput;
-      } catch {
-        input = {};
-      }
-
-      const auth = await requireAuthenticatedSubject(ctx, req);
-      if (!auth.ok) return auth.response;
-      const scopeRaw = parseOptionalString(input.scope, 24);
-      const scope = scopeRaw === "global" || scopeRaw === "workspace" ? scopeRaw : undefined;
-      const scopeId = parseOptionalString(input.scope_id, 240) ?? undefined;
-      const limit = normalizePositiveInt(input.limit, 200, 1000);
-      const rows = (await (ctx as any).runQuery(api.personalMemory.listPersonalMemoryItems as any, {
-        authSubject: auth.authSubject,
-        scope,
-        scopeId,
-        limit,
-      })) as Array<{
-        id?: string;
-        content?: string;
-        scope?: string;
-        scope_id?: string | null;
-        pinned?: boolean;
-        created_at?: string;
-        updated_at?: string;
-      }>;
-
-      const normalized = rows.map((row, index) => {
-        const nowSec = Math.floor(Date.now() / 1000);
-        const updatedAt =
-          parseIsoToEpochSeconds(row?.updated_at) ??
-          parseIsoToEpochSeconds(row?.created_at) ??
-          nowSec - Math.max(0, index);
-        return {
-          id: String(row?.id ?? "").trim(),
-          content: String(row?.content ?? ""),
-          scope: String(row?.scope ?? "global"),
-          scope_id: row?.scope_id ?? null,
-          pinned: row?.pinned === true ? 1 : 0,
-          updated_at: updatedAt,
-        };
-      });
-      return jsonResponse(req, 200, normalized);
-    }),
-  });
 }

@@ -22,11 +22,11 @@ const ALLOWED = new Map([
   ["communityChannelBackfill", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityAiFeedRetirement", "data retirement job; removed with the AI feed tables"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
-  ["communitySkillAttachments", "skills and harness: waiting on Neil's decision"],
-  ["harnessMounts", "skills and harness: waiting on Neil's decision"],
-  ["harnessSkills", "skills and harness: waiting on Neil's decision"],
-  ["skillPackages", "skills and harness: waiting on Neil's decision"],
-  ["userPlatformSkills", "skills and harness: waiting on Neil's decision"],
+  ["communitySkillAttachments", "skills and harness: being removed (Neil, Oct 27)"],
+  ["harnessMounts", "skills and harness: being removed (Neil, Oct 27)"],
+  ["harnessSkills", "skills and harness: being removed (Neil, Oct 27)"],
+  ["skillPackages", "skills and harness: being removed (Neil, Oct 27)"],
+  ["userPlatformSkills", "skills and harness: being removed (Neil, Oct 27)"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })

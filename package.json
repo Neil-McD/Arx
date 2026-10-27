@@ -214,7 +214,6 @@
     "check:personal-skill-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/personal_skill_runtime_contract_proof.ts",
     "check:community-overlay-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_overlay_runtime_behavior_proof.ts",
     "check:community-lens-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lens_runtime_contract_proof.ts",
-    "check:personal-memory-access-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/personal_memory_access_policy_proof.ts",
     "check:polynet-workspace-mcp-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_contract_proof.ts",
     "check:polynet-workspace-mcp-auth-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_auth_contract_proof.ts",
     "check:polynet-profile-mcp-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_profile_mcp_contract_proof.ts",
