@@ -5,7 +5,7 @@ contribution while keeping Polynet's licensing ([LICENSING.md](LICENSING.md))
 possible: the AGPL-3.0 platform, the MIT parts, and commercial licenses. You
 keep the copyright in your contribution.
 
-You agree to it by signing through the CLA bot on your first pull request.
+You agree to it by signing through the CLA Assistant bot on your first pull request (one click with your GitHub account). The bot keeps a record of who signed which version.
 
 ## 1. Definitions
 

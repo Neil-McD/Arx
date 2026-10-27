@@ -17,7 +17,8 @@ their own, built by their AI agent and served on `<community>.polynet.page`.
   agent.
 
 The easiest way to use Polynet is the hosted service at
-[polynet.ai](https://polynet.ai).
+[polynet.ai](https://polynet.ai). Community sites and `@polynet/cli` are in
+preview: today they run against Polynet's staging environment.
 
 ## This repository
 

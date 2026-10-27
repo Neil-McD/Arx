@@ -29,6 +29,14 @@ so a community's site, its AI agent and its tools never carry AGPL obligations:
 A community's own site, built on these, belongs to its founder under whatever
 license they choose.
 
+## Not covered
+
+- **Polynet brand assets**: the Polynet name, logo and favicons
+  (`apps/web/public/favicon*`, `apps/web/public/landing-polynet/`) are not
+  licensed under the AGPL or MIT. See [TRADEMARK.md](TRADEMARK.md).
+- **Third-party marks**, such as the app logos in `apps/web/public/app-logos/`,
+  belong to their owners and are used only to identify those services.
+
 ## Commercial licenses
 
 If the AGPL doesn't work for your organization, a commercial license is
