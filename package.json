@@ -35,7 +35,7 @@
     "check:legacy-route-surface-guard": "bash scripts/legacy_route_surface_guard.sh",
     "check:no-compat-rpc-primitive-guard": "bash scripts/no_compat_rpc_primitive_guard.sh",
     "check:auth-env-contract-guard": "bash scripts/auth_env_contract_guard.sh",
-    "ops:auth-runtime-readiness": "bash scripts/auth_runtime_readiness_check.sh",
+    "ops:auth-runtime-readiness": "bash scripts/auth_runtime_readiness.sh",
     "check:no-direct-legacy-auth-imports-guard": "bash scripts/no_direct_legacy_auth_imports_guard.sh",
     "check:legacy-function-transport-surface-guard": "bash scripts/legacy_function_transport_surface_guard.sh",
     "check:convex-client-surface-guard": "bash scripts/convex_client_surface_guard.sh",

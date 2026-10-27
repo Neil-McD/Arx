@@ -1,6 +1,7 @@
 // Runs every `check:*` script in package.json that the release gate does not
 // already run, so no check can exist without running. Also fails when a check
-// file in scripts/ is not wired into package.json or another script.
+// file in scripts/ is not run by the gate, a script it runs, or a script file
+// one of those runs.
 //
 // Usage: node scripts/run_all_checks.mjs [--list]
 
@@ -35,23 +36,47 @@ for (let grew = true; grew; ) {
 reached.add("check:all");
 const pending = Object.keys(scripts).filter((name) => name.startsWith("check:") && !reached.has(name));
 
-// Every check file must be wired somewhere, or it silently never runs.
+// Every check file must be run by something the gate runs, or it silently never
+// runs. Trace from the gate and every reached package script through script
+// files that reference each other in code (comments don't count).
+const webScripts = JSON.parse(readFileSync(join(ROOT, "apps/web/package.json"), "utf8")).scripts ?? {};
+const ranRoot = new Set([...reached, ...pending]);
+const ranWeb = new Set();
+for (const name of ranRoot) {
+  for (const match of (scripts[name] ?? "").matchAll(/npm --prefix apps\/web run ([\w:.-]+)/g)) ranWeb.add(match[1]);
+}
+const stripComments = (file, text) =>
+  file.endsWith(".sh")
+    ? text.replace(/^\s*#.*$/gm, "")
+    : text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
 const scriptDir = join(ROOT, "scripts");
 const scriptFiles = readdirSync(scriptDir).filter((file) => statSync(join(scriptDir, file)).isFile());
-const scriptText = new Map(scriptFiles.map((file) => [file, readFileSync(join(scriptDir, file), "utf8")]));
-const packageText = [join(ROOT, "package.json"), join(ROOT, "apps/web/package.json")]
-  .map((path) => JSON.stringify(JSON.parse(readFileSync(path, "utf8")).scripts ?? {}))
-  .join("\n");
-const referencedByAnotherScript = (file) => {
-  const stem = file.replace(/\.(ts|mjs|sh)$/, "");
-  return [...scriptText].some(([other, text]) => other !== file && text.includes(stem));
+const scriptCode = new Map(scriptFiles.map((file) => [file, stripComments(file, readFileSync(join(scriptDir, file), "utf8"))]));
+const references = (code, file) => {
+  const stem = escape(file.replace(/\.(ts|mjs|js|sh)$/, ""));
+  return new RegExp(`["'\`/\\s]${stem}(\\.(ts|mjs|js|sh))?["'\`\\s]`).test(code);
 };
-const unwired = scriptFiles.filter(
-  (file) => CHECK_FILE.test(file) && !NOT_CHECKS.test(file) && !packageText.includes(file) && !referencedByAnotherScript(file),
-);
+const runText = [...[...ranRoot].map((name) => scripts[name] ?? ""), ...[...ranWeb].map((name) => webScripts[name] ?? "")]
+  .map((command) => ` ${command} `)
+  .join("\n");
+const ranFiles = new Set(GATE_FILES.map((path) => path.replace("scripts/", "")));
+for (const file of scriptFiles) if (references(runText, file)) ranFiles.add(file);
+for (let grew = true; grew; ) {
+  grew = false;
+  for (const runner of [...ranFiles]) {
+    for (const file of scriptFiles) {
+      if (!ranFiles.has(file) && references(scriptCode.get(runner) ?? "", file)) {
+        ranFiles.add(file);
+        grew = true;
+      }
+    }
+  }
+}
+const unwired = scriptFiles.filter((file) => CHECK_FILE.test(file) && !NOT_CHECKS.test(file) && !ranFiles.has(file));
 
 if (process.argv.includes("--list")) {
   console.log(pending.join("\n"));
+  if (unwired.length) console.log(`\nunwired:\n  ${unwired.join("\n  ")}`);
   process.exit(0);
 }
 
@@ -79,7 +104,7 @@ for (const result of failed) {
   console.log(`FAIL ${result.name}\n${result.output.split("\n").filter(Boolean).slice(-15).join("\n")}\n`);
 }
 if (unwired.length) {
-  console.log(`FAIL: check files not wired into package.json or another script:\n  ${unwired.join("\n  ")}`);
+  console.log(`FAIL: check files nothing in the gate runs:\n  ${unwired.join("\n  ")}`);
 }
 console.log(`run_all_checks: ${results.length - failed.length}/${results.length} passed outside the gate's own steps`);
 process.exit(failed.length || unwired.length ? 1 : 0);
