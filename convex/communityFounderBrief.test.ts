@@ -132,6 +132,9 @@ describe("founder brief delivery", () => {
   it("schedules the next brief at the founder's next local hour", () => {
     expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T08:30:00.000Z"), 8, "UTC")).toISOString()).toBe("2026-10-27T08:00:00.000Z");
     expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T13:30:00.000Z"), 8, "America/New_York")).toISOString()).toBe("2026-10-27T12:00:00.000Z");
+    // Fractional offsets land on the local hour too.
+    expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T12:00:00.000Z"), 8, "Asia/Kolkata")).toISOString()).toBe("2026-10-27T02:30:00.000Z");
+    expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T12:00:00.000Z"), 8, "Asia/Kathmandu")).toISOString()).toBe("2026-10-27T02:15:00.000Z");
     // Across the US daylight-saving change, 8am moves from 12:00 to 13:00 UTC.
     expect(new Date(nextOccurrenceMs(Date.parse("2026-10-31T13:00:00.000Z"), 8, "America/New_York")).toISOString()).toBe("2026-11-01T13:00:00.000Z");
   });

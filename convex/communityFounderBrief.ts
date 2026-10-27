@@ -248,11 +248,19 @@ export function briefMarkdown(brief: FounderBrief): string {
 const MAX_ATTEMPTS = 3;
 const RETRY_AFTER_MS = 30 * 60 * 1000;
 
-// The next top of the hour after afterMs whose local hour is localHour.
+function localMinute(nowMs: number, timeZone: string): number {
+  const minute = new Intl.DateTimeFormat("en-US", { timeZone, minute: "2-digit" })
+    .formatToParts(new Date(nowMs)).find((part) => part.type === "minute")?.value;
+  return Number(minute ?? 0);
+}
+
+// The next moment after afterMs when it is localHour:00 in the founder's time
+// zone. Steps in quarter hours, so fractional offsets (India, Nepal) land on time.
 export function nextOccurrenceMs(afterMs: number, localHour: number, timeZone: string): number {
-  let at = Math.floor(afterMs / HOUR_MS) * HOUR_MS + HOUR_MS;
-  for (let step = 0; step < 50; step += 1, at += HOUR_MS) {
-    if (localDateAndHour(at, timeZone).hour === localHour) return at;
+  const QUARTER_MS = HOUR_MS / 4;
+  let at = Math.floor(afterMs / QUARTER_MS) * QUARTER_MS + QUARTER_MS;
+  for (let step = 0; step < 4 * 50; step += 1, at += QUARTER_MS) {
+    if (localDateAndHour(at, timeZone).hour === localHour && localMinute(at, timeZone) === 0) return at;
   }
   return afterMs + DAY_MS;
 }
