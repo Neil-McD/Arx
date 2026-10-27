@@ -128,10 +128,12 @@ export function getRequestOrigin(req) {
   return host ? `${proto}://${host}` : "";
 }
 
+// A path on this site only. Browsers read "/\\host" and tabs or newlines inside a
+// URL as "//host", so backslashes and control characters are refused too.
 export function normalizeReturnToPath(raw) {
   const value = String(raw ?? "").trim();
   if (!value) return DEFAULT_POST_SIGN_IN_PATH;
-  if (value.startsWith("//")) return DEFAULT_POST_SIGN_IN_PATH;
+  if (value.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(value)) return DEFAULT_POST_SIGN_IN_PATH;
   if (value.startsWith("/")) return value;
   if (value.startsWith("#")) return `${DEFAULT_POST_SIGN_IN_PATH}${value}`;
   return DEFAULT_POST_SIGN_IN_PATH;
@@ -139,7 +141,9 @@ export function normalizeReturnToPath(raw) {
 
 export function buildRedirectUrl(req, returnTo, params = {}) {
   const origin = getRequestOrigin(req) || "http://localhost";
-  const url = new URL(normalizeReturnToPath(returnTo), origin);
+  let url = new URL(normalizeReturnToPath(returnTo), origin);
+  // Belt and braces: never redirect off this site.
+  if (url.origin !== new URL(origin).origin) url = new URL(DEFAULT_POST_SIGN_IN_PATH, origin);
   for (const [key, value] of Object.entries(params)) {
     if (value === null || value === undefined || value === "") continue;
     url.searchParams.set(key, String(value));

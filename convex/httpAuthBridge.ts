@@ -41,7 +41,10 @@ function hasValidBridgeSecret(req: Request): boolean {
   const expected = readBridgeSecret();
   if (!expected) return false;
   const provided = String(req.headers.get("x-arx-auth-bridge-secret") ?? "").trim();
-  return Boolean(provided) && provided === expected;
+  if (!provided || provided.length !== expected.length) return false;
+  let diff = 0;
+  for (let index = 0; index < expected.length; index += 1) diff |= provided.charCodeAt(index) ^ expected.charCodeAt(index);
+  return diff === 0;
 }
 
 function buildSessionId(): string {
