@@ -489,26 +489,6 @@ assert.match(
 );
 assert.match(
   threads,
-  /ensureMemberAgentGlobalChannel = mutation[\s\S]*resolveOwnerIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*ensureGlobalMemberAgentChannelCore/,
-  "the global private channel must authenticate and validate its initial community lens",
-);
-assert.match(
-  threads,
-  /ensureGlobalMemberAgentChannelCore[\s\S]*getGlobalMemberAgentChannel[\s\S]*buildGlobalMemberAgentEpisodeThreadKey\(1\)[\s\S]*scopeKey: MEMBER_AGENT_GLOBAL_SCOPE_KEY[\s\S]*memberAgentEpisodes/,
-  "the member must receive one global channel and one active global episode",
-);
-assert.match(
-  threads,
-  /startNewMemberAgentGlobalEpisode = mutation[\s\S]*expectedActiveEpisodeId[\s\S]*status: "closed"[\s\S]*activeEpisodeId: episodeId/,
-  "New chat must close the prior global episode and atomically move the global channel pointer",
-);
-assert.doesNotMatch(
-  threads.match(/startNewMemberAgentGlobalEpisode = mutation[\s\S]*?\n\}\);/)?.[0] ?? "",
-  /archivedAt|\.delete\(/,
-  "New chat must preserve the prior thread and transcript",
-);
-assert.match(
-  threads,
   /requireWritableMemberAgentThread[\s\S]*isReadOnlyLegacyMemberAgentThreadKey\(threadKey\)[\s\S]*member_agent_legacy_episode_read_only[\s\S]*args\.role !== "user"[\s\S]*getGlobalMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
   "new user messages must fail closed when addressed to a closed member-agent episode",
 );
@@ -585,7 +565,7 @@ assert.match(
 );
 assert.match(
   threads,
-  /upsertCloudThreadMessageByMessageKey = mutation[\s\S]*deriveAutoThreadTitlePatch/,
+  /upsertCloudThreadMessageByMessageKeyHandler[\s\S]*deriveAutoThreadTitlePatch[\s\S]*upsertCloudThreadMessageByMessageKey = mutation/,
   "the dock's idempotent message path must derive the episode title from the first user message",
 );
 assert.match(

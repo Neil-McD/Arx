@@ -19,8 +19,12 @@ function exportedConstBlock(source: string, exportName: string): string {
   const startToken = `export const ${exportName}`;
   const start = source.indexOf(startToken);
   assert.notEqual(start, -1, `${exportName} should exist`);
+  // The exported definition ends at its first top-level `});`; helpers that
+  // follow it are not part of the export.
+  const end = source.indexOf("\n});", start + startToken.length);
   const next = source.indexOf("\nexport const ", start + startToken.length);
-  return source.slice(start, next < 0 ? source.length : next);
+  const stop = [end < 0 ? -1 : end + "\n});".length, next].filter((value) => value >= 0);
+  return source.slice(start, stop.length ? Math.min(...stop) : source.length);
 }
 
 function functionBlock(source: string, functionName: string): string {

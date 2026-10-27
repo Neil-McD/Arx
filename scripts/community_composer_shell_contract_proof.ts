@@ -76,7 +76,7 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /<div className=\{`chat-input-bar[\s\S]*replyingToMessage[\s\S]*renderCommunityAttachmentsPreview\(communityAttachments,[\s\S]*community-composer-editor-row[\s\S]*<CommunityComposerControls/,
+  /<div className="chat-input-bar">[\s\S]*replyingToMessage[\s\S]*renderCommunityAttachmentsPreview\(communityAttachments,[\s\S]*community-composer-editor-row[\s\S]*<CommunityComposerControls/,
   "reply context and queued attachments should live inside the main composer shell",
 );
 assert.match(

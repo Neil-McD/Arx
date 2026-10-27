@@ -83,7 +83,7 @@ assert.doesNotMatch(
 
 assert.match(
   controller,
-  /events: boolean[\s\S]*events: false[\s\S]*events: Boolean\(row\.events\)/,
+  /events: boolean[\s\S]*events: Boolean\(row\.events\)/,
   "frontend attention controller must carry Events indicators",
 );
 

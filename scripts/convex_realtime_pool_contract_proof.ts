@@ -71,6 +71,6 @@ assert.match(
   "an in-place identity replacement must immediately close the previous actor's transport",
 );
 assert.match(authController, /closeRealtimeTransportForReplacedIdentity\(sessionRef\.current, nextSession\)/);
-assert.match(authController, /closeRealtimeTransportForReplacedIdentity\(sessionRef\.current, refreshed\)/);
+assert.match(authController, /onRefreshed: \(refreshed\) => \{[\s\S]{0,80}adoptAuthSession\(refreshed/, "a token refresh adopts through the same identity-replacement path");
 
 console.log("Convex realtime pool contract proof passed");

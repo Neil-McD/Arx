@@ -564,12 +564,17 @@ assert.match(
 );
 assert.match(
   webCss,
-  /\.resources-panel\s*\{[^}]*gap:\s*10px;[^}]*padding:\s*0 24px 24px;/,
+  /\.community-utility-panel\s*\{[^}]*gap:\s*10px;[^}]*padding:\s*0 24px 24px;/,
   "desktop Resources must reuse the shell top band instead of stacking blanket top padding",
 );
 assert.match(
+  read("apps/web/src/components/CommunityResourcesPanel.tsx"),
+  /className="community-panel community-utility-panel resources-panel"/,
+  "Resources must use the shared utility-panel spacing",
+);
+assert.match(
   webCss,
-  /\.resources-panel > \.feed-header-row\s*\{[^}]*min-height:\s*var\(--web-topbar-height\);[^}]*padding-right:\s*var\(--web-topbar-right-action-safe-inset\);/,
+  /\.community-utility-panel > \.feed-header-row\s*\{[^}]*min-height:\s*var\(--web-topbar-height\);[^}]*padding-right:\s*var\(--web-topbar-right-action-safe-inset\);/,
   "the Resources utility row must reserve the canonical floating DM action inset",
 );
 assert.match(
@@ -579,7 +584,7 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  />\s*No lessons yet\s*</,
+  /"No lessons yet"/,
   "empty courses must explain the next authoring action",
 );
 assert.match(

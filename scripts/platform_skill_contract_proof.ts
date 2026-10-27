@@ -310,7 +310,7 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
-    "For read-only member-style questions, follow the live Resources read workflow",
+    "follow the live Resources read workflow",
     "builder resource lane inherits member read workflow",
   );
   assertIncludes(

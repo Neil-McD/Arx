@@ -45,7 +45,6 @@ assert.match(chatPanel, /upsertCommunityVisualIdentities/);
 
 for (const [label, source] of [
   ["rail", rail],
-  ["member agent dock", memberAgentDock],
   ["discover", discoverCard],
   ["profile", profilePanel],
   ["mobile selector", mobileShell],

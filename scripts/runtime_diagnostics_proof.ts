@@ -101,10 +101,8 @@ assert.ok(
   eventSource.includes('eventType: "runtime_diagnostics_detected"'),
   "runtime diagnostics are emitted as their own runtime event",
 );
-assert.ok(
-  eventSource.includes("parseRuntimeDiagnosticsFromText"),
-  "runtime tool finish path parses diagnostics",
-);
+// Diagnostics now come from tool failure semantics (below); parsing shell output
+// retired with the shell tools.
 assert.ok(
   eventSource.includes("inferRuntimeToolFailureSemantics"),
   "runtime tool finish path persists semantic shell failures",

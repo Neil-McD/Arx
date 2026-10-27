@@ -25,7 +25,11 @@ function exportedConstBlock(source: string, exportName: string): string {
   const start = source.indexOf(startToken);
   assert.notEqual(start, -1, `${exportName} should exist`);
   const next = source.indexOf("\nexport const ", start + startToken.length);
-  return source.slice(start, next < 0 ? source.length : next);
+  const block = source.slice(start, next < 0 ? source.length : next);
+  // Public functions delegate to a shared core (`handler: (ctx, args) => xCore(...)`);
+  // read the core too, so checks follow the behavior rather than the wrapper.
+  const core = block.match(/handler:\s*(?:async\s*)?\([^)]*\)\s*=>\s*(\w+Core)\(/)?.[1];
+  return core ? `${block}\n${functionBlock(source, core)}` : block;
 }
 
 function functionBlock(source: string, functionName: string): string {
@@ -144,7 +148,13 @@ assert.match(
   "reply writes should read existing replies by community idempotency key",
 );
 
-const createComposerMessage = exportedConstBlock(interactions, "createCommunityInteractionComposerMessage");
+// The public mutation and its trusted-member twin share one argument shape and
+// one core; read them together as the composer write path.
+const composerArgsStart = interactions.indexOf("const communityInteractionComposerArgs = {");
+assert.notEqual(composerArgsStart, -1, "communityInteractionComposerArgs should exist");
+const createComposerMessage =
+  interactions.slice(composerArgsStart, interactions.indexOf("\n  };", composerArgsStart) + 5) +
+  functionBlock(interactions, "createCommunityInteractionComposerMessageCore");
 const canonicalReplyTargetResolver = functionBlock(
   interactions,
   "resolveOptionalReplyTargetForCanonicalComposer",
@@ -166,7 +176,7 @@ assert.doesNotMatch(
 );
 assert.match(
   createComposerMessage,
-  /resolveInteractionAttachmentClaims\([\s\S]*attachments: args\.attachments \?\? \[\][\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
+  /attachments: args\.attachments \?\? \[\][\s\S]*resolveInteractionAttachmentClaims\([\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
   "composer bridge should allow attachment-only sends while rejecting empty payloads",
 );
 assert.match(
@@ -222,7 +232,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /requireChannelForAddressableRoot\(\{ ctx, root \}\)[\s\S]*args\.channelId[\s\S]*interaction_channel_mismatch[\s\S]*communityInteractionReplies" as any[\s\S]*channelId: rootChannel\._id/,
+  /requireChannelForAddressableRoot\(\{ ctx, root, actor: channelActor \}\)[\s\S]*normalizeIdValue\(requestedChannel\._id\)[\s\S]*interaction_channel_mismatch[\s\S]*communityInteractionReplies" as any[\s\S]*channelId: rootChannel\._id/,
   "composer replies should inherit the server-validated channel from their root and reject a caller mismatch",
 );
 assert.match(

@@ -7,9 +7,9 @@ function readText(path: string): string {
 
 const schema = readText("../convex/schema.ts");
 const stripeCustomers = readText("../convex/stripeCustomers.ts");
-const workspaceCredits = readText("../convex/workspaceCredits.ts");
 const communityCommerce = readText("../convex/communityCommerce.ts");
 const billingCore = readText("../convex/billingCore.ts");
+const founderBilling = readText("../convex/founderBilling.ts");
 
 assert.match(
   schema,
@@ -64,7 +64,8 @@ assert.match(
 );
 
 for (const [label, source] of [
-  ["workspace credit top-up", stripeCustomers],
+  // Workspace credit top-ups are retired; founder subscription checkout is the live path.
+  ["founder subscription", founderBilling],
 ] as const) {
   assert.match(
     source,
@@ -100,9 +101,9 @@ assert.match(
 );
 
 assert.match(
-  workspaceCredits,
-  /attachStripeCustomerToUser\({[\s\S]*providerCustomerId: args\.providerCustomerId/,
-  "Workspace top-up completion must backfill Stripe customer identity.",
+  founderBilling,
+  /attachStripeCustomerToUser\(\{/,
+  "Founder checkout completion must backfill Stripe customer identity.",
 );
 assert.doesNotMatch(
   communityCommerce,

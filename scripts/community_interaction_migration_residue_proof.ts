@@ -54,7 +54,13 @@ function extractExportedConst(source: string, name: string): string {
   const start = source.indexOf(`export const ${name} =`);
   assert.notEqual(start, -1, `expected exported const ${name}`);
   const next = source.indexOf("\nexport const ", start + 1);
-  return next === -1 ? source.slice(start) : source.slice(start, next);
+  const block = next === -1 ? source.slice(start) : source.slice(start, next);
+  // Follow a thin wrapper into the shared core it delegates to.
+  const core = block.match(/handler:\s*(?:async\s*)?\([^)]*\)\s*=>\s*(\w+Core)\(/)?.[1];
+  if (!core) return block;
+  const coreStart = source.indexOf(`async function ${core}(`);
+  assert.notEqual(coreStart, -1, `expected core ${core}`);
+  return `${block}\n${source.slice(coreStart, source.indexOf("\n}\n", coreStart) + 2)}`;
 }
 
 assert.match(
