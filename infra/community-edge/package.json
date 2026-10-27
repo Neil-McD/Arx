@@ -7,6 +7,6 @@
   },
   "devDependencies": {
     "convex": "1.42.1",
-    "wrangler": "4.151.1"
+    "wrangler": "4.153.0"
   }
 }
