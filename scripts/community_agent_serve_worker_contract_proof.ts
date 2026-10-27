@@ -235,8 +235,13 @@ assert.match(
 );
 assert.match(
   actionBlock,
-  /catch \(error\) \{[\s\S]*if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*else if \(!providerFailureIsKnownPreSpend\(toolCompletion\.code\)\)[\s\S]*usage\.complete = false/,
+  /catch \(error\) \{[\s\S]*if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*observeFounderProviderResult\(usage, toolCompletion,\s*toolCompletion\.ok === false && providerFailureIsKnownPreSpend\(toolCompletion\.code\)\)/,
   "unknown provider crashes and returned failures should settle conservatively",
+);
+assert.match(
+  readFileSync(join(process.cwd(), "convex/founderInferenceUsage.ts"), "utf8"),
+  /export function observeFounderProviderResult[\s\S]*else if \(!knownPreSpend\) \{\s*totals\.complete = false;/,
+  "a returned failure without usage settles conservatively unless it is known to be pre-spend",
 );
 assert.doesNotMatch(actionBlock, /owner_api_key|ownerApiKey|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(

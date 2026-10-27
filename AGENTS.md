@@ -160,6 +160,9 @@ every change must respect:
   (Neil).
 - Tables retire over two releases: stop writing, release, then delete data with
   Neil's approval.
+- The release gate runs every unit test (`npm run test:unit`) and every
+  `check:*` script (`npm run check:all`); a check file that nothing runs fails
+  the gate. Fix or delete a failing check; never leave one unrun.
 - A change is done when the release gate passes, the behavior is verified on
   staging, docs match, and nothing in §3 lost coverage.
 

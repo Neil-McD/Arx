@@ -16,7 +16,7 @@ This is the canonical Polynet web app and primary release surface.
    - `ARX_AUTH_BRIDGE_SECRET`
    - `ARX_AUTH_JWT_ISSUER`
    - `ARX_AUTH_JWT_JWKS_URL`
-   - Validate config: `npm run check:auth-runtime-readiness`
+   - Validate config: `npm run ops:auth-runtime-readiness`
 3. Run:
    - `npm run dev`
 4. Cloud Auth:

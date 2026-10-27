@@ -23,7 +23,7 @@ assert.doesNotMatch(
 );
 assert.match(
   memberAgentDock,
-  /activeThreadKeyRef[\s\S]*if \(activeThreadKeyRef\.current\) return;[\s\S]*ensureCloudMemberAgentGlobalChannel/,
+  /activeThreadKeyRef[\s\S]*if \(activeThreadKeyRef\.current\) return;[\s\S]*ensureCloudCommunityAgentConversation/,
   "the mounted member-agent surface must own one explicit active channel without App-level auto-selection",
 );
 

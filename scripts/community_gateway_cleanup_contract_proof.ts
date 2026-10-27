@@ -108,12 +108,12 @@ for (const [label, source] of [
 
 assert.match(
   resourceController,
-  /const generation = \(moduleLoadGenerationRef\.current \+= 1\)[\s\S]*moduleLoadGenerationRef\.current !== generation[\s\S]*argsRef\.current\.activeCommunityId !== communityId[\s\S]*current\.setCommunityResourceModules\(rows\)/,
+  /communityId !== current\.activeCommunityId[\s\S]*moduleLoadGenerationRef[\s\S]*const generation = \+\+ref\.current[\s\S]*scopeRef\.current === requestScope && ref\.current === generation[\s\S]*if \(!isCurrent\(\)\) return;[\s\S]*current\.setCommunityResourceModules\(rows\)/,
   "module loads should guard stale results and community changes before setting module state",
 );
 assert.match(
   resourceController,
-  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*resourceLoadGenerationRef\.current !== generation[\s\S]*argsRef\.current\.activeCommunityId !== communityId[\s\S]*current\.setCommunityResources\(rows\)/,
+  /communityId !== current\.activeCommunityId[\s\S]*collection === "resources" \? resourceLoadGenerationRef[\s\S]*const generation = \+\+ref\.current[\s\S]*scopeRef\.current === requestScope && ref\.current === generation[\s\S]*if \(!isCurrent\(\)\) return;[\s\S]*current\.setCommunityResources\(rows\)/,
   "resource loads should guard stale results and community changes before setting resource state",
 );
 assert.match(

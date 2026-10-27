@@ -16,6 +16,12 @@ const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityContentController = read("apps/web/src/controllers/useWebCommunityContentController.ts");
+// One reload refreshes both courses and lessons (modules and resources).
+assert.match(
+  read("shared/useCommunityResourceController.ts"),
+  /collections: ResourceCollection\[\] = \["modules", "resources"\][\s\S]*const loadCommunityResources = useCallback\(\(communityId: string, session: SessionT\) =>\s*refreshCommunityResources\(communityId, session\)/,
+  "a resource mutation reload refreshes both modules and resources",
+);
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
@@ -476,7 +482,7 @@ assert.doesNotMatch(
 );
 assert.match(
   communityContentController,
-  /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*loadCommunityResourceModules[\s\S]*loadCommunityResources/,
+  /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*loadCommunityResources\(detail\.communityId/,
   "workspace should refresh modules and resources after a verified resource mutation",
 );
 

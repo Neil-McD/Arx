@@ -443,6 +443,20 @@ async function main() {
     );
 
     await runStep(
+      "unit_tests",
+      "Every unit and behavior test",
+      "npm run test:unit",
+      () => runCommand("npm", ["run", "test:unit"]),
+    );
+
+    await runStep(
+      "all_checks",
+      "Every remaining check script, and no unwired check files",
+      "npm run check:all",
+      () => runCommand("npm", ["run", "check:all"]),
+    );
+
+    await runStep(
       "dependency_security_interlock",
       "Dependency security compatibility",
       "npm run check:dependency-security-interlock",

@@ -63,7 +63,7 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /const visibleMonthEvents = useMemo\([\s\S]*\.filter\(\(event\) =>[\s\S]*isSameLocalMonth\(startsAt, monthDate\)[\s\S]*\.sort\(\(a, b\) => Date\.parse\(a\.starts_at\) - Date\.parse\(b\.starts_at\)\)/,
+  /const visibleMonthEvents = useMemo\([\s\S]*\.filter\(\(event\) =>[\s\S]*isSameLocalMonth\(startsAt, monthDate\)[\s\S]*\.sort\(\(a, b\) => Date\.parse\(a\.starts_at\) - Date\.parse\(b\.starts_at\)/,
   "the visible projection must be one chronological ledger restricted to the viewer-local month",
 );
 
@@ -99,7 +99,7 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /<time className="community-events-date" dateTime=\{group\.key\}>[\s\S]*dayLabel\.weekday[\s\S]*dayLabel\.day[\s\S]*group\.events\.map/,
+  /<time className="community-events-date" dateTime=\{toLocalDateKey\(group\.date\)\}>[\s\S]*dayLabel\.weekday[\s\S]*dayLabel\.day[\s\S]*group\.events\.map/,
   "each chronological group must expose a semantic date before its event rows",
 );
 

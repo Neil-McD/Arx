@@ -162,7 +162,7 @@ Examples:
 Run:
 
 ```bash
-npm run check:auth-runtime-readiness
+npm run ops:auth-runtime-readiness
 ```
 
 This check now catches:

@@ -97,10 +97,10 @@ assert.doesNotMatch(
   /useWebWorkspaceSurfaceController|workspaceSurfaceLifecycle/,
   "the member-agent dock must remain independent from retired Workspace hydration",
 );
-assert.match(
+assert.doesNotMatch(
   mcp,
-  /community_context: "workspace_context"/,
-  "MCP wire compatibility must remain unchanged during web lifecycle retirement",
+  /workspace_context/,
+  "the retired workspace_context MCP alias stays removed now that the lifecycle retirement is complete",
 );
 
 console.log("workspace_account_lifecycle_retirement_contract_proof: ok");

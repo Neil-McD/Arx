@@ -401,14 +401,11 @@ assert.equal(
 
 assert.match(
   memberAgentDock,
-  /mobileShellActive\?: boolean;[\s\S]*mobileRoot\?: boolean;[\s\S]*Boolean\(props\.mobileRoot\)[\s\S]*props\.mobileRoot \? " mobile-root"/,
+  /mobileShellActive\?: boolean;[\s\S]*mobileRoot\?: boolean;[\s\S]*Boolean\(props\.mobileShellActive && props\.mobileRoot\)[\s\S]*props\.mobileRoot \? " mobile-root"/,
   "the existing member-agent should support controlled mobile-root presentation",
 );
-assert.match(
-  memberAgentDock,
-  /\{!props\.mobileShellActive \? \([\s\S]*onClick=\{\(\) => setIsOpen\(false\)\}[\s\S]*aria-label="Close"/,
-  "only the desktop agent dock should expose a close action",
-);
+// The floating dock and its close action are retired: the Agent page is a page.
+assert.doesNotMatch(memberAgentDock, /aria-label="Close"/, "the retired floating dock close action stays gone");
 assert.match(
   memberAgentDockCss,
   /\.member-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*\.member-agent-dock\.mobile-root \.member-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: var\(--community-shell-radius\);/,
