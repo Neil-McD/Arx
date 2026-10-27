@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: MIT (see LICENSING.md and ./LICENSE-MIT)
 // The Polynet SDK for community front ends, served by the edge at
 // /__polynet/sdk.js on every community's own domain. It is plain JavaScript
 // (an ES module) kept as text so the edge serves exactly what the tests run.
 // No backticks or template placeholders inside: this is a String.raw literal.
-export const SDK_SOURCE = String.raw`// Polynet SDK: everything a community front end needs, on this community's own domain.
+export const SDK_SOURCE = String.raw`// SPDX-License-Identifier: MIT
+// Polynet SDK: everything a community front end needs, on this community's own domain.
 // Usage:  import polynet from "/__polynet/sdk.js";
 // Docs:   /__polynet/llms.txt
 // The member's session lives in an HttpOnly cookie that this page never sees.

@@ -1,10 +1,12 @@
+// SPDX-License-Identifier: MIT (see LICENSING.md and ./LICENSE-MIT)
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to their account, their
 // communities, Discover, messages and settings. Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
 // CSS custom properties. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
-export const UI_SOURCE = String.raw`// Polynet shell: <polynet-account>. Usage:
+export const UI_SOURCE = String.raw`// SPDX-License-Identifier: MIT
+// Polynet shell: <polynet-account>. Usage:
 //   <script type="module" src="/__polynet/ui.js"></script>   (Polynet adds this to every page)
 //   <polynet-account></polynet-account>                      (or Polynet adds one, top-right)
 // Theme it from the site's CSS (all optional):

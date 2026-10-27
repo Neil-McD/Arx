@@ -8,6 +8,6 @@
   "engines": { "node": ">=20" },
   "keywords": ["polynet", "community", "deploy"],
   "homepage": "https://polynet.ai",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "publishConfig": { "access": "public" }
 }
