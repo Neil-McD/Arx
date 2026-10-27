@@ -128,13 +128,13 @@ and data are proven gone, following the two-release pattern in
 | Candidate | Known state |
 | --- | --- |
 | Member workflows and forms | Being replaced by the proactive agent; check production use first |
-| Personal-agent leftovers (`personalMemoryItems`, global member-agent channel) | Due after the Oct 27 release |
-| Credit and workspace-compute tables, `legacyProgramGrants` | No writers found; Neil to confirm |
+| Personal-agent tables (`personalMemoryItems`, `userMemorySettings`) | Code removed Oct 27; data deletion with Neil's OK |
+| Credit and workspace-compute tables, `legacyProgramGrants` | Neil decided Oct 27: delete after a production backup, with his sign-off |
 | AI feed tables | Feature retired; retirement module still present |
 | `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |
 | Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityInteractionLegacyChatLinks`) | **Still written:** `communityChat.createThreadUserMessage` and the legacy bridge. Duplicate substrate; prove callers and migrate first |
-| `communityFunnels` and the funnel editor | Sites are the front door; Neil to decide |
-| Integrations and skills tables | Neil to decide |
+| `communityFunnels` and the funnel editor | Neil decided Oct 27: delete; a plain join and checkout page stays |
+| Integrations and skills tables | Neil decided Oct 27: delete |
 
 ## Open risks
 

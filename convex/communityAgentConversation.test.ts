@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
+import { MEMBER_AGENT_GLOBAL_SCOPE_KEY, buildGlobalMemberAgentEpisodeThreadKey } from "../shared/runtimeInvocationSurface";
 const modules = import.meta.glob(["./threads.ts", "./_generated/**/*.*s"]);
 
 async function fixture() {
@@ -63,7 +64,15 @@ test("authentication is required and generic thread creation cannot claim scoped
 
 test("global conversation history is not adopted or modified", async () => {
   const f = await fixture();
-  const old = await f.a.mutation(api.threads.ensureMemberAgentGlobalChannel, { initialCommunityId: f.communities[0] });
+  // A global conversation from the retired personal-agent era, as stored history.
+  const old = await f.t.run(async ctx => {
+    const owner = await ctx.db.query("users").withIndex("by_authSubject", q => q.eq("authSubject", "a")).unique();
+    const threadId = await ctx.db.insert("threads", { ownerId: owner!._id, threadKey: buildGlobalMemberAgentEpisodeThreadKey(1), titleSource: "auto", communityId: f.communities[0], contextVersion: 0, lastSeq: 0, createdAt: 1, updatedAt: 1 });
+    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId: owner!._id, scopeKey: MEMBER_AGENT_GLOBAL_SCOPE_KEY, nextOrdinal: 2, createdAt: 1, updatedAt: 1 });
+    const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId, ordinal: 1, status: "active", startedAt: 1, createdAt: 1, updatedAt: 1 });
+    await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
+    return { thread_id: String(threadId) };
+  });
   const before = await f.t.run(ctx => ctx.db.get(old.thread_id as any));
   const current = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId: f.communities[0] });
   expect(current.thread_id).not.toBe(old.thread_id);
