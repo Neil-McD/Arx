@@ -19,9 +19,8 @@ permissions:
   pull-requests: write
   statuses: write
 
-concurrency:
-  group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: false
+# No concurrency group: a queued run would replace another queued run and drop a
+# signing comment. Signature writes are optimistic (file sha) and retried instead.
 
 jobs:
   cla:
@@ -56,7 +55,7 @@ jobs:
             add(pr.user);
             for (const commit of commits) {
               if (commit.author?.login) add(commit.author);
-              else unlinked.push(commit.commit?.author?.email || commit.sha.slice(0, 7));
+              else unlinked.push(commit.sha.slice(0, 7)); // never echo author-controlled text
             }
             const needs = [...people.values()].filter((p) => !ALLOW.has(p.login.toLowerCase()) && !p.login.endsWith("[bot]"));
 
@@ -100,7 +99,7 @@ jobs:
                   "Thanks for contributing to Polynet! Before we can merge, every contributor needs to sign our [Contributor License Agreement](" + CLA_URL + ") once. You keep the copyright in your work.",
                   "",
                   ...(missing.length ? ["To sign, comment exactly:", "", "```", SIGN, "```", "", "Still to sign: " + missing.map((p) => "@" + p.login).join(", ")] : []),
-                  ...(unlinked.length ? ["", "Some commits aren't linked to a GitHub account (" + unlinked.join(", ") + "). Add that email to your GitHub account, then comment `recheck`."] : []),
+                  ...(unlinked.length ? ["", "Some commits aren't linked to a GitHub account (" + unlinked.map((sha) => "`" + sha + "`").join(", ") + "). Add their author email to your GitHub account, then comment `recheck`."] : []),
                 ];
             const body = MARKER + "\n" + lines.join("\n");
             const existing = (await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 }))
