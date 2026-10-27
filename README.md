@@ -20,6 +20,24 @@ The easiest way to use Polynet is the hosted service at
 [polynet.ai](https://polynet.ai). Community sites and `@polynet/cli` are in
 preview: today they run against Polynet's staging environment.
 
+![A community's own site, designed and built by the founder's AI agent](docs/assets/readme/community-site.jpg)
+
+![The founder's morning brief from the community agent, in Polynet Studio](docs/assets/readme/founder-brief.jpg)
+
+## Build your community's site in three steps
+
+1. Create a community at [polynet.ai](https://polynet.ai).
+2. Set up a site folder for your AI agent:
+
+   ```bash
+   npx @polynet/cli create my-site --community <your-community-slug>
+   ```
+
+3. Open `my-site` in Claude Code, Codex or Cursor and say *"Design our
+   community's site."* Your agent asks about your community, shows you three
+   directions live, and builds the one you pick at
+   `https://<your-community-slug>.polynet.page`.
+
 ## This repository
 
 | Path | What it is |
