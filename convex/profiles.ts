@@ -1,6 +1,7 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { validateProfileHandle } from "../shared/profileHandle";
 import { maybeDeleteStorageAsset } from "./communityCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
@@ -372,7 +373,11 @@ export const getProfileDetailByUserId = query({
     if (!user) return null;
     const detail = await findProfileDetailByUserId(ctx, user._id);
     // Detail/setup reads expose explicit profile fields only; public display fallback lives in userProfileProjection.
-    return await mapProfileDetail(ctx, user, detail);
+    const profile = await mapProfileDetail(ctx, user, detail);
+    // Anyone can read a public profile; the time zone and onboarding state are the owner's alone.
+    const viewer = await readAuthenticatedIdentityProfile(ctx).catch(() => null);
+    if (viewer?.authSubject === user.authSubject) return profile;
+    return { ...profile, timezone: null, onboarding_completed_at: null };
   },
 });
 
