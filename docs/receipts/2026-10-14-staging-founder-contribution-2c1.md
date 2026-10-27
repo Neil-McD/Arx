@@ -9,7 +9,7 @@ exactly one root and one completed operation receipt, unchanged by replay or the
 negative controls. No runtime or provider configuration changes were needed.
 
 [Structured evidence](evidence/2026-10-14-staging-founder-contribution-2c1.json).
-[Scope and execution runbook](../polynet-staging-founder-contribution-2c1.md).
+[Scope and execution runbook](../archive/polynet-staging-founder-contribution-2c1.md).
 
 ## Provenance
 

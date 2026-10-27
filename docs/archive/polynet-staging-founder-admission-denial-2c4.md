@@ -4,7 +4,7 @@ Status: **scoped staging acceptance passed October 15, 2026**. One live denial,
 discarded-response recovery after native process restart, unchanged cooldown,
 public re-entry denial and cleanup are verified. Full seven-day expiry and
 same-ID reapplication are controlled-time local proof; elapsed live reapplication
-remains unobserved. See the [execution receipt](receipts/2026-10-15-staging-founder-admission-denial-2c4.md).
+remains unobserved. See the [execution receipt](../receipts/2026-10-15-staging-founder-admission-denial-2c4.md).
 Production is untouched. Step 1 requirements were reconciled; Step 2 excluded
 unnecessary infrastructure; Step 3 verified the remaining bounded adapter.
 
@@ -13,7 +13,7 @@ unnecessary infrastructure; Step 3 verified the remaining bounded adapter.
 No blocking runtime finding in the scoped 2C3 change. It reauthorizes the current
 manager before execution and historical replay, binds the observed application,
 and commits the admission effects and recoverable receipt in one transaction.
-The [2C3 receipt](receipts/2026-10-15-staging-founder-admission-approval-2c3.md)
+The [2C3 receipt](../receipts/2026-10-15-staging-founder-admission-approval-2c3.md)
 records one actual free admission, discarded-response recovery after a native
 client restart, normal leave, and historical replay without restoring access.
 These are recorded live observations; this review did not repeat those writes.
@@ -42,7 +42,7 @@ a validation gap, not evidence of an observed runtime authorization bypass.
 ## Requirements and avoidable effort
 
 Source: the founder operations branch of the
-[trunk-down plan](research/headless-trunk-down-approach-20261014.md), the user's
+[trunk-down plan](../research/headless-trunk-down-approach-20261014.md), the user's
 request for denial/cooldown/reapplication, and existing domain behavior. The
 minimum outcome is a founder rejecting one observed application, an applicant
 seeing when another application is allowed, and retries preserving that decision.

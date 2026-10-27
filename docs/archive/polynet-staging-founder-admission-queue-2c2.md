@@ -2,7 +2,7 @@
 
 Status: scoped staging acceptance passed October 15, 2026. Native founder,
 applicant/member denial and cancellation proofs are complete, with their exact
-limits in the [execution receipt](receipts/2026-10-15-staging-founder-admission-queue-2c2.md).
+limits in the [execution receipt](../receipts/2026-10-15-staging-founder-admission-queue-2c2.md).
 Production is unchanged. Admission decisions remain outside this slice.
 
 ## 2C1 review and current baseline
@@ -24,7 +24,7 @@ receipt with the original ref. The compressed observation fingerprints validate.
 | Review checks | 59 canonical executor/receipt/channel tests pass again |
 | Admission owner checks | 20 join-request core/access-lifecycle tests pass |
 
-The [2C1 receipt](receipts/2026-10-14-staging-founder-contribution-2c1.md) certifies
+The [2C1 receipt](../receipts/2026-10-14-staging-founder-contribution-2c1.md) certifies
 application-discarded response recovery, not a TCP failure, live receipt-lease
 reclaim, revoked founder writes, workflow progress or a full custom app. The
 scratch helper's stale-client correction was not a Polynet runtime fix or a new
@@ -33,7 +33,7 @@ limitation. Neither justifies a new auth layer or SDK for this next slice.
 
 ## Step 1: choose the next irreducible gap
 
-The [trunk-down order](research/headless-trunk-down-approach-20261014.md) places
+The [trunk-down order](../research/headless-trunk-down-approach-20261014.md) places
 community operations after the first independent contribution proof and before
 progress expansion. Founders currently have first-party join-request operations,
 but the five-tool namespace has no supported admission queue projection. The

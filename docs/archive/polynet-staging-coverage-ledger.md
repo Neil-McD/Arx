@@ -28,7 +28,7 @@ The docs/evidence volume is not runtime scope or a measure of product completion
   whose tree `7728a2a5ea955b2f74889210709aa528241d3e36` exactly matches reviewed
   branch head `806aacca749e4fe59a88706510da5db365df1fa9`. All 15 gate steps passed.
   This is merge-tree CI, distinct from the exact runtime candidate's local gate.
-- The [4A1 receipt](receipts/2026-10-15-staging-memory-consumption-4a1.md)
+- The [4A1 receipt](../receipts/2026-10-15-staging-memory-consumption-4a1.md)
   retains that clean runtime gate: 1,865 tests / 194 files, both typechecks,
   build/browser checks and zero findings in both dependency audits.
 - Fresh checkpoint execution: **344 tests / all eight changed test files passed**;
@@ -44,7 +44,7 @@ The docs/evidence volume is not runtime scope or a measure of product completion
   patches and changed proof assertions. No submitted independent review exists
   on #177; this checkpoint is the implementing agent's review.
 
-[Sanitized checkpoint evidence](receipts/evidence/2026-10-15-staging-integration-checkpoint.json).
+[Sanitized checkpoint evidence](../receipts/evidence/2026-10-15-staging-integration-checkpoint.json).
 Historical receipts retain their original source and deployment boundaries.
 
 ## Coverage against the trunk-down plan
@@ -73,18 +73,18 @@ fresh compilation acceptance.
 
 | Slice / receipt | What the acceptance establishes | What remains outside it |
 | --- | --- | --- |
-| [1 — baseline](research/package-1-staging-baseline-reconciliation-20261014.md) | Main-based staging reconciliation, stale ontology assertion fixed, dependency patches verified | Production parity or rollout |
-| [2A — context](receipts/2026-10-14-staging-context-2a.md) | Real member/builder context, resource traversal, private/cross-community denial and same-bearer membership revocation | Every object type or another client's compatibility |
-| [2B1 — session](receipts/2026-10-14-staging-session-2b1.md) | Truthful public web logout/session lifecycle | External OAuth grant revocation |
-| [2B2 — external OAuth](receipts/2026-10-14-staging-external-oauth-2b2.md) | Native Codex enrollment, continuity, refresh and local disconnect | Claude Code acceptance, provider-wide logout or old-token invalidation |
-| [2B3 — auth cleanup](receipts/2026-10-14-staging-auth-cleanup-2b3.md) | Body-inclusive deadlines, shared origin guard and session regression proof | Auth redesign or new provider configuration |
-| [2C1 — contribution](receipts/2026-10-14-staging-founder-contribution-2c1.md) | Attributed external contribution, exact-envelope replay and conflict handling | Full founder application or accepted-memory promotion |
-| [2C2 — admission queue](receipts/2026-10-15-staging-founder-admission-queue-2c2.md) | Bounded owner/admin queue/detail and native applicant denial | All administrative operations |
-| [2C3 — approval](receipts/2026-10-15-staging-founder-admission-approval-2c3.md) | One fresh free admission and safe retries | Paid entry, existing membership restoration or role changes |
-| [2C4 — denial](receipts/2026-10-15-staging-founder-admission-denial-2c4.md) | One denial, stable cooldown, replay and immediate re-entry denial; controlled-time expiry/reapplication tests | Elapsed live reapplication: not observed before `2026-10-22T17:55:59.047Z` |
-| [3A1 — member progress](receipts/2026-10-15-staging-member-progress-3a1.md) | Private pinned form submission and one evidence-backed automatic progress transition | Private answers becoming shared memory or generic workflow authoring |
-| [3A2 — founder approval](receipts/2026-10-15-staging-founder-progress-approval-3a2.md) | Approval against exact reviewed evidence with current authority and safe retries | Force moves, goal assessment or bulk approval |
-| [4A1 — memory consumption](receipts/2026-10-15-staging-memory-consumption-4a1.md) | Existing citation-backed memory read, truthful refusal, one synthetic observed outcome and retry recovery | Fresh learning, model use, customer benefit, outcome application or memory promotion |
+| [1 — baseline](../research/package-1-staging-baseline-reconciliation-20261014.md) | Main-based staging reconciliation, stale ontology assertion fixed, dependency patches verified | Production parity or rollout |
+| [2A — context](../receipts/2026-10-14-staging-context-2a.md) | Real member/builder context, resource traversal, private/cross-community denial and same-bearer membership revocation | Every object type or another client's compatibility |
+| [2B1 — session](../receipts/2026-10-14-staging-session-2b1.md) | Truthful public web logout/session lifecycle | External OAuth grant revocation |
+| [2B2 — external OAuth](../receipts/2026-10-14-staging-external-oauth-2b2.md) | Native Codex enrollment, continuity, refresh and local disconnect | Claude Code acceptance, provider-wide logout or old-token invalidation |
+| [2B3 — auth cleanup](../receipts/2026-10-14-staging-auth-cleanup-2b3.md) | Body-inclusive deadlines, shared origin guard and session regression proof | Auth redesign or new provider configuration |
+| [2C1 — contribution](../receipts/2026-10-14-staging-founder-contribution-2c1.md) | Attributed external contribution, exact-envelope replay and conflict handling | Full founder application or accepted-memory promotion |
+| [2C2 — admission queue](../receipts/2026-10-15-staging-founder-admission-queue-2c2.md) | Bounded owner/admin queue/detail and native applicant denial | All administrative operations |
+| [2C3 — approval](../receipts/2026-10-15-staging-founder-admission-approval-2c3.md) | One fresh free admission and safe retries | Paid entry, existing membership restoration or role changes |
+| [2C4 — denial](../receipts/2026-10-15-staging-founder-admission-denial-2c4.md) | One denial, stable cooldown, replay and immediate re-entry denial; controlled-time expiry/reapplication tests | Elapsed live reapplication: not observed before `2026-10-22T17:55:59.047Z` |
+| [3A1 — member progress](../receipts/2026-10-15-staging-member-progress-3a1.md) | Private pinned form submission and one evidence-backed automatic progress transition | Private answers becoming shared memory or generic workflow authoring |
+| [3A2 — founder approval](../receipts/2026-10-15-staging-founder-progress-approval-3a2.md) | Approval against exact reviewed evidence with current authority and safe retries | Force moves, goal assessment or bulk approval |
+| [4A1 — memory consumption](../receipts/2026-10-15-staging-memory-consumption-4a1.md) | Existing citation-backed memory read, truthful refusal, one synthetic observed outcome and retry recovery | Fresh learning, model use, customer benefit, outcome application or memory promotion |
 
 ## Supported surface versus remaining parity
 

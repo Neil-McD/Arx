@@ -21,7 +21,7 @@ catalog, adopt a second workflow engine, or enable arbitrary third-party MCP mou
 Composio is the first pilot provider. This supersedes the earlier Pipedream-first
 sandbox recommendation after user review of pricing and agent fit. Do not implement
 Pipedream in parallel. Start with member-owned connection and one read, not the
-full event fixture below. See [the implementation map](./composio-member-read-pilot-plan.md).
+full event fixture below. See [the implementation map](../composio-member-read-pilot-plan.md).
 HubSpot trigger coverage and shared-app webhook behavior remain unresolved for
 later workflow acceptance; neither blocks planning the bounded read-only pilot.
 Native HubSpot webhooks are an option to evaluate later, not an authorized build.

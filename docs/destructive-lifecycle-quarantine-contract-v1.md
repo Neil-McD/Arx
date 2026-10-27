@@ -97,6 +97,6 @@ unchanged after the matrix, cleanup left zero residue, and the temporary
 internal acceptance harness was removed from the deployed surface.
 
 The human-readable certificate is
-[`destructive-lifecycle-quarantine-staging-acceptance-20260728.md`](./destructive-lifecycle-quarantine-staging-acceptance-20260728.md).
+[`destructive-lifecycle-quarantine-staging-acceptance-20260728.md`](archive/destructive-lifecycle-quarantine-staging-acceptance-20260728.md).
 Machine-checked evidence is stored in
 [`destructive_lifecycle_quarantine_staging_acceptance_20260728.json`](../scripts/fixtures/destructive_lifecycle_quarantine_staging_acceptance_20260728.json).

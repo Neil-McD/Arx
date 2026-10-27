@@ -8,7 +8,7 @@ bearer. No runtime code or deployment changed in this slice.
 [Machine-readable evidence](evidence/2026-10-14-staging-context-2a.json) contains
 timestamps, identity fingerprints, unchanged token hash/expiry, fixture paths,
 source hashes, revocation pre/postconditions and sanitized results.
-[Runbook](../polynet-mcp-context-acceptance.md) defines the bounded procedure.
+[Runbook](../archive/polynet-mcp-context-acceptance.md) defines the bounded procedure.
 
 ## Provenance
 

@@ -204,8 +204,8 @@ coverage. Current first-party Convex RPCs are not automatically a supported
 external application API. An application adapter may use a different typed wire
 shape while sharing the same domain owner, authorization, effects and receipts.
 
-The source contracts are [canonical operations](canonical-platform-operation-contract-v1.md)
-and [official MCP](polynet-workspace-mcp-contract-v0.md); code owners are
+The source contracts are [canonical operations](../canonical-platform-operation-contract-v1.md)
+and [official MCP](../polynet-workspace-mcp-contract-v0.md); code owners are
 `shared/polynetCanonicalToolContract.ts`, `convex/polynetCanonicalExecutor.ts`
 and `convex/communityCapabilityContext.ts`.
 
@@ -351,7 +351,7 @@ use the current canonical operation/MCP contracts linked above.
 ## 11. How the receiving agent should work
 
 1. Read this handoff, the actual worktree's `AGENTS.md`, the
-   [semantic platform thesis](agent-native-semantic-platform-thesis.md),
+   [semantic platform thesis](../agent-native-semantic-platform-thesis.md),
    [coverage ledger](polynet-staging-coverage-ledger.md) and relevant operation
    contracts. Verify refs, worktree status and source before changing anything.
 2. Keep the distinction between user vision, proposed architecture, implemented

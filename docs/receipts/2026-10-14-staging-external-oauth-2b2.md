@@ -7,7 +7,7 @@ across a new conversation and full process restart, refreshed through its own
 expiry lifecycle, and failed closed after local disconnect.
 
 [Structured evidence](evidence/2026-10-14-staging-external-oauth-2b2.json).
-[Execution runbook](../polynet-staging-external-oauth-2b2.md).
+[Execution runbook](../archive/polynet-staging-external-oauth-2b2.md).
 
 ## Provenance and ownership
 

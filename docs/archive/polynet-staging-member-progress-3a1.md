@@ -1,7 +1,7 @@
 # Slice 3A1 proposal: one private form to verified member progress
 
 Status: bounded staging acceptance passed October 15, 2026. Production is
-untouched. [Implementation and live evidence](receipts/2026-10-15-staging-member-progress-3a1.md)
+untouched. [Implementation and live evidence](../receipts/2026-10-15-staging-member-progress-3a1.md)
 record the exact candidate, retained effects and proof limits. The requirements
 and exclusions below remain the approved boundary.
 
@@ -29,7 +29,7 @@ decision engine. The archived assertion now checks the intended rejection.
 | Fresh admission review | 173 tests / four files passed |
 | Fresh progress foundation review | 198 tests / five files passed: workflow join/completion, workflows/context, forms, timers and member save/retry |
 
-The [2C4 receipt](receipts/2026-10-15-staging-founder-admission-denial-2c4.md)
+The [2C4 receipt](../receipts/2026-10-15-staging-founder-admission-denial-2c4.md)
 records one live denial, native restart recovery and immediate public re-entry
 refusal with an unchanged deadline. Its original clean runtime gate records
 1,777 tests / 192 files and both audits zero; this review did not rerun that full
@@ -44,7 +44,7 @@ The user outcome is: **an authorized member can read one assigned private form,
 submit it through an external harness, recover an uncertain response, and then
 read a real evidence-backed progress outcome.** Its source is the approved
 headless direction and package 5 of the
-[trunk-down plan](research/headless-trunk-down-approach-20261014.md).
+[trunk-down plan](../research/headless-trunk-down-approach-20261014.md).
 
 Qualitative avoidable-effort ranking; no measured cost ratio is claimed.
 

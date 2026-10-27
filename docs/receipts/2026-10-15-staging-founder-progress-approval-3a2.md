@@ -3,7 +3,7 @@
 **Bounded staging acceptance passed October 15, 2026. Production was untouched.**
 
 [Structured evidence](evidence/2026-10-15-staging-founder-progress-approval-3a2.json).
-[Approved scope](../polynet-staging-founder-progress-approval-3a2.md).
+[Approved scope](../archive/polynet-staging-founder-progress-approval-3a2.md).
 [Draft PR #176](https://github.com/Neil-McD/Arx/pull/176), stacked on #175.
 
 ## Release identity

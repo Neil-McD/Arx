@@ -1,54 +1,68 @@
-# Docs Index
+# Docs index
 
-## Agent orientation
-1. [Polynet headless vision and zero-context handoff](polynet-headless-agent-handoff.md)
+Read in this order:
 
-## Product Documentation
-1. `product/README.md`
-2. `product/llms.txt`
-3. `product/llms-full.txt`
+1. [../AGENTS.md](../AGENTS.md): what Polynet is and how to work here.
+2. [core-contract.md](core-contract.md): core objects, invariants, product rules,
+   retirement candidates.
+3. [system-map.md](system-map.md): every area, its code, entry points, tables
+   and contract.
 
-## Current Release Truth
-1. `alpha-release-workflow.md`
+Implementation status is owned by current code, executable proofs, Git refs,
+deployment markers and live evidence. Docs describe rules and design; they do
+not track status. Update the system map instead of adding status ledgers.
 
-## Current staging coverage
-1. [Headless coverage and integration checkpoint](polynet-staging-coverage-ledger.md)
+## Contracts by area
 
-## Active contracts
-1. `auth-money-access-matrix.md`
-2. `irreducible-core-contract.md`
-3. `canonical-platform-operation-contract-v1.md`
-4. `native-agent-runtime-context-contract-v1.md`
-5. `polynet-workspace-mcp-contract-v0.md`
-6. `url-routing-contract-v1.md`
-7. `platform-diagnostics-contract-v1.md`
-8. `platform-cost-safety-contract-v1.md`
-9. `distribution-engineer-lead-adapter-v1.md`
+- **Identity and sign-in:** [auth-runtime-setup-workos-authkit.md](auth-runtime-setup-workos-authkit.md),
+  [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
+  [auth-money-access-matrix.md](auth-money-access-matrix.md)
+- **Communities and joining:** [community-join-request-canonicalization.md](community-join-request-canonicalization.md),
+  [community-member-arrival-v1.md](community-member-arrival-v1.md),
+  [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),
+  [url-routing-contract-v1.md](url-routing-contract-v1.md)
+- **Chat:** [community-interaction-substrate-contract-v1.md](community-interaction-substrate-contract-v1.md),
+  [community-interaction-migration-residue-map.md](community-interaction-migration-residue-map.md),
+  [community-private-channels-v1.md](community-private-channels-v1.md)
+- **Memory and cognition:** [community-agent-cognition-contract-v1.md](community-agent-cognition-contract-v1.md),
+  [community-lineage-ontology-contract-v0.md](community-lineage-ontology-contract-v0.md),
+  [community-evidence-integrity-contract-v1.md](community-evidence-integrity-contract-v1.md),
+  [member-ontology-contract-v1.md](member-ontology-contract-v1.md)
+- **Community agent:** [native-agent-runtime-context-contract-v1.md](native-agent-runtime-context-contract-v1.md),
+  [community-agent-conversations.md](community-agent-conversations.md),
+  [community-agent-conversation-end-state-v1.md](community-agent-conversation-end-state-v1.md),
+  [specs/proactive-community-agent-v0.md](specs/proactive-community-agent-v0.md)
+- **MCP and operations:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
+  [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md)
+- **Community sites:** [../infra/community-edge/README.md](../infra/community-edge/README.md),
+  [research/community-frontend-hosting-20261016.md](research/community-frontend-hosting-20261016.md)
+- **Money and cost:** [platform-cost-safety-contract-v1.md](platform-cost-safety-contract-v1.md),
+  [product/reference/billing-entitlements.md](product/reference/billing-entitlements.md),
+  [legal/](legal/)
+- **Operations:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md),
+  [schema-data-migration-discipline.md](schema-data-migration-discipline.md)
+- **Being removed with their code:** [community-forms-v1.md](community-forms-v1.md),
+  [community-member-workflows-foundation-v1.md](community-member-workflows-foundation-v1.md),
+  [contracts/community-funnel-v2-authority-kernel.md](contracts/community-funnel-v2-authority-kernel.md),
+  [composio-member-read-pilot-plan.md](composio-member-read-pilot-plan.md),
+  [skill-harness-contract.md](skill-harness-contract.md)
 
-## Destination architecture
-1. `agent-native-semantic-platform-thesis.md`
-2. `community-agent-cognition-contract-v1.md`
+## Release
 
-Implementation status is owned by current code, executable proof, Git/ref state,
-deployment markers, and live evidence. The staging coverage ledger above is a
-derived index requested for the headless integration checkpoint; it does not
-replace those sources. Keep dated plans and receipts as historical evidence,
-and update that single coverage index rather than adding competing status ledgers.
+- [alpha-release-workflow.md](alpha-release-workflow.md): the runbook.
+- [receipts/](receipts/): one receipt per production release.
 
-## Active operational guides
-1. `auth-runtime-setup-workos-authkit.md`
-2. `auth-session-target-architecture-v1.md`
-3. `schema-data-migration-discipline.md`
-4. `alpha-release-workflow.md`
+## Thinking and research
 
-## Archived historical evidence
-1. `archive/production-baseline-fingerprint-worksheet.md`
-2. legacy alpha deploy manifest
-3. `archive/release-candidate-freeze-2026-04-02.md`
-4. `archive/alpha-builder-only-posture-2026-03-19.md`
-5. `archive/convex-hardening-plan-v1.md`
-6. `archive/community-membership-access-rearchitecture-plan-v1.md`
-7. `archive/auth-foundation-plan-v1.md`
-8. `archive/auth-closure-plan-v1.md`
-9. `archive/convex-schema-skeleton-v1.md`
-10. `archive/convex-web3-posture-execution-plan-v1.md`
+- [agent-native-semantic-platform-thesis.md](agent-native-semantic-platform-thesis.md)
+- [research/](research/)
+
+## Product documentation
+
+Served to Studio's docs panel and agents: [product/README.md](product/README.md),
+`product/llms.txt`, `product/llms-full.txt`.
+
+## Archive
+
+[archive/](archive/) holds dated acceptance notes, finished plans and superseded
+contracts. They are historical evidence only.

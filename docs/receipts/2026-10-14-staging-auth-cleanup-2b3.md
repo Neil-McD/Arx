@@ -6,7 +6,7 @@ Deployed runtime: `09e1ca37e7ae0dd3fc48d4cf249526b5ea4c30bc`.
 [Machine-readable evidence](evidence/2026-10-14-staging-auth-cleanup-2b3.json)
 records the exact candidate gate, served asset identity, public boundaries,
 canonical metadata and local screenshot hashes.
-[Scope and runbook](../polynet-staging-auth-cleanup-2b3.md).
+[Scope and runbook](../archive/polynet-staging-auth-cleanup-2b3.md).
 
 ## Resulting behavior
 

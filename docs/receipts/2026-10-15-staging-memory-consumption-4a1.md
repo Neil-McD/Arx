@@ -3,7 +3,7 @@
 **Bounded staging acceptance passed October 15, 2026. Production was untouched.**
 
 [Structured evidence](evidence/2026-10-15-staging-memory-consumption-4a1.json).
-[Approved scope](../polynet-staging-memory-consumption-4a1.md).
+[Approved scope](../archive/polynet-staging-memory-consumption-4a1.md).
 [Draft PR #177](https://github.com/Neil-McD/Arx/pull/177), stacked on #176.
 
 ## Release identity

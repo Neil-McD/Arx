@@ -3,7 +3,7 @@
 Status: scoped staging acceptance passed October 15, 2026. One synthetic free
 admission, discarded-response recovery, native process restart, normal leave and
 non-restoring historical replay are verified. See the
-[execution receipt](receipts/2026-10-15-staging-founder-admission-approval-2c3.md).
+[execution receipt](../receipts/2026-10-15-staging-founder-admission-approval-2c3.md).
 Production is untouched. Elon algorithm: Step 1 requirements reconciled; Step 2
 excluded unnecessary infrastructure; Step 3 verified the remaining adapter.
 
@@ -31,7 +31,7 @@ The three documentation files changed after the runtime candidate do not
 change its backend source. This turn refreshed Git refs and public version
 metadata; it did not redeploy or independently attest the remote backend tree.
 
-The [2C2 receipt](receipts/2026-10-15-staging-founder-admission-queue-2c2.md)
+The [2C2 receipt](../receipts/2026-10-15-staging-founder-admission-queue-2c2.md)
 supports live founder non-empty list/read, repeat/fresh conversation, ordinary
 public request/cancellation, and native applicant/member private-queue denial.
 The later native document-denial probe used a nonexistent selector after
@@ -45,7 +45,7 @@ Nothing in 2C2 proves admission writes, workflow execution or notification deliv
 The product requirement is that a founder can admit a waiting member through a
 custom experience while Polynet remains the access authority. Its source is the
 founder onboarding loop and headless community-operations branch in the
-[trunk-down plan](research/headless-trunk-down-approach-20261014.md). A request ID,
+[trunk-down plan](../research/headless-trunk-down-approach-20261014.md). A request ID,
 an OAuth grant or an agent's statement cannot confer admission authority.
 
 Qualitative ranking below; these are mechanism-based estimates, not measured
