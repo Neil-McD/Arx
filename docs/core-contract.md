@@ -129,6 +129,7 @@ and data are proven gone, following the two-release pattern in
 | --- | --- |
 | Member workflows and forms | Being replaced by the proactive agent; check production use first |
 | Personal-agent tables (`personalMemoryItems`, `userMemorySettings`) | Code removed Oct 27; data deletion with Neil's OK |
+| Own-account payment tables (`userProviderConnections`, `userProviderAuthStates`, `userProviderDeviceAuthStates`) | Code removed Oct 27 (POL-10); encrypted keys, deleted with Neil's sign-off |
 | Credit and workspace-compute tables, `legacyProgramGrants` | Neil decided Oct 27: delete after a production backup, with his sign-off |
 | AI feed tables | Feature retired; retirement module still present |
 | `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |

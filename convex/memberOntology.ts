@@ -57,7 +57,6 @@ function mapAccountForMcp(account: Awaited<ReturnType<typeof loadMemberAccountCo
     display_name: account.displayName,
     handle: account.handle,
     timezone: account.timezone,
-    inference_provider: account.inferenceProvider,
     social_links: account.socialLinks,
     memberships: account.memberships.map((membership) => ({
       community_name: membership.communityName,
@@ -319,7 +318,6 @@ export const getMyMemberContextMarkdown = query({
   args: {
     authSubject: v.optional(v.string()),
     communityId: v.optional(v.id("communities")),
-    includeBillingContext: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -337,7 +335,6 @@ export const getMyMemberContextMarkdown = query({
       lens: { kind: "self" },
       communityId: args.communityId ? String(args.communityId) : null,
       communityName: community?.name ?? null,
-      includeBillingContext: args.includeBillingContext !== false,
     });
     return {
       member_md: rendered.memberMd,

@@ -5,7 +5,7 @@ import {
   decryptStoredSecret,
   encryptSecret,
   sha256HexText,
-} from "./providerConnections";
+} from "./secretCrypto";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   type CommunityResourceModuleLike,

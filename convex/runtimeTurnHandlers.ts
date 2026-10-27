@@ -1,11 +1,5 @@
-import {
-  runChatgptCompletion,
-} from "./httpChatgpt";
 import { api, internal } from "./_generated/api";
-import {
-  runOpenAiCompletion,
-  runOpenRouterCompletion,
-} from "./httpRuntimeSupport";
+import { runOpenAiCompletion } from "./httpRuntimeSupport";
 import {
   buildRuntimeRunPersistenceHelpers,
   type SseResponseEvent,
@@ -396,7 +390,6 @@ export async function handleRuntimeTurnRequest(args: {
       stream,
       inferenceSource,
       requestedRuntimeEngine,
-      providerApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,
@@ -450,10 +443,6 @@ export async function handleRuntimeTurnRequest(args: {
     const runtimeCommunityContextVersion = Number.isFinite(Number(ownedThread.contextVersion ?? 0))
       ? Math.max(0, Math.floor(Number(ownedThread.contextVersion ?? 0)))
       : 0;
-    const chatgptCodexRequestMetadata = {
-      sessionId: String(ownedThread._id),
-      threadId: String(ownedThread._id),
-    };
     const persistVisibleUserMessage = true;
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
@@ -924,33 +913,20 @@ export async function handleRuntimeTurnRequest(args: {
               runId,
               touchHeartbeat: touchRunHeartbeatBestEffort,
               operation: async (signal) => {
-                if (inferenceSource === "chatgpt") {
-                  return await runChatgptCompletion({
-                    ctx,
-                    userId: actor.dbUserId,
-                    modelId: requestedModelId,
-                    messages: finalizationMessages,
-                    maxTokens: finalizationMaxTokens,
-                    requestMetadata: chatgptCodexRequestMetadata,
-                    signal,
-                  });
+                // The founder-funded OpenAI model writes the fallback answer.
+                if (!openAiFinalizerModelId) {
+                  return {
+                    ok: false as const,
+                    status: 503,
+                    code: "finalizer_model_unavailable",
+                    message: "The community model is not an OpenAI model.",
+                  };
                 }
-                if (inferenceSource === "user_key" && openAiFinalizerModelId) {
-                  return await runOpenAiCompletion({
-                    req,
-                    modelId: openAiFinalizerModelId,
-                    messages: finalizationMessages,
-                    maxTokens: finalizationMaxTokens,
-                    apiKeyOverride: providerApiKeyOverride,
-                    signal,
-                  });
-                }
-                return await runOpenRouterCompletion({
+                return await runOpenAiCompletion({
                   req,
-                  modelRef,
+                  modelId: openAiFinalizerModelId,
                   messages: finalizationMessages,
                   maxTokens: finalizationMaxTokens,
-                  apiKeyOverride: providerApiKeyOverride,
                   signal,
                 });
               },
@@ -1270,7 +1246,6 @@ export async function handleRuntimeTurnRequest(args: {
             allowedToolNames: polynetAllowedToolNamesForRun,
             invocationSurface,
             memberAgentSurfaceContext,
-            apiKeyOverride: providerApiKeyOverride,
             appendRunEvent: streamAppendRunEvent,
             refreshRuntimeContextSnapshot: async (
               phase: "started" | "active" = "active",
@@ -1660,7 +1635,6 @@ export async function handleRuntimeTurnRequest(args: {
         allowedToolNames: polynetAllowedToolNamesForRun,
         invocationSurface,
         memberAgentSurfaceContext,
-        apiKeyOverride: providerApiKeyOverride,
         appendRunEvent: async (event): Promise<void> => {
           observeFunnelDraftWriteEvent(event);
           await appendRunEvent(event);

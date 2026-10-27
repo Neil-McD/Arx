@@ -133,14 +133,13 @@ require_match_in_file "$PERSISTENCE_FILE" 'existingAssistant = \(await ctx\.runQ
 require_match_in_file "$HANDLERS_FILE" 'if \(existingReplay\) \{' \
   "runtime turn returns persisted assistant for duplicate idempotency key"
 ASSIST_LOOKUP_LINE="$(rg -n -S 'existingAssistant = \(await ctx\.runQuery\(' "$PERSISTENCE_FILE" | head -n 1 | cut -d: -f1)"
-CHATGPT_COMPLETION_LINE="$(rg -n -S 'runChatgptCompletion\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
-OPENROUTER_COMPLETION_LINE="$(rg -n -S 'runOpenRouterCompletion\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
+OPENAI_COMPLETION_LINE="$(rg -n -S 'runOpenAiCompletion\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
 UNIFIED_TOOL_LOOP_LINE="$(rg -n -S 'executeChatToolsAgentLoop\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
 if [[ -z "$ASSIST_LOOKUP_LINE" ]]; then
   echo "FAIL: unable to verify assistant lookup ordering in runtime turn path"
   exit 1
 fi
-for COMPLETION_LINE in "$CHATGPT_COMPLETION_LINE" "$OPENROUTER_COMPLETION_LINE" "$UNIFIED_TOOL_LOOP_LINE"; do
+for COMPLETION_LINE in "$OPENAI_COMPLETION_LINE" "$UNIFIED_TOOL_LOOP_LINE"; do
   [[ -z "$COMPLETION_LINE" ]] && continue
   if (( ASSIST_LOOKUP_LINE >= COMPLETION_LINE )); then
     echo "FAIL: idempotency assistant lookup must occur before runtime inference/tool call"

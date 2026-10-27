@@ -81,7 +81,7 @@ for (const path of [
 const memberRuntime = read("convex/runtimeAgentLoop.ts");
 assert.match(
   memberRuntime,
-  /const activeProviderTools = \{[\s\S]*toolSchemas:[\s\S]*activeProviderTools\.(?:openAiTools|responsesTools)[\s\S]*openRouterTools: activeProviderTools\.openAiTools[\s\S]*responsesApiTools: activeProviderTools\.responsesTools/,
+  /const activeProviderTools = \{[\s\S]*toolSchemas:[\s\S]*activeProviderTools\.responsesTools[\s\S]*tools: activeProviderTools\.responsesTools/,
   "Member and Funnel must budget and send one resolved provider tool surface",
 );
 assert.match(
@@ -149,11 +149,7 @@ for (const path of [
   );
 }
 
-for (const path of [
-  "convex/openAiNativeToolCompletion.ts",
-  "convex/chatgptResponsesTransport.ts",
-  "convex/openRouterNativeTransport.ts",
-]) {
+for (const path of ["convex/openAiNativeToolCompletion.ts"]) {
   assert.doesNotMatch(read(path), /messages_exceed_size_budget/);
 }
 
@@ -161,25 +157,13 @@ const runtimeEvents = read("convex/communityAgentRuntime.ts");
 assert.match(runtimeEvents, /v\.literal\("input_budget"\)/);
 assert.match(runtimeEvents, /v\.literal\("context_projection"\)/);
 
-const inferenceConfig = read("convex/httpInferenceConfig.ts");
 const capacityRegistry = read("shared/runtimeInputBudget.ts");
 assert.doesNotMatch(
-  inferenceConfig,
-  /claude-sonnet-4-5|claude-opus-4-1|grok-4-fast/,
-  "active aliases must not resolve to retired or nonexistent OpenRouter slugs",
+  capacityRegistry,
+  /openrouter_chat_completions|chatgpt_responses/,
+  "agent turns budget only the OpenAI transport",
 );
-assert.match(inferenceConfig, /"grok-4\.1": "x-ai\/grok-4\.3"/);
-const defaultResolvedModelRefs = Array.from(
-  inferenceConfig.matchAll(/:\s*"([a-z0-9-]+\/[^"\s]+)"/gi),
-  (match) => match[1],
-);
-for (const modelRef of defaultResolvedModelRefs) {
-  assert.match(
-    capacityRegistry,
-    new RegExp(modelRef.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    `${modelRef} must have a reviewed capacity profile`,
-  );
-}
+assert.match(capacityRegistry, /"openai\/gpt-6-luna"/, "the community model must have a reviewed capacity profile");
 assert.match(capacityRegistry, /openai\/gpt-5\.6-luna/);
 
 const contract = read("docs/native-agent-runtime-context-contract-v1.md");

@@ -8,6 +8,7 @@ import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
 import {
   listRuntimeModelCapacityProfiles,
   planRuntimeInputBudget,
+  resolveRuntimeModelCapacityProfile,
   resolveRuntimeProviderBudgetIdentity,
   RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE,
 } from "../shared/runtimeInputBudget.ts";
@@ -120,18 +121,18 @@ describe("runtime input budget", () => {
 
   it("is monotonic as transcript content grows", () => {
     const shortPlan = planRuntimeInputBudget({
-      transport: "openrouter_chat_completions",
-      modelRef: "openai/gpt-oss-120b:free",
+      transport: "openai_responses",
+      modelRef: "openai/gpt-6-luna",
       messages: baseMessages,
       toolSchemas: [],
       reservedOutputTokens: 1_600,
     });
     const longPlan = planRuntimeInputBudget({
-      transport: "openrouter_chat_completions",
-      modelRef: "openai/gpt-oss-120b:free",
+      transport: "openai_responses",
+      modelRef: "openai/gpt-6-luna",
       messages: [
         ...baseMessages,
-        { role: "user", content: "x".repeat(300_000) },
+        { role: "user", content: "x".repeat(2_400_000) },
       ],
       toolSchemas: [],
       reservedOutputTokens: 1_600,
@@ -143,27 +144,27 @@ describe("runtime input budget", () => {
     expect(longPlan.failureCode).toBe("context_window_exceeded");
   });
 
-  it("binds admission to the provider transport and exact effective reference", () => {
+  it("binds admission to the OpenAI transport and the exact effective reference", () => {
     expect(
       resolveRuntimeProviderBudgetIdentity({
-        inferenceSource: "chatgpt",
-        requestedModelId: "gpt-5.6-sol",
-        modelRef: "openai/ignored-for-chatgpt",
+        inferenceSource: "platform",
+        requestedModelId: "gpt-6-luna",
+        modelRef: "openai/gpt-6-luna",
       }),
     ).toEqual({
-      transport: "chatgpt_responses",
-      modelRef: "openai/gpt-5.6-sol",
+      transport: "openai_responses",
+      modelRef: "openai/gpt-6-luna",
     });
-    expect(
-      resolveRuntimeProviderBudgetIdentity({
-        inferenceSource: "user_key",
-        requestedModelId: "sonnet-4.6",
-        modelRef: "anthropic/claude-sonnet-4.6",
-      }),
-    ).toEqual({
-      transport: "openrouter_chat_completions",
+    const unreviewed = resolveRuntimeProviderBudgetIdentity({
+      inferenceSource: "platform",
+      requestedModelId: "sonnet-4.6",
       modelRef: "anthropic/claude-sonnet-4.6",
     });
+    expect(unreviewed).toEqual({
+      transport: "openai_responses",
+      modelRef: "anthropic/claude-sonnet-4.6",
+    });
+    expect(resolveRuntimeModelCapacityProfile(unreviewed)).toBeNull();
   });
 
   it("rejects unknown capacity before provider execution and records the plan", async () => {
@@ -214,12 +215,12 @@ describe("runtime input budget", () => {
     let providerCalls = 0;
     const result = await runNativeRuntimeKernel({
       messages: [
-        { role: "user", content: "x".repeat(300_000) },
+        { role: "user", content: "x".repeat(2_400_000) },
       ],
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
-        transport: "openrouter_chat_completions",
-        modelRef: "openai/gpt-oss-120b:free",
+        transport: "openai_responses",
+        modelRef: "openai/gpt-6-luna",
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
@@ -233,7 +234,7 @@ describe("runtime input budget", () => {
           assistantText: "must not run",
           promptTokens: 1,
           completionTokens: 1,
-          resolvedModelId: "gpt-oss-120b",
+          resolvedModelId: "gpt-6-luna",
         };
       },
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
@@ -259,14 +260,14 @@ describe("runtime input budget", () => {
     const result = await runNativeRuntimeKernel({
       messages: [
         { role: "system", content: "Inspect only the authorized community." },
-        { role: "user", content: "x".repeat(300_000) },
+        { role: "user", content: "x".repeat(2_400_000) },
         { role: "assistant", content: "Prior answer." },
         { role: "user", content: "What is happening now?" },
       ],
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
-        transport: "openrouter_chat_completions",
-        modelRef: "openai/gpt-oss-120b:free",
+        transport: "openai_responses",
+        modelRef: "openai/gpt-6-luna",
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
@@ -289,7 +290,7 @@ describe("runtime input budget", () => {
           assistantText: "Current answer.",
           promptTokens: 1,
           completionTokens: 1,
-          resolvedModelId: "gpt-oss-120b",
+          resolvedModelId: "gpt-6-luna",
         };
       },
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
@@ -311,7 +312,7 @@ describe("runtime input budget", () => {
     ]);
     expect(result.transcript.slice(0, 4)).toEqual([
       { role: "system", content: "Inspect only the authorized community." },
-      { role: "user", content: "x".repeat(300_000) },
+      { role: "user", content: "x".repeat(2_400_000) },
       { role: "assistant", content: "Prior answer." },
       { role: "user", content: "What is happening now?" },
     ]);

@@ -15,7 +15,7 @@ describe("runtime context projection", () => {
   it("is deterministic and never mutates the durable transcript", () => {
     const messages: NativeToolAwareMessage[] = [
       { role: "system", content: "Canonical policy." },
-      { role: "user", content: "x".repeat(80_000) },
+      { role: "user", content: "x".repeat(640_000) },
       { role: "assistant", content: "Old answer." },
       { role: "user", content: "Current request." },
     ];
@@ -58,7 +58,7 @@ describe("runtime context projection", () => {
       {
         role: "tool",
         tool_call_id: "read-1",
-        content: JSON.stringify({ output: "e".repeat(100_000) }),
+        content: JSON.stringify({ output: "e".repeat(800_000) }),
       },
       { role: "assistant", content: "Evidence inspected." },
       { role: "user", content: "What changed?" },
@@ -92,11 +92,11 @@ describe("runtime context projection", () => {
     const currentToolResult: NativeToolAwareMessage = {
       role: "tool",
       tool_call_id: "current-read-1",
-      content: JSON.stringify({ output: "current evidence ".repeat(4_000) }),
+      content: JSON.stringify({ output: "current evidence ".repeat(32_000) }),
     };
     const messages: NativeToolAwareMessage[] = [
       { role: "system", content: "Canonical policy." },
-      { role: "user", content: "x".repeat(80_000) },
+      { role: "user", content: "x".repeat(640_000) },
       { role: "assistant", content: "Old answer." },
       { role: "user", content: "Inspect the current community events." },
       currentToolCall,
@@ -175,7 +175,7 @@ describe("runtime context projection", () => {
       {
         role: "tool",
         tool_call_id: "current-read-oversized",
-        content: JSON.stringify({ output: "x".repeat(300_000) }),
+        content: JSON.stringify({ output: "x".repeat(2_400_000) }),
       },
     ];
     const projection = projectProviderContextToBudget({
@@ -205,13 +205,13 @@ describe("runtime context projection", () => {
         {
           role: "tool",
           tool_call_id: "current-read-provider-stop",
-          content: JSON.stringify({ output: "x".repeat(300_000) }),
+          content: JSON.stringify({ output: "x".repeat(2_400_000) }),
         },
       ],
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
-        transport: "openrouter_chat_completions",
-        modelRef: "openai/gpt-oss-120b:free",
+        transport: "openai_responses",
+        modelRef: "openai/gpt-6-luna",
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
@@ -225,7 +225,7 @@ describe("runtime context projection", () => {
           assistantText: "must not run",
           promptTokens: 1,
           completionTokens: 1,
-          resolvedModelId: "gpt-oss-120b",
+          resolvedModelId: "gpt-6-luna",
         };
       },
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
@@ -246,7 +246,7 @@ describe("runtime context projection", () => {
   it("allows one effective provider-overflow retry and no projection loop", async () => {
     const messages: NativeToolAwareMessage[] = [
       { role: "system", content: "Canonical policy." },
-      { role: "user", content: "x".repeat(60_000) },
+      { role: "user", content: "x".repeat(480_000) },
       { role: "assistant", content: "Old answer." },
       { role: "user", content: "Current request." },
     ];
@@ -257,8 +257,8 @@ describe("runtime context projection", () => {
       messages,
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
-        transport: "openrouter_chat_completions",
-        modelRef: "openai/gpt-oss-120b:free",
+        transport: "openai_responses",
+        modelRef: "openai/gpt-6-luna",
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
@@ -284,7 +284,7 @@ describe("runtime context projection", () => {
           assistantText: "Recovered.",
           promptTokens: 10,
           completionTokens: 2,
-          resolvedModelId: "gpt-oss-120b",
+          resolvedModelId: "gpt-6-luna",
         };
       },
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
@@ -311,14 +311,14 @@ describe("runtime context projection", () => {
     const result = await runNativeRuntimeKernel({
       messages: [
         { role: "system", content: "Canonical policy." },
-        { role: "user", content: "x".repeat(300_000) },
+        { role: "user", content: "x".repeat(2_400_000) },
         { role: "assistant", content: "Old answer." },
         { role: "user", content: "Current request." },
       ],
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
-        transport: "openrouter_chat_completions",
-        modelRef: "openai/gpt-oss-120b:free",
+        transport: "openai_responses",
+        modelRef: "openai/gpt-6-luna",
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
@@ -334,7 +334,7 @@ describe("runtime context projection", () => {
           assistantText: "must not run",
           promptTokens: 1,
           completionTokens: 1,
-          resolvedModelId: "gpt-oss-120b",
+          resolvedModelId: "gpt-6-luna",
         };
       },
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
@@ -364,8 +364,8 @@ describe("runtime context projection", () => {
       ],
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
-        transport: "openrouter_chat_completions",
-        modelRef: "openai/gpt-oss-120b:free",
+        transport: "openai_responses",
+        modelRef: "openai/gpt-6-luna",
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,

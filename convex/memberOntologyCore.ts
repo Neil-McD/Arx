@@ -310,14 +310,10 @@ export async function loadMemberAccountContext(
   userId: any,
   nowMs: number,
 ): Promise<MemberAccountContextLike> {
-  const [user, detail, providerConnections, membershipRows, ownedRows] =
+  const [user, detail, membershipRows, ownedRows] =
     await Promise.all([
       ctx.db.get(userId),
       getUniqueUserProfileDetailByUserId(ctx, userId),
-      ctx.db
-        .query("userProviderConnections")
-        .withIndex("by_user", (q: any) => q.eq("userId", userId))
-        .collect(),
       ctx.db
         .query("communityMemberships")
         .withIndex("by_user", (q: any) => q.eq("userId", userId))
@@ -327,9 +323,6 @@ export async function loadMemberAccountContext(
         .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
         .collect(),
     ]);
-
-  const hasChatgpt = providerConnections.some((row: any) => row?.provider === "chatgpt");
-  const hasOpenAi = providerConnections.some((row: any) => row?.provider === "openai");
 
   const activeMemberships = (membershipRows as any[]).filter((row) =>
     communityMembershipRowIsActive(row),
@@ -358,7 +351,6 @@ export async function loadMemberAccountContext(
     displayName: detail?.displayName ?? null,
     handle: user?.handle ?? null,
     timezone: detail?.timezone ?? null,
-    inferenceProvider: hasChatgpt ? "chatgpt" : hasOpenAi ? "openai" : null,
     socialLinks,
     memberships,
     ownedCommunities: (ownedRows as any[])

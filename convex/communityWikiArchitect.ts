@@ -39,7 +39,7 @@ import {
   hydrateCommunityResourceBody,
   writeCommunityResourceBodyContent,
 } from "./communityResourceContent";
-import { sha256HexText } from "./providerConnections";
+import { sha256HexText } from "./secretCrypto";
 import {
   resolveCommunityInferenceFundingForAction,
 } from "./founderInferenceRuntime";

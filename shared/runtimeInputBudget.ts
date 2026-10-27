@@ -6,10 +6,8 @@ export const RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE =
 export const RUNTIME_INPUT_BUDGET_INVALID_CODE =
   "runtime_input_budget_invalid";
 
-export type RuntimeProviderTransport =
-  | "chatgpt_responses"
-  | "openai_responses"
-  | "openrouter_chat_completions";
+// Agent turns call OpenAI's Responses API only.
+export type RuntimeProviderTransport = "openai_responses";
 
 export type RuntimeModelCapacityProfile = {
   transport: RuntimeProviderTransport;
@@ -98,38 +96,6 @@ const RUNTIME_MODEL_CAPACITY_PROFILES: readonly RuntimeModelCapacityProfile[] = 
   capacityProfile("openai_responses", "openai/gpt-5.6-luna", 1_050_000),
   capacityProfile("openai_responses", "openai/gpt-6-luna", 1_050_000),
   capacityProfile("openai_responses", "openai/gpt-5.5", 1_050_000),
-  capacityProfile("chatgpt_responses", "openai/gpt-5.6-sol", 1_050_000),
-  capacityProfile("chatgpt_responses", "openai/gpt-5.5", 1_050_000),
-  capacityProfile(
-    "openrouter_chat_completions",
-    "openai/gpt-oss-120b:free",
-    131_072,
-  ),
-  capacityProfile(
-    "openrouter_chat_completions",
-    "anthropic/claude-sonnet-4.6",
-    1_000_000,
-  ),
-  capacityProfile(
-    "openrouter_chat_completions",
-    "anthropic/claude-opus-4.6",
-    1_000_000,
-  ),
-  capacityProfile(
-    "openrouter_chat_completions",
-    "google/gemini-2.5-flash",
-    1_048_576,
-  ),
-  capacityProfile(
-    "openrouter_chat_completions",
-    "google/gemini-2.5-pro",
-    1_048_576,
-  ),
-  capacityProfile(
-    "openrouter_chat_completions",
-    "x-ai/grok-4.3",
-    1_000_000,
-  ),
 ];
 
 function normalizeModelRef(value: unknown): string {
@@ -169,28 +135,11 @@ export function resolveRuntimeProviderBudgetIdentity(params: {
   requestedModelId: string;
   modelRef: string;
 }): { transport: RuntimeProviderTransport; modelRef: string } {
-  const inferenceSource = String(params.inferenceSource ?? "")
-    .trim()
-    .toLowerCase();
-  if (inferenceSource === "chatgpt") {
-    return {
-      transport: "chatgpt_responses",
-      modelRef: `openai/${normalizeModelRef(params.requestedModelId)}`,
-    };
-  }
-  const resolvedModelRef = normalizeModelRef(params.modelRef);
-  if (
-    (inferenceSource === "platform" || inferenceSource === "user_key") &&
-    resolvedModelRef.startsWith("openai/")
-  ) {
-    return {
-      transport: "openai_responses",
-      modelRef: resolvedModelRef,
-    };
-  }
+  // A model reference without a reviewed OpenAI profile fails closed later as
+  // runtime_model_capacity_unknown.
   return {
-    transport: "openrouter_chat_completions",
-    modelRef: resolvedModelRef,
+    transport: "openai_responses",
+    modelRef: normalizeModelRef(params.modelRef),
   };
 }
 
