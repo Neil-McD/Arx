@@ -266,9 +266,12 @@ class Settings {
     this.save.textContent = "Saving…";
     this.status.textContent = "Saving…";
     const value = (key) => this.fields[key].control.value;
+    const keys = ["display_name", "handle", "bio"].concat(LINKS.map((link) => link[0]));
+    const submitted = {};
+    for (const key of keys) submitted[key] = value(key);
     const res = await call("/__polynet/me/profile", {
-      display_name: value("display_name"), handle: value("handle"), bio: value("bio"),
-      social_links: { youtube: value("youtube"), x: value("x"), instagram: value("instagram") },
+      display_name: submitted.display_name, handle: submitted.handle, bio: submitted.bio,
+      social_links: { youtube: submitted.youtube, x: submitted.x, instagram: submitted.instagram },
     });
     if (!this.current()) return;
     this.saving = false;
@@ -279,11 +282,15 @@ class Settings {
     if (!ok(res) || !res.body.profile) return this.showError(res.body.code, "That didn't save. Try again.");
     const profile = res.body.profile;
     this.data.profile = profile;
-    this.fields.display_name.control.value = profile.display_name || "";
-    this.fields.handle.control.value = profile.handle || "";
-    this.fields.bio.control.value = profile.bio || "";
-    for (const link of LINKS) this.fields[link[0]].control.value = profile.social_links[link[0]] || "";
-    this.status.textContent = "Saved.";
+    const saved = { display_name: profile.display_name, handle: profile.handle, bio: profile.bio };
+    for (const link of LINKS) saved[link[0]] = profile.social_links[link[0]];
+    // Fields edited while the save was in flight keep the newer text.
+    let edited = false;
+    for (const key of keys) {
+      if (value(key) !== submitted[key]) edited = true;
+      else this.fields[key].control.value = saved[key] || "";
+    }
+    this.status.textContent = edited ? "Saved. Save again to keep your newer edits." : "Saved.";
   }
 
   photoRow() {

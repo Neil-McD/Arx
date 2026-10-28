@@ -80,6 +80,7 @@ async function backend(request: Request): Promise<Response> {
     // The first sign-out hands back a ticket; the other origin's, with it, just ends.
     return Response.json(JSON.parse(body).ticket ? { ok: true } : { ok: true, signout_ticket: TICKET });
   }
+  if (url.pathname === "/runtime/app/me/profile" && settings.holdProfile) await settings.holdProfile;
   if (url.pathname.startsWith("/runtime/app/me/") && url.pathname !== "/runtime/app/me/communities") return settingsBackend(url.pathname, JSON.parse(body || "{}"));
   return Response.json({ ok: true, value: {} });
 }
@@ -89,6 +90,7 @@ const TICKET = `${Date.now() + 60_000}.${"k".repeat(43)}`;
 const settings = {
   profile: {} as Record<string, any>, community: { name: "Sunrise Climbing Club", role: "member" },
   notifications: { muted: false, weekly_digest: true }, failNotifications: false, left: false,
+  holdProfile: null as Promise<void> | null,
 };
 function resetSettings(role = "member") {
   settings.profile = { display_name: "Mo Climber", handle: "mo", bio: "Bouldering.", avatar_url: null, social_links: { youtube: "", x: "", instagram: "" } };
@@ -96,6 +98,7 @@ function resetSettings(role = "member") {
   settings.notifications = { muted: false, weekly_digest: true };
   settings.failNotifications = false;
   settings.left = false;
+  settings.holdProfile = null;
 }
 function settingsBackend(path: string, body: Record<string, any>): Response {
   const refuse = (code: string, status = 400) => Response.json({ ok: false, code }, { status });
@@ -361,6 +364,31 @@ for (const [engine, type] of ENGINES) {
     }
   }, 60_000);
 }
+
+test("Settings: edits made while a save is in flight are kept, and the page says they aren't saved yet", async () => {
+  resetSettings();
+  const { browser, page } = await openTwin(chromium, "/settings", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    let release = () => {};
+    settings.holdProfile = new Promise<void>((resolve) => { release = resolve; });
+    const name = personal.getByLabel("Name", { exact: true });
+    const bio = personal.getByLabel("Bio");
+    await name.fill("  Mo the Climber ");
+    await personal.locator("[part=save]").click();
+    await expect.poll(() => personal.locator("[part~=section-profile] [part=status]").textContent()).toBe("Saving…");
+    await bio.fill("Bouldering and ropes.");
+    release();
+    const status = personal.locator("[part~=section-profile] [part=status]");
+    await expect.poll(() => status.textContent()).toBe("Saved. Save again to keep your newer edits.");
+    // The untouched field shows the saved (trimmed) value; the edited one keeps the newer text.
+    expect([await name.inputValue(), await bio.inputValue()]).toEqual(["Mo the Climber", "Bouldering and ropes."]);
+    expect(settings.profile.bio).toBe("Bouldering.");
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
 
 test("Settings: leaving asks first, then goes to Your communities; the owner is told they can't", async () => {
   resetSettings("owner");
