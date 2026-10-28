@@ -1600,6 +1600,18 @@ test("events: in a busy community the one under way and the recent past still sh
   await page.close();
 });
 
+test("events: an event that began days ago and is still running shows as under way", async () => {
+  const page = await open((fake) => {
+    calendar(fake);
+    const start = new Date(Date.now() - 4 * DAYS);
+    fake.events.push({ ...fake.events[1], ref: `event:long:${start.getTime()}`, path: "/x/long.md", title: "Week-long trip", starts_at: start.toISOString(), ends_at: new Date(Date.now() + DAYS).toISOString() });
+  }, frame(), "/events");
+  const events = eventsOf(page);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  expect((await titles(events.locator("[part~=event-now] [part=event-title]"))).some((t: string) => t.includes("Week-long trip"))).toBe(true);
+  await page.close();
+});
+
 test("events: a saved link to a cancelled event says so, with nothing to join or add", async () => {
   const page = await open((fake) => {
     fake.events = [{ ref: "event:ev9:1893456000000", title: "Harbour swim", starts_at: new Date(1893456000000).toISOString(), timezone: "UTC", status: "cancelled", url: "https://example.com/join" }];

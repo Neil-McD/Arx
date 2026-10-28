@@ -239,7 +239,14 @@ class PolynetEvents extends HTMLElement {
     if (generation !== this.generation) return;
     const known = (list) => list.filter((event) => addressOf(event.ref));
     const started = (list) => known(list).filter((event) => startOf(event).getTime() < now);
-    this.now = started(current.entries).filter((event) => endOf(event).getTime() > now);
+    // Under way: started and not yet ended, from either read (a long event
+    // that began before the short read's window is still in the past read).
+    const seen = new Set();
+    this.now = started(current.entries.concat(past.entries)).filter((event) => {
+      if (endOf(event).getTime() <= now || seen.has(event.ref)) return false;
+      seen.add(event.ref);
+      return true;
+    });
     this.past = limit ? [] : started(past.entries).filter((event) => endOf(event).getTime() <= now).reverse();
     // One starting just as the reads ran can be in both.
     const under = new Set(this.now.map((event) => event.ref));
