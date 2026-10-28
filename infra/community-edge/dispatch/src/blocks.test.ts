@@ -789,6 +789,23 @@ test("an edit over 8,000 characters keeps the editor open and saves nothing", as
   await page.close();
 });
 
+test("a failed text-only send keeps its key across a reload, so resending can't post it twice", async () => {
+  const page = await open((fake) => { fake.failPosts = 1; });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  const input = chat.locator("[part=footer] [part=composer-input]");
+  await input.fill("Lost in transit");
+  await chat.locator("[part=footer] [part~=composer-send]").click();
+  await expect.poll(() => input.inputValue()).toBe("Lost in transit");
+  const firstKey = (await calls(page, "post"))[0][3].key;
+  await page.reload();
+  await expect.poll(() => input.inputValue()).toBe("Lost in transit");
+  await chat.locator("[part=footer] [part~=composer-send]").click();
+  await expect.poll(async () => (await calls(page, "post")).length).toBe(1);
+  expect((await calls(page, "post"))[0][3].key).toBe(firstKey);
+  await page.close();
+});
+
 test("drafts stay with their channel when the member switches away and back", async () => {
   const page = await open();
   const chat = page.locator("polynet-chat");

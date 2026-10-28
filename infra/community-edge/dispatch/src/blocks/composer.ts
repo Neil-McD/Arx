@@ -115,6 +115,14 @@ function draftFor(scope) {
         draft.text = saved.text;
         draft.mentions = Array.isArray(saved.mentions) ? saved.mentions.filter((m) => m && m.ref && m.handle) : [];
         draft.agent = saved.agent === true;
+        // A failed text-only send keeps its retry identity across a reload: the
+        // server may have taken it, and a new key would post it twice.
+        const failed = saved.failed;
+        if (failed && typeof failed.key === "string" && /^[A-Za-z0-9_-]{8,100}$/.test(failed.key) && typeof failed.text === "string"
+          && Array.isArray(failed.mentions) && failed.mentions.every((ref) => typeof ref === "string")) {
+          draft.failedKey = failed.key;
+          draft.failedSend = { text: failed.text, askAgent: failed.askAgent === true, mentions: failed.mentions, files: [] };
+        }
       }
     } catch (error) {
       // Storage can be off (private windows, blocked site data): memory still holds the draft.
@@ -126,7 +134,10 @@ function draftFor(scope) {
 function saveDraft(scope, draft) {
   if (!draftOwner(scope)) return;
   try {
-    if (draft.text) sessionStorage.setItem(draftId(scope), JSON.stringify({ text: draft.text, mentions: draft.mentions, agent: draft.agent }));
+    // Files can't be stored, so only a text-only failure keeps its key.
+    const failed = draft.failedKey && draft.failedSend && !draft.failedSend.files.length
+      ? { key: draft.failedKey, text: draft.failedSend.text, askAgent: draft.failedSend.askAgent, mentions: draft.failedSend.mentions } : null;
+    if (draft.text) sessionStorage.setItem(draftId(scope), JSON.stringify({ text: draft.text, mentions: draft.mentions, agent: draft.agent, failed: failed }));
     else sessionStorage.removeItem(draftId(scope));
   } catch (error) {
     // See draftFor.
