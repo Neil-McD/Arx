@@ -11,6 +11,8 @@ import { KIT_SOURCE } from "./blocks/kit";
 import { CHANNELS_SOURCE } from "./blocks/channels";
 import { CHAT_SOURCE } from "./blocks/chat";
 import { COMPOSER_SOURCE } from "./blocks/composer";
+import { MEMBERS_SOURCE } from "./blocks/members";
+import { PROFILE_SOURCE } from "./blocks/profile";
 import { UI_SOURCE } from "./ui";
 
 const SITE = "https://run-club.polynet.test";
@@ -83,7 +85,21 @@ export default {
     return { ok: true };
   },
   typing: async (slug, on, options) => { record("typing", [slug, on, (options && options.thread) || null]); },
-  members: async () => { record("members", []); return fake.members.map((m) => Object.assign({}, m)); },
+  members: async () => { fail(); record("members", []); return fake.members.map((m) => Object.assign({}, m)); },
+  profile: async (who) => {
+    fail();
+    record("profile", [who]);
+    const key = typeof who === "string" ? who : who.handle || who.ref;
+    const found = Object.values(fake.profiles).find((p) => p.handle === key || p.ref === key);
+    if (!found) { const error = new Error("Not found."); error.code = "semantic_not_found"; throw error; }
+    return JSON.parse(JSON.stringify(found));
+  },
+  watchOnline: async (onChange) => {
+    record("watchOnline", []);
+    fake.onlineWatchers.push(onChange);
+    onChange();
+    return () => { fake.onlineWatchers = fake.onlineWatchers.filter((f) => f !== onChange); };
+  },
   markRead: async (slug) => { record("markRead", [slug]); return {}; },
   watch: async (slug, onChange) => {
     record("watch", [slug]);
@@ -92,8 +108,16 @@ export default {
     return () => { fake.watchers[slug] = fake.watchers[slug].filter((f) => f !== onChange); };
   },
   fileUrl: (file) => "/__polynet/files/" + String(file.ref || file).replace("attachment:", ""),
-  markdown: (text) => { const p = document.createElement("p"); p.textContent = text; const f = document.createDocumentFragment(); f.append(p); return f; },
-  account: async () => ({ member: {}, community: {}, links: {} }),
+  // Paragraph text, with inline code as code (like the real one), never markup.
+  markdown: (text) => {
+    const p = document.createElement("p");
+    for (const piece of String(text).split(/(\x60[^\x60]+\x60)/)) {
+      if (/^\x60.*\x60$/.test(piece)) { const code = document.createElement("code"); code.textContent = piece.slice(1, -1); p.append(code); }
+      else if (piece) p.append(piece);
+    }
+    const f = document.createDocumentFragment(); f.append(p); return f;
+  },
+  account: async () => ({ member: {}, community: {}, links: { messages: "https://polynet.test/?dm=inbox" } }),
   signOut: async () => {},
 };
 `;
@@ -148,6 +172,13 @@ function fixture() {
         { ...post("r2", ana, minutes(7), "Bring a headlamp"), ref: "interaction:reply:r2", object_type: "reply" },
       ],
     } as Record<string, object[]>,
+    profiles: {
+      sam: { ref: "user:sam", name: "Sam Rivera", handle: "sam", avatar_url: null, role: "admin", online: false,
+        bio: "Trail runner.\n<b>not bold</b>", links: { youtube: "https://youtube.com/@samruns", x: "javascript:alert(1)", instagram: "data:text/html,hi" } },
+      ana: { ref: "user:ana", name: "Ana Ito", handle: "ana", avatar_url: null, role: "member", online: true, bio: null, links: { youtube: null, x: "https://x.com/ana", instagram: null } },
+      me: { ref: "user:me", name: "Me", handle: "me", avatar_url: null, role: "member", online: true, bio: "It's me.", links: {} },
+    } as Record<string, object>,
+    onlineWatchers: [] as unknown[],
     watchers: {},
     calls: [] as unknown[],
   };
@@ -175,6 +206,7 @@ async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}
   const files: Record<string, string> = {
     "/__polynet/ui.js": UI_SOURCE, "/__polynet/sdk.js": FAKE_SDK, "/__polynet/blocks/kit.js": KIT_SOURCE,
     "/__polynet/blocks/channels.js": CHANNELS_SOURCE, "/__polynet/blocks/chat.js": CHAT_SOURCE, "/__polynet/blocks/composer.js": COMPOSER_SOURCE,
+    "/__polynet/blocks/members.js": MEMBERS_SOURCE, "/__polynet/blocks/profile.js": PROFILE_SOURCE,
   };
   await page.route(`${SITE}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -882,5 +914,246 @@ test("on a touch screen Enter is a new line, the button sends, and message actio
   expect(await own.locator("[part~=message-action-edit]").isVisible()).toBe(false);
   await own.locator("[part=message-more]").tap();
   await expect.poll(() => own.locator("[part~=message-action-edit]").isVisible()).toBe(true);
+  await page.close();
+});
+
+// Members and profiles.
+const MEMBERS_PAGE = `<!doctype html><html lang="en"><head><title>x</title><script type="module" src="/__polynet/ui.js"></script></head>
+  <body style="font-family: Georgia, serif"><polynet-members style="width:320px"></polynet-members></body></html>`;
+const crowd = (fake: ReturnType<typeof fixture>) => {
+  fake.members = [
+    { name: "Sam Rivera", handle: "sam", ref: "user:sam", avatar_url: null, online: false, role: "admin" },
+    { name: "Ana Ito", handle: "ana", ref: "user:ana", avatar_url: null, online: true, role: "member" },
+    { name: "Bea Chen", handle: "bea", ref: "user:bea", avatar_url: null, online: false, role: "member" },
+    { name: "Olu Ade", handle: "olu", ref: "user:olu", avatar_url: null, online: true, role: "owner" },
+    { name: "Max Moss", handle: "max", ref: "user:max", avatar_url: null, online: false, role: "moderator" },
+    { name: "Me", handle: "me", ref: "user:me", avatar_url: null, online: true, role: "member" },
+  ];
+};
+const panel = (page: Page) => page.locator("polynet-profile [part=panel]");
+const deepActive = (page: Page) => page.evaluate(() => {
+  let node: Element | null = document.activeElement;
+  while (node && node.shadowRoot && node.shadowRoot.activeElement) node = node.shadowRoot.activeElement;
+  return node ? (node.getAttribute("data-key") || node.getAttribute("part")) : null;
+});
+
+test("members: online first with a presence dot, role badges, and search by name or handle", async () => {
+  const page = await open(crowd, MEMBERS_PAGE);
+  const members = page.locator("polynet-members");
+  await expect.poll(() => members.getAttribute("state")).toBe("ready");
+  const names = (section: string) => members.locator(`[part~=section-${section}] [part=member-name]`).allTextContents();
+  // Online first; within each, owners, admins and moderators lead, then by name.
+  expect(await names("online")).toEqual(["Olu Ade", "Ana Ito", "Me"]);
+  expect(await names("everyone")).toEqual(["Sam Rivera", "Max Moss", "Bea Chen"]);
+  expect(await members.locator("[part~=section-online] [part=section-title]").textContent()).toBe("Online3");
+  expect(await members.locator("[part~=section-everyone] [part=section-title]").textContent()).toBe("Everyone else3");
+  expect(await members.locator("[part~=member-online]").count()).toBe(3);
+  expect(await members.locator("[part~=section-online] [part=presence-dot]").count()).toBe(3);
+  expect(await members.locator("[part~=section-everyone] [part=presence-dot]").count()).toBe(0);
+  expect(await members.locator("[part~=role-badge]").allTextContents()).toEqual(["Owner", "Admin", "Moderator"]);
+  expect(await members.locator("[part~=member]").first().textContent()).toContain(", online, Owner");
+  expect(await members.locator("[part~=member-you] [part=member-name]").textContent()).toBe("Me");
+  expect(await members.locator("[part~=member]").first().getAttribute("href")).toBe("?member=olu");
+
+  const search = members.locator("[part=search]");
+  await search.fill("sa");
+  expect(await members.locator("[part=member-name]").allTextContents()).toEqual(["Sam Rivera"]);
+  await search.fill("@an");
+  expect(await members.locator("[part=member-name]").allTextContents()).toEqual(["Ana Ito"]);
+  expect(await members.locator("[part~=section-everyone]").count()).toBe(0);
+  await search.fill("zzz");
+  expect(await members.locator("[part=no-results]").textContent()).toBe("No one matches “zzz”.");
+  await search.fill("");
+  // The keyboard: from the search box into the list, one tab stop, arrows move.
+  await search.focus();
+  await page.keyboard.press("ArrowDown");
+  expect(await deepActive(page)).toBe("user:olu");
+  await page.keyboard.press("ArrowDown");
+  expect(await deepActive(page)).toBe("user:ana");
+  expect(await members.locator("[part~=member][tabindex='0']").count()).toBe(1);
+  expect(await calls(page, "members")).toHaveLength(1);
+  await page.close();
+});
+
+test("members: live when who's online changes, and large communities render a page at a time", async () => {
+  const page = await open(crowd, MEMBERS_PAGE);
+  const members = page.locator("polynet-members");
+  await expect.poll(() => members.locator("[part~=member-online]").count()).toBe(3);
+  await page.evaluate(() => {
+    const fake = (window as any).fake;
+    fake.members.find((m: any) => m.handle === "sam").online = true;
+    for (const f of fake.onlineWatchers) f();
+  });
+  await expect.poll(() => members.locator("[part~=section-online] [part=member-name]").allTextContents(), { timeout: 5000 })
+    .toEqual(["Olu Ade", "Sam Rivera", "Ana Ito", "Me"]);
+  await page.close();
+
+  const big = await open((fake) => {
+    fake.members = Array.from({ length: 450 }, (_, i) => ({ name: `Runner ${i}`, handle: `r${i}`, ref: `user:r${i}`, avatar_url: null, online: false, role: "member" }));
+  }, MEMBERS_PAGE);
+  const list = big.locator("polynet-members");
+  await expect.poll(() => list.locator("[part~=member]").count()).toBe(200);
+  expect(await list.locator("[part~=section-everyone] [part=section-title]").textContent()).toBe("Everyone450");
+  expect(await list.locator("[part=more]").textContent()).toBe("Show 200 more");
+  await list.locator("[part=more]").scrollIntoViewIfNeeded();
+  await expect.poll(() => list.locator("[part~=member]").count()).toBeGreaterThanOrEqual(400);
+  await big.close();
+});
+
+test("members signed out: no names, no members read, a way in", async () => {
+  const page = await open((fake) => { crowd(fake); fake.session = { signed_in: false, community: "run-club", community_name: "Run Club", join_url: "https://polynet.test/c/run-club" } as any; }, MEMBERS_PAGE);
+  const members = page.locator("polynet-members");
+  await expect.poll(() => members.getAttribute("state")).toBe("signed-out");
+  expect(await members.locator("[part=sign-in]").textContent()).toBe("Sign in");
+  expect(await members.locator("[part=join]").getAttribute("href")).toBe("https://polynet.test/c/run-club");
+  const text = await page.evaluate(() => document.querySelector("polynet-members")!.shadowRoot!.textContent);
+  for (const name of ["Sam", "Ana", "Olu"]) expect(text).not.toContain(name);
+  expect(await calls(page, "members")).toEqual([]);
+  expect(await calls(page, "watchOnline")).toEqual([]);
+  await page.close();
+});
+
+test("a member opens their profile: text-only bio, safe links, Message to Studio, ?member= in the URL; Esc closes and returns focus", async () => {
+  const page = await open(crowd, MEMBERS_PAGE);
+  const members = page.locator("polynet-members");
+  const sam = members.locator("[part~=member][data-key='user:sam']");
+  await sam.click();
+  const sheet = panel(page);
+  await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("ready");
+  expect(await sheet.isVisible()).toBe(true);
+  expect(await page.evaluate(() => location.search)).toBe("?member=sam");
+  expect(await sheet.getAttribute("aria-labelledby")).toBe(await sheet.locator("[part=name]").getAttribute("id"));
+  expect(await sheet.locator("[part=name]").textContent()).toBe("Sam Rivera");
+  expect(await sheet.locator("[part=handle]").textContent()).toBe("@sam");
+  expect(await sheet.locator("[part~=role-badge]").textContent()).toBe("Admin");
+  expect(await sheet.locator("[part=online]").count()).toBe(0);
+  // The bio is text: markup in it shows as typed, never as elements.
+  expect(await sheet.locator("[part=bio]").textContent()).toBe("Trail runner.\n<b>not bold</b>");
+  expect(await sheet.locator("[part=bio] b").count()).toBe(0);
+  // javascript: and data: links are dropped; web links open apart from the site.
+  const links = sheet.locator("[part=link]");
+  expect(await links.allTextContents()).toEqual(["YouTube"]);
+  expect(await links.first().getAttribute("href")).toBe("https://youtube.com/@samruns");
+  expect(await links.first().getAttribute("rel")).toBe("noopener noreferrer");
+  expect(await links.first().getAttribute("target")).toBe("_blank");
+  const message = sheet.locator("[part=message]");
+  await expect.poll(() => message.count()).toBe(1);
+  expect(await message.getAttribute("href")).toBe("https://polynet.test/?dm=inbox");
+  expect(await message.getAttribute("target")).toBe(null);
+  expect(await calls(page, "profile")).toEqual([["profile", "sam"]]);
+  // Wide screens: a side sheet at the right edge, full height (once it has slid in).
+  await expect.poll(async () => { const box = (await sheet.boundingBox())!; return [Math.round(box.x + box.width), Math.round(box.height)]; }).toEqual([1100, 760]);
+
+  // Focus starts on Close and Tab stays in the panel.
+  expect(await deepActive(page)).toBe("close");
+  for (let i = 0; i < 4; i += 1) {
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe("POLYNET-PROFILE");
+  }
+  await page.keyboard.press("Escape");
+  await expect.poll(() => sheet.isVisible()).toBe(false);
+  await expect.poll(() => page.evaluate(() => location.search)).toBe("");
+  expect(await deepActive(page)).toBe("user:sam");
+  await page.close();
+});
+
+test("site code opens a profile with polynet:profile; Message is hidden on your own; Back closes; a phone gets a bottom sheet", async () => {
+  const page = await open(crowd, MEMBERS_PAGE, "/", { viewport: { width: 390, height: 800 } });
+  await expect.poll(() => page.locator("polynet-members").getAttribute("state")).toBe("ready");
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "me" } })));
+  const sheet = panel(page);
+  await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("ready");
+  expect(await sheet.locator("[part=name]").textContent()).toBe("Me");
+  expect(await sheet.locator("[part=you]").textContent()).toBe("You");
+  await page.waitForTimeout(100);
+  expect(await sheet.locator("[part=message]").count()).toBe(0);
+  await expect.poll(async () => { const box = (await sheet.boundingBox())!; return [Math.round(box.x), Math.round(box.width), Math.round(box.y + box.height)]; })
+    .toEqual([0, 390, 800]);
+
+  // Another member, then Back: the panel closes with the URL.
+  await sheet.locator("[part=close]").click();
+  await expect.poll(() => sheet.isVisible()).toBe(false);
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "ana" } })));
+  await expect.poll(() => sheet.locator("[part=name]").textContent()).toBe("Ana Ito");
+  // The URL follows once the close's own Back has landed.
+  await expect.poll(() => page.evaluate(() => location.search)).toBe("?member=ana");
+  expect(await sheet.locator("[part=online]").textContent()).toBe("Online");
+  await page.goBack();
+  await expect.poll(() => sheet.isVisible()).toBe(false);
+  expect(await page.evaluate(() => location.search)).toBe("");
+
+  // Unknown members and anything that isn't a handle or ref.
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "../secret" } })));
+  await page.waitForTimeout(100);
+  expect(await sheet.isVisible()).toBe(false);
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "ghost" } })));
+  await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("missing");
+  expect(await sheet.locator("[part=state]").textContent()).toBe("This profile isn't available.");
+  expect((await calls(page, "profile")).map((c: any) => c[1])).toEqual(["me", "ana", "ghost"]);
+  await page.close();
+});
+
+test("?member= on arrival opens that profile; signed out it shows a way in and nothing about them", async () => {
+  const page = await open(() => {}, PAGE, "/?channel=crew&member=sam");
+  const sheet = panel(page);
+  await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("ready");
+  expect(await sheet.locator("[part=name]").textContent()).toBe("Sam Rivera");
+  await sheet.locator("[part=close]").click();
+  await expect.poll(() => sheet.isVisible()).toBe(false);
+  // Closing keeps the rest of the address.
+  expect(await page.evaluate(() => location.search)).toBe("?channel=crew");
+  await page.close();
+
+  const out = await open((fake) => { fake.session = { signed_in: false, community: "run-club", community_name: "Run Club", join_url: "https://polynet.test/c/run-club" } as any; }, MEMBERS_PAGE, "/?member=sam");
+  const gate = panel(out);
+  await expect.poll(() => out.locator("polynet-profile").getAttribute("state")).toBe("signed-out");
+  expect(await gate.textContent()).not.toContain("Sam");
+  expect(await calls(out, "profile")).toEqual([]);
+  await gate.locator("[part=sign-in]").click();
+  expect(await calls(out, "signIn")).toEqual([["signIn", "/?member=sam"]]);
+  await out.close();
+});
+
+test("chat authors and @-tagged members open their profile; focus comes back to the name", async () => {
+  const page = await open((fake) => {
+    fake.feeds.general.push(post("t1", ME, minutes(1), "Thanks @ana, see `@sam` and @nobody (mail a@b.com)", { by_me: true }));
+  });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(6);
+  // The agent has no profile.
+  expect(await chat.locator("[part~=message-agent] button[part=message-author]").count()).toBe(0);
+  const ana = chat.locator("[part~=message]").nth(3);
+  await ana.locator("[part=message-author]").click();
+  const sheet = panel(page);
+  await expect.poll(() => sheet.locator("[part=name]").textContent()).toBe("Ana Ito");
+  await page.keyboard.press("Escape");
+  await expect.poll(() => sheet.isVisible()).toBe(false);
+  expect(await deepActive(page)).toBe("author");
+
+  // Only known members' tags become links, and not inside code.
+  const tagged = chat.locator("[part~=message]").last();
+  await expect.poll(() => tagged.locator("[part=mention]").allTextContents()).toEqual(["@ana"]);
+  expect(await tagged.locator("[part=message-body]").textContent()).toBe("Thanks @ana, see @sam and @nobody (mail a@b.com)");
+  expect(await tagged.locator("[part=message-body] code").textContent()).toBe("@sam");
+  expect(await tagged.locator("[part=mention]").getAttribute("href")).toBe("?member=ana");
+  // Straight after a close (its Back still on the way), the new profile keeps the panel and the URL.
+  await tagged.locator("[part=mention]").click();
+  await expect.poll(() => sheet.isVisible()).toBe(true);
+  await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("ready");
+  expect(await sheet.locator("[part=name]").textContent()).toBe("Ana Ito");
+  await page.waitForTimeout(100);
+  expect(await sheet.isVisible()).toBe(true);
+  expect(await page.evaluate(() => location.search)).toBe("?member=ana");
+  await page.close();
+});
+
+test("a thread's authors open profiles too", async () => {
+  const page = await open();
+  const chat = page.locator("polynet-chat");
+  await chat.locator("[part=replies]").click();
+  const thread = chat.locator("[part=thread-panel]");
+  await expect.poll(() => thread.locator("[part~=message-body]").count()).toBe(3);
+  await thread.locator("[part=message-author]").nth(1).click();
+  await expect.poll(() => panel(page).locator("[part=name]").textContent()).toBe("Sam Rivera");
   await page.close();
 });

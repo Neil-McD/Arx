@@ -2,7 +2,8 @@
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to their account, their
 // communities, Discover, messages and settings. It also loads Polynet's
-// blocks (/__polynet/blocks/<name>.js) on pages that place them. Its structure, keyboard
+// blocks (/__polynet/blocks/<name>.js) on pages that place them, and opens the
+// profile panel for ?member= links and "polynet:profile". Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
 // CSS custom properties. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
@@ -266,7 +267,7 @@ else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELA
 
 // Polynet's blocks load only on pages that place them, now or later (a
 // single-page app may render <polynet-chat> after a route change).
-const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat" };
+const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members" };
 const pendingBlocks = new Set(Object.keys(BLOCKS));
 let blockCheck = false;
 function loadBlocks() {
@@ -283,4 +284,28 @@ const blockObserver = new MutationObserver(() => {
 });
 blockObserver.observe(document.documentElement, { childList: true, subtree: true });
 loadBlocks();
+
+// Profiles open over any page: from Polynet's blocks, from a ?member=<handle>
+// link (Back closes it), or from the site's own code:
+//   document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }));
+// The panel (/__polynet/blocks/profile.js) loads the first time one opens.
+let profiles = null;
+function withProfiles(run) {
+  if (!profiles) profiles = import("/__polynet/blocks/profile.js");
+  profiles.then(run, () => { profiles = null; });
+}
+// Where focus was, inside blocks too, so closing the panel can put it back.
+function focused() {
+  let node = document.activeElement;
+  while (node && node.shadowRoot && node.shadowRoot.activeElement) node = node.shadowRoot.activeElement;
+  return node && node !== document.body ? node : null;
+}
+document.addEventListener("polynet:profile", (event) => {
+  const detail = (event && event.detail) || {};
+  const opener = focused();
+  withProfiles((module) => module.openProfile({ handle: detail.handle, ref: detail.ref }, opener));
+});
+const memberInUrl = () => new URLSearchParams(location.search).has("member");
+window.addEventListener("popstate", () => { if (memberInUrl()) withProfiles((module) => module.followUrl()); });
+if (memberInUrl()) withProfiles((module) => module.followUrl());
 `;

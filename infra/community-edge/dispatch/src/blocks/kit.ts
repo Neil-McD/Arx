@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ../LICENSE-MIT)
 // The blocks kit, served at /__polynet/blocks/kit.js: what every Polynet block
-// shares (the token style, a DOM helper, avatars, time labels, the channel URL
-// contract and the feed's grouping). Pure helpers: it never calls Polynet, so
-// tests import it as is. Kept as text (a String.raw literal: no backticks or
+// shares (the token style, a DOM helper, avatars, time labels, the channel and
+// member URL contracts, the feed's grouping and @-tag links). It never calls
+// Polynet on import, so tests import it as is. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
 export const KIT_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet blocks kit: shared by /__polynet/blocks/*.js. Not for site code.
@@ -196,5 +196,69 @@ export function readChannels(polynet, fresh) {
     promise.catch(function () { if (channelsRead && channelsRead.promise === promise) channelsRead = null; });
   }
   return channelsRead.promise;
+}
+
+// Members, read once for every block on the page; fresh re-reads them (who's
+// online changed) and the others see that read too.
+let membersRead = null;
+export function readMembers(polynet, fresh) {
+  if (fresh || !membersRead) {
+    const promise = polynet.members();
+    membersRead = promise;
+    promise.catch(function () { if (membersRead === promise) membersRead = null; });
+  }
+  return membersRead;
+}
+
+// Roles worth a badge; members need none.
+export function roleLabel(role) {
+  return role === "owner" ? "Owner" : role === "admin" ? "Admin" : role === "moderator" ? "Moderator" : null;
+}
+
+// A profile lives in the URL (?member=<handle>) while it is open, so it can be
+// shared and Back closes it. profile.js draws it over the page; blocks open it
+// here, site code with the "polynet:profile" event (ui.js).
+export function memberHref(handle) {
+  const params = new URLSearchParams(location.search);
+  params.set("member", handle);
+  return "?" + params.toString();
+}
+export function openProfile(who, opener) {
+  return import("/__polynet/blocks/profile.js").then(function (module) { return module.openProfile(who, opener); });
+}
+// A plain click opens the panel; a new tab or window keeps the browser's own behavior.
+export function plainClick(event) {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+// Tags in rendered text: "@handle" (a handle is 1-32 of a-z 0-9 _ -, ending in
+// a letter or digit). linkMentions swaps the ones isMember(handle) knows for
+// link(handle), outside code and links, and leaves everything else as text.
+const MENTION_SOURCE = "(^|[^A-Za-z0-9_@])@([A-Za-z0-9](?:[A-Za-z0-9_-]{0,30}[A-Za-z0-9])?)(?![A-Za-z0-9_-])";
+export function hasMention(text) {
+  return new RegExp(MENTION_SOURCE).test(String(text || ""));
+}
+export function linkMentions(root, isMember, link) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!(node.parentElement && node.parentElement.closest("code, pre, a, button"))) texts.push(node);
+  }
+  for (const node of texts) {
+    const text = node.nodeValue;
+    const pieces = [];
+    let last = 0;
+    for (const match of text.matchAll(new RegExp(MENTION_SOURCE, "g"))) {
+      if (!isMember(match[2].toLowerCase())) continue;
+      const start = match.index + match[1].length;
+      if (start > last) pieces.push(text.slice(last, start));
+      pieces.push(link(match[2]));
+      last = start + 1 + match[2].length;
+    }
+    if (!pieces.length) continue;
+    if (last < text.length) pieces.push(text.slice(last));
+    node.replaceWith(...pieces);
+  }
+  return root;
 }
 `;

@@ -2,7 +2,8 @@
 //
 //   /__polynet/auth/*  "Sign in with Polynet" for this community's own domain
 //   /__polynet/api     same-origin proxy to the Polynet backend, as the signed-in member
-//   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat> and its composer), loaded by ui.js
+//   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat> and its composer,
+//                      <polynet-members>, the profile panel), loaded by ui.js
 //   everything else    the community's own front end (a user Worker with static assets)
 //
 // The member session lives only in an HttpOnly cookie on the community's domain.
@@ -16,11 +17,15 @@ import { KIT_SOURCE } from "./blocks/kit";
 import { CHANNELS_SOURCE } from "./blocks/channels";
 import { CHAT_SOURCE } from "./blocks/chat";
 import { COMPOSER_SOURCE } from "./blocks/composer";
+import { MEMBERS_SOURCE } from "./blocks/members";
+import { PROFILE_SOURCE } from "./blocks/profile";
 // The live-updates client, served from this domain so no community site loads a third-party script.
 import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
 
 // Polynet's blocks, each its own module at /__polynet/blocks/<name>.js (ui.js loads them).
-const BLOCKS: Record<string, string> = { kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE, composer: COMPOSER_SOURCE };
+const BLOCKS: Record<string, string> = {
+  kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE, composer: COMPOSER_SOURCE, members: MEMBERS_SOURCE, profile: PROFILE_SOURCE,
+};
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");

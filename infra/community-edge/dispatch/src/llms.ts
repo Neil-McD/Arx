@@ -152,15 +152,16 @@ community only: { member { name, handle, avatar_url }, community { slug,
 name, role, studio_url }, links { communities, discover, settings, messages } }.
 The member's other communities are never readable from a site.
 
-## Blocks: channels and chat
+## Blocks: channels, chat and members
 
-Polynet's blocks are the standard way to show a community's channels and
-conversation. Polynet owns how they behave (data, permissions, live updates,
-keyboard, screen readers); your site owns how they look. Place the tags;
-ui.js (on every page) loads each block only on pages that have it:
+Polynet's blocks are the standard way to show a community's channels,
+conversation and people. Polynet owns how they behave (data, permissions,
+live updates, keyboard, screen readers); your site owns how they look. Place
+the tags; ui.js (on every page) loads each block only on pages that have it:
 
     <polynet-channels></polynet-channels>
     <polynet-chat></polynet-chat>
+    <polynet-members></polynet-members>
 
 - <polynet-channels>: the channels the member can read, as a nav of links,
   with an unread dot and an "@" badge where someone mentioned them. Arrow
@@ -193,6 +194,31 @@ ui.js (on every page) loads each block only on pages that have it:
   Where the member can't post (or reply), the box is replaced by a quiet
   note. Your site needs no composer of its own for chat; a custom one built
   with the SDK (post(), below) is still possible beside the blocks.
+  Authors' names and pictures, and @-tags of members in posts, open that
+  member's profile.
+- <polynet-members>: everyone in the community. Who's online comes first,
+  each with a presence dot, then everyone else; owners, admins and
+  moderators lead each group and carry a role badge. A search box filters
+  by name or handle. It stays live as people come and go, and a large
+  community renders 200 at a time, more as the list scrolls. Selecting a
+  member opens their profile. Signed out (or not a member) it shows a
+  sign-in and join prompt, never a name. It grows with its content: put it
+  in a sized, scrolling column if you want it to scroll on its own.
+
+Profiles: clicking a member anywhere (<polynet-members>, a chat author, an
+@-tag) opens their profile over the page: a side sheet on wide screens, a
+bottom sheet on phones. It shows their picture, name, @handle, role here,
+whether they're online, their bio and links (YouTube, X, Instagram), and a
+Message button (it opens the member's messages in Polynet; never on their
+own profile). Esc, the close button or a click outside closes it, and focus
+goes back where it was. While it is open the URL carries ?member=<handle>,
+so a profile can be linked (link to ?member=sam) and Back closes it. Open
+one from your own code:
+
+    document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }));
+
+(or detail { ref } with a member's ref from members()). Signed out, the
+panel asks the visitor to sign in and shows nothing about the member.
 
 Which channel: the URL says, ?channel=<slug> (no parameter: the General
 channel). Selecting a channel in <polynet-channels> updates the URL and
@@ -205,18 +231,20 @@ navigation, link to ?channel=<slug>, or dispatch the event yourself:
 When the chat marks a channel read it fires "polynet:read" with { slug }.
 Each block reflects its state on the tag as state="loading" | "ready" |
 "signed-out" | "error" (the chat also "unavailable"), for your layout:
-polynet-chat[state=signed-out] { ... }.
+polynet-chat[state=signed-out] { ... }. The profile panel is
+<polynet-profile>, added to the page when one first opens, with
+state="loading" | "ready" | "missing" | "signed-out" | "error".
 
 Theme: the blocks use the page's font and inherit its text color. They read
 the same tokens as the shell; set them once on :root:
 
     :root {
-      --polynet-accent: #c2410c;   /* unread dot, "@" badge, agent name, "New", focus */
+      --polynet-accent: #c2410c;   /* unread dot, "@" badge, agent name, "New", presence dot, focus */
       --polynet-on-accent: #fff;
       --polynet-text: #1c1917;     /* default: the page's color */
       --polynet-muted: #78716c;    /* times, dividers' labels (default: text at 62%) */
       --polynet-border: #e7e5e4;   /* hairlines (default: text at 14%) */
-      --polynet-surface: #fbfaf7;  /* behind the narrow thread and "New messages" (set it on dark sites) */
+      --polynet-surface: #fbfaf7;  /* behind the profile panel, the narrow thread and "New messages" (set it on dark sites) */
       --polynet-radius: 10px;
     }
 
@@ -243,23 +271,36 @@ Restyle any piece with ::part():
   composer-error, composer-retry, composer-note, attachment-chips,
   attachment-chip, attachment-thumb, attachment-remove, mention-list,
   mention-option (mention-agent), mention-online.
+  A member tagged in a post: mention.
+- polynet-members: members, search, list, section (also section-online,
+  section-everyone), section-title, member (each one; also member-online,
+  member-you), avatar, presence-dot, member-name, member-handle, role-badge
+  (also role-owner, role-admin, role-moderator), more, empty, no-results,
+  state, gate, gate-text, sign-in, join, retry.
+- polynet-profile (the panel): panel, close, avatar, presence-dot, name,
+  handle, role-badge, online, you, bio, links, link, message,
+  message-note, state, retry, gate, gate-text, sign-in, join.
 
-Slots, for your own words: slot="header" (polynet-channels and
-polynet-chat: replaces the chat's "#channel" title), slot="empty" (an empty
-channel), slot="signed-out" (the chat's sign-in line), slot="read-only"
-(the chat's note where the member can't post).
+Slots, for your own words: slot="header" (polynet-channels,
+polynet-members, and polynet-chat: replaces the chat's "#channel" title),
+slot="empty" (an empty channel; a community with no members yet),
+slot="signed-out" (the chat's and the members' sign-in line),
+slot="read-only" (the chat's note where the member can't post).
 
 Example, in your design's own layout:
 
     <style>
-      .talk { display: grid; grid-template-columns: 220px 1fr; gap: 32px; }
+      .talk { display: grid; grid-template-columns: 220px 1fr 240px; gap: 32px; }
       .talk polynet-chat { height: calc(100dvh - 160px); }
+      .talk polynet-members { max-height: calc(100dvh - 160px); overflow-y: auto; }
       polynet-chat::part(message-author) { text-transform: uppercase; letter-spacing: .06em; }
-      @media (max-width: 720px) { .talk { grid-template-columns: minmax(0, 1fr); } }
+      polynet-members::part(role-badge) { border-color: var(--polynet-accent); }
+      @media (max-width: 960px) { .talk { grid-template-columns: minmax(0, 1fr); } }
     </style>
     <section class="talk">
       <polynet-channels></polynet-channels>
       <polynet-chat><span slot="empty">Nothing logged yet. First one out?</span></polynet-chat>
+      <polynet-members><h2 slot="header">The crew</h2></polynet-members>
     </section>
 
 Build your own views with the SDK (below) beside the blocks when the design

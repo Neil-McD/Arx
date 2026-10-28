@@ -8,7 +8,7 @@
 export const COMPOSER_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block part: the composer of <polynet-chat>. Not for site code.
 import polynet from "/__polynet/sdk.js";
-import { h, avatar, fileSize } from "/__polynet/blocks/kit.js";
+import { h, avatar, fileSize, readMembers } from "/__polynet/blocks/kit.js";
 
 export const COMPOSER_STYLE = [
   ".composer { position: relative; padding: .25em .5em 0; }",
@@ -96,16 +96,6 @@ export function hasToken(text, token) {
   return false;
 }
 
-// Members, read once per page, for every composer on it.
-let membersRead = null;
-function readMembers() {
-  if (!membersRead) {
-    membersRead = polynet.members();
-    membersRead.catch(() => { membersRead = null; });
-  }
-  return membersRead;
-}
-
 // Drafts live per channel and thread: in memory (with their files) and in
 // sessionStorage (text and tags), so switching channels or reloading keeps them.
 const drafts = new Map();
@@ -171,7 +161,7 @@ export class Composer {
       class: "input", part: "composer-input", rows: 1, id: id + "-input",
       "aria-autocomplete": "list", "aria-controls": id + "-mentions", "aria-expanded": "false",
       oninput: () => this.changed(true), onkeydown: (event) => this.onKey(event), onclick: () => this.suggest(),
-      onpaste: (event) => this.onPaste(event), onblur: () => this.onBlur(), onfocus: () => { clearTimeout(this.idleTimer); readMembers(); },
+      onpaste: (event) => this.onPaste(event), onblur: () => this.onBlur(), onfocus: () => { clearTimeout(this.idleTimer); readMembers(polynet).catch(() => {}); },
     });
     this.list = h("ul", { class: "mentions", part: "mention-list", id: id + "-mentions", role: "listbox", "aria-label": "People to mention", hidden: true });
     this.chips = h("ul", { class: "chips", part: "attachment-chips", "aria-label": "Attachments" });
@@ -312,7 +302,7 @@ export class Composer {
     this.renderChoices(this.choicesFor(found.query, this.members || []));
     if (this.members) return;
     try {
-      this.members = await readMembers();
+      this.members = await readMembers(polynet);
     } catch (error) {
       return;
     }

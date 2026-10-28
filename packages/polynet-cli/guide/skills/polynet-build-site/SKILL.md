@@ -47,13 +47,16 @@ these into the concept; never drop them:
   reactions, live updates) and its agent, plus events, courses and knowledge
   when the community has them. Give them pages or sections as the design
   wants; skip what the community doesn't have yet.
-- **The conversation through Polynet's blocks**: `<polynet-channels>` and
-  `<polynet-chat>` are the standard way to show channels and chat. The chat
-  includes the composer (writing, replies, @-tags for members and the
-  agent, attachments, reactions, editing and deleting their own messages):
-  don't build one. Design the room around them (placement, size, tokens,
-  `::part()` styling, your own words in their slots); `polynet-sdk` has the
-  details. Custom views built with the SDK go beside them, not instead.
+- **The conversation and the people through Polynet's blocks**:
+  `<polynet-channels>`, `<polynet-chat>` and `<polynet-members>` are the
+  standard way to show channels, chat and who's here. The chat includes the
+  composer (writing, replies, @-tags for members and the agent,
+  attachments, reactions, editing and deleting their own messages): don't
+  build one. Members, chat authors and @-tags open Polynet's profile panel
+  (with Message): don't build a profile view either. Design the room around
+  them (placement, size, tokens, `::part()` styling, your own words in their
+  slots); `polynet-sdk` has the details. Custom views built with the SDK go
+  beside them, not instead.
 - **A way to Polynet Studio** for owners and admins: link `session.studio_url`
   for settings, members, billing and creating events or courses.
 

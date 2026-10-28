@@ -4,14 +4,16 @@
 // "polynet:channel" event) unless channel="<slug>" pins one. The feed, threads,
 // reactions and the member's own edits and deletes live here; the message boxes
 // come from composer.js, and this block sends what they hand it (optimistic,
-// with retry). Kept as text (a String.raw literal: no backticks or template
-// placeholders inside) so the edge serves exactly what is reviewed.
+// with retry). Authors and @-tagged members open the profile panel. Kept as
+// text (a String.raw literal: no backticks or template placeholders inside)
+// so the edge serves exactly what is reviewed.
 export const CHAT_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-chat>. ui.js loads it on pages that place the tag.
 import polynet from "/__polynet/sdk.js";
 import {
   BASE_STYLE, h, avatar, authorName, clockTime, fullTime, timeLabel, fileSize, typingText,
   feedItems, reconcile, channelFromUrl, pickChannel, readChannels,
+  readMembers, memberHref, openProfile, plainClick, hasMention, linkMentions,
 } from "/__polynet/blocks/kit.js";
 import { Composer, COMPOSER_STYLE, autosize, enterSends } from "/__polynet/blocks/composer.js";
 
@@ -44,6 +46,13 @@ const STYLE = BASE_STYLE + "\n" + COMPOSER_STYLE + "\n" + [
   ".message.grouped:hover .gutter .time, .message.grouped:focus-within .gutter .time { opacity: 1; }",
   ".head { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .5em; line-height: 1.35; }",
   ".author { font-weight: 600; }",
+  // People open their profile: the name is the control; the picture is a mouse shortcut to it.
+  "button.author { background: none; border: 0; padding: 0; margin: 0; text-align: left; line-height: inherit; }",
+  "@media (hover: hover) { button.author:hover { text-decoration: underline; text-underline-offset: .2em; } }",
+  ".face { display: block; cursor: pointer; }",
+  ".body a.mention { text-decoration: none; font-weight: 600; color: var(--pn-accent); border-radius: 4px; padding: 0 .125em;",
+  "  background: color-mix(in srgb, var(--pn-accent) 10%, transparent); }",
+  "@media (hover: hover) { .body a.mention:hover { text-decoration: underline; } }",
   ".agent .author { color: var(--pn-accent); }",
   ".time { color: var(--pn-muted); font-size: .8125em; font-variant-numeric: tabular-nums; }",
   ".body { line-height: 1.55; overflow-wrap: anywhere; }",
@@ -298,6 +307,8 @@ class PolynetChat extends HTMLElement {
     this.typing.textContent = "";
     this.setStatus("loading");
     this.showState([h("p", { class: "muted", text: "Loading…" })], "status");
+    // A failed members read is tried again with the next channel.
+    if (!this.handles) this.handlesRead = false;
     try {
       const session = await polynet.session();
       if (generation !== this.generation) return;
@@ -548,7 +559,9 @@ class PolynetChat extends HTMLElement {
     const focus = this.focusKey();
     if (options.quiet) this.feed.setAttribute("aria-busy", "true");
     // What the member just sent follows the server's posts until a re-read shows it.
-    const items = feedItems(this.sorted().concat(this.outgoing(null)), { seenThroughAt: this.seenThroughAt });
+    const posts = this.sorted();
+    this.wantHandles(posts);
+    const items = feedItems(posts.concat(this.outgoing(null)), { seenThroughAt: this.seenThroughAt });
     const next = new Map();
     const nodes = items.map((item) => {
       const signature = this.signature(item, false);
@@ -569,7 +582,8 @@ class PolynetChat extends HTMLElement {
     if (item.type !== "message") return item.type + ":" + item.label;
     const post = item.post;
     return JSON.stringify([item.grouped, post.text, post.edited_at, post.reactions, post.reacted_by_me, post.reply_count,
-      post.attachments, post.actor, post.outgoing, post.files, this.threadRef === post.ref, this.canReply(), this.ui(post.ref, inThread)]);
+      post.attachments, post.actor, post.outgoing, post.files, this.threadRef === post.ref, this.canReply(), this.ui(post.ref, inThread),
+      !!this.handles && hasMention(post.text)]);
   }
 
   // Which of the member's controls are open on a message (in the feed, or in the thread).
@@ -609,7 +623,7 @@ class PolynetChat extends HTMLElement {
     if (ui.editing) {
       body = this.buildEditor();
     } else {
-      body = h("div", { class: "body", part: "message-body" }, [polynet.markdown(post.text)]);
+      body = h("div", { class: "body", part: "message-body" }, [this.renderText(post, inThread)]);
       if (post.edited_at) {
         const edited = h("span", { class: "edited", part: "message-edited", text: " (edited)" });
         const last = body.lastElementChild;
@@ -617,14 +631,19 @@ class PolynetChat extends HTMLElement {
         else body.append(edited);
       }
     }
+    const person = this.personOf(post);
+    const profile = person ? () => this.showProfile(person, post.ref, inThread, "author") : null;
     return h("li", {
       class: classes.join(" "), part: parts.join(" "), "data-ref": post.ref,
       onkeydown: (event) => { if (event.key === "Escape" && this.dismiss(post.ref, inThread)) { event.preventDefault(); event.stopPropagation(); } },
     }, [
-      h("div", { class: "gutter" }, [grouped ? time : avatar(post.actor, name)]),
+      h("div", { class: "gutter" }, [grouped ? time
+        : profile ? h("span", { class: "face", "aria-hidden": "true", onclick: profile }, [avatar(post.actor, name)]) : avatar(post.actor, name)]),
       h("div", { class: "content" }, [
         grouped ? h("span", { class: "sr", text: name + ": " })
-          : h("div", { class: "head" }, [h("span", { class: "author", part: "message-author", text: name }), time]),
+          : h("div", { class: "head" }, [profile
+            ? h("button", { class: "author", part: "message-author", type: "button", "data-key": "author", "aria-label": name + ", profile", text: name, onclick: profile })
+            : h("span", { class: "author", part: "message-author", text: name }), time]),
         post.outgoing === "pending" ? h("span", { class: "sr", text: "Sending: " }) : null,
         body,
         post.outgoing ? this.buildSending(post) : this.buildAttachments(post),
@@ -642,6 +661,52 @@ class PolynetChat extends HTMLElement {
         post.outgoing || ui.editing ? null : this.buildTools(post, inThread, ui),
       ]),
     ]);
+  }
+
+  // Members with a handle open their profile; the agent and pending copies don't.
+  personOf(post) {
+    const actor = post.actor || {};
+    if (post.outgoing || actor.type === "community_agent" || !actor.handle) return null;
+    return { handle: actor.handle, name: authorName(actor, this.communityName), avatar_url: actor.avatar_url || null };
+  }
+
+  // The panel gives focus back to the control that opened it, found again after re-renders.
+  showProfile(person, ref, inThread, key) {
+    const scope = inThread ? this.threadList : this.list;
+    openProfile(person, () => {
+      for (const message of scope.querySelectorAll("[data-ref]")) {
+        if (message.getAttribute("data-ref") !== ref) continue;
+        for (const control of message.querySelectorAll("[data-key]")) if (control.getAttribute("data-key") === key) return control;
+      }
+      return null;
+    }).catch(() => {});
+  }
+
+  // Post text as markdown; tags of this community's members link to their profile.
+  renderText(post, inThread) {
+    const content = polynet.markdown(post.text);
+    if (!this.handles || !hasMention(post.text)) return content;
+    return linkMentions(content, (handle) => this.handles.has(handle), (handle) => {
+      const key = "mention:" + handle.toLowerCase();
+      return h("a", {
+        class: "mention", part: "mention", href: memberHref(handle.toLowerCase()), "data-key": key, text: "@" + handle,
+        onclick: (event) => {
+          if (!plainClick(event)) return;
+          event.preventDefault();
+          this.showProfile({ handle: handle }, post.ref, inThread, key);
+        },
+      });
+    });
+  }
+
+  // Members are read only once a post tags someone; until then tags stay text.
+  wantHandles(posts) {
+    if (this.handles || this.handlesRead || !posts.some((post) => hasMention(post.text))) return;
+    this.handlesRead = true;
+    readMembers(polynet).then((members) => {
+      this.handles = new Set(members.filter((member) => member.handle).map((member) => member.handle.toLowerCase()));
+      this.rerender();
+    }, () => {});
   }
 
   // Files still on their way: names only, until the server's copy replaces them.
@@ -851,6 +916,7 @@ class PolynetChat extends HTMLElement {
     const focus = this.focusKey();
     const quiet = !this.threadNodes.size;
     if (quiet) this.threadList.setAttribute("aria-busy", "true");
+    this.wantHandles(this.thread);
     const [root, ...replies] = this.thread.filter((post) => !this.removing.has(post.ref)).concat(this.outgoing(this.threadRef));
     const items = [];
     if (root) items.push({ type: "message", key: root.ref, post: root, grouped: false });

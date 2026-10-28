@@ -22,8 +22,10 @@
     body { margin: 0; font: 16px/1.5 "Instrument Sans", system-ui, sans-serif; background: #fbfaf7; color: #1c1917; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 4vw, 40px); border-bottom: 1px solid #e7e5e4; }
     h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
-    main { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; padding: 24px clamp(16px, 4vw, 40px); }
+    main { display: grid; grid-template-columns: 220px minmax(0, 1fr) 240px; gap: 32px; padding: 24px clamp(16px, 4vw, 40px); }
     polynet-chat { height: calc(100dvh - 140px); }
+    polynet-members { max-height: calc(100dvh - 140px); overflow-y: auto; }
+    @media (max-width: 1080px) { main { grid-template-columns: 220px minmax(0, 1fr); } polynet-members { grid-column: 1 / -1; max-height: none; } }
     @media (max-width: 720px) {
       main { grid-template-columns: minmax(0, 1fr); gap: 16px; }
       polynet-channels::part(list) { display: flex; overflow-x: auto; gap: 4px; }
@@ -41,6 +43,7 @@
     <polynet-chat>
       <span slot="empty">Nothing here yet. The first word is yours.</span>
     </polynet-chat>
+    <polynet-members></polynet-members>
   </main>
   <script type="module">
     import polynet from "/__polynet/sdk.js";
