@@ -391,9 +391,6 @@ test("approval rechecks target blocks and leaves admission state untouched", asy
   }));
   expect(state.request).toMatchObject({ status: "pending" });
   expect(state.memberships).toHaveLength(0);
-  await expect(asMember.query(api.communityPublic.getMyJoinRequestBySlug, {
-    communitySlug: "access-lifecycle-approval",
-  })).resolves.toBeNull();
   await expect(asMember.query(api.communityAccessQueries.getMyCommunityAccessBySlug, {
     communitySlug: "access-lifecycle-approval",
   })).resolves.toMatchObject({
@@ -549,11 +546,6 @@ test("unfunded managed communities remain public while AI funding fails closed",
       communitySlug: "access-lifecycle-open",
     }),
   ).resolves.toMatchObject({ outcome: "joined" });
-  await expect(
-    asMember.query(api.communityPublic.resolvePublicCommunityAccessBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).resolves.toMatchObject({ ok: true });
 });
 
 test("archived communities are frozen across ordinary access and public projections", async () => {
@@ -627,11 +619,6 @@ test("archived communities are frozen across ordinary access and public projecti
     }),
   ).resolves.toEqual({ ok: false });
   await expect(
-    asMember.query(api.communityPublic.resolvePublicCommunityAccessBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).resolves.toEqual({ ok: false });
-  await expect(
     t.query(
       api.communityIntelligenceDirectory.resolvePublicCommunityMemoryOverviewBySlug,
       { communitySlug: "access-lifecycle-open" },
@@ -643,11 +630,6 @@ test("archived communities are frozen across ordinary access and public projecti
       visitorKey: "archived-community-visitor",
     }),
   ).resolves.toEqual({ ok: false });
-  await expect(
-    asMember.query(api.communityPublic.getMyJoinRequestBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).resolves.toBeNull();
 
   const discover = await t.query(
     api.communityPublic.listPublicDiscoverCommunities,

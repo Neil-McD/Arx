@@ -224,17 +224,6 @@ export const getActor = query({
   },
 });
 
-export const setDevTierOverride = mutation({
-  args: {
-    authSubject: v.optional(v.string()),
-    tier: v.union(v.literal("free"), v.literal("architect")),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async () => {
-    throw new Error("account_tier_retired");
-  },
-});
-
 export const getAccountCommerceStatus = query({
   args: {
     authSubject: v.optional(v.string()),

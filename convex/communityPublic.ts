@@ -370,53 +370,6 @@ export const resolvePublicFunnelStatsBySlug = query({
   },
 });
 
-export const resolvePublicCommunityAccessBySlug = query({
-  args: {
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community || !communityIsActive(community)) return { ok: false as const };
-
-    let userId: any = null;
-    try {
-      const { actor } = await findAuthenticatedActorState({ ctx, authSubject: null });
-      userId = actor?.dbUserId ?? null;
-    } catch {
-      userId = null;
-    }
-
-    let membership: CommunityMembershipLike | null = null;
-    if (userId) {
-      const membershipRows = (await ctx.db
-        .query("communityMemberships")
-        .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
-        .collect()) as CommunityMembershipLike[];
-      membership = pickMostRelevantCommunityMembership(membershipRows);
-    }
-
-    const access = await resolveCommunityAccessBundle({
-      ctx,
-      community,
-      membership,
-      userId,
-    });
-    if (!access.relation) return { ok: false as const };
-
-    return {
-      ok: true as const,
-      access: {
-        ...access,
-        user_id: userId ? access.user_id : null,
-      },
-    };
-  },
-});
-
 export const recordPublicFunnelVisitBySlug = mutation({
   args: {
     communitySlug: v.string(),
@@ -585,57 +538,6 @@ export const listPublicDiscoverCommunities = query({
    uses communityAccessQueries:getMyCommunityAccessBySlug as its sole
    admission projection; remove this compatibility shim only after the pinned
    cached-client contract advances past that build. */
-export const getMyJoinRequestBySlug = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community || !communityIsActive(community)) return null;
-    if (String(community.ownerId) === String(userId)) return null;
-    if (await communityUserIsBlocked({
-      ctx,
-      communityId: community._id,
-      userId,
-    })) return null;
-    const membership = await getUniqueCommunityMembershipByPair({
-      ctx,
-      communityId: community._id,
-      userId,
-    });
-    if (communityMembershipRowIsActive(membership)) return null;
-    const request = await getCurrentCommunityJoinRequestByPair({
-      ctx,
-      communityId: community._id,
-      userId,
-    });
-    if (!request) return null;
-    const status = assertCanonicalCommunityJoinRequest(request);
-    return {
-      community_id: String(community._id),
-      status,
-      created_at: toIsoString(request.createdAt),
-      updated_at: toIsoString(request.updatedAt),
-      denied_at:
-        typeof request.deniedAt === "number" ? toIsoString(request.deniedAt) : null,
-      reapply_at:
-        typeof request.reapplyAt === "number" ? toIsoString(request.reapplyAt) : null,
-      denied_until:
-        typeof request.reapplyAt === "number" ? toIsoString(request.reapplyAt) : null,
-    };
-  },
-});
 
 async function joinPublicCommunityInternal(args: {
   ctx: any;

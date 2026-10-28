@@ -316,27 +316,6 @@ export const deleteCommunityChannel = mutation({
   },
 });
 
-export const getGeneralChannelInternal = internalQuery({
-  args: {
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const channel = await getGeneralChannel(ctx, args.communityId);
-    if (!channel) return null;
-    return {
-      id: normalizeIdValue(channel._id),
-      community_id: normalizeIdValue(channel.communityId),
-      system_role: channel.systemRole ?? null,
-      slug: channel.slug,
-      name: channel.name,
-      access_mode: channel.accessMode,
-      posting_policy: channel.postingPolicy,
-      status: channel.status,
-      position: channel.position,
-    };
-  },
-});
-
 function mapCommunityChannelForRepository(channel: CommunityChannelLike) {
   return {
     ...mapCommunityChannel(channel),

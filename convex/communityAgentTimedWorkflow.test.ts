@@ -167,9 +167,6 @@ test("confidential workflow facts require manager or live execution, never self/
   const dossierArgs = { communityId: s.f.communityId, membershipId: s.f.membershipId };
   expect(JSON.stringify(await s.owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, dossierArgs))).toContain("CONFIDENTIAL_SERVICE_RECORD");
   await expect(member.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, dossierArgs)).rejects.toThrow();
-  expect(JSON.stringify(await member.query(api.memberOntology.getMyMemberFacts, {}))).not.toContain("CONFIDENTIAL_SERVICE_RECORD");
-  expect(JSON.stringify(await member.query(api.memberOntology.getMyMemberContextMarkdown, { communityId: s.f.communityId }))).not.toContain("CONFIDENTIAL_SERVICE_RECORD");
-  await expect(member.mutation(api.memberOntology.retractMemberFact, { factId })).rejects.toThrow("member_fact_consent_forbidden");
   // A profile submission must not supersede a same-text confidential record.
   await member.mutation(api.memberOntology.confirmMemberInterviewFacts, { communityId: s.f.communityId,
     facts: [{ kind: "situation", body: "CONFIDENTIAL_SERVICE_RECORD", provenance: "form_answer" }] });

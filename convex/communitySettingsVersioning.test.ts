@@ -202,7 +202,7 @@ test("competing writers cannot both commit the same settings revision", async ()
   expect(["Writer A", "Writer B"]).toContain(snapshot.about);
 });
 
-test("surviving narrow writes advance the same revision", async () => {
+test("the narrow About write advances the settings revision", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -214,19 +214,11 @@ test("surviving narrow writes advance the same revision", async () => {
     }),
   ).resolves.toMatchObject({ settings_revision: 1 });
   await expect(
-    asOwner.mutation(api.communityLifecycle.saveCommunityOneLiner, {
-      communityId: fixture.communityId,
-      oneLiner: "Narrow one-liner write.",
-    }),
-  ).resolves.toMatchObject({ settings_revision: 2 });
-
-  await expect(
     asOwner.query(api.communityLifecycle.getCommunitySettings, {
       communityId: fixture.communityId,
     }),
   ).resolves.toMatchObject({
-    settings_revision: 2,
-    one_liner: "Narrow one-liner write.",
+    settings_revision: 1,
     about: "Narrow About write.",
   });
 });

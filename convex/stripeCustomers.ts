@@ -179,39 +179,6 @@ export const getUserStripeCustomerInternal = internalQuery({
   },
 });
 
-export const getUserStripeCustomerByProviderCustomerIdInternal = internalQuery({
-  args: {
-    providerCustomerId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const providerCustomerId = normalizeStripeCustomerId(args.providerCustomerId);
-    if (!providerCustomerId) return null;
-    const row = await ctx.db
-      .query("userStripeCustomers")
-      .withIndex("by_providerCustomerId", (q) =>
-        q.eq("providerCustomerId", providerCustomerId),
-      )
-      .first();
-    if (!row) return null;
-    return {
-      userId: row.userId,
-      provider: row.provider,
-      providerCustomerId: row.providerCustomerId,
-      email: row.email ?? null,
-      paymentMethodStatus: row.paymentMethodStatus ?? null,
-      providerDefaultPaymentMethodId: row.providerDefaultPaymentMethodId ?? null,
-      paymentMethodCheckedAt: row.paymentMethodCheckedAt ?? null,
-      cardBrand: row.cardBrand ?? null,
-      cardLast4: row.cardLast4 ?? null,
-      cardExpMonth: row.cardExpMonth ?? null,
-      cardExpYear: row.cardExpYear ?? null,
-      cardRemovedAt: row.cardRemovedAt ?? null,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
-  },
-});
-
 export const attachUserStripeCustomerInternal = internalMutation({
   args: {
     userId: v.id("users"),

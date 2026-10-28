@@ -2049,13 +2049,6 @@ test("builder resource agents may stage changes but cannot make terminal decisio
     legacyStage.ok ? (legacyStage.value.ref ?? "") : "",
   );
   expect(legacyChangesetId).not.toBe("");
-  await asOwner.mutation(
-    api.communityResources.approveCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: legacyChangesetId as any,
-    },
-  );
   await expect(
     asAdmin.mutation(
       api.communityResources.applyCommunityResourceBuilderChangeset,
@@ -2230,13 +2223,6 @@ test("resource changeset staging permits only one live proposal per community", 
     });
   });
 
-  await asOwner.mutation(
-    api.communityResources.approveCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: third.changeset_id as any,
-    },
-  );
   await expect(stage("single-active-4", "Single active four")).rejects.toThrow(
     "community_resource_changeset_already_pending",
   );
@@ -2332,13 +2318,6 @@ test("expired resource changesets commit one terminal state across every decisio
   });
 
   const approvedCandidate = await stage("legacy-approved");
-  await asOwner.mutation(
-    api.communityResources.approveCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: approvedCandidate.changeset_id as any,
-    },
-  );
   await makeExpired(approvedCandidate.changeset_id);
   await expect(
     asOwner.mutation(
