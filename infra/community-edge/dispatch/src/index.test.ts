@@ -362,6 +362,26 @@ test("an address on the sites domain with nothing deployed says how to deploy", 
   expect(await (await edge.fetch(new Request("https://elsewhere.example/"), e)).text()).toBe("Community not found");
 });
 
+test("staging shares polynet.page: its front door and unpublished addresses carry the staging suffix", async () => {
+  resetEdgeCaches();
+  const e = { ...env(), POLYNET_SITES_DOMAIN: "polynet.page", POLYNET_SITES_HOST_SUFFIX: "-staging",
+    POLYNET_SITES_FRONT_DOOR: "staging.polynet.page", DEV_ROUTES_JSON: "{}" };
+  const page = await edge.fetch(new Request("https://staging.polynet.page/"), e);
+  expect(page.status).toBe(200);
+  const html = await page.text();
+  expect(html).toContain("Read https://staging.polynet.page/llms.txt first.");
+  expect(html).toContain("your-community-staging.polynet.page");
+  expect((await edge.fetch(new Request("https://staging.polynet.page/llms.txt"), e)).status).toBe(200);
+  // The production front door is not staging's.
+  expect(await (await edge.fetch(new Request("https://polynet.page/"), e)).text()).toBe("Community not found");
+  const unpublished = await edge.fetch(new Request("https://new-club-staging.polynet.page/"), e);
+  expect(unpublished.status).toBe(404);
+  const text = await unpublished.text();
+  expect(text).toContain("npx @polynet/cli deploy --community new-club --staging");
+  expect(text).toContain("https://staging.polynet.page/llms.txt");
+  expect(await (await edge.fetch(new Request("https://-staging.polynet.page/"), e)).text()).toBe("Community not found");
+});
+
 test("hostname lookups read the routes map once, then use a short cache", async () => {
   const get = vi.fn(async (key: string) => key === "host:cached.polynet.page" ? JSON.stringify({ script: "site-cached", community: "cached" }) : null);
   const routes = { get };

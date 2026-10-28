@@ -8,7 +8,8 @@ const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 // Each site's only code: assets are served first; anything else is not found.
 const SITE_MODULE = `export default { async fetch() { return new Response("Not found", { status: 404 }); } };\n`;
 
-export type SitesConfig = { token: string; accountId: string; namespace: string; routesKvId: string; domain: string };
+// hostSuffix is "" in production and "-staging" on staging (<slug>-staging.polynet.page).
+export type SitesConfig = { token: string; accountId: string; namespace: string; routesKvId: string; domain: string; hostSuffix: string };
 export type SiteTarget = { communityId: string; communitySlug: string; userId: any; hostname: string; script: string };
 export type SiteUpload = { url: string; jwt: string; buckets: string[][] };
 
@@ -20,7 +21,10 @@ export function readSitesConfig(env: Record<string, string | undefined> = proces
     routesKvId: env.POLYNET_SITES_ROUTES_KV_ID ?? "",
     domain: env.POLYNET_SITES_DOMAIN ?? "",
   };
-  return Object.values(config).every(Boolean) ? config : null;
+  if (!Object.values(config).every(Boolean)) return null;
+  const hostSuffix = (env.POLYNET_SITES_HOST_SUFFIX ?? "").trim().toLowerCase();
+  if (hostSuffix && !/^-[a-z0-9-]{1,20}$/.test(hostSuffix)) return null;
+  return { ...config, hostSuffix };
 }
 
 async function cloudflare(config: SitesConfig, path: string, init: RequestInit): Promise<{ ok: boolean; result: any }> {

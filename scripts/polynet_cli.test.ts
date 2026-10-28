@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 // @ts-expect-error plain ES module without types
-import { buildManifest, collectFiles, hashFile, installGuide, mimeType, pkce, readCheckedFiles, siteConfigPaths, uploadBuckets } from "../packages/polynet-cli/lib.mjs";
+import { apiUrlFor, buildManifest, collectFiles, hashFile, installGuide, mimeType, pkce, readCheckedFiles, siteAddress, siteConfigPaths, uploadBuckets } from "../packages/polynet-cli/lib.mjs";
 import { checkSite } from "../packages/polynet-cli/checks.mjs";
 
 function site() {
@@ -72,6 +72,22 @@ test("deploying a build folder keeps polynet.json in the project, where builds d
   expect(siteConfigPaths("/work/club-site-2", project)).toEqual({ read: ["/work/club-site-2/polynet.json"], save: "/work/club-site-2/polynet.json" });
 });
 
+test("production is the default; --staging or an explicit API URL choose otherwise", () => {
+  expect(apiUrlFor({})).toBe("https://wry-hawk-715.convex.site");
+  expect(apiUrlFor({ staging: true })).toBe("https://quick-porcupine-949.convex.site");
+  expect(apiUrlFor({ env: { POLYNET_API_URL: "https://example.convex.site/" }, staging: true })).toBe("https://example.convex.site");
+  expect(siteAddress("run-club")).toBe("https://run-club.polynet.page");
+  expect(siteAddress("run-club", true)).toBe("https://run-club-staging.polynet.page");
+});
+
+test("create --staging remembers staging in polynet.json", () => {
+  const parent = mkdtempSync(join(tmpdir(), "polynet-create-"));
+  const out = execFileSync("node", [join(process.cwd(), "packages/polynet-cli/bin/polynet.mjs"), "create", "club-site", "--community", "run-club", "--staging"],
+    { cwd: parent, encoding: "utf8" });
+  expect(out).toContain("https://run-club-staging.polynet.page");
+  expect(JSON.parse(readFileSync(join(parent, "club-site", "polynet.json"), "utf8"))).toEqual({ community: "run-club", staging: true });
+});
+
 test("sign-in uses PKCE", () => {
   const first = pkce();
   expect(first.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -137,6 +153,18 @@ test("site checks warn about what needs a person's judgment", () => {
   expect(warned.warnings).toContain("prefers-reduced-motion");
   expect(warned.warnings).toContain("innerHTML");
   expect(warned.warnings).toContain("Calls Polynet's servers directly");
+});
+
+test("site checks warn when hidden sections can show and when the agent's public answers can't", () => {
+  const page = (body: string) => ({ path: "/index.html", text: `<!doctype html><html lang="en"><head><title>x</title><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>${body}</body></html>` });
+  const toggled = [page('<main id="members" hidden></main>'), { path: "/app.js", text: 'members.hidden = false; await polynet.post(s, t, { askAgent: true });' },
+    { path: "/styles.css", text: ".members { display: grid; }" }];
+  const warnings = checkSite(toggled).warnings.map((w: { message: string }) => w.message).join("\n");
+  expect(warnings).toContain("[hidden] { display: none !important; }");
+  expect(warnings).toContain("Show replies with polynet.thread()");
+  const fixed = [toggled[0], { path: "/app.js", text: 'members.hidden = false; await polynet.post(s, t, { askAgent: true }); await polynet.thread(s, p.ref);' },
+    { path: "/styles.css", text: "[hidden] { display: none !important; } .members { display: grid; }" }];
+  expect(checkSite(fixed).warnings).toEqual([]);
 });
 
 test("skills install into both agent folders without overwriting the founder's guides", async () => {

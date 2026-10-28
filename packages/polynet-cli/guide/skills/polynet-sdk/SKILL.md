@@ -25,8 +25,9 @@ It only works on the live site (`<slug>.polynet.page`): deploy to try things.
 
 ```js
 if (!session.signed_in) {
-  document.querySelector("#sign-in").onclick = () => polynet.signIn();
   document.querySelector("#join").href = session.join_url;
+  // The shell already shows "Sign in"; this is an optional quiet link in the body.
+  document.querySelector("#members-sign-in")?.addEventListener("click", () => polynet.signIn());
 }
 ```
 
@@ -43,7 +44,7 @@ if (!session.signed_in) {
 ```html
 <ol id="feed" role="log" aria-label="Club feed" aria-live="off"></ol>
 <template id="post">
-  <li><img class="avatar" alt=""><b class="who"></b> <time></time><div class="text"></div></li>
+  <li><img class="avatar" alt=""><b class="who"></b> <time></time><div class="text"></div><ol class="replies"></ol></li>
 </template>
 ```
 
@@ -52,7 +53,7 @@ const general = (await polynet.channels()).find((c) => c.isGeneral);
 const post = document.querySelector("#post");
 await polynet.watch(general.slug, async () => { // runs now, then on every change
   const posts = await polynet.feed(general.slug, { limit: 30 });
-  document.querySelector("#feed").replaceChildren(...posts.map((p) => {
+  document.querySelector("#feed").replaceChildren(...await Promise.all(posts.map(async (p) => {
     const node = post.content.cloneNode(true);
     node.querySelector(".who").textContent = p.actor.display_name ?? "Member";
     node.querySelector("time").textContent = new Date(p.created_at).toLocaleString();
@@ -60,8 +61,16 @@ await polynet.watch(general.slug, async () => { // runs now, then on every chang
     const avatar = node.querySelector(".avatar");
     if (p.actor.avatar_url && p.actor.type !== "community_agent") avatar.src = p.actor.avatar_url;
     else avatar.remove();
+    if (p.reply_count > 0) { // replies, including the agent's answers to askAgent posts
+      const [, ...replies] = await polynet.thread(general.slug, p.ref);
+      node.querySelector(".replies").append(...replies.map((r) => {
+        const li = document.createElement("li");
+        li.append(polynet.markdown(r.text));
+        return li;
+      }));
+    }
     return node;
-  }));
+  })));
 });
 ```
 
@@ -70,7 +79,7 @@ await polynet.watch(general.slug, async () => { // runs now, then on every chang
 ```js
 await polynet.post(general.slug, text);                          // a new post
 await polynet.post(general.slug, text, { replyTo: p.ref });      // a reply
-await polynet.post(general.slug, text, { askAgent: true });      // ask the agent in public
+await polynet.post(general.slug, text, { askAgent: true });      // ask the agent in public: it answers in the thread
 await polynet.react(p.ref, "🔥", !p.reacted_by_me.includes("🔥")); // toggle a reaction
 const replies = await polynet.thread(general.slug, p.ref);       // the post, then its replies
 ```
@@ -130,3 +139,8 @@ its own script.
   `img-src 'self' https:`.
 - After Polynet updates the SDK, a hard refresh picks it up (it's cached for
   a few minutes).
+- Showing members' sections with the `hidden` attribute? Add
+  `[hidden] { display: none !important; }`: a CSS `display` rule otherwise
+  wins, and visitors see the member page. `polynet check` warns about it.
+- Links to sections that appear after sign-in (`#log`) need a scroll once you
+  reveal them: `document.getElementById(location.hash.slice(1))?.scrollIntoView()`.

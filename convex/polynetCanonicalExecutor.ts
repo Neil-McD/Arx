@@ -2373,7 +2373,7 @@ async function executeSiteDeploy(args: {
   }
   const config = readSitesConfig();
   if (!config) return canonicalError("sites_unconfigured", "Site hosting isn't set up here.");
-  const hostname = siteHostname(target.communitySlug, config.domain);
+  const hostname = siteHostname(target.communitySlug, config.domain, config.hostSuffix);
   if (!hostname) return canonicalError("site_name_unavailable", "This community's name can't be used as a site address.");
 
   const receiptIdempotencyKey = `community-site:${args.idempotencyKey}`;

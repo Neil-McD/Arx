@@ -49,26 +49,31 @@ in the Release Gate job.
 | API GET | 405 at the edge |
 | Body over 64 KB | 413 at the edge |
 
-## Staging on polynet.page (October 20, 2026)
+## Staging on polynet.page
 
-Live: `https://<community>.polynet.page`, against the staging backend. The front
-door `https://polynet.page` (a page, and the builder guide at `/llms.txt`) is where
-a founder's AI starts.
+Staging shares `polynet.page` with production (Oct 28, POL-34, no second domain):
+staging sites live at `https://<community>-staging.polynet.page` against the staging
+backend, and the staging front door is `https://staging.polynet.page`. Production
+owns `https://<community>.polynet.page` and the front door `https://polynet.page`
+(a page, and the builder guide at `/llms.txt`), where a founder's AI starts.
+Production refuses site names ending in `-staging`. Sign-in cookies are
+`__Host-` (host-only), so staging and production sites never share a session.
 
 | Piece | Value |
 | --- | --- |
 | Zone | `polynet.page` (registered at Namecheap, nameservers on Cloudflare) |
 | DNS | `*` A `192.0.2.0`, proxied (the edge answers; the address is a placeholder) |
-| Edge Worker | `polynet-edge-staging`, route `*.polynet.page/*` (`wrangler deploy --env staging` in `dispatch/`) |
+| Edge Worker | `polynet-edge-staging`, routes `*-staging.polynet.page/*` and `staging.polynet.page/*` (more specific than production's `*.polynet.page/*`; `wrangler deploy --env staging` in `dispatch/`) |
 | Sites | Workers for Platforms namespace `polynet-sites-staging`, one user Worker per community (`site-<community>`) |
 | Hostname map | KV `polynet-routes-staging`: `host:<hostname>` → `{"script","community"}` |
+| Settings | `POLYNET_SITES_HOST_SUFFIX=-staging` and `POLYNET_SITES_FRONT_DOOR=staging.polynet.page` on the edge; `POLYNET_SITES_HOST_SUFFIX=-staging` on the staging backend |
 | Secret | `POLYNET_EDGE_SECRET` (`wrangler secret put --env staging`), equal to the backend's `POLYNET_COMMUNITY_EDGE_SECRET` |
 | Backend | origin registered with `communityApps:registerCommunityDomainInternal` |
 
 Deploy a community site (owner or admin; signs in through the browser once):
 
 ```bash
-cd my-site && POLYNET_API_URL=https://quick-porcupine-949.convex.site node <repo>/packages/polynet-cli/bin/polynet.mjs deploy --community <slug>
+cd my-site && node <repo>/packages/polynet-cli/bin/polynet.mjs deploy --community <slug> --staging
 ```
 
 The backend (`convex/httpCommunitySites.ts`) checks builder authority, gets a
@@ -92,6 +97,6 @@ updating live, the community agent streaming, and only `/__polynet/sdk.js` and
 
 ## Not yet
 
-- Publish `@polynet/cli` to npm at the production release (switch its default API to production first; npm account `polynet` needs 2FA on).
+- Publish `@polynet/cli` 0.3.0 (production by default, `--staging` for staging; npm account `polynet` needs 2FA on).
 - Founders' own domains (Cloudflare for SaaS custom hostnames, `*/*` route).
-- A separate production edge and namespace before the production release.
+- The production edge (`--env production`), namespace and routes map, then `polynet.page` on the Public Suffix List.

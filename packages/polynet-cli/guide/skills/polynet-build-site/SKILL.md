@@ -39,8 +39,10 @@ these into the concept; never drop them:
   messages and settings. Never rebuild those. Polynet adds
   `/__polynet/ui.js` to every page, and puts the shell in the top-right
   corner of any page that doesn't place it; place it yourself so it fits.
-- **A public face** for visitors: who it's for, why it's worth joining,
-  "Sign in" (`polynet.signIn()`) and "Join" (`session.join_url`).
+- **A public face** for visitors: who it's for, why it's worth joining, and
+  "Join" (`session.join_url`). The shell already shows "Sign in": never add a
+  second one beside it. A quiet "Members, sign in" link in the body
+  (`polynet.signIn()`) is fine.
 - **The community's life for members**: the conversation (channels, threads,
   reactions, live updates) and its agent, plus events, courses and knowledge
   when the community has them. Give them pages or sections as the design

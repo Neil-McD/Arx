@@ -2,9 +2,6 @@
 
 Put your community's site live on Polynet.
 
-> Preview: until Polynet's production release, deploys go to Polynet's staging
-> environment. Start at https://polynet.page.
-
 ```bash
 npx @polynet/cli create my-site --community <your-community-slug>   # a folder set up for your AI agent
 cd my-site                                                          # open it in Claude Code, Codex or Cursor:

@@ -114,7 +114,7 @@ community context, and member interactions and autonomous community-agent author
   is paid, about $49 a month with an included budget.
 - A 2.9% application fee on paid-member revenue, versioned in commerce policy.
 - Entry policies: open, approval, paid.
-- One site per community on `<slug>.polynet.page`; Studio stays Polynet's own UI.
+- One site per community on `<slug>.polynet.page` (staging: `<slug>-staging.polynet.page`); Studio stays Polynet's own UI.
 - Proactive agent: founders see outcomes, at most two agent-started messages
   per member per week, outreach in draft mode until the founder widens it
   ([spec](specs/proactive-community-agent-v0.md)).
