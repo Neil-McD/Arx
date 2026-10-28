@@ -1024,6 +1024,40 @@ test("members mounted together share one read", async () => {
   await page.close();
 });
 
+test("members in a narrow column: names and handles truncate, the role badge stays inside its row", async () => {
+  const page = await open((fake) => {
+    crowd(fake);
+    fake.members[3] = { ...fake.members[3], name: "Oluwaseun Adebayo-Fitzgerald", handle: "oluwaseun_adebayo_fitzgerald" };
+    fake.members[4] = { ...fake.members[4], name: "Maximilian Moss-Worthington", handle: "maximilian_moss" };
+  }, MEMBERS_PAGE.replace("width:320px", "width:180px"));
+  const members = page.locator("polynet-members");
+  await expect.poll(() => members.getAttribute("state")).toBe("ready");
+  const rows = await members.evaluate((host) => {
+    const right = (node: Element | null | undefined) => (node ? node.getBoundingClientRect().right : null);
+    const edge = host.getBoundingClientRect().right;
+    return Array.from(host.shadowRoot!.querySelectorAll(".member")).map((row) => ({
+      edge, row: right(row), badge: right(row.querySelector(".badge")), badgeLeft: row.querySelector(".badge")?.getBoundingClientRect().left ?? null,
+      name: right(row.querySelector(".name")), handle: right(row.querySelector(".handle")),
+      clipped: (row.querySelector(".name") as HTMLElement).scrollWidth > (row.querySelector(".name") as HTMLElement).clientWidth,
+    }));
+  });
+  expect(rows).toHaveLength(6);
+  for (const row of rows) {
+    expect(row.row!).toBeLessThanOrEqual(row.edge + 0.5);
+    if (row.badge !== null) {
+      expect(row.badge).toBeLessThanOrEqual(row.row! + 0.5);
+      expect(row.name!).toBeLessThanOrEqual(row.badgeLeft! + 0.5);
+      expect(row.handle!).toBeLessThanOrEqual(row.badgeLeft! + 0.5);
+    } else {
+      expect(row.name!).toBeLessThanOrEqual(row.row! + 0.5);
+    }
+  }
+  // The long names are cut with an ellipsis rather than pushing the row wider.
+  expect(rows.filter((row) => row.clipped).length).toBeGreaterThanOrEqual(2);
+  expect(await members.locator("[part~=role-badge]").allTextContents()).toEqual(["Owner", "Admin", "Moderator"]);
+  await page.close();
+});
+
 test("members signed out: no names, no members read, a way in", async () => {
   const page = await open((fake) => { crowd(fake); fake.session = { signed_in: false, community: "run-club", community_name: "Run Club", join_url: "https://polynet.test/c/run-club" } as any; }, MEMBERS_PAGE);
   const members = page.locator("polynet-members");
