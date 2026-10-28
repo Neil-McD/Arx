@@ -1,4 +1,3 @@
-import "./integrationCallbackCapture";
 import { captureAppException } from "./instrument";
 import "./posthogAnalytics";
 import React from "react";
@@ -7,8 +6,6 @@ import App from "./App";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
-import { IntegrationCallbackRoute } from "./auth/IntegrationCallbackRoute";
-import { INTEGRATION_CALLBACK_PATH } from "../../../shared/integrationCallback";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
@@ -366,7 +363,6 @@ if (!isLoginTrampoline) {
 
 const rootView = isLoginTrampoline
   ? <LoginTrampolineRoute />
-  : window.location.pathname === INTEGRATION_CALLBACK_PATH ? <IntegrationCallbackRoute />
   : <App />;
 
 document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);

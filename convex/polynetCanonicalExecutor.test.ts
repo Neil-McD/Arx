@@ -5,14 +5,12 @@ import { getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { completeCanonicalOperationReceiptInternal } from "./polynetCanonicalReceipts";
 import { COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS, ensurePendingCommunityJoinRequest } from "./communityJoinRequestCore";
-import * as verificationPilot from "./integrationVerificationPilot";
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers();});
 
 import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import schema from "./schema";
-import { connectWithAdapter, verifyWithAdapter, revokeWithAdapter, integrationAttemptAlias } from "./communityIntegrationActions";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { buildCommunityFunnelContentTestFixture } from "../scripts/community_funnel_test_fixture";
@@ -21,236 +19,17 @@ import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDi
 import { settleCommunityIntelligenceFromDigestItemsCore } from "./communityCompilerCandidates";
 
 const selfContextPath = "/communities/canonical-community/members/me/context.md";
-test.each(["deployment", "member", "community", "config", "expired", "disabled"])("pilot %s denial precedes remote initiation", async mode => {
-  const t = convexTest(schema, modules); const f = await createFixture(t);
-  await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: true}));
-  const policy = verificationPilot.integrationVerificationPilot()!;
-  if (mode === "deployment") vi.stubEnv("CONVEX_CLOUD_URL", "https://wry-hawk-715.convex.cloud");
-  else vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue(mode === "disabled" ? null : {
-    ...policy, ...(mode === "member" ? {actorUserId: "other"} : mode === "community" ? {communityId: "other"} :
-      mode === "config" ? {authConfigId: "other"} : {expiresAt: Date.now() - 1}),
-  });
-  const adapter = {authConfigId: "config", initiate: vi.fn(), verify: vi.fn(), revoke: vi.fn()};
-  const ctx = executionContext(t.withIdentity({subject: f.memberSubject}));
-  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow("integration_pilot_unavailable");
-  expect(await verifyWithAdapter(ctx, f.communityId, "session", adapter)).toBe(false);
-  expect(adapter.initiate).not.toHaveBeenCalled(); expect(adapter.verify).not.toHaveBeenCalled();
-  expect(await t.run(c => c.db.query("communityIntegrationConnections").collect())).toEqual([]);
-});
-
-test.each(["expired", "disabled"])("pilot %s and community disablement do not prevent cleanup", async mode => {
-  const t = convexTest(schema, modules); const f = await createFixture(t);
-  await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: true}));
-  const policy = verificationPilot.integrationVerificationPilot()!;
-  vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue({...policy, expiresAt: Date.now() + 30_000});
-  const ctx = executionContext(t.withIdentity({subject: f.memberSubject}));
-  const adapter = {authConfigId: "config", initiate: vi.fn(async () => ({connectedAccountId: "account", authorizationUrl: "https://connect.composio.dev/link"})), verify: vi.fn(), revoke: vi.fn(async () => {})};
-  const attempt = await connectWithAdapter(ctx, f.communityId, adapter);
-  if (!attempt.available) throw new Error("expected available integration connection");
-  expect(attempt.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
-  vi.mocked(verificationPilot.integrationVerificationPilot).mockReturnValue(mode === "disabled" ? null : {...policy, expiresAt: 1});
-  await t.run(c => c.db.patch(f.communityId, {integrationReadPilotEnabled: false}));
-  expect(await verifyWithAdapter(ctx, f.communityId, "late", adapter)).toBe(false);
-  expect(await revokeWithAdapter(ctx, f.communityId, {...adapter, authConfigId: "wrong"})).toEqual({cleanupPending: true});
-  expect(adapter.revoke).not.toHaveBeenCalled();
-  adapter.revoke.mockRejectedValueOnce(new Error("uncertain"));
-  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({cleanupPending: true});
-  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({cleanupPending: false});
-  expect(adapter.revoke).toHaveBeenLastCalledWith("account");
-});
-
-test("attempt correlation is stable, opaque and isolated by binding and generation",async()=>{
-  const alias=await integrationAttemptAlias("binding-one",1);
-  expect(alias).toMatch(/^pn_[a-f0-9]{64}$/);
-  expect(alias).toBe(await integrationAttemptAlias("binding-one",1));
-  expect(alias).not.toBe(await integrationAttemptAlias("binding-two",1));
-  expect(alias).not.toBe(await integrationAttemptAlias("binding-one",2));
-  for(const generation of [0,-1,NaN,Infinity,1.5])
-    await expect(integrationAttemptAlias("binding-one",generation)).rejects.toThrow("integration_invalid_attempt");
-});
-
-test.each(["before", "after", "persistent"])("initiation attachment failure %s never repeats remote work", async (failure) => {
-  const t=convexTest(schema,modules); const f=await createFixture(t);
-  const member=t.withIdentity({subject:f.memberSubject}); const ctx=executionContext(member);
-  const refs=(internal as any).communityIntegrationConnections;
-  const who={authSubject:f.memberSubject,userId:f.memberId,communityId:f.communityId};
-  await t.run(c=>c.db.patch(f.communityId,{integrationReadPilotEnabled:true}));
-  const adapter={authConfigId:"config",initiate:vi.fn(async()=>({connectedAccountId:"account",authorizationUrl:"https://connect.composio.dev/link"})),verify:vi.fn(),revoke:vi.fn(async()=>{})};
-  let attachments=0;
-  const broken={...ctx,runMutation:async(ref:any,args:any)=>{
-    if (args.connectedAccountId === "account" && args.authorizationUrl) {
-      attachments++;
-      if(failure === "persistent") throw new Error("database down");
-      if(attachments === 1) {
-        if(failure === "after") await ctx.runMutation(ref,args);
-        throw new Error("lost response");
-      }
-    }
-    return ctx.runMutation(ref,args);
-  }};
-  if(failure === "persistent") {
-    await expect(connectWithAdapter(broken,f.communityId,adapter)).rejects.toThrow("integration_reconciliation_required");
-    const row=await member.query(refs.ownBindingInternal,who);
-    expect(row.initiationState).toBe("awaiting");
-    await connectWithAdapter(ctx,f.communityId,adapter);
-  } else {
-    expect(await connectWithAdapter(broken,f.communityId,adapter)).toMatchObject({available:true});
-    expect(await member.query(refs.ownBindingInternal,who)).toMatchObject({connectedAccountId:"account",initiationState:"ready"});
-  }
-  expect(attachments).toBe(2);expect(adapter.initiate).toHaveBeenCalledTimes(1);expect(adapter.revoke).not.toHaveBeenCalled();
-});
-
-test("callback admission rejects invalid expiry and revocation reports failed finalization",async()=>{
-  const t=convexTest(schema,modules); const f=await createFixture(t);
-  const member=t.withIdentity({subject:f.memberSubject}); const ctx=executionContext(member);
-  const refs=(internal as any).communityIntegrationConnections;
-  const who={authSubject:f.memberSubject,userId:f.memberId,communityId:f.communityId};
-  await t.run(c=>c.db.patch(f.communityId,{integrationReadPilotEnabled:true}));
-  const adapter={authConfigId:"config",initiate:vi.fn(async()=>({connectedAccountId:"account",authorizationUrl:"https://connect.composio.dev/link"})),verify:vi.fn(),revoke:vi.fn(async()=>{})};
-  await connectWithAdapter(ctx,f.communityId,adapter);
-  const row=await member.query(refs.ownBindingInternal,who);
-  for(const expiresAt of [undefined,NaN,Infinity,0]) {
-    await t.run(c=>c.db.patch(row._id,{expiresAt}));
-    expect(await verifyWithAdapter(ctx,f.communityId,"session",adapter,row.generation)).toBe(false);
-    expect(await member.mutation(refs.claimCallbackInternal,{...who,generation:row.generation})).toBe(false);
-  }
-  expect(adapter.verify).not.toHaveBeenCalled();
-  for(const throws of [false,true]) {
-    const broken={...ctx,runMutation:async(ref:any,args:any)=>{
-      if(args.connectedAccountId === "account") {if(throws) throw new Error("database down");return false;}
-      return ctx.runMutation(ref,args);
-    }};
-    expect(await revokeWithAdapter(broken,f.communityId,adapter)).toEqual({cleanupPending:true});
-    expect((await member.query(refs.ownBindingInternal,who)).revokePending).toBe(true);
-  }
-  expect(await revokeWithAdapter(ctx,f.communityId,adapter)).toEqual({cleanupPending:false});
-});
-
-test("connection lifecycle orders remote work after one durable attempt", async () => {
-  const t = convexTest(schema, modules); const f = await createFixture(t);
-  const member = t.withIdentity({ subject: f.memberSubject });
-  const owner = t.withIdentity({ subject: "canonical-owner-subject" });
-  const ctx = executionContext(member);
-  const pub = (api as any).communityIntegrationConnections;
-  const refs = (internal as any).communityIntegrationConnections;
-  const who = { authSubject: f.memberSubject, userId: f.memberId, communityId: f.communityId };
-  const adapter = { authConfigId: "config",
-    initiate: vi.fn(async () => ({ connectedAccountId: "account", authorizationUrl: "https://connect.composio.dev/link" })),
-    verify: vi.fn(async (_id: string, userId: string) => ({ connectedAccountId: "account", providerUserId: userId, authConfigId: "config", toolkit: "hubspot", active: true, scopes: ["crm.objects.contacts.read"] })),
-    revoke: vi.fn(async () => {}) };
-  await expect(member.mutation(pub.setPilotEnabled, { communityId: f.communityId, enabled: true })).rejects.toThrow();
-  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow();
-  await owner.mutation(pub.setPilotEnabled, { communityId: f.communityId, enabled: true });
-  expect(await connectWithAdapter(ctx, f.communityId, null)).toEqual({ available: false });
-  await Promise.all([connectWithAdapter(ctx, f.communityId, adapter), connectWithAdapter(ctx, f.communityId, adapter)]);
-  expect(adapter.initiate).toHaveBeenCalledTimes(1);
-  const firstBinding=await member.query(refs.ownBindingInternal,who);
-  expect(adapter.initiate).toHaveBeenLastCalledWith(firstBinding.providerUserId,
-    await integrationAttemptAlias(firstBinding._id,firstBinding.generation));
-  expect(await verifyWithAdapter(ctx, f.communityId, "session", adapter, -1)).toBe(false);
-  expect(adapter.verify).not.toHaveBeenCalled();
-  const results = await Promise.all([verifyWithAdapter(ctx, f.communityId, "session", adapter), verifyWithAdapter(ctx, f.communityId, "session", adapter)]);
-  expect(results.sort()).toEqual([false, true]);
-  expect(adapter.verify).toHaveBeenCalledTimes(1);
-  expect(await member.query(pub.connectionStatus, { communityId: f.communityId })).toMatchObject({ status: "active" });
-  adapter.revoke.mockRejectedValueOnce(new Error("provider down"));
-  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({ cleanupPending: true });
-  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow();
-  expect(await verifyWithAdapter(ctx, f.communityId, "late", adapter)).toBe(false);
-  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({ cleanupPending: false });
-  await connectWithAdapter(ctx, f.communityId, adapter);
-  const b = await member.query(refs.ownBindingInternal, who);
-  expect(adapter.initiate).toHaveBeenLastCalledWith(b.providerUserId,await integrationAttemptAlias(b._id,b.generation));
-  expect(await integrationAttemptAlias(b._id,b.generation)).not.toBe(await integrationAttemptAlias(firstBinding._id,firstBinding.generation));
-  await t.run(ctx => ctx.db.patch(b._id, { expiresAt: 1 }));
-  expect(await verifyWithAdapter(ctx, f.communityId, "expired", adapter)).toBe(false);
-  expect(await member.query(pub.connectionStatus, {communityId:f.communityId})).toMatchObject({status:"error",actions:["disconnect"]});
-  await revokeWithAdapter(ctx, f.communityId, adapter);
-  adapter.initiate.mockImplementationOnce(async () => {
-    await member.mutation(refs.disconnectInternal, who);
-    return { connectedAccountId: "late-account", authorizationUrl: "https://connect.composio.dev/link" };
-  });
-  expect(await connectWithAdapter(ctx, f.communityId, adapter)).toEqual({ available: false });
-  expect(adapter.revoke).toHaveBeenLastCalledWith("late-account");
-  expect(await member.query(pub.connectionStatus, { communityId: f.communityId })).toMatchObject({ status: "disconnected" });
-  adapter.initiate.mockRejectedValueOnce(new Error("ambiguous timeout"));
-  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow("integration_reconciliation_required");
-  const calls = adapter.initiate.mock.calls.length;
-  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow();
-  expect(adapter.initiate).toHaveBeenCalledTimes(calls);
-  expect(await t.run(ctx => ctx.db.query("communityIntegrationConnections").collect())).toHaveLength(1);
-  await t.run(async ctx => {
-    const row = await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first();
-    await ctx.db.patch(row!._id, { active: false });
-  });
-  expect(await revokeWithAdapter(ctx, f.communityId, adapter)).toEqual({ cleanupPending: true });
-  expect(await member.query(pub.connectionStatus, { communityId: f.communityId })).toMatchObject({ status: "disconnected", cleanupPending: true });
-  await expect(connectWithAdapter(ctx, f.communityId, adapter)).rejects.toThrow();
-});
-test("connection descriptors are atomic and failed callbacks cannot replay", async () => {
-  const t = convexTest(schema, modules); const f = await createFixture(t);
-  const member = t.withIdentity({subject:f.memberSubject});
-  const ctx = executionContext(member);
-  const pub = (api as any).communityIntegrationConnections;
-  const refs = (internal as any).communityIntegrationConnections;
-  const who = {authSubject:f.memberSubject,userId:f.memberId,communityId:f.communityId};
-  await t.withIdentity({subject:f.ownerSubject}).mutation(pub.setPilotEnabled,{communityId:f.communityId,enabled:true});
-  const adapter = {authConfigId:"config",initiate:vi.fn(async()=>({connectedAccountId:"account",authorizationUrl:"https://connect.composio.dev/link"})),
-    verify:vi.fn(async()=>{throw new Error("provider failure");}),revoke:vi.fn(async()=>{})};
-  const first=await connectWithAdapter(ctx,f.communityId,adapter);
-  if (!first.available) throw new Error("expected available integration connection");
-  const [a,b]=await Promise.all([connectWithAdapter(ctx,f.communityId,adapter),connectWithAdapter(ctx,f.communityId,adapter)]);
-  expect(a).toEqual(first);expect(b).toEqual(first);
-  const row=await member.query(refs.ownBindingInternal,who);
-  expect(first).toMatchObject({generation:row.generation,expiresAt:row.expiresAt,authorizationUrl:row.authorizationUrl});
-  expect(await verifyWithAdapter(ctx,f.communityId,"callback",adapter,first.generation)).toBe(false);
-  expect(await member.query(pub.connectionStatus,{communityId:f.communityId})).toMatchObject({status:"error",actions:["disconnect"]});
-  expect(await verifyWithAdapter(ctx,f.communityId,"callback",adapter,first.generation)).toBe(false);
-  expect(adapter.verify).toHaveBeenCalledTimes(1);
-  await revokeWithAdapter(ctx,f.communityId,adapter);
-  expect(await member.query(pub.connectionStatus,{communityId:f.communityId})).toMatchObject({actions:["connect"]});
-});
-
-test("mocked integration read traverses the scoped harness and real binding query", async () => {
+test("retired integration paths are not found", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  await t.run(async ctx => {
-    await ctx.db.patch(f.communityId, { integrationReadPilotEnabled: true });
-    await ctx.db.insert("communityIntegrationConnections", { communityId: f.communityId, ownerUserId: f.memberId,
-      provider: "composio", toolkit: "hubspot", providerUserId: "opaque", authConfigId: "config", connectedAccountId: "account",
-      generation: 1, status: "active", scopes: ["crm.objects.contacts.read"], createdAt: 1, updatedAt: 1 });
-  });
   const ctx = executionContext(t.withIdentity({ subject: f.memberSubject }));
-  const deps = {
-    load: async () => ({ ...await ctx.runQuery((internal as any).communityIntegrationConnections.readPilotBindingInternal,
-      { authSubject: f.memberSubject, userId: f.memberId, communityId: f.communityId }), approvedContactId: "123" }),
-    claim: vi.fn(async () => ({receiptKey:"receipt",claimToken:"claim"})), start:vi.fn(async()=>true),
-    execute: vi.fn(async () => ({ successful: true, data: { id: "123", archived: false,
-      createdAt: "2026-09-11T00:00:00Z", updatedAt: "2026-09-11T00:00:00Z", properties: { firstname: "Fixture" } } })),
-    finalize: vi.fn(async () => {}),
-  };
-  const base = { ctx, userId: f.memberId, authSubject: f.memberSubject, runId: "integration-test", toolCallId:"integration-call", communityId: f.communityId,
+  const read = await executeRetrievalHarnessTool({ ctx, userId: f.memberId, authSubject: f.memberSubject,
+    runId: "integration-retired", toolCallId: "integration-call", communityId: f.communityId,
     communityBoundConversation: true, toolName: "polynet_read" as const,
     args: { path: "/communities/canonical-community/integrations/hubspot/contacts/123" },
-    evidenceSurface: "member_agent_dock" as const, integrationRead: deps };
-  const read = await executeRetrievalHarnessTool(base);
-  expect(read.status, JSON.stringify(read)).toBe("ok");
-  expect(deps.execute).toHaveBeenCalledTimes(1);
-  expect((await executeRetrievalHarnessTool({ ...base, args: { ...base.args, connectedAccountId: "forged" } })).status).toBe("ok");
-  expect(deps.execute).toHaveBeenLastCalledWith(expect.objectContaining({ connectedAccountId: "account" }));
-  deps.execute.mockClear();
-  for (const override of [{ communityBoundConversation: false }, { communityId: "other-community" },
-    { evidenceSurface: "external_mcp" as const },
-    { evidenceSurface: "community_concierge" as const }, { integrationRead: undefined },
-    { toolName: "polynet_list" as const },
-    { args: { path: "/communities/canonical-community/integrations/hubspot/contacts/not-an-id" } }]) {
-    expect((await executeRetrievalHarnessTool({ ...base, ...override })).status, JSON.stringify(override)).toBe("error");
-  }
-  await t.run(async dbctx => { await dbctx.db.patch(f.communityId, { integrationReadPilotEnabled: false }); });
-  expect((await executeRetrievalHarnessTool(base)).status).toBe("error");
-  expect(deps.execute).not.toHaveBeenCalled();
-  await expect(ctx.runQuery((internal as any).communityIntegrationConnections.readPilotBindingInternal,
-    { authSubject: f.memberSubject, userId: f.ownerId, communityId: f.communityId })).rejects.toThrow();
+    evidenceSurface: "member_agent_dock" as const });
+  expect(read.status).toBe("error");
+  expect(JSON.stringify(read)).toContain("semantic_not_found");
 });
 
 test("scoped interactive harness reads member context without gaining builder or platform access", async () => {
@@ -623,7 +402,6 @@ const modules = import.meta.glob([
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
-  "./communityIntegrationConnections.ts",
   "./communityIntegrationActions.ts",
   "./communityAgent.ts",
   "./communityMemberWorkflows.ts",
@@ -765,9 +543,6 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       memberSubject: "canonical-member-subject",
     };
   });
-  vi.stubEnv("CONVEX_CLOUD_URL", verificationPilot.INTEGRATION_PILOT_TARGET.deploymentUrl);
-  vi.spyOn(verificationPilot, "integrationVerificationPilot").mockReturnValue({id: "test-pilot",
-    communityId: fixture.communityId, actorUserId: fixture.memberId, authConfigId: "config", expiresAt: Date.now() + 600_000});
   return fixture;
 }
 

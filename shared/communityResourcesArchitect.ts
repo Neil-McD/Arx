@@ -1,13 +1,8 @@
-import type { PlatformSkillSummary } from "../shared/platformSkills";
-import {
-  PLATFORM_RESOURCES_ARCHITECT_SKILL,
-} from "../shared/platformSkills";
+import type { CommunityResourceRuntimeLaneState } from "./communityResourceLane";
 
-export type RuntimePlatformSkillDefinition = PlatformSkillSummary & {
-  instructionsMd: string;
-};
-
-export const PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
+// Instructions for the community agent when a builder works on Resources. They
+// are added to every builder-lane turn; members never see them.
+export const RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
   "Purpose: help community builders organize, refactor, and draft the active community Resources area from source material and existing resource records.",
   "Ground truth: use the five canonical Polynet tools only. List the active community's builder/resources/ directory and inspect its health summary before deciding what should change. Read returned categories, pages, ready source records, source lineage, and provenance through exact returned paths.",
   "Source boundary: use only source inbox records whose ingestion status is ready. Never infer content from queued, processing, failed, or unread sources, and never move or delete source inbox records.",
@@ -27,12 +22,9 @@ export const PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
   "Security: act only inside the active community scope, respect builder permissions, and do not expose private source material outside the builder workflow.",
 ].join("\n");
 
-export const COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS: RuntimePlatformSkillDefinition[] =
-  [
-    {
-      ...PLATFORM_RESOURCES_ARCHITECT_SKILL,
-      instructionsMd: PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD,
-    },
-  ];
-
-export const GLOBAL_PLATFORM_RUNTIME_SKILLS: RuntimePlatformSkillDefinition[] = [];
+export function buildResourcesArchitectPromptBlock(
+  lane: CommunityResourceRuntimeLaneState,
+): string {
+  if (lane.lane !== "builder" || !lane.can_use_resource_builder) return "";
+  return ["RESOURCES_ARCHITECT", RESOURCES_ARCHITECT_INSTRUCTIONS_MD].join("\n");
+}

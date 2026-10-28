@@ -135,7 +135,7 @@ and data are proven gone, following the two-release pattern in
 | `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |
 | Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityInteractionLegacyChatLinks`) | **Still written:** `communityChat.createThreadUserMessage` and the legacy bridge. Duplicate substrate; prove callers and migrate first |
 | `communityFunnels` and the funnel editor | Neil decided Oct 27: delete; a plain join and checkout page stays |
-| Integrations and skills tables | Neil decided Oct 27: delete |
+| Integrations and skills tables | Code deleted Oct 28 (POL-21); tables dropped next release with Neil's OK. GitHub and Google Drive source import is the next slice |
 
 ## Open risks
 

@@ -3,7 +3,6 @@ import {
   type FounderPaidToolAction,
   type FounderPaidToolName,
 } from "../shared/founderPaidTools";
-import { type IntegrationReceiptIntent, type IntegrationReceiptAction } from "./communityIntegrationReceiptIntent";
 
 const internalRefs = internal as any;
 
@@ -38,8 +37,9 @@ export async function authorizeFounderPaidToolFundingSession(args: {
   actorUserId: unknown;
   sourceRunId: string;
   toolCallId: string;
-} & ({toolName: FounderPaidToolName; action: FounderPaidToolAction} |
-  {toolName: "integration"; action: IntegrationReceiptAction; integrationIntent: IntegrationReceiptIntent})): Promise<FounderPaidToolFundingSession> {
+  toolName: FounderPaidToolName;
+  action: FounderPaidToolAction;
+}): Promise<FounderPaidToolFundingSession> {
   const sourceRunId = requireIdentifier(
     args.sourceRunId,
     "founder_paid_tool_source_run_invalid",
@@ -64,7 +64,6 @@ export async function authorizeFounderPaidToolFundingSession(args: {
       actorUserId: args.actorUserId,
       toolName: args.toolName,
       action: args.action,
-      ...(args.toolName === "integration" ? {integrationIntent: args.integrationIntent} : {}),
       claimToken,
       nowMs: Date.now(),
     },
