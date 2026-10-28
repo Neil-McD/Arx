@@ -90,7 +90,7 @@ async function door(tool, input) {
 }
 
 const list = function (path, options) { return door("polynet_list", Object.assign({ path: path }, options || {})); };
-const read = function (path) { return door("polynet_read", { path: path }); };
+const read = function (path, options) { return door("polynet_read", Object.assign({ path: path }, options || {})); };
 const search = function (path, query) { return door("polynet_search", { path: path, query: query }); };
 const write = function (input) { return door("polynet_write", Object.assign({ idempotency_key: newKey() }, input)); };
 const call = function (operation, input) {
@@ -359,9 +359,34 @@ function fileUrl(attachment) {
   return "/__polynet/files/" + String(attachment.ref || attachment).replace("attachment:", "");
 }
 
+// Events in start order, from now (one already under way is not included) or
+// from options.from (a Date, ms or ISO time: past events too). Up to limit
+// (default 20, at most 50); the list's cursor reads the next page
+// (events({ cursor: list.cursor })), null at the end. Each occurrence of a
+// recurring event is its own entry, with its own ref.
 async function events(options) {
-  const value = await list(root() + "events/", { limit: (options && options.limit) || 20 });
-  return value.entries || [];
+  options = options || {};
+  const input = { limit: options.limit || 20 };
+  if (options.cursor) input.cursor = String(options.cursor);
+  else if (options.from !== undefined && options.from !== null) {
+    const from = options.from instanceof Date ? options.from.getTime() : typeof options.from === "number" ? options.from : Date.parse(options.from);
+    if (!Number.isFinite(from)) throw new PolynetError("invalid_tool_args", "from is a Date, a time in ms or an ISO time.");
+    input.cursor = String(Math.max(0, Math.floor(from)));
+  }
+  const value = await list(root() + "events/", input);
+  const entries = value.entries || [];
+  entries.cursor = value.next_cursor || null;
+  return entries;
+}
+
+// One event (an entry from events(), or its ref "event:<id>:<start ms>"), read
+// fresh: the same fields as events() lists.
+const EVENT_REF = /^event:[A-Za-z0-9_-]{1,180}:[0-9]{1,16}$/;
+async function event(which) {
+  const ref = String((which && which.ref) || which || "");
+  if (!EVENT_REF.test(ref)) throw new PolynetError("invalid_tool_args", "Pass an event from events(), or its ref.");
+  const value = await read(root() + "events/" + ref + ".md");
+  return Object.assign(JSON.parse(value.body), { ref: ref, path: root() + "events/" + ref + ".md" });
 }
 
 // Courses (folders) and lessons (documents). Pass an entry's path to open a folder.
@@ -370,9 +395,12 @@ async function resources(path) {
 }
 
 // A document's text: a lesson, a memory, or a post (posts from feed/thread already have .text).
+// A long lesson comes a page at a time; this reads them all (up to TEXT_PAGES).
+const TEXT_PAGES = 20;
 async function readText(entry) {
   if (entry && entry.type === "interaction" && typeof entry.text === "string") return entry.text;
-  const value = await read(entry.path || entry);
+  const path = entry.path || entry;
+  const value = await read(path);
   let text = (value && value.body) || "";
   try {
     const parsed = JSON.parse(text);
@@ -381,8 +409,17 @@ async function readText(entry) {
     } else {
       text = parsed.body_md || parsed.bodyMd || text;
     }
+    // A JSON document is read whole: its next page would repeat the first.
+    return text;
   } catch (error) {
     // Markdown documents are already text.
+  }
+  let next = value && value.next_offset;
+  for (let page = 1; page < TEXT_PAGES && typeof next === "number" && next > 0; page += 1) {
+    const more = await read(path, { offset: next });
+    text += (more && more.body) || "";
+    // Only forward: a page that doesn't move on ends the read.
+    next = more && typeof more.next_offset === "number" && more.next_offset > next ? more.next_offset : null;
   }
   return text;
 }
@@ -678,7 +715,7 @@ const polynet = {
   session: session, signIn: signIn, signOut: signOut, community: community, account: account,
   channels: channels, feed: feed, thread: thread, post: post, edit: edit, remove: remove, react: react, fileUrl: fileUrl, watch: watch,
   markRead: markRead, typing: typing,
-  events: events, resources: resources, readText: readText, knowledge: knowledge, members: members,
+  events: events, event: event, resources: resources, readText: readText, knowledge: knowledge, members: members,
   profile: profile, online: online, watchOnline: watchOnline,
   agentHistory: agentHistory, askAgent: askAgent, markdown: markdown,
   door: { list: list, read: read, search: search, write: write, call: call },

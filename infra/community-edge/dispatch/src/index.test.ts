@@ -373,7 +373,7 @@ test("every site gets the shell (ui.js) and the member's account, read with thei
 });
 
 test("every site serves Polynet's blocks as modules; ui.js loads them only where they're placed", async () => {
-  for (const name of ["kit", "channels", "chat", "composer", "members", "profile", "page"]) {
+  for (const name of ["kit", "channels", "chat", "composer", "members", "profile", "page", "events", "learn", "knowledge", "ask"]) {
     const res = await edge.fetch(request(`/__polynet/blocks/${name}.js`, { headers: { "sec-fetch-site": "cross-site" } }), env());
     expect(res.status, name).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
@@ -390,17 +390,21 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
   expect(await (await edge.fetch(request("/__polynet/blocks/members.js"), env())).text()).toContain('customElements.define("polynet-members"');
   expect(await (await edge.fetch(request("/__polynet/blocks/profile.js"), env())).text()).toContain("export function openProfile");
   expect(await (await edge.fetch(request("/__polynet/blocks/page.js"), env())).text()).toContain('customElements.define("polynet-page"');
+  for (const name of ["events", "learn", "knowledge", "ask"]) {
+    expect(await (await edge.fetch(request(`/__polynet/blocks/${name}.js`), env())).text()).toContain(`customElements.define("polynet-${name}"`);
+  }
   // Unknown blocks are Polynet's 404, never the site's own fallback page.
   const site = vi.fn(async () => new Response("<html>site</html>", { headers: { "content-type": "text/html" } }));
   const e = { ...env(), DEV_USER_WORKER: { fetch: site } };
-  for (const path of ["/__polynet/blocks/events.js", "/__polynet/blocks/", "/__polynet/blocks/%2e%2e%2fui.js", "/__polynet/blocks/Chat.js", "/__polynet/blocks/chat.js.map", "/__polynet/blocks/constructor.js"]) {
+  for (const path of ["/__polynet/blocks/courses.js", "/__polynet/blocks/", "/__polynet/blocks/%2e%2e%2fui.js", "/__polynet/blocks/Chat.js", "/__polynet/blocks/chat.js.map", "/__polynet/blocks/constructor.js"]) {
     const res = await edge.fetch(request(path), e);
     expect(res.status, path).toBe(404);
   }
   expect(site).not.toHaveBeenCalled();
 
   const ui = await (await edge.fetch(request("/__polynet/ui.js"), env())).text();
-  expect(ui).toContain('const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page" };');
+  expect(ui).toContain('"polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page",');
+  expect(ui).toContain('"polynet-events": "events", "polynet-learn": "learn", "polynet-knowledge": "knowledge", "polynet-ask": "ask",');
   expect(ui).toContain('import("/__polynet/blocks/profile.js")');
   expect(ui).toContain('import("/__polynet/blocks/" + BLOCKS[tag] + ".js")');
 });
@@ -429,13 +433,15 @@ const browse = (path: string, headers: Record<string, string> = {}) =>
   request(path, { headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", ...headers } });
 const identity = (name: string) => vi.fn(async () => Response.json({ ok: true, community: { slug: "apps-community", name, one_liner: null, about: null, member_count: 3 } }));
 
-test("standard pages: the site's frame is served at /chat, /people and /people/<handle>, titled, with the shell", async () => {
+test("standard pages: the site's frame is served at each standard page and the addresses under it, titled, with the shell", async () => {
   resetEdgeCaches();
   vi.stubGlobal("fetch", identity("Apps Club"));
   vi.stubGlobal("HTMLRewriter", FakeRewriter);
   const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME });
   const e = { ...env(), DEV_USER_WORKER: site };
-  for (const [path, title] of [["/chat", "Chat"], ["/chat?channel=crew", "Chat"], ["/people", "People"], ["/people/sam", "People"], ["/people/Sam_R-2", "People"]]) {
+  for (const [path, title] of [["/chat", "Chat"], ["/chat?channel=crew", "Chat"], ["/people", "People"], ["/people/sam", "People"], ["/people/Sam_R-2", "People"],
+    ["/events", "Events"], ["/events/k97abc_D-1~1793570400000", "Events"], ["/learn", "Learn"], ["/learn/start-here~k1", "Learn"],
+    ["/learn/start-here~k1/first-steps~k2", "Learn"], ["/knowledge", "Knowledge"], ["/ask", "Ask"]]) {
     site.seen.length = 0;
     const res = await edge.fetch(browse(path, { "if-none-match": '"frame-etag"', cookie: `theme=dark; __Host-polynet_session=${TOKEN}` }), e);
     expect(res.status, path).toBe(200);
@@ -464,7 +470,8 @@ test("standard pages: the site's own page wins; /chat/ without one goes to /chat
   resetEdgeCaches();
   vi.stubGlobal("fetch", identity("Apps Club"));
   vi.stubGlobal("HTMLRewriter", FakeRewriter);
-  const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME, "/chat": "<html><body>our own chat</body></html>", "/people/": "<html><body>our crew</body></html>", "/people": "redirect:/people/" });
+  const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME, "/chat": "<html><body>our own chat</body></html>", "/people/": "<html><body>our crew</body></html>", "/people": "redirect:/people/",
+    "/events": "<html><body>our calendar</body></html>", "/ask": "<html><body>our oracle</body></html>" });
   const e = { ...env(), DEV_USER_WORKER: site };
   const own = await edge.fetch(browse("/chat"), e);
   expect(own.status).toBe(200);
@@ -473,10 +480,15 @@ test("standard pages: the site's own page wins; /chat/ without one goes to /chat
   const redirect = await edge.fetch(browse("/people"), e);
   expect([redirect.status, redirect.headers.get("location")]).toEqual([307, "/people/"]);
   expect(await (await edge.fetch(browse("/people/"), e)).text()).toContain("our crew");
+  expect(await (await edge.fetch(browse("/events"), e)).text()).toContain("our calendar");
+  expect(await (await edge.fetch(browse("/ask"), e)).text()).toContain("our oracle");
   expect(site.seen.map((s) => s.path)).not.toContain("/frame");
+  // Its own /events page doesn't cover the addresses under it: those are the frame, where <polynet-page> shows the event.
+  const event = await edge.fetch(browse("/events/k1~1793570400000"), e);
+  expect([event.status, await event.text()]).toEqual([200, expect.stringContaining("<polynet-page></polynet-page>")]);
 
   const bare = deployedSite({ "/": "<html>home</html>", "/frame": FRAME });
-  for (const [path, to] of [["/chat/", "/chat"], ["/people/sam/?x=1", "/people/sam?x=1"]]) {
+  for (const [path, to] of [["/chat/", "/chat"], ["/people/sam/?x=1", "/people/sam?x=1"], ["/learn/a~k1/b~k2/", "/learn/a~k1/b~k2"], ["/knowledge/", "/knowledge"]]) {
     const res = await edge.fetch(browse(path), { ...env(), DEV_USER_WORKER: bare });
     expect([res.status, res.headers.get("location")], path).toEqual([307, to]);
   }
@@ -505,7 +517,10 @@ test("standard pages never shadow Polynet's paths, the site's files, other metho
   vi.stubGlobal("fetch", identity("Apps Club"));
   const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME, "/people/photo.jpg": "jpg" });
   const e = { ...env(), DEV_USER_WORKER: site };
-  for (const path of ["/people/a.b", "/people/x/y", `/people/${"a".repeat(33)}`, "/people/s%20m", "/people/@sam", "/people/photo.jpg", "/chat/app.js", "/chats", "/Chat", "/frame"]) {
+  for (const path of ["/people/a.b", "/people/x/y", `/people/${"a".repeat(33)}`, "/people/s%20m", "/people/@sam", "/people/photo.jpg", "/chat/app.js", "/chats", "/Chat", "/frame",
+    // Not an event, course or lesson address: the site's own (a file, or its client-side routes).
+    "/events/123", "/events/k1~x", "/events/k1~1/more", "/events/photo.jpg", "/learn/intro", "/learn/Intro~k1", "/learn/a~k1/b~k2/c~k3", "/learn/a~k1/notes.md",
+    "/knowledge/x", "/ask/anything", "/eventsx", "/Learn"]) {
     site.seen.length = 0;
     const res = await edge.fetch(browse(path), e);
     // Straight to the site, as the browser asked (a navigation keeps its index.html fallback).

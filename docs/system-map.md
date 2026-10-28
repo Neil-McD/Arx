@@ -261,10 +261,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   memory, the agent), the shared `<polynet-account>` shell, deploys. Every
   site is its own world (Oct 28): it ships a frame (`/frame.html`, its header,
   nav and footer around one `<polynet-page>`), and the edge serves that frame
-  at Polynet's standard pages (`/chat`, `/people`, `/people/<handle>`) unless
-  the site has its own file there; `<polynet-page>` fills it with Polynet's
-  blocks (`<polynet-channels>`, `<polynet-chat>`, `<polynet-members>`, served
-  from `blocks/`). The route table is `STANDARD_PAGES` in
+  at Polynet's standard pages (`/chat`, `/people[/<handle>]`,
+  `/events[/<event>]`, `/learn[/<course>[/<lesson>]]`, `/knowledge`, `/ask`)
+  unless the site has its own file there; `<polynet-page>` fills it with
+  Polynet's blocks (`<polynet-channels>`, `<polynet-chat>`,
+  `<polynet-members>`, `<polynet-events>`, `<polynet-learn>`,
+  `<polynet-knowledge>`, `<polynet-ask>`, served from `blocks/`) over the
+  SDK's events, resources, memory and private agent conversation. The route table is `STANDARD_PAGES` in
   `packages/polynet-cli/checks.mjs`, whose site checks fail `polynet check`,
   CLI and MCP deploys without the frame, or when a site's own standard page
   lacks its blocks. Sites style them only through tokens, `::part()`, slots

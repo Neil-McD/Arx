@@ -19,16 +19,36 @@ concept, and the blocks live inside that concept.
 - **A frame (required: `check` and `deploy` fail without it).**
   `frame.html` at the root: the site's header, navigation and footer
   around exactly one `<polynet-page></polynet-page>`, every path starting
-  with `/`. Polynet's standard pages appear in it on every site: `/chat`
-  (channels and chat) and `/people` (members; `/people/<handle>` opens that
-  profile). Put them in the site's navigation, named in the community's
-  words. Restyle the page with `.pn-page-*` classes and the blocks'
-  `::part()`s; `<h1 slot="chat-heading">` (or `people-heading`) inside
-  `<polynet-page>` replaces its heading (llms.txt lists the rest).
-- **The blocks.** `<polynet-channels>`, `<polynet-chat>` and
-  `<polynet-members>`, on `/chat` and `/people` and anywhere else the
-  design wants them. A site's own `chat.html` or `people/index.html`
-  replaces Polynet's page and must place the same blocks. The chat
+  with `/`. Polynet's standard pages appear in it on every site, in this
+  order in the shell's "In this club" menu:
+
+  | Page | Block | Addresses under it |
+  | --- | --- | --- |
+  | `/chat` | `<polynet-channels>` + `<polynet-chat>` | `?channel=<slug>` |
+  | `/people` | `<polynet-members>` | `/people/<handle>` (that profile open) |
+  | `/events` | `<polynet-events>` | `/events/<event>` (one event: when, where, .ics, link) |
+  | `/learn` | `<polynet-learn>` | `/learn/<course>`, `/learn/<course>/<lesson>` |
+  | `/knowledge` | `<polynet-knowledge>` | none (memories open in place) |
+  | `/ask` | `<polynet-ask>` | none (private to each member) |
+
+  Put them in the site's navigation, named in the community's words ("The
+  calendar", "The library", "Ask the coach"). Style them like any page of
+  the site: the frame gives them your header, fonts and colors; lay out
+  the page with `.pn-page-header`, `.pn-page-heading`, `.pn-page-body` and
+  `.pn-page-<name>` (`polynet-page[page=events]` and so on); restyle the
+  blocks with the `--polynet-*` tokens and their `::part()`s;
+  `<h1 slot="events-heading">The calendar</h1>` (`chat-heading`,
+  `people-heading`, `learn-heading`, `knowledge-heading`, `ask-heading`)
+  inside `<polynet-page>` replaces a heading, and
+  `<p data-block="polynet-events" slot="empty">…</p>` gives a block your
+  words (llms.txt lists every part and slot).
+- **The blocks.** `<polynet-channels>`, `<polynet-chat>`,
+  `<polynet-members>`, `<polynet-events>`, `<polynet-learn>`,
+  `<polynet-knowledge>` and `<polynet-ask>`, on their standard pages and
+  anywhere else the design wants them (`<polynet-events limit="3">` on a
+  home page lists the next three and links to `/events`). A site's own
+  `chat.html`, `events.html`, `learn/index.html` (and so on) replaces
+  Polynet's page and must place the same blocks. The chat
   is the whole conversation: feed, composer, threads, reactions,
   attachments, typing, @-tags for members and the agent, editing and
   deleting. Members, chat authors and @-tags open Polynet's profile panel
@@ -41,7 +61,8 @@ concept, and the blocks live inside that concept.
   "Join" (`session.join_url`). Signed out, the blocks show their own
   sign-in and join prompt, never posts or names.
 - **A way to Polynet Studio** for owners and admins: link
-  `session.studio_url` for settings, members, billing, events and courses.
+  `session.studio_url` for settings, members, billing, and creating events
+  and courses (members read them on `/events` and `/learn`).
 - **Never** build direct messages, a profile view or a chat composer.
 
 ## The flow
@@ -67,8 +88,9 @@ for a new one.
 
 ## Where the blocks go
 
-`/chat` and `/people` always exist (in the frame). Beyond them, name the
-places in the community's own words:
+`/chat`, `/people`, `/events`, `/learn`, `/knowledge` and `/ask` always
+exist (in the frame). Beyond them, name the places in the community's own
+words:
 
 - **The room** (a page or a section, e.g. "The Boathouse", "Base Camp"):
   `<polynet-channels>` beside `<polynet-chat>`. This is where members
@@ -77,9 +99,10 @@ places in the community's own words:
 - **The people** ("The crew", "Who's climbing"): `<polynet-members>`, on its
   own page or as a column in the room.
 - **The public face**: the story, the rhythm (events), and "Join". The
-  blocks can sit here too; signed out they invite people in.
+  blocks can sit here too; signed out they invite people in (no block ever
+  shows an event, a course, a memory or a conversation to a visitor).
 - **Extras**, built with the SDK beside the blocks, never instead of them:
-  a route log, this week's sessions, a knowledge shelf, "ask the agent".
+  a route log, a "this week" strip on the home page.
 
 The channel lives in the URL (`?channel=<slug>`); the blocks follow it
 across pages, so a link to `/room.html?channel=routes` opens that channel.
@@ -167,6 +190,10 @@ write every one in the concept's words:
 | `<polynet-channels>` | `header` |
 | `<polynet-chat>` | `header` (replaces the "#channel" title), `empty` (a channel with no posts), `signed-out`, `read-only` (the note where the member can't post or reply) |
 | `<polynet-members>` | `header`, `empty` (a community with no members yet; a search with no match has its own line), `signed-out` |
+| `<polynet-events>` | `empty` (nothing on the calendar), `signed-out` |
+| `<polynet-learn>` | `empty` (no courses yet), `signed-out` |
+| `<polynet-knowledge>` | `header`, `intro` (what the memory is, above the search), `empty`, `signed-out` |
+| `<polynet-ask>` | `header`, `privacy` (the "only you can see this" line), `starters` (buttons that each ask their text, while the conversation is empty), `signed-out` |
 
 `signed-out` replaces only the sign-in line. Polynet's "Sign in" button and
 "New here? Join" link stay under it, so don't add your own. Style state with

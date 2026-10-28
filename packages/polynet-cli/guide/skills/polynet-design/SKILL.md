@@ -11,9 +11,12 @@ members screenshot and send to friends. If it could be any community's site,
 it isn't done.
 
 There is no template. Every site starts from its own concept. What every
-site shares is Polynet's blocks: `<polynet-channels>`, `<polynet-chat>` and
-`<polynet-members>` (on every site's `/chat` and `/people`, inside the
-site's own frame) and the
+site shares is Polynet's blocks: `<polynet-channels>`, `<polynet-chat>`,
+`<polynet-members>`, `<polynet-events>`, `<polynet-learn>`,
+`<polynet-knowledge>` and `<polynet-ask>` (on every site's `/chat`,
+`/people`, `/events`, `/learn`, `/knowledge` and `/ask`, inside the site's
+own frame, so design the frame for pages of talk, people, dates, lessons
+and answers alike) and the
 `<polynet-account>` shell. They behave the same everywhere so members always
 know how to talk and find each other; how they look is your job. A
 direction isn't done until they look like they were made for it.

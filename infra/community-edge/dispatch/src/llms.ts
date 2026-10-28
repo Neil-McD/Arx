@@ -17,14 +17,18 @@ below brings everything else.
 - Every site has a frame: /frame.html, the site's own header, navigation
   and footer around one <polynet-page></polynet-page>. Deploys fail
   without it. Polynet's standard pages exist on every site from the first
-  deploy, inside that frame: /chat (channels and chat) and /people (the
-  members; /people/<handle> opens one profile). Link to them in your
-  navigation. See "The frame and the standard pages", below.
+  deploy, inside that frame: /chat (channels and chat), /people (the
+  members; /people/<handle> opens one profile), /events (the calendar;
+  /events/<event> is one event), /learn (courses and lessons), /knowledge
+  (the community's memory) and /ask (the member's private conversation
+  with the community agent). Link to them in your navigation. See "The
+  frame and the standard pages", below.
 - The blocks on those pages: <polynet-channels>, <polynet-chat> and
   <polynet-members>, the channels, the whole conversation (composer,
   threads, reactions, attachments, @-tags) and the people (each opens a
-  profile with Message). Place them on your own pages too if you like.
-  Never rebuild, hide or replace them.
+  profile with Message); <polynet-events>, <polynet-learn>,
+  <polynet-knowledge> and <polynet-ask>. Place them on your own pages too
+  if you like. Never rebuild, hide or replace them.
 - The shell (<polynet-account>) is automatic: Polynet adds it to every page.
   Place it into your design yourself.
 - Polynet owns how the blocks behave; your site owns how they look, through
@@ -188,10 +192,21 @@ The member's other communities are never readable from a site.
 
 ## The frame and the standard pages
 
-Polynet's standard pages exist on every site: /chat (channels beside the
-chat) and /people (the members; /people/<handle> is the same page with that
-member's profile open, and closing it returns to /people). They appear
-inside the site's frame, /frame.html at the site's root: the same header,
+Polynet's standard pages exist on every site, in this order in the shell's
+"In this club" menu:
+
+- /chat: channels beside the chat (?channel=<slug> picks one).
+- /people: the members; /people/<handle> is the same page with that
+  member's profile open, and closing it returns to /people.
+- /events: <polynet-events>, the calendar; /events/<id>~<start ms> is one
+  event (from its ref, event:<id>:<start ms>).
+- /learn: <polynet-learn>, the courses; /learn/<course> is a course's
+  lessons and /learn/<course>/<lesson> a lesson (each the last part of its
+  Polynet path, like start-here~k17..., without .md).
+- /knowledge: <polynet-knowledge>, the community's memory.
+- /ask: <polynet-ask>, the member's private conversation with the agent.
+
+They appear inside the site's frame, /frame.html at the site's root: the same header,
 navigation, footer, fonts and colors as every other page, with exactly one
 <polynet-page></polynet-page> where the page goes:
 
@@ -205,34 +220,42 @@ navigation, footer, fonts and colors as every other page, with exactly one
     </head>
     <body>
       <header><a href="/">Dawn Patrol</a>
-        <nav><a href="/chat">The river</a> <a href="/people">The pack</a></nav>
+        <nav><a href="/chat">The river</a> <a href="/people">The pack</a>
+          <a href="/events">Runs</a> <a href="/learn">Training</a></nav>
         <polynet-account></polynet-account></header>
       <main><polynet-page></polynet-page></main>
     </body>
     </html>
 
 - Start every link and file path in the frame from the root (/styles.css,
-  not styles.css): it is shown at /chat and /people/<handle> alike. Deploys
+  not styles.css): it is shown at /chat, /people/<handle> and
+  /learn/<course>/<lesson> alike. Deploys
   fail on relative paths there.
 - <polynet-page> renders into the page itself (no shadow DOM), so your CSS
   lays it out. Default: a heading, then channels beside the chat (one
-  column on phones, the chat given a height) or the members. Restyle with
-  .pn-page-header, .pn-page-heading, .pn-page-body, .pn-page-chat,
-  .pn-page-people, .pn-page-missing, .pn-page-links and
-  polynet-page[page=chat|people|not-found]; the blocks inside keep their
-  ::part()s.
+  column on phones, the chat given a height), the members, or the page's
+  block at a reading width (the private conversation given a height).
+  Restyle with .pn-page-header, .pn-page-heading, .pn-page-body,
+  .pn-page-chat, .pn-page-people, .pn-page-events, .pn-page-learn,
+  .pn-page-knowledge, .pn-page-ask, .pn-page-missing, .pn-page-links and
+  polynet-page[page=chat|people|events|learn|knowledge|ask|not-found]; the
+  blocks inside keep their ::part()s.
 - Your words: <h1 slot="chat-heading">The river</h1> (also
-  slot="people-heading", slot="not-found-heading") inside <polynet-page>
+  slot="people-heading", "events-heading", "learn-heading",
+  "knowledge-heading", "ask-heading", "not-found-heading") inside <polynet-page>
   replaces that page's heading; <polynet-page no-heading> drops them all;
   <p data-block="polynet-chat" slot="empty">No miles yet.</p> goes into
   that block as its slot.
 - The frame's own nav links to the current page get aria-current="page":
   style them with nav a[aria-current=page].
-- Want your own /chat or /people? Ship chat.html (or chat/index.html,
-  people/index.html, people/<handle>.html): the site's file wins over
-  Polynet's, and must place that page's blocks (/chat: <polynet-channels>
-  and <polynet-chat>; /people: <polynet-members>). Only a file counts; a
-  client-side route can't replace a standard page.
+- Want your own version of one? Ship chat.html (or chat/index.html,
+  people/index.html, events.html, learn/index.html, ...): the site's file
+  wins over Polynet's, and must place that page's blocks (/chat:
+  <polynet-channels> and <polynet-chat>; /people: <polynet-members>;
+  /events: <polynet-events>; /learn: <polynet-learn>; /knowledge:
+  <polynet-knowledge>; /ask: <polynet-ask>). Only a file counts; a
+  client-side route can't replace a standard page. Your own events.html
+  doesn't cover /events/<event>: those still show in the frame.
 - Messages, settings, your communities and joining open in Polynet for now;
   they move into the site in a later release.
 
@@ -364,6 +387,26 @@ Restyle any piece with ::part():
 - polynet-profile (the panel): panel, close, avatar, presence-dot, name,
   handle, role-badge, online, you, bio, links, link, message,
   message-note, state, retry, gate, gate-text, sign-in, join.
+- polynet-events: events, month, month-title, event (also event-now),
+  event-date, event-title, now-badge, event-time, event-local-time,
+  event-place, none, past, past-summary, more, all, detail, back,
+  detail-title, detail-when, detail-local-time, detail-where, detail-link,
+  detail-description, add-to-calendar, share, share-status, missing, empty,
+  state, gate, gate-text, sign-in, join, retry.
+- polynet-learn: learn, courses, course, course-title, course-count,
+  course-heading, lessons, lesson, lesson-number, lesson-title, no-lessons,
+  reader, lesson-position, lesson-heading, lesson-body, pager, previous,
+  next, back, heading, missing, empty, state, gate, gate-text, sign-in,
+  join, retry.
+- polynet-knowledge: knowledge, intro, search, search-input,
+  search-button, results, showing, clear, memories, memory, memory-toggle,
+  memory-title, memory-type, memory-applies, memory-body, memory-text,
+  memory-source, no-results, search-error, empty, state, gate, gate-text,
+  sign-in, join, retry.
+- polynet-ask: ask, privacy, log, message (also message-user,
+  message-agent), avatar (avatar-agent), message-author, message-time,
+  message-body, thinking, starters, starter, composer, box, input, send,
+  problem, state, gate, gate-text, sign-in, join, retry.
 
 Slots, for your own words:
 - polynet-channels: slot="header".
@@ -372,6 +415,13 @@ Slots, for your own words:
   slot="read-only" (the note where the member can't post or reply).
 - polynet-members: slot="header", slot="empty" (a community with no members
   yet; a search with no match has its own line), slot="signed-out".
+- polynet-events: slot="empty" (nothing on the calendar), slot="signed-out".
+- polynet-learn: slot="empty" (no courses yet), slot="signed-out".
+- polynet-knowledge: slot="header", slot="intro" (above the search),
+  slot="empty", slot="signed-out".
+- polynet-ask: slot="header", slot="privacy" (the "only you can see this"
+  line), slot="starters" (your own buttons; each asks its text),
+  slot="signed-out".
 slot="signed-out" replaces only the sign-in line: Polynet's "Sign in" button
 and "New here? Join" link stay under it, so don't add your own.
 
@@ -398,6 +448,38 @@ polynet-channels::part(list) { grid-auto-flow: column; overflow-x: auto }
 turns the channels into a scrolling row above the chat. Custom views (a
 route log, this week's sessions) are built with the SDK below, beside the
 blocks, never instead of them.
+
+## Blocks: events, learn, knowledge and ask
+
+On Polynet's /events, /learn, /knowledge and /ask pages on every site, and
+anywhere you place them. Like the others, signed out (or not a member) each
+shows a sign-in and join prompt and never an event, course, memory or
+conversation.
+
+- <polynet-events>: upcoming events first, grouped by month, each with its
+  date, time in the event's own time zone and, when the member's differs,
+  their own ("7:00 – 8:30 PM GMT your time"), and where; one under way is
+  marked Now; past events (the last 90 days) are folded below. Each opens
+  at /events/<event> (in place on /events; Back returns): when, where, a
+  join link the organizer set, the description, "Add to calendar" (an .ics
+  file made in the page) and "Copy link". No RSVP. limit="3" shows only the
+  next three and a link to /events (for a home page).
+- <polynet-learn>: the courses as cards (with lesson counts), a course's
+  lessons in order, and the lesson reader (markdown) with Previous and Next.
+  Each step is an address under /learn, in place on that page.
+- <polynet-knowledge>: what the community knows, from its memory: the top
+  memories (title, kind, when it applies) and a search; each opens in place,
+  labelled "From the community's memory".
+- <polynet-ask>: the member's private conversation with the community agent
+  (only they see it): the history, a box (Enter asks; Shift+Enter is a new
+  line), the reply as it streams, and starter questions while the
+  conversation is empty. If a question fails it goes back in the box with
+  Try again. Give it a height (it scrolls inside): polynet-ask { height:
+  70vh } is the default.
+
+Each reflects its state on the tag: state="loading" | "ready" | "signed-out"
+| "error" (events and learn also "missing", for an address that isn't there).
+They take the same tokens; their ::part()s and slots are listed above.
 
 ## Errors
 
@@ -489,15 +571,25 @@ own rather than avatar_url (which is the member's).
 
 ## Events, courses, knowledge
 
-- events({ limit }) -> upcoming events (default 20). Fields: title,
+- events({ limit, from, cursor }) -> events in start order (limit default
+  20, at most 50): from now (one already under way isn't included), or from
+  options.from (a Date, ms or ISO time, so past events too); list.cursor
+  reads the next page (events({ cursor: list.cursor })), null at the end.
+  Each occurrence of a recurring event is its own entry. Fields: ref
+  ("event:<id>:<start ms>"; its page is /events/<id>~<start ms>), title,
   description_md, starts_at and ends_at (ISO), timezone (IANA name),
   location_type ("online", "physical" or "tbd"), location_label, url (a link the
   organizer set, or null), recurrence_frequency, recurrence_interval.
   Show times with new Date(starts_at).toLocaleString(undefined, { timeZone:
   timezone }). Ignore starts_at_zoned (not readable by Date). No RSVP yet.
+- event(eventOrRef) -> one event, read fresh (the same fields).
 - resources(path?) -> courses (kind "directory") and lessons (kind
-  "document"). Pass a course's path to list its lessons.
-- readText(entry) -> the text of a lesson, a memory or a post (markdown).
+  "document"), each with name and path, in the community's order. Pass a
+  course's path to list its lessons. A course's page is /learn/<the last
+  part of its path>, a lesson's /learn/<course>/<the last part of its
+  path, without .md>.
+- readText(entry) -> the text of a lesson (all of it, however long), a
+  memory or a post (markdown).
 - members() -> [{ name, role, ref, path, handle, avatar_url, online }], role
   "owner", "admin", "moderator" or "member"; online: here right now.
 - profile(memberOrHandle) -> { ref, name, handle, avatar_url, role, online,
@@ -524,7 +616,9 @@ Each community has one AI agent. Members talk to it privately:
   show a "thinking" state until onDelta first runs. Render the last onDelta
   (or the resolved reply) as the answer; it replaces anything shown before.
 It is the same conversation the member has on the community's Agent page in
-Polynet. In channels, post(..., { askAgent: true }) asks it publicly.
+Polynet, and the one <polynet-ask> (on /ask) shows; use that block rather
+than building your own. In channels, post(..., { askAgent: true }) asks it
+publicly.
 
 ## Rendering
 
@@ -565,8 +659,9 @@ remembers it.
 Every deploy checks the site first ("npx @polynet/cli check" runs the same
 checks alone). These stop a deploy until fixed: no index.html or
 frame.html at the site's root; a frame.html without exactly one
-<polynet-page>, or with relative paths; a site's own /chat or /people page
-(chat.html, people/index.html, ...) that doesn't place that page's blocks
+<polynet-page>, or with relative paths; a site's own version of a standard
+page (chat.html, people/index.html, events.html, ...) that doesn't place
+that page's blocks
 (for a framework build, a script naming them counts, not in a comment); a
 page without <html lang>, a <title> or a viewport that
 allows zooming; an <img> without alt; a button or link with no text or
@@ -576,9 +671,10 @@ innerHTML, positive tabindex) are printed but don't stop it.
 
 Only changed files upload. The site is live at
 https://<community-slug>.polynet.page within a minute. Opening or refreshing
-any path in the browser serves index.html, so client-side routes (/events)
-work, except the standard pages (/chat, /people, /people/<handle>), which
-show frame.html unless the site has a file there; a script's fetch() of a path that isn't a file gets 404. No server code
+any path in the browser serves index.html, so client-side routes (/runs)
+work, except the standard pages and the addresses under them (/chat,
+/people/<handle>, /events/<event>, /learn/<course>/<lesson>, /knowledge,
+/ask), which show frame.html unless the site has a file there; a script's fetch() of a path that isn't a file gets 404. No server code
 runs: everything dynamic comes from the SDK.
 
 Using a bundler (Vite, Rollup, esbuild): the SDK and shell are served by the

@@ -89,7 +89,7 @@ function avatar(url, name) {
 const PAGES = __POLYNET_PAGE_ROUTES__;
 function currentPage() {
   const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, "") : location.pathname;
-  const page = PAGES.find((page) => path === page.path || (page.members && path.indexOf(page.path + "/") === 0));
+  const page = PAGES.find((page) => path === page.path || (page.below.length > 0 && path.indexOf(page.path + "/") === 0));
   return page ? page.path : null;
 }
 
@@ -290,7 +290,10 @@ else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELA
 
 // Polynet's blocks load only on pages that place them, now or later (a
 // single-page app may render <polynet-chat> after a route change).
-const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page" };
+const BLOCKS = {
+  "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page",
+  "polynet-events": "events", "polynet-learn": "learn", "polynet-knowledge": "knowledge", "polynet-ask": "ask",
+};
 const pendingBlocks = new Set(Object.keys(BLOCKS));
 let blockCheck = false;
 function loadBlocks() {
@@ -341,16 +344,23 @@ if (memberInUrl()) withProfiles((module) => module.followUrl());
 // <polynet-page> (in the page's own DOM) by default: every rule is wrapped in
 // :where(), so any rule of the site's wins.
 export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defined), polynet-chat:not(:defined),\n" +
-  "polynet-members:not(:defined), polynet-profile:not(:defined), polynet-page:not(:defined) { visibility: hidden; }\n" +
+  "polynet-members:not(:defined), polynet-profile:not(:defined), polynet-page:not(:defined),\n" +
+  "polynet-events:not(:defined), polynet-learn:not(:defined), polynet-knowledge:not(:defined), polynet-ask:not(:defined) { visibility: hidden; }\n" +
   [
     ":where(polynet-page) { display: block; }",
     ":where(polynet-page .pn-page-heading) { margin: 0 0 .75em; }",
     ":where(polynet-page .pn-page-chat) { display: grid; grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr); gap: 1.5rem; align-items: start; }",
     ":where(polynet-page .pn-page-chat > polynet-chat) { height: max(24rem, calc(100vh - 12rem)); height: max(24rem, calc(100dvh - 12rem)); }",
     ":where(polynet-page .pn-page-chat > polynet-chat[state=signed-out]) { height: auto; }",
+    // A reading measure for the pages of words.
+    ":where(polynet-page .pn-page-events, polynet-page .pn-page-learn, polynet-page .pn-page-knowledge, polynet-page .pn-page-ask) { max-width: 46rem; }",
+    // The private conversation scrolls inside, its box always in reach, like the chat.
+    ":where(polynet-page .pn-page-ask > polynet-ask) { height: max(24rem, calc(100vh - 12rem)); height: max(24rem, calc(100dvh - 12rem)); }",
+    ":where(polynet-page .pn-page-ask > polynet-ask[state=signed-out]) { height: auto; }",
     ":where(polynet-page .pn-page-links) { display: flex; flex-wrap: wrap; gap: .5em 1.25em; list-style: none; margin: 0; padding: 0; }",
     "@media (max-width: 720px) {",
     "  :where(polynet-page .pn-page-chat) { grid-template-columns: minmax(0, 1fr); gap: .75rem; }",
-    "  :where(polynet-page .pn-page-chat > polynet-chat) { height: max(20rem, calc(100vh - 14rem)); height: max(20rem, calc(100dvh - 14rem)); }",
+    // :where() weighs nothing, so these come after the signed-out rules above unless they skip them.
+    "  :where(polynet-page .pn-page-chat > polynet-chat:not([state=signed-out]), polynet-page .pn-page-ask > polynet-ask:not([state=signed-out])) { height: max(20rem, calc(100vh - 14rem)); height: max(20rem, calc(100dvh - 14rem)); }",
     "}",
   ].join("\n") + "\n";

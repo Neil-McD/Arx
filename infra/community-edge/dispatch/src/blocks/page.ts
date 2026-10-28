@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ../LICENSE-MIT)
 // <polynet-page>, served at /__polynet/blocks/page.js: the one placeholder in a
 // site's frame (/frame.html). The edge serves the frame at each standard page
-// the site doesn't serve itself (/chat, /people, /people/<handle>); this block
+// the site doesn't serve itself (/chat, /people/<handle>, /events/<event>,
+// /learn/<course>/<lesson>, /knowledge, /ask, ...); this block
 // reads the address and puts that page's blocks in place. It renders in the
 // page's own DOM (no shadow root), so the site's CSS lays it out and its
 // ::part() rules reach the blocks inside. Kept as text (a String.raw literal: no
 // backticks or template placeholders inside) so the edge serves exactly what is
 // reviewed; the route table is filled in from the one the edge routes by.
-import { MEMBER_HANDLE, STANDARD_PAGES } from "../../../../../packages/polynet-cli/checks.mjs";
+import { STANDARD_PAGES } from "../../../../../packages/polynet-cli/checks.mjs";
 
-// What the block needs of each standard page, as JSON (no functions, no URLs).
+// What the block needs of each standard page, as JSON (no functions, no URLs):
+// below is each level's pattern as regex source.
 export const PAGE_ROUTES_JSON = JSON.stringify(STANDARD_PAGES.map((page) => ({
   path: page.path, name: page.name, title: page.title, blocks: page.blocks, members: Boolean(page.members),
+  below: page.below.map(([, pattern]) => pattern.source),
 })));
 
 export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
@@ -20,26 +23,30 @@ export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 //   <main><polynet-page></polynet-page></main>
 // Optional, inside it (each replaces Polynet's default for that page):
 //   <h1 slot="chat-heading">The wall</h1>   <h1 slot="people-heading">The crew</h1>
+//   (also events-heading, learn-heading, knowledge-heading, ask-heading)
 //   <h1 slot="not-found-heading">Off the map</h1>
 //   <p data-block="polynet-chat" slot="empty">Chalk's dry.</p>   (moved into that block, keeping its slot)
 //   <polynet-page no-heading></polynet-page>                     (no headings at all)
 // Lay it out with classes: .pn-page-header, .pn-page-heading, .pn-page-body,
-// .pn-page-chat, .pn-page-people, .pn-page-missing, .pn-page-links, and the
-// page attribute: polynet-page[page=chat|people|not-found].
+// .pn-page-chat, .pn-page-people, .pn-page-events, .pn-page-learn,
+// .pn-page-knowledge, .pn-page-ask, .pn-page-missing, .pn-page-links, and the
+// page attribute: polynet-page[page=chat|people|events|learn|knowledge|ask|not-found].
+// The blocks read the rest of the address themselves (/events/<event>,
+// /learn/<course>/<lesson>).
 import { h } from "/__polynet/blocks/kit.js";
 
 const PAGES = __POLYNET_PAGE_ROUTES__;
-const HANDLE = new RegExp(__POLYNET_MEMBER_HANDLE__);
+for (const page of PAGES) page.below = page.below.map((source) => new RegExp(source));
 
-// Which page this address is: { page, handle } or null.
+// Which page this address is: { page, handle } or null (the edge's standardPage).
 function route(pathname) {
   const path = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
   for (const page of PAGES) {
     if (path === page.path) return { page: page, handle: null };
-    if (page.members && path.indexOf(page.path + "/") === 0) {
-      const handle = path.slice(page.path.length + 1);
-      if (HANDLE.test(handle)) return { page: page, handle: handle.toLowerCase() };
-    }
+    if (!page.below.length || path.indexOf(page.path + "/") !== 0) continue;
+    const below = path.slice(page.path.length + 1).split("/");
+    if (below.length > page.below.length || !below.every((segment, i) => page.below[i].test(segment))) continue;
+    return { page: page, handle: page.members ? below[0].toLowerCase() : null };
   }
   return null;
 }
@@ -118,4 +125,4 @@ class PolynetPage extends HTMLElement {
 }
 
 if (!customElements.get("polynet-page")) customElements.define("polynet-page", PolynetPage);
-`.replace("__POLYNET_PAGE_ROUTES__", PAGE_ROUTES_JSON).replace("__POLYNET_MEMBER_HANDLE__", JSON.stringify(MEMBER_HANDLE.source));
+`.replace("__POLYNET_PAGE_ROUTES__", PAGE_ROUTES_JSON);

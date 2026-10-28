@@ -15,10 +15,14 @@ and the Polynet SDK (`/__polynet/sdk.js`) for anything else.
    `<polynet-page></polynet-page>` (paths in it start with `/`). `check`
    and `deploy` fail without it. Polynet's standard pages exist on every
    site inside that frame: `/chat` (`<polynet-channels>` and
-   `<polynet-chat>`) and `/people` (`<polynet-members>`; `/people/<handle>`
-   opens that profile). Link to them from the site's navigation. A site
-   may ship its own `chat.html` or `people/index.html` instead; it must then
-   place the same blocks. The blocks are how members find each other on
+   `<polynet-chat>`), `/people` (`<polynet-members>`; `/people/<handle>`
+   opens that profile), `/events` (`<polynet-events>`; `/events/<event>`
+   is one event), `/learn` (`<polynet-learn>`: courses, then
+   `/learn/<course>/<lesson>`), `/knowledge` (`<polynet-knowledge>`) and
+   `/ask` (`<polynet-ask>`, the member's private conversation with the
+   agent). Link to them from the site's navigation. A site may ship its
+   own `chat.html`, `events.html` (and so on) instead; it must then place
+   the same blocks. The blocks are how members find each other on
    every Polynet site, so never rebuild them, hide them or replace them.
 2. **The shell is automatic.** Polynet adds `/__polynet/ui.js` to every page
    and `<polynet-account>` (account, communities, Discover, messages,
