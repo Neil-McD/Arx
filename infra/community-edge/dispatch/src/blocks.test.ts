@@ -415,6 +415,23 @@ test("live: typing shows who, new posts append, and the channel is marked read a
   await page.close();
 });
 
+test("a channel isn't marked read if the member scrolls up during the short delay", async () => {
+  const page = await open((fake) => { for (let i = 0; i < 30; i += 1) fake.feeds.general.push({ ...fake.feeds.general[1], ref: "interaction:root:x" + i, text: "Filler " + i }); });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => calls(page, "markRead")).toHaveLength(1);
+  await page.evaluate(() => {
+    const fake = (window as any).fake;
+    fake.feeds.general.push({ ...fake.feeds.general[1], ref: "interaction:root:late", text: "Late", created_at: new Date().toISOString() });
+  });
+  await emit(page, "general", { changed: true, typing: [] });
+  await expect.poll(() => chat.locator("[part~=message-body]").last().textContent()).toBe("Late");
+  // Scroll away before the read delay ends.
+  await chat.locator("[part=feed]").evaluate((feed) => { feed.scrollTop = 0; feed.dispatchEvent(new Event("scroll")); });
+  await page.waitForTimeout(900);
+  expect(await calls(page, "markRead")).toHaveLength(1);
+  await page.close();
+});
+
 test("ui.css keeps a block's slot content hidden until the block is defined", async () => {
   // The edge links ui.css first in <head>; ui.js is held back here so the blocks stay undefined.
   const page = await open(() => {}, `<!doctype html><html lang="en"><head><link rel="stylesheet" href="/__polynet/ui.css"><title>x</title></head>

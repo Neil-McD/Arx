@@ -436,6 +436,8 @@ class PolynetChat extends HTMLElement {
   // The newest page replaces everything it covers (edits, deletions); older
   // history outside it stays.
   merge(page, newest) {
+    // An empty page that still has a cursor read nothing it can vouch for.
+    if (newest && !page.length && page.cursor) return;
     if (newest) {
       const oldest = page.length ? at(page[0]) : -Infinity;
       const fresh = new Set(page.map((post) => post.ref));
@@ -487,6 +489,8 @@ class PolynetChat extends HTMLElement {
     const generation = this.generation;
     this.readTimer = setTimeout(async () => {
       if (generation !== this.generation || !this.needsRead) return;
+      // Still looking? The member may have scrolled up or switched tabs meanwhile.
+      if (this.status !== "ready" || document.visibilityState !== "visible" || !this.atBottom()) return;
       const slug = this.channel.slug;
       this.needsRead = false;
       try {

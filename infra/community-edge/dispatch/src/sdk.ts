@@ -172,13 +172,23 @@ async function markRead(channel, throughAt) {
 // reactions, reacted_by_me, by_me, reply_count, attachments, created_at. The list's
 // cursor fetches the page before it (feed(channel, { cursor: posts.cursor })); null
 // at the start of the channel.
+// The channel lists posts and replies together, newest first, so a page can
+// hold only replies: read on (up to FEED_PAGES pages) until there are posts or
+// the channel's start. An empty list with a cursor means "not read that far",
+// never "no posts".
+const FEED_PAGES = 10;
 async function feed(channel, options) {
   options = options || {};
-  const input = { limit: options.limit || 50 };
-  if (options.cursor) input.cursor = options.cursor;
-  const value = await list(channelPath(channel), input);
-  const posts = (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize);
-  posts.cursor = value.next_cursor || null;
+  const limit = options.limit || 50;
+  let cursor = options.cursor || null;
+  let posts = [];
+  for (let page = 0; page < FEED_PAGES; page += 1) {
+    const value = await list(channelPath(channel), cursor ? { limit: limit, cursor: cursor } : { limit: limit });
+    posts = (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize).concat(posts);
+    cursor = value.next_cursor || null;
+    if (posts.length || !cursor) break;
+  }
+  posts.cursor = cursor;
   return posts;
 }
 

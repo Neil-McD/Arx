@@ -80,6 +80,23 @@ test("feed returns posts oldest first; errors surface as PolynetError", async ()
   await expect(polynet.feed("missing")).rejects.toMatchObject({ name: "PolynetError", code: "semantic_not_found" });
 });
 
+test("feed reads past a page of only replies instead of returning no posts", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (!input.cursor) return ok({ entries: [{ ref: "interaction:reply:9", object_type: "reply" }], next_cursor: "c1", truncated: true });
+      return ok({ entries: [{ ref: "interaction:root:1", object_type: "root" }], next_cursor: null, truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const posts = await polynet.feed("general", { limit: 1 });
+  expect(posts.map((entry: any) => entry.ref)).toEqual(["interaction:root:1"]);
+  expect(posts.cursor).toBeNull();
+  expect(calls.filter((call) => call.body?.tool === "polynet_list" && String(call.body.input.path).includes("/channels/"))).toHaveLength(2);
+});
+
 test("feed pages back through history with the list's cursor", async () => {
   const calls = stubFetch({
     "/__polynet/auth/session": signedIn,
