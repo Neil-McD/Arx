@@ -43,7 +43,7 @@ Archive is the outer authority boundary and always wins over payment, grandfathe
 - Existing production communities are grandfathered for ordinary platform operation. They require Builder for Polynet-hosted AI.
 - Every newly created non-operator community is subscription-required and must consume one verified active Builder subscription.
 - Each active Builder cycle includes up to `$20` raw GPT 5.6 Luna model cost for that community.
-- `active` and `cancel_at_period_end` grant only through the paid-through timestamp. `past_due`, `canceled`, `ended`, expired, revoked, ambiguous, or malformed state fails closed.
+- `active` and `cancel_at_period_end` grant only through the paid-through timestamp. `past_due` keeps the community operating while Stripe retries inside the current paid-through period (the same grace paid members get) but grants no hosted AI (`founderSubscriptionKeepsCommunityRunning` vs `founderSubscriptionStatusGrantsAccess`). `canceled`, `ended`, expired, revoked, ambiguous, or malformed state fails closed.
 - Archived grandfathered communities restore free after cleanup and return without AI unless Builder is separately active.
 - Archived subscription-required communities restore only from verified active payment for the current archived generation.
 - Community BYOK and requester ChatGPT are not authority for community AI. Historical records are audit or migration evidence only.
@@ -63,7 +63,7 @@ Archive is the outer authority boundary and always wins over payment, grandfathe
 - Composed operational authority: `convex/communityBuilderAccessCore.ts`
 - Archive and restoration: `convex/communityColdArchive.ts`
 - Builder payment lifecycle: `convex/founderBilling.ts`
-- Community access projection: `convex/communityCore.ts`
+- Community access: `convex/communityCore.ts` — `resolveCommunityLens` is the one answer to who someone is in a community and what they may do (can the community run, blocked, entitled, relation held now, powers). The chat, manager and moderator gates and Studio's access bundle wrap it; `scripts/one_community_lens_proof.ts` fails on access re-derived elsewhere.
 - Member commerce: `convex/communityCommerce.ts`
 - Legal version authority: `shared/legalDocuments.ts`, `convex/legalAcceptances.ts`
 
