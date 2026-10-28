@@ -61,7 +61,7 @@ assert.match(
 );
 assert.match(
   vercel,
-  /"src": "\/api\/preview\([^)]+\)\?"[\s\S]*"handle": "filesystem"/,
+  /"handle": "filesystem"[\s\S]*"src": "\/\(\.\*\)", "dest": "\/index\.html"/,
   "source URL fetch broker should remain reachable through the filesystem function route",
 );
 assert.match(
