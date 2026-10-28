@@ -426,6 +426,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `publicAppUrl`.
 - **Hosting:** Vercel `polynet` (production, www.polynet.ai) and `polynet-staging`.
 - **Known hot spot:** `App.tsx` (3,100 lines).
+- **Community looks (proposed):** each community's theme (colours per scheme,
+  fonts, type, corners, density), saved themes and brand. Members see the
+  published theme inside the community; managers edit a draft in Settings →
+  Appearance and publish it. The theme also writes the `--polynet-*` site
+  tokens. Agents read and write `/builder/theme.json` and `/builder/brand.json`.
+  Code: `communityThemes`, `communitySavedThemes`, `communityBrands`;
+  `shared/communityTheme.ts`. Tables: `communityThemes`, `communitySavedThemes`,
+  `communityBrands`. Contract: [community-theme-v1.md](community-theme-v1.md).
 
 ### 18. Release, CI and the factory — Keep
 

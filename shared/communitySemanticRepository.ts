@@ -587,7 +587,8 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     if (repositoryPath.localPath === "/members/me/forms/" || /^\/members\/me\/forms\/[A-Za-z0-9]+\.json$/.test(repositoryPath.localPath) ||
       // Who is online, and members' profiles as JSON, are executor documents too.
       repositoryPath.localPath === POLYNET_PRESENCE_DOCUMENT_PATH ||
-      /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath)) {
+      /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath) ||
+      repositoryPath.localPath === "/builder/theme.json" || repositoryPath.localPath === "/builder/brand.json") {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: repositoryPath.localPath === "/members/me/forms/" ? POLYNET_JOIN_REQUESTS_DIRECTORY_PATH : "/community.md" });
       return validated.ok ? { ...validated, path: repositoryPath.path } : validated;

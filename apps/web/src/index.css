@@ -4,6 +4,9 @@
 @import "./styles/community-and-content.css";
 @import "./styles/settings-runtime-and-theme-overrides.css";
 @import "./styles/message-media.css";
+@import "./styles/community-theme-map.css";
+@import "./styles/community-theme-hooks.css";
+@import "./styles/edges.css";
 
 :root {
   --web-chat-max-width: 800px;
