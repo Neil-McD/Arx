@@ -68,9 +68,10 @@ product.
 - Auth and session lifecycle.
 - Community creation and management; visibility is only `Published` or
   `Unlisted`, and `Published` never means ungated.
-- Joining: open, approval or paid, through one canonical Polynet join and
-  checkout page per community (`/c/:slug`). A site links to it and cannot grant
-  access.
+- Joining: open, approval or paid, through one join logic per community,
+  shown in the community's own world (its site's private twin, `/join`) or on
+  Studio (`/c/:slug`). Both use the same Polynet cores and checkout; a site's
+  own code links to it and cannot grant access.
 - Discover: communities only.
 - Core member experience: channels, posts, replies, reactions, attachments,
   mentions, DMs, voice, courses, events.

@@ -1407,6 +1407,35 @@ test("twin join: a paid plan goes to Studio's checkout, back only to this twin's
   expect(stripe.checkouts).toHaveLength(1);
 });
 
+test("twin join: a community that went from approval to paid shows its checkout, whatever was asked before", async () => {
+  stripe.checkouts.length = 0;
+  const f = await joinFixture();
+  const nowMs = Date.now();
+  await f.policy("approval");
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body).toMatchObject({ viewer: { state: "pending" } });
+  await f.policy("paid_subscription");
+  await f.t.run(async (c) => {
+    await c.db.insert("communityPricePoints", {
+      communityId: f.ids.communityId, billingPeriod: "monthly", name: "Monthly", amountBaseUnits: 1000, currency: "usd", currencyDecimals: 2,
+      isCurrent: true, providerAccountId: "acct_test_owner", providerPriceId: "price_test_monthly", createdAt: nowMs, updatedAt: nowMs,
+    });
+    await c.db.insert("userStripeConnectAccounts", {
+      userId: f.ids.ownerId, stripeAccountId: "acct_test_owner", accountType: "express", transfersEnabled: true, status: "ready",
+      detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, requirementsCurrentlyDue: [], requirementsEventuallyDue: [], createdAt: nowMs, updatedAt: nowMs,
+    });
+  });
+  // The old pending request doesn't hide the plan.
+  expect((await f.read(token)).body).toMatchObject({ gate: "checkout", viewer: { state: "visitor" } });
+  // Nor does an old denial with a cooldown.
+  await f.t.run(async (c) => {
+    const row = (await c.db.query("communityJoinRequests").collect())[0];
+    await c.db.patch(row._id, { status: "denied", deniedAt: Date.now(), reapplyAt: Date.now() + 86_400_000 });
+  });
+  expect((await f.read(token)).body).toMatchObject({ gate: "checkout", viewer: { state: "visitor" } });
+  expect(await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).toMatchObject({ status: 200, body: { ok: true } });
+});
+
 test("twin join: checkout returns only to this community's own twin", async () => {
   const f = await joinFixture();
   expect(twinCheckoutReturnUrls(f.twin)).toEqual({ successUrl: `${f.twin}/join?checkout={CHECKOUT_SESSION_ID}`, cancelUrl: `${f.twin}/join?checkout=canceled` });
