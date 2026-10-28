@@ -3,73 +3,34 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const packageJson = readFileSync(join(root, "package.json"), "utf8");
-const communityChat = readFileSync(join(root, "convex/communityChat.ts"), "utf8");
-const composerController = readFileSync(join(root, "apps/web/src/controllers/useWebCommunityChatController.ts"), "utf8");
-
-function extractNumberConst(source: string, name: string): number {
-  const match = source.match(new RegExp(`const ${name} = ([0-9_]+);`));
-  assert.ok(match, `expected const ${name}`);
-  return Number(match[1].replaceAll("_", ""));
-}
+const read = (path: string) => readFileSync(join(root, path), "utf8");
+const packageJson = read("package.json");
+const policy = read("shared/communityAttachmentPolicy.ts");
+const bridge = read("convex/communityInteractionAttachmentBridge.ts");
+const interactions = read("convex/communityInteractions.ts");
+const composerController = read("apps/web/src/controllers/useWebCommunityChatController.ts");
 
 assert.match(
   packageJson,
   /"check:community-chat-attachment-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_chat_attachment_policy_proof\.ts"/,
   "package scripts should expose the community chat attachment policy proof",
 );
-
-assert.equal(
-  extractNumberConst(communityChat, "MAX_STORED_CHAT_ATTACHMENTS"),
-  8,
-  "backend should own the max community chat attachment count",
-);
-assert.equal(
-  extractNumberConst(communityChat, "MAX_STORED_CHAT_IMAGE_DATA_URL_CHARS"),
-  600000,
-  "backend should cap stored image data URL fallbacks",
-);
-
+assert.match(policy, /export const COMMUNITY_ATTACHMENT_MAX_COUNT = 8;/, "one shared policy owns the per-message attachment count");
 assert.match(
-  communityChat,
-  /raw\.length > MAX_STORED_CHAT_ATTACHMENTS[\s\S]*message_attachment_limit_exceeded/,
-  "write normalization should reject over-limit attachment arrays",
+  bridge,
+  /args\.attachments\.length > COMMUNITY_ATTACHMENT_MAX_COUNT\) throw new Error\("message_attachment_limit_exceeded"\)/,
+  "claiming rejects over-limit attachment arrays",
 );
 assert.match(
-  communityChat,
-  /out\.length >= MAX_STORED_CHAT_ATTACHMENTS\) break;/,
-  "read normalization should bound legacy attachment arrays without throwing",
+  interactions,
+  /if \(!input\.attachmentId\) \{\s*throw new Error\("Please reattach this file before sending/,
+  "only uploaded attachment ids are honored; inline attachment payloads are refused",
 );
-assert.match(
-  communityChat,
-  /attachments\.length === 0[\s\S]*Array\.isArray\(record\.attachments\)[\s\S]*\{ \.\.\.record, attachments: \[\] \}/,
-  "read mapping should not return unsanitized legacy attachment arrays when all entries are dropped",
-);
-assert.match(
-  communityChat,
-  /normalizedDataUrl\.startsWith\("data:image\/"\)[\s\S]*normalizedDataUrl\.length > MAX_STORED_CHAT_IMAGE_DATA_URL_CHARS[\s\S]*message_attachment_payload_too_large/,
-  "write normalization should reject oversized image data URL fallbacks",
-);
-assert.match(
-  communityChat,
-  /const attachments = normalizeStoredChatAttachments\(args\.attachments, \{ enforceWritePolicy: true \}\);/,
-  "message creation should use write-enforced attachment normalization",
-);
-assert.match(
-  communityChat,
-  /normalizeStoredChatAttachments\(\(args\.contentJson as Record<string, unknown>\)\.attachments, \{ enforceWritePolicy: true \}\)/,
-  "message edits should use write-enforced attachment normalization",
-);
-
+assert.doesNotMatch(read("convex/communityChat.ts"), /attachments/, "the old chat attachment path stays deleted");
 assert.match(
   composerController,
   /message_attachment_limit_exceeded[\s\S]*You can attach up to 8 files per message/,
   "attachment count policy errors should map to user-facing chat copy",
-);
-assert.match(
-  composerController,
-  /message_attachment_payload_too_large[\s\S]*One attachment preview is too large/,
-  "attachment payload policy errors should map to user-facing chat copy",
 );
 
 console.log("community_chat_attachment_policy_proof: ok");

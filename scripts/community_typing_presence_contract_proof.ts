@@ -48,11 +48,8 @@ const clearTyping = sectionBetween(
   "export const clearCommunityTyping",
   "export const listCommunityTyping",
 );
-const listTyping = sectionBetween(
-  communityChat,
-  "export const listCommunityTyping",
-  "export const createThreadUserMessage",
-);
+const listTyping = communityChat.slice(communityChat.indexOf("export const listCommunityTyping"));
+assert.ok(listTyping.length > 0, "missing listCommunityTyping");
 const subscriptionLifecycle = sectionBetween(
   hook,
   "useEffect(() => {\n    if (!args.isEnabled || !sessionIdentity || !args.activeCommunityId)",

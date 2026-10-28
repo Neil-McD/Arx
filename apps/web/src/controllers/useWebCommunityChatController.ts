@@ -139,14 +139,7 @@ function mapCommunityComposerErrorMessage(error: unknown): string {
   if (message.includes("message_attachment_limit_exceeded")) {
     return "You can attach up to 8 files per message.";
   }
-  if (message.includes("message_attachment_payload_too_large")) {
-    return "One attachment preview is too large. Try a smaller image.";
-  }
-  if (
-    message.includes("community_interaction_reply_target_unmapped") ||
-    message.includes("interaction_legacy_reply_target") ||
-    message.includes("interaction_target_reply_invalid")
-  ) {
+  if (message.includes("interaction_target_reply_invalid")) {
     return "Reply target is unavailable. Reopen the thread and try again.";
   }
   if (message.includes("interaction_mention_everybody_reply_not_allowed")) {
@@ -397,10 +390,7 @@ export function useWebCommunityChatController(
     }
     const interactionReplyToId =
       String(replySnapshot?.interaction_reply_id ?? "").trim() || null;
-    const legacyReplyToMessageId =
-      String(replySnapshot?.legacy_message_id ?? "").trim() || null;
-    const canonicalReplyToMessageId =
-      interactionReplyToId ?? (replyRootId ? null : legacyReplyToMessageId);
+    const canonicalReplyToMessageId = interactionReplyToId;
     if (replySnapshot && textContainsEverybodyMentionToken(rawText)) {
       setError("@everybody can only be used in top-level community posts.");
       return;

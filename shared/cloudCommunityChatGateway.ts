@@ -155,25 +155,6 @@ export async function clearCloudCommunityTyping<SessionT>(
   });
 }
 
-export async function createCloudThreadUserMessageRows<SessionT, TRow = unknown>(
-  params: CloudCommunityChatGatewayParams<SessionT> & {
-    threadId: string;
-    text: string;
-    attachments?: unknown[];
-    replyToId?: string | null;
-  },
-): Promise<TRow[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityChat:createThreadUserMessage" as any, {
-    authSubject,
-    threadId: params.threadId,
-    text: params.text,
-    attachments: params.attachments ?? [],
-    replyToId: params.replyToId ?? null,
-  });
-  return coerceObjectRows<TRow>(payload);
-}
-
 export async function uploadCloudCommunityChatAttachmentFile<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
@@ -223,21 +204,4 @@ export async function downloadCloudCommunityChatAttachment<SessionT>(params: {
   });
   if (!response.ok) throw new Error("This attachment is unavailable or you no longer have access.");
   return response.blob();
-}
-
-export async function listCloudThreadMessages<SessionT, TRow = unknown>(
-  params: CloudCommunityChatGatewayParams<SessionT> & {
-    threadId: string;
-    beforeSeq?: number | null;
-    limit?: number;
-  },
-): Promise<TRow[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityChat:listThreadMessages" as any, {
-    authSubject,
-    threadId: params.threadId,
-    beforeSeq: params.beforeSeq ?? null,
-    limit: params.limit ?? 100,
-  });
-  return coerceObjectRows<TRow>(payload);
 }

@@ -17,7 +17,6 @@ const ALLOWED = new Map([
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
   ["communityCognitionCleanup", "operator tool: drains a deleted community's cognition data"],
-  ["communityInteractionBackfill", "needed to finish the legacy chat retirement"],
   ["communityChannelAudit", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityChannelBackfill", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityAiFeedRetirement", "data retirement job; removed with the AI feed tables"],

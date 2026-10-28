@@ -18,8 +18,13 @@ const packageJson = read("package.json");
 
 assert.match(
   rootReplyTarget,
-  /export type WebCommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id: string;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
+  /export type WebCommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id: string;[\s\S]*interaction_reply_id\?: string \| null;/,
   "the canonical web reply-target type must carry explicit interaction ids",
+);
+assert.doesNotMatch(
+  rootReplyTarget + composerController,
+  /legacy_message_id/,
+  "reply targets use interaction ids only; old chat message ids are retired",
 );
 assert.doesNotMatch(
   chatPanel,
@@ -83,7 +88,7 @@ assert.match(
 );
 assert.match(
   interactionProjection,
-  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*mention_candidate: replyMentionCandidate,[\s\S]*interaction_reply_id: reply\.id,[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null,/,
+  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*mention_candidate: replyMentionCandidate,[\s\S]*interaction_reply_id: reply\.id,/,
   "mentionable thread replies must pass identity and canonical reply id together",
 );
 assert.doesNotMatch(
@@ -98,7 +103,7 @@ assert.match(
 );
 assert.match(
   composerController,
-  /const interactionReplyToId =[\s\S]*String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId =[\s\S]*interactionReplyToId \?\? \(replyRootId \? null : legacyReplyToMessageId\);/,
+  /const interactionReplyToId =[\s\S]*String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId = interactionReplyToId;/,
   "canonical sends should use explicit reply ids and never miscast a root message as a reply target",
 );
 assert.match(

@@ -1,4 +1,3 @@
-import { LEGACY_ATTACHMENT_UPLOAD_PATH } from "./communityLegacyAttachmentUploads";
 import { internal } from "./_generated/api";
 import type { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
 import { COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, COMMUNITY_ATTACHMENT_UPLOAD_PATH, communityAttachmentByteLimit, detectCommunityAttachmentMime } from "../shared/communityAttachmentPolicy";
@@ -106,36 +105,6 @@ export async function storeCommunityAttachmentUpload(ctx: any, req: Request, sco
 
 export function registerCommunityAttachmentRoutes(args: RouteDependencies) {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
-  http.route({ path: LEGACY_ATTACHMENT_UPLOAD_PATH, method: "OPTIONS",
-    handler: httpAction(async (_ctx, req) => optionsResponse(req)) });
-  http.route({ path: LEGACY_ATTACHMENT_UPLOAD_PATH, method: "POST", handler: httpAction(async (ctx, req) => {
-    const url = new URL(req.url), attachmentId = url.searchParams.get("attachmentId");
-    let ownerId: any, storageId: any, finished = false;
-    let upload: Awaited<ReturnType<typeof prepareCommunityAttachmentStream>> | undefined;
-    try {
-      upload = await prepareCommunityAttachmentStream(req);
-      const ticket = await ctx.runMutation((internal as any).communityLegacyAttachmentUploads.beginInternal, {
-        attachmentId, token: url.searchParams.get("token") ?? "", mime: upload.mime,
-      });
-      ownerId = ticket.ownerId;
-      const response = await fetch(ticket.uploadUrl, { method: "POST", headers: { "Content-Type": upload.mime },
-        body: upload.stream, duplex: "half" } as RequestInit);
-      if (!response.ok) throw new Error("community_attachment_storage_failed");
-      storageId = (await response.json())?.storageId;
-      if (!storageId || !upload.bytesReceived()) throw new Error("community_attachment_storage_failed");
-      await ctx.runMutation((internal as any).communityLegacyAttachmentUploads.finishInternal, { attachmentId, storageId });
-      finished = true;
-      return jsonResponse(req, 200, { storageId });
-    } catch {
-      return jsonResponse(req, 400, { code: "community_attachment_upload_failed" });
-    } finally {
-      await upload?.cancel();
-      if (!finished && ownerId) await ctx.runMutation((internal as any).communityAttachmentUploads.cleanupInternal, {
-        attachmentId, cancelOwnerId: ownerId, ...(storageId ? { storageId } : {}),
-      });
-    }
-  }) });
-
   http.route({ path: COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)) });
   http.route({ path: COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, method: "POST", handler: httpAction(async (ctx, req) => {

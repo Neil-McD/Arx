@@ -708,7 +708,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     });
   }, [
     activeCommunity?.name,
-    selectedInteractionRootBundle?.root.legacy_message_id,
     selectedInteractionRootBundle?.root.actor_user_id,
     selectedInteractionRootBundle?.root.actor_agent_key,
     selectedInteractionRootBundle?.root.actor_type,

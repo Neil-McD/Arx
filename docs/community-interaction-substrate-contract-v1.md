@@ -217,11 +217,10 @@ between provider upload completion and recording its returned storage ID can
 still leave an untracked orphan; this slice does not claim transactional storage
 and database writes or run a historical storage sweep.
 
-Legacy message creation rejects attachments. Legacy edits may retain or remove
-persisted attachments, not introduce or relabel uploaded bytes. Historical
-hydration is isolated from new writes and uses the persisted pre-edit message.
-Deleted canonical rows remain tombstones: their existence prevents fallback to
-legacy attachment payloads. No historical files are deleted by this migration.
+The old thread chat and its ticketed upload route are deleted (POL-26). The
+composer still accepts the old inline attachment shape from the cached
+production web and refuses it with a reattach message; only uploaded attachment
+ids are honored. Deleted attachment rows stay tombstones and are never listed.
 
 Deployment must coordinate backend and web changes; stale raw-ID upload clients
 must refresh rather than use an insecure compatibility shim. Local streaming
@@ -489,8 +488,9 @@ Migration order:
 4. Keep the legacy chat writer only for compatibility consumers and migration/backfill.
 5. Move reactions, embeds, mentions, and moderation onto canonical tables; keep
    the community unread boundary in `communityMemberSettings`.
-6. Delete legacy chat writes after parity.
-7. Delete legacy chat reads after backfill and UI projection are stable.
+6. Delete legacy chat writes after parity. Done Oct 28, 2026 (POL-26).
+7. Delete legacy chat reads after backfill and UI projection are stable. Done
+   Oct 28, 2026 (POL-26); the old tables drop in the table-drop release.
 
 No big-bang rewrite. No duplicated product truth.
 
@@ -537,7 +537,6 @@ The first backend slice adds canonical tables beside legacy chat:
 - `communityInteractionMentions`
 - `communityInteractionReactions`
 - `communityInteractionModerationEvents`
-- `communityInteractionLegacyChatLinks`
 - `communityReadCursors`
 
 Channel identity is carried by interaction roots, replies, read cursors,
@@ -606,9 +605,7 @@ Rules:
 - reply reads return only live `community` and `public` replies
 - reply reads return only one-level drawer replies
 - read APIs do not use legacy chat tables as source-of-truth
-- read bundles prefer canonical `communityInteractionAttachments` rows before using legacy attachment fallback
-- migration-only legacy attachment hydration may resolve linked legacy chat attachments only when canonical attachment rows are absent, until canonical attachment backfill is complete
-- migration-only legacy attachment hydration lives outside the canonical interaction core in `communityInteractionLegacyAttachments`
+- read bundles return canonical `communityInteractionAttachments` rows only
 - canonical attachment row reads and storage URL resolution live outside the canonical interaction core in `communityInteractionAttachmentBridge`
 - viewer reaction state must be loaded only for the visible root/reply target ids, never by scanning all reactions for a viewer
 - reaction summary updates must not rescan every reaction on a target
@@ -631,7 +628,6 @@ Rules:
 - top-level composer sends use the canonical composer bridge, including prepared attachments
 - drawer reply sends use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
 - a missing canonical writer fails closed instead of falling back to the legacy chat writer
-- legacy timeline sends remain on the legacy chat writer only for non-projection compatibility call paths
 - successful sends may request a canonical projection reload; canonical projection does not rely on any legacy chat client lifecycle
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - General is the default navigation channel and continues to omit a channel id at the client boundary for rolling compatibility
@@ -716,46 +712,13 @@ Bounded chat formatting rules:
 - formatting and contact linking remain canonical plain text plus derived presentation: typed syntax and bounded keyboard behavior do not introduce HTML, alternate message storage, new content blocks, mention mutation, or embed records
 - fenced code protects matching standalone URL lines from in-flow embed replacement
 
-## Current Legacy Chat Adapter Slice
+## Old Thread Chat (retired)
 
-The compatibility adapter keeps the legacy chat mutation alive while dual-writing canonical interactions for old-path compatibility sends:
-
-- `createThreadUserMessage` remains the legacy write entrypoint for old clients, migration tools, and compatibility paths
-- top-level chat messages are translated into `communityInteractionRoots`
-- chat replies are translated into `communityInteractionReplies`
-- legacy reply targets map to one drawer root; reply-to-reply targets become `targetReplyId` quote/context only
-- deterministic idempotency keys use the legacy message id
-- `communityInteractionLegacyChatLinks` stores legacy message to interaction root/reply mappings
-- adapter validation failures are skipped without failing the legacy chat send path
-- adapter write/materialization failures are not swallowed after writes begin; Convex must abort the transaction instead of committing partial canonical rows
-- adapter writes do not call the public interaction mutations
-- adapter writes do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
-- adapter writes do not write source traces, archive truth, or compiler state synchronously; they schedule the same idempotent derived-evidence sync as canonical writes
-- the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
-- attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
-- legacy chat response shape is unchanged
-- legacy chat link table access for the legacy adapter and backfill lives in `communityInteractionLegacyBridge`
-
-## Current Legacy Chat Backfill Slice
-
-The first repair/backfill API is a bounded batch tool for migrating old legacy chat rows into canonical interaction rows.
-
-Rules:
-
-- `backfillCommunityInteractionsFromLegacyChatBatch` is moderator-gated
-- `dryRun` defaults to true
-- each batch processes one legacy chat thread
-- when no `threadId` is supplied, the canonical first community chat thread is used
-- reads are bounded by `limit` and ordered by legacy message `seq`
-- `afterSeq` is the forward cursor
-- dry-run predicts links created earlier in the same batch before counting reply outcomes
-- top-level legacy messages become interaction roots
-- legacy replies become one-level interaction replies only when their target mapping exists
-- missing target mappings are counted as `unresolved_replies`, not guessed
-- running the batch repeatedly must not duplicate roots or replies
-- backfill write/materialization failures are not caught after writes begin
-- backfill does not migrate reactions, edits, deletes, or moderation state
-- backfill does not promote source traces, write archive truth, or call the compiler synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
+The old thread chat (`communityChat` writes, reads, reactions and uploads), its
+dual-write adapter and the one-time backfill are deleted (POL-26). Production had
+92 of 92 old messages backfilled and none carried attachments. Read bundles no
+longer return `legacy_*` ids. `communityChat` keeps typing presence only. The old
+tables leave the schema in the table-drop release.
 
 ## Canonical Interaction Evidence Spine
 
@@ -787,7 +750,7 @@ Rules:
 - every readable interaction sync creates or updates one exact source trace; related root and reply traces share an episode scheduling key without collapsing identity
 - private, admin-only, hidden, deleted, missing, or parent-hidden evidence is excluded or redacted and fails closed at read time even if a derived index is stale
 - interaction writes do not wait for compiler work; idempotent derived synchronization is scheduled after canonical mutation success
-- legacy chat tables and links remain migration substrate for unrelated compatibility consumers, but they are no longer memory/evidence search authority
+- the retired legacy chat tables are not memory/evidence search authority
 
 ### Composer text visibility
 

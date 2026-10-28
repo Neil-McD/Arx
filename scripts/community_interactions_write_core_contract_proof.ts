@@ -176,7 +176,7 @@ assert.doesNotMatch(
 );
 assert.match(
   createComposerMessage,
-  /attachments: args\.attachments \?\? \[\][\s\S]*resolveInteractionAttachmentClaims\([\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
+  /\(args\.attachments \?\? \[\]\)\.map\([\s\S]*resolveInteractionAttachmentClaims\([\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
   "composer bridge should allow attachment-only sends while rejecting empty payloads",
 );
 assert.match(

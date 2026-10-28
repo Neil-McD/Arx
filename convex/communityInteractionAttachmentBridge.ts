@@ -1,6 +1,7 @@
-import type { CommunityChatMessageLike } from "./communityCore";
+
 import { normalizeIdValue } from "./communityCore";
 import { requireAttachmentUploadScope } from "./communityAttachmentUploads";
+import { COMMUNITY_ATTACHMENT_MAX_COUNT } from "../shared/communityAttachmentPolicy";
 
 type CanonicalAttachmentKind = "image" | "video" | "file";
 
@@ -28,176 +29,14 @@ export type NormalizedInteractionAttachmentInput = {
   dataUrl?: string;
 };
 
-const MAX_LEGACY_INTERACTION_ATTACHMENTS = 8;
-const MAX_ATTACHMENT_NAME_CHARS = 256;
-const MAX_ATTACHMENT_MIME_CHARS = 160;
-const MAX_LEGACY_IMAGE_DATA_URL_CHARS = 600_000;
-const MAX_ATTACHMENT_CONTENT_HASH_CHARS = 256;
-
-export function readLegacyInteractionAttachmentPayloads(message: CommunityChatMessageLike): unknown[] {
-  const contentJson = message.contentJson;
-  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return [];
-  const rawAttachments = (contentJson as Record<string, unknown>).attachments;
-  return Array.isArray(rawAttachments) ? rawAttachments : [];
-}
-
-function normalizeLegacyAttachmentKind(record: Record<string, unknown>, mimeType?: string): CanonicalAttachmentKind {
-  if (record.type === "image") return "image";
-  if (record.type === "video") return "video";
-  const mime = String(mimeType ?? "").toLowerCase();
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  return "file";
-}
-
-export function normalizeInteractionAttachmentInputs(rawAttachments: unknown[]): NormalizedInteractionAttachmentInput[] {
-  const out: NormalizedInteractionAttachmentInput[] = [];
-  for (const raw of rawAttachments) {
-    if (out.length >= MAX_LEGACY_INTERACTION_ATTACHMENTS) break;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const record = raw as Record<string, unknown>;
-    const id = typeof record.id === "string" && record.id.trim()
-      ? record.id.trim()
-      : `attachment-${out.length}`;
-    const name = typeof record.name === "string" && record.name.trim()
-      ? record.name.trim().slice(0, MAX_ATTACHMENT_NAME_CHARS)
-      : "attachment";
-    const mimeType = typeof record.mime === "string" && record.mime.trim()
-      ? record.mime.trim().slice(0, MAX_ATTACHMENT_MIME_CHARS)
-      : undefined;
-    const storageIdRaw =
-      typeof record.storageId === "string"
-        ? record.storageId
-        : typeof record.storage_id === "string"
-          ? record.storage_id
-          : "";
-    const storageId = storageIdRaw.trim() ? storageIdRaw.trim() : undefined;
-    const sizeRaw = Number(record.size);
-    const sizeBytes = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
-    let dataUrl: string | undefined;
-    const dataUrlRaw = typeof record.data_url === "string"
-      ? record.data_url
-      : typeof record.dataUrl === "string"
-        ? record.dataUrl
-        : "";
-    if (dataUrlRaw) {
-      const normalizedDataUrl = dataUrlRaw.trim();
-      if (
-        normalizedDataUrl.startsWith("data:image/")
-        && normalizedDataUrl.length <= MAX_LEGACY_IMAGE_DATA_URL_CHARS
-      ) {
-        dataUrl = normalizedDataUrl;
-      }
-    }
-    if (!storageId && !dataUrl) continue;
-    out.push({
-      id,
-      name,
-      attachmentKind: normalizeLegacyAttachmentKind(record, mimeType),
-      ...(mimeType ? { mimeType } : {}),
-      sizeBytes,
-      ...(storageId ? { storageId } : {}),
-      ...(dataUrl ? { dataUrl } : {}),
-    });
-  }
-  return out;
-}
-
-export async function hasCanonicalInteractionAttachmentsForTarget(args: {
-  ctx: any;
-  rootId?: any;
-  replyId?: any;
-}): Promise<boolean> {
-  if (Boolean(args.rootId) === Boolean(args.replyId)) {
-    throw new Error("interaction_attachment_target_required");
-  }
-  const row = args.rootId
-    ? await args.ctx.db
-        .query("communityInteractionAttachments" as any)
-        .withIndex("by_root", (q: any) => q.eq("rootId", args.rootId))
-        .first()
-    : await args.ctx.db
-        .query("communityInteractionAttachments" as any)
-        .withIndex("by_reply", (q: any) => q.eq("replyId", args.replyId))
-        .first();
-  return Boolean(row);
-}
-
-async function insertLegacyInteractionAttachmentsForTarget(args: {
-  ctx: any;
-  communityId: any;
-  rootId?: any;
-  replyId?: any;
-  attachments: NormalizedInteractionAttachmentInput[];
-  actorUserId?: any;
-  nowMs: number;
-  contentHashPrefix: string;
-  skipIfExisting?: boolean;
-}): Promise<string[]> {
-  if (Boolean(args.rootId) === Boolean(args.replyId)) {
-    throw new Error("interaction_attachment_target_required");
-  }
-  if (args.attachments.length === 0) return [];
-  if (args.skipIfExisting && await hasCanonicalInteractionAttachmentsForTarget(args)) return [];
-  const nowMs = Math.max(0, Math.floor(Number(args.nowMs) || Date.now()));
-  const ids: string[] = [];
-  for (const attachment of args.attachments) {
-    const attachmentId = await args.ctx.db.insert("communityInteractionAttachments" as any, {
-      communityId: args.communityId,
-      ...(args.rootId ? { rootId: args.rootId } : {}),
-      ...(args.replyId ? { replyId: args.replyId } : {}),
-      attachmentKind: attachment.attachmentKind,
-      status: "uploaded",
-      name: attachment.name,
-      ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
-      sizeBytes: attachment.sizeBytes,
-      ...(attachment.storageId ? { storageId: attachment.storageId as any } : {}),
-      ...(!attachment.storageId && attachment.dataUrl ? { externalUrl: attachment.dataUrl } : {}),
-      contentHash: `${args.contentHashPrefix}:${attachment.id}`.slice(0, MAX_ATTACHMENT_CONTENT_HASH_CHARS),
-      createdByActorType: "human",
-      ...(args.actorUserId ? { createdByUserId: args.actorUserId } : {}),
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    ids.push(normalizeIdValue(attachmentId));
-  }
-  return ids;
-}
-
-export async function insertCanonicalInteractionAttachmentsFromLegacyMessage(args: {
-  ctx: any;
-  communityId: any;
-  rootId?: any;
-  replyId?: any;
-  message: CommunityChatMessageLike;
-  nowMs: number;
-}): Promise<string[]> {
-  if (Boolean(args.rootId) === Boolean(args.replyId)) {
-    throw new Error("interaction_attachment_target_required");
-  }
-  const attachments = normalizeInteractionAttachmentInputs(readLegacyInteractionAttachmentPayloads(args.message));
-  if (attachments.length === 0) return [];
-  const createdAt = Math.max(0, Math.floor(Number(args.message.createdAt) || args.nowMs));
-  return await insertLegacyInteractionAttachmentsForTarget({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    rootId: args.rootId,
-    replyId: args.replyId,
-    attachments,
-    actorUserId: args.message.senderUserId,
-    nowMs: createdAt,
-    contentHashPrefix: `legacy-chat:${normalizeIdValue(args.message._id)}`,
-    skipIfExisting: true,
-  });
-}
 
 // New writes accept only canonical claims. Metadata and storage handles are read
-// from the server-owned row; legacy hydration above is not a public write path.
+// from the server-owned row.
 export async function resolveInteractionAttachmentClaims(args: {
   ctx: any; communityId: any; actorUserId: any; messageKey: string;
   rootId?: any; attachments: Array<{ attachmentId: any }>;
 }): Promise<NormalizedInteractionAttachmentInput[]> {
-  if (args.attachments.length > MAX_LEGACY_INTERACTION_ATTACHMENTS) throw new Error("message_attachment_limit_exceeded");
+  if (args.attachments.length > COMMUNITY_ATTACHMENT_MAX_COUNT) throw new Error("message_attachment_limit_exceeded");
   const seen = new Set<string>();
   const out: NormalizedInteractionAttachmentInput[] = [];
   for (const input of args.attachments) {
@@ -296,11 +135,11 @@ export async function listCanonicalInteractionAttachmentsForTarget(args: {
     ? await args.ctx.db
         .query("communityInteractionAttachments" as any)
         .withIndex("by_root", (q: any) => q.eq("rootId", args.rootId))
-        .take(MAX_LEGACY_INTERACTION_ATTACHMENTS)
+        .take(COMMUNITY_ATTACHMENT_MAX_COUNT)
     : await args.ctx.db
         .query("communityInteractionAttachments" as any)
         .withIndex("by_reply", (q: any) => q.eq("replyId", args.replyId))
-        .take(MAX_LEGACY_INTERACTION_ATTACHMENTS);
+        .take(COMMUNITY_ATTACHMENT_MAX_COUNT);
   return await Promise.all(
     rows
       .filter((row: any) => row?.status === "uploaded")

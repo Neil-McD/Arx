@@ -545,7 +545,7 @@ async function main() {
   assert.match(directory, /citationIds: effectiveEvidenceCitationIds/);
   assert.doesNotMatch(resourceEvidence, /query\("communityAiFeedPosts"/);
   assert.match(resourceEvidence, /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/);
-  assert.match(legacyChat, /syncLegacyChatMessageDeleteToInteractionCore/);
+  assert.doesNotMatch(legacyChat, /createThreadUserMessage|deleteOwnMessage|patchOwnMessageContent/, "the old chat no longer writes evidence-bearing messages");
   assert.match(
     compilerCandidates,
     /resolveCurrentDigestItemTrace[\s\S]*sourceTraceIds\.length !== 1[\s\S]*sourceRevisions/,
