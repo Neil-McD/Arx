@@ -52,6 +52,8 @@ export const COMPOSER_STYLE = [
 
 // The backend's limits (shared/communityAttachmentPolicy.ts); it enforces them exactly.
 const MAX_FILES = 8;
+// The server's limit for a message (communityInteractions.ts).
+const MAX_TEXT_CHARS = 8000;
 const MB = 1024 * 1024;
 function fileLimit(file) {
   const type = file.type || "";
@@ -228,6 +230,11 @@ export class Composer {
     autosize(this.input);
     saveDraft(this.scope, this.draft);
     this.updateSend();
+    // The length note goes once the message fits.
+    if (this.notice && this.notice.indexOf("Messages can be up to") === 0 && this.input.value.trim().length <= MAX_TEXT_CHARS) {
+      this.notice = "";
+      this.renderProblem();
+    }
     if (this.isEmpty() && this.draft.failedKey) this.discard();
     if (typed) {
       if (this.input.value.trim()) polynet.typing(this.scope.channel, true, this.typingScope());
@@ -498,6 +505,12 @@ export class Composer {
       return;
     }
     const text = draft.text.trim();
+    if (text.length > MAX_TEXT_CHARS) {
+      // Longer would be cut short on the server; keep the draft and say by how much.
+      this.notice = "Messages can be up to " + MAX_TEXT_CHARS.toLocaleString("en-US") + " characters. Trim " + (text.length - MAX_TEXT_CHARS).toLocaleString("en-US") + " to send.";
+      this.renderProblem();
+      return;
+    }
     const payload = {
       scope: scope, text: text, files: draft.files.slice(), key: null,
       // Only tags still in the text count.

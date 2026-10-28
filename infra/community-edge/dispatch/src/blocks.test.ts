@@ -663,6 +663,23 @@ test("attachments: pick, paste and drop add chips; too big is refused; remove wo
   await page.close();
 });
 
+test("a message over 8,000 characters stays in the box with a note saying how much to trim", async () => {
+  const page = await open();
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  const input = chat.locator("[part=footer] [part=composer-input]");
+  await input.fill("x".repeat(8005));
+  await chat.locator("[part=footer] [part~=composer-send]").click();
+  await expect.poll(() => chat.locator("[part=footer] [part=composer-error]").textContent()).toContain("Trim 5 to send");
+  expect(await calls(page, "post")).toHaveLength(0);
+  expect((await input.inputValue()).length).toBe(8005);
+  await input.fill("x".repeat(8000));
+  await expect.poll(() => chat.locator("[part=footer] [part=composer-error]").textContent()).toBe("");
+  await chat.locator("[part=footer] [part~=composer-send]").click();
+  await expect.poll(() => calls(page, "post")).toHaveLength(1);
+  await page.close();
+});
+
 test("drafts stay with their channel when the member switches away and back", async () => {
   const page = await open();
   const chat = page.locator("polynet-chat");

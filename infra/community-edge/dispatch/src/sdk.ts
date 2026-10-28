@@ -226,7 +226,16 @@ async function upload(file, options) {
 // older than UPLOAD_REUSE_MS is uploaded again, unless a write with its key
 // has already gone out: the server's receipt for that key names those uploads.
 const UPLOAD_REUSE_MS = 25 * 60 * 1000;
+// File -> (key -> upload): one File can go out in posts with different keys,
+// and each key's receipt names its own uploads.
 const uploaded = new WeakMap();
+// The server's limit; anything longer would be cut short silently.
+const MAX_TEXT_CHARS = 8000;
+function checkLength(text) {
+  if (text.length > MAX_TEXT_CHARS) {
+    throw new PolynetError("message_too_long", "A message can be up to " + MAX_TEXT_CHARS.toLocaleString("en-US") + " characters; this one has " + text.length.toLocaleString("en-US") + ".");
+  }
+}
 const keysSent = new Set();
 // A key whose uploads lapsed before its post claimed them can never post: the
 // key that replaced it.
@@ -240,13 +249,17 @@ function attachmentClaimFailed(error) {
 async function uploadAll(files, channel, key, replyTo) {
   const attachments = [];
   for (const file of files) {
-    const done = uploaded.get(file);
-    if (done && done.key === key && (keysSent.has(key) || Date.now() - done.at < UPLOAD_REUSE_MS)) {
+    const byKey = file && typeof file === "object" ? uploaded.get(file) : null;
+    const done = byKey && byKey.get(key);
+    if (done && (keysSent.has(key) || Date.now() - done.at < UPLOAD_REUSE_MS)) {
       attachments.push({ attachmentId: done.attachmentId });
       continue;
     }
     const attachment = await upload(file, { channel: channel, key: key, replyTo: replyTo });
-    if (file && typeof file === "object") uploaded.set(file, { key: key, attachmentId: attachment.attachmentId, at: Date.now() });
+    if (file && typeof file === "object") {
+      if (!uploaded.has(file)) uploaded.set(file, new Map());
+      uploaded.get(file).set(key, { attachmentId: attachment.attachmentId, at: Date.now() });
+    }
     attachments.push(attachment);
   }
   return attachments;
@@ -266,8 +279,9 @@ async function post(channel, text, options) {
   let key = options.key ? String(options.key) : newKey();
   while (keysReplaced.has(key)) key = keysReplaced.get(key);
   const files = options.files || [];
-  let attachments = await uploadAll(files, channel, key, options.replyTo);
   let body = String(text || "").trim();
+  checkLength(body);
+  let attachments = await uploadAll(files, channel, key, options.replyTo);
   const mentions = (options.mentions || []).map(function (member) {
     return { userId: String((member && member.ref) || member).replace("user:", "") };
   });
@@ -276,6 +290,7 @@ async function post(channel, text, options) {
     if (body.toLowerCase().indexOf(("@" + name).toLowerCase()) === -1) body = "@" + name + " " + body;
     mentions.push({ agentKey: "community_agent" });
   }
+  checkLength(body);
   const content = { text: body };
   if (options.replyTo) content.root_id = rootIdOf(options.replyTo);
   if (attachments.length) content.attachments = attachments;

@@ -399,6 +399,43 @@ test("a post retried with its own key reuses the key and never uploads a file tw
   await expect(polynet.post("general", "x", { key: "bad key!" })).rejects.toMatchObject({ code: "invalid_tool_args" });
 });
 
+test("one File in two posts keeps each post's upload, so retrying the first never re-uploads", async () => {
+  let failFirst = 1;
+  let n = 0;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/upload": () => Response.json({ ok: true, attachment: { attachmentId: "att-" + ++n } }),
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (tool === "polynet_write" && input.idempotency_key === "first-key-1" && failFirst-- > 0) return Response.json({ ok: false, code: "community_chat_write_failed" });
+      return ok({ ref: "interaction:root:new" });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+  await expect(polynet.post("general", "One", { files: [photo], key: "first-key-1" })).rejects.toMatchObject({ code: "community_chat_write_failed" });
+  await polynet.post("general", "Two", { files: [photo], key: "second-key-1" });
+  await polynet.post("general", "One", { files: [photo], key: "first-key-1" });
+  const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => [call.body.input.idempotency_key, call.body.input.content.attachments]);
+  expect(writes).toEqual([
+    ["first-key-1", [{ attachmentId: "att-1" }]],
+    ["second-key-1", [{ attachmentId: "att-2" }]],
+    ["first-key-1", [{ attachmentId: "att-1" }]],
+  ]);
+});
+
+test("a message over the server's 8,000-character limit is refused before anything is uploaded or sent", async () => {
+  const calls = stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ ref: "interaction:root:new" }) });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+  await expect(polynet.post("general", "x".repeat(8001), { files: [photo] })).rejects.toMatchObject({ code: "message_too_long" });
+  expect(calls.filter((call) => call.url === "/__polynet/upload" || call.body?.tool === "polynet_write")).toHaveLength(0);
+  await polynet.post("general", "x".repeat(8000));
+  expect(calls.filter((call) => call.body?.tool === "polynet_write")).toHaveLength(1);
+});
+
 test("a retry uploads again a file whose upload the server has let lapse, if no write has claimed it", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
