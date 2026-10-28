@@ -337,6 +337,29 @@ test("watch passes who's typing, says when posts changed, and drops a typist nob
   }
 });
 
+test("watch keeps a typist whose lease keeps renewing", async () => {
+  vi.useFakeTimers();
+  try {
+    stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ entries: [] }) });
+    let push: (result: unknown) => void = () => undefined;
+    vi.stubGlobal("convex", { ConvexClient: class {
+      onUpdate(_name: string, _args: unknown, callback: (result: unknown) => void) { push = callback; return () => undefined; }
+      close() {}
+    } });
+    const polynet = await loadSdk();
+    const updates: any[] = [];
+    await polynet.watch("general", (update: unknown) => { updates.push(update); });
+    const ava = { ref: "user:2", name: "Ava", avatar_url: null, thread_ref: null };
+    push({ ok: true, version: 1, typing: [{ ...ava, lease_until: 5000, expires_in_ms: 5000 }] });
+    await vi.advanceTimersByTimeAsync(4000);
+    push({ ok: true, version: 1, typing: [{ ...ava, lease_until: 9000, expires_in_ms: 5000 }] });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(updates).toEqual([{ changed: true, typing: [ava] }]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("watchOnline watches presence.json and calls back only when who's online changes", async () => {
   stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ entries: [] }) });
   const paths: string[] = [];

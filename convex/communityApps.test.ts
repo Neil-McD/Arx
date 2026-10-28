@@ -653,6 +653,7 @@ test("a front end sets its member's typing; others see it live, the typist doesn
   expect(await f.t.run((c) => c.db.query("communityTypingPresence").collect())).toHaveLength(1);
   expect(await watchAs(member)).toMatchObject({ ok: true, typing: [{
     ref: `user:${f.ids.ownerId}`, name: "apps-owner", avatar_url: "https://example.com/apps-owner.png", thread_ref: null,
+    lease_until: expect.any(Number),
     expires_in_ms: expect.any(Number),
   }] });
   expect(await watchAs(owner)).toMatchObject({ ok: true, typing: [] });

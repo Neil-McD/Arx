@@ -74,13 +74,16 @@ export const watch = query({
       .withIndex("by_channel_updatedAt", (q) => q.eq("channelId", channel._id))
       .order("desc")
       .first();
-    let typing: Array<{ ref: string; name: string | null; avatar_url: string | null; thread_ref: string | null; expires_in_ms: number }> = [];
+    let typing: Array<{ ref: string; name: string | null; avatar_url: string | null; thread_ref: string | null; lease_until: number; expires_in_ms: number }> = [];
     try {
       const nowMs = Date.now();
       const presence = await resolveCommunityTypingPresence({ ctx, community, channelId: channel._id, viewerUserId: session.userId });
       typing = presence.users.map((user) => ({
         ref: `user:${user.canonical_user_id}`, name: user.display_name, avatar_url: user.avatar_url,
         thread_ref: user.root_id ? `interaction:root:${user.root_id}` : null,
+        // The absolute deadline changes on every renewal, so a steady typist's
+        // renewals are new results and reach the front end.
+        lease_until: user.display_until_ms,
         expires_in_ms: Math.max(0, user.display_until_ms - nowMs),
       }));
     } catch {
