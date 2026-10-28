@@ -36,7 +36,15 @@ export default {
     posts.cursor = start > 0 ? "older:" + start : null;
     return posts;
   },
-  thread: async (slug, ref) => { fail(); record("thread", [slug, ref]); return (fake.threads[ref] || []).map((p) => Object.assign({}, p)); },
+  // threadCap: a read that stops short of the whole thread, as the real SDK's does past its page cap.
+  thread: async (slug, ref) => {
+    fail();
+    record("thread", [slug, ref]);
+    const all = (fake.threads[ref] || []).map((p) => Object.assign({}, p));
+    const entries = fake.threadCap ? all.slice(0, fake.threadCap) : all;
+    entries.complete = entries.length === all.length;
+    return entries;
+  },
   react: async (ref, emoji, on) => { record("react", [ref, emoji, on]); return { reacted: on }; },
   // Writes land in window.fake, so the chat's next read shows them like the server would.
   post: async (slug, text, options) => {
@@ -114,6 +122,7 @@ function fixture() {
     ],
     hold: false,
     failPosts: 0,
+    threadCap: 0,
     failEdit: false,
     signedOut: false,
     channels: [
@@ -475,6 +484,46 @@ test("a failed send keeps the text in the box with Retry, and the retry reuses i
   await page.close();
 });
 
+test("a failed send with files reuses its key only for the very same File objects, not a file picked again", async () => {
+  const page = await open((fake) => { fake.failPosts = 2; });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  const chips = chat.locator("[part=footer] [part=attachment-chip]");
+  // The same name, type, size and date each time, as when the member picks the same file again.
+  const drop = () => page.evaluate(() => {
+    const data = new DataTransfer();
+    data.items.add(new File([new Uint8Array([37, 80, 68, 70])], "plan.pdf", { type: "application/pdf", lastModified: 1_700_000_000_000 }));
+    document.querySelector("polynet-chat")!.shadowRoot!.querySelector("[part=composer-box]")!
+      .dispatchEvent(new DragEvent("drop", { dataTransfer: data, bubbles: true, cancelable: true }));
+  });
+  await drop();
+  await expect.poll(() => chips.count()).toBe(1);
+  await chat.locator("[part=footer] [part=composer-input]").fill("Route plan");
+  await chat.locator("[part=footer] [part~=composer-send]").click();
+  await expect.poll(() => chat.locator("[part=footer] [part=composer-retry]").count()).toBe(1);
+  expect(await chips.count()).toBe(1);
+
+  // Retry resends the same File objects: the same key.
+  await chat.locator("[part=footer] [part=composer-retry]").click();
+  await expect.poll(() => calls(page, "post")).toHaveLength(2);
+  await expect.poll(() => chat.locator("[part=footer] [part=composer-retry]").count()).toBe(1);
+
+  // Removed and picked again: a new File, so a new upload and a new key.
+  await chat.locator("[part=footer] [aria-label='Remove plan.pdf']").click();
+  await drop();
+  await expect.poll(() => chips.count()).toBe(1);
+  await chat.locator("[part=footer] [part~=composer-send]").click();
+  await expect.poll(() => calls(page, "post")).toHaveLength(3);
+  const keys = (await calls(page, "post")).map((c: any) => c[3].key);
+  expect((await calls(page, "post")).map((c: any) => [c[2], c[3].files])).toEqual([
+    ["Route plan", ["plan.pdf"]], ["Route plan", ["plan.pdf"]], ["Route plan", ["plan.pdf"]],
+  ]);
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2]).not.toBe(keys[0]);
+  await expect.poll(() => chat.locator("[part~=message-body]").last().textContent()).toBe("Route plan");
+  await page.close();
+});
+
 test("where the member can't post or reply, a quiet note replaces the box and Reply is not offered", async () => {
   const page = await open((fake) => { fake.channels[0].canPost = false; fake.channels[0].canReply = false; });
   const chat = page.locator("polynet-chat");
@@ -728,6 +777,38 @@ test("Reply opens the thread in its reply box, which posts with replyTo and says
   await expect.poll(() => chat.locator("[part=replies]").textContent()).toBe("3 replies");
   // The channel's own box is untouched.
   expect(await chat.locator("[part=footer] [part=composer-input]").inputValue()).toBe("");
+  await page.close();
+});
+
+test("a reply sent in a thread the read doesn't wholly cover stays on screen until a read holds it", async () => {
+  const page = await open((fake) => {
+    const root = fake.feeds.general[3] as { ref: string; reply_count: number };
+    const replies = Array.from({ length: 6 }, (_, i) => ({
+      ...post("t" + i, human("Sam", "sam"), minutes(8 - i / 10), "Reply " + i), ref: "interaction:reply:t" + i, object_type: "reply" }));
+    root.reply_count = replies.length;
+    fake.threads[root.ref] = [fake.threads[root.ref][0], ...replies];
+    fake.threadCap = 5;
+  });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  await chat.locator("[part~=message]").nth(3).locator("[part~=message-action-reply]").click();
+  const panel = chat.locator("[part=thread-panel]");
+  await expect.poll(() => panel.locator("[part~=message-body]").count()).toBe(5);
+  await page.keyboard.type("Late to this");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => calls(page, "post")).toHaveLength(1);
+  // The reads after the send stop short of it: the reply stays, never vanishes.
+  await expect.poll(async () => (await calls(page, "thread")).length).toBeGreaterThan(1);
+  await emit(page, "general", { changed: true, typing: [] });
+  await page.waitForTimeout(300);
+  expect(await panel.locator("[part~=message-body]").last().textContent()).toBe("Late to this");
+  expect(await panel.locator("[part~=message-pending]").count()).toBe(1);
+  // A read that holds it settles it: one copy, the server's.
+  await page.evaluate(() => { (window as any).fake.threadCap = 0; });
+  await emit(page, "general", { changed: true, typing: [] });
+  await expect.poll(() => panel.locator("[part~=message-pending]").count()).toBe(0);
+  expect(await panel.locator("[part~=message-body]").last().textContent()).toBe("Late to this");
+  expect(await panel.locator("[part~=message-body]").evaluateAll((nodes) => nodes.filter((n) => n.textContent === "Late to this").length)).toBe(1);
   await page.close();
 });
 

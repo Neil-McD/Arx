@@ -111,7 +111,7 @@ const drafts = new Map();
 // tab never sees them. A member without a handle keeps drafts in memory only.
 function draftOwner(scope) { return (scope.me && scope.me.handle) || ""; }
 function draftId(scope) { return "polynet:draft:" + scope.community + ":" + draftOwner(scope) + ":" + scope.channel + ":" + (scope.thread || ""); }
-function emptyDraft() { return { text: "", mentions: [], agent: false, files: [], failedKey: null, failedFor: null, error: null }; }
+function emptyDraft() { return { text: "", mentions: [], agent: false, files: [], failedKey: null, failedSend: null, error: null }; }
 function draftFor(scope) {
   const id = draftId(scope);
   let draft = drafts.get(id);
@@ -140,8 +140,16 @@ function saveDraft(scope, draft) {
     // See draftFor.
   }
 }
-function fingerprint(text, files) {
-  return JSON.stringify([text, files.map((entry) => [entry.file.name, entry.file.size, entry.file.lastModified])]);
+// A failed send's key binds the exact request on the server, so a retry may
+// reuse it only to resend exactly that: the same text, tags and agent ask, and
+// the very same File objects in the same order. The SDK reuses an upload per
+// File object, so a file removed and picked again (a new File, though its name,
+// size and date match) uploads afresh, and the old key would then conflict.
+function sameSend(failed, payload) {
+  return !!failed && failed.text === payload.text && failed.askAgent === payload.askAgent
+    && failed.mentions.join(" ") === payload.mentions.map((member) => member.ref).join(" ")
+    && failed.files.length === payload.files.length
+    && failed.files.every((file, index) => file === payload.files[index].file);
 }
 
 // One message box. options: { id, slot (the channel's own read-only words),
@@ -249,7 +257,7 @@ export class Composer {
   // A failed message's content is in the box again: emptying the box drops it.
   discard() {
     this.draft.failedKey = null;
-    this.draft.failedFor = null;
+    this.draft.failedSend = null;
     this.draft.error = null;
     this.renderProblem();
     this.options.onDiscard(this.scope);
@@ -477,8 +485,8 @@ export class Composer {
     this.problem.replaceChildren(...nodes);
   }
 
-  // Hands the message to the chat and empties the box. A retry of the same
-  // text and files reuses the failed attempt's key, so it can't post twice.
+  // Hands the message to the chat and empties the box. A retry of exactly the
+  // failed send (see sameSend) reuses its key, so it can't post twice.
   send() {
     const scope = this.scope;
     const draft = this.draft;
@@ -490,14 +498,13 @@ export class Composer {
       return;
     }
     const text = draft.text.trim();
-    const print = fingerprint(text, draft.files);
     const payload = {
-      scope: scope, text: text, files: draft.files.slice(),
-      key: draft.failedKey && draft.failedFor === print ? draft.failedKey : newKey(),
+      scope: scope, text: text, files: draft.files.slice(), key: null,
       // Only tags still in the text count.
       mentions: draft.mentions.filter((member) => hasToken(text, "@" + member.handle)).map((member) => ({ ref: member.ref, handle: member.handle })),
       askAgent: draft.agent && !!scope.agentName && hasToken(text, "@" + scope.agentName),
     };
+    payload.key = draft.failedKey && sameSend(draft.failedSend, payload) ? draft.failedKey : newKey();
     const fresh = emptyDraft();
     drafts.set(draftId(scope), fresh);
     this.draft = fresh;
@@ -529,7 +536,10 @@ export class Composer {
     }
     draft.agent = draft.agent || payload.askAgent;
     draft.failedKey = payload.key;
-    draft.failedFor = fingerprint(payload.text, payload.files);
+    draft.failedSend = {
+      text: payload.text, askAgent: payload.askAgent,
+      mentions: payload.mentions.map((member) => member.ref), files: payload.files.map((entry) => entry.file),
+    };
     draft.error = error && error.code === "upload_failed" && error.message ? error.message + " Your message wasn't sent."
       : error && error.code === "sign_in_required" ? "Your session ended, so this wasn't sent."
       : "Your message wasn't sent.";

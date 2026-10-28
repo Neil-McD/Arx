@@ -104,6 +104,43 @@ test("feed pages back through history with the list's cursor", async () => {
   ]);
 });
 
+test("thread reads the whole thread, following the server's pages; past the cap it says it isn't complete", async () => {
+  const reply = (n: number) => ({ type: "interaction", ref: "interaction:reply:" + n, object_type: "reply", text: "r" + n });
+  let endless = false;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (endless) return ok({ entries: [reply(Number(input.cursor || 0) + 1)], next_cursor: String(Number(input.cursor || 0) + 1), truncated: true });
+      // As the executor lists a thread: the post and 100 replies, then the rest after the cursor.
+      if (!input.cursor) {
+        return ok({ entries: [{ type: "interaction", ref: "interaction:root:p", object_type: "root", text: "post" }, ...Array.from({ length: 100 }, (_, i) => reply(i + 1))],
+          next_cursor: "1700000000100", truncated: true });
+      }
+      return ok({ entries: [reply(101), reply(102)], next_cursor: null, truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const whole = await polynet.thread("general", "interaction:root:p");
+  expect(whole).toHaveLength(103);
+  expect(whole[0].ref).toBe("interaction:root:p");
+  expect(whole.at(-1).ref).toBe("interaction:reply:102");
+  expect(whole.complete).toBe(true);
+  const inputs = calls.filter((call) => call.body?.tool === "polynet_list").map((call) => call.body.input).slice(-2);
+  expect(inputs).toEqual([
+    { path: "/communities/run-club/channels/general/interaction:root:p/" },
+    { path: "/communities/run-club/channels/general/interaction:root:p/", cursor: "1700000000100" },
+  ]);
+
+  endless = true;
+  const before = calls.length;
+  const capped = await polynet.thread("general", "interaction:root:p");
+  expect(calls.length - before).toBe(20);
+  expect(capped).toHaveLength(20);
+  expect(capped.complete).toBe(false);
+});
+
 test("channels follows every page of the listing", async () => {
   const calls = stubFetch({
     "/__polynet/auth/session": signedIn,

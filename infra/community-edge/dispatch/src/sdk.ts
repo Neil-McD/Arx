@@ -182,10 +182,26 @@ async function feed(channel, options) {
   return posts;
 }
 
-// A post and its replies, oldest first.
+// A post and its replies, oldest first: the whole thread. The server lists a
+// thread a page of replies at a time (the post first, then 100 replies per
+// page); this follows the pages, up to THREAD_PAGES of them. In a thread longer
+// than that the list holds the post and its first replies and
+// list.complete is false; otherwise it is true.
+const THREAD_PAGES = 20;
 async function thread(channel, postRef) {
-  const value = await list(channelPath(channel) + postRef + "/");
-  return (value.entries || []).map(normalize);
+  const path = channelPath(channel) + postRef + "/";
+  let entries = [];
+  let cursor = null;
+  let complete = false;
+  for (let page = 0; page < THREAD_PAGES; page += 1) {
+    const value = await list(path, cursor ? { cursor: cursor } : {});
+    entries = entries.concat(value.entries || []);
+    if (!value.next_cursor) { complete = true; break; }
+    cursor = value.next_cursor;
+  }
+  const posts = entries.map(normalize);
+  posts.complete = complete;
+  return posts;
 }
 
 async function upload(file, options) {

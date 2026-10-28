@@ -289,7 +289,9 @@ Failed calls throw PolynetError with .code, .message and .status. Codes:
   most 50), oldest first (chat order; reverse() for newest-first). The list
   has .cursor: pass it back (feed(slug, { cursor: posts.cursor })) for the
   page before; null means you reached the start of the channel.
-- thread(channelSlug, post.ref) -> the post, then its replies, oldest first.
+- thread(channelSlug, post.ref) -> the post, then its replies, oldest first:
+  the whole thread (the SDK follows the server's pages, up to 2,000 replies).
+  The list has .complete: false only when a thread is longer than that.
 
 Each post or reply has:
   ref                 // "interaction:root:<id>" or "interaction:reply:<id>"

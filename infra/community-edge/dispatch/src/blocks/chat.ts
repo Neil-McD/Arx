@@ -324,7 +324,7 @@ class PolynetChat extends HTMLElement {
       if (generation !== this.generation) return;
       this.cursor = page.cursor || null;
       this.merge(page, true);
-      this.settle(startedAt, null);
+      this.settle(startedAt, null, page);
       // "New" marks what was unread on arrival; posts that come in while the
       // member watches don't get one.
       if (!page.some((post) => !post.by_me && at(post) > (this.seenThroughAt || 0))) this.seenThroughAt = null;
@@ -403,7 +403,7 @@ class PolynetChat extends HTMLElement {
       const before = new Map(Array.from(this.posts.values(), (post) => [post.ref, post.reply_count]));
       const stick = this.pinned;
       this.merge(page, true);
-      this.settle(startedAt, null);
+      this.settle(startedAt, null, page);
       const arrivals = page.filter((post) => !before.has(post.ref));
       if (arrivals.length || page.some((post) => before.has(post.ref) && post.reply_count > before.get(post.ref))) this.needsRead = true;
       this.renderFeed({});
@@ -836,7 +836,7 @@ class PolynetChat extends HTMLElement {
       if (ref !== this.threadRef || generation !== this.generation) return;
       this.thread = entries;
       this.threadStatus = "ready";
-      this.settle(startedAt, ref);
+      this.settle(startedAt, ref, entries);
     } catch (error) {
       if (ref !== this.threadRef || generation !== this.generation) return;
       if (error && error.code === "sign_in_required") { this.fail(error); return; }
@@ -936,10 +936,19 @@ class PolynetChat extends HTMLElement {
   }
 
   // A read that started after the server confirmed a send (or a delete)
-  // shows the truth: the pending copy (or the hiding) can go.
-  settle(startedAt, thread) {
+  // shows the truth: the pending copy (or the hiding) can go, once the read
+  // covers it. A read covers a sent message when it holds its ref. A thread
+  // read without it covers it only when it is the whole thread (then the reply
+  // was deleted); a long thread's partial read keeps the pending copy rather
+  // than lose the reply. The channel's read is its newest page, which holds
+  // anything as new as a confirmed send unless a page of newer posts has
+  // followed it, so it covers what it doesn't hold.
+  settle(startedAt, thread, read) {
     const slug = this.channel && this.channel.slug;
-    this.outbox = this.outbox.filter((item) => !(item.state === "sent" && item.channel === slug && item.thread === thread && item.sentAt <= startedAt));
+    const refs = new Set(read.map((post) => post.ref));
+    const covers = (item) => !item.ref || refs.has(item.ref) || !thread || read.complete !== false;
+    this.outbox = this.outbox.filter((item) => !(item.state === "sent" && item.channel === slug && item.thread === thread
+      && item.sentAt <= startedAt && covers(item)));
     if (!thread) for (const [ref, entry] of this.removing) if (entry.at <= startedAt) this.removing.delete(ref);
   }
 
