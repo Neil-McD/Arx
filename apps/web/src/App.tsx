@@ -3,30 +3,23 @@ import {
   useMemo,
   useRef,
   Suspense,
-  type ChangeEvent,
 } from "react";
 import "highlight.js/styles/github-dark.css";
 import { WebCommunityNextStep } from "./components/WebCommunityNextStep";
 import {
   beginBrowserSignedOutState,
-  getAuthPublicKey,
-  getAuthUrl,
   type AuthSession,
 } from "./auth";
 import {
-  clearPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
+  clearPendingPurchaseClaimToken, storePendingPurchaseClaimToken, type PendingPurchaseClaim
 } from "../../../shared/pay_first";
 import { resolveAuthSubject } from "../../../shared/authSession";
 import { getAuthUid } from "../../../shared/authCore";
-import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import { isLikelyImageFile } from "../../../shared/attachmentHelpers";
 import {
-  DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentLanding, } from "../../../shared/communityAgentLanding";
-import {
-  formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
+  formatChatTime, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
 import {
   formatPlanPrice,
-  formatSubscriptionPrice,
 } from "../../../shared/accountCommerce";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
@@ -82,21 +75,13 @@ import { useWebShellNavigationController } from "./controllers/useWebShellNaviga
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { useWebAppActivityController } from "./controllers/useWebAppActivityController";
 import { captureProductAnalyticsEvent } from "./posthogAnalytics";
-
-import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
   copyTextToClipboard,
   getAvatarColor,
   getInitials,
 } from "../../../shared/chatUi";
 import {
-  type AppPage,
-  type AppView,
-  type CommunitySettingsPane,
-  type CommunityTab,
-  type OperatorTab,
   type SettingsGroup,
-  type SettingsPage,
 } from "../../../shared/appShellNavigation";
 import type {
   CommunityAccess as SharedCommunityAccess,
@@ -106,7 +91,6 @@ import type {
 } from "../../../shared/communityTypes";
 import {
   type PublicRoute,
-  applyShellVariantToAppPath,
   buildAppRoutePath,
   buildCommunityTabPath,
   buildSettingsIndexPath,
@@ -116,15 +100,6 @@ import { shouldHydrateWebRouteAccountSetup } from "../../../shared/webRouteAcces
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
 import {
   communityInitials,
-  parseHistoryUsedArray,
-  parseMessageHistoryUsed,
-  parseMemoryUsedArray,
-  parseMessageMemoryAdded,
-  parseMessageMemorySuggestions,
-  parseMessageMemoryUsed,
-  type HistoryUsedItem,
-  type MemorySuggestion,
-  type MemoryUsedItem,
 } from "../../../shared/messageMetadataUi";
 import { renderTextWithLinks } from "../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../shared/markdownUi";
@@ -142,14 +117,11 @@ import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunit
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
 import { truncateReplyPreview } from "../../../shared/communityMessageParsing";
 import {
-  formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
 } from "../../../shared/communityVisibility";
 import {
-  loadAccountCommerceStatusCanonical,
   type AccountCommerceStatus,
 } from "../../../shared/accountCommerceStatusGateway";
-import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import {
   deriveCommunityFunnelAction,
   deriveCommunityMembersJoinReviewMode,
@@ -187,7 +159,6 @@ import { useWebChannelPeoplePanel } from "./controllers/useWebChannelPeoplePanel
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 import type {
   WebCommunityRecord,
-  WebPersonalMemoryItem,
   WebPublicCommunityRecord,
 } from "./webAppContracts";
 import {
@@ -216,7 +187,6 @@ type CommunityAccess = SharedCommunityAccess;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
-type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
 
 export default function App() {

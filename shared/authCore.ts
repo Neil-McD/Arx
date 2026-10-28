@@ -3,7 +3,6 @@ import {
   type ConvexAuthenticatedSessionProbeResult,
 } from "./convexAuthSessionProbe";
 import { readConvexRuntimeUrl } from "./convexRuntime";
-import { isStandaloneWebApp } from "./browserRuntimeMode";
 import { VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS } from "./voiceCapture";
 import { APP_ADMISSION_TIMEOUT_MS } from "./asyncDeadline";
 
@@ -471,22 +470,6 @@ function coerceAuthBridgeBootstrapTrace(payload: unknown): AuthBridgeBootstrapTr
     rotatedSessionFollowed,
     upstreamRefreshMs,
   };
-}
-
-function buildAuthHeaders(params: {
-  apiKey?: string | null;
-  accessToken?: string | null;
-  includeJsonContentType?: boolean;
-}): Headers {
-  const headers = new Headers();
-  if (params.includeJsonContentType !== false) headers.set("Content-Type", "application/json");
-  const apiKey = readString(params.apiKey);
-  if (apiKey) {
-    headers.set("apikey", apiKey);
-  }
-  const bearerToken = readString(params.accessToken) ?? (apiKey && isLikelyAuthJwt(apiKey) ? apiKey : null);
-  if (bearerToken) headers.set("Authorization", `Bearer ${bearerToken}`);
-  return headers;
 }
 
 export type BeginOAuthSignInUrlResult =

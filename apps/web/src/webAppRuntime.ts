@@ -60,7 +60,3 @@ export function scrubCurrentRouteSearchParams(
   window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
 }
 
-const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX =
-  "source_integration_oauth_finalize:";
-const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
-

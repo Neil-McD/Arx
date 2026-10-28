@@ -1,6 +1,5 @@
 import type {
   OperatorAccountSetupSnapshot,
-  OperatorAccountSetupUserRecord,
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,

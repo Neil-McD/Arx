@@ -11,7 +11,6 @@ import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
-type MagicLinkStatus = "idle" | "sending" | "sent";
 
 export type PublicCommunityFunnelCommunityLike = {
   id?: string;

@@ -10,11 +10,9 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../../shared/communityUnsavedGuard";
 import {
-  applyShellVariantToPublicPath,
   buildCommunityTabPath,
   type AppShellVariant,
 } from "../../../../shared/webAppRouteState";
-import type { CommunityFunnelSlot } from "../../../../shared/communityTypes";
 import type { MobileOverlay } from "../components/webShellChromeShared";
 import type { WebCommunityRecord } from "../webAppContracts";
 

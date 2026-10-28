@@ -1,7 +1,6 @@
 import {
   lazy,
   Suspense,
-  type ComponentProps,
   type Ref,
 } from "react";
 
