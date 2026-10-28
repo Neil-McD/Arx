@@ -143,7 +143,7 @@ test("the twin draws the site's frame with nothing of the site's left to run", a
   expect(policy).toMatch(new RegExp(`^default-src 'none'; script-src 'self'; style-src 'self' ${SITE.replace(/\./g, "\\.")} https://fonts\\.googleapis\\.com 'sha256-[^']+' 'sha256-[^']+' 'sha256-[^']+' 'unsafe-hashes'; `));
   expect(policy).not.toContain("unsafe-inline");
   expect(res.headers.get("x-frame-options")).toBe("DENY");
-  expect(res.headers.get("cache-control")).toBe("no-store");
+  expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   expect(res.headers.get("referrer-policy")).toBe("same-origin");
   expect(backendCalls.map((call) => call.path)).toEqual(["/runtime/community_edge/public"]);
 });

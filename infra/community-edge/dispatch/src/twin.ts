@@ -237,7 +237,7 @@ export function twinPageHeaders(policy: string): Headers {
     "Content-Security-Policy": policy,
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "same-origin",
-    "Cache-Control": "no-store",
+    "Cache-Control": "no-store, no-transform",
     "Cross-Origin-Opener-Policy": "same-origin",
   });
 }

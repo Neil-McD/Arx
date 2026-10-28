@@ -847,7 +847,7 @@ test("twin: with no rewriter to strip the frame, never the site's frame: Polynet
   expect(policy).not.toContain("unsafe-inline");
   expect(Object.fromEntries(["x-frame-options", "referrer-policy", "cache-control", "cross-origin-opener-policy", "cross-origin-resource-policy", "x-content-type-options", "origin-agent-cluster"]
     .map((name) => [name, res.headers.get(name)]))).toEqual({
-    "x-frame-options": "DENY", "referrer-policy": "same-origin", "cache-control": "no-store", "cross-origin-opener-policy": "same-origin",
+    "x-frame-options": "DENY", "referrer-policy": "same-origin", "cache-control": "no-store, no-transform", "cross-origin-opener-policy": "same-origin",
     "cross-origin-resource-policy": "same-origin", "x-content-type-options": "nosniff", "origin-agent-cluster": "?1",
   });
   // The frame is asked for as the site's own file, without Polynet's cookies.
