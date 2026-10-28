@@ -2362,7 +2362,7 @@
   font-size: var(--pn-type-label);
   border-radius: calc(8px * var(--pn-radius-scale, 1));
 }
-[data-community-theme] .settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger) {
+[data-community-theme] .settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]) {
   font-size: var(--pn-type-label);
   border-radius: calc(6px * var(--pn-radius-scale, 1));
 }
