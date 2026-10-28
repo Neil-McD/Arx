@@ -540,8 +540,10 @@ Implemented evidence:
   revalidation, idempotency, and conflict detection in `runtimeRunEvents`.
 - `executeRetrievalAgentLoop` persists the attestation before entering the
   native kernel for Member and Funnel surfaces.
-- `npm run check:runtime-provider-context-attestation-proof` covers the pure
-  contract, both surface identities, large transcripts, persistence conflict,
+- `convex/runtimeProviderContextAttestation.test.ts` and
+  `convex/runtimeProviderContextAttestationPersistence.test.ts` (run by
+  `npm run test:unit`) and `npm run check:runtime-agent-loop-context-receipt-smoke`
+  cover the pure contract, both surface identities, large transcripts, persistence conflict,
   provider-start ordering, failure, canonical manifest-digest verification,
   and corrupted-digest rejection.
 

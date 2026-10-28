@@ -14,14 +14,25 @@ const CONCURRENCY = 6;
 const GATE_FILES = ["scripts/release_gate.mjs", "scripts/foundation_baseline_gate.sh"];
 // Files in scripts/ that look like checks but are tools run by hand.
 const NOT_CHECKS = /(_browser_qa\.mjs|_dry_run\.ts|_report\.sh|Preflight\.ts|_fixture\.ts)$/;
-const CHECK_FILE = /(_proof|_contract|_guard|_check)\.(ts|mjs|sh)$/;
+const CHECK_FILE = /(_proof|_contract|_guard|_check|_behavior)\.(ts|mjs|sh)$/;
+// Vitest runs these through `test:unit`. Any other script that asserts and has no
+// package command of its own (hand-run smoke/preflight tools have one) is a check.
+const VITEST_FILE = /\.test\.ts$/;
+const ASSERTS = /from\s+["']node:assert(\/strict)?["']|require\(["']node:assert/;
 
 const scripts = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts;
 const gateText = GATE_FILES.map((path) => readFileSync(join(ROOT, path), "utf8")).join("\n");
 const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Scripts the gate already runs, directly or through `npm run` chains.
-const reached = new Set(Object.keys(scripts).filter((name) => new RegExp(`\\b${escape(name)}\\b`).test(gateText)));
+// Scripts the gate already runs, directly or through `npm run` chains. A gate
+// file that runs a script's exact command (e.g. `bash scripts/x_guard.sh`)
+// counts as running that script, so it is not run a second time here.
+const runsCommand = (command) => new RegExp(`(^|\\s)${escape(command.trim())}(\\s|$)`, "m").test(gateText);
+const reached = new Set(
+  Object.keys(scripts).filter(
+    (name) => new RegExp(`\\b${escape(name)}\\b`).test(gateText) || runsCommand(scripts[name]),
+  ),
+);
 for (let grew = true; grew; ) {
   grew = false;
   for (const name of [...reached]) {
@@ -37,8 +48,10 @@ reached.add("check:all");
 const pending = Object.keys(scripts).filter((name) => name.startsWith("check:") && !reached.has(name));
 
 // Every check file must be run by something the gate runs, or it silently never
-// runs. Trace from the gate and every reached package script through script
-// files that reference each other in code (comments don't count).
+// runs. Trace from the gate, every reached package script, and (when the gate
+// runs `test:unit`) every vitest file, through script files that reference each
+// other in code (comments don't count). A check file is one named like a check,
+// or a non-vitest script that imports node:assert and no package command runs.
 const webScripts = JSON.parse(readFileSync(join(ROOT, "apps/web/package.json"), "utf8")).scripts ?? {};
 const ranRoot = new Set([...reached, ...pending]);
 const ranWeb = new Set();
@@ -60,6 +73,9 @@ const runText = [...[...ranRoot].map((name) => scripts[name] ?? ""), ...[...ranW
   .map((command) => ` ${command} `)
   .join("\n");
 const ranFiles = new Set(GATE_FILES.map((path) => path.replace("scripts/", "")));
+if (reached.has("test:unit") && /^vitest run\s*$/.test(scripts["test:unit"] ?? "")) {
+  for (const file of scriptFiles) if (VITEST_FILE.test(file)) ranFiles.add(file);
+}
 for (const file of scriptFiles) if (references(runText, file)) ranFiles.add(file);
 for (let grew = true; grew; ) {
   grew = false;
@@ -72,7 +88,12 @@ for (let grew = true; grew; ) {
     }
   }
 }
-const unwired = scriptFiles.filter((file) => CHECK_FILE.test(file) && !NOT_CHECKS.test(file) && !ranFiles.has(file));
+const anyCommandText = [...Object.values(scripts), ...Object.values(webScripts)].map((command) => ` ${command} `).join("\n");
+const isCheckFile = (file) =>
+  !VITEST_FILE.test(file) &&
+  (CHECK_FILE.test(file) ||
+    (/\.(ts|mjs|js)$/.test(file) && ASSERTS.test(scriptCode.get(file) ?? "") && !references(anyCommandText, file)));
+const unwired = scriptFiles.filter((file) => isCheckFile(file) && !NOT_CHECKS.test(file) && !ranFiles.has(file));
 
 if (process.argv.includes("--list")) {
   console.log(pending.join("\n"));
