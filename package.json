@@ -205,7 +205,6 @@
     "check:community-semantic-repository-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_semantic_repository_contract_proof.ts",
     "check:community-semantic-behavior": "vitest run convex/communityResourceSemanticTraversal.test.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
-    "check:community-overlay-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_overlay_runtime_behavior_proof.ts",
     "check:community-lens-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lens_runtime_contract_proof.ts",
     "check:polynet-workspace-mcp-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_contract_proof.ts",
     "check:polynet-workspace-mcp-auth-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_auth_contract_proof.ts",

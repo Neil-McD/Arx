@@ -27,8 +27,8 @@ function main() {
   const memberAgentDock = readText(
     join(root, "apps/web/src/components/WebMemberAgentDock.tsx"),
   );
-  const runtimeSkillResolution = readText(
-    join(root, "convex/runtimeSkillResolution.ts"),
+  const runtimeCommunityResourceLane = readText(
+    join(root, "convex/runtimeCommunityResourceLane.ts"),
   );
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
@@ -36,9 +36,6 @@ function main() {
   const runtimePrompt = readText(join(root, "shared/runtimePrompt.ts"));
   const communityLensAuthority = readText(
     join(root, "shared/communityLensAuthority.ts"),
-  );
-  const communityOverlayRuntime = readText(
-    join(root, "shared/communityOverlayRuntime.ts"),
   );
 
   assertNotIncludes(
@@ -53,18 +50,13 @@ function main() {
   );
   assertIncludes(
     runtimeAgentLoop,
-    "internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal",
-    "community-lens shared skill resolution query",
+    "internal.runtimeCommunityResourceLane.resolveRuntimeCommunityResourceLaneInternal",
+    "community-lens resource lane query",
   );
   assertIncludes(
-    runtimeHarnessComposition,
-    "buildAmbiguousSkillMentionsPromptBlock",
-    "community-lens ambiguity handling prompt block",
-  );
-  assertIncludes(
-    runtimeHarnessComposition,
-    "buildCommunityOverlayRuntimeState({",
-    "shared overlay runtime composition helper",
+    runtimeCommunityResourceLane,
+    'throw new Error("community_entitlement_required")',
+    "community-lens resource lane fails closed without community entry",
   );
   assertIncludes(
     runtimeAgentLoop,
@@ -72,29 +64,9 @@ function main() {
     "community-lens effective harness composer",
   );
   assertIncludes(
-    runtimeAgentLoop,
-    "community_skills_resolved",
-    "runtime evidence for skill overlays",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "filterUserSkillScopeAgainstCommunity({",
-    "community-lens personal skill shadowing helper",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "...userPlatformSkillScope.selectedCandidates",
-    "community-lens personal skill candidates remain available when unique",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "...communitySelectedCandidates",
-    "community-lens community skill candidates remain active",
-  );
-  assertIncludes(
-    runtimeAgentLoop,
-    "effective_harness_resolved",
-    "community-lens effective harness evidence event",
+    runtimeHarnessComposition,
+    "buildResourcesArchitectPromptBlock(",
+    "builder-lane resources architect instructions",
   );
   assertIncludes(
     threads,
@@ -160,16 +132,6 @@ function main() {
     runtimeTurnHandlers,
     "communityLensAuthority: runtimeCommunityLensAuthority",
     "runtime handlers pass community lens authority into harnesses",
-  );
-  assertIncludes(
-    communityOverlayRuntime,
-    "COMMUNITY_WORKFLOW_CONTEXT",
-    "community workflow context prompt block",
-  );
-  assertIncludes(
-    communityOverlayRuntime,
-    "personal skills remain available",
-    "community workflow context is priority, not exclusive",
   );
 
   console.log("community_lens_runtime_contract_proof: ok");

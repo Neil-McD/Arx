@@ -120,23 +120,16 @@ The dimensions are independent:
 
 ## 5. Harness overlay sections
 
-The former opaque `systemPromptSuffix` has four explicit ordered components:
+Skills are gone (Oct 28, POL-21). The harness adds one section:
 
-| Section                    | Owner     | Slot        | Authority        |
-| -------------------------- | --------- | ----------- | ---------------- |
-| `platform_skill_overlay`   | platform  | instruction | platform policy  |
-| `personal_skill_overlay`   | user      | instruction | user preference  |
-| `ambiguous_skill_mentions` | runtime   | context     | runtime fact     |
-| `community_skill_overlay`  | community | instruction | community policy |
+| Section               | Owner    | Slot        | Authority       |
+| --------------------- | -------- | ----------- | --------------- |
+| `resources_architect` | platform | instruction | platform policy |
 
-The aggregate `systemPromptSuffix` is not retained at the resolved-harness
-boundary. Overlay builders may keep their local legacy field names while their
-outputs are adapted immediately into canonical sections.
-
-Skill selection provenance belongs in the existing skill-resolution events.
-Those events record selected state, activation route, and activation reason.
-The manifest records the actual compiled overlay section, not a guessed prompt
-entry for every selected skill.
+It renders only on builder-lane turns (the builder can manage resources) and is
+empty otherwise; a community site always runs in the member lane. Prompt
+receipts carry `version: 3` and require this section; version 2 receipts
+(with the four former skill sections) still verify against the old list.
 
 ## 6. Manifest v2
 

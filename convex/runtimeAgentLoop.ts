@@ -1194,7 +1194,7 @@ async function executeRetrievalAgentLoop(
       eventType: "runtime_prompt_bundle_resolved",
       eventKey: `${params.runId}:runtime_prompt_bundle_resolved:1`,
       payload: {
-        version: 2,
+        version: 3,
         run_id: params.runId,
         base_prompt_chars: runtimePromptBundle.text.length - promptSuffixChars,
         prompt_suffix_chars: promptSuffixChars,
