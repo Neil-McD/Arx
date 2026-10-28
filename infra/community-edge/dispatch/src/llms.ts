@@ -149,7 +149,7 @@ session() -> {
   member_count,        // public: how many members it has
   member,              // { name, handle, avatar_url, role } when signed in, else null
                        // role: "owner", "admin", "moderator" or "member"
-  join_url,            // Polynet's join page for this community
+  join_url,            // the community's own join page (/join, on its private twin)
   studio_url,          // where owners and admins manage it in Polynet Studio
   live                 // used by watch(); ignore it
 }
@@ -172,9 +172,11 @@ the agent) needs a signed-in member and otherwise throws sign_in_required.
   site can't do: creating events and courses, settings, members, billing.
 - signIn(returnPath?) sends the visitor to Polynet and back here signed in.
   For someone already on Polynet it is one quick redirect.
-- Someone on Polynet who is not a member yet comes back to "/?polynet=join",
-  still signed out. Show "Join" (session.join_url opens the join page: free,
-  approval or paid), then "Sign in" again once they have joined.
+- session.join_url opens the community's own join page, in your frame: its
+  pitch (name, one-liner, about, member count) and the way in, free,
+  approval or paid (Stripe's checkout, then back). Once they've joined it
+  brings them back to the site signed in. Someone on Polynet who isn't a
+  member yet and presses "Sign in" lands there too.
 - signOut() signs out of the site and refreshes session(). The shell's own
   Sign out also signs out of the site's private twin.
 - polynet.community() -> { name, slug } (the same name as community_name).
@@ -331,8 +333,8 @@ navigation, footer, fonts and colors as every other page, with exactly one
   communities and Settings are the member's own pages on the site's private
   twin, where the site's code never runs: the inbox, conversations, typing,
   read state and attachments live there, in your frame. There is no
-  direct-message API for site code, by design. Joining opens in Polynet for
-  now and moves there next.
+  direct-message API for site code, by design. Join (/join) is there too:
+  link "Join" to session.join_url (or to /join, which Polynet sends there).
 
 ## Blocks: channels, chat and members
 

@@ -14,7 +14,7 @@
 //                      private twin, <slug>--me<suffix>.<sites domain> (twin.ts),
 //                      which draws the site's frame with every script removed, so
 //                      only Polynet's code runs there. The site sends them there.
-//   /__polynet/me/*    personal data, settings and messages, on the twin only, for its own session
+//   /__polynet/me/*    personal data, settings, messages and joining, on the twin only, for its own session
 //   everything else    the community's own front end (a user Worker with static assets);
 //                      on the twin, a redirect to the site
 //
@@ -40,6 +40,7 @@ import { DISCOVER_SOURCE } from "./blocks/discover";
 import { PERSONAL_SOURCE } from "./blocks/personal";
 import { SETTINGS_SOURCE } from "./blocks/settings";
 import { MESSAGES_SOURCE } from "./blocks/messages";
+import { JOIN_SOURCE } from "./blocks/join";
 import {
   plainStyleHash, plainTwinPage, stripFrame, twinPageHeaders, twinPolicy, withTwinHeaders, type StripRewriterClass,
 } from "./twin";
@@ -58,7 +59,7 @@ const BLOCKS: Record<string, string> = {
   discover: DISCOVER_SOURCE,
 };
 // Blocks that only the private twin serves: they read the member's own data.
-const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE, messages: MESSAGES_SOURCE };
+const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE, messages: MESSAGES_SOURCE, join: JOIN_SOURCE };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
@@ -241,6 +242,18 @@ const MY_MESSAGES: Record<string, MyRoute> = {
   "/__polynet/me/messages/typing": { method: "POST", backend: "/runtime/app/me/messages/typing", maxBytes: 1024 },
   "/__polynet/me/messages/block": { method: "POST", backend: "/runtime/app/me/messages/block", maxBytes: 1024 },
 };
+
+// Join: the page reads (GET, signed out too) and acts (small JSON POSTs, signed
+// in on the twin). Each action runs Studio's own join, cancel and checkout cores.
+const MY_JOIN_PATH = "/__polynet/me/join";
+const MY_JOIN: Record<string, MyRoute> = {
+  "/__polynet/me/join": { method: "POST", backend: "/runtime/app/me/join/request", maxBytes: 1024 },
+  "/__polynet/me/join/cancel": { method: "POST", backend: "/runtime/app/me/join/cancel", maxBytes: 1024 },
+  "/__polynet/me/join/checkout": { method: "POST", backend: "/runtime/app/me/join/checkout", maxBytes: 1024 },
+  "/__polynet/me/join/finish": { method: "POST", backend: "/runtime/app/me/join/finish", maxBytes: 1024 },
+};
+// Where a paid plan's checkout may send the member: Stripe's own hosted page only.
+const STRIPE_CHECKOUT_PREFIX = "https://checkout.stripe.com/";
 
 function isMemberEndpoint(pathname: string): boolean {
   return MEMBER_PATHS.has(pathname) || pathname.startsWith(`${API_PREFIX}/`) || pathname.startsWith(FILES_PREFIX) || pathname.startsWith(PERSONAL_API_PREFIX);
@@ -460,9 +473,10 @@ async function handleAuth(request: Request, url: URL, route: Route, place: Place
 
   if (action === "session" && request.method === "GET") {
     const token = String(readCookie(request, SESSION_COOKIE) ?? "");
-    // Joining (open, approval or paid) happens on Polynet's own join page;
-    // owners and admins manage the community in Studio's community settings.
-    const joinUrl = new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
+    // Joining (open, approval or paid) is the community's own /join, on its
+    // private twin (Polynet's join page where a site has no twin); owners and
+    // admins manage the community in Studio's community settings.
+    const joinUrl = place.privateOrigin ? `${place.privateOrigin}/join` : studioJoinUrl(route, env);
     const studioUrl = new URL(`/c/${encodeURIComponent(route.community)}/settings/community`, env.POLYNET_AUTH_URL).toString();
     const identity = await publicIdentity(env, place.siteOrigin);
     const base = {
@@ -659,14 +673,12 @@ async function proxyMyCommunities(request: Request, url: URL, route: Route, env:
   return json(200, { ok: true, communities });
 }
 
-// Settings and Messages, for the twin's own pages: each call forwarded with
-// the twin's session (the backend refuses any other kind and runs Studio's own
-// cores), writes only as small same-origin JSON, and only the fields the page
-// shows leave the edge.
-async function proxyMine(
-  request: Request, url: URL, env: Env, route: MyRoute, shape: (path: string, answer: Record<string, unknown>, env: Env) => Record<string, unknown> | null,
-  unavailable: string,
-): Promise<Response> {
+// Settings, Messages and Join's actions, for the twin's own pages: each call
+// forwarded with the twin's session (the backend refuses any other kind and
+// runs Studio's own cores), writes only as small same-origin JSON, and only the
+// fields the page shows leave the edge.
+type Shape = (path: string, answer: Record<string, unknown>, env: Env, place: Place) => Record<string, unknown> | null;
+async function proxyMine(request: Request, url: URL, env: Env, place: Place, route: MyRoute, shape: Shape, unavailable: string): Promise<Response> {
   if (request.method !== route.method) return json(405, { ok: false, code: "method_not_allowed" });
   const token = readCookie(request, SESSION_COOKIE);
   if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
@@ -696,8 +708,93 @@ async function proxyMine(
     const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : unavailable;
     return json(upstream.ok ? 502 : upstream.status, { ok: false, code });
   }
-  const shaped = shape(url.pathname, answer, env);
+  const shaped = shape(url.pathname, answer, env, place);
   return shaped ? json(200, { ok: true, ...shaped }) : json(502, { ok: false, code: unavailable });
+}
+
+function studioJoinUrl(route: Route, env: Env): string {
+  return new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
+}
+
+// Join's read: anyone may see the community's pitch and how it lets people in;
+// with the twin's session, also where they stand. A session the backend refuses
+// reads as signed out (and is cleared), so the pitch still shows.
+async function proxyJoinRead(request: Request, url: URL, env: Env, place: Place): Promise<Response> {
+  if (request.method !== "GET") return json(405, { ok: false, code: "method_not_allowed" });
+  const token = readCookie(request, SESSION_COOKIE);
+  const signedIn = Boolean(token && TOKEN_PATTERN.test(token));
+  const read = (withSession: boolean) => fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/me/join`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+      ...(withSession ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: "{}",
+  });
+  let upstream = await read(signedIn);
+  const cleared = signedIn && upstream.status === 401;
+  if (cleared) upstream = await read(false);
+  const answer = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
+  const headers: Record<string, string> = cleared ? { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) } : {};
+  if (!upstream.ok || !answer || answer.ok !== true) {
+    const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : "join_unavailable";
+    return json(upstream.ok ? 502 : upstream.status, { ok: false, code }, headers);
+  }
+  const shaped = joinView(answer, env, place);
+  return shaped ? json(200, { ok: true, ...shaped }, headers) : json(502, { ok: false, code: "join_unavailable" }, headers);
+}
+
+// Join: only what the page draws leaves the edge. The community's public face,
+// how it lets people in (in Studio's words), where the member stands, and the
+// ways onward: into the site (its own sign-in, silent once they're a member),
+// and Polynet's account setup.
+const JOIN_GATES = new Set(["join", "request_access", "checkout"]);
+const JOIN_STATES = new Set(["member", "pending", "denied", "blocked", "visitor"]);
+const JOIN_OUTCOMES = new Set(["joined", "approval_pending", "approval_denied", "paid_plan_required"]);
+const FINISH_STATUSES = new Set(["joined", "pending", "expired", "not_found"]);
+function joinView(answer: Record<string, unknown>, env: Env, place: Place): Record<string, unknown> | null {
+  const storage = storageOrigin(env);
+  const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+  const community = (answer.community ?? null) as Record<string, unknown> | null;
+  const gate = typeof answer.gate === "string" && JOIN_GATES.has(answer.gate) ? answer.gate : null;
+  if (!community || !gate) return null;
+  const viewer = answer.viewer && typeof answer.viewer === "object" ? answer.viewer as Record<string, unknown> : null;
+  const state = viewer && typeof viewer.state === "string" && JOIN_STATES.has(viewer.state) ? viewer.state : null;
+  const plans = (Array.isArray(answer.plans) ? answer.plans : []).slice(0, 2).flatMap((raw) => {
+    const plan = (raw ?? {}) as Record<string, unknown>;
+    const period = plan.billing_period === "monthly" || plan.billing_period === "annual" ? plan.billing_period : null;
+    const label = text(plan.label, 80);
+    return period && label ? [{ billing_period: period, name: text(plan.name, 120), label }] : [];
+  });
+  return {
+    signed_in: answer.signed_in === true,
+    community: {
+      name: text(community.name, 120) ?? "", one_liner: text(community.one_liner, 500), about: text(community.about, 4000),
+      member_count: Math.max(0, Math.floor(Number(community.member_count) || 0)),
+      avatar_url: typeof community.avatar_url === "string" && storage && community.avatar_url.startsWith(`${storage}/api/storage/`) ? community.avatar_url : null,
+    },
+    gate, available: answer.available === true, action_label: text(answer.action_label, 80) ?? "Join", plans,
+    viewer: state ? {
+      state, can_request_again: viewer?.can_request_again === true,
+      reapply_at: typeof viewer?.reapply_at === "string" && !Number.isNaN(Date.parse(viewer.reapply_at)) ? viewer.reapply_at : null,
+      setup_required: viewer?.setup_required === true,
+    } : null,
+    // Into the site: its own sign-in, which is silent for a member already signed in to Polynet.
+    enter_url: `${place.siteOrigin}${AUTH_PREFIX}start?return=${encodeURIComponent("/chat")}`,
+    setup_url: new URL("/onboarding", env.POLYNET_AUTH_URL).toString(),
+  };
+}
+
+function myJoinAnswer(path: string, answer: Record<string, unknown>, env: Env, place: Place): Record<string, unknown> | null {
+  if (path === "/__polynet/me/join/checkout") {
+    const url = typeof answer.checkout_url === "string" && answer.checkout_url.startsWith(STRIPE_CHECKOUT_PREFIX) ? answer.checkout_url : null;
+    return url ? { checkout_url: url } : null;
+  }
+  const view = joinView(answer, env, place);
+  if (!view) return null;
+  if (path === "/__polynet/me/join") return { ...view, outcome: typeof answer.outcome === "string" && JOIN_OUTCOMES.has(answer.outcome) ? answer.outcome : null };
+  if (path === "/__polynet/me/join/finish") return { ...view, status: typeof answer.status === "string" && FINISH_STATUSES.has(answer.status) ? answer.status : "pending" };
+  return view;
 }
 
 const SETTINGS_ROLES = new Set(["owner", "admin", "moderator", "member"]);
@@ -868,8 +965,10 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (url.pathname === "/__polynet/sdk.js") return polynetAsset(SDK_SOURCE, "text/javascript", 300);
   if (url.pathname === "/__polynet/llms.txt") return polynetAsset(LLMS_TXT, "text/plain", 300);
   if (url.pathname === MY_COMMUNITIES_PATH) return await proxyMyCommunities(request, url, route, env);
-  if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMine(request, url, env, MY_SETTINGS[url.pathname], mySettingsAnswer, "settings_unavailable");
-  if (Object.hasOwn(MY_MESSAGES, url.pathname)) return await proxyMine(request, url, env, MY_MESSAGES[url.pathname], myMessagesAnswer, "messages_unavailable");
+  if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMine(request, url, env, place, MY_SETTINGS[url.pathname], mySettingsAnswer, "settings_unavailable");
+  if (Object.hasOwn(MY_MESSAGES, url.pathname)) return await proxyMine(request, url, env, place, MY_MESSAGES[url.pathname], myMessagesAnswer, "messages_unavailable");
+  if (url.pathname === MY_JOIN_PATH && request.method === "GET") return await proxyJoinRead(request, url, env, place);
+  if (Object.hasOwn(MY_JOIN, url.pathname)) return await proxyMine(request, url, env, place, MY_JOIN[url.pathname], myJoinAnswer, "join_unavailable");
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
   if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
   if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);
@@ -903,6 +1002,13 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
     if (own.status !== 404) return sitePage(own);
     await own.body?.cancel();
     return new Response(null, { status: 302, headers: { Location: `${place.privateOrigin}${url.pathname}${url.search}`, "Cache-Control": "no-store" } });
+  }
+  // No twin (off the sites domain): Join is Polynet's own join page, unless the site has its own.
+  if (personal?.name === "join") {
+    const own = await worker.fetch(siteRequest(request, url.pathname + url.search, NAVIGATION_HEADERS));
+    if (own.status !== 404) return sitePage(own);
+    await own.body?.cancel();
+    return new Response(null, { status: 302, headers: { Location: studioJoinUrl(route, env), "Cache-Control": "no-store" } });
   }
   const standard = read ? standardPage(url.pathname) : null;
   if (standard) return await serveStandardPage(request, url, standard, worker, env);

@@ -46,8 +46,10 @@ if (!session.signed_in) {
 - Signed out, only `session()` (`community_name`, `community_one_liner`,
   `community_about`, `member_count`, `join_url`), `community()` and
   `discover()` work. Everything else throws `sign_in_required`.
-- Someone not yet a member comes back to `/?polynet=join`: show "Join"
-  again, then "Sign in" once they've joined.
+- `join_url` is the community's own join page (`/join`, on the site's private
+  twin, in your frame): free, approval or paid. Someone on Polynet who isn't a
+  member yet and signs in lands there too, and comes back signed in once
+  they've joined.
 - `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show
   owners and admins a link to `session.studio_url`.
 

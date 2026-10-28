@@ -54,14 +54,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 2. Communities, membership and joining — Keep
 
 - **Does:** create, configure, archive and restore communities; join (open,
-  approval, paid); roles; blocks; Discover.
+  approval, paid), from Studio's funnel and from a community site's own
+  `/join` (on its private twin, `communityAppJoin`, through the same cores and
+  checkout); roles; blocks; Discover.
 - **Code:** `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
   `memberEntryDestination`, `platformHomeCommunity`.
-- **Reached by:** Studio; site join links go to Polynet's `/c/<slug>` join page.
+- **Reached by:** Studio (`/c/<slug>`); community sites' `/join` (their private twin).
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`.
@@ -278,7 +280,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   CLI and MCP deploys without the frame, or when a site's own standard page
   lacks its blocks. Sites style them only through tokens, `::part()`, slots
   and the page's `.pn-page-*` classes. A member's own pages (`/communities`,
-  `/settings` and `/messages` now; `/join` says "coming soon") live on the
+  `/settings`, `/messages` and `/join`) live on the
   site's **private twin**, `<slug>--me<suffix>.polynet.page`: the edge draws
   the site's frame there with every script, handler and dangerous URL
   stripped (`twin.ts`, HTMLRewriter), adds only Polynet's scripts under a
@@ -290,14 +292,18 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   other session and 404 on the site. Messages runs the helpers Studio's DM
   functions run (`directMessages`, `...ForTrustedUserInternal`) and goes live
   through `communityLive.watchMessages`, which answers only a private
-  session's watch token, with versions only. The site <-> twin host mapping is
+  session's watch token, with versions only. Join (`communityAppJoin`) works
+  signed out and is the one page for someone not yet a member (the twin's
+  sign-in mints them a private session for it): Studio's funnel projection,
+  join core and checkout, back to the twin's `/join`, with membership only from
+  the webhook's record. The site <-> twin host mapping is
   `privateTwinHost` / `siteHostOfTwin` in `checks.mjs` (edge, backend, CLI). Spec:
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
-- **Code:** `httpCommunityApps`, `communityApps`, `communityPublic` (Discover's list), `httpCommunitySites`,
+- **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityPublic` (Discover's list), `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
   `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, the private twin
   `twin.ts`, SDK `sdk.ts`, shell `ui.ts`, blocks `blocks/` including `page.ts`
-  `personal.ts`, `settings.ts` and `messages.ts`, guide `llms.ts`); `packages/polynet-cli` (`@polynet/cli`: create, check,
+  `personal.ts`, `settings.ts`, `messages.ts` and `join.ts`, guide `llms.ts`); `packages/polynet-cli` (`@polynet/cli`: create, check,
   skills, deploy).
 - **Reached by:** the edge only (`/runtime/app*`, `/runtime/community_edge/*`,
   edge secret); `/runtime/sites/deploy/*` from the CLI and MCP.

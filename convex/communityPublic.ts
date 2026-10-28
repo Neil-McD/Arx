@@ -67,7 +67,7 @@ async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Om
   return await resolveUserProfileDisplayProjection(ctx, userId);
 }
 
-async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Promise<PublicPlanSummaryLike[]> {
+export async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Promise<PublicPlanSummaryLike[]> {
   const currentPricePoints = (await ctx.db
     .query("communityPricePoints" as any)
     .withIndex("by_community_current", (q: any) => q.eq("communityId", communityId).eq("isCurrent", true))
@@ -586,7 +586,9 @@ export const listSiteDiscoverCommunitiesInternal = internalQuery({
    admission projection; remove this compatibility shim only after the pinned
    cached-client contract advances past that build. */
 
-async function joinPublicCommunityInternal(args: {
+// The join decision for Studio's funnel and for Join on a community site's
+// private twin (communityAppJoin.ts): one gate, whichever page asks.
+export async function joinPublicCommunityInternal(args: {
   ctx: any;
   community: CommunityLike;
   userId: any;

@@ -167,10 +167,15 @@ export function normalizeStripeCommunitySubscriptionStatus(args: {
 }
 
 export function buildCheckoutSuccessUrl(successUrlRaw: unknown, sessionId: string): string {
-  const successUrl = requireCanonicalCheckoutReturnUrl(
-    successUrlRaw,
-    "checkout_success_url_invalid",
+  return fillCheckoutSuccessUrl(
+    requireCanonicalCheckoutReturnUrl(successUrlRaw, "checkout_success_url_invalid"),
+    sessionId,
   );
+}
+
+// A success URL its caller already validated (Studio's origin, or a community
+// site's private twin), with Polynet's own checkout session id filled in.
+export function fillCheckoutSuccessUrl(successUrl: string, sessionId: string): string {
   if (successUrl.includes("{CHECKOUT_SESSION_ID}")) {
     return successUrl.replaceAll("{CHECKOUT_SESSION_ID}", sessionId);
   }

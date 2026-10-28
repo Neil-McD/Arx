@@ -201,7 +201,10 @@ export const removeCommunityDomainInternal = internalMutation({
 });
 
 // Step 1, called by Polynet's login bridge for an already-verified Polynet
-// session: a one-time code for a registered domain of a community the user belongs to.
+// session: a one-time code for a registered domain of a community the user
+// belongs to. A site's private twin also signs in someone who isn't a member
+// yet, for its Join page: only Polynet's code runs there, every personal page
+// still requires membership, and the site's API re-checks it on every call.
 export const createCommunityAppHandoffInternal = internalMutation({
   args: {
     userId: v.id("users"),
@@ -222,7 +225,7 @@ export const createCommunityAppHandoffInternal = internalMutation({
     if (!community || !domain || domain.communityId !== community._id) {
       return { ok: false as const, reason: "address_not_registered" as const };
     }
-    if (!(await memberHasAccess(ctx, community._id, args.userId))) {
+    if (domain.kind !== "private" && !(await memberHasAccess(ctx, community._id, args.userId))) {
       return { ok: false as const, reason: "not_a_member" as const, communitySlug: community.slug };
     }
     const nowMs = Date.now();
@@ -263,7 +266,7 @@ export const consumeCommunityAppHandoffInternal = internalMutation({
     ) {
       return { ok: false as const, reason: "code_invalid" as const };
     }
-    if (!(await memberHasAccess(ctx, domain.communityId, handoff.userId))) {
+    if (domain.kind !== "private" && !(await memberHasAccess(ctx, domain.communityId, handoff.userId))) {
       return { ok: false as const, reason: "not_a_member" as const };
     }
     const expired = await ctx.db

@@ -193,9 +193,12 @@ Sign-in is invisible when the member is already signed in to Polynet:
    belongs to a registered domain of that community, then issues a one-time
    code (60 seconds, bound to state and domain, deleted when presented; only
    hashes stored). A Polynet user who isn't a member yet is sent back to the
-   front end (`/?polynet=join`), which links to Polynet's join page
-   (`join_url` from the edge's session endpoint); joining (open, approval or
-   paid) stays Polynet-hosted.
+   site's `/join`, which the edge serves on the site's private twin: the
+   community's own join page (`join_url` from the edge's session endpoint),
+   deciding exactly as Studio's funnel does (open, approval or paid, through
+   Studio's cores and checkout). A private twin's own sign-in also signs in
+   someone who isn't a member yet, for Join only: every personal page still
+   requires membership, and the site API re-checks it on every call.
 3. The edge swaps the code server to server (edge secret) for a 30-day session
    kept in an HttpOnly, host-only cookie on the community's domain. Page code
    and the community's own Worker never see it. When it expires, the same hop

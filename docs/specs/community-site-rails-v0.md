@@ -143,7 +143,7 @@ shell's menu ("In this club") and the checks.
 | `/communities` | Your communities: every community the member is in, each linking to its own site (else Studio) | 3b-1 (now), private twin |
 | `/settings` | the member's settings: profile, this community's notifications, leave, sign out (see *Settings* below) | 3b-2 (now), private twin |
 | `/messages`, `/messages/<conversation>`, `/messages/new?to=<handle>` | the member's direct messages (see *Messages* below) | 3b-3 (now), private twin |
-| `/join` | personal page ("coming soon" in the twin's frame until built) | 3b, private twin |
+| `/join` | the community's own join page: its pitch and gate, free, approval or paid (see *Join* below) | 3b-4 (now), private twin |
 | `/manage` | community admin | after the personal pages |
 
 Until `/manage` exists, "Manage this community" opens Studio's community
@@ -188,7 +188,11 @@ first-party cookie everywhere.
   session minted there is recorded as `kind: "private"`. Every personal
   endpoint requires a private session, and the site answers them 404.
   Everything the site's endpoints do works on both.
-- **Not yet:** Join is a "coming soon" placeholder in the twin's frame.
+- **Join signs in non-members.** The twin's sign-in also mints a private
+  session for someone on Polynet who isn't a member yet, for Join: only
+  Polynet's code runs there, every other personal page still requires
+  membership, and the site API re-checks it on every call. The site's own
+  sign-in still refuses them, and sends them to `/join`.
 
 ### Settings (3b-2)
 
@@ -272,6 +276,56 @@ of someone still in the community. A conversation is named by its id and a
 person by their handle; no user id or storage id reaches the page, and
 another member's conversation reads as no conversation at all.
 
+### Join (3b-4)
+
+Every Join on a site opens the twin's `/join`: `session().join_url` (so the
+shell's Join and the blocks' "New here? Join"), and `/join` on the site itself
+(the edge sends it to the twin, unless the site has its own file there). A
+Polynet user who isn't a member and presses the site's "Sign in" lands there
+too, instead of a dead end. Where a site has no twin, Join is Studio's
+`/c/<slug>`. Studio's funnel is unchanged.
+
+The page is the community's pitch (name, one-liner, about, member count,
+avatar), readable signed out, and its **gate exactly as Studio's funnel
+decides it**: the backend projects it with Studio's own functions
+(`shared/communityJoinPolicy.ts`, moved from the web app so both share it, and
+`shared/communityFunnelUi.ts` for the button words) and every action runs
+Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
+
+- **Open:** "Join free". Signed out it signs in first (the normal hop, back
+  to `/join`), then one press joins through Studio's join core.
+- **Approval:** the same press asks (Studio has no join questions; there are
+  none here either), then "Request pending" in Studio's words, with "Cancel
+  request". The page re-reads while it's open (every 30 seconds and on
+  return to the tab), as Studio's does. A denial says until when; after
+  that, "Request again".
+- **Paid:** Studio's plans (one per billing period, priced in Studio's words;
+  a choice when there are two), then Studio's checkout, created by the same
+  backend path (`startCommunityJoinCheckoutCore`), on the founder's Stripe
+  account, returning only to this twin's own `/join` (success
+  `/join?checkout=<Polynet's checkout id>`, cancel `/join?checkout=canceled`),
+  built by the backend from the twin origin it verified, never from the page.
+  The page goes exactly where the backend's answer says (the edge passes only
+  a `https://checkout.stripe.com/` address). Back from Stripe it shows
+  "Finishing up…" and asks the backend, which runs Studio's finalization and
+  claim: membership comes only once Stripe's verified webhook has marked the
+  checkout complete. A return alone grants nothing. After a minute it offers
+  "Check again".
+- **Already a member:** "You're in." with a link into the site.
+- **Blocked, denied, cooldown, unavailable, account not set up:** Studio's
+  words (or, where Studio shows a raw code, plain ones), and for an
+  unfinished Polynet account a link to Polynet's own setup.
+
+Once they're a member (joined, or paid and confirmed) the page sends them into
+the site through the site's own sign-in (`/__polynet/auth/start?return=/chat`),
+which is silent for someone signed in to Polynet and now succeeds.
+
+Endpoints: `GET /__polynet/me/join` (signed out too) and `POST
+/__polynet/me/join`, `/join/cancel`, `/join/checkout`, `/join/finish`, twin
+only, same-origin, small JSON POSTs (1 KB), forwarded to
+`/runtime/app/me/join*`; every action requires a private session (the site's
+own session, which its code holds, is refused).
+
 ## Private messages stay private
 
 A site's code is written by its founder (or the founder's agent) and runs
@@ -330,7 +384,7 @@ the community deletes them (existing `deleteCommunityPresenceForUser`).
    theming contract; `checkSite` enforcement; guide and skills rewritten.
 3. **Shell rails**: the profile drawer, the private twin (3b-1: the stripped
    frame, its session and Your communities; 3b-2: Settings; 3b-3: Messages;
-   then Join on it), and Studio's back bar.
+   3b-4: Join), and Studio's back bar.
 4. **Recommended blocks**: online, knowledge, events, courses, ask.
 5. **Proof**: a fresh agent builds Sunrise Climbing Club from the guide alone,
    twice, with different design directions. Every block is present and both

@@ -37,6 +37,7 @@ import type * as communityAgentServiceWorkflowCore from "../communityAgentServic
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
 import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
 import type * as communityAppAgentTurn from "../communityAppAgentTurn.js";
+import type * as communityAppJoin from "../communityAppJoin.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
 import type * as communityApps from "../communityApps.js";
@@ -254,6 +255,7 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
   communityAiFeedRetirement: typeof communityAiFeedRetirement;
   communityAppAgentTurn: typeof communityAppAgentTurn;
+  communityAppJoin: typeof communityAppJoin;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
   communityApps: typeof communityApps;
