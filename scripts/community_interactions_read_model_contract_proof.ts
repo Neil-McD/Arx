@@ -71,7 +71,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /root reads return only `community` and `public` roots[\s\S]*root reads do not hydrate drawer replies inline[\s\S]*reply reads require a live community\/public-readable root[\s\S]*reply reads return only live `community` and `public` replies[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*read bundles prefer canonical `communityInteractionAttachments` rows[\s\S]*migration-only legacy attachment hydration[\s\S]*communityInteractionLegacyAttachments[\s\S]*communityInteractionAttachmentBridge[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
+  /root reads return only `community` and `public` roots[\s\S]*root reads do not hydrate drawer replies inline[\s\S]*reply reads require a live community\/public-readable root[\s\S]*reply reads return only live `community` and `public` replies[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*read bundles return canonical `communityInteractionAttachments` rows only[\s\S]*communityInteractionAttachmentBridge[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
   "contract should preserve read-model boundaries",
 );
 
