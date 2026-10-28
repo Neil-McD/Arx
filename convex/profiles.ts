@@ -6,7 +6,6 @@ import { validateProfileHandle } from "../shared/profileHandle";
 import {
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
-  maybeDeleteStorageAsset,
   normalizeCommunityRoleForOutput,
   requireCommunityChatAccess,
 } from "./communityCore";
@@ -674,12 +673,10 @@ export const upsertProfileDetail = mutation({
       }
     }
 
-    if (
-      existingDetail?.avatarStorageId &&
-      String(existingDetail.avatarStorageId) !== String(nextAvatarStorageId ?? "")
-    ) {
-      await maybeDeleteStorageAsset(ctx, existingDetail.avatarStorageId);
-    }
+    // A replaced photo's file is left in storage, never deleted here: the file
+    // a profile points at isn't proven to be the member's own upload, and
+    // deleting it could remove someone else's file (another photo, a banner,
+    // an attachment) that a member pointed their profile at.
 
     const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
     const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);
