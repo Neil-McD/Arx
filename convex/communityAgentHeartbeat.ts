@@ -261,16 +261,15 @@ async function quarantineExhaustedDigestEvidence(
   items: unknown,
   nowMs: number,
 ): Promise<void> {
-  const traceIds = new Set<string>();
   for (const item of Array.isArray(items) ? items : []) {
-    for (const traceId of Array.isArray(item?.sourceTraceIds) ? item.sourceTraceIds : []) {
-      traceIds.add(String(traceId));
-    }
-  }
-  for (const traceId of traceIds) {
-    const trace = await ctx.db.get(traceId as any);
+    const traceIds = Array.isArray(item?.sourceTraceIds) ? item.sourceTraceIds : [];
+    const revisions = Array.isArray(item?.sourceRevisions) ? item.sourceRevisions : [];
+    if (traceIds.length !== 1 || revisions.length !== 1) continue;
+    const trace = await ctx.db.get(traceIds[0] as any);
     if (!trace || normalizeIdValue(trace.communityId) !== normalizeIdValue(communityId)) continue;
     if (trace.compilerState !== "pending") continue;
+    // Evidence updated since the digest was built is newer work; leave it pending.
+    if (await buildCommunitySourceTraceRevision(trace as any) !== String(revisions[0])) continue;
     await ctx.db.patch(trace._id, {
       compilerState: "agent_retries_exhausted" as const,
       compilerPendingSince: undefined,
