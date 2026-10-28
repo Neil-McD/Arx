@@ -86,7 +86,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   resourceModuleDeleteModalProps: WebCommunitySecondaryPanelsProps["resourceModuleDeleteModal"];
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
   isProfileSetupComplete: WebCommunityChatPanelProps["isProfileSetupComplete"];
-  typingPresence: WebCommunityChatPanelProps["typingPresence"];
   onCommunityTypingSignal: WebCommunityChatPanelProps["onCommunityTypingSignal"];
   onCommunityTypingClear: WebCommunityChatPanelProps["onCommunityTypingClear"];
   profilesByUserId: WebCommunityChatPanelProps["profilesByUserId"];
@@ -125,7 +124,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   truncateReplyPreview: WebCommunityChatPanelProps["truncateReplyPreview"];
   renderTextWithLinks: WebCommunityChatPanelProps["renderTextWithLinks"];
   onOpenCommunityChatLightbox: WebCommunityChatPanelProps["onOpenCommunityChatLightbox"];
-  onStartReply: WebCommunityChatPanelProps["onStartReply"];
   voiceButtonProps: WebCommunityChatPanelProps["voiceButtonProps"];
   drawerVoiceButtonProps: WebCommunityChatPanelProps["drawerVoiceButtonProps"];
   onCommunityVoiceInputClick: WebCommunityChatPanelProps["onCommunityVoiceInputClick"];
@@ -274,7 +272,6 @@ export function buildWebCommunitySurfaceProjection(
     isProfileSetupComplete: params.isProfileSetupComplete,
     canMentionEverybody: params.canManageMembersActiveCommunity,
     everybodyMemberCount: params.communityMemberCount,
-    typingPresence: params.typingPresence,
     onCommunityTypingSignal: params.onCommunityTypingSignal,
     onCommunityTypingClear: params.onCommunityTypingClear,
     profilesByUserId: params.profilesByUserId,
@@ -313,7 +310,6 @@ export function buildWebCommunitySurfaceProjection(
     truncateReplyPreview: params.truncateReplyPreview,
     renderTextWithLinks: params.renderTextWithLinks,
     onOpenCommunityChatLightbox: params.onOpenCommunityChatLightbox,
-    onStartReply: params.onStartReply,
     voiceButtonProps: params.voiceButtonProps,
     drawerVoiceButtonProps: params.drawerVoiceButtonProps,
     onCommunityVoiceInputClick: params.onCommunityVoiceInputClick,

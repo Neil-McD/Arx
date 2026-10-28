@@ -77,7 +77,6 @@ export function WebRouteAccessHold(props: {
       canManageMembersActiveCommunity: false,
       canViewActiveCommunityAnalytics: false,
       isLoadingCommunityAccess: true,
-      lockedCommunityNavTabs: null,
       canOpenDirectMessages: false,
       directMessagesUnreadCount: 0,
       communities: [],

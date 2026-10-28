@@ -27,7 +27,6 @@ export function buildWebShellChromeHostProps(params: {
   mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
   mobileRootPage: WebShellChromeHostProps["mobileTopBarProps"]["rootPage"];
   mobileThreadPageOpen: boolean;
-  forceMobileCommunityRoot: boolean;
   showMobileSettingsIndex: boolean;
   activePage: AppPage;
   destination: WebDestination;
@@ -70,7 +69,6 @@ export function buildWebShellChromeHostProps(params: {
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   isLoadingCommunityAccess: boolean;
-  lockedCommunityNavTabs?: WebShellChromeHostProps["communityShell"]["lockedCommunityNavTabs"];
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   onCopyCommunityJoinLink: WebShellChromeHostProps["communityShell"]["onCopyCommunityJoinLink"];
@@ -136,9 +134,7 @@ export function buildWebShellChromeHostProps(params: {
     mobileChromeReadingMode: params.mobileChromeReadingMode,
     mobileTopBarProps: {
       mode: params.mobileShellMode,
-      rootPage: params.forceMobileCommunityRoot
-          ? "community"
-          : params.mobileRootPage,
+      rootPage: params.mobileRootPage,
       isThreadPage: params.mobileThreadPageOpen,
       isCommunityHome: isMobileCommunityHome,
       communityDetailLabel: mobileChannelLabel,
@@ -207,7 +203,6 @@ export function buildWebShellChromeHostProps(params: {
       showMobileGlobalShell: params.showMobileGlobalShell,
       mobileOverlay: params.mobileOverlay,
       mobileRootPage: params.mobileRootPage,
-      forceMobileCommunityRoot: params.forceMobileCommunityRoot,
       setMobileOverlay: params.setMobileOverlay,
       onSelectMobileRootPage: params.handleSelectMobileRootPage,
       activeCommunity: params.activeCommunity,
@@ -238,7 +233,6 @@ export function buildWebShellChromeHostProps(params: {
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
       isLoadingCommunityAccess: params.isLoadingCommunityAccess,
-      lockedCommunityNavTabs: params.lockedCommunityNavTabs ?? null,
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,

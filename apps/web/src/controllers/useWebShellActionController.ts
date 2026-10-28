@@ -56,15 +56,6 @@ export function useWebShellActionController(params: {
     params.selectedActiveCommunitySlug,
   ]);
 
-  const handleOpenLandingCommunity = useCallback(() => {
-    const communitySlug = String(
-      params.activeCommunitySlug ?? "",
-    ).trim();
-    if (communitySlug) {
-      params.openCommunityChat(communitySlug);
-    }
-  }, [params.activeCommunitySlug, params.openCommunityChat]);
-
   const handleOpenDiscover = useCallback(() => {
     const transition = deriveOpenDiscoverTransition({
       activePage: params.activePage,
@@ -85,7 +76,6 @@ export function useWebShellActionController(params: {
       void params.goBack();
     },
     handleTopbarBackToCommunity,
-    handleOpenLandingCommunity,
     handleOpenDiscover,
   };
 }

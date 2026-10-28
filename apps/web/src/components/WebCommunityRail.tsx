@@ -14,8 +14,7 @@ export function WebCommunityRail({
 
   if (
     isMobileShell
-      ? !communityShell.showMobileShell ||
-        communityShell.forceMobileCommunityRoot
+      ? !communityShell.showMobileShell
       : !communityShell.showDesktopCommunityRail
   )
     return null;

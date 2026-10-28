@@ -506,8 +506,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const ThreadSurface = isMobileThreadPage ? "section" : "aside";
   const hasDetailPanel = Boolean(selectedRoot || props.profilePanel);
 
-  const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
-
   return (
     <>
     <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>

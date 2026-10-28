@@ -342,12 +342,6 @@ export function useWebCommunityChatController(
     ingestAttachmentsFromFileList: ingestAttachments,
   });
 
-  const handleStartReply = useCallback((message: WebCommunityReplyTarget) => {
-    if (message.id.startsWith("pending-")) return;
-    setReplyingToMessage(message);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }, []);
-
   const handleSendCommunityMessage = useCallback(async (
     draft?: WebCommunityMessageSendDraft,
   ) => {
@@ -619,7 +613,6 @@ export function useWebCommunityChatController(
       setIndex: setCommunityChatLightboxIndex,
       onClose: closeCommunityChatLightbox,
     },
-    handleStartReply,
     handleSendCommunityMessage,
     setMessageInputFromTextarea,
   };

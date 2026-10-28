@@ -344,8 +344,8 @@ assert.match(
 );
 assert.match(
   communityRail,
-  /presentation: "desktop" \| "mobile-shell";[\s\S]*isMobileShell[\s\S]*communityShell\.forceMobileCommunityRoot[\s\S]*onOpenCommunityHome\(communitySlug\)/,
-  "one canonical rail should serve desktop and authenticated global mobile roots while failing closed for visitor roots",
+  /presentation: "desktop" \| "mobile-shell";[\s\S]*isMobileShell[\s\S]*onOpenCommunityHome\(communitySlug\)/,
+  "one canonical rail should serve desktop and authenticated global mobile roots",
 );
 assert.match(
   communityRail,
@@ -380,7 +380,7 @@ assert.doesNotMatch(
 );
 assert.match(
   shellHost,
-  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*destination\.kind === "community_home"[\s\S]*const showMobileGlobalShell =[\s\S]*!props\.communityShell\.forceMobileCommunityRoot[\s\S]*<WebMobileGlobalShell/,
+  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*destination\.kind === "community_home"[\s\S]*const showMobileGlobalShell =[\s\S]*props\.communityShell\.showMobileGlobalShell[\s\S]*<WebMobileGlobalShell/,
   "AI, Messages, Discover, Settings, and the community directory should share one global mobile frame",
 );
 assert.match(

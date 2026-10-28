@@ -123,7 +123,6 @@ async function fixture() {
     });
     return { ownerId, memberId, outsiderId, communityId, otherCommunityId, membershipId };
   });
-  const as = (handle: string) => t.withIdentity({ subject: `${handle}-subject` });
   const register = (origin = ORIGIN, communityId = ids.communityId) =>
     t.mutation(internal.communityApps.registerCommunityDomainInternal, { communityId, origin });
 

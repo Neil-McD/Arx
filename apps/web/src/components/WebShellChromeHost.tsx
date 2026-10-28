@@ -44,9 +44,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     !props.showMobileSettingsShell &&
     props.communityShell.mobileRootPage === "community" &&
     props.communityShell.destination.kind === "community_home";
-  const showMobileGlobalShell =
-    props.communityShell.showMobileGlobalShell &&
-    !props.communityShell.forceMobileCommunityRoot;
+  const showMobileGlobalShell = props.communityShell.showMobileGlobalShell;
   const isMobileDiscoverRoot =
     props.showMobileAppShell &&
     showMobileGlobalShell &&

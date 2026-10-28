@@ -9,8 +9,6 @@ export const RUNTIME_COMMUNITY_CONTEXT_RECEIPT_TOOL_NAMES = [
   "community_memory_read",
   "community_chat_search",
   "community_chat_read",
-  "community_ai_feed_search",
-  "community_ai_feed_read",
   "community_resources_map",
   "community_resources_list",
   "community_resources_read",
@@ -379,9 +377,6 @@ export function runtimeCommunityContextReceiptResultSummary(payload: unknown): s
   const result = asRecord(receipt?.result);
   if (!result) return null;
   const itemCount = asFiniteInteger(result.item_count) ?? 0;
-  const refs = Array.isArray(result.refs) ? result.refs.length : 0;
-  const sourceIds = Array.isArray(result.source_ids) ? result.source_ids.length : 0;
-  const nodeIds = Array.isArray(result.node_ids) ? result.node_ids.length : 0;
   const retrievalIds = Array.isArray(result.retrieval_ids) ? result.retrieval_ids.length : 0;
   const referenceCount = new Set(
     [

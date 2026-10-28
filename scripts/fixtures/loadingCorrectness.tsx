@@ -234,8 +234,6 @@ function useProfileHarness(props: any) {
     setProfilesByUserId,
     getProfileSaveSession: () => props.session,
     profileSaveFailureMessage: "Save failed",
-    profileSaveUnauthenticatedErrorMessage:
-      props.profileSaveUnauthenticatedErrorMessage ?? null,
   } as any);
   return { ui, admin, cloudProfile, profiles };
 }

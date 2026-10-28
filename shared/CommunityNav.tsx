@@ -51,8 +51,6 @@ type CommunityNavProps = {
   isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
-  /** Guest mode (public funnel): tabs rendered with a lock glyph instead of an indicator dot. */
-  lockedTabs?: Partial<Record<CommunityTab, boolean>>;
   channels?: CommunityNavChannel[];
   isLoadingChannels?: boolean;
   selectedChannelSlug?: string | null;
@@ -133,17 +131,6 @@ function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
   target.focus();
 }
 
-function NavLockGlyph() {
-  return (
-    <span className="nav-item-lock" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="4" y="11" width="16" height="10" rx="2" />
-        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-      </svg>
-    </span>
-  );
-}
-
 function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
   const slug = String(slugRaw ?? "").trim();
   if (!slug) return null;
@@ -168,7 +155,6 @@ export const CommunityNav = memo(function CommunityNav({
   onSelectTab,
   memberNextStep,
   onCopyCommunityJoinLink,
-  lockedTabs = {},
   channels = [],
   isLoadingChannels = false,
   selectedChannelSlug = "general",
@@ -469,7 +455,7 @@ export const CommunityNav = memo(function CommunityNav({
                   {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.8} /> : <Hash size={17} strokeWidth={1.8} />}
                 </span>
                 <span className="nav-item-label">{channel.name}</span>
-                {lockedTabs.chat ? <NavLockGlyph /> : !isSelected && (indicator?.chat || indicator?.mentions) ? (
+                {!isSelected && (indicator?.chat || indicator?.mentions) ? (
                   <span className={`nav-item-dot${indicator.mentions ? " is-mention" : ""}`} aria-hidden="true" />
                 ) : null}
               </button>
@@ -582,7 +568,7 @@ export const CommunityNav = memo(function CommunityNav({
               <Brain size={18} strokeWidth={1.7} aria-hidden="true" />
             </span>
             <span className="nav-item-label">Knowledge</span>
-            {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+            {communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
           <button
             className={showActiveSelection && communityTab === "events" ? "nav-item active" : "nav-item"}
@@ -602,7 +588,7 @@ export const CommunityNav = memo(function CommunityNav({
               </svg>
             </span>
             <span className="nav-item-label">Events</span>
-            {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+            {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
         </>
       ) : null}

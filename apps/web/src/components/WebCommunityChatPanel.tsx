@@ -14,7 +14,6 @@ import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
   ProfileCommunityContext as SharedProfileCommunityContext,
-  CommunityTypingPresenceBundle as SharedCommunityTypingPresenceBundle,
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
 import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
@@ -65,7 +64,6 @@ import {
   type CommunityVisualIdentity,
 } from "../../../../shared/communityVisualIdentity";
 
-type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type UserProfile = SharedUserProfile;
 type ProfileCommunityContext = SharedProfileCommunityContext;
 type CommunityMentionMember = {
@@ -248,7 +246,6 @@ export type WebCommunityChatPanelProps = {
   canMentionEverybody: boolean;
   /** Authoritative community member count for the @everybody row copy. */
   everybodyMemberCount: number | null;
-  typingPresence: CommunityTypingPresenceBundle;
   onCommunityTypingSignal?: (rootId?: string | null) => void;
   onCommunityTypingClear?: (rootId?: string | null) => void;
   profilesByUserId: Record<string, UserProfile>;
@@ -293,7 +290,6 @@ export type WebCommunityChatPanelProps = {
   truncateReplyPreview: (value: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
   onOpenCommunityChatLightbox: (images: CommunityChatMediaImage[], index: number) => void;
-  onStartReply: (message: CommunityReplyTarget) => void;
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   drawerVoiceButtonProps: Omit<ComponentProps<typeof VoiceInputButton>, "onClick">;
   onCommunityVoiceInputClick: (
@@ -329,7 +325,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     isProfileSetupComplete,
     canMentionEverybody,
     everybodyMemberCount,
-    typingPresence,
     onCommunityTypingSignal,
     onCommunityTypingClear,
     profilesByUserId,
@@ -368,7 +363,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     truncateReplyPreview,
     renderTextWithLinks,
     onOpenCommunityChatLightbox,
-    onStartReply,
     voiceButtonProps,
     drawerVoiceButtonProps,
     onCommunityVoiceInputClick,
