@@ -84,8 +84,8 @@ Next: automatic member-join service rooms, using these existing channel and
 permission primitives. Increasing shared-room capacity is not part of this V1.
 
 Invite-only rooms are visible to invited active members and community
-owners/admins. Personal agents and external MCP inherit the authenticated
-member's current access; the community agent requires its own explicit grant.
+owners/admins. The community agent acting for a member and external MCP inherit
+the authenticated member's current access; the community agent requires its own explicit grant.
 This is not a new DM, membership, identity, or agent system.
 
 ## Canonical authority

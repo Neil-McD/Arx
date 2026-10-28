@@ -1,9 +1,10 @@
 # Member Ontology Contract v1
 
 Companion to `community-agent-cognition-contract-v1.md`. That contract declares
-the boundary this one formalizes: *personal memory is private by default and
-must not silently become community memory*; members *control private context
-and sharing scope*; personal agents *emit permissioned traces*. The member
+the boundary this one formalizes: a member's private conversation with the
+agent *is private by default and must not silently become community memory*;
+members *control private context and sharing scope*; the community agent acting
+for a member *emits permissioned traces*. The member
 ontology is the structured half of those permissioned traces — the typed,
 consented record of who a member is, kept queryable so any person or agent can
 be oriented about a member without ever reading past what that member allowed.
@@ -27,15 +28,16 @@ ledger, never a new store**.
 
 ## Position in the Existing Ontology
 
-- Extends the Member / Personal Agent entities in the cognition contract.
+- Extends the Member entity (and the community agent acting for a member) in
+  the cognition contract. There is no personal agent.
 - Lives beside — not inside — the community intelligence graph
   (`communityIntelligenceNodes`/`Edges`). Community knowledge may cite members
   through the graph's existing `person` reference edges; per-member facts stay
   in this ledger. Rationale: the platform layer of a member's ontology must
   travel across communities; the intelligence graph is community-scoped.
-- Replaces nothing: `personalMemoryItems` (freeform personal memory) and
-  `userProfileDetails` (display profile) remain. The ledger is the structured,
-  scoped, consented layer between them.
+- Replaces nothing: `userProfileDetails` (display profile) remains. The ledger
+  is the structured, scoped, consented layer beside it. (`personalMemoryItems`,
+  the retired personal agent's freeform memory, is a retiring table.)
 
 ## The Fact Record
 
@@ -213,10 +215,10 @@ must set its audience explicitly rather than reinterpret historical profile fact
 2. **Interview confirmation** → batch of `stated_interview` / `form_answer`
    facts, community scope, born approved-in-scope. The dormant
    `member_profile_confirm_facts` runtime primitive delegates to the same
-   confirmation mutation; one mutation, one approval marker. No current global
-   skill exposes it. A future profile-building flow must activate it explicitly.
-   The external Polynet MCP exposes a separate authenticated-self confirmation
-   boundary for the member's platform profile. It accepts only an approval
+   confirmation mutation; one mutation, one approval marker. Nothing exposes it
+   (skills were deleted). A future profile-building flow must activate it explicitly.
+   The external Polynet MCP (builders only) exposes a separate
+   authenticated-self confirmation boundary for the caller's platform profile. It accepts only an approval
    marker plus bounded `kind`/`body` pairs; the server fixes the verified user,
    platform scope, `stated_interview` provenance, confidence, evidence
    namespace, consent derivation, and member authorship. Exact marker retries

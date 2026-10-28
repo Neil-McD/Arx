@@ -36,7 +36,7 @@ This contract covers four cost domains:
 2. **Vercel:** builds, functions, bandwidth, image optimization, and public HTTP
    traffic.
 3. **AI and tool providers:** inference, search, crawl/browser, transcription,
-   email, and workspace providers.
+   and email providers.
 4. **Staging and test:** preview deployments, staging backends, canaries, test
    data, and reconnecting or stale clients.
 
@@ -108,7 +108,7 @@ Grounded on 2026-08-13 against production and `origin/main` commit
 | --- | --- | --- | --- |
 | Community attention subscription | one pooled realtime transport with one community and at most 10 stored channel/grant rows per reactive page | no fixed poll, no manual post-mutation refresh, and every execution is scope-bounded; total subscriptions scale with authorized pages | incomplete/failed assemblies are unknown, never fabricated all-read results; measure reads before adding a stored head projection |
 | Active-community presence | mount, resume, and every 30 seconds while visible | one in-flight call; 90-second lease; scan limit 64 | `keep, verify`: behavior is bounded; prove one effective lease per actor/community across multiple tabs |
-| Pending public join access | every 30 seconds while a signed-in visitor's approval request is pending on a visible funnel; also on focus or visibility return | one in-flight actor/community access read per tab; no call for anonymous, approved, denied, hidden, or departed routes; timer stops when pending ends or route unmounts | `keep, verified on staging`: approval changed the open funnel CTA without a reload; retain this bounded read until an existing realtime access path can replace it |
+| Pending public join access | every 30 seconds while a signed-in visitor's approval request is pending on a visible join page; also on focus or visibility return | one in-flight actor/community access read per tab; no call for anonymous, approved, denied, hidden, or departed routes; timer stops when pending ends or route unmounts | `keep, verified on staging`: approval changed the open join page's CTA without a reload; retain this bounded read until an existing realtime access path can replace it |
 | Founder checkout reconciliation | 1.5-second polling after checkout | canceled on teardown; route-specific | `keep, prove`: bounded commercial recovery must have an explicit attempt/time cap on every branch |
 | Checkout finalization | delayed retries after provider redirect | centralized timeout ref and terminal attempt rules | `keep, prove`: idempotent finalization is required; no indefinite retry |
 | Public Builder purchase attachment | 750-ms bounded post-auth checks | finite loop | `keep, prove`: commercial recovery only |
@@ -128,7 +128,7 @@ CI admits exactly these seven first-party `setInterval` call sites:
 | `shared/useCommunityTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
-| `apps/web/src/controllers/useWebPublicCommunityRouteController.ts` | backend pending-join access check | authenticated pending public funnel only; visible tab, 30-second minimum interval, one in-flight call; cleared when pending ends or route unmounts |
+| `apps/web/src/controllers/useWebPublicCommunityRouteController.ts` | backend pending-join access check | authenticated pending public join page only; visible tab, 30-second minimum interval, one in-flight call; cleared when pending ends or route unmounts |
 | `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
 
 The executable contract scans the first-party source corpus. A new interval or
@@ -146,7 +146,7 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 6 jobs:
+`convex/crons.ts` currently declares 8 jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
@@ -156,6 +156,8 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; verify due-window indexes and fanout accounting |
 | Community memory sweep | 6 hours | 500 oldest due communities across bounded indexed sources | AI-triggering job; idle communities are absent, metabolism is outcome-revision gated, and compiler admission retains founder funding plus per-community caps |
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
+| Advance due workflow milestones | 1 minute | 25 due timers | member-workflow job; goes when member workflows are removed |
+| Send due founder briefs | 15 minutes | 25 due briefs (`MAX_BRIEFS_PER_RUN`) | AI-triggering job: one founder-funded model call per brief, deterministic brief when funding or the model is unavailable |
 
 The existence of a batch limit does not prove cost safety. Each job still needs
 an indexed due-work query, bounded downstream fanout, idempotency where it

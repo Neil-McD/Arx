@@ -350,7 +350,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (Resend webhook),
   `communityWeeklyDigest*`, `communityMentionEmails`, `communityMentionEmailDelivery`.
 - **Crons:** "process pending email outbox" (5 min), "process pending mention
-  emails" (15 min), weekly digest.
+  emails" (15 min). The weekly digest has no cron (see below).
 - **Tables:** `emailOutbox`, `emailDeliveries`, `emailPreferences`,
   `communityWeeklyDigestSchedules`.
 - **Dormant by design:** the weekly digest worker

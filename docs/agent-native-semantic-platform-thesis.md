@@ -12,7 +12,7 @@ thesis does not maintain a parallel milestone ledger.
 ## Product definition
 
 Polynet is the community runtime for the agentic internet. It gives humans,
-personal agents, community agents, workflows, and connected applications one
+community agents, builders' own agent harnesses, and connected applications one
 shared environment in which to understand a community and act inside explicit
 authority boundaries.
 
@@ -81,19 +81,21 @@ State answers what exists and what is true now.
 Current principal identities are:
 
 - `user`: a human Polynet account;
-- `personal_agent`: an agent owned by and serving one user;
-- `community_agent`: the persistent agent identity owned by one community;
+- `community_agent`: the one persistent agent identity owned by one community;
+  it acts on its own or for one member within that member's authority
+  (`shared/polynetAuthority.ts`). The retired `personal_agent` identity remains
+  only on stored history;
 - `community`: the institution and authority boundary for shared context and
   collective intelligence;
 - `system`: trusted Polynet infrastructure.
 
 An independently enrolled agent or service principal is proposed future state,
-not current membership behavior. Current membership is user-based. A personal
-agent acting under a user does not silently become an independently enrolled
-member; an invocation preserves both identities:
+not current membership behavior. Current membership is user-based. The
+community agent acting for a user does not silently become an independently
+enrolled member; an invocation preserves both identities:
 
 ```text
-actor = personal agent
+actor = community agent (acting for the member)
 authority = user's current membership and entitlements
 ```
 
@@ -189,8 +191,8 @@ An active community should feel to an agent like a checked-out code repository:
 one explicit community context, one deterministic directory, progressive
 inspection, and no path that can escape into another community.
 
-The current staging namespace is deliberately bounded. Personal-agent and
-official-MCP requests begin at the platform root:
+The current staging namespace is deliberately bounded. Official-MCP requests
+(builders only) begin at the platform root:
 
 ```text
 /
@@ -327,7 +329,7 @@ mutation, and canonical authority is checked again at the operation boundary.
 
 ## Ownership and extension boundary
 
-The user owns their identity, profile ontology, and personal agent. The
+The user owns their identity and profile ontology. The
 community owns its namespace, community agent, shared resources, accepted
 intelligence, and future community-scoped workflows, app mounts, and surfaces.
 Polynet owns the deterministic authority, semantic, capability, and receipt
@@ -383,7 +385,7 @@ The labels mean:
 | Architecture element | Status | Current boundary |
 | --- | --- | --- |
 | Communities as primary authenticated context | `IMPLEMENTED` | browser Workspace destination is deleted; inbound legacy classification and protected execution substrate remain |
-| Separate personal-agent and community-agent identities | `IMPLEMENTED` | delegated personal authority does not create agent membership |
+| One community agent with separate member-delegated and autonomous authority | `IMPLEMENTED` | acting for a member does not create agent membership; the personal agent is retired |
 | Fail-closed community context and authority resolution | `IMPLEMENTED` | current bounded community read/capability seams are the reuse point |
 | Canonical cloud authority for identity, access, money, and history | `IMPLEMENTED` | remaining domain migrations are tracked separately |
 | Stable resource references and permissioned resource reads | `IMPLEMENTED` | exact stable-reference reads hydrate the sole canonical resource-content owner |

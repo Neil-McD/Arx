@@ -35,7 +35,8 @@ meeting ingestion, or a universal graph.
 A principal is an accountable identity:
 
 - `user`: a human Polynet account
-- `agent`: a personal agent or community-owned agent
+- `agent`: the community-owned agent (old rows may name the retired personal
+  agent, which read as the community agent acting for that member)
 - `community`: the community as an institutional authority
 - `system`: trusted Polynet infrastructure
 
@@ -69,8 +70,8 @@ Attribution modes are conceptually:
 - `system`: operational infrastructure produced the record
 
 Current chat supports direct human, autonomous community-agent and system
-contributions, plus bounded personal-agent/external-MCP publishing through
-`polynet_write`. Agent-assisted writes persist explicit `on_behalf_of` authority
+contributions, plus bounded publishing through `polynet_write` by the
+community agent acting for a member and by external MCP. Agent-assisted writes persist explicit `on_behalf_of` authority
 and the permitted credit decision. Authentication alone never implies authorship
 or human contribution credit. See `polynet-workspace-mcp-contract-v0.md`.
 Legacy evidence missing the required actor identity is projected as
@@ -163,7 +164,7 @@ be added before the product claims verbatim historical reconstruction.
 An episode is a bounded context in which evidence occurred:
 
 - a chat root and its replies
-- a direct or personal-agent conversation
+- a direct-message or Agent-page conversation
 - a community event or call occurrence
 - a workflow execution
 - an agent run
@@ -278,9 +279,11 @@ must evaluate every cited item independently.
 
 ### Lens Rules
 
-- Personal agent and authorized external harness: may traverse the requesting
-  user's authorized communities, one server-validated community context per
-  evidence request.
+- Authorized external harness (the MCP, builders only): may traverse the
+  requesting user's authorized communities, one server-validated community
+  context per evidence request.
+- The community agent acting for a member (Agent page, a site's `/ask`): one
+  community only, mounted by the server, using the member's authority.
 - Community Concierge: one community only, using the requester's authority.
 - Member-to-member profile: only shared-community or public evidence readable by
   the viewer.
@@ -321,15 +324,15 @@ projection  = source_only in v0
 The source interaction controls content and visibility. The source trace copies
 provenance for compilation. Retrieval always rechecks the source.
 
-### Scenario B: Personal Agent Or External Harness
+### Scenario B: Agent Acting For A Member Or External Harness
 
-Personal-agent, Concierge and MCP retrieval creates metadata-only audit records,
+Agent-page, Concierge and MCP retrieval creates metadata-only audit records,
 not community contributions. Memory search/read also creates actor-owned
 consumption receipts; those are operational evidence, not accepted learning.
 The retrieval audit retains principal, community, surface, capability, result
 references, and time; it does not copy raw search text.
 
-Bounded personal-agent or MCP publishing uses the explicit contribution contract:
+Bounded agent-for-member or MCP publishing uses the explicit contribution contract:
 
 ```txt
 actor       = the concrete agent or harness identity
@@ -368,7 +371,7 @@ Interaction search/read returns a deterministic lineage envelope:
 - authority: the actor user for direct human evidence, the community for the
   community agent, otherwise system
 - credit: direct human user or the autonomous community agent; no inferred human
-  credit for personal-agent/system evidence
+  credit for agent-for-member (including old `personal_agent`) or system evidence
 - origin: `community_chat`
 - episode: the root evidence reference
 - relation: the targeted reply when present, otherwise the root for replies
@@ -398,7 +401,7 @@ The interaction evidence proof must demonstrate:
 
 1. Stable root/reply evidence and episode references.
 2. Deterministic direct-human and autonomous-agent attribution.
-3. No inferred human credit for personal-agent or system evidence.
+3. No inferred human credit for agent-for-member or system evidence.
 4. Reply-to relations preserve target reply or root continuity.
 5. Retrieval produces metadata-only audit/consumption rows, not contributions.
    Agent publishing uses a separate explicit write and attribution contract.

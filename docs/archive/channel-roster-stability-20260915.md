@@ -47,7 +47,8 @@ subscription measurements, not production database-read or latency measurements.
   `scripts/mobile_member_roster_navigation.test.ts`,
   `convex/communityChannelParticipants.test.ts` (21 original tests, plus dedicated pagination regression tests).
 - Browser fixture mounts the real `ChannelRosterPanel` with controlled readers.
-  Run `./node_modules/.bin/vite --config scripts/fixtures/channel-roster/vite.config.mjs`,
+  (The fixture under `scripts/fixtures/channel-roster/` was removed on 2026-10-28
+  in #277; the steps below are historical.) Run `./node_modules/.bin/vite --config scripts/fixtures/channel-roster/vite.config.mjs`,
   open `http://127.0.0.1:5186/scripts/fixtures/channel-roster/index.html`, then click
   **Run lifecycle checks**. Reload before rerunning.
   All 34 browser assertions passed, including a three-page scroll/rebuild scenario. It checks delayed renewal, row/focus/scroll continuity, loaded memory continuity,

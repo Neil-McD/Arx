@@ -4,6 +4,14 @@ Status: staging architecture; canonical five-tool boundary implemented
 Scope: product architecture, memory system, community agent loop
 Last updated: 2026-08-08
 
+> **Personal agent retirement (Oct 2026):** there is one agent per community and
+> no member personal agent or personal memory (`personalMemoryItems` is a
+> retiring table). Where the architecture below says "personal agent", read "the
+> community agent acting for a member". The member-workflows and forms features
+> are being removed;
+> the proactive agent replaces them ([specs/proactive-community-agent-v0.md](specs/proactive-community-agent-v0.md)).
+> Skills and integrations are deleted.
+
 > **AI Feed retirement:** AI Feed is no longer a live product, repository, agent,
 > compiler-input, or MCP surface. Historical AI Feed lineage and schema remain
 > migration substrate until the bounded retirement census and data cleanup are
@@ -22,35 +30,32 @@ This document defines the intended architecture for community cognition, memory 
 
 ## Current Runtime Boundary
 
-There is one canonical community-agent identity with two runtime surfaces. The
-member's private agent dock is not one of them; it is a client of the member's
-personal agent runtime under the active community lens.
+There is one agent per community; members have no personal agent. The same
+community agent runs on three surfaces:
 
-1. `member_agent_dock`
-   - belongs to the signed-in member, not the community
-   - is exposed only inside an authenticated community surface; Discover,
-     settings, docs, onboarding, and operator pages have no member-agent dock
-   - uses one stable private channel per member across Polynet; the channel points to one active hidden conversation episode backed by the existing thread/message runtime
-   - every turn carries a bounded community-surface snapshot identifying the exact section
-   - the active episode thread holds the required server-validated community lens; changing communities changes the lens for subsequent turns without changing the agent, channel, episode, or prior messages
-   - the server rejects community surface snapshots that do not match the thread's validated lens; page context guides relevance but never grants authority
-   - every runtime run captures immutable surface context plus community-lens id and context-version provenance before execution
-   - `Start fresh conversation` closes the active episode and atomically moves the channel to a fresh episode without deleting or exposing a picker for prior transcripts
-   - community deletion makes that community unavailable as a future lens but does not close the member's global channel or episodes
-   - platform-hosted through the community's active Builder subscription or
-     canonical operator grant and server-bound to an authorized community lens;
-     members never supply inference credentials
+1. `member_agent_dock` (compatibility name for the Agent page)
+   - the community agent in a private conversation with one signed-in member,
+     inside one community: Studio's `/c/:slug/agent`, and a community site's
+     `/ask` through `/runtime/app/agent`
+   - acts within that member's current permissions
+     (`community_agent_for_member`, `shared/polynetAuthority.ts`)
+   - one active conversation per member and community
+     (`memberAgentChannels` -> `memberAgentEpisodes` -> `threads`, keys from
+     `shared/communityConversationIdentity.ts`); New conversation closes the
+     active episode and opens the next one atomically
+   - older `member-agent:` threads, including the retired personal agent's
+     global episodes, are read-only history
    - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
-   - prior episodes are never injected automatically; the dock can list bounded episode metadata and read one bounded private transcript only through member-owned recall tools
-   - recall spans the member's global episodes and retained legacy per-community episodes, returns lens provenance with user and assistant text, fails closed across members, and requires transcript evidence before the agent claims prior conversational memory
-   - retained legacy per-community episodes are read-only recall artifacts: no client gateway or public mutation may create, rotate, message, or execute them
-   - transcript loads commit only while their signed-in member generation and thread remain active
-   - receives the canonical five Polynet repository tools; community context
-     and authority are resolved by the server on every operation
+   - prior conversations are never injected automatically
+   - platform-hosted through the community's active Builder subscription or
+     canonical operator grant and server-bound to the conversation's community;
+     members never supply inference credentials
+   - receives the canonical five Polynet repository tools plus web research,
+     mounted to that one community; community context and authority are
+     resolved by the server on every operation
    - can publish to authorized community chat paths only when the
      signed-in member explicitly requests it
-   - cannot invoke workspace, Daytona, third-party MCP, or autonomous cognition
-     actions
+   - cannot invoke third-party MCP or autonomous cognition actions
 
 The community-owned runtime surfaces are:
 
@@ -59,8 +64,8 @@ The community-owned runtime surfaces are:
    - funded only by an active $79 Builder subscription attached to that community,
      or by the active platform-owner grant without a subscription
    - revalidates community access and source visibility for every turn
-   - receives the same canonical five Polynet repository tools as the personal
-     harness and official MCP
+   - receives the same canonical five Polynet repository tools as the Agent
+     page and official MCP
    - is server-mounted to exactly one community and always operates in the
      member lane, even when the operational sponsor is an owner or admin
    - can publish to that community's chat with community-agent
@@ -321,16 +326,16 @@ The architecture promise:
 
 There are two primary entities:
 
-1. Members and personal agents.
+1. Members.
 2. The community and its community agent.
 
-Builders, admins, and moderators are members with governance permissions. They are not a separate species in the product model. They instantiate and govern the community agent, but they remain members who have their own personal agents.
+Builders, admins, and moderators are members with governance permissions. They are not a separate species in the product model. They instantiate and govern the community agent, and they reach it the same way members do.
 
 ### Member
 
 A member:
 
-- has a personal agent
+- reaches the community agent on the Agent page, by @mention, or on a site's `/ask`
 - participates in communities
 - runs workflows
 - creates artifacts
@@ -339,17 +344,20 @@ A member:
 - produces activity and outcomes
 - controls private context and sharing scope
 
-### Personal Agent
+### The Community Agent Acting For A Member
 
-A personal agent acts for a member.
+There is no personal agent (retired Oct 2026). When the community agent works
+for one member (Agent page, a site's `/ask`), it acts within that member's
+current permissions and uses community playbooks, examples, warnings and
+retrieval context the member can access.
 
-It may be named, styled, and configured by the member. It can inherit community workflows, playbooks, examples, warnings, skills, and retrieval context when the member is inside a community they can access.
+Acting for a member, it does not directly write canonical community
+intelligence. It emits permissioned traces that the community cognition loop
+can evaluate.
 
-The personal agent does not directly write canonical community intelligence. It emits permissioned traces that the community cognition loop can evaluate.
-
-Personal memory belongs to this layer. It should store user preferences, goals, style, private notes, personal constraints, connected-app context, and private workflow history.
-
-Personal memory is private by default. It can influence the user's personal agent, but it must not silently become community memory.
+A member's private conversation with the agent is private by default. It must
+not silently become community memory. Personal memory (`personalMemoryItems`,
+`userMemorySettings`) is retired.
 
 ### Community
 
@@ -2306,7 +2314,7 @@ API in the application would expand the security and maintenance surface after
 its evidence had already served its purpose.
 
 The durable certificate is
-`docs/community-memory-kernel-staging-acceptance-20260716.md`, with a small
+`docs/archive/community-memory-kernel-staging-acceptance-20260716.md`, with a small
 machine-checked result fixture under `scripts/fixtures`. Requalification may
 temporarily restore an isolated acceptance action on a non-production branch,
 but the canonical deployed surface contains only the memory runtime itself.
@@ -2380,10 +2388,10 @@ Rules:
   response and have no first-party writer.
 
 The staging acceptance certificate for these rules is recorded in
-`docs/community-memory-retrieval-receipt-staging-acceptance-20260716.md`.
+`docs/archive/community-memory-retrieval-receipt-staging-acceptance-20260716.md`.
 Transactional outcome replay and concurrency acceptance is recorded separately
 in
-`docs/community-memory-outcome-idempotency-staging-acceptance-20260716.md`.
+`docs/archive/community-memory-outcome-idempotency-staging-acceptance-20260716.md`.
 
 ## Thirty-Third Implementation Slice: Guarded Cognition-Orphan Cleanup
 
@@ -2425,7 +2433,7 @@ mutations removed 218 target cognition rows across all fourteen phases while
 an untouched control and all product-source sentinels remained unchanged. The
 temporary acceptance function and flag were removed afterward. The durable
 certificate is
-`docs/community-cognition-cleanup-staging-acceptance-20260716.md`.
+`docs/archive/community-cognition-cleanup-staging-acceptance-20260716.md`.
 
 ## Thirty-Fourth Implementation Slice: Same-Day Cited Answer
 

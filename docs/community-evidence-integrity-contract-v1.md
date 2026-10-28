@@ -90,6 +90,6 @@ foreign, hidden, deleted, or nonexistent source.
 ## Explicit non-goals
 
 This contract does not add Events or transcripts, remove public tool aliases,
-define cross-community personal-agent search, or decide whether an already
+define cross-community agent search, or decide whether an already
 accepted memory must be erased after its source is later deleted. It prevents
 invalid evidence from moving forward and exposes legacy lineage honestly.

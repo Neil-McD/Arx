@@ -33,7 +33,7 @@ In scope:
 
 Out of scope for this first contract:
 
-- full funnel builder analytics
+- join-page conversion analytics beyond the KPIs below
 - broad BI dashboards
 - deep cohort analysis
 - builder coaching playbooks
@@ -82,9 +82,9 @@ Each diagnostic signal should be classified with one of these statuses:
 | Security and audit | privileged mutations, destructive actions, webhooks, operator access | Are trust boundaries holding? | Convex critical audit, Sentry, Stripe | permission denied events, webhook signature failures, account deletion events, operator role changes, suspicious retries | partial |
 | Runtime and AI | native agent turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
 | Tools and Polynet MCP | fixed product tools and official MCP requests | Can native tools and the official external gateway execute safely? | Convex runtime events, Sentry spans, MCP request diagnostics | tool success rate, tool failures by tool, MCP auth/access failures, timeout rate | partial |
-| Skills and harness | Settings-managed personal/community skills and fixed runtime tools | Are skills and fixed tools projected correctly? | Convex, PostHog, Sentry | skill resolution failures, duplicate skill conflicts, runtime tool-policy mismatches | partial |
-| Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
-| Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
+| Harness | fixed runtime tools (skills were deleted Oct 2026) | Are fixed tools projected correctly? | Convex, Sentry | runtime tool-policy mismatches | partial |
+| Community core | chat, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
+| Funnel and join | public join page, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
 | Billing and entitlements | founder funding, community subscriptions, application fees, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, founder allowance reservation/settlement failures, payout blocked count | partial |
 | Operator panel health | operator panel load, snapshots, attention queue | Can the operator trust the panel? | Convex, Sentry, proof scripts | snapshot freshness, query failures, missing evidence, unknown error codes, stale diagnostics | partial |
 
@@ -144,12 +144,10 @@ Each diagnostic signal should be classified with one of these statuses:
 | Polynet MCP auth failures | Official provider requests rejected by OAuth/authentication reason | MCP HTTP logs and Sentry spans | Convex, Sentry | now |
 | Polynet MCP access failures | Official provider calls rejected by membership, entitlement, or capability reason | community access evidence and MCP HTTP logs | Convex, Sentry | now |
 
-### Skills and Harness
+### Harness
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
-| Skill resolution success | Personal and community skill selection resolves deterministically | runtime skill-resolution evidence | Convex | now |
-| Duplicate skill conflicts | Ambiguous or duplicated skill identities in one lens | runtime skill-resolution evidence | Convex | now |
 | Runtime tool-policy mismatch | Exposed fixed tools without a declared policy, or declared tools not exposed | contract proofs and runtime evidence | Convex, GitHub Actions | now |
 
 ### Community Core
@@ -166,10 +164,10 @@ Each diagnostic signal should be classified with one of these statuses:
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
-| Funnel visits | Public funnel visits in selected window | Convex public visit events and PostHog | Convex, PostHog | now |
+| Funnel visits | Public join-page visits in selected window | Convex public visit events and PostHog | Convex, PostHog | now |
 | Join starts | Join requests or checkout starts | Convex and PostHog | Convex, PostHog | now |
 | Join completions | Approved/joined/paid unlocked memberships | Convex membership/access state | Convex | now |
-| Conversion rate | Join completions divided by funnel visits | Convex analytics rollup | Convex | now |
+| Conversion rate | Join completions divided by join-page visits | Convex analytics rollup | Convex | now |
 | Pending claim age | Oldest unresolved purchase claim | Convex purchase claims | Convex | now |
 | Checkout failure rate | Failed/expired checkouts by surface | Stripe/Convex checkout sessions | Stripe, Convex | now |
 
@@ -281,7 +279,7 @@ The operator panel should project diagnostics in this order:
 2. Attention queue: the highest-leverage issues to inspect now
 3. Subsystem cards: auth, security, runtime, Polynet MCP/tools, billing, deploy
 4. Evidence feed: recent critical events with severity, subsystem, actor/context, timestamp, evidence ID
-5. Drill-out links: Sentry issue/trace, Vercel deploy/logs, Stripe object, Convex row/function/log, workspace process/logs
+5. Drill-out links: Sentry issue/trace, Vercel deploy/logs, Stripe object, Convex row/function/log
 
 The panel should not show every metric by default. Metrics should earn a place by answering an operator question.
 
