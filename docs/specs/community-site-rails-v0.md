@@ -44,13 +44,13 @@ behave; the site owns how they look.**
 The edge already injects `/__polynet/ui.js` and shows `<polynet-account>` on
 any page without one. It grows into the rails:
 
-- **Messages.** Opens a drawer inside the site: the member's inbox,
-  conversations, typing, read state, attachments and "new message". See
-  *Private messages stay private* below.
+- **Messages.** Opens the member's inbox on the site's private twin, in the
+  site's own frame: conversations, typing, read state, attachments and "new
+  message". See *Messages (3b-3)* and *Private messages stay private* below.
 - **Profiles.** Clicking any person anywhere (a post, a member list, an
   @-mention) opens their profile drawer: avatar, name, handle, bio and links
   (through the existing profile privacy filter), their role here, and a
-  **Message** button.
+  **Message** button (the conversation with them on the twin's Messages).
 - **Your communities.** Listed in the menu; each opens that community's site,
   or its Studio page when it has none.
 - **Discover** (since 3a-3) is the site's own `/discover`, inside its frame.
@@ -142,7 +142,8 @@ shell's menu ("In this club") and the checks.
 | `/discover` | every published community, public; the shell's "Discover communities" | 3a-3 (now) |
 | `/communities` | Your communities: every community the member is in, each linking to its own site (else Studio) | 3b-1 (now), private twin |
 | `/settings` | the member's settings: profile, this community's notifications, leave, sign out (see *Settings* below) | 3b-2 (now), private twin |
-| `/messages`, `/join` | personal pages ("coming soon" in the twin's frame until built) | 3b, private twin |
+| `/messages`, `/messages/<conversation>`, `/messages/new?to=<handle>` | the member's direct messages (see *Messages* below) | 3b-3 (now), private twin |
+| `/join` | personal page ("coming soon" in the twin's frame until built) | 3b, private twin |
 | `/manage` | community admin | after the personal pages |
 
 Until `/manage` exists, "Manage this community" opens Studio's community
@@ -187,8 +188,7 @@ first-party cookie everywhere.
   session minted there is recorded as `kind: "private"`. Every personal
   endpoint requires a private session, and the site answers them 404.
   Everything the site's endpoints do works on both.
-- **Not yet:** Messages and Join are "coming soon" placeholders in the twin's
-  frame; the menu's Messages still opens Studio.
+- **Not yet:** Join is a "coming soon" placeholder in the twin's frame.
 
 ### Settings (3b-2)
 
@@ -221,6 +221,56 @@ Studio's:
 Every settings endpoint is `/__polynet/me/*` on the twin only (same-origin,
 writes as small JSON POSTs), forwarded to `/runtime/app/me/*`, which answers
 only a private session of someone still in the community.
+
+### Messages (3b-3)
+
+The menu's Messages opens the twin's `/messages`; a profile's **Message**
+button (on the site and on the twin) opens `/messages/new?to=<handle>` there,
+in the same tab, which shows their existing conversation (the address becomes
+`/messages/<conversation>`) or, when Studio's rules let the member message
+them (a shared community, no block either way), an empty conversation that
+the first message creates. Where a site has no twin, both open Studio's inbox.
+It shows and does what Studio's DMs do, through the same helpers
+(`convex/directMessages.ts`: Studio's functions are thin wrappers over them),
+so every rule, rate limit, block and refusal is Studio's:
+
+- **Inbox:** every conversation, newest first, with the other person's picture
+  and name, the last message, unread counts and muted marks; a search by name.
+  Beside the conversation on a wide page, instead of it on a narrow one.
+- **Conversation:** each at its own address. Messages by day, links in text,
+  images and files; "Load earlier messages"; "Seen" once the other person has
+  read the member's last message; read up to the newest message shown while
+  the page is visible; typing both ways (Studio's lease, renewed while
+  typing); a send that fails stays on screen with Studio's words and Retry
+  (the same key, so the server never takes it twice).
+- **Attachments:** Studio's flow and limits (8 files, 10 MB each, 25 MB in
+  all, Studio's types). The twin's send takes only a file uploaded in the
+  last hour, with the size and type storage recorded.
+- **Mute and block:** both on the conversation; block and unblock ask first.
+  Blocked, the box is replaced by a note; the other person isn't told.
+
+**Live, and why it is safe.** The page subscribes to
+`communityLive:watchMessages` on Polynet's live updates with the twin
+session's watch token (derived from its session token, handed out only by the
+twin's own `/__polynet/auth/session`, same-origin). The query answers only a
+token whose session was minted as private on an origin that is still the
+private twin, of someone still in the community; the site's watch token, which
+the site's code holds, is refused. It returns only a version (for the inbox,
+or for one of the member's own conversations) and, in a conversation, whether
+the other person is typing: no text, names or ids. A new version makes the
+page re-read through `/__polynet/me/messages*`. The twin's policy allows
+`connect-src` to exactly that one Polynet origin (`https` and `wss`). Without
+live updates the page still re-reads whenever the member returns to the tab.
+(Short polling through the edge was the alternative: simpler to reason about,
+but slower and a steady load on every open tab; the watch carries nothing a
+private route wouldn't.)
+
+Every Messages endpoint is `/__polynet/me/messages*` on the twin only
+(same-origin, reads as GETs, writes as small JSON POSTs, the send up to 24 KB),
+forwarded to `/runtime/app/me/messages*`, which answers only a private session
+of someone still in the community. A conversation is named by its id and a
+person by their handle; no user id or storage id reaches the page, and
+another member's conversation reads as no conversation at all.
 
 ## Private messages stay private
 
@@ -279,8 +329,8 @@ the community deletes them (existing `deleteCommunityPresenceForUser`).
    typing, threads, reactions, attachments) and `<polynet-members>`; the
    theming contract; `checkSite` enforcement; guide and skills rewritten.
 3. **Shell rails**: the profile drawer, the private twin (3b-1: the stripped
-   frame, its session and Your communities; 3b-2: Settings; then Messages
-   and Join on it), and Studio's back bar.
+   frame, its session and Your communities; 3b-2: Settings; 3b-3: Messages;
+   then Join on it), and Studio's back bar.
 4. **Recommended blocks**: online, knowledge, events, courses, ask.
 5. **Proof**: a fresh agent builds Sunrise Climbing Club from the guide alone,
    twice, with different design directions. Every block is present and both

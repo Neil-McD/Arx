@@ -197,10 +197,12 @@ async function hashes(texts: string[]): Promise<string[]> {
 }
 
 // What a twin page may load: scripts only from the twin itself (Polynet's), the
-// site's stylesheets, fonts, images and media, Google Fonts, and avatars from
-// Polynet's storage. It talks only to itself and, for a new profile photo, to
-// Polynet's storage (Studio's upload flow). Nothing frames it, nothing posts
-// away from it, no <base>.
+// site's stylesheets, fonts, images and media, Google Fonts, and avatars and
+// attachments from Polynet's storage. It talks only to itself, to Polynet's
+// storage (Studio's upload flow, for a profile photo or a message's file) and,
+// over a WebSocket, to the same Polynet deployment's live updates (Messages:
+// versions only; the page re-reads through its own origin). Nothing frames it,
+// nothing posts away from it, no <base>.
 export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | null; styleHashes?: string[]; attributeHashes?: string[] }): string {
   const styleHashes = [...(args.styleHashes ?? []), ...(args.attributeHashes ?? [])];
   const style = ["'self'", args.siteOrigin, "https://fonts.googleapis.com", ...styleHashes];
@@ -212,12 +214,17 @@ export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | n
     `font-src ${args.siteOrigin} https://fonts.gstatic.com data:`,
     `img-src 'self' data: ${args.siteOrigin}${args.storageOrigin ? ` ${args.storageOrigin}` : ""}`,
     `media-src ${args.siteOrigin}`,
-    `connect-src 'self'${args.storageOrigin ? ` ${args.storageOrigin}` : ""}`,
+    `connect-src 'self'${args.storageOrigin ? ` ${args.storageOrigin} ${liveSocketOrigin(args.storageOrigin)}` : ""}`,
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "object-src 'none'",
   ].join("; ");
+}
+
+// The deployment's live-update socket: the storage origin's own host, over wss.
+function liveSocketOrigin(storageOrigin: string): string {
+  return storageOrigin.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
 }
 
 // On every twin response: nothing outside this origin may embed or read it,

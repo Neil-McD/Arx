@@ -14,7 +14,7 @@
 //                      private twin, <slug>--me<suffix>.<sites domain> (twin.ts),
 //                      which draws the site's frame with every script removed, so
 //                      only Polynet's code runs there. The site sends them there.
-//   /__polynet/me/*    personal data and settings, on the twin only, for its own session
+//   /__polynet/me/*    personal data, settings and messages, on the twin only, for its own session
 //   everything else    the community's own front end (a user Worker with static assets);
 //                      on the twin, a redirect to the site
 //
@@ -39,6 +39,7 @@ import { ASK_SOURCE } from "./blocks/ask";
 import { DISCOVER_SOURCE } from "./blocks/discover";
 import { PERSONAL_SOURCE } from "./blocks/personal";
 import { SETTINGS_SOURCE } from "./blocks/settings";
+import { MESSAGES_SOURCE } from "./blocks/messages";
 import {
   plainStyleHash, plainTwinPage, stripFrame, twinPageHeaders, twinPolicy, withTwinHeaders, type StripRewriterClass,
 } from "./twin";
@@ -57,7 +58,7 @@ const BLOCKS: Record<string, string> = {
   discover: DISCOVER_SOURCE,
 };
 // Blocks that only the private twin serves: they read the member's own data.
-const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE };
+const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE, messages: MESSAGES_SOURCE };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
@@ -204,15 +205,41 @@ const MEMBER_PATHS = new Set([`${AUTH_PREFIX}session`, `${AUTH_PREFIX}logout`, "
 // The member's own data: only the private twin answers it, only to its own pages.
 const PERSONAL_API_PREFIX = "/__polynet/me/";
 const MY_COMMUNITIES_PATH = "/__polynet/me/communities";
-// Settings: reads are GET; writes are POST with a small JSON body.
-const MY_SETTINGS: Record<string, { method: "GET" | "POST"; backend: string; maxBytes: number }> = {
+// Settings and Messages: reads are GET (query: what of the address the backend
+// is sent, or null to refuse it); writes are POST with a small JSON body.
+type MyRoute = { method: "GET" | "POST"; backend: string; maxBytes: number; query?: (url: URL) => Record<string, unknown> | null };
+const MY_SETTINGS: Record<string, MyRoute> = {
   "/__polynet/me/settings": { method: "GET", backend: "/runtime/app/me/settings", maxBytes: 0 },
-  "/__polynet/me/handle": { method: "GET", backend: "/runtime/app/me/handle", maxBytes: 0 },
+  "/__polynet/me/handle": { method: "GET", backend: "/runtime/app/me/handle", maxBytes: 0,
+    query: (url) => ({ handle: (url.searchParams.get("handle") ?? "").slice(0, 64) }) },
   "/__polynet/me/profile": { method: "POST", backend: "/runtime/app/me/profile", maxBytes: 8 * 1024 },
   "/__polynet/me/avatar/upload": { method: "POST", backend: "/runtime/app/me/avatar_upload", maxBytes: 1024 },
   "/__polynet/me/avatar": { method: "POST", backend: "/runtime/app/me/avatar", maxBytes: 1024 },
   "/__polynet/me/notifications": { method: "POST", backend: "/runtime/app/me/notifications", maxBytes: 1024 },
   "/__polynet/me/leave": { method: "POST", backend: "/runtime/app/me/leave", maxBytes: 1024 },
+};
+// A conversation by its id, a person by their handle: the only names the page uses.
+const CONVERSATION_ID_PATTERN = /^[A-Za-z0-9]{20,40}$/;
+const HANDLE_PATTERN = /^@?[A-Za-z0-9_-]{1,32}$/;
+const MY_MESSAGES: Record<string, MyRoute> = {
+  "/__polynet/me/messages": { method: "GET", backend: "/runtime/app/me/messages", maxBytes: 0, query: () => ({}) },
+  "/__polynet/me/messages/conversation": { method: "GET", backend: "/runtime/app/me/messages/conversation", maxBytes: 0, query: (url) => {
+    const id = url.searchParams.get("id") ?? "";
+    const before = url.searchParams.get("before");
+    if (!CONVERSATION_ID_PATTERN.test(id) || (before !== null && !/^[1-9][0-9]{0,9}$/.test(before))) return null;
+    return { conversation_id: id, ...(before !== null ? { before_seq: Number(before) } : {}) };
+  } },
+  "/__polynet/me/messages/start": { method: "GET", backend: "/runtime/app/me/messages/start", maxBytes: 0, query: (url) => {
+    const handle = url.searchParams.get("to") ?? "";
+    return HANDLE_PATTERN.test(handle) ? { handle } : null;
+  } },
+  // Text up to Studio's 4,000 characters (each up to 4 bytes), and up to 8 attachments.
+  "/__polynet/me/messages/send": { method: "POST", backend: "/runtime/app/me/messages/send", maxBytes: 24 * 1024 },
+  "/__polynet/me/messages/upload": { method: "POST", backend: "/runtime/app/me/messages/upload", maxBytes: 1024 },
+  "/__polynet/me/messages/read": { method: "POST", backend: "/runtime/app/me/messages/read", maxBytes: 1024 },
+  "/__polynet/me/messages/mute": { method: "POST", backend: "/runtime/app/me/messages/mute", maxBytes: 1024 },
+  "/__polynet/me/messages/typing": { method: "POST", backend: "/runtime/app/me/messages/typing", maxBytes: 1024 },
+  "/__polynet/me/messages/block": { method: "POST", backend: "/runtime/app/me/messages/block", maxBytes: 1024 },
 };
 
 function isMemberEndpoint(pathname: string): boolean {
@@ -632,12 +659,14 @@ async function proxyMyCommunities(request: Request, url: URL, route: Route, env:
   return json(200, { ok: true, communities });
 }
 
-// Settings, for the twin's own page: each call forwarded with the twin's
-// session (the backend refuses any other kind and runs Studio's own cores),
-// writes only as small same-origin JSON, and only the fields the page shows
-// leave the edge.
-async function proxyMySettings(request: Request, url: URL, env: Env): Promise<Response> {
-  const route = MY_SETTINGS[url.pathname];
+// Settings and Messages, for the twin's own pages: each call forwarded with
+// the twin's session (the backend refuses any other kind and runs Studio's own
+// cores), writes only as small same-origin JSON, and only the fields the page
+// shows leave the edge.
+async function proxyMine(
+  request: Request, url: URL, env: Env, route: MyRoute, shape: (path: string, answer: Record<string, unknown>, env: Env) => Record<string, unknown> | null,
+  unavailable: string,
+): Promise<Response> {
   if (request.method !== route.method) return json(405, { ok: false, code: "method_not_allowed" });
   const token = readCookie(request, SESSION_COOKIE);
   if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
@@ -647,9 +676,11 @@ async function proxyMySettings(request: Request, url: URL, env: Env): Promise<Re
     if (!/^application\/json(;|$)/i.test(request.headers.get("content-type") ?? "")) return json(415, { ok: false, code: "json_required" });
     if (Number(request.headers.get("content-length") ?? 0) > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
     body = await request.text();
-    if (body.length > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
-  } else if (url.pathname === "/__polynet/me/handle") {
-    body = JSON.stringify({ handle: (url.searchParams.get("handle") ?? "").slice(0, 64) });
+    if (new TextEncoder().encode(body).length > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
+  } else if (route.query) {
+    const query = route.query(url);
+    if (!query) return json(400, { ok: false, code: "invalid_request" });
+    body = JSON.stringify(query);
   }
   const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}${route.backend}`, {
     method: "POST",
@@ -662,11 +693,11 @@ async function proxyMySettings(request: Request, url: URL, env: Env): Promise<Re
   const answer = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
   if (upstream.status === 401) return json(401, { ok: false, code: "sign_in_required" }, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
   if (!upstream.ok || !answer || answer.ok !== true) {
-    const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : "settings_unavailable";
+    const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : unavailable;
     return json(upstream.ok ? 502 : upstream.status, { ok: false, code });
   }
-  const shaped = mySettingsAnswer(url.pathname, answer, env);
-  return shaped ? json(200, { ok: true, ...shaped }) : json(502, { ok: false, code: "settings_unavailable" });
+  const shaped = shape(url.pathname, answer, env);
+  return shaped ? json(200, { ok: true, ...shaped }) : json(502, { ok: false, code: unavailable });
 }
 
 const SETTINGS_ROLES = new Set(["owner", "admin", "moderator", "member"]);
@@ -717,6 +748,79 @@ function mySettingsAnswer(path: string, answer: Record<string, unknown>, env: En
   }
 }
 
+// Messages: only what the page draws leaves the edge, whatever the backend
+// sends. People by name, handle and avatar; files only at Polynet's storage.
+function myMessagesAnswer(path: string, answer: Record<string, unknown>, env: Env): Record<string, unknown> | null {
+  const storage = storageOrigin(env);
+  const stored = (value: unknown) => (typeof value === "string" && storage && value.startsWith(`${storage}/api/storage/`) ? value : null);
+  const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
+  const count = (value: unknown) => Math.max(0, Math.floor(Number(value) || 0));
+  const id = (value: unknown) => (typeof value === "string" && CONVERSATION_ID_PATTERN.test(value) ? value : null);
+  const person = (raw: unknown) => {
+    if (!raw || typeof raw !== "object") return null;
+    const row = raw as Record<string, unknown>;
+    const handle = typeof row.handle === "string" && /^[a-z0-9_-]{1,32}$/.test(row.handle) ? row.handle : null;
+    return { name: text(row.name, 120), handle, avatar_url: stored(row.avatar_url) };
+  };
+  const conversation = (raw: unknown) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const last = row.last_message && typeof row.last_message === "object" ? row.last_message as Record<string, unknown> : null;
+    const conversationId = id(row.id);
+    if (!conversationId) return null;
+    return {
+      id: conversationId, peer: person(row.peer), community_name: text(row.community_name, 120),
+      unread_count: count(row.unread_count), muted: row.muted === true, blocked: row.blocked === true,
+      last_seq: count(row.last_seq), read_seq: count(row.read_seq), peer_read_seq: count(row.peer_read_seq),
+      last_message: last && typeof last.preview === "string"
+        ? { preview: last.preview.slice(0, 160), from_me: last.from_me === true, at: text(last.at, 40) } : null,
+    };
+  };
+  const message = (raw: unknown) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const attachments = (Array.isArray(row.attachments) ? row.attachments : []).slice(0, 8).flatMap((item) => {
+      const file = (item ?? {}) as Record<string, unknown>;
+      const url = stored(file.url);
+      return url ? [{
+        id: text(file.id, 64) ?? "", name: text(file.name, 256) ?? "attachment", kind: file.kind === "image" ? "image" : "file",
+        mime: text(file.mime, 160), size: count(file.size), url,
+      }] : [];
+    });
+    const key = typeof row.client_message_id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(row.client_message_id) ? row.client_message_id : null;
+    return {
+      id: text(row.id, 64) ?? "", seq: count(row.seq), from_me: row.from_me === true, text: text(row.text, 4000) ?? "",
+      attachments, created_at: text(row.created_at, 40) ?? "", client_message_id: key,
+    };
+  };
+  switch (path) {
+    case "/__polynet/me/messages":
+      return Array.isArray(answer.conversations)
+        ? { conversations: answer.conversations.slice(0, 50).map(conversation).filter((row) => row !== null) } : null;
+    case "/__polynet/me/messages/conversation": {
+      const shaped = conversation(answer.conversation);
+      return shaped && Array.isArray(answer.messages)
+        ? { conversation: shaped, messages: answer.messages.slice(0, 50).map(message), has_more: answer.has_more === true } : null;
+    }
+    case "/__polynet/me/messages/start":
+      return { conversation_id: id(answer.conversation_id), peer: person(answer.peer) };
+    case "/__polynet/me/messages/send": {
+      const conversationId = id(answer.conversation_id);
+      return conversationId ? { conversation_id: conversationId, message: message(answer.message) } : null;
+    }
+    case "/__polynet/me/messages/upload": {
+      // The file goes straight to Polynet's storage, nowhere else.
+      const upload = typeof answer.upload_url === "string" && storage && answer.upload_url.startsWith(`${storage}/api/storage/upload?`) ? answer.upload_url : null;
+      return upload ? { upload_url: upload } : null;
+    }
+    case "/__polynet/me/messages/typing":
+      return { typing: answer.typing === true };
+    default: {
+      // read, mute and block answer with the conversation as it now is.
+      const shaped = conversation(answer.conversation);
+      return shaped ? { conversation: shaped } : null;
+    }
+  }
+}
+
 // Where Polynet's files (avatars) are served from: the deployment's storage.
 function storageOrigin(env: Env): string | null {
   try {
@@ -764,7 +868,8 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (url.pathname === "/__polynet/sdk.js") return polynetAsset(SDK_SOURCE, "text/javascript", 300);
   if (url.pathname === "/__polynet/llms.txt") return polynetAsset(LLMS_TXT, "text/plain", 300);
   if (url.pathname === MY_COMMUNITIES_PATH) return await proxyMyCommunities(request, url, route, env);
-  if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMySettings(request, url, env);
+  if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMine(request, url, env, MY_SETTINGS[url.pathname], mySettingsAnswer, "settings_unavailable");
+  if (Object.hasOwn(MY_MESSAGES, url.pathname)) return await proxyMine(request, url, env, MY_MESSAGES[url.pathname], myMessagesAnswer, "messages_unavailable");
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
   if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
   if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);
@@ -816,8 +921,9 @@ async function serveTwin(
     if (!read || SCRIPT_DESTINATIONS.has(request.headers.get("sec-fetch-dest") ?? "")) return new Response("Not found", { status: 404 });
     return new Response(null, { status: 302, headers: { Location: `${place.siteOrigin}${url.pathname}${url.search}`, "Cache-Control": "no-store" } });
   }
-  if (url.pathname !== personal.path) {
-    return new Response(null, { status: 307, headers: { Location: personal.path + url.search, "Cache-Control": "no-store" } });
+  // One address per page: /messages/ is /messages.
+  if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+    return new Response(null, { status: 307, headers: { Location: url.pathname.slice(0, -1) + url.search, "Cache-Control": "no-store" } });
   }
   // A member's page with no session here yet: the same silent hop the site uses.
   // (A session the backend later refuses shows the page's own sign-in instead, so this never loops.)

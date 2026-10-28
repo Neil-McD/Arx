@@ -22,6 +22,15 @@ import {
   COMMUNITY_APP_MY_AVATAR_PATH,
   COMMUNITY_APP_MY_NOTIFICATIONS_PATH,
   COMMUNITY_APP_MY_LEAVE_PATH,
+  COMMUNITY_APP_MY_MESSAGES_PATH,
+  COMMUNITY_APP_MY_CONVERSATION_PATH,
+  COMMUNITY_APP_MY_MESSAGE_START_PATH,
+  COMMUNITY_APP_MY_MESSAGE_SEND_PATH,
+  COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH,
+  COMMUNITY_APP_MY_MESSAGE_READ_PATH,
+  COMMUNITY_APP_MY_MESSAGE_MUTE_PATH,
+  COMMUNITY_APP_MY_MESSAGE_TYPING_PATH,
+  COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH,
 } from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import {
@@ -65,6 +74,8 @@ const modules = import.meta.glob([
   "./emailPreferences.ts",
   "./polynetCanonicalReceipts.ts",
   "./profiles.ts",
+  "./directMessages.ts",
+  "./directMessageEmails.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -981,4 +992,235 @@ test("signing out of the twin ends the site's session in the same browser, and b
   expect(await alive(siteToken, f.site)).toBe(false);
   // The member's other devices stay signed in.
   expect(await alive(otherDevice, f.site)).toBe(true);
+});
+
+// Messages on the twin: the member and the owner share apps-community; the
+// outsider shares nothing with either until a test lets them in.
+async function messagesFixture() {
+  const f = await twinFixture();
+  const member = await f.signInAt(f.twin);
+  const owner = await f.signInAt(f.twin, "apps-owner");
+  const send = (token: string, body: Record<string, unknown>) =>
+    f.me(COMMUNITY_APP_MY_MESSAGE_SEND_PATH, token, { text: "", ...body });
+  const conversation = (token: string, id: string, extra: Record<string, unknown> = {}) =>
+    f.me(COMMUNITY_APP_MY_CONVERSATION_PATH, token, { conversation_id: id, ...extra });
+  const inbox = async (token: string) => (await f.me(COMMUNITY_APP_MY_MESSAGES_PATH, token)).body;
+  const letIn = (handle: "apps-outsider") => f.t.run(async (c) => {
+    const user = await c.db.query("users").withIndex("by_authSubject", (q) => q.eq("authSubject", `${handle}-subject`)).first();
+    await c.db.insert("communityMemberships", {
+      communityId: f.ids.communityId, userId: user!._id, role: "member", accessSource: "free_grant", active: true,
+      activationSequence: 2, activatedAt: 1, createdAt: 1, updatedAt: 1,
+    });
+  });
+  return { ...f, member, owner, send, conversation, inbox, letIn };
+}
+
+test("twin messages: every route answers only a private session of a member here", async () => {
+  const f = await messagesFixture();
+  const siteToken = await f.signInAt(f.site);
+  const started = await f.send(f.member, { to: "apps-owner", text: "Hi" });
+  const id = started.body.conversation_id as string;
+  const routes: Array<[string, unknown]> = [
+    [COMMUNITY_APP_MY_MESSAGES_PATH, {}], [COMMUNITY_APP_MY_CONVERSATION_PATH, { conversation_id: id }],
+    [COMMUNITY_APP_MY_MESSAGE_START_PATH, { handle: "apps-owner" }], [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: "x" }],
+    [COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, { conversation_id: id }], [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: 1 }],
+    [COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, { conversation_id: id, muted: true }], [COMMUNITY_APP_MY_MESSAGE_TYPING_PATH, { conversation_id: id, typing: true }],
+    [COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH, { conversation_id: id, blocked: true }],
+  ];
+  for (const [path, body] of routes) {
+    // The site's own session, whatever its page's code asks; the twin's session from the site's origin; no edge.
+    expect(await f.me(path, siteToken, body, f.site), path).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+    expect((await f.me(path, f.member, body, f.site)).status, path).toBe(401);
+    expect((await f.me(path, f.member, body, f.twin, "wrong")).status, path).toBe(401);
+  }
+  // Nothing changed: one message, nobody muted, blocked or typing.
+  expect(await f.t.run((c) => c.db.query("dmMessages").collect())).toHaveLength(1);
+  expect(await f.t.run((c) => c.db.query("dmBlocks").collect())).toEqual([]);
+  expect(await f.t.run((c) => c.db.query("dmTypingPresence").collect())).toEqual([]);
+  expect((await f.t.run((c) => c.db.query("dmParticipants").collect())).every((row) => !row.mutedAt)).toBe(true);
+  // A session that outlives its member's membership reads and writes nothing here.
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  for (const [path, body] of routes) {
+    expect(await f.me(path, f.member, body), path).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  }
+  // Malformed requests never reach a core.
+  for (const [path, body] of [
+    [COMMUNITY_APP_MY_CONVERSATION_PATH, { conversation_id: "../x" }], [COMMUNITY_APP_MY_MESSAGE_START_PATH, { handle: "no spaces" }],
+    [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, to: "apps-owner", text: "both" }],
+    [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { text: "neither" }], [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: 5 }],
+    [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: "x", attachments: [{ storage_id: "a", name: "", type: "file" }] }],
+    [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: -1 }], [COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, { conversation_id: id, muted: "yes" }],
+  ] as const) {
+    expect(await f.me(path, f.owner, body), JSON.stringify(body)).toMatchObject({ status: 400, body: { code: "invalid_request" } });
+  }
+});
+
+test("twin messages: start, send, read and mute through Studio's rules, with no user or storage ids", async () => {
+  const f = await messagesFixture();
+  // Message @handle: nobody to open yet, so who they are; nothing is created.
+  expect(await f.me(COMMUNITY_APP_MY_MESSAGE_START_PATH, f.member, { handle: "@Apps-Owner" })).toEqual({ status: 200, body: {
+    ok: true, conversation_id: null, peer: { name: "apps-owner", handle: "apps-owner", avatar_url: "https://example.com/apps-owner.png" },
+  } });
+  expect(await f.t.run((c) => c.db.query("dmConversations").collect())).toEqual([]);
+  // Studio's rules for who may message whom: a shared community; never yourself; someone who exists.
+  expect(await f.me(COMMUNITY_APP_MY_MESSAGE_START_PATH, f.member, { handle: "apps-outsider" })).toEqual({ status: 403, body: { ok: false, code: "dm_conversation_access_required" } });
+  expect(await f.send(f.member, { to: "apps-outsider", text: "Hi" })).toEqual({ status: 403, body: { ok: false, code: "dm_conversation_access_required" } });
+  expect(await f.me(COMMUNITY_APP_MY_MESSAGE_START_PATH, f.member, { handle: "apps-member" })).toEqual({ status: 400, body: { ok: false, code: "dm_target_self" } });
+  expect(await f.me(COMMUNITY_APP_MY_MESSAGE_START_PATH, f.member, { handle: "nobody-here" })).toEqual({ status: 404, body: { ok: false, code: "dm_target_not_found" } });
+  // The first message creates the conversation, from this community; a retry with its key doesn't send twice.
+  const first = await f.send(f.member, { to: "apps-owner", text: "  Climbing Saturday? ", client_message_id: "key-1" });
+  expect(first.status).toBe(200);
+  const id = first.body.conversation_id as string;
+  expect(first.body.message).toMatchObject({ seq: 1, from_me: true, text: "Climbing Saturday?", attachments: [], client_message_id: "key-1" });
+  expect((await f.send(f.member, { to: "apps-owner", text: "Climbing Saturday?", client_message_id: "key-1" })).body.message.seq).toBe(1);
+  expect((await f.t.run((c) => c.db.get(id as any))) as any).toMatchObject({ createdFromCommunityId: f.ids.communityId });
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_START_PATH, f.member, { handle: "apps-owner" })).body).toEqual({ ok: true, conversation_id: id, peer: null });
+  // The owner's inbox: one unread conversation with the member, newest first.
+  const ownerInbox = await f.inbox(f.owner);
+  expect(ownerInbox).toEqual({ ok: true, conversations: [{
+    id, peer: { name: "apps-member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png" }, community_name: "apps-community",
+    unread_count: 1, muted: false, blocked: false, last_seq: 1, read_seq: 0, peer_read_seq: 1,
+    last_message: { preview: "Climbing Saturday?", from_me: false, at: expect.any(String) },
+  }] });
+  // Only names, handles and avatars: never anyone's user id or a storage id.
+  expect(JSON.stringify(ownerInbox)).not.toContain("-subject");
+  const read = await f.conversation(f.owner, id);
+  expect(read.body).toMatchObject({ ok: true, has_more: false, messages: [{ seq: 1, from_me: false, text: "Climbing Saturday?" }] });
+  expect(JSON.stringify(read.body)).not.toMatch(/-subject|sender_user_id|storage_id/);
+  // A reply, then reading: unread goes to zero; the member sees it was read.
+  expect((await f.send(f.owner, { conversation_id: id, text: "Yes! 7am." })).body.message).toMatchObject({ seq: 2, from_me: true });
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_READ_PATH, f.member, { conversation_id: id, through_seq: 2 })).body.conversation)
+    .toMatchObject({ unread_count: 0, read_seq: 2, peer_read_seq: 2 });
+  // Studio's read rule: never past what exists, never backwards.
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_READ_PATH, f.member, { conversation_id: id, through_seq: 99 })).body.conversation.read_seq).toBe(2);
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_READ_PATH, f.member, { conversation_id: id, through_seq: 1 })).body.conversation.read_seq).toBe(2);
+  expect((await f.conversation(f.owner, id)).body.conversation).toMatchObject({ peer_read_seq: 2, last_message: { preview: "You: Yes! 7am.", from_me: true } });
+  // Mute is the member's own.
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, f.member, { conversation_id: id, muted: true })).body.conversation.muted).toBe(true);
+  expect((await f.inbox(f.owner)).conversations[0].muted).toBe(false);
+  // Older pages: 50 at a time, the newest first.
+  for (let index = 0; index < 51; index += 1) await f.t.run(async (c) => {
+    const row = await c.db.get(id as any) as any;
+    await c.db.insert("dmMessages", { conversationId: id as any, seq: row.lastSeq + 1, senderType: "user", senderUserId: f.ids.ownerId,
+      contentJson: { text: `m${index}` }, createdAt: Date.now(), updatedAt: Date.now() });
+    await c.db.patch(id as any, { lastSeq: row.lastSeq + 1 });
+  });
+  const page = (await f.conversation(f.member, id)).body;
+  expect([page.messages.length, page.has_more, page.messages[0].seq, page.messages.at(-1).seq]).toEqual([50, true, 4, 53]);
+  const older = (await f.conversation(f.member, id, { before_seq: 4 })).body;
+  expect([older.messages.map((m: any) => m.seq), older.has_more]).toEqual([[1, 2, 3], false]);
+  // Studio's limit, said rather than cut.
+  expect(await f.send(f.member, { conversation_id: id, text: "x".repeat(4001) })).toEqual({ status: 400, body: { ok: false, code: "dm_message_too_long" } });
+  expect(await f.send(f.member, { conversation_id: id, text: "  " })).toEqual({ status: 400, body: { ok: false, code: "dm_message_payload_required" } });
+});
+
+test("twin messages: another member's conversation reads as no conversation at all", async () => {
+  const f = await messagesFixture();
+  const id = (await f.send(f.member, { to: "apps-owner", text: "Just us" })).body.conversation_id as string;
+  await f.letIn("apps-outsider");
+  const outsider = await f.signInAt(f.twin, "apps-outsider");
+  expect((await f.inbox(outsider)).conversations).toEqual([]);
+  for (const [path, body] of [
+    [COMMUNITY_APP_MY_CONVERSATION_PATH, { conversation_id: id }], [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: "hi" }],
+    [COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, { conversation_id: id }], [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: 1 }],
+    [COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, { conversation_id: id, muted: true }], [COMMUNITY_APP_MY_MESSAGE_TYPING_PATH, { conversation_id: id, typing: true }],
+    [COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH, { conversation_id: id, blocked: true }],
+  ] as const) {
+    expect(await f.me(path, outsider, body), path).toEqual({ status: 404, body: { ok: false, code: "dm_conversation_not_found" } });
+  }
+  // An id of another kind, or none at all, the same.
+  expect(await f.conversation(outsider, String(f.ids.communityId))).toEqual({ status: 404, body: { ok: false, code: "dm_conversation_not_found" } });
+  expect(await f.t.run((c) => c.db.query("dmMessages").collect())).toHaveLength(1);
+  expect(await f.t.run((c) => c.db.query("dmBlocks").collect())).toEqual([]);
+});
+
+test("twin messages: blocks and rate limits are Studio's", async () => {
+  const f = await messagesFixture();
+  const id = (await f.send(f.member, { to: "apps-owner", text: "Hi" })).body.conversation_id as string;
+  // The member blocks the owner: neither can message the other; the owner isn't told it's a block.
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH, f.member, { conversation_id: id, blocked: true })).body.conversation.blocked).toBe(true);
+  expect((await f.inbox(f.owner)).conversations[0].blocked).toBe(false);
+  expect(await f.send(f.owner, { conversation_id: id, text: "?" })).toEqual({ status: 403, body: { ok: false, code: "dm_conversation_access_required" } });
+  expect(await f.send(f.member, { conversation_id: id, text: "?" })).toEqual({ status: 403, body: { ok: false, code: "dm_conversation_access_required" } });
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_TYPING_PATH, f.owner, { conversation_id: id, typing: true })).status).toBe(403);
+  // History stays readable; unblocking lets both write again.
+  expect((await f.conversation(f.owner, id)).body.messages).toHaveLength(1);
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH, f.member, { conversation_id: id, blocked: false })).body.conversation.blocked).toBe(false);
+  expect((await f.send(f.owner, { conversation_id: id, text: "Back" })).status).toBe(200);
+  // Studio's rate limit: 25 messages a minute.
+  for (let index = 0; index < 24; index += 1) expect((await f.send(f.member, { conversation_id: id, text: `n${index}` })).status).toBe(200);
+  expect(await f.send(f.member, { conversation_id: id, text: "one too many" })).toEqual({ status: 429, body: { ok: false, code: "dm_rate_limited" } });
+});
+
+test("twin messages: attachments go straight to storage; only a fresh upload is sent, as storage recorded it", async () => {
+  const f = await messagesFixture();
+  const id = (await f.send(f.member, { to: "apps-owner", text: "Hi" })).body.conversation_id as string;
+  const issued = await f.me(COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, f.member, { conversation_id: id });
+  expect([issued.status, typeof issued.body.upload_url]).toEqual([200, "string"]);
+  // Before the first message too, by handle, under the same rule as sending.
+  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, f.member, { to: "apps-outsider" })).status).toBe(403);
+  const store = (type: string) => f.t.run(async (c) => {
+    const storageId = await c.storage.store(new Blob([new Uint8Array([1, 2, 3, 4])], { type }));
+    await (c.db as any).patch(storageId, { contentType: type });
+    return storageId;
+  });
+  const photo = await store("image/png");
+  const sent = await f.send(f.member, { conversation_id: id, text: "", attachments: [{ storage_id: photo, name: "wall.png", type: "image" }] });
+  expect(sent.status).toBe(200);
+  const url = await f.t.run((c) => c.storage.getUrl(photo));
+  expect(sent.body.message.attachments).toEqual([{ id: expect.any(String), name: "wall.png", kind: "image", mime: "image/png", size: 4, url }]);
+  expect((await f.inbox(f.owner)).conversations[0].last_message.preview).toBe("Sent an image");
+  // Studio's type rules on what storage recorded; not a storage id; an old file.
+  expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: await store("text/html"), name: "x.png", type: "image" }] }))
+    .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_type_not_supported" } });
+  expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: "notastorageid", name: "x.png", type: "image" }] }))
+    .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_invalid" } });
+  const old = await store("image/png");
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60 * 60 * 1000);
+  expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: old, name: "old.png", type: "image" }] }))
+    .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_invalid" } });
+});
+
+test("twin messages live: only a private session's watch token, versions and typing only", async () => {
+  const f = await messagesFixture();
+  const siteToken = await f.signInAt(f.site);
+  const watch = async (token: string, conversation?: string) =>
+    f.t.query(api.communityLive.watchMessages, { token: await deriveCommunityAppWatchToken(token), ...(conversation ? { conversation } : {}) });
+  // The site's own session (whose watch token the site's code holds) gets nothing.
+  expect(await watch(siteToken)).toEqual({ ok: false, code: "private_session_required" });
+  expect(await f.t.query(api.communityLive.watchMessages, { token: "pnw_nope" })).toEqual({ ok: false, code: "session_invalid" });
+  const empty = await watch(f.member);
+  expect(empty).toMatchObject({ ok: true, typing: null });
+  const id = (await f.send(f.owner, { to: "apps-member", text: "Secret plans" })).body.conversation_id as string;
+  // A new message moves the member's inbox version; the conversation has its own.
+  const inbox = await watch(f.member);
+  expect(inbox.ok && inbox.version).not.toBe(empty.ok && empty.version);
+  const before = await watch(f.member, id);
+  expect(before).toMatchObject({ ok: true, typing: null });
+  // The owner types: the member sees that someone is, never who (the page knows who it's talking to).
+  await f.me(COMMUNITY_APP_MY_MESSAGE_TYPING_PATH, f.owner, { conversation_id: id, typing: true });
+  const typing = await watch(f.member, id);
+  expect(typing).toMatchObject({ ok: true, typing: { lease_until: expect.any(Number), expires_in_ms: expect.any(Number) } });
+  // ...and not their own.
+  expect((await watch(f.owner, id) as any).typing).toBeNull();
+  // Reading moves the other side's version too ("Seen").
+  const ownerBefore = await watch(f.owner, id);
+  await f.me(COMMUNITY_APP_MY_MESSAGE_READ_PATH, f.member, { conversation_id: id, through_seq: 1 });
+  expect((await watch(f.owner, id) as any).version).not.toBe((ownerBefore as any).version);
+  // Never content, names or ids.
+  expect(JSON.stringify([inbox, typing])).not.toMatch(/Secret|apps-owner|-subject/);
+  // Someone else's conversation, or a non-id: nothing.
+  await f.letIn("apps-outsider");
+  const outsider = await f.signInAt(f.twin, "apps-outsider");
+  expect(await watch(outsider, id)).toEqual({ ok: false, code: "watch_unavailable" });
+  expect(await watch(f.member, "nope")).toEqual({ ok: false, code: "watch_unavailable" });
+  // Leaving the community ends the watch live.
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  expect(await watch(f.member)).toEqual({ ok: false, code: "watch_unavailable" });
+  // A twin origin that stops being private stops answering too.
+  await f.t.run(async (c) => {
+    const row = await c.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", f.twin)).first();
+    await c.db.patch(row!._id, { kind: "site" });
+  });
+  expect(await watch(f.owner)).toEqual({ ok: false, code: "private_session_required" });
 });

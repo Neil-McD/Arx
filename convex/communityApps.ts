@@ -39,6 +39,19 @@ async function memberHasAccess(ctx: any, communityId: any, userId: any): Promise
   }
 }
 
+// The member's role in an active community (owner, or an active membership),
+// or null: what every personal page and its live watch require of a session,
+// which can outlive the membership it was minted for.
+export async function communityAppMemberRole(ctx: any, community: any, userId: any): Promise<string | null> {
+  if (!community || !communityIsActive(community)) return null;
+  if (String(community.ownerId) === String(userId)) return "owner";
+  const membership = await ctx.db
+    .query("communityMemberships")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", userId))
+    .first();
+  return membership?.active === true ? membership.role : null;
+}
+
 // Operator setup until the CLI registers domains. One domain belongs to one community.
 export const registerCommunityDomainInternal = internalMutation({
   args: { communityId: v.id("communities"), origin: v.string() },
@@ -90,15 +103,8 @@ export const getCommunityAppAccountInternal = internalQuery({
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     const community = await ctx.db.get(args.currentCommunityId) as any;
-    if (!user || !community || !communityIsActive(community)) return null;
-    let role: string | null = String(community.ownerId) === String(args.userId) ? "owner" : null;
-    if (!role) {
-      const membership = await ctx.db
-        .query("communityMemberships")
-        .withIndex("by_community_user", (q) => q.eq("communityId", args.currentCommunityId).eq("userId", args.userId))
-        .first();
-      role = membership?.active === true ? membership.role : null;
-    }
+    if (!user || !community) return null;
+    const role = await communityAppMemberRole(ctx, community, args.userId);
     if (!role) return null;
     const display = await resolveUserProfileDisplayProjection(ctx, args.userId);
     let studioOrigin: string | null = null;

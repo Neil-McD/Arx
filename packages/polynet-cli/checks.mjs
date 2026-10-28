@@ -48,19 +48,28 @@ export const STANDARD_PAGES = [
 // only Polynet's code runs, so the site's code can never read a member's
 // messages, settings or other communities. ready: built; the rest say "coming
 // soon" until their slice lands. signIn: only for a signed-in member (Join is
-// for someone who isn't one yet).
+// for someone who isn't one yet). below: the addresses under the page, as on
+// STANDARD_PAGES (/messages/<conversation>, and /messages/new?to=<handle>).
+export const CONVERSATION_SEGMENT = /^(?:new|[A-Za-z0-9]{20,40})$/;
 export const PERSONAL_PAGES = [
-  { path: "/communities", name: "communities", title: "Your communities", ready: true, signIn: true },
-  { path: "/messages", name: "messages", title: "Messages", ready: false, signIn: true },
-  { path: "/settings", name: "settings", title: "Settings", ready: true, signIn: true },
-  { path: "/join", name: "join", title: "Join", ready: false, signIn: false },
+  { path: "/communities", name: "communities", title: "Your communities", ready: true, signIn: true, below: [] },
+  { path: "/messages", name: "messages", title: "Messages", ready: true, signIn: true, below: [["conversation", CONVERSATION_SEGMENT]] },
+  { path: "/settings", name: "settings", title: "Settings", ready: true, signIn: true, below: [] },
+  { path: "/join", name: "join", title: "Join", ready: false, signIn: false, below: [] },
 ];
 
-// Which personal page a path is (exactly, or with one trailing slash), or null.
+// Which personal page a path is (exactly, or an address under it, with or
+// without one trailing slash), or null.
 export function personalPage(pathname) {
   const path = String(pathname || "");
   const bare = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
-  return PERSONAL_PAGES.find((page) => page.path === bare) ?? null;
+  for (const page of PERSONAL_PAGES) {
+    if (bare === page.path) return page;
+    if (!page.below.length || !bare.startsWith(page.path + "/")) continue;
+    const below = bare.slice(page.path.length + 1).split("/");
+    if (below.length <= page.below.length && below.every((segment, i) => page.below[i][1].test(segment))) return page;
+  }
+  return null;
 }
 
 // The shape of a community slug that can have a site on the sites domain. A
