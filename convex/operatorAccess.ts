@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { resolveAuthenticatedActor } from "./authActor";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { recordPlatformDiagnosticEventBestEffort } from "./platformDiagnostics";
@@ -99,23 +99,6 @@ export async function requireOperatorRole(
   }
   return operator;
 }
-
-export const getOperatorWriteAccessInternal = internalQuery({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
-    return {
-      userId: operator.userId,
-      dbUserId: operator.dbUserId,
-      email: operator.email,
-      displayName: operator.displayName,
-      role: operator.role,
-      source: operator.source,
-    };
-  },
-});
 
 async function recordOperatorAudit(
   ctx: any,

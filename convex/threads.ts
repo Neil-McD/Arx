@@ -464,26 +464,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-async function hydrateRuntimeEventPayload(ctx: any, payload: unknown): Promise<unknown> {
-  const payloadRecord = asRecord(payload);
-  if (!payloadRecord) return payload;
-  const detailsRecord = asRecord(payloadRecord.details);
-  const computerUseRecord = asRecord(detailsRecord?.computer_use);
-  const frameStorageId = String(computerUseRecord?.frame_storage_id ?? "").trim();
-  if (!frameStorageId) return payload;
-  const frameUrl = await ctx.storage.getUrl(frameStorageId as any);
-  return {
-    ...payloadRecord,
-    details: {
-      ...detailsRecord,
-      computer_use: {
-        ...computerUseRecord,
-        frame_url: frameUrl ?? null,
-      },
-    },
-  };
-}
-
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
 }
@@ -3010,42 +2990,6 @@ export const setCloudRuntimeRunContextSnapshotInternal = internalMutation({
   },
 });
 
-export const getActiveRuntimeTurnStateInternal = internalQuery({
-  args: {
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-  },
-  handler: async (ctx, args) => {
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId: args.ownerId,
-      threadId: args.threadId,
-    });
-    const run = await getRunningRuntimeRunByThread({
-      ctx,
-      threadId: thread._id,
-    });
-    if (!run || run.ownerId !== args.ownerId) return null;
-    return {
-      runId: run.runId,
-      threadId: String(run.threadId),
-      status: run.status,
-      reason: run.reason ?? null,
-      errorCode: run.errorCode ?? null,
-      errorMessage: run.errorMessage ?? null,
-      pendingUserSteering: Array.isArray(run.pendingUserSteering)
-        ? run.pendingUserSteering.slice(-8)
-        : [],
-      stopRequestedAt: run.stopRequestedAt ?? null,
-      stopReason: run.stopReason ?? null,
-      activeContextSnapshot: run.activeContextSnapshot ?? null,
-      activeContextSnapshotUpdatedAt: run.activeContextSnapshotUpdatedAt ?? null,
-      startedAt: run.startedAt,
-      updatedAt: run.updatedAt,
-    };
-  },
-});
-
 export const touchCloudRuntimeRunHeartbeatInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -3198,48 +3142,3 @@ export const cancelCloudRuntimeRunByThreadKeyInternal = internalMutation({
   },
 });
 
-export const listCloudRuntimeRunEvents = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    runId: v.string(),
-    threadId: v.optional(v.id("threads")),
-    afterSeq: v.optional(v.number()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const runId = normalizeRunId(args.runId);
-    if (args.threadId) {
-      await requireOwnedCloudThread({
-        ctx,
-        ownerId,
-        threadId: args.threadId,
-      });
-    }
-
-    const safeLimit = Math.max(1, Math.min(2000, Math.floor(args.limit ?? 1000)));
-    const afterSeq =
-      typeof args.afterSeq === "number" && Number.isFinite(args.afterSeq) ? Math.floor(args.afterSeq) : null;
-    const rows = await ctx.db
-      .query("runtimeRunEvents")
-      .withIndex("by_owner_run_seq", (q: any) =>
-        afterSeq === null ? q.eq("ownerId", ownerId).eq("runId", runId) : q.eq("ownerId", ownerId).eq("runId", runId).gt("seq", afterSeq),
-      )
-      .take(safeLimit);
-    const out = rows.sort((a: RuntimeRunEventLike, b: RuntimeRunEventLike) => a.seq - b.seq);
-    const filtered = !args.threadId
-      ? out
-      : out.filter((row: RuntimeRunEventLike) => row.threadId === args.threadId);
-    return await Promise.all(
-      filtered.map(async (row: RuntimeRunEventLike) => ({
-        ...row,
-        payload: await hydrateRuntimeEventPayload(ctx, row.payload),
-      })),
-    );
-  },
-});

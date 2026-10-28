@@ -90,11 +90,6 @@ const COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_DEFAULT_LIMIT = 24;
 const COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_MAX_LIMIT = 50;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS = 12_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS = 20_000;
-const COMMUNITY_RESOURCE_BATCH_READ_MAX_REFS = 10;
-const COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS = 36_000;
-const COMMUNITY_RESOURCE_BATCH_READ_MAX_TOTAL_CHARS = 50_000;
-const COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS = 12_000;
-const COMMUNITY_RESOURCE_BATCH_READ_MAX_PER_RESOURCE_CHARS = 20_000;
 const COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT = 50;
 const COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT = 250;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50;
@@ -1084,28 +1079,6 @@ function boundedReadLimit(raw: unknown): number {
   const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS));
   if (!Number.isFinite(parsed)) return COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS;
   return Math.max(1, Math.min(COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS, parsed));
-}
-
-function boundedBatchReadMaxChars(raw: unknown): number {
-  const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS));
-  if (!Number.isFinite(parsed)) return COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS;
-  return Math.max(1, Math.min(COMMUNITY_RESOURCE_BATCH_READ_MAX_TOTAL_CHARS, parsed));
-}
-
-function boundedBatchReadPerResourceChars(raw: unknown, maxChars: number): number {
-  const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS));
-  const fallback = Math.min(COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS, maxChars);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(1, Math.min(COMMUNITY_RESOURCE_BATCH_READ_MAX_PER_RESOURCE_CHARS, maxChars, parsed));
-}
-
-function normalizeBatchReadRefs(raw: unknown): string[] {
-  if (!Array.isArray(raw)) throw new Error("community_resources_read_refs_required");
-  const refs = raw
-    .map((ref) => String(ref ?? "").trim().slice(0, 1024))
-    .filter(Boolean);
-  if (refs.length < 1) throw new Error("community_resources_read_refs_required");
-  return refs.slice(0, COMMUNITY_RESOURCE_BATCH_READ_MAX_REFS);
 }
 
 function normalizeDirectoryToolPath(raw: unknown): string {
@@ -2544,19 +2517,6 @@ function compareSuggestedResourceReadTargets(
   return compareCommunityResources(a, b);
 }
 
-function buildCommunityResourceMapResourceEntry(args: {
-  row: CommunityResourceLike;
-  moduleNameMap: Map<string, string>;
-  builder: boolean;
-}) {
-  const entry = buildResourceDirectoryEntry(args.row, args.moduleNameMap);
-  if (!args.builder) return entry;
-  return {
-    ...entry,
-    builder_metadata: mapCompactCommunityResourceBuilderListRow(args.row, args.moduleNameMap),
-  };
-}
-
 function readContentUnavailableReason(row: CommunityResourceLike): string | null {
   if (communityResourceBodyChars(row) > 0) return null;
   if (row.fileKey && row.url) return "external_or_uploaded_content_not_parsed";
@@ -2668,99 +2628,6 @@ async function buildCommunityResourceDirectoryReadPayload(args: {
   };
 }
 
-async function buildSourceResourceMetadata(args: {
-  ctx: any;
-  communityId: any;
-  sourceResourceId: any;
-  resources: CommunityResourceLike[];
-  moduleNameMap: Map<string, string>;
-}) {
-  const source = resolveVisibleResourceById({
-    resources: args.resources,
-    resourceId: normalizeIdValue(args.sourceResourceId),
-  });
-  if (!source) {
-    return {
-      source_resource_id: normalizeIdValue(args.sourceResourceId),
-      available: false,
-    };
-  }
-  return {
-    source_resource_id: normalizeIdValue(source._id),
-    available: true,
-    ...buildResourceDirectoryEntry(source, args.moduleNameMap),
-  };
-}
-
-function buildBatchReadFailure(ref: string, error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return {
-    ok: false,
-    ref,
-    reason_code: message || "community_resource_read_failed",
-    message: message || "Community resource read failed.",
-  };
-}
-
-async function buildBatchReadResourceResult(args: {
-  ctx: any;
-  communityId: any;
-  ref: string;
-  resources: CommunityResourceLike[];
-  moduleNameMap: Map<string, string>;
-  builder: boolean;
-  contentLimit: number;
-}) {
-  const resolved = await resolveResourceByRef({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    ref: args.ref,
-    resources: args.resources,
-    moduleNameMap: args.moduleNameMap,
-  });
-  if (!resolved.ok) {
-    const { ok: _ok, ...failure } = resolved;
-    return {
-      ok: false,
-      ref: args.ref,
-      ...failure,
-    };
-  }
-
-  const row = await hydrateCommunityResourceBody(args.ctx, resolved.resource) ?? resolved.resource;
-  const body = String(row.bodyMd ?? "");
-  const contentLimit = Math.max(0, Math.floor(args.contentLimit));
-  const bodySlice = body && contentLimit > 0 ? body.slice(0, contentLimit) : null;
-  const source = args.builder && row.sourceResourceId
-    ? await buildSourceResourceMetadata({
-        ctx: args.ctx,
-        communityId: args.communityId,
-        sourceResourceId: row.sourceResourceId,
-        resources: args.resources,
-        moduleNameMap: args.moduleNameMap,
-      })
-    : null;
-
-  return {
-    ok: true,
-    ref: args.ref,
-    resource: buildCommunityResourceMapResourceEntry({
-      row,
-      moduleNameMap: args.moduleNameMap,
-      builder: args.builder,
-    }),
-    source,
-    content: {
-      body_md: bodySlice,
-      offset: 0,
-      limit: contentLimit,
-      total_chars: body.length,
-      truncated: Boolean(body && (bodySlice?.length ?? 0) < body.length),
-      unavailable_reason: readContentUnavailableReason(row),
-    },
-  };
-}
-
 export const listCommunityResourceSemanticDirectoryInternal = internalQuery({
   args: {
     userId: v.id("users"),
@@ -2847,77 +2714,6 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
         truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
         unavailable_reason: readContentUnavailableReason(row),
       },
-    };
-  },
-});
-
-export const readCommunityResourcesForToolInternal = internalQuery({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    refs: v.array(v.string()),
-    maxChars: v.optional(v.number()),
-    perResourceChars: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    await requireCommunityResourceDirectoryToolAccess({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-    });
-    const refs = normalizeBatchReadRefs(args.refs);
-    const maxChars = boundedBatchReadMaxChars(args.maxChars);
-    const perResourceChars = boundedBatchReadPerResourceChars(args.perResourceChars, maxChars);
-    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
-    const resources = await listResourceDirectoryLivePageResources(
-      ctx,
-      args.communityId,
-      new Set(modules.map((module) => normalizeIdValue(module._id))),
-    );
-    const moduleNameMap = buildModuleNameMap(modules);
-    let remainingChars = maxChars;
-    const results = [];
-    for (const ref of refs) {
-      if (remainingChars <= 0) {
-        results.push({
-          ok: false,
-          ref,
-          reason_code: "community_resources_read_budget_exhausted",
-          message: "The community_resources_read character budget was exhausted before this resource could be read.",
-        });
-        continue;
-      }
-      try {
-        const item = await buildBatchReadResourceResult({
-          ctx,
-          communityId: args.communityId,
-          ref,
-          resources,
-          moduleNameMap,
-          builder: false,
-          contentLimit: Math.min(perResourceChars, remainingChars),
-        });
-        if (item.ok && "content" in item && item.content) {
-          remainingChars = Math.max(0, remainingChars - String(item.content.body_md ?? "").length);
-        }
-        results.push(item);
-      } catch (error) {
-        results.push(buildBatchReadFailure(ref, error));
-      }
-    }
-
-    return {
-      ok: true,
-      kind: "community_resources_read",
-      scope: "member",
-      requested_refs: refs,
-      max_chars: maxChars,
-      per_resource_chars: perResourceChars,
-      remaining_chars: remainingChars,
-      returned_count: results.filter((item) => item.ok).length,
-      resources: results,
     };
   },
 });

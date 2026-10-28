@@ -10,8 +10,10 @@ Status: written October 27, 2026 from `main` at `d63eb4a63`. Code paths are
 
 **Status column:** **Keep** (core), **Going** (removal planned; Neil decided
 Oct 27), **Dead** (no first-party caller; the gate's
-`no_orphan_modules_proof` fails on any new one). **Hand-run** modules have no
-code caller on purpose and are named, with a reason, in that proof's exceptions.
+`no_orphan_modules_proof` fails on any new dead module and
+`no_uncalled_functions_proof` on any new uncalled function). **Hand-run** modules
+and functions have no code caller on purpose and are named, with a reason, in
+those proofs' exceptions.
 
 ## The shape
 

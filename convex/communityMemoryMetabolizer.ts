@@ -1,10 +1,7 @@
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
-  requireCommunityManager,
-  resolveUserIdForAuthenticatedRequest,
-  toIsoString,
 } from "./communityCore";
 import { COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION } from "../shared/communityEvidenceContract";
 
@@ -568,43 +565,3 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
   },
 });
 
-export const listCommunityMemoryMetabolizerRuns = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 25)));
-    const rows = (await ctx.db
-      .query("communityMemoryMetabolizerRuns" as any)
-      .withIndex("by_community_finishedAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .take(limit)) as Array<Record<string, any>>;
-    return rows.map((row) => ({
-      id: normalizeIdValue(row._id),
-      community_id: normalizeIdValue(row.communityId),
-      status: row.status,
-      trigger: row.trigger,
-      inspected_retrieval_log_count: row.inspectedRetrievalLogCount,
-      inspected_outcome_count: row.inspectedOutcomeCount,
-      signal_node_count: row.signalNodeCount,
-      inspected_node_count: row.inspectedNodeCount,
-      settled_node_count: row.settledNodeCount,
-      node_update_limit: row.nodeUpdateLimit,
-      changed_node_ids: (row.changedNodeIds ?? []).map(normalizeIdValue),
-      error_code: row.errorCode ?? null,
-      error_message: row.errorMessage ?? null,
-      started_at: toIsoString(row.startedAt),
-      finished_at: toIsoString(row.finishedAt),
-      created_at: toIsoString(row.createdAt),
-    }));
-  },
-});
