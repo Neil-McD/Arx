@@ -124,22 +124,6 @@ async function recordOperatorAudit(
   });
 }
 
-export const getMyOperatorAccess = query({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const operator = await requireOperatorRole(ctx, args.authSubject, "readonly");
-    return {
-      userId: operator.userId,
-      email: operator.email,
-      displayName: operator.displayName,
-      role: operator.role,
-      source: operator.source,
-    };
-  },
-});
-
 export const getMyOperatorAccessOptional = query({
   args: {
     authSubject: v.optional(v.string()),

@@ -29,6 +29,11 @@ const ALLOWED = new Map<string, string>([
   ["communityChannels:listCommunityChannels", "channel access tests read through it; replace in the channel slice"],
   ["communityChannels:reorderCommunityChannels", "channel ordering tests use it; replace in the channel slice"],
   ["communityCompilerEvidence:measureCommunityCompilerEvidenceInternal", "operator diagnostic, run by hand"],
+  ["communityAttention:listMyCommunityAttention", "attention tests read through it; replace with the paged query in the channel slice"],
+  ["communityCompilerDigest:runCommunityCompilerDigestPass", "protected core (community compiler): deleting needs Neil's confirmation"],
+  ["communityResources:listCommunityResourceBuilderDirectory", "protected core (resources): deleting needs Neil's confirmation"],
+  ["communityResources:readCommunityResourceBuilderResource", "protected core (resources): deleting needs Neil's confirmation"],
+  ["threads:cancelCloudRuntimeRunByThreadKey", "protected core (runtime): the HTTP route uses the internal twin; deleting needs Neil's confirmation"],
   ["communityFounderBrief:setFounderBriefSettingsInternal", "operator tool: brief settings for the staging lab"],
   ["communityFounderBrief:sendFounderBriefNowInternal", "operator tool: send a brief now"],
   ["communityMaintenance:purgeOrphanedCommunityUserArtifactsInternal", "operator tool: purges orphaned user artifacts"],
@@ -80,13 +85,13 @@ for (const path of modules) {
     const name = match[1];
     const operation = `${module}:${name}`;
     if (productionCalls.has(operation)) continue;
-    const references = [`${module}.${name}`, operation];
+    // Whole-word matches only: `x.list` must not count as a call to `x.listPage`.
+    const word = (reference: string) => new RegExp(`(?<![A-Za-z0-9_$])${reference}(?![A-Za-z0-9_$])`);
+    const dotted = word(`${module}\\.${name}`);
+    const references = [dotted, word(operation)];
     const called = [...corpus].some(([file, text]) =>
-      references.some((reference) => {
-        if (file !== path) return text.includes(reference);
-        // In its own file only a self call through internal/api counts.
-        return text.includes(`${module}.${name}`);
-      }),
+      // In its own file only a self call through internal/api counts.
+      file !== path ? references.some((reference) => reference.test(text)) : dotted.test(text),
     );
     if (!called) uncalled.push(operation);
   }
