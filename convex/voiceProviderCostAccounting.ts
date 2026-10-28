@@ -1,4 +1,29 @@
 import { internal } from "./_generated/api";
+import { internalMutation } from "./_generated/server";
+import { v } from "convex/values";
+import { recordProviderCostEntry } from "./providerCostCore";
+
+// Voice transcription's provider cost goes to the shared provider cost ledger,
+// the same one paid tools use. Platform absorbed; never charged to a user.
+export const recordVoiceProviderCostInternal = internalMutation({
+  args: {
+    costKey: v.string(),
+    userId: v.optional(v.union(v.id("users"), v.null())),
+    category: v.literal("voice"),
+    component: v.literal("voice_transcription"),
+    provider: v.string(),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+    quantityKind: v.string(),
+    quantity: v.number(),
+    rawVendorCostUsd: v.number(),
+    evidence: v.union(v.literal("estimated"), v.literal("provider_reported")),
+    billingDisposition: v.literal("platform_absorbed"),
+    metadata: v.optional(v.any()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => await recordProviderCostEntry(ctx, args),
+});
 
 function normalizeString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
@@ -40,7 +65,7 @@ export async function recordVoiceProviderCostBestEffort(params: {
     normalizeString(metadata.final_cost_source);
 
   try {
-    await params.ctx.runMutation(internal.workspaceCredits.recordProviderCostInternal as any, {
+    await params.ctx.runMutation(internal.voiceProviderCostAccounting.recordVoiceProviderCostInternal, {
       costKey: `platform_tool:${costKey}:provider_cost`,
       userId: params.userId ?? undefined,
       category: "voice",

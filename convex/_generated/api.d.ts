@@ -222,7 +222,6 @@ import type * as voiceProviderCostAccounting from "../voiceProviderCostAccountin
 import type * as webResearchTools from "../webResearchTools.js";
 import type * as webSearchTypes from "../webSearchTypes.js";
 import type * as workosEmailVerification from "../workosEmailVerification.js";
-import type * as workspaceCredits from "../workspaceCredits.js";
 
 import type {
   ApiFromModules,
@@ -445,7 +444,6 @@ declare const fullApi: ApiFromModules<{
   webResearchTools: typeof webResearchTools;
   webSearchTypes: typeof webSearchTypes;
   workosEmailVerification: typeof workosEmailVerification;
-  workspaceCredits: typeof workspaceCredits;
 }>;
 
 /**
