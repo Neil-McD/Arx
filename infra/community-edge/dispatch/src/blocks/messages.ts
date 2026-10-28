@@ -462,8 +462,11 @@ class Messages {
   async loadConversation(first) {
     const id = this.view && this.view.id;
     if (!id) return false;
+    const read = this.reads = (this.reads || 0) + 1;
     const res = await call("/__polynet/me/messages/conversation?id=" + encodeURIComponent(id));
     if (!this.current() || !this.view || this.view.id !== id) return false;
+    // A refresh started after this one answers with newer state; drop this one.
+    if (!first && read !== this.reads) return false;
     if (res.status === 401) { this.signedOut(); return false; }
     if (res.status === 403 && res.body.code === "not_a_member") { this.notMember(); return false; }
     if (!ok(res) || !res.body.conversation) {
@@ -477,8 +480,11 @@ class Messages {
     // shown, so start again from it and let "earlier" page back through the rest.
     const gap = !first && newestShown > 0 && oldest !== Infinity && oldest > newestShown + 1;
     const earlier = first || gap ? [] : this.messages.filter((message) => message.seq < oldest);
+    // Sends acknowledged after the server took this snapshot stay.
+    const newest = fresh.length ? fresh[fresh.length - 1].seq : Infinity;
+    const later = first ? [] : this.messages.filter((message) => message.seq > newest);
     this.conversation = res.body.conversation;
-    this.messages = earlier.concat(fresh);
+    this.messages = earlier.concat(fresh, later);
     if (first || gap) this.hasMore = res.body.has_more === true;
     else if (!earlier.length) this.hasMore = res.body.has_more === true;
     // A pending send the server now holds is the server's message.

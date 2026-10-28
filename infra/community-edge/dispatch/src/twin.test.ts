@@ -712,6 +712,30 @@ test("Messages: two sends whose replies come back in reverse still show in order
   }
 }, 60_000);
 
+test("Messages: a refresh that read the thread before a send landed doesn't drop it", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    const seqs = () => personal.locator("[part~=message][data-seq]").evaluateAll((nodes) => nodes.map((node) => Number(node.getAttribute("data-seq"))));
+    await expect.poll(seqs).toEqual([1, 2]);
+    // A refresh reads [1, 2] and its reply is held; meanwhile a send lands as 3.
+    const [slow, release] = hold();
+    dm.holdNextConversation = slow;
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => dm.held).toBe(1);
+    await personal.locator("[part=input]").fill("Still here");
+    await personal.locator("[part=send]").click();
+    await expect.poll(seqs).toEqual([1, 2, 3]);
+    release();
+    await page.waitForTimeout(300);
+    expect(await seqs()).toEqual([1, 2, 3]);
+    expect(await personal.locator("[part~=message-pending]").count()).toBe(0);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
 test("Messages: text typed while a just-made thread loads is kept", async () => {
   resetMessages();
   const { browser, page } = await openTwin(chromium, "/messages/new?to=newbie", TOKEN, undefined, { fakeLive: true });
