@@ -165,11 +165,6 @@
   gap: 8px;
 }
 
-.workflow-pipeline-header {
-  flex: 0 0 auto;
-  min-width: 0;
-}
-
 .workflow-milestone-canvas {
   display: flex;
   flex: 1;
