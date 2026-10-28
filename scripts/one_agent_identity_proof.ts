@@ -37,7 +37,7 @@ assert.match(surface, /return normalizedThreadKey\.startsWith\(`\$\{COMMUNITY_AG
 const interactions = read("convex/communityInteractions.ts");
 assert.match(interactions, /actor_type: presentInteractionActorType\(root\.actorType\)/, "old posts read as the community agent");
 assert.match(interactions, /actor_type: presentInteractionActorType\(reply\.actorType\)/, "old replies read as the community agent");
-assert.match(interactions, /asPersonalAgent: v\.optional\(v\.boolean\(\)\)/, "the cached production web's composer flag stays accepted until the production release");
+assert.doesNotMatch(interactions, /asPersonalAgent/, "the old composer flag stays deleted");
 
 for (const [path, reason] of ALLOWED) {
   assert.ok(read(path).includes("personal_agent"), `remove ${path} from ALLOWED (${reason}): it no longer mentions the retired name`);

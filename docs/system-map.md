@@ -75,11 +75,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   funnel builder (the `community_funnel_builder` invocation surface; the value
   stays in stored receipts and evidence only), draft previews, the external
   website link, and the hero-media editor. The join page is plain (it never
-  rendered custom content or intro media on the default page). `communityFunnel`
-  keeps only four stand-ins for the cached production web
-  (`getCommunityFunnelConfig`, `getCommunityFunnelDraftPreview`,
-  `setCommunityExternalFunnelUrl`, `setCommunityExternalFunnelActive`); delete
-  them after the next production release. `communityFunnels` (validated by
+  rendered custom content or intro media on the default page; `communityPublic`
+  returns the plain default). The `communityFunnel` module and its four stand-ins
+  for the cached production web were deleted after production moved to 150828216
+  (POL-30). `communityFunnels` (validated by
   `communityFunnelValidators`) has no live reader; it holds 6 unpublished drafts
   and 4 unused intro-video links, dropped with Neil's OK.
 - **Hand-run:** `communityMaintenance` (purges orphaned user artifacts).
@@ -118,8 +117,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityChatMessages`, `communityMessageReactions`,
   `communityInteractionLegacyChatLinks`, `communityFeaturedMessages`. Anonymous-user
   cleanup and orphan maintenance still delete their rows for removed users until
-  then. The composer's old inline attachment shape (refused with a reattach
-  message) goes after the production release.
+  then. The composer's old inline attachment shape, the `ai_feed` attention
+  surface and the `reorderCommunityChannels` stub were deleted once production
+  ran 150828216 (POL-30); the composer takes uploaded attachment ids only.
 - **Hand-run:** `communityChannelAudit`, `communityChannelBackfill` (General channel
   migration: delete after two clean production audits, residue map R-009).
 
@@ -213,8 +213,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   conversations, including the retired personal agent's global episodes, are
   read-only history. `one_agent_identity_proof` keeps the retired `personal_agent`
   value on stored history only (`shared/communityAgentIdentity.ts`).
-- **Going:** the `asPersonalAgent` composer flag (after the production release);
-  stored `personal_agent` values on 14 posts, 4 replies and 9 receipts (rewritten in
+- **Deleted Oct 28 (POL-30):** the `asPersonalAgent` composer flag (production
+  150828216 never sends it).
+- **Going:** stored `personal_agent` values on 14 posts, 4 replies and 9 receipts (rewritten in
   the table-drop release with Neil's OK); "community agent" code names (step 2b).
 - **Deleted Oct 27 (POL-10, Neil):** OpenRouter (`openRouterNativeTransport`, the
   failure answer now calls OpenAI directly), the free demo model, Claude, Gemini
@@ -392,8 +393,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Deleted Oct 28 (POL-21):** community integrations (Composio, the HubSpot
   pilot, `communityIntegrationConnections` code, integration reads in the agent's
   tools, the integration receipt in paid tools, the callback page) and all skill
-  code. `communityIntegrationActions` is a stub answering "not verified" for the
-  cached production web's callback page; delete it next release.
+  code. The `communityIntegrationActions` stub for the old callback page was
+  deleted once production ran 150828216 (POL-30).
 - **Deleted Oct 28 (POL-22):** GitHub and Google Drive source import (OAuth,
   listing, import and fetch in `communityResources`, the `httpCommunitySourceIntegrations`
   callback routes, the web gateway calls). Sources imported that way keep their

@@ -221,18 +221,6 @@ const rootKindValidator = v.union(
   v.literal("agent_signal"),
 );
 
-const legacyInteractionAttachmentInputValidator = v.object({
-  id: v.optional(v.string()),
-  name: v.string(),
-  type: v.string(),
-  mime: v.optional(v.union(v.string(), v.null())),
-  size: v.number(),
-  storageId: v.optional(v.id("_storage")),
-  data_url: v.optional(v.string()),
-  text: v.optional(v.string()),
-  truncated: v.optional(v.boolean()),
-});
-
 const interactionAttachmentInputValidator = v.object({
   attachmentId: v.id("communityInteractionAttachments"),
 });
@@ -1129,13 +1117,9 @@ const communityInteractionComposerArgs = {
         }),
       ),
     ),
-    // The old inline attachment shape stays accepted for the cached production
-    // web until the next release; only uploaded attachment ids are honored.
-    attachments: v.optional(v.array(v.union(interactionAttachmentInputValidator, legacyInteractionAttachmentInputValidator))),
+    attachments: v.optional(v.array(interactionAttachmentInputValidator)),
     // The community's agent writing for this member (Agent page tool use).
-    // asPersonalAgent is the older name, still accepted from cached clients.
     asCommunityAgent: v.optional(v.boolean()),
-    asPersonalAgent: v.optional(v.boolean()),
   };
 
 // One composer path. The public mutation verifies the signed-in caller; the
@@ -1152,7 +1136,7 @@ async function createCommunityInteractionComposerMessageCore(
       authSubject: args.authSubject ?? null,
     });
     // The agent acts within this member's access, so the channel checks are the member's.
-    const forMember = args.asCommunityAgent === true || args.asPersonalAgent === true;
+    const forMember = args.asCommunityAgent === true;
     const channelActor = await resolveCommunityChannelActor({
       ctx, communityId: args.communityId, userId,
       kind: forMember ? "community_agent_for_member" : "human",
@@ -1160,15 +1144,9 @@ async function createCommunityInteractionComposerMessageCore(
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    const attachmentInputs = (args.attachments ?? []).map((input: any) => {
-      if (!input.attachmentId) {
-        throw new Error("Please reattach this file before sending. Its upload ownership could not be verified.");
-      }
-      return { attachmentId: input.attachmentId };
-    });
     const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
       actorUserId: userId, messageKey: args.idempotencyKey, rootId: args.rootId,
-      attachments: attachmentInputs });
+      attachments: args.attachments ?? [] });
     if (!text && attachments.length === 0) throw new Error("interaction_content_required");
     if (args.rootId && textContainsEverybodyMentionToken(text)) {
       throw new Error("interaction_mention_everybody_reply_not_allowed");

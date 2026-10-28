@@ -2,34 +2,48 @@
   "contract_id": "cached_production_client_compatibility_v1",
   "version": 1,
   "production_origin": "https://polynet.ai",
-  "production_build_id": "4b39981eb96bb3779f7debb5d2dfecac524b3a0e",
+  "production_build_id": "150828216d65f37110dca97df9e0c8d95441194a",
   "staging_deployment": "quick-porcupine-949",
   "production_asset_paths": [
     "/",
-    "/assets/CommunityComposerControls-DMQbNlsq.js",
-    "/assets/PdfReader-jlYVK0tf.js",
-    "/assets/SettingsNavList-BQZmPiPu.js",
-    "/assets/VoiceInputButton-BTCLVLid.js",
-    "/assets/WebAnalyticsScopeSwitcher-BmCmnp3F.js",
-    "/assets/WebAppMainSurfaceHost-vmnt6wbv.js",
-    "/assets/WebMemberAgentDock-Dgs9RVu0.js",
-    "/assets/WebOperatorDashboardHost-BKiWncUj.js",
-    "/assets/WebStandalonePublicRouteShell-Dc2uiDQh.js",
-    "/assets/analytics-vendor-DoSbVXOQ.js",
-    "/assets/appShellNavigation-BQZt9DWx.js",
-    "/assets/communityMessageParsing-T2jfbS36.js",
-    "/assets/convex-vendor-bTWq0dZv.js",
-    "/assets/convexAuthenticatedClient-CGylww1Z.js",
-    "/assets/highlight-vendor-BGBInwCK.js",
-    "/assets/index-Bgv0WpR0.js",
-    "/assets/markdown-vendor-C5CCf8KE.js",
-    "/assets/preload-helper-KXeexFN2.js",
-    "/assets/react-vendor-DjLdCIHi.js",
-    "/assets/rolldown-runtime-CwAb3D5D.js",
-    "/assets/ui-vendor-6kB4HD-A.js"
+    "/assets/CommunityComposerControls-BrcKZ0yT.js",
+    "/assets/PdfReader-CWhM2J3M.js",
+    "/assets/SettingsNavList-CxmlxxlE.js",
+    "/assets/VoiceInputButton-Dq1bzxM7.js",
+    "/assets/WebAnalyticsScopeSwitcher-BtsrRZqC.js",
+    "/assets/WebAppMainSurfaceHost-Cea0LdMA.js",
+    "/assets/WebCommunityAgentDock-FNJ5GqZ2.js",
+    "/assets/WebOperatorDashboardHost-f9OfDMZf.js",
+    "/assets/WebStandalonePublicRouteShell-gkjGfSMw.js",
+    "/assets/analytics-vendor-CcvsIhgw.js",
+    "/assets/appShellNavigation-Czli7_Vw.js",
+    "/assets/convex-vendor-DzZ-txv_.js",
+    "/assets/convexAuthenticatedClient-BWsMLI6l.js",
+    "/assets/highlight-vendor-jsKuClrv.js",
+    "/assets/index-BboM8nxr.js",
+    "/assets/markdown-vendor-DJK6i9mf.js",
+    "/assets/preload-helper-D86MY_wp.js",
+    "/assets/react-vendor-CQkePvAz.js",
+    "/assets/rolldown-runtime-Dw3EMYOL.js",
+    "/assets/ui-vendor-i_NZjK6_.js"
   ],
   "supplemental_operation_sources": {
     "communityInteractions:createCommunityInteractionComposerMessage": "shared/cloudCommunityInteractionsGateway.ts"
+  },
+  "reviewed_validator_narrowings": {
+    "communityInteractions:createCommunityInteractionComposerMessage": {
+      "removed": [
+        "asPersonalAgent argument",
+        "inline attachment object ({name, size, type, data_url?, text?, ...}) in attachments[]"
+      ],
+      "evidence": "At 150828216 the only web caller is shared/cloudCommunityInteractionsGateway.ts createCloudCommunityInteractionComposerMessageRows, which never sends asPersonalAgent; its attachments come from serializeAttachmentsForWrite in apps/web/src/controllers/useWebCommunityChatController.ts, which pushes only { attachmentId } (retries in useWebCommunityInteractionProjection.ts resend those same serialized rows)."
+    },
+    "communityAttention:markCommunitySurfaceSeen": {
+      "removed": [
+        "surface literal \"ai_feed\""
+      ],
+      "evidence": "At 150828216 shared/cloudCommunityAttentionGateway.ts types the sent surface as \"chat\" | \"resources\" | \"events\" | \"mentions\", and apps/web/src/controllers/useWebCommunityAttentionController.ts only marks \"resources\" and \"events\"; the attention row type has no ai_feed field and no web code reads it."
+    }
   },
   "required_public_operations": [
     "auth:bootstrapActor",
@@ -83,11 +97,6 @@
     "communityEvents:cancelCommunityEvent",
     "communityEvents:listCommunityEvents",
     "communityEvents:saveCommunityEvent",
-    "communityFunnel:getCommunityFunnelConfig",
-    "communityFunnel:getCommunityFunnelDraftPreview",
-    "communityFunnel:setCommunityExternalFunnelActive",
-    "communityFunnel:setCommunityExternalFunnelUrl",
-    "communityIntegrationActions:verifyConnection",
     "communityIntelligenceDirectory:getCommunityPolynetOverview",
     "communityIntelligenceDirectory:resolvePublicCommunityMemoryOverviewBySlug",
     "communityInteractions:createCommunityInteractionComposerMessage",
@@ -1251,10 +1260,6 @@
                 },
                 {
                   "type": "literal",
-                  "value": "ai_feed"
-                },
-                {
-                  "type": "literal",
                   "value": "resources"
                 },
                 {
@@ -2340,182 +2345,6 @@
       },
       "functionType": "Mutation"
     },
-    "communityFunnel:getCommunityFunnelConfig": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "communityFunnel:getCommunityFunnelDraftPreview": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "slug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "communityFunnel:setCommunityExternalFunnelActive": {
-      "args": {
-        "type": "object",
-        "value": {
-          "active": {
-            "fieldType": {
-              "type": "boolean"
-            },
-            "optional": false
-          },
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "expectedSettingsRevision": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": false
-          },
-          "expectedUrl": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
-    "communityFunnel:setCommunityExternalFunnelUrl": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "expectedSettingsRevision": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": false
-          },
-          "url": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
-    "communityIntegrationActions:verifyConnection": {
-      "args": {
-        "type": "object",
-        "value": {
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "generation": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": false
-          },
-          "sessionUri": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Action"
-    },
     "communityIntelligenceDirectory:getCommunityPolynetOverview": {
       "args": {
         "type": "object",
@@ -2574,99 +2403,20 @@
             },
             "optional": true
           },
-          "asPersonalAgent": {
-            "fieldType": {
-              "type": "boolean"
-            },
-            "optional": true
-          },
           "attachments": {
             "fieldType": {
               "type": "array",
               "value": {
-                "type": "union",
-                "value": [
-                  {
-                    "type": "object",
-                    "value": {
-                      "attachmentId": {
-                        "fieldType": {
-                          "tableName": "communityInteractionAttachments",
-                          "type": "id"
-                        },
-                        "optional": false
-                      }
-                    }
-                  },
-                  {
-                    "type": "object",
-                    "value": {
-                      "data_url": {
-                        "fieldType": {
-                          "type": "string"
-                        },
-                        "optional": true
-                      },
-                      "id": {
-                        "fieldType": {
-                          "type": "string"
-                        },
-                        "optional": true
-                      },
-                      "mime": {
-                        "fieldType": {
-                          "type": "union",
-                          "value": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "optional": true
-                      },
-                      "name": {
-                        "fieldType": {
-                          "type": "string"
-                        },
-                        "optional": false
-                      },
-                      "size": {
-                        "fieldType": {
-                          "type": "number"
-                        },
-                        "optional": false
-                      },
-                      "storageId": {
-                        "fieldType": {
-                          "tableName": "_storage",
-                          "type": "id"
-                        },
-                        "optional": true
-                      },
-                      "text": {
-                        "fieldType": {
-                          "type": "string"
-                        },
-                        "optional": true
-                      },
-                      "truncated": {
-                        "fieldType": {
-                          "type": "boolean"
-                        },
-                        "optional": true
-                      },
-                      "type": {
-                        "fieldType": {
-                          "type": "string"
-                        },
-                        "optional": false
-                      }
-                    }
+                "type": "object",
+                "value": {
+                  "attachmentId": {
+                    "fieldType": {
+                      "tableName": "communityInteractionAttachments",
+                      "type": "id"
+                    },
+                    "optional": false
                   }
-                ]
+                }
               }
             },
             "optional": true

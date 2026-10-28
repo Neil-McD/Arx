@@ -22,7 +22,6 @@ const ALLOWED = new Map([
   ["communityChannelBackfill", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityAiFeedRetirement", "data retirement job; removed with the AI feed tables"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
-  ["communityIntegrationActions", "stub for the cached production web's HubSpot callback page; delete next release (POL-21)"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })

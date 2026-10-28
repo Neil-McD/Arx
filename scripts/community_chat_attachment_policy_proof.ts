@@ -23,9 +23,10 @@ assert.match(
 );
 assert.match(
   interactions,
-  /if \(!input\.attachmentId\) \{\s*throw new Error\("Please reattach this file before sending/,
-  "only uploaded attachment ids are honored; inline attachment payloads are refused",
+  /const communityInteractionComposerArgs = \{[\s\S]*?attachments: v\.optional\(v\.array\(interactionAttachmentInputValidator\)\),/,
+  "the composer accepts only uploaded attachment ids",
 );
+assert.doesNotMatch(interactions, /legacyInteractionAttachmentInputValidator|data_url: v\./, "the old inline attachment shape stays deleted");
 assert.doesNotMatch(read("convex/communityChat.ts"), /attachments/, "the old chat attachment path stays deleted");
 assert.match(
   composerController,

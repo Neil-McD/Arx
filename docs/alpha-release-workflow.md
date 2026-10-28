@@ -293,9 +293,9 @@ proved all of the following without truncation:
 - the terminal migration phase `source_deleted`.
 
 The seven legacy Partner table schemas and the temporary migration code are deleted
-in the terminal cleanup release. The nine public retired tombstones remain only for
-cached production client compatibility. They are deterministic, read no product or
-financial state, and cannot enroll, attribute, accrue, approve, or transfer money.
+in the terminal cleanup release. The nine public retired tombstones that briefly
+remained for cached production clients are also deleted; no Partner function is
+callable.
 
 The four partner grandfather records remain permanent historical evidence only. The
 eight partner-derived community inference policies were bounded cleanup inputs, not
@@ -346,8 +346,8 @@ The retired onboarding activation table, community onboarding configuration fiel
 and their migration tooling were removed after a complete production scan found no
 stored rows or dedicated onboarding threads. Do not recreate that persistence layer.
 
-The temporary `requestOnboardingGuideKickoff` shim has been retired with the other
-cached-client compatibility functions; do not restore it.
+The temporary `requestOnboardingGuideKickoff` shim is deleted; no onboarding
+kickoff function is callable.
 
 ### Normal release
 

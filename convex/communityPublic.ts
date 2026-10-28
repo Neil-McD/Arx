@@ -32,7 +32,6 @@ import {
   ensurePendingCommunityJoinRequest,
   getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
-import { COMMUNITY_FUNNEL_PUBLIC_CONFIG } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   communityMembershipRequiresManagerReapproval,
@@ -60,6 +59,16 @@ import {
   resolveCommunityBuilderAccess,
 } from "./communityBuilderAccessCore";
 import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
+
+// The join page's funnel projection is always the plain default: the funnel
+// editor and hero media are retired (POL-23) and no custom content renders.
+const COMMUNITY_FUNNEL_PUBLIC_CONFIG = {
+  hero_media_url: null,
+  hero_media_kind: "image" as const,
+  active_slot: "default" as const,
+  published_vsl_url: null,
+  published_content_v2: null,
+};
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -580,11 +589,6 @@ export const listSiteDiscoverCommunitiesInternal = internalQuery({
     }));
   },
 });
-
-/* Cached production clients still call this operation. The current web app
-   uses communityAccessQueries:getMyCommunityAccessBySlug as its sole
-   admission projection; remove this compatibility shim only after the pinned
-   cached-client contract advances past that build. */
 
 // The join decision for Studio's funnel and for Join on a community site's
 // private twin (communityAppJoin.ts): one gate, whichever page asks.

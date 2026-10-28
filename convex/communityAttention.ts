@@ -27,12 +27,11 @@ import {
 import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
 import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
 
-type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
+type CommunityAttentionSurface = "chat" | "resources" | "events" | "mentions";
 
 type CommunityAttentionRow = {
   community_id: string;
   chat: boolean;
-  ai_feed: boolean;
   resources: boolean;
   events: boolean;
   // Someone tagged this user and they have not seen it yet. Rides the chat
@@ -366,9 +365,6 @@ async function getCommunityAttentionRow(
   return {
     community_id: String(communityId),
     chat: channelRows.some((row) => row.chat),
-    // Rolling-client compatibility tombstone. AI Feed is retired and can no
-    // longer produce attention.
-    ai_feed: false,
     resources:
       typeof latestResourcesCreatedAt === "number" &&
       latestResourcesCreatedAt > Math.max(0, Math.floor(settingsRow?.resourcesLastSeenAt ?? 0)),
@@ -410,12 +406,6 @@ async function upsertCommunitySurfaceSeen(args: {
   }
 
   const existing = await getCommunityMemberSettingsRow(ctx, communityId, userId);
-
-  if (surface === "ai_feed") {
-    // Cached clients may still acknowledge the retired surface. Preserve a
-    // harmless success response without reading or mutating Feed state.
-    return;
-  }
 
   if (surface === "mentions") {
     const latestMentionCreatedAt = await getLatestCommunityMentionOfUserCreatedAt(ctx, communityId, userId);
@@ -577,7 +567,7 @@ export const markCommunitySurfaceSeen = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    surface: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resources"), v.literal("events"), v.literal("mentions")),
+    surface: v.union(v.literal("chat"), v.literal("resources"), v.literal("events"), v.literal("mentions")),
     seenAtMs: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -669,6 +659,3 @@ export const markCommunityChannelReadForUserInternal = internalMutation({
       channelId: channel._id ?? null, userId: args.userId, requestedThroughAt: args.throughAtMs ?? null });
   },
 });
-
-// Rolling-deployment adapter for clients deployed before the canonical
-// acknowledgeCommunityChatRead contract. It no longer owns a second data path.

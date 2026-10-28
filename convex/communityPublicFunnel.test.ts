@@ -7,7 +7,6 @@ import { api } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob([
-  "./communityFunnel.ts",
   "./communityPublic.ts",
   "./_generated/**/*.*s",
 ]);
@@ -90,37 +89,4 @@ test("the join page is the plain default: no custom funnel content or intro medi
     published_content_v2: null,
   });
   expect((result as any).community).not.toHaveProperty("external_funnel_url");
-});
-
-test("retired funnel stand-ins read the plain default and reject writes", async () => {
-  const t = convexTest(schema, modules);
-  const { communityId } = await createFixture(t);
-  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const config = await owner.query(api.communityFunnel.getCommunityFunnelConfig, { authSubject: OWNER_SUBJECT, communityId });
-  expect(config).toMatchObject({
-    active_slot: "default",
-    published_content_v2: null,
-    external_funnel_url: null,
-    external_funnel_active: false,
-    settings_revision: 3,
-    custom_funnels: { custom_1: null, custom_2: null },
-  });
-  expect(await owner.query(api.communityFunnel.getCommunityFunnelDraftPreview, { authSubject: OWNER_SUBJECT, slug: "funnel-authority" }))
-    .toEqual(config);
-  await expect(owner.mutation(api.communityFunnel.setCommunityExternalFunnelUrl, {
-    authSubject: OWNER_SUBJECT, communityId, expectedSettingsRevision: 3, url: "https://example.com",
-  })).rejects.toThrow(/community_funnel_retired/);
-  await expect(owner.mutation(api.communityFunnel.setCommunityExternalFunnelActive, {
-    authSubject: OWNER_SUBJECT, communityId, expectedSettingsRevision: 3, expectedUrl: "https://example.com", active: true,
-  })).rejects.toThrow(/community_funnel_retired/);
-});
-
-test("members cannot read the manager funnel stand-ins", async () => {
-  const t = convexTest(schema, modules);
-  const { communityId } = await createFixture(t);
-  const member = t.withIdentity({ subject: MEMBER_SUBJECT });
-  await expect(member.query(api.communityFunnel.getCommunityFunnelConfig, { authSubject: MEMBER_SUBJECT, communityId }))
-    .rejects.toThrow();
-  await expect(member.query(api.communityFunnel.getCommunityFunnelDraftPreview, { authSubject: MEMBER_SUBJECT, slug: "funnel-authority" }))
-    .rejects.toThrow();
 });

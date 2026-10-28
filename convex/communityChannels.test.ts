@@ -250,9 +250,6 @@ test("managers move one channel between current neighbors while General remains 
     }),
   ).rejects.toThrow("community_general_channel_immutable");
   expect(listed.channels.map(c => [c.name, c.position])).toEqual([["General", 0], ["Gamma", 0.5], ["Alpha", 1], ["Beta", 2]]);
-  await expect(asOwner.mutation(api.communityChannels.reorderCommunityChannels, {
-    communityId: fixture.communityId, orderedChannelIds: [],
-  })).rejects.toThrow("community_channel_refresh_required");
 });
 
 test("indexed names and neighbor moves work beyond the retained creation cap", async () => {

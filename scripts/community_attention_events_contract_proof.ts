@@ -42,8 +42,8 @@ assert.match(
 
 assert.match(
   backend,
-  /type CommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events" \| "mentions"/,
-  "the backend must retain AI Feed as a historical attention compatibility value",
+  /type CommunityAttentionSurface = "chat" \| "resources" \| "events" \| "mentions"/,
+  "the retired AI Feed surface stays deleted from the backend",
 );
 
 assert.match(
@@ -60,7 +60,7 @@ assert.match(
 
 assert.match(
   backend,
-  /surface: v\.union\(v\.literal\("chat"\), v\.literal\("ai_feed"\), v\.literal\("resources"\), v\.literal\("events"\), v\.literal\("mentions"\)\)[\s\S]*seenAtMs: v\.optional\(v\.number\(\)\)/,
+  /surface: v\.union\(v\.literal\("chat"\), v\.literal\("resources"\), v\.literal\("events"\), v\.literal\("mentions"\)\)[\s\S]*seenAtMs: v\.optional\(v\.number\(\)\)/,
   "markCommunitySurfaceSeen must accept the Events surface and visible seen marker",
 );
 
