@@ -86,6 +86,21 @@ const staging = operationMap(
   functionSpec(["--deployment", contract.staging_deployment]),
 );
 
+// A reviewed narrowing records that the cached build never sends what was
+// removed, so staging may match either production's live validator or the
+// recorded narrower one. Every other operation keeps the live comparison.
+const reviewedNarrowings = contract.reviewed_validator_narrowings ?? {};
+for (const operation of Object.keys(reviewedNarrowings)) {
+  assert.ok(
+    contract.required_public_operations.includes(operation),
+    `${operation} has a reviewed narrowing but is not a required operation`,
+  );
+  assert.ok(
+    contract.production_function_contracts?.[operation]?.args,
+    `${operation} has a reviewed narrowing but no recorded validator`,
+  );
+}
+
 for (const operation of contract.required_public_operations) {
   const oldEntry = production.get(operation);
   const stagedEntry = staging.get(operation);
@@ -96,7 +111,19 @@ for (const operation of contract.required_public_operations) {
     oldEntry.functionType,
     `${operation} changed function type`,
   );
-  assertOldArgsAccepted(oldEntry.args, stagedEntry.args, operation);
+  if (!reviewedNarrowings[operation]) {
+    assertOldArgsAccepted(oldEntry.args, stagedEntry.args, operation);
+    continue;
+  }
+  try {
+    assertOldArgsAccepted(oldEntry.args, stagedEntry.args, operation);
+  } catch {
+    assertOldArgsAccepted(
+      contract.production_function_contracts[operation].args,
+      stagedEntry.args,
+      operation,
+    );
+  }
 }
 
 console.log(
