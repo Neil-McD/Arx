@@ -198,7 +198,9 @@ async function hashes(texts: string[]): Promise<string[]> {
 
 // What a twin page may load: scripts only from the twin itself (Polynet's), the
 // site's stylesheets, fonts, images and media, Google Fonts, and avatars from
-// Polynet's storage. Nothing frames it, nothing posts away from it, no <base>.
+// Polynet's storage. It talks only to itself and, for a new profile photo, to
+// Polynet's storage (Studio's upload flow). Nothing frames it, nothing posts
+// away from it, no <base>.
 export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | null; styleHashes?: string[]; attributeHashes?: string[] }): string {
   const styleHashes = [...(args.styleHashes ?? []), ...(args.attributeHashes ?? [])];
   const style = ["'self'", args.siteOrigin, "https://fonts.googleapis.com", ...styleHashes];
@@ -210,7 +212,7 @@ export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | n
     `font-src ${args.siteOrigin} https://fonts.gstatic.com data:`,
     `img-src 'self' data: ${args.siteOrigin}${args.storageOrigin ? ` ${args.storageOrigin}` : ""}`,
     `media-src ${args.siteOrigin}`,
-    "connect-src 'self'",
+    `connect-src 'self'${args.storageOrigin ? ` ${args.storageOrigin}` : ""}`,
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

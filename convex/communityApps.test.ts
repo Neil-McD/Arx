@@ -15,9 +15,18 @@ import {
   COMMUNITY_APP_UPLOAD_PATH,
   COMMUNITY_APP_FILE_PATH,
   COMMUNITY_APP_MY_COMMUNITIES_PATH,
+  COMMUNITY_APP_MY_SETTINGS_PATH,
+  COMMUNITY_APP_MY_HANDLE_PATH,
+  COMMUNITY_APP_MY_PROFILE_PATH,
+  COMMUNITY_APP_MY_AVATAR_UPLOAD_PATH,
+  COMMUNITY_APP_MY_AVATAR_PATH,
+  COMMUNITY_APP_MY_NOTIFICATIONS_PATH,
+  COMMUNITY_APP_MY_LEAVE_PATH,
 } from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import { COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommunityAppSessionToken } from "../shared/communityAppSession";
+import {
+  COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommunityAppSessionToken, signCommunityAppSignoutTicket,
+} from "../shared/communityAppSession";
 
 const modules = import.meta.glob([
   "./communityApps.ts",
@@ -53,6 +62,7 @@ const modules = import.meta.glob([
   "./communityResourceEvidence.ts",
   "./communityResources.ts",
   "./email.ts",
+  "./emailPreferences.ts",
   "./polynetCanonicalReceipts.ts",
   "./profiles.ts",
   "./_generated/**/*.*s",
@@ -793,4 +803,182 @@ test("a site's private twin: its sessions are private, and only they read the me
     await c.db.patch(row!._id, { kind: "site" });
   });
   expect(await mine(twinToken, twin)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+});
+
+// A site and its private twin, both registered by a deploy, with a member signed in at each.
+async function twinFixture() {
+  const f = await fixture();
+  const site = "https://apps-community-staging.polynet.page";
+  const twin = "https://apps-community--me-staging.polynet.page";
+  await f.t.mutation(internal.communitySites.recordCommunitySiteDeployInternal, {
+    communityId: f.ids.communityId, userId: f.ids.ownerId, hostname: "apps-community-staging.polynet.page",
+    sitesDomain: "polynet.page", hostSuffix: "-staging", fileCount: 1, totalBytes: 1,
+  });
+  const signInAt = async (origin: string, handle = "apps-member") => {
+    const issued = await f.handoff(handle, { origin });
+    expect(issued).toMatchObject({ status: 200, body: { ok: true } });
+    const exchanged = await f.exchange(issued.body.code, { origin });
+    expect(exchanged).toMatchObject({ status: 200, body: { ok: true } });
+    return exchanged.body.token as string;
+  };
+  const me = (path: string, token: string, body: unknown = {}, origin = twin, secret = EDGE_SECRET) =>
+    f.post(path, { origin, "x-polynet-edge-secret": secret, authorization: `Bearer ${token}` }, body);
+  return { ...f, site, twin, signInAt, me };
+}
+
+test("twin settings: every route answers only a private session of a member here", async () => {
+  const f = await twinFixture();
+  const siteToken = await f.signInAt(f.site);
+  const twinToken = await f.signInAt(f.twin);
+  const routes: Array<[string, unknown]> = [
+    [COMMUNITY_APP_MY_SETTINGS_PATH, {}], [COMMUNITY_APP_MY_HANDLE_PATH, { handle: "sam" }], [COMMUNITY_APP_MY_PROFILE_PATH, { bio: "x" }],
+    [COMMUNITY_APP_MY_AVATAR_UPLOAD_PATH, {}], [COMMUNITY_APP_MY_AVATAR_PATH, { storage_id: null }],
+    [COMMUNITY_APP_MY_NOTIFICATIONS_PATH, { muted: true }], [COMMUNITY_APP_MY_LEAVE_PATH, {}],
+  ];
+  for (const [path, body] of routes) {
+    // The site's own session, whatever its page's code asks; the twin's session from the site's origin; no edge.
+    expect(await f.me(path, siteToken, body, f.site), path).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+    expect((await f.me(path, twinToken, body, f.site)).status, path).toBe(401);
+    expect((await f.me(path, twinToken, body, f.twin, "wrong")).status, path).toBe(401);
+  }
+  // Nothing changed.
+  const member = await f.t.run((c) => c.db.get(f.ids.memberId));
+  expect(member?.handle).toBe("apps-member");
+  expect(await f.t.run((c) => c.db.get(f.ids.membershipId))).not.toBeNull();
+  expect(await f.t.run((c) => c.db.query("communityMemberSettings").collect())).toEqual([]);
+  // A session that outlives its member's membership changes nothing here.
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  for (const [path, body] of routes) {
+    expect(await f.me(path, twinToken, body), path).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  }
+});
+
+test("twin settings: the profile through Studio's own validation and write", async () => {
+  const f = await twinFixture();
+  const token = await f.signInAt(f.twin);
+  expect(await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).toEqual({ status: 200, body: { ok: true,
+    profile: { display_name: "apps-member", handle: "apps-member", bio: null, avatar_url: "https://example.com/apps-member.png",
+      social_links: { youtube: "", x: "", instagram: "" } },
+    community: { name: "apps-community", role: "member" },
+    notifications: { muted: false, weekly_digest: true },
+  } });
+  // Handles: Studio's availability check (their own counts as free).
+  const handle = async (value: string) => (await f.me(COMMUNITY_APP_MY_HANDLE_PATH, token, { handle: value })).body;
+  expect(await handle("apps-owner")).toEqual({ ok: true, available: false, status: "taken", handle: "apps-owner" });
+  expect(await handle("@Apps-Member")).toEqual({ ok: true, available: true, status: "available", handle: "apps-member" });
+  expect(await handle("ab")).toMatchObject({ available: false, status: "too_short" });
+  expect(await handle("admin")).toMatchObject({ available: false, status: "reserved" });
+  // Every refusal is Studio's, and nothing is written.
+  const save = (body: unknown) => f.me(COMMUNITY_APP_MY_PROFILE_PATH, token, body);
+  for (const [body, code] of [
+    [{ handle: "apps-owner" }, "profile_handle_taken"], [{ handle: "no spaces" }, "profile_handle_invalid_format"],
+    [{ handle: "settings" }, "profile_handle_reserved"], [{ display_name: "x".repeat(121) }, "profile_display_name_too_long"],
+    [{ bio: "x".repeat(501) }, "profile_bio_too_long"], [{ social_links: { youtube: "https://vimeo.com/sam" } }, "profile_link_invalid_youtube"],
+    [{ social_links: { x: "x.com/" } }, "profile_link_invalid_x"],
+  ] as const) {
+    expect(await save(body), code).toEqual({ status: 400, body: { ok: false, code } });
+  }
+  for (const body of [{ display_name: 5 }, { social_links: "x" }, { social_links: { x: 1 } }, []]) {
+    expect(await save(body)).toMatchObject({ status: 400, body: { code: "invalid_request" } });
+  }
+  expect((await f.t.run((c) => c.db.get(f.ids.memberId)))?.handle).toBe("apps-member");
+  // A good save, normalized as Studio normalizes it.
+  const saved = await save({ display_name: "  Sam Rivera ", handle: "@Sam_R", bio: "Climbs at dawn.", social_links: { youtube: "youtube.com/@samr", x: "twitter.com/samr", instagram: "" } });
+  expect(saved).toEqual({ status: 200, body: { ok: true, profile: {
+    display_name: "Sam Rivera", handle: "sam_r", bio: "Climbs at dawn.", avatar_url: "https://example.com/apps-member.png",
+    social_links: { youtube: "https://youtube.com/@samr", x: "https://x.com/samr", instagram: "" },
+  } } });
+  expect(await f.t.run((c) => c.db.get(f.ids.memberId))).toMatchObject({ handle: "sam_r", normalizedHandle: "sam_r" });
+  // Fields left out stay as they are; null clears.
+  expect((await save({ bio: null })).body.profile).toMatchObject({ display_name: "Sam Rivera", bio: null, handle: "sam_r" });
+});
+
+test("twin settings: a new photo goes straight to storage and is confirmed; only a fresh image is taken", async () => {
+  const f = await twinFixture();
+  const token = await f.signInAt(f.twin);
+  const issued = await f.me(COMMUNITY_APP_MY_AVATAR_UPLOAD_PATH, token);
+  expect(issued.status).toBe(200);
+  expect(typeof issued.body.upload_url).toBe("string");
+  // As an upload with its Content-Type records it (the test store doesn't).
+  const store = (type: string) => f.t.run(async (c) => {
+    const id = await c.storage.store(new Blob([new Uint8Array([1, 2, 3])], { type }));
+    await (c.db as any).patch(id, { contentType: type });
+    return id;
+  });
+  const photo = await store("image/png");
+  const confirmed = await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: photo });
+  expect(confirmed.status).toBe(200);
+  const url = await f.t.run((c) => c.storage.getUrl(photo));
+  expect(confirmed.body.profile.avatar_url).toBe(url);
+  // Studio's framing reset, on the profile row.
+  expect(await f.t.run((c) => c.db.query("userProfileDetails").withIndex("by_user", (q) => q.eq("userId", f.ids.memberId)).first()))
+    .toMatchObject({ avatarStorageId: photo, avatarFocusX: 0.5, avatarFocusY: 0.5, avatarZoom: 1 });
+  // Not an image, or not a storage id: refused, the photo unchanged.
+  expect(await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: await store("text/html") })).toEqual({ status: 400, body: { ok: false, code: "profile_avatar_invalid" } });
+  expect((await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: "../x" })).body).toMatchObject({ code: "invalid_request" });
+  expect((await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: "notastorageid" })).body).toMatchObject({ code: "profile_avatar_invalid" });
+  expect((await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).body.profile.avatar_url).toBe(url);
+  // Removing it: no photo, and the file is gone, as in Studio.
+  expect((await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: null })).body.profile.avatar_url).toBeNull();
+  expect(await f.t.run((c) => c.storage.getUrl(photo))).toBeNull();
+});
+
+test("twin settings: Studio's notification settings, this community's mute and the weekly digest", async () => {
+  const f = await twinFixture();
+  const token = await f.signInAt(f.twin);
+  const set = (body: unknown) => f.me(COMMUNITY_APP_MY_NOTIFICATIONS_PATH, token, body);
+  expect(await set({ muted: true })).toEqual({ status: 200, body: { ok: true, notifications: { muted: true } } });
+  expect(await set({ weekly_digest: false })).toEqual({ status: 200, body: { ok: true, notifications: { weekly_digest: false } } });
+  for (const body of [{}, { muted: "yes" }, { weekly_digest: 1 }]) expect((await set(body)).status).toBe(400);
+  expect((await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).body.notifications).toEqual({ muted: true, weekly_digest: false });
+  // The same rows Studio reads.
+  expect(await f.t.run((c) => c.db.query("communityMemberSettings").collect())).toMatchObject([{ communityId: f.ids.communityId, userId: f.ids.memberId, muted: true }]);
+  expect(await f.t.run((c) => c.db.query("emailPreferences").collect())).toMatchObject([{ userId: f.ids.memberId, weeklyDigestEnabled: false }]);
+});
+
+test("twin settings: a member leaves through Studio's leave; the owner can't", async () => {
+  const f = await twinFixture();
+  const ownerToken = await f.signInAt(f.twin, "apps-owner");
+  expect((await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, ownerToken)).body.community).toEqual({ name: "apps-community", role: "owner" });
+  expect(await f.me(COMMUNITY_APP_MY_LEAVE_PATH, ownerToken)).toEqual({ status: 400, body: { ok: false, code: "community_owner_cannot_leave" } });
+  const token = await f.signInAt(f.twin);
+  await f.me(COMMUNITY_APP_MY_NOTIFICATIONS_PATH, token, { muted: true });
+  expect(await f.me(COMMUNITY_APP_MY_LEAVE_PATH, token)).toEqual({ status: 200, body: { ok: true } });
+  // Studio's leave: the membership, its member settings and the member count go with it.
+  expect(await f.t.run((c) => c.db.get(f.ids.membershipId))).toBeNull();
+  expect(await f.t.run((c) => c.db.query("communityMemberSettings").collect())).toEqual([]);
+  expect((await f.t.run((c) => c.db.get(f.ids.communityId)))?.activeMemberCount).toBe(1);
+  // Gone from here: nothing more to change, and the communities page no longer lists it.
+  expect(await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  expect((await f.me(COMMUNITY_APP_MY_COMMUNITIES_PATH, token, { sites_domain: "polynet.page", host_suffix: "-staging" })).body.communities).toEqual([]);
+});
+
+test("signing out of the twin ends the site's session in the same browser, and back; nothing else ends", async () => {
+  const f = await twinFixture();
+  const revoke = (body: unknown) => f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, body);
+  const alive = async (token: string, origin: string) =>
+    (await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } }, origin)).status === 200;
+  const twinToken = await f.signInAt(f.twin);
+  const siteToken = await f.signInAt(f.site);
+  const otherDevice = await f.signInAt(f.site);
+  const ownerSite = await f.signInAt(f.site, "apps-owner");
+  const first = await revoke({ token: twinToken });
+  expect(first.status).toBe(200);
+  const ticket = first.body.signout_ticket as string;
+  expect(ticket).toMatch(/^[0-9]{13}\.[A-Za-z0-9_-]{43}$/);
+  expect(await alive(twinToken, f.twin)).toBe(false);
+  // The ticket ends only the same member's session: another member's is refused and kept.
+  expect(await revoke({ token: ownerSite, ticket })).toEqual({ status: 403, body: { ok: false, code: "signout_ticket_invalid" } });
+  expect(await alive(ownerSite, f.site)).toBe(true);
+  // A forged or expired ticket ends nothing.
+  expect((await revoke({ token: siteToken, ticket: `${Date.now() + 60_000}.${"a".repeat(43)}` })).status).toBe(403);
+  const stale = await signCommunityAppSignoutTicket(EDGE_SECRET, String(f.ids.memberId), String(f.ids.communityId), Date.now() - 3 * 60_000);
+  expect((await revoke({ token: siteToken, ticket: stale })).status).toBe(403);
+  expect((await revoke({ token: siteToken, ticket: "nope" })).status).toBe(400);
+  expect(await alive(siteToken, f.site)).toBe(true);
+  // The real one ends this browser's site session, and hands back no further ticket.
+  expect(await revoke({ token: siteToken, ticket })).toEqual({ status: 200, body: { ok: true } });
+  expect(await alive(siteToken, f.site)).toBe(false);
+  // The member's other devices stay signed in.
+  expect(await alive(otherDevice, f.site)).toBe(true);
 });

@@ -365,4 +365,11 @@ Those are on the site's private twin (`<slug>--me<suffix>.<sites domain>`,
 only Polynet's code runs; the deploy registers the twin's origin beside the
 site's (`communityDomains.kind = "private"`), and its read
 (`/runtime/app/me/communities`) answers only a session minted there
-(`communityAppSessions.kind = "private"`).
+(`communityAppSessions.kind = "private"`). So do the member's settings there
+(`/runtime/app/me/settings`, `handle`, `profile`, `avatar_upload`, `avatar`,
+`notifications`, `leave`), which also require current membership and call the
+same cores as Studio's settings (profile write, handle check, avatar upload
+URL, email preferences, community member settings, leave). Signing out on
+either origin returns a short-lived ticket (`session_revoke` →
+`signout_ticket`) that ends the other origin's session for the same member in
+the same browser only.

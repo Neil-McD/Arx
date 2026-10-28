@@ -1904,21 +1904,25 @@ export const getCommunityMemberSettings = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const row = (await ctx.db
-      .query("communityMemberSettings" as any)
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.userId),
-      )
-      .first()) as CommunityMemberSettingsLike | null;
-    return row ? await mapCommunityMemberSettingsRow(ctx, row) : null;
+    return await readCommunityMemberSettingsForUser(ctx, { communityId: args.communityId, userId });
   },
 });
+
+// A member's own settings in one community (mute), for Studio and a site's private twin.
+async function readCommunityMemberSettingsForUser(ctx: any, args: { communityId: any; userId: any }) {
+  await requireCommunityChatAccess({
+    ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const row = (await ctx.db
+    .query("communityMemberSettings" as any)
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    )
+    .first()) as CommunityMemberSettingsLike | null;
+  return row ? await mapCommunityMemberSettingsRow(ctx, row) : null;
+}
 
 export const saveCommunityMemberSettings = mutation({
   args: {
@@ -1934,58 +1938,83 @@ export const saveCommunityMemberSettings = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
-    return await runLoggedCommunityAdminMutation({
-      operation: "save_member_settings",
-      context: {
-        actorUserId: args.userId,
-        communityId: String(args.communityId),
-        targetUserId: String(args.userId),
-        muted: Boolean(args.muted),
-      },
-      handler: async () => {
-        const nowMs = Date.now();
-        await requireCommunityChatAccess({
-          ctx,
-          communityId: args.communityId,
-          userId: args.userId,
-        });
-        const mutedUntil = parseIsoMs(args.mutedUntilIso);
-        const existing = (await ctx.db
-          .query("communityMemberSettings" as any)
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", args.userId),
-          )
-          .first()) as CommunityMemberSettingsLike | null;
-        if (existing) {
-          await ctx.db.patch(existing._id as any, {
-            muted: Boolean(args.muted),
-            mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
-            updatedAt: nowMs,
-          });
-          const updated = (await ctx.db.get(
-            existing._id as any,
-          )) as CommunityMemberSettingsLike | null;
-          if (!updated) throw new Error("community_member_settings_not_found");
-          return await mapCommunityMemberSettingsRow(ctx, updated);
-        }
-        const id = await ctx.db.insert("communityMemberSettings" as any, {
-          communityId: args.communityId,
-          userId: args.userId,
+    return await saveCommunityMemberSettingsForUser(ctx, { ...args, userId });
+  },
+});
+
+// The one write of a member's own settings in a community, for Studio's
+// signed-in user and a community site's private twin.
+async function saveCommunityMemberSettingsForUser(
+  ctx: any,
+  args: { userId: any; communityId: any; muted: boolean; mutedUntilIso?: string | null },
+) {
+  return await runLoggedCommunityAdminMutation({
+    operation: "save_member_settings",
+    context: {
+      actorUserId: args.userId,
+      communityId: String(args.communityId),
+      targetUserId: String(args.userId),
+      muted: Boolean(args.muted),
+    },
+    handler: async () => {
+      const nowMs = Date.now();
+      await requireCommunityChatAccess({
+        ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+      });
+      const mutedUntil = parseIsoMs(args.mutedUntilIso);
+      const existing = (await ctx.db
+        .query("communityMemberSettings" as any)
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", args.communityId).eq("userId", args.userId),
+        )
+        .first()) as CommunityMemberSettingsLike | null;
+      if (existing) {
+        await ctx.db.patch(existing._id as any, {
           muted: Boolean(args.muted),
           mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
-          createdAt: nowMs,
           updatedAt: nowMs,
         });
-        const created = (await ctx.db.get(
-          id as any,
+        const updated = (await ctx.db.get(
+          existing._id as any,
         )) as CommunityMemberSettingsLike | null;
-        if (!created)
-          throw new Error("community_member_settings_create_failed");
-        return await mapCommunityMemberSettingsRow(ctx, created);
-      },
-    });
-  },
+        if (!updated) throw new Error("community_member_settings_not_found");
+        return await mapCommunityMemberSettingsRow(ctx, updated);
+      }
+      const id = await ctx.db.insert("communityMemberSettings" as any, {
+        communityId: args.communityId,
+        userId: args.userId,
+        muted: Boolean(args.muted),
+        mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const created = (await ctx.db.get(
+        id as any,
+      )) as CommunityMemberSettingsLike | null;
+      if (!created)
+        throw new Error("community_member_settings_create_failed");
+      return await mapCommunityMemberSettingsRow(ctx, created);
+    },
+  });
+}
+
+// The same three member actions for a member whose private-twin session the
+// caller (httpCommunityApps) already checked, in that session's community.
+export const getCommunityMemberSettingsForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => await readCommunityMemberSettingsForUser(ctx, args),
+});
+
+export const saveCommunityMemberSettingsForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), muted: v.boolean() },
+  handler: async (ctx, args) => await saveCommunityMemberSettingsForUser(ctx, { ...args, mutedUntilIso: null }),
+});
+
+export const leaveCommunityForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => await leaveCommunityForUser(ctx, args),
 });
 
 export const approvePendingJoinRequestsForOpenAccessInternal = internalMutation({
@@ -2128,86 +2157,91 @@ export const leaveCommunity = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
-    return await runLoggedCommunityAdminMutation({
-      operation: "leave_community",
-      context: {
-        actorUserId: args.userId,
-        communityId: String(args.communityId),
-      },
-      handler: async () => {
-        const nowMs = Date.now();
-        const community = (await ctx.db.get(
-          args.communityId,
-        )) as CommunityLike | null;
-        if (!community) throw new Error("community_not_found");
-        if (String(community.ownerId) === String(args.userId)) {
-          throw new Error("community_owner_cannot_leave");
-        }
-        const membership = await getUniqueCommunityMembershipByPair({
+    return await leaveCommunityForUser(ctx, { communityId: args.communityId, userId });
+  },
+});
+
+// The one way a member leaves, for Studio's signed-in user and a community
+// site's private twin. The owner can't.
+async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId: any }) {
+  return await runLoggedCommunityAdminMutation({
+    operation: "leave_community",
+    context: {
+      actorUserId: args.userId,
+      communityId: String(args.communityId),
+    },
+    handler: async () => {
+      const nowMs = Date.now();
+      const community = (await ctx.db.get(
+        args.communityId,
+      )) as CommunityLike | null;
+      if (!community) throw new Error("community_not_found");
+      if (String(community.ownerId) === String(args.userId)) {
+        throw new Error("community_owner_cannot_leave");
+      }
+      const membership = await getUniqueCommunityMembershipByPair({
+        ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+      });
+      if (membership) {
+        await endCommunitySubscriptionsForMembership({
           ctx,
-          communityId: args.communityId,
-          userId: args.userId,
+          membershipId: membership._id,
+          nowMs,
         });
-        if (membership) {
-          await endCommunitySubscriptionsForMembership({
-            ctx,
-            membershipId: membership._id,
-            nowMs,
-          });
-          const preservePlatformHomeRelationship = isPlatformHomeCommunity({
-            communitySlug: community.slug,
-          });
-          const after = preservePlatformHomeRelationship
-            ? ({
-                ...membership,
-                active: false,
-                revokedAt: nowMs,
-                revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
-                updatedAt: nowMs,
-              } as CommunityMembershipLike)
-            : null;
-          if (after) {
-            await ctx.db.patch(membership._id as any, {
+        const preservePlatformHomeRelationship = isPlatformHomeCommunity({
+          communitySlug: community.slug,
+        });
+        const after = preservePlatformHomeRelationship
+          ? ({
+              ...membership,
               active: false,
               revokedAt: nowMs,
               revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
               updatedAt: nowMs,
-            });
-          } else {
-            await ctx.db.delete(membership._id as any);
-          }
-          await adjustCommunityActiveMemberCountForMembershipTransition({
-            ctx,
-            communityId: args.communityId,
-            before: membership,
-            after,
+            } as CommunityMembershipLike)
+          : null;
+        if (after) {
+          await ctx.db.patch(membership._id as any, {
+            active: false,
+            revokedAt: nowMs,
+            revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
+            updatedAt: nowMs,
           });
+        } else {
+          await ctx.db.delete(membership._id as any);
         }
-        const memberSettings = (await ctx.db
-          .query("communityMemberSettings" as any)
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", args.userId),
-          )
-          .first()) as CommunityMemberSettingsLike | null;
-        if (memberSettings) {
-          await ctx.db.delete(memberSettings._id as any);
-        }
-        await deleteCommunityReadCursorsForUserCommunity(
-          ctx,
-          args.communityId,
-          args.userId,
-        );
-        await deleteCommunityJoinRequestByPair({
+        await adjustCommunityActiveMemberCountForMembershipTransition({
           ctx,
           communityId: args.communityId,
-          userId: args.userId,
+          before: membership,
+          after,
         });
-        return { ok: true };
-      },
-    });
-  },
-});
+      }
+      const memberSettings = (await ctx.db
+        .query("communityMemberSettings" as any)
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", args.communityId).eq("userId", args.userId),
+        )
+        .first()) as CommunityMemberSettingsLike | null;
+      if (memberSettings) {
+        await ctx.db.delete(memberSettings._id as any);
+      }
+      await deleteCommunityReadCursorsForUserCommunity(
+        ctx,
+        args.communityId,
+        args.userId,
+      );
+      await deleteCommunityJoinRequestByPair({
+        ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+      });
+      return { ok: true };
+    },
+  });
+}
 
 export const getCommunityAnalyticsSnapshot = query({
   args: {

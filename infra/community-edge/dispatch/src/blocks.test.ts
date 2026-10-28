@@ -1489,7 +1489,7 @@ test("the account menu: In this club links to the site's own pages, marking the 
   await home.close();
 });
 
-test("the account menu: Your communities opens the site's private twin, where the site's code never runs", async () => {
+test("the account menu: Your communities and Settings open the site's private twin, where the site's code never runs", async () => {
   const twin = "https://run-club--me.polynet.test";
   const page = await open((fake) => {
     (fake.session as any).site_origin = SITE;
@@ -1502,11 +1502,44 @@ test("the account menu: Your communities opens the site's private twin, where th
   const mine = shell.locator("[part=panel] a", { hasText: "Your communities" });
   await expect.poll(() => mine.count()).toBe(1);
   expect(await mine.getAttribute("href")).toBe(`${twin}/communities`);
-  // On the site, the club's pages stay relative; everything else in the menu is as it was.
+  expect(await shell.locator("[part=panel] a", { hasText: "Settings" }).getAttribute("href")).toBe(`${twin}/settings`);
+  // On the site, the club's pages stay relative; Messages is still Polynet's for now.
   expect(await shell.locator("[part=group] a", { hasText: "Chat" }).getAttribute("href")).toBe("/chat");
   expect(await shell.locator("[part=panel] a", { hasText: "Messages" }).getAttribute("href")).toBe("https://polynet.test/?dm=inbox");
-  expect(await shell.locator("[part=panel] a", { hasText: "Settings" }).getAttribute("href")).toBe("https://polynet.test/settings/profile");
   await page.close();
+});
+
+test("the account menu: Sign out on the site goes through its private twin's sign-out, and nowhere else", async () => {
+  const twin = "https://run-club--me.polynet.test";
+  const setup = (fake: ReturnType<typeof fixture>) => {
+    (fake.session as any).site_origin = SITE;
+    (fake.session as any).private_origin = twin;
+    (fake as any).account = { member: { name: "Me" }, community: { role: "member" }, links: {} };
+  };
+  for (const [then, expected] of [
+    [`${twin}/__polynet/auth/signout?ticket=t&return=%2Fchat`, `${twin}/__polynet/auth/signout?ticket=t&return=%2Fchat`],
+    // Anything but the twin's own sign-out is never followed: the page just reloads, signed out.
+    ["https://evil.example.com/__polynet/auth/signout?x", `${SITE}/chat`],
+  ]) {
+    const page = await open(setup, frame(), "/chat");
+    const posts: string[] = [];
+    await page.route(`${SITE}/__polynet/auth/logout**`, (route) => {
+      posts.push(`${route.request().method()} ${new URL(route.request().url()).search}`);
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, then }) });
+    });
+    await page.route(`${twin}/**`, (route) => route.fulfill({ contentType: "text/html", body: "<p>signed out</p>" }));
+    const elsewhere: string[] = [];
+    await page.route("https://evil.example.com/**", (route) => { elsewhere.push(route.request().url()); return route.abort(); });
+    const shell = page.locator("polynet-account");
+    await shell.locator("[part=trigger]").click();
+    const navigated = page.waitForEvent("framenavigated");
+    await shell.locator("[part=panel] button", { hasText: "Sign out" }).click();
+    await navigated;
+    expect(page.url()).toBe(expected);
+    expect(elsewhere).toEqual([]);
+    expect(posts).toEqual([`POST ?return=${encodeURIComponent("/chat")}`]);
+    await page.close();
+  }
 });
 
 // The calendar, around now: one under way, two coming (one next month), one

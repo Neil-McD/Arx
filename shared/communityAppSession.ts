@@ -82,3 +82,38 @@ export function normalizeCommunityAppOrigin(raw: string): string | null {
 export function isCommunityAppTool(value: unknown): value is PolynetCanonicalToolName {
   return typeof value === "string" && (POLYNET_CANONICAL_TOOL_NAMES as readonly string[]).includes(value);
 }
+
+// Signing out of a community's site also signs out of its private twin, and
+// back. Each keeps a host-only cookie only a top-level visit to that origin can
+// clear, so the first sign-out hands back a short-lived ticket, bound to the
+// member and community, that lets the visit to the other origin end its
+// session in the same browser. Anything else bounced there ends nothing.
+export const COMMUNITY_APP_SIGNOUT_TICKET_TTL_MS = 2 * 60 * 1000;
+
+export function isCommunityAppSignoutTicket(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9]{13}\.[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+async function signoutMac(secret: string, userId: string, communityId: string, expiresAt: number): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(`polynet-signout:${secret}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${userId}:${communityId}:${expiresAt}`));
+  return base64Url(new Uint8Array(mac));
+}
+
+export async function signCommunityAppSignoutTicket(secret: string, userId: string, communityId: string, nowMs: number): Promise<string> {
+  const expiresAt = nowMs + COMMUNITY_APP_SIGNOUT_TICKET_TTL_MS;
+  return `${expiresAt}.${await signoutMac(secret, userId, communityId, expiresAt)}`;
+}
+
+export async function verifyCommunityAppSignoutTicket(
+  secret: string, ticket: string, userId: string, communityId: string, nowMs: number,
+): Promise<boolean> {
+  if (!secret || !isCommunityAppSignoutTicket(ticket)) return false;
+  const [at, mac] = ticket.split(".");
+  const expiresAt = Number(at);
+  if (!(expiresAt > nowMs) || expiresAt > nowMs + COMMUNITY_APP_SIGNOUT_TICKET_TTL_MS) return false;
+  const expected = await signoutMac(secret, userId, communityId, expiresAt);
+  let diff = expected.length ^ mac.length;
+  for (let index = 0; index < Math.min(expected.length, mac.length); index += 1) diff |= expected.charCodeAt(index) ^ mac.charCodeAt(index);
+  return diff === 0;
+}

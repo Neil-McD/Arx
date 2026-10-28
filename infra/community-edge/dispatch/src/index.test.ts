@@ -682,12 +682,14 @@ test("the builder kit is served on every community's domain", async () => {
 });
 
 test("logout revokes the session and clears the cookie", async () => {
-  const revoke = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
+  const revoke = vi.fn(async () => new Response(JSON.stringify({ ok: true, signout_ticket: `${Date.now() + 60_000}.${"k".repeat(43)}` })));
   vi.stubGlobal("fetch", revoke);
   const res = await edge.fetch(request("/__polynet/auth/logout", { method: "POST", headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), env());
   expect(res.status).toBe(200);
   expect(JSON.parse(String((revoke.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toEqual({ token: TOKEN });
   expect(res.headers.get("set-cookie")).toMatch(/__Host-polynet_session=; .*Max-Age=0/);
+  // Off the sites domain there's no private twin to sign out of too.
+  expect(await res.json()).toEqual({ ok: true });
 });
 
 test("return paths stay on the community's own site", () => {
@@ -842,7 +844,7 @@ test("twin: with no rewriter to strip the frame, never the site's frame: Polynet
   const policy = res.headers.get("content-security-policy")!;
   expect(policy).toMatch(/^default-src 'none'; script-src 'self'; style-src 'self' https:\/\/apps-community-staging\.polynet\.page https:\/\/fonts\.googleapis\.com 'sha256-[A-Za-z0-9+/=]+'; /);
   for (const part of ["font-src https://apps-community-staging.polynet.page https://fonts.gstatic.com data:",
-    "img-src 'self' data: https://apps-community-staging.polynet.page https://live.example.convex.cloud", "connect-src 'self'",
+    "img-src 'self' data: https://apps-community-staging.polynet.page https://live.example.convex.cloud", "connect-src 'self' https://live.example.convex.cloud;",
     "form-action 'self'", "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'"]) expect(policy).toContain(part);
   expect(policy).not.toContain("unsafe-inline");
   expect(Object.fromEntries(["x-frame-options", "referrer-policy", "cache-control", "cross-origin-opener-policy", "cross-origin-resource-policy", "x-content-type-options", "origin-agent-cluster"]
@@ -868,4 +870,146 @@ test("twin: the site sends its members' own pages to its twin, unless it has its
   // Off the sites domain there's no twin: the site's own, as before.
   const local = await edge.fetch(request("/communities", { headers: { "sec-fetch-mode": "navigate" } }), env());
   expect(local.status).toBe(200);
+});
+
+// Settings on the twin: Studio's member settings through /__polynet/me/*.
+const SETTINGS_PATHS: Array<[string, "GET" | "POST"]> = [
+  ["/__polynet/me/settings", "GET"], ["/__polynet/me/handle?handle=sam", "GET"], ["/__polynet/me/profile", "POST"],
+  ["/__polynet/me/avatar/upload", "POST"], ["/__polynet/me/avatar", "POST"], ["/__polynet/me/notifications", "POST"], ["/__polynet/me/leave", "POST"],
+];
+const settingsCall = (origin: string, path: string, method: string, headers: Record<string, string> = {}, body = "{}") =>
+  at(origin, path, { method, headers: { cookie: `__Host-polynet_session=${TOKEN}`, ...(method === "POST" ? { "content-type": "application/json" } : {}), ...headers },
+    body: method === "POST" ? body : undefined });
+
+test("twin settings: the routes and the settings module exist only on the twin, for its own pages", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  for (const [path, method] of SETTINGS_PATHS) {
+    expect((await edge.fetch(settingsCall(SITE, path, method), e)).status, `site ${path}`).toBe(404);
+    // Another site's page (same site, other origin), or anything cross-site, can't call them on the twin.
+    for (const site of ["same-site", "cross-site"]) {
+      const res = await edge.fetch(settingsCall(TWIN, path, method, { "sec-fetch-site": site }), e);
+      expect(res.status, `${site} ${path}`).toBe(403);
+    }
+  }
+  expect((await edge.fetch(at(SITE, "/__polynet/blocks/settings.js"), e)).status).toBe(404);
+  expect(backend).not.toHaveBeenCalled();
+  const module = await edge.fetch(at(TWIN, "/__polynet/blocks/settings.js"), e);
+  expect([module.status, module.headers.get("content-type")]).toEqual([200, "text/javascript; charset=utf-8"]);
+  const source = await module.text();
+  expect(source).toContain("export function mountSettings");
+  expect(source).not.toContain("__POLYNET_SETTINGS_MESSAGES__");
+  expect(source).not.toContain("innerHTML");
+});
+
+test("twin settings: reads are GETs, writes small same-origin JSON POSTs; no session, no call", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  for (const [path, method] of SETTINGS_PATHS) {
+    const other = method === "GET" ? "POST" : "GET";
+    expect((await edge.fetch(settingsCall(TWIN, path, other), e)).status, `${other} ${path}`).toBe(405);
+    expect((await edge.fetch(at(TWIN, path, { method, body: method === "POST" ? "{}" : undefined, headers: { "content-type": "application/json" } }), e)).status, path).toBe(401);
+    if (method !== "POST") continue;
+    // A form any page can post never reaches a write.
+    expect((await edge.fetch(settingsCall(TWIN, path, method, { "content-type": "application/x-www-form-urlencoded" }, "a=1"), e)).status, path).toBe(415);
+    expect((await edge.fetch(settingsCall(TWIN, path, method, { "content-type": "text/plain" }), e)).status, path).toBe(415);
+  }
+  // Size limits: the profile takes up to 8 KB, the rest 1 KB; a lying Content-Length doesn't help.
+  const big = (bytes: number) => JSON.stringify({ bio: "x".repeat(bytes) });
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/profile", "POST", {}, big(9000)), e)).status).toBe(413);
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/notifications", "POST", {}, big(2000)), e)).status).toBe(413);
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/leave", "POST", { "content-length": "999999" }), e)).status).toBe(413);
+  expect(backend).not.toHaveBeenCalled();
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/profile", "POST", {}, big(7000)), e)).status).toBe(200);
+  expect(backend).toHaveBeenCalledTimes(1);
+});
+
+test("twin settings: forwarded with the twin's session to Studio's cores; only the fields the page shows come back", async () => {
+  resetEdgeCaches();
+  const answers: Record<string, unknown> = {
+    "/runtime/app/me/settings": { ok: true, email: "never@example.com",
+      profile: { display_name: "Sam", handle: "sam", bio: "Hi", avatar_url: "https://tracker.example.com/a.png", user_id: "secret", social_links: { youtube: "https://youtube.com/@sam", x: "", instagram: "", tiktok: "z" } },
+      community: { name: "Apps Club", role: "superuser", id: "k1" }, notifications: { muted: true, weekly_digest: false, other: 1 } },
+    "/runtime/app/me/handle": { ok: true, available: false, status: "taken", handle: "sam", owner: "someone" },
+    "/runtime/app/me/avatar_upload": { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" },
+    "/runtime/app/me/avatar": { ok: true, profile: { display_name: "Sam", handle: "sam", bio: null, avatar_url: "https://live.example.convex.cloud/api/storage/kg2", social_links: {} } },
+    "/runtime/app/me/leave": { ok: true, extra: 1 },
+  };
+  const backend = vi.fn(async (url: string, _init?: RequestInit) => Response.json(answers[new URL(url).pathname] ?? { ok: false }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  const read = async (path: string, method = "GET", body = "{}") => {
+    const res = await edge.fetch(settingsCall(TWIN, path, method, {}, body), e);
+    return [res.status, await res.json()];
+  };
+  expect(await read("/__polynet/me/settings")).toEqual([200, { ok: true,
+    profile: { display_name: "Sam", handle: "sam", bio: "Hi", avatar_url: null, social_links: { youtube: "https://youtube.com/@sam", x: "", instagram: "" } },
+    community: { name: "Apps Club", role: "member" }, notifications: { muted: true, weekly_digest: false },
+    account_url: "https://polynet.example.com/settings/account" }]);
+  const [path, init] = backend.mock.calls[0];
+  expect(path).toBe("https://api.example.convex.site/runtime/app/me/settings");
+  expect(init?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}`, "x-polynet-edge-secret": "edge-secret" });
+  expect(await read("/__polynet/me/handle?handle=sam")).toEqual([200, { ok: true, available: false, status: "taken", handle: "sam" }]);
+  expect(JSON.parse(String(backend.mock.calls[1][1]?.body))).toEqual({ handle: "sam" });
+  expect(await read("/__polynet/me/avatar/upload", "POST")).toEqual([200, { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" }]);
+  expect((await read("/__polynet/me/avatar", "POST", '{"storage_id":"kg2"}'))[1]).toMatchObject({ profile: { avatar_url: "https://live.example.convex.cloud/api/storage/kg2" } });
+  expect(JSON.parse(String(backend.mock.calls[3][1]?.body))).toEqual({ storage_id: "kg2" });
+  expect(await read("/__polynet/me/leave", "POST")).toEqual([200, { ok: true }]);
+  // An upload address anywhere but Polynet's storage is never handed to the page.
+  answers["/runtime/app/me/avatar_upload"] = { ok: true, upload_url: "https://evil.example.com/api/storage/upload?token=t" };
+  expect(await read("/__polynet/me/avatar/upload", "POST")).toEqual([502, { ok: false, code: "settings_unavailable" }]);
+  // A core's refusal keeps its code; a session the backend refuses is cleared.
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false, code: "profile_handle_taken", message: "<b>raw</b>" }, { status: 400 })));
+  expect(await read("/__polynet/me/profile", "POST", '{"handle":"sam"}')).toEqual([400, { ok: false, code: "profile_handle_taken" }]);
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false }, { status: 401 })));
+  const refused = await edge.fetch(settingsCall(TWIN, "/__polynet/me/settings", "GET"), e);
+  expect(refused.status).toBe(401);
+  expect(refused.headers.get("set-cookie")).toMatch(/^__Host-polynet_session=; Path=\/; HttpOnly; SameSite=Lax; Max-Age=0; Secure$/);
+});
+
+test("twin sign-out: each origin ends its own session; the other ends its own on a visit, only with the member's ticket", async () => {
+  resetEdgeCaches();
+  const ticket = `${Date.now() + 60_000}.${"k".repeat(43)}`;
+  const revoke = vi.fn(async (_url: string, init?: RequestInit) =>
+    Response.json(JSON.parse(String(init?.body)).ticket ? { ok: true } : { ok: true, signout_ticket: ticket }));
+  vi.stubGlobal("fetch", revoke);
+  const e = sitesEnv();
+  const cookie = `__Host-polynet_session=${TOKEN}`;
+  // From the twin: back to the site's home, through the site's own sign-out.
+  const onTwin = await edge.fetch(at(TWIN, "/__polynet/auth/logout", { method: "POST", headers: { cookie } }), e);
+  expect(await onTwin.json()).toEqual({ ok: true, then: `${SITE}/__polynet/auth/signout?ticket=${ticket}&return=%2F` });
+  // From the site: through the twin's, then back to the same page.
+  const onSite = await edge.fetch(at(SITE, "/__polynet/auth/logout?return=/chat%3Fchannel%3Dcrew", { method: "POST", headers: { cookie } }), e);
+  expect(await onSite.json()).toEqual({ ok: true, then: `${TWIN}/__polynet/auth/signout?ticket=${ticket}&return=%2Fchat%3Fchannel%3Dcrew` });
+  // The visit: a top-level navigation from the other origin, so no same-origin rule; the ticket goes to the backend.
+  revoke.mockClear();
+  const visit = (origin: string, query: string, headers: Record<string, string> = { cookie }) =>
+    edge.fetch(at(origin, `/__polynet/auth/signout${query}`, { headers: { "sec-fetch-site": "same-site", "sec-fetch-mode": "navigate", ...headers } }), e);
+  const ended = await visit(SITE, `?ticket=${ticket}&return=%2F`);
+  expect([ended.status, ended.headers.get("location")]).toEqual([302, `${SITE}/`]);
+  expect(ended.headers.get("set-cookie")).toMatch(/^__Host-polynet_session=; .*Max-Age=0/);
+  expect(JSON.parse(String(revoke.mock.calls[0][1]?.body))).toEqual({ token: TOKEN, ticket });
+  const twinEnded = await visit(TWIN, `?ticket=${ticket}&return=%2Fchat`);
+  expect([twinEnded.status, twinEnded.headers.get("location")]).toEqual([302, `${SITE}/chat`]);
+  // Without a ticket, with a bad one, or with one the backend refuses: nothing ends, and it never leaves the site.
+  revoke.mockClear();
+  for (const query of ["", "?ticket=nope", "?return=https://evil.example.com", "?return=//evil.example.com"]) {
+    const res = await visit(SITE, query);
+    expect([res.status, res.headers.get("location"), res.headers.get("set-cookie")], query).toEqual([302, `${SITE}/`, null]);
+  }
+  expect(revoke).not.toHaveBeenCalled();
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false, code: "signout_ticket_invalid" }, { status: 403 })));
+  expect((await visit(SITE, `?ticket=${ticket}`)).headers.get("set-cookie")).toBeNull();
+});
+
+test("twin settings: the profile refusals read exactly as Studio words them", async () => {
+  const { SETTINGS_MESSAGES } = await import("./blocks/settings");
+  const { PROFILE_MUTATION_ERROR_MESSAGES } = await import("../../../../shared/profileMutationErrors");
+  const profileCodes = Object.keys(SETTINGS_MESSAGES).filter((code) => code.startsWith("profile_"));
+  expect(profileCodes.length).toBe(12);
+  for (const code of profileCodes) expect(SETTINGS_MESSAGES[code], code).toBe((PROFILE_MUTATION_ERROR_MESSAGES as Record<string, string>)[code]);
 });

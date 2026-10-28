@@ -5,7 +5,7 @@ one edge Worker in front of every community front end.
 
 ```text
 <community address> → dispatch Worker (Polynet edge)
-                         ├─ /__polynet/auth/* → "Sign in with Polynet" (start, callback, session, logout);
+                         ├─ /__polynet/auth/* → "Sign in with Polynet" (start, callback, session, logout, signout);
                          │                      session also returns the live URL and watch-only token
                          ├─ /__polynet/api    → Polynet backend /runtime/app (server-side, edge secret + session cookie)
                          ├─ /__polynet/upload, /__polynet/files/<id> → /runtime/app/upload, /runtime/app/file
@@ -33,8 +33,8 @@ one edge Worker in front of every community front end.
 <slug>--me<suffix>.<sites domain> (the site's private twin: the member's own pages)
                          ├─ found through the site's route (no KV entry of its own); unknown site → 404
                          ├─ /__polynet/* as on the site (its own sign-in, session cookie, API, blocks, shell),
-                         │  plus /__polynet/blocks/personal.js and /__polynet/me/communities
-                         │                    → /runtime/app/me/communities (private session only)
+                         │  plus /__polynet/blocks/personal.js, settings.js and /__polynet/me/*
+                         │                    → /runtime/app/me/* (private session only)
                          ├─ /communities, /messages, /settings, /join → the site's frame, stripped (below)
                          ├─ other GET/HEAD    → 302 to the same path on the site (never for a script)
                          └─ anything else     → 404
@@ -82,7 +82,7 @@ On a personal page (`PERSONAL_PAGES` in `checks.mjs`) the edge:
    style-src 'self' <site> https://fonts.googleapis.com <sha256 of each inline
    style> ['unsafe-hashes' when style attributes exist]; font-src <site>
    https://fonts.gstatic.com data:; img-src 'self' data: <site> <storage>;
-   media-src <site>; connect-src 'self'; form-action 'self'; frame-ancestors
+   media-src <site>; connect-src 'self' <storage>; form-action 'self'; frame-ancestors
    'none'; base-uri 'none'; object-src 'none'`, plus `X-Frame-Options: DENY`,
    `Referrer-Policy: same-origin`, `Cache-Control: no-store`,
    `Cross-Origin-Opener-Policy: same-origin`. Every twin response also has
@@ -100,6 +100,34 @@ to its own site on this sites domain, else to `<POLYNET_AUTH_URL>/c/<slug>`;
 avatars only from Polynet's storage (`POLYNET_LIVE_URL`'s origin). The backend
 answers only a private-kind session (`private_session_required` otherwise);
 the site's `/__polynet/account` still never names other communities.
+
+Settings (`/settings`, `blocks/settings.ts`), twin only, same-origin only;
+each forwarded with the twin's session to the backend, which also requires
+current membership (`not_a_member`) and runs Studio's own cores:
+
+| Edge | Backend | Core |
+| --- | --- | --- |
+| `GET /__polynet/me/settings` | `/runtime/app/me/settings` | profile read, email preferences, community member settings, role |
+| `GET /__polynet/me/handle?handle=` | `/runtime/app/me/handle` | Studio's handle availability |
+| `POST /__polynet/me/profile` (≤ 8 KB) | `/runtime/app/me/profile` | Studio's profile write (name, handle, bio, links) |
+| `POST /__polynet/me/avatar/upload` (≤ 1 KB) | `/runtime/app/me/avatar_upload` | Studio's avatar upload URL |
+| `POST /__polynet/me/avatar` (≤ 1 KB) | `/runtime/app/me/avatar` | Studio's profile write with the uploaded file (or `null`) |
+| `POST /__polynet/me/notifications` (≤ 1 KB) | `/runtime/app/me/notifications` | mute this community; weekly digest |
+| `POST /__polynet/me/leave` (≤ 1 KB) | `/runtime/app/me/leave` | Studio's leave (owners can't) |
+
+Writes must be `application/json` (no plain form reaches them). Only the
+fields the page shows leave the edge; an upload URL only if it is Polynet's
+storage (`POLYNET_LIVE_URL`'s origin, which the twin's `connect-src` allows so
+the photo goes straight there). `account_url` is
+`<POLYNET_AUTH_URL>/settings/account`.
+
+Sign-out: `POST /__polynet/auth/logout` on either origin revokes its session
+and answers `then`, the other origin's `GET /__polynet/auth/signout?ticket=&return=`
+(the backend's two-minute ticket for this member and community). That visit
+revokes its own session only if the backend accepts the ticket for the same
+member, clears its cookie, and returns to the site (`return` is a path). The
+shell and the settings page follow `then`; site code's `polynet.signOut()`
+ends only the site's session.
 
 ### Standard pages (the site's frame)
 

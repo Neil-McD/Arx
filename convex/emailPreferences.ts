@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ensureAuthenticatedActor } from "./authActor";
 
@@ -62,15 +62,36 @@ export const updateMyEmailPreferences = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = Date.now();
-    const existing = await ensureEmailPreferencesRow(ctx, actor.dbUserId, nowMs);
-    const patch: Record<string, unknown> = {};
-    if (typeof args.weeklyDigestEnabled === "boolean") patch.weeklyDigestEnabled = args.weeklyDigestEnabled;
-    if (typeof args.eventReminderEnabled === "boolean") patch.eventReminderEnabled = args.eventReminderEnabled;
-    if (Object.keys(patch).length === 0) return toPublicPreferences(existing);
-    patch.updatedAt = nowMs;
-    await ctx.db.patch(existing._id, patch);
-    return toPublicPreferences({ ...existing, ...patch });
+    return await updateEmailPreferencesForUser(ctx, actor.dbUserId, args);
   },
+});
+
+// The one write, for Studio's signed-in user and a community site's private twin.
+async function updateEmailPreferencesForUser(
+  ctx: any,
+  userId: any,
+  args: { weeklyDigestEnabled?: boolean; eventReminderEnabled?: boolean },
+) {
+  const nowMs = Date.now();
+  const existing = await ensureEmailPreferencesRow(ctx, userId, nowMs);
+  const patch: Record<string, unknown> = {};
+  if (typeof args.weeklyDigestEnabled === "boolean") patch.weeklyDigestEnabled = args.weeklyDigestEnabled;
+  if (typeof args.eventReminderEnabled === "boolean") patch.eventReminderEnabled = args.eventReminderEnabled;
+  if (Object.keys(patch).length === 0) return toPublicPreferences(existing);
+  patch.updatedAt = nowMs;
+  await ctx.db.patch(existing._id, patch);
+  return toPublicPreferences({ ...existing, ...patch });
+}
+
+// For a member whose private-twin session the caller already checked: what
+// Studio's settings show (the weekly digest), nothing more.
+export const getEmailPreferencesForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => toPublicPreferences(await getEmailPreferencesRowByUserId(ctx, args.userId)),
+});
+
+export const updateWeeklyDigestForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), weeklyDigestEnabled: v.boolean() },
+  handler: async (ctx, args) => await updateEmailPreferencesForUser(ctx, args.userId, { weeklyDigestEnabled: args.weeklyDigestEnabled }),
 });
 
