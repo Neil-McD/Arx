@@ -7,12 +7,6 @@ import {
 } from "../shared/communityMemoryRecall";
 import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
-  runChatgptNativeToolCompletion,
-  type ChatgptCodexRequestMetadata,
-  type ChatgptFunctionTool,
-  type ChatgptToolAwareMessage,
-} from "./httpChatgpt";
-import {
   appendRuntimeToolCallFinished,
   appendRuntimeToolCallStarted,
 } from "./runtimeToolCallEvents";
@@ -39,7 +33,6 @@ import {
   type WebResearchCreditAction,
 } from "../shared/providerPricing";
 import { founderPaidToolActionForTool } from "../shared/founderPaidTools";
-import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import { type RetrievalToolName } from "../shared/retrievalTools";
 import {
   extractTextFromNativeToolMessageContent,
@@ -59,7 +52,6 @@ import {
   type RuntimeKernelToolExecutionResult as NativeToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
 import {
-  buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
   normalizeToolArguments as normalizeRegistryToolArguments,
 } from "../shared/toolRegistry";
@@ -87,7 +79,6 @@ import {
 } from "../shared/memberAgentIdentityContext.ts";
 import type { MemberAgentSurfaceContextV1 } from "../shared/memberAgentSurfaceContext.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
-import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
@@ -191,11 +182,8 @@ class RuntimeProviderLifecycleHookError extends Error {
   }
 }
 
-type OpenAiCompatibleFunctionTool = ReturnType<
-  typeof buildOpenAiFunctionTools
->[number];
-type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
-type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
+// Every turn is founder-funded through OpenAI.
+type RuntimeInferenceSource = "platform";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
 const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
@@ -795,72 +783,34 @@ export async function executeRetrievalHarnessTool(params: {
 }
 
 async function runProviderNativeToolCompletion(params: {
-  ctx: any;
-  userId: string;
-  requestedModelId: string;
-  inferenceSource: RuntimeInferenceSource;
   modelRef: string;
   messages: NativeToolAwareMessage[];
   maxTokens: number;
-  openRouterTools: OpenAiCompatibleFunctionTool[];
-  responsesApiTools: ChatgptCompatibleFunctionTool[];
-  apiKeyOverride?: string | null;
+  tools: Parameters<typeof runOpenAiNativeToolCompletion>[0]["tools"];
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
   onTextDelta?: (delta: string) => void;
-  onReasoningSummaryTextDelta?: (params: {
-    delta: string;
-    summaryIndex: number;
-  }) => Promise<void> | void;
-  onReasoningSummaryPartAdded?: (params: {
-    summaryIndex: number;
-  }) => Promise<void> | void;
-  requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
 }): Promise<
   NativeToolAwareCompletionSuccess<string> | RuntimeAgentLoopFailureInput
 > {
-  if (params.inferenceSource === "chatgpt") {
-    return runChatgptNativeToolCompletion({
-      ctx: params.ctx,
-      userId: params.userId,
-      modelId: params.requestedModelId,
-      messages: params.messages as ChatgptToolAwareMessage[],
-      maxTokens: params.maxTokens,
-      tools: params.responsesApiTools,
-      parallelToolCalls: params.parallelToolCalls,
-      toolChoice: params.toolChoice,
-      onReasoningSummaryTextDelta: params.onReasoningSummaryTextDelta,
-      onReasoningSummaryPartAdded: params.onReasoningSummaryPartAdded,
-      requestMetadata: params.requestMetadata,
-      signal: params.signal,
-    });
-  }
   const parsedProviderRef = parseProviderModelRef(params.modelRef);
-  if (
-    (params.inferenceSource === "platform" || params.inferenceSource === "user_key") &&
-    parsedProviderRef?.provider === "openai"
-  ) {
-    return runOpenAiNativeToolCompletion({
-      modelId: parsedProviderRef.providerModel,
-      messages: params.messages,
-      maxTokens: params.maxTokens,
-      tools: params.responsesApiTools,
-      apiKeyOverride: params.inferenceSource === "user_key" ? params.apiKeyOverride : null,
-      parallelToolCalls: params.parallelToolCalls,
-      toolChoice: params.toolChoice,
-      onTextDelta: params.onTextDelta,
-      signal: params.signal,
-    });
+  if (parsedProviderRef?.provider !== "openai") {
+    return {
+      ok: false,
+      status: 503,
+      code: "runtime_model_provider_unsupported",
+      message: "The community model must be an OpenAI model.",
+    };
   }
-  return runOpenRouterNativeToolCompletion({
-    modelRef: params.modelRef,
+  return runOpenAiNativeToolCompletion({
+    modelId: parsedProviderRef.providerModel,
     messages: params.messages,
     maxTokens: params.maxTokens,
-    tools: params.openRouterTools,
-    apiKeyOverride: params.apiKeyOverride,
+    tools: params.tools,
     parallelToolCalls: params.parallelToolCalls,
     toolChoice: params.toolChoice,
+    onTextDelta: params.onTextDelta,
     signal: params.signal,
   });
 }
@@ -888,7 +838,6 @@ async function executeRetrievalAgentLoop(
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
-    apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
       eventKey?: string;
@@ -1095,7 +1044,6 @@ async function executeRetrievalAgentLoop(
     fixedToolNames: effectiveAllowedToolNames,
   });
   const activeProviderTools = {
-    openAiTools: buildOpenAiFunctionTools(effectiveAllowedToolNames),
     responsesTools: buildResponsesApiFunctionTools(effectiveAllowedToolNames),
     activeToolNames: [...effectiveAllowedToolNames],
     activeToolPolicies: providerToolPolicySurface.policies,
@@ -1106,10 +1054,7 @@ async function executeRetrievalAgentLoop(
     requestedModelId: params.requestedModelId,
     modelRef: params.modelRef,
   });
-  const resolvedProviderToolSchemas =
-    inputBudgetIdentity.transport === "openrouter_chat_completions"
-      ? activeProviderTools.openAiTools
-      : activeProviderTools.responsesTools;
+  const resolvedProviderToolSchemas = activeProviderTools.responsesTools;
   let conversationMessagesForProvider = params.messages;
   if (params.persistedConversationHistory) {
     const historySeed = params.persistedConversationHistory;
@@ -1293,8 +1238,6 @@ async function executeRetrievalAgentLoop(
   );
   const providerToolChoice: NativeToolChoice = "auto";
   let reasoningSummaryStreamCount = 0;
-  let reasoningSummaryPartAddedCount = 0;
-  let reasoningSummaryTextDeltaCount = 0;
   let activeToolBatchTelemetry: ActiveRuntimeToolBatchTelemetry | null = null;
 
   const flushActiveToolBatchTelemetry = async (options: {
@@ -1564,7 +1507,6 @@ async function executeRetrievalAgentLoop(
       });
     };
     const loopStartedAt = Date.now();
-    const chatgptCodexRequestId = String(params.threadId ?? "").trim() || params.runId;
     const attestedSurface =
       params.invocationSurface === "member_agent_dock" ||
       params.invocationSurface === "community_funnel_builder"
@@ -1585,12 +1527,6 @@ async function executeRetrievalAgentLoop(
         ) {
           throw new Error("runtime_provider_context_attestation_inputs_missing");
         }
-        const parsedProviderRef = parseProviderModelRef(params.modelRef);
-        const useResponsesApiTools =
-          params.inferenceSource === "chatgpt" ||
-          ((params.inferenceSource === "platform" ||
-            params.inferenceSource === "user_key") &&
-            parsedProviderRef?.provider === "openai");
         const attestation = await buildRuntimeProviderContextAttestation({
           surface: attestedSurface,
           runId: params.runId,
@@ -1609,13 +1545,9 @@ async function executeRetrievalAgentLoop(
           messages: providerMessages,
           promptSections: runtimePromptBundle.sections,
           contextManifest: runtimeContextManifest,
-          toolSchemaFormat: useResponsesApiTools
-            ? "responses_api"
-            : "openai_compatible",
+          toolSchemaFormat: "responses_api",
           toolNames: activeProviderTools.activeToolNames,
-          providerTools: useResponsesApiTools
-            ? activeProviderTools.responsesTools
-            : activeProviderTools.openAiTools,
+          providerTools: activeProviderTools.responsesTools,
         });
         const persisted =
           await params.recordInitialProviderContextAttestation(attestation);
@@ -1690,11 +1622,6 @@ async function executeRetrievalAgentLoop(
           | NativeToolAwareCompletionSuccess<string>
           | RuntimeAgentLoopFailureInput;
         let providerResultObserved = false;
-        const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
-          runId: params.runId,
-          summaryStreamId: `${params.runId}:tool_completion:${reasoningSummaryStreamCount}`,
-          appendRunEvent: params.appendRunEvent,
-        });
         const completionIndex = reasoningSummaryStreamCount;
         const onAssistantTextDelta = params.onAssistantTextDelta;
         reasoningSummaryStreamCount += 1;
@@ -1717,49 +1644,16 @@ async function executeRetrievalAgentLoop(
                 throw new RuntimeProviderLifecycleHookError(error);
               }
               return await runProviderNativeToolCompletion({
-                ctx: params.ctx,
-                userId: params.userId,
-                requestedModelId: params.requestedModelId,
-                inferenceSource: params.inferenceSource,
                 modelRef: params.modelRef,
                 messages,
                 maxTokens: params.maxTokens,
-                openRouterTools: activeProviderTools.openAiTools,
-                responsesApiTools: activeProviderTools.responsesTools,
-                apiKeyOverride: params.apiKeyOverride,
+                tools: activeProviderTools.responsesTools,
                 parallelToolCalls:
                   providerToolChoice === "auto" && parallelReadToolsEnabled,
                 toolChoice: providerToolChoice,
                 onTextDelta: onAssistantTextDelta
                   ? (delta) => onAssistantTextDelta(delta, completionIndex)
                   : undefined,
-                requestMetadata: {
-                  sessionId: chatgptCodexRequestId,
-                  threadId: chatgptCodexRequestId,
-                },
-                onReasoningSummaryPartAdded: async ({ summaryIndex }) => {
-                  try {
-                    reasoningSummaryPartAddedCount += 1;
-                    await reasoningSummaryEmitter.onPartAdded(summaryIndex);
-                  } catch {
-                    // Best-effort UX event; do not fail the loop if summary persistence fails.
-                  }
-                },
-                onReasoningSummaryTextDelta: async ({
-                  delta,
-                  summaryIndex,
-                }) => {
-                  if (!delta) return;
-                  try {
-                    reasoningSummaryTextDeltaCount += 1;
-                    await reasoningSummaryEmitter.onTextDelta(
-                      delta,
-                      summaryIndex,
-                    );
-                  } catch {
-                    // Best-effort UX event; do not fail the loop if summary persistence fails.
-                  }
-                },
                 signal,
               });
             },
@@ -2253,7 +2147,6 @@ async function executeChatToolsAgentLoop(
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
-    apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
       eventKey?: string;

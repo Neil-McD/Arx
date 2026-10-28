@@ -39,7 +39,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `auth`, `authIdentity`, `authActor`, `authSessions`, `authSessionLifecycleCore`,
   `authSessionMaintenanceCore`, `httpAuth`, `httpAuthBridge`, `workosEmailVerification`,
   `profiles`, `profileCore`, `profileRelationshipCore`, `userProfileProjection`,
-  `account`, `accountSetupCore`, `legalAcceptances`; Vercel `api/auth/*`
+  `account`, `accountSetupCore`, `secretCrypto` (encryption for stored secrets), `legalAcceptances`; Vercel `api/auth/*`
   (HttpOnly `__Host-` cookies, return-path checks).
 - **Reached by:** Studio sign-in (WorkOS AuthKit, Google), `/runtime/auth_*`,
   `/runtime/auth_bridge_session_*`, `/user_management/`.
@@ -58,7 +58,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
-  `memberEntryDestination`, `gates`, `platformHomeCommunity`.
+  `memberEntryDestination`, `platformHomeCommunity`.
 - **Reached by:** Studio; site join links go to Polynet's `/c/<slug>` join page.
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
@@ -167,13 +167,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityAgentFilesystem`,
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
   `communityAgentServeWorker`, `communityAppAgentTurn`, `httpRuntimeRoutes`,
-  `httpStreaming`, `modelRegistry`, `fundedInferenceGateway`, `founderInference*`,
-  `chatgptResponsesTransport`, `openAiNativeToolCompletion`, `httpContext`,
-  `httpInferenceConfig`, `httpMemberAgentAttachments`, `httpRuntimeSupport`,
+  `httpStreaming`, `fundedInferenceGateway`, `founderInference*`,
+  `openAiNativeToolCompletion`, `httpInferenceConfig`, `httpMemberAgentAttachments`, `httpRuntimeSupport`,
   `httpRuntimeTurnState`, `runtimeCancellation`, `runtimeHarnessTelemetry`,
   `runtimeReasoningSummaryEvents`, `runtimeToolCallEvents`; web research:
   `webResearchTools`, `webSearchTypes`, `openAiWebSearchTransport`,
   `fallbackHtmlSearchTransport`.
+- **Who pays:** every turn is founder-funded and runs on OpenAI's community model
+  (`COMMUNITY_OWNER_FUNDED_MODEL_ID`). `single_inference_provider_contract_proof`
+  keeps it that way.
 - **Reached by:** `/runtime/runtime_turn`, `/runtime/runtime_cancel`, streaming;
   `/runtime/app/agent` from sites; mention serve requests.
 - **Tables:** `threads`, `cloudMessages`, `cloudThreadAttachments`,
@@ -191,7 +193,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   conversations use them).
 - **Going:** the `asPersonalAgent` argument alias (with the rename; old-client
   contract first); internal `personal_agent` and "member agent" names, renamed to
-  the community agent; `openRouterNativeTransport`, `xAiSearchTransport` (POL-10).
+  the community agent.
+- **Deleted Oct 27 (POL-10, Neil):** OpenRouter (`openRouterNativeTransport`, the
+  failure answer now calls OpenAI directly), the free demo model, Claude, Gemini
+  and Grok model entries, xAI web search (`xAiSearchTransport`), own-account
+  payment (`chatgptAuth`, `httpChatgpt`, `chatgptResponsesTransport`,
+  `providerConnections`), the funding gate queries (`gates`), and the unused model
+  registry route (`httpContext`, `modelRegistry`).
 - **Going (Neil, Oct 27):** skills and harness: `harnessMounts`, `harnessSkills`,
   personal skills, and the skill path in `runtimeSkillResolution`.
 
@@ -292,22 +300,18 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 15. Integrations and skills — Going (Neil, Oct 27)
 
-- **Code:** `communityIntegration*`, `providerConnections`, `providerConnectionProbes`,
-  `httpCommunitySourceIntegrations` (GitHub and Google Drive callbacks),
+- **Code:** `communityIntegration*`, `httpCommunitySourceIntegrations` (GitHub and Google Drive callbacks),
   `composioConnectionAdapter`, `hubspotPilotContract`, `integrationVerificationPilot`,
   `skillCore`, `skillPackages`, `userPlatformSkills`, `platformSkillRuntime`,
   `communitySkillAttachments`.
-- **Tables:** `userProviderConnections`, `userProviderAuthStates`,
-  `userProviderDeviceAuthStates`, `userSourceIntegrationConnections`,
+- **Tables:** `userSourceIntegrationConnections`,
   `userSourceIntegrationAuthStates`, `communityIntegrationConnections`,
   `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`,
   `communitySkillAttachments`.
 - **Contracts:** [skill-harness-contract.md](skill-harness-contract.md).
-- **Keep (Neil, Oct 20):** bring-your-own OpenAI key and ChatGPT account
-  (`chatgptAuth`, `httpChatgpt`, and the OpenAI and ChatGPT parts of
-  `providerConnections`). Whether they survive the "agent paid" pricing is a
-  question for the pricing spec.
-- **Going:** the OpenRouter part of `providerConnections` (POL-10).
+- **Retiring tables:** `userProviderConnections`, `userProviderAuthStates`,
+  `userProviderDeviceAuthStates` (own-account payment, deleted Oct 27 in POL-10;
+  they hold encrypted keys, deleted with Neil's sign-off).
 - **Going (Neil, Oct 27):** everything else in this area, including the Studio
   integrations page.
   Production still calls `communityIntegrationActions:verifyConnection` and the

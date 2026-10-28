@@ -1,6 +1,5 @@
 import { searchWithFallbackHtml } from "./fallbackHtmlSearchTransport";
 import { searchWithOpenAiWebSearch } from "./openAiWebSearchTransport";
-import { searchWithXAi } from "./xAiSearchTransport";
 import type {
   NormalizedSearchResult,
   StructuredWebSource,
@@ -19,40 +18,6 @@ import {
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
-}
-
-function isTimeSensitiveSearchQuery(query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return false;
-  return /\b(latest|current|recent|today|yesterday|this week|this month|breaking|news|update|updates|development|developments)\b/.test(
-    normalized,
-  );
-}
-
-function isCanonicalSearchQuery(query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return false;
-  return /\b(doc|docs|documentation|api|sdk|github|repo|repository|readme|reference|guide|spec|specification|official|manual|changelog)\b/.test(
-    normalized,
-  );
-}
-
-function isFrontierSearchQuery(query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return false;
-  return /\b(alpha|signal|sentiment|reaction|buzz|chatter|discourse|on x|on twitter|what people are saying|what x is saying)\b/.test(
-    normalized,
-  );
-}
-
-type SearchBackendMode = "canonical" | "hybrid";
-
-function routeSearchBackend(query: string): SearchBackendMode {
-  const canonical = isCanonicalSearchQuery(query);
-  const frontier = isFrontierSearchQuery(query);
-  const timeSensitive = isTimeSensitiveSearchQuery(query);
-  if (canonical && !timeSensitive && !frontier) return "canonical";
-  return "hybrid";
 }
 
 function formatNormalizedResults(query: string, results: NormalizedSearchResult[], backendLabels: string[]): string {
@@ -124,34 +89,6 @@ function buildStructuredOpenedSource(url: string): StructuredWebSource {
   };
 }
 
-function mergeResultsWithDiversity(
-  batches: NormalizedSearchResult[][],
-  maxResults: number,
-): NormalizedSearchResult[] {
-  const indexes = batches.map(() => 0);
-  const seen = new Set<string>();
-  const merged: NormalizedSearchResult[] = [];
-
-  while (merged.length < maxResults) {
-    let progressed = false;
-    for (let batchIndex = 0; batchIndex < batches.length && merged.length < maxResults; batchIndex += 1) {
-      const batch = batches[batchIndex] ?? [];
-      while (indexes[batchIndex] < batch.length) {
-        const candidate = batch[indexes[batchIndex]++];
-        const key = normalizeWebResearchUrl(candidate?.url ?? "");
-        if (!candidate || !key || seen.has(key)) continue;
-        seen.add(key);
-        merged.push(candidate);
-        progressed = true;
-        break;
-      }
-    }
-    if (!progressed) break;
-  }
-
-  return merged;
-}
-
 function buildEstimatedBillingEvidence(params: {
   backend: WebResearchBillingBackend;
   action: WebResearchCreditAction;
@@ -166,21 +103,6 @@ function buildEstimatedBillingEvidence(params: {
     provider: params.backend,
     backends: [params.backend],
     usage: null,
-  };
-}
-
-function withEstimatedFallback(params: {
-  evidence: WebResearchBillingEvidence;
-  action: WebResearchCreditAction;
-  backend: WebResearchBillingBackend;
-}): WebResearchBillingEvidence {
-  if (params.evidence.costSource === "provider_exact") return params.evidence;
-  return {
-    ...params.evidence,
-    rawVendorCostUsd: estimateWebResearchVendorCostUsd(params.action),
-    costSource: "estimated",
-    provider: params.evidence.provider ?? params.backend,
-    backends: params.evidence.backends?.length ? params.evidence.backends : [params.backend],
   };
 }
 
@@ -248,10 +170,8 @@ export async function searchWeb(params: {
     };
   }
 
-  const mode = routeSearchBackend(query);
   const backendLabels: string[] = [];
   const openAiResults: NormalizedSearchResult[] = [];
-  const xAiResults: NormalizedSearchResult[] = [];
   const fallbackResults: NormalizedSearchResult[] = [];
   const billingEvidenceParts: WebResearchBillingEvidence[] = [];
   let needsCanonicalFallback = false;
@@ -265,29 +185,6 @@ export async function searchWeb(params: {
     openAiResults.push(...openAiResult.results);
   } else {
     needsCanonicalFallback = true;
-  }
-
-  const shouldUseXAi = mode === "hybrid";
-  if (shouldUseXAi) {
-    const xAiResult = await searchWithXAi({ query });
-    if (xAiResult.ok) {
-      backendLabels.push("xai");
-      xAiResults.push(...xAiResult.results);
-      billingEvidenceParts.push(
-        withEstimatedFallback({
-          evidence: xAiResult.billingEvidence,
-          action: "search",
-          backend: "xai",
-        }),
-      );
-    } else if (!openAiResult.ok) {
-      return {
-        ok: false,
-        code: xAiResult.code,
-        message: xAiResult.message,
-        outputPreview: xAiResult.outputPreview,
-      };
-    }
   }
 
   if (needsCanonicalFallback) {
@@ -307,10 +204,7 @@ export async function searchWeb(params: {
     );
   }
 
-  const results =
-    mode === "canonical"
-      ? dedupeResults([...openAiResults, ...fallbackResults]).slice(0, 8)
-      : mergeResultsWithDiversity([openAiResults, xAiResults, fallbackResults], 8);
+  const results = dedupeResults([...openAiResults, ...fallbackResults]).slice(0, 8);
 
   return {
     ok: true,

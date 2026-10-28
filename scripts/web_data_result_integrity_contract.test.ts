@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -200,14 +200,12 @@ describe("web data result integrity contract", () => {
   });
 
   it("retires the cached provider-connections read that amplified the incident", () => {
-    const providerConnections = read("convex/providerConnections.ts");
     const compatibility = read(
       "shared/contracts/cached_production_client_compatibility_v1.json",
     );
 
-    expect(providerConnections).not.toContain(
-      "export const getCurrentUserProviderConnections",
-    );
+    // The whole module is gone now (POL-10), which retires the read for good.
+    expect(existsSync("convex/providerConnections.ts")).toBe(false);
     expect(compatibility).not.toContain(
       "providerConnections:getCurrentUserProviderConnections",
     );

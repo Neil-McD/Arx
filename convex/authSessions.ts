@@ -1,7 +1,7 @@
 import { internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { decryptStoredSecret, encryptSecret } from "./providerConnections";
+import { decryptStoredSecret, encryptSecret } from "./secretCrypto";
 import {
   pruneRevokedAuthSessionsBatch,
   requireAuthSessionMaintenanceSecret,

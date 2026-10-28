@@ -15,7 +15,6 @@ export type MemberAccountContextLike = {
   displayName: string | null;
   handle: string | null;
   timezone: string | null;
-  inferenceProvider: "chatgpt" | "openai" | null;
   socialLinks: string[];
   memberships: Array<{
     communityName: string;
@@ -34,11 +33,6 @@ const KIND_LABELS: Record<MemberFactKind, string> = {
   preference: "Preferences",
   link: "Links",
 };
-
-const INFERENCE_LABELS = {
-  chatgpt: "ChatGPT",
-  openai: "OpenAI API key",
-} as const;
 
 function renderFactSections(facts: MemberFactLike[], headerLevel: string): string[] {
   const lines: string[] = [];
@@ -61,7 +55,6 @@ export function renderMemberContextMarkdown(args: {
   communityName?: string | null;
   /* Lifecycle prompts can exclude provider context: the model cannot mention
      a connection it never saw. */
-  includeBillingContext?: boolean;
 }): { memberMd: string; communityMd: string | null } {
   /* Defense in depth: callers pass lens-filtered rows, but the renderer
      re-applies the one predicate so it cannot leak what a caller forgot. */
@@ -83,12 +76,8 @@ export function renderMemberContextMarkdown(args: {
   const name = account.displayName?.trim() || "Member";
   const title = account.handle?.trim() ? `# Member — ${name} (@${account.handle.trim()})` : `# Member — ${name}`;
 
-  const includeBillingContext = args.includeBillingContext !== false;
   const accountLines: string[] = ["", "## Account"];
   if (account.timezone?.trim()) accountLines.push(`- Timezone: ${account.timezone.trim()}`);
-  if (includeBillingContext && account.inferenceProvider) {
-    accountLines.push(`- Inference: ${INFERENCE_LABELS[account.inferenceProvider]}`);
-  }
   const memberships = [...account.memberships].sort((a, b) =>
     a.communityName.localeCompare(b.communityName),
   );

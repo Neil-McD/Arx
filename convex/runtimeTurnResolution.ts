@@ -1,7 +1,5 @@
 import { api, internal } from "./_generated/api";
 import { parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
-import { decryptStoredSecret } from "./providerConnections";
-import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig";
 import { type RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
 import {
@@ -20,18 +18,10 @@ import {
 } from "../shared/communityLensAuthority";
 import {
   DEFAULT_ACTIVE_MODEL_ID,
-  supportsModelImageInput,
 } from "../shared/modelCatalog";
 import {
   asRuntimeMessages,
-  gateDeniedResponse,
-  hasChatgptConnectionForUser,
-  hasOpenAiConnectionForUser,
-  mapGateLaneToRuntimeLane,
   normalizeMaxTokens,
-  normalizeSurface,
-  parseRequestedFundingSource,
-  resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 import {
   isReadOnlyLegacyMemberAgentThreadKey,
@@ -69,13 +59,6 @@ export type RuntimeTurnInput = {
   invocation_surface?: RuntimeInvocationSurface | null;
   surface_context?: unknown;
   requested_agentic_tools?: boolean | null;
-  requested_funding_source?:
-    | "demo_public"
-    | "user_key"
-    | "user_chatgpt"
-    | "platform"
-    | "auto"
-    | null;
   stream?: boolean;
   idempotency_key?: string | null;
   user_message_key?: string | null;
@@ -118,13 +101,12 @@ export type RuntimeTurnResolution = {
   }>;
   persistedConversationHistory: MemberAgentPersistedHistorySeed | null;
   requestedModelId: string;
-  lane: "public" | "platform" | "chatgpt";
+  lane: "platform";
   modelRef: string;
   maxTokens: number;
   stream: boolean;
-  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+  inferenceSource: "platform";
   requestedRuntimeEngine: RuntimeEngine | null;
-  providerApiKeyOverride: string | null;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
   runtimeCommunitySlug: string | null;
@@ -259,7 +241,7 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
 
 export function resolveAllowedToolNames(params: {
   activeCapabilityFamilies: readonly RuntimeCapabilityFamily[];
-  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+  inferenceSource: "platform";
 }): RetrievalToolName[] {
   const toolNames: RetrievalToolName[] = [];
   if (params.activeCapabilityFamilies.includes("product_docs")) {
@@ -478,19 +460,12 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
 
   setStage("gate");
-  const publicMap = loadPublicModelMap();
-  const platformMap = loadPlatformModelMap();
-  const invocationFundingPolicy =
-    resolveRuntimeInvocationFundingPolicy(invocationSurface);
-  const isCommunityOwnerFundedTurn =
-    invocationFundingPolicy === "community_owner";
-  const requestedModelId = isCommunityOwnerFundedTurn
-    ? COMMUNITY_OWNER_FUNDED_MODEL_ID
-    : String(input.model_id ?? "").trim() || DEFAULT_ACTIVE_MODEL_ID;
-  const requestedModelSupportsImageInput = isCommunityOwnerFundedTurn
-    ? COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT
-    : supportsModelImageInput(requestedModelId);
-  if (hasPersistedImageInput && !requestedModelSupportsImageInput) {
+  // Every runtime turn is founder-funded: the community's plan pays for OpenAI's
+  // community model. resolveRuntimeInvocationFundingPolicy rejects any surface
+  // that is not.
+  resolveRuntimeInvocationFundingPolicy(invocationSurface);
+  const requestedModelId = COMMUNITY_OWNER_FUNDED_MODEL_ID;
+  if (hasPersistedImageInput && !COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT) {
     return {
       ok: false,
       response: fail(400, {
@@ -501,125 +476,14 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  const publicRef = publicMap[requestedModelId];
-  const fallbackPublicRef = Object.values(publicMap).find(
-    (value) => typeof value === "string" && value.trim().length > 0,
-  );
-  const fallbackPlatformRef =
-    readEnv("ARX_PLATFORM_DEFAULT_MODEL") ||
-    platformMap[DEFAULT_ACTIVE_MODEL_ID] ||
-    platformMap["gpt-5.5"] ||
-    requestedModelId;
   const maxTokens = normalizeMaxTokens(input.max_tokens, 2048);
   const stream = input.stream !== false;
-  let lane: "public" | "platform" | "chatgpt";
-  let modelRef: string;
-  let inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
-  let entitledCapabilityFamilies: RuntimeCapabilityFamily[];
-  let providerApiKeyOverride: string | null = null;
-  if (isCommunityOwnerFundedTurn) {
-    lane = "platform";
-    modelRef = `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`;
-    inferenceSource = "platform";
-    entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
-      authState: "authenticated",
-    }) as RuntimeCapabilityFamily[];
-  } else {
-    const requestedFundingSource = parseRequestedFundingSource(
-      input.requested_funding_source,
-      publicRef ? "demo_public" : "platform",
-    );
-    const [hasUserKeyConnection, hasUserChatgptConnection] = await Promise.all([
-      hasOpenAiConnectionForUser({
-        ctx,
-        userId: actor.dbUserId,
-      }),
-      hasChatgptConnectionForUser({
-        ctx,
-        userId: actor.dbUserId,
-      }),
-    ]);
-    const gateDecision = await resolveGateDecisionForAuthenticatedActor({
-      ctx,
-      authSubject: actor.authSubject,
-      surface: normalizeSurface(input.surface, "web"),
-      requestedFundingSource,
-      hasUserKeyConnection,
-      hasUserChatgptConnection,
-    });
-    if (!gateDecision.allowed) {
-      return {
-        ok: false,
-        response: gateDeniedResponse(
-          (_req, status, payload) => fail(status, payload as Record<string, unknown>),
-          req,
-          {
-            decision: gateDecision,
-            requestedModelId,
-          },
-        ),
-      };
-    }
-    setStage("provider_connection");
-    lane = mapGateLaneToRuntimeLane({ lane: gateDecision.lane });
-    modelRef = lane === "public"
-      ? publicRef || fallbackPublicRef || requestedModelId
-      : platformMap[requestedModelId] || fallbackPlatformRef;
-    inferenceSource = gateDecision.fundingSource === "user_key"
-      ? "user_key"
-      : gateDecision.fundingSource === "user_chatgpt"
-        ? "chatgpt"
-        : lane === "public"
-          ? "free"
-          : "platform";
-    entitledCapabilityFamilies = gateDecision.entitledCapabilityFamilies;
-    if (gateDecision.fundingSource !== "user_key") {
-      providerApiKeyOverride = null;
-    } else {
-      const connectionRow = (await ctx.runQuery(
-        internal.providerConnections.getOpenAiConnectionForUserInternal as any,
-        {
-          userId: actor.dbUserId,
-        },
-      )) as { encryptedSecretHex?: unknown; secretIvHex?: unknown } | null;
-      if (!connectionRow?.encryptedSecretHex || !connectionRow?.secretIvHex) {
-        return {
-          ok: false,
-          response: fail(403, {
-            ok: false,
-            code: "provider_connection_required",
-            error: "provider_connection_required",
-            message: "Connect a provider to use this model.",
-            gate_code: "provider_connection_required",
-            cta: "connect_provider",
-            lane: gateDecision.lane,
-            model_id: requestedModelId,
-          }),
-        };
-      }
-      try {
-        providerApiKeyOverride = await decryptStoredSecret({
-          encryptedSecretHex: String(connectionRow.encryptedSecretHex),
-          secretIvHex: String(connectionRow.secretIvHex),
-        });
-      } catch {
-        return {
-          ok: false,
-          response: fail(503, {
-            ok: false,
-            code: "provider_connection_unavailable",
-            error: "provider_connection_unavailable",
-            message:
-              "Stored provider credentials are unavailable. Reconnect your provider and retry.",
-            gate_code: "provider_connection_required",
-            cta: "connect_provider",
-            lane: gateDecision.lane,
-            model_id: requestedModelId,
-          }),
-        };
-      }
-    }
-  }
+  const lane = "platform" as const;
+  const modelRef = `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`;
+  const inferenceSource = "platform" as const;
+  const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
+    authState: "authenticated",
+  }) as RuntimeCapabilityFamily[];
 
   let runtimeCommunityId: string | null = null;
   let runtimeCommunityName: string | null = null;
@@ -766,38 +630,36 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
 
   let communityInferenceAdmission: CommunityInferenceFundingAdmission | null = null;
-  if (isCommunityOwnerFundedTurn) {
-    if (!runtimeCommunityId) {
-      return {
+  if (!runtimeCommunityId) {
+    return {
+      ok: false,
+      response: fail(403, {
         ok: false,
-        response: fail(403, {
-          ok: false,
-          code: "member_agent_community_context_required",
-          error: "member_agent_community_context_required",
-          message: "Community AI is available from inside a joined community.",
-        }),
-      };
-    }
-    setStage("community_inference_funding");
-    const admission = (await ctx.runQuery(
-      internal.founderInference.resolveCommunityInferenceFundingAdmissionInternal as any,
-      { communityId: runtimeCommunityId },
-    )) as CommunityInferenceFundingAdmission;
-    if (admission.ok === false) {
-      return {
-        ok: false,
-        response: fail(403, {
-          ok: false,
-          code: "community_ai_unavailable",
-          error: "community_ai_unavailable",
-          message: "Community AI is currently unavailable. The community owner can restore it from Billing.",
-          funding_code: admission.code,
-          community_id: runtimeCommunityId,
-        }),
-      };
-    }
-    communityInferenceAdmission = admission;
+        code: "member_agent_community_context_required",
+        error: "member_agent_community_context_required",
+        message: "Community AI is available from inside a joined community.",
+      }),
+    };
   }
+  setStage("community_inference_funding");
+  const admission = (await ctx.runQuery(
+    internal.founderInference.resolveCommunityInferenceFundingAdmissionInternal as any,
+    { communityId: runtimeCommunityId },
+  )) as CommunityInferenceFundingAdmission;
+  if (admission.ok === false) {
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "community_ai_unavailable",
+        error: "community_ai_unavailable",
+        message: "Community AI is currently unavailable. The community owner can restore it from Billing.",
+        funding_code: admission.code,
+        community_id: runtimeCommunityId,
+      }),
+    };
+  }
+  communityInferenceAdmission = admission;
 
   const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
     invocationSurface,
@@ -846,7 +708,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       stream,
       inferenceSource,
       requestedRuntimeEngine,
-      providerApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,

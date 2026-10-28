@@ -10,7 +10,6 @@ import {
   type RuntimeProviderContextAttestationV1,
 } from "../shared/runtimeProviderContextAttestation.ts";
 
-process.env.OPENROUTER_API_KEY = "";
 process.env.OPENAI_API_KEY = "";
 
 const { executeChatToolsAgentLoop } = await import("../convex/runtimeAgentLoop.ts");
@@ -99,9 +98,9 @@ const loopParams = {
   userId: "user_context_receipt_smoke",
   authSubject: "user:context-receipt-smoke",
   threadId: "thread_context_receipt_smoke",
-  requestedModelId: "gpt-oss-120b-free",
-  inferenceSource: "free",
-  modelRef: "openai/gpt-oss-120b:free",
+  requestedModelId: "gpt-6-luna",
+  inferenceSource: "platform",
+  modelRef: "openai/gpt-6-luna",
   messages: [
     {
       role: "user",
@@ -271,7 +270,7 @@ assert.equal(manifest?.scope?.threadId, "thread_context_receipt_smoke");
 assert.equal(manifest?.scope?.communityId, "community_context_receipt_smoke");
 assert.equal(manifest?.scope?.communityContextVersion, 7);
 assert.equal(manifest?.scope?.harnessName, "chat_tools");
-assert.equal(manifest?.scope?.inferenceSource, "free");
+assert.equal(manifest?.scope?.inferenceSource, "platform");
 assert.equal(manifest?.request?.latestUserText, "Smoke test the runtime context receipt path.");
 assert.equal(manifest?.request?.conversationMessageCount, 1);
 assert.ok(manifest?.summary?.promptCount > 0, "manifest should enumerate prompt inputs");

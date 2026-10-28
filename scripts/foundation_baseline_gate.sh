@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=65
+TOTAL_STEPS=66
 CURRENT_STEP=1
 
 run_step() {
@@ -23,6 +23,7 @@ run_step() {
 run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
 run_step "No orphan Convex modules" npm run check:no-orphan-modules
 run_step "System map covers every module and table" npm run check:system-map-coverage
+run_step "One inference provider, founder-funded turns" npm run check:single-inference-provider
 run_step "Community launcher retirement contract" npm run check:community-launcher-retirement-proof
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
 run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh

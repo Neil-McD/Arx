@@ -59,8 +59,10 @@ require_contains "$AUTH_ACTOR_FILE" 'resolveAuthenticatedSubject\(' \
   "convex/authActor.ts must resolve authenticated subject via identity helper"
 require_contains "$AUTH_FILE" 'ensureAuthenticatedActor\(|findAuthenticatedActorState\(|resolveAuthenticatedActor\(' \
   "convex/auth.ts delegates authenticated actor resolution through authActor seam"
-require_contains "$GATES_FILE" 'resolveAuthenticatedSubject\(' \
-  "convex/gates.ts must resolve authenticated subject via identity helper"
+if [[ -e "$GATES_FILE" ]]; then
+  echo "FAIL: $GATES_FILE was retired (POL-10) and must stay deleted"
+  exit 1
+fi
 
 echo "[6/13] Ensuring thread functions resolve owner via verified identity..."
 require_contains "$THREADS_FILE" 'resolveOwnerIdForAuthenticatedRequest\(' \
@@ -74,11 +76,8 @@ guard_rg_assert_absent \
   -n --fixed-strings 'ownerId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE"
 echo "OK: createCommunity allows authenticated-subject-first identity resolution."
 
-echo "[8/13] Ensuring direct authSubject-required guards are not reintroduced in gates..."
-guard_rg_assert_absent \
-  "direct authSubject-required guard in $GATES_FILE" \
-  -n --fixed-strings 'if (!authSubject) throw new Error("auth_subject_required")' "$GATES_FILE"
-echo "OK: gates relies on authenticated subject helper."
+echo "[8/13] Ensuring the retired funding-gate queries stay deleted..."
+echo "OK: $GATES_FILE is absent (checked in step 5)."
 
 echo "[9/13] Ensuring public APIs allow authenticated-subject-first identity resolution..."
 if ! python - "$THREADS_FILE" "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts' <<'PYGUARD'

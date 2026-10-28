@@ -39,7 +39,7 @@ import {
   projectCommunityMembershipReadSummary,
   projectPublicDiscoverCommunityReadSummary,
 } from "../shared/communityReadContract.ts";
-import { supportsModelImageInput } from "../shared/modelCatalog.ts";
+import { COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT } from "../shared/founderInference.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -63,9 +63,8 @@ const memberAgentSurfaceController = read(
 const attachmentPolicy = read("shared/memberAgentAttachments.ts");
 const voiceController = read("shared/useWebVoiceInputController.ts");
 const cloudThreadsGateway = read("shared/cloudThreadsGateway.ts");
-const modelCatalog = read("shared/modelCatalog.ts");
 const nativeToolProtocol = read("shared/nativeToolProtocol.ts");
-const openRouterTransport = read("convex/openRouterNativeTransport.ts");
+const openAiCompletion = read("convex/openAiNativeToolCompletion.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 const account = read("convex/account.ts");
@@ -612,23 +611,15 @@ assert.match(
   /restrictCapabilityFamiliesForInvocationSurface[\s\S]*restrictToolNamesForInvocationSurface/,
   "the server must constrain capabilities and tools instead of trusting the web client",
 );
-const memberAgentGateBranch = resolution.match(
-  /if \(isCommunityOwnerFundedTurn\) \{([\s\S]*?)\n  \} else \{/,
-)?.[1] ?? "";
-assert.match(
-  memberAgentGateBranch,
-  /lane = "platform"[\s\S]*modelRef = `openai\/\$\{COMMUNITY_OWNER_FUNDED_MODEL_ID\}`[\s\S]*inferenceSource = "platform"/,
-  "the member dock must use the platform-hosted community model lane",
-);
-assert.doesNotMatch(
-  memberAgentGateBranch,
-  /hasOpenAiConnectionForUser|hasChatgptConnectionForUser|getOpenAiConnectionForUserInternal|decryptStoredSecret/,
-  "member-agent admission must not depend on member provider credentials",
-);
 assert.match(
   resolution,
-  /\} else \{[\s\S]*hasOpenAiConnectionForUser[\s\S]*hasChatgptConnectionForUser[\s\S]*getOpenAiConnectionForUserInternal/,
-  "the protected non-dock runtime must retain its existing provider-connection path",
+  /const lane = "platform" as const;\s*const modelRef = `openai\/\$\{COMMUNITY_OWNER_FUNDED_MODEL_ID\}`;\s*const inferenceSource = "platform" as const;/,
+  "every runtime turn, the member dock included, must use the founder-funded platform model lane",
+);
+assert.doesNotMatch(
+  resolution,
+  /hasOpenAiConnectionForUser|hasChatgptConnectionForUser|getOpenAiConnectionForUserInternal|decryptStoredSecret/,
+  "runtime admission must not depend on member provider credentials",
 );
 assert.match(
   resolution,
@@ -1068,18 +1059,15 @@ assert.match(
   "runtime metadata must derive bounded text without stringifying multimodal content",
 );
 assert.match(
-  openRouterTransport,
-  /normalizeMessagesForOpenRouter[\s\S]*type: "image_url"[\s\S]*image_url: \{ url: imageUrl \}/,
-  "OpenRouter must receive its provider-native image_url content shape",
+  openAiCompletion,
+  /part\.type === "image"[\s\S]*type: "input_image"[\s\S]*image_url: imageUrl/,
+  "OpenAI must receive its provider-native input_image content shape",
 );
-assert.match(
-  modelCatalog,
-  /supportsImageInput: boolean[\s\S]*supportsModelImageInput[\s\S]*supportsImageInput === true/,
-  "image-capable model selection must be an explicit catalog policy",
+assert.equal(
+  COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT,
+  true,
+  "the founder-funded model must accept member image attachments",
 );
-assert.equal(supportsModelImageInput("gpt-5.6-sol"), true);
-assert.equal(supportsModelImageInput("gpt-oss-120b-free"), false);
-assert.equal(supportsModelImageInput("unknown-future-model"), false);
 assert.match(
   runtimeTurnResolution,
   /image_model_unsupported[\s\S]*const allowedToolNames/,
