@@ -77,11 +77,6 @@ assert.match(
   /const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary\.memberCount === "number"[\s\S]*\? communitySocialSummary\.memberCount[\s\S]*: null;/,
   "App must derive public social member count from the presence summary",
 );
-assert.match(
-  app,
-  /previewCommunity:[\s\S]*member_count: activeCommunitySocialMemberCount/,
-  "Funnel preview must use the summary-backed member count",
-);
 assert.doesNotMatch(
   app,
   /buildWorkspaceRightPanelCommunityData|workspacePanelCommunityRecentSignals|workspacePanelCommunityIntegrations/,

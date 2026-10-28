@@ -109,7 +109,6 @@
     "check:community-funnel-authority-kernel": "vitest run convex/communityFunnel.test.ts",
     "check:community-funnel-render-model": "vitest run scripts/community_funnel_render_model.test.ts",
     "check:community-funnel-renderer-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_funnel_renderer_contract_proof.ts",
-    "check:community-funnel-vsl-url": "vitest run scripts/community_funnel_vsl_url.test.ts",
     "check:community-tab-hydration-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_tab_hydration_contract_proof.ts",
     "check:purchase-token-hygiene-proof": "tsx scripts/purchase_token_hygiene_proof.ts",
     "check:frontend-privacy-hygiene-proof": "tsx scripts/frontend_privacy_hygiene_proof.ts",

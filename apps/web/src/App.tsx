@@ -141,7 +141,6 @@ import { useCommunityMembersReviewController } from "../../../shared/useCommunit
 import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunityAdminAnalyticsLifecycle";
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
 import { truncateReplyPreview } from "../../../shared/communityMessageParsing";
-import { buildCommunityFunnelPrimaryActionView } from "../../../shared/communityFunnelUi";
 import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
@@ -219,27 +218,6 @@ type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
 type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
-
-function buildCommunityFunnelPreviewPlan(params: {
-  pricingMode: "free" | "monthly" | "annual";
-  monthlyUsd: string;
-  annualUsd: string;
-}): PublicPlanSummary | null {
-  if (params.pricingMode === "free") return null;
-  const rawAmount = params.pricingMode === "monthly"
-    ? params.monthlyUsd
-    : params.annualUsd;
-  const amountUsd = Number(rawAmount);
-  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return null;
-  return {
-    name: "Community access",
-    description: null,
-    amount_base_units: String(Math.round(amountUsd * 100)),
-    currency: "USD",
-    currency_decimals: 2,
-    billing_period: params.pricingMode,
-  };
-}
 
 export default function App() {
   const appActivity = useWebAppActivityController();
@@ -794,7 +772,6 @@ export default function App() {
     communitySocialSummary,
     funnelPreviewAdminCount,
     funnelPreviewOnlineCount,
-    funnelPreviewOnlineFaces,
     activeCommunityOnlineUserIds,
     activeCommunityPresenceSummary,
     isLoadingActiveCommunityPresence,
@@ -1832,8 +1809,6 @@ export default function App() {
       enabled: canReorderCommunities,
       onMoveToIndex: handleReorderCommunityRail,
     });
-  const funnelPreviewVisibility = toCanonicalCommunityVisibility(activeCommunity?.visibility, "unlisted");
-  const funnelPreviewVisibilityLabel = formatCommunityVisibilityLabel(funnelPreviewVisibility);
   const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary.memberCount === "number"
     ? communitySocialSummary.memberCount
     : null;
