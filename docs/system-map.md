@@ -178,7 +178,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `httpStreaming`, `fundedInferenceGateway`, `founderInference*`,
   `openAiNativeToolCompletion`, `httpInferenceConfig`, `httpMemberAgentAttachments`, `httpRuntimeSupport`,
   `httpRuntimeTurnState`, `runtimeCancellation`, `runtimeHarnessTelemetry`,
-  `runtimeReasoningSummaryEvents`, `runtimeToolCallEvents`; web research:
+  `runtimeToolCallEvents`; web research:
   `webResearchTools`, `webSearchTypes`, `openAiWebSearchTransport`,
   `fallbackHtmlSearchTransport`.
 - **Who pays:** every turn is founder-funded and runs on OpenAI's community model

@@ -204,7 +204,6 @@ import type * as runtimeContextIntegrity from "../runtimeContextIntegrity.js";
 import type * as runtimeHarnessComposition from "../runtimeHarnessComposition.js";
 import type * as runtimeHarnessShaping from "../runtimeHarnessShaping.js";
 import type * as runtimeHarnessTelemetry from "../runtimeHarnessTelemetry.js";
-import type * as runtimeReasoningSummaryEvents from "../runtimeReasoningSummaryEvents.js";
 import type * as runtimeToolCallEvents from "../runtimeToolCallEvents.js";
 import type * as runtimeTurnContext from "../runtimeTurnContext.js";
 import type * as runtimeTurnHandlers from "../runtimeTurnHandlers.js";
@@ -426,7 +425,6 @@ declare const fullApi: ApiFromModules<{
   runtimeHarnessComposition: typeof runtimeHarnessComposition;
   runtimeHarnessShaping: typeof runtimeHarnessShaping;
   runtimeHarnessTelemetry: typeof runtimeHarnessTelemetry;
-  runtimeReasoningSummaryEvents: typeof runtimeReasoningSummaryEvents;
   runtimeToolCallEvents: typeof runtimeToolCallEvents;
   runtimeTurnContext: typeof runtimeTurnContext;
   runtimeTurnHandlers: typeof runtimeTurnHandlers;
