@@ -28,8 +28,12 @@ export default {
     fail();
     record("feed", [slug, options]);
     const all = (fake.feeds[slug] || []).map((p) => Object.assign({}, p));
-    const posts = all.slice(-((options && options.limit) || 50));
-    posts.cursor = null;
+    const limit = (options && options.limit) || 50;
+    // Pages count back from the newest; the cursor is where the page before starts.
+    const end = options && options.cursor ? Number(String(options.cursor).slice(6)) : all.length;
+    const start = Math.max(0, end - limit);
+    const posts = all.slice(start, end);
+    posts.cursor = start > 0 ? "older:" + start : null;
     return posts;
   },
   thread: async (slug, ref) => { fail(); record("thread", [slug, ref]); return (fake.threads[ref] || []).map((p) => Object.assign({}, p)); },
@@ -598,6 +602,45 @@ test("drafts stay with their channel when the member switches away and back", as
   await page.goBack();
   await expect.poll(() => input.getAttribute("placeholder")).toBe("Message #General");
   expect(await input.inputValue()).toBe("Half a thought");
+  await page.close();
+});
+
+test("a draft belongs to the member who wrote it, not whoever signs in next on the tab", async () => {
+  const page = await open();
+  const chat = page.locator("polynet-chat");
+  const input = chat.locator("[part=footer] [part=composer-input]");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  await input.fill("Half a thought");
+  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith("polynet:draft:")))).toEqual(["polynet:draft:run-club:me:general:"]);
+  // Someone else signs in on the same tab: no draft for them.
+  await page.addInitScript(() => { (window as any).fake.session.member = { name: "Other", handle: "other", avatar_url: null }; });
+  await page.reload();
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  expect(await input.inputValue()).toBe("");
+  // The writer comes back: their draft is still there.
+  await page.addInitScript(() => { (window as any).fake.session.member = { name: "Me", handle: "me", avatar_url: null }; });
+  await page.reload();
+  await expect.poll(() => input.inputValue()).toBe("Half a thought");
+  await page.close();
+});
+
+test("a deleted post from older history stays gone after the refresh", async () => {
+  const page = await open((fake) => {
+    const older = Array.from({ length: 55 }, (_, i) => post("o" + i, human("Sam", "sam"), minutes(400 - i), "Older " + i));
+    older[0] = post("old-mine", fake.me, minutes(400), "My old plan", { by_me: true, can_edit: true });
+    fake.feeds.general = [...older, ...fake.feeds.general];
+  });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(50);
+  await chat.locator("[part=feed]").evaluate((feed) => { feed.scrollTop = 0; feed.dispatchEvent(new Event("scroll")); });
+  const own = chat.locator("[part~=message-mine]");
+  await expect.poll(() => own.count()).toBe(1);
+  await own.locator("[part~=message-action-delete]").click();
+  await chat.locator("[part=delete-confirm-yes]").click();
+  await expect.poll(() => calls(page, "remove")).toEqual([["remove", "interaction:root:old-mine"]]);
+  await emit(page, "general", { changed: true, typing: [] });
+  await page.waitForTimeout(300);
+  expect(await own.count()).toBe(0);
   await page.close();
 });
 

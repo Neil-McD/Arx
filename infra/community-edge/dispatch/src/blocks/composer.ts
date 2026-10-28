@@ -105,7 +105,10 @@ function readMembers() {
 // Drafts live per channel and thread: in memory (with their files) and in
 // sessionStorage (text and tags), so switching channels or reloading keeps them.
 const drafts = new Map();
-function draftId(scope) { return "polynet:draft:" + scope.community + ":" + scope.channel + ":" + (scope.thread || ""); }
+// Drafts belong to the signed-in member: another member signing in on the same
+// tab never sees them. A member without a handle keeps drafts in memory only.
+function draftOwner(scope) { return (scope.me && scope.me.handle) || ""; }
+function draftId(scope) { return "polynet:draft:" + scope.community + ":" + draftOwner(scope) + ":" + scope.channel + ":" + (scope.thread || ""); }
 function emptyDraft() { return { text: "", mentions: [], agent: false, files: [], failedKey: null, failedFor: null, error: null }; }
 function draftFor(scope) {
   const id = draftId(scope);
@@ -113,7 +116,7 @@ function draftFor(scope) {
   if (!draft) {
     draft = emptyDraft();
     try {
-      const saved = JSON.parse(sessionStorage.getItem(id) || "null");
+      const saved = draftOwner(scope) ? JSON.parse(sessionStorage.getItem(id) || "null") : null;
       if (saved && typeof saved.text === "string") {
         draft.text = saved.text;
         draft.mentions = Array.isArray(saved.mentions) ? saved.mentions.filter((m) => m && m.ref && m.handle) : [];
@@ -127,6 +130,7 @@ function draftFor(scope) {
   return draft;
 }
 function saveDraft(scope, draft) {
+  if (!draftOwner(scope)) return;
   try {
     if (draft.text) sessionStorage.setItem(draftId(scope), JSON.stringify({ text: draft.text, mentions: draft.mentions, agent: draft.agent }));
     else sessionStorage.removeItem(draftId(scope));

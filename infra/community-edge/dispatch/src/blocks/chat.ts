@@ -1078,6 +1078,9 @@ class PolynetChat extends HTMLElement {
     try {
       await polynet.remove(post);
       if (generation !== this.generation) return;
+      // Gone from the cache too: a post older than the newest page would
+      // otherwise come back when the refresh drops its hiding.
+      this.posts.delete(ref);
       this.removing.set(ref, { at: Date.now() });
       this.refresh();
     } catch (error) {
