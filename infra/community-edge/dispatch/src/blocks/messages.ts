@@ -309,6 +309,7 @@ class Messages {
     this.view = next;
     // Only navigation makes in-flight writes stale; re-reading the same thread doesn't.
     this.threadGen = (this.threadGen || 0) + 1;
+    this.carryDraft = false;
     this.stopConversationWatch();
     this.sendTyping(false);
     this.conversation = null;
@@ -519,6 +520,9 @@ class Messages {
   }
 
   drawThread() {
+    // Adopting a just-made thread keeps what's in the composer at this moment.
+    const carried = this.carryDraft && this.input ? { value: this.input.value, focused: this.block.root.activeElement === this.input } : null;
+    this.carryDraft = false;
     const conversation = this.conversation;
     const peer = conversation.peer || {};
     const name = personName(peer);
@@ -544,6 +548,11 @@ class Messages {
     this.typistLine = h("p", { class: "typing", part: "typing", "aria-live": "polite" });
     this.thread.setAttribute("aria-labelledby", headingId);
     this.thread.replaceChildren(this.head, this.confirmArea, this.scroller, this.typistLine, this.composerFor(conversation));
+    if (carried && this.input && this.input.isConnected) {
+      this.input.value = carried.value;
+      this.grow();
+      if (carried.focused) this.input.focus();
+    }
     this.renderLog(true);
   }
 
@@ -810,7 +819,11 @@ class Messages {
     }
     this.pending = this.pending.filter((other) => other !== item);
     if (!this.conversation.id) return this.adoptConversation(res.body.conversation_id);
-    if (!this.messages.some((message) => message.id === res.body.message.id)) this.messages.push(res.body.message);
+    if (!this.messages.some((message) => message.id === res.body.message.id)) {
+      // Replies can land out of order; the log is always in sequence.
+      this.messages.push(res.body.message);
+      this.messages.sort((left, right) => left.seq - right.seq);
+    }
     this.renderLog(true);
   }
 
@@ -821,15 +834,9 @@ class Messages {
     history.replaceState(history.state, "", "/messages/" + id);
     this.view = where();
     this.conversation = Object.assign({}, this.conversation, { id: id });
-    const draft = this.input ? this.input.value : "";
-    const focused = this.input && this.block.root.activeElement === this.input;
+    this.carryDraft = true;
     await this.openConversation(id);
     if (!this.current() || !this.view || this.view.id !== id) return;
-    if (this.input && draft && !this.input.value) {
-      this.input.value = draft;
-      this.grow();
-    }
-    if (this.input && focused) this.input.focus();
     if (this.chips) this.renderChips();
     this.loadInbox();
   }

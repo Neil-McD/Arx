@@ -87,6 +87,17 @@ async function backend(request: Request): Promise<Response> {
     dm.held += 1;
     await hold;
   }
+  // Held after the backend did the work: the reply arrives late.
+  const replyHold = url.pathname === "/runtime/app/me/messages/send" ? dm.holdNextSendReply
+    : url.pathname === "/runtime/app/me/messages/conversation" ? dm.holdNextConversation : null;
+  if (replyHold) {
+    if (url.pathname.endsWith("/send")) dm.holdNextSendReply = null;
+    else dm.holdNextConversation = null;
+    const reply = messagesBackend(url.pathname, JSON.parse(body || "{}"));
+    dm.held += 1;
+    await replyHold;
+    return reply;
+  }
   if (url.pathname === "/runtime/app/me/messages" || url.pathname.startsWith("/runtime/app/me/messages/")) return messagesBackend(url.pathname, JSON.parse(body || "{}"));
   if (url.pathname.startsWith("/runtime/app/me/") && url.pathname !== "/runtime/app/me/communities") return settingsBackend(url.pathname, JSON.parse(body || "{}"));
   return Response.json({ ok: true, value: {} });
@@ -148,6 +159,7 @@ const NEWBIE = `new${"3".repeat(29)}`;
 const dm = {
   conversations: [] as any[], messages: {} as Record<string, any[]>, calls: [] as Array<[string, any]>, failSend: null as string | null,
   holdNextSend: null as Promise<void> | null, held: 0, pageSize: 50, failRead: false,
+  holdNextSendReply: null as Promise<void> | null, holdNextConversation: null as Promise<void> | null,
 };
 function resetMessages() {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -170,6 +182,8 @@ function resetMessages() {
   dm.held = 0;
   dm.pageSize = 50;
   dm.failRead = false;
+  dm.holdNextSendReply = null;
+  dm.holdNextConversation = null;
 }
 function messagesBackend(path: string, body: Record<string, any>): Response {
   dm.calls.push([path, body]);
@@ -663,6 +677,56 @@ test("Messages: a profile's Message starts a conversation with the first message
     await page.goto(`${TWIN}/messages/new?to=outsider`);
     await expect.poll(() => personal.locator("[part=thread] [role=alert] p").textContent()).toBe("You can't message this person right now.");
     expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+function hold(): [Promise<void>, () => void] {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  return [held, release];
+}
+
+test("Messages: two sends whose replies come back in reverse still show in order", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    const seqs = () => personal.locator("[part~=message][data-seq]").evaluateAll((nodes) => nodes.map((node) => Number(node.getAttribute("data-seq"))));
+    await expect.poll(seqs).toEqual([1, 2]);
+    const [late, release] = hold();
+    dm.holdNextSendReply = late;
+    const input = personal.locator("[part=input]");
+    await input.fill("First");
+    await personal.locator("[part=send]").click();
+    await expect.poll(() => dm.held).toBe(1);
+    await input.fill("Second");
+    await personal.locator("[part=send]").click();
+    await expect.poll(seqs).toEqual([1, 2, 4]);
+    release();
+    await expect.poll(seqs).toEqual([1, 2, 3, 4]);
+    expect(await personal.locator("[part~=message][data-seq='3']").textContent()).toContain("First");
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: text typed while a just-made thread loads is kept", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, "/messages/new?to=newbie", TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=thread-header] h2").textContent()).toBe("Newbie");
+    const [slow, release] = hold();
+    dm.holdNextConversation = slow;
+    await personal.locator("[part=input]").fill("Welcome!");
+    await personal.locator("[part=send]").click();
+    await expect.poll(() => dm.held).toBe(1);
+    await personal.locator("[part=input]").fill("Bring shoes");
+    release();
+    await expect.poll(() => personal.locator("[part=mute]").count()).toBe(1);
+    expect(await personal.locator("[part=input]").inputValue()).toBe("Bring shoes");
   } finally {
     await browser.close();
   }
