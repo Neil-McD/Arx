@@ -262,7 +262,7 @@ class PolynetProfile extends HTMLElement {
     this.reach = null;
     const nodes = [];
     if (this.status === "ready") {
-      nodes.push(...this.renderProfile(this.data));
+      nodes.push(...this.renderProfile(this.data).filter(Boolean));
     } else if (this.status === "signed-out") {
       const session = this.session || {};
       nodes.push(h("div", { class: "gate", part: "gate" }, [

@@ -1065,6 +1065,8 @@ test("site code opens a profile with polynet:profile; Message is hidden on your 
   await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("ready");
   expect(await sheet.locator("[part=name]").textContent()).toBe("Me");
   expect(await sheet.locator("[part=you]").textContent()).toBe("You");
+  // A profile without links shows nothing for them (no stray text).
+  expect(await sheet.textContent()).not.toContain("null");
   await page.waitForTimeout(100);
   expect(await sheet.locator("[part=message]").count()).toBe(0);
   await expect.poll(async () => { const box = (await sheet.boundingBox())!; return [Math.round(box.x), Math.round(box.width), Math.round(box.y + box.height)]; })
