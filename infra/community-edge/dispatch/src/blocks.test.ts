@@ -415,6 +415,35 @@ test("live: typing shows who, new posts append, and the channel is marked read a
   await page.close();
 });
 
+test("when another member deletes the first post of a short channel, it goes on the next refresh", async () => {
+  const page = await open();
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  await page.evaluate(() => { const fake = (window as any).fake; fake.feeds.general.shift(); });
+  await emit(page, "general", { changed: true, typing: [] });
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(4);
+  await page.close();
+});
+
+test("after more than a page arrives at once, the posts in between load when scrolling up", async () => {
+  const page = await open();
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  await page.evaluate(() => {
+    const fake = (window as any).fake;
+    const base = fake.feeds.general[1];
+    for (let i = 0; i < 60; i += 1) fake.feeds.general.push({ ...base, ref: "interaction:root:burst" + i, text: "Burst " + i, created_at: new Date(Date.now() + i).toISOString() });
+  });
+  await emit(page, "general", { changed: true, typing: [] });
+  await expect.poll(() => chat.locator("[part~=message-body]").last().textContent()).toBe("Burst 59");
+  for (let i = 0; i < 6; i += 1) {
+    await chat.locator("[part=feed]").evaluate((feed) => { feed.scrollTop = 0; feed.dispatchEvent(new Event("scroll")); });
+    await page.waitForTimeout(150);
+  }
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(65);
+  await page.close();
+});
+
 test("a channel isn't marked read if the member scrolls up during the short delay", async () => {
   const page = await open((fake) => { for (let i = 0; i < 30; i += 1) fake.feeds.general.push({ ...fake.feeds.general[1], ref: "interaction:root:x" + i, text: "Filler " + i }); });
   const chat = page.locator("polynet-chat");

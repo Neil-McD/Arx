@@ -434,14 +434,27 @@ class PolynetChat extends HTMLElement {
   }
 
   // The newest page replaces everything it covers (edits, deletions); older
-  // history outside it stays.
+  // history outside it stays, as long as the page connects to it.
   merge(page, newest) {
     // An empty page that still has a cursor read nothing it can vouch for.
     if (newest && !page.length && page.cursor) return;
-    if (newest) {
-      const oldest = page.length ? at(page[0]) : -Infinity;
-      const fresh = new Set(page.map((post) => post.ref));
-      for (const [ref, post] of this.posts) if (at(post) >= oldest && !fresh.has(ref)) this.posts.delete(ref);
+    if (newest && !page.cursor) {
+      // The page reaches the channel's start: it is the whole channel.
+      this.posts.clear();
+      this.cursor = null;
+    } else if (newest) {
+      const oldest = at(page[0]);
+      let newestCached = -Infinity;
+      for (const post of this.posts.values()) newestCached = Math.max(newestCached, at(post));
+      if (oldest > newestCached) {
+        // More arrived than one page holds (a sleeping tab): what lies between
+        // wasn't read, so start over from this page and page back from it.
+        this.posts.clear();
+        this.cursor = page.cursor;
+      } else {
+        const fresh = new Set(page.map((post) => post.ref));
+        for (const [ref, post] of this.posts) if (at(post) >= oldest && !fresh.has(ref)) this.posts.delete(ref);
+      }
     }
     for (const post of page) this.posts.set(post.ref, post);
   }
