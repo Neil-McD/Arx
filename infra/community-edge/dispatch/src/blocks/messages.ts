@@ -307,6 +307,8 @@ class Messages {
     const same = this.view && next.view === this.view.view && next.id === this.view.id && next.handle === this.view.handle;
     if (same) return;
     this.view = next;
+    // Only navigation makes in-flight writes stale; re-reading the same thread doesn't.
+    this.threadGen = (this.threadGen || 0) + 1;
     this.stopConversationWatch();
     this.sendTyping(false);
     this.conversation = null;
@@ -783,37 +785,54 @@ class Messages {
   // One send, or its retry with the same key, so the server never takes it twice.
   async deliver(item) {
     const conversation = this.conversation;
+    const gen = this.threadGen;
     item.state = "sending";
     item.error = null;
     this.renderLog(true);
     const target = conversation.id ? { conversation_id: conversation.id } : { to: this.handle };
     const res = await call("/__polynet/me/messages/send", Object.assign(target, { text: item.text, attachments: item.files, client_message_id: item.key }));
-    if (!this.current() || this.conversation !== conversation) return;
+    if (!this.current() || this.threadGen !== gen) return;
     if (!ok(res) || !res.body.message) {
       item.state = "failed";
       item.error = res.status === 401 ? "You were signed out. Sign in again to send." : says(res.body.code, "Not sent.");
       return this.renderLog(true);
     }
-    if (!conversation.id) {
-      // The first message made the conversation: this is its address now.
-      this.pending = [];
-      await this.go("/messages/" + res.body.conversation_id, true);
-      return this.loadInbox();
-    }
     this.pending = this.pending.filter((other) => other !== item);
+    if (!this.conversation.id) return this.adoptConversation(res.body.conversation_id);
     if (!this.messages.some((message) => message.id === res.body.message.id)) this.messages.push(res.body.message);
     this.renderLog(true);
+  }
+
+  // The first message made the conversation: this is its address now. Sends
+  // still in flight, the draft and its files stay; each send's server copy
+  // replaces it as it lands.
+  async adoptConversation(id) {
+    history.replaceState(history.state, "", "/messages/" + id);
+    this.view = where();
+    this.conversation = Object.assign({}, this.conversation, { id: id });
+    const draft = this.input ? this.input.value : "";
+    const focused = this.input && this.block.root.activeElement === this.input;
+    await this.openConversation(id);
+    if (!this.current() || !this.view || this.view.id !== id) return;
+    if (this.input && draft && !this.input.value) {
+      this.input.value = draft;
+      this.grow();
+    }
+    if (this.input && focused) this.input.focus();
+    if (this.chips) this.renderChips();
+    this.loadInbox();
   }
 
   async toggleMute() {
     const conversation = this.conversation;
     if (!conversation || !conversation.id || this.muteButton.disabled) return;
     this.muteButton.disabled = true;
+    const gen = this.threadGen;
     const res = await call("/__polynet/me/messages/mute", { conversation_id: conversation.id, muted: !conversation.muted });
-    if (!this.current() || this.conversation !== conversation) return;
+    if (!this.current() || this.threadGen !== gen) return;
     this.muteButton.disabled = false;
     if (!ok(res) || !res.body.conversation) return this.showComposeError(says(res.body.code, "That didn't work. Try again."));
-    this.conversation = Object.assign({}, conversation, res.body.conversation);
+    this.conversation = Object.assign({}, this.conversation, res.body.conversation);
     const muted = this.conversation.muted;
     this.muteButton.setAttribute("aria-pressed", muted ? "true" : "false");
     this.muteButton.textContent = muted ? "Muted" : "Mute";
@@ -827,6 +846,7 @@ class Messages {
     if (!conversation || !conversation.id) return;
     const name = personName(conversation.peer);
     const blocking = !conversation.blocked;
+    const gen = this.threadGen;
     const alert = h("p", { class: "error", role: "alert", hidden: true });
     const question = h("p", { tabindex: "-1", text: blocking
       ? "Block " + name + "? Neither of you will be able to message the other. You can unblock them later."
@@ -836,7 +856,7 @@ class Messages {
       confirm.disabled = true;
       cancel.disabled = true;
       const res = await call("/__polynet/me/messages/block", { conversation_id: conversation.id, blocked: blocking });
-      if (!this.current() || this.conversation !== conversation) return;
+      if (!this.current() || this.threadGen !== gen) return;
       if (!ok(res) || !res.body.conversation) {
         confirm.disabled = false;
         cancel.disabled = false;
@@ -844,7 +864,7 @@ class Messages {
         alert.hidden = false;
         return;
       }
-      this.conversation = Object.assign({}, conversation, res.body.conversation);
+      this.conversation = Object.assign({}, this.conversation, res.body.conversation);
       this.updateInboxRow(this.conversation);
       this.drawThread();
       this.blockButton.focus();
