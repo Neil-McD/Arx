@@ -1,4 +1,5 @@
-// Community sites on <slug>.<sites domain>: the rules for a deploy and its record.
+// Community sites on <slug><host suffix>.<sites domain>: the rules for a deploy and its record.
+// Production uses no suffix (<slug>.polynet.page); staging uses "-staging".
 // The HTTP routes and the Cloudflare calls live in httpCommunitySites.ts.
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
@@ -18,11 +19,16 @@ export const SITE_MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 
 export type SiteManifest = Record<string, { hash: string; size: number }>;
 
-export function siteHostname(communitySlug: string, sitesDomain: string): string | null {
+// Names ending in the staging suffix stay free for staging's addresses on the
+// shared domain, so no production community can claim one.
+const RESERVED_SITE_SUFFIX = "-staging";
+
+export function siteHostname(communitySlug: string, sitesDomain: string, hostSuffix = ""): string | null {
   const slug = communitySlug.trim().toLowerCase();
   if (!/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(slug)) return null;
   if (RESERVED_SITE_NAMES.has(slug) && !RESERVED_EXCEPTIONS.has(slug)) return null;
-  return `${slug}.${sitesDomain}`;
+  if (slug.endsWith(RESERVED_SITE_SUFFIX)) return null;
+  return `${slug}${hostSuffix}.${sitesDomain}`;
 }
 
 const SITE_MIME: Record<string, string> = {

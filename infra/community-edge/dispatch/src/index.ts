@@ -38,6 +38,10 @@ export interface Env {
   ROUTES?: { get(key: string): Promise<string | null> };
   // The sites domain (e.g. polynet.page): its apex and www are the front door.
   POLYNET_SITES_DOMAIN?: string;
+  // Staging shares the domain: sites at <slug>-staging.polynet.page and the
+  // front door at staging.polynet.page. Production sets neither.
+  POLYNET_SITES_HOST_SUFFIX?: string;
+  POLYNET_SITES_FRONT_DOOR?: string;
   DEV_ROUTES_JSON?: string;
   DEV_USER_WORKER?: Fetcher;
 }
@@ -462,26 +466,37 @@ export default {
 // anything else is simply not found.
 function noSiteYet(url: URL, env: Env): Response {
   const domain = (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase();
+  const suffix = (env.POLYNET_SITES_HOST_SUFFIX ?? "").toLowerCase();
   const host = url.hostname.toLowerCase();
-  if (!domain || !host.endsWith(`.${domain}`)) return new Response("Community not found", { status: 404 });
-  const slug = host.slice(0, -(domain.length + 1));
-  const text = `No site is published at ${host} yet.\n\nIf this is your community, build its site and deploy it:\n  npx @polynet/cli deploy --community ${slug}\n\nStart here: https://${domain}/llms.txt\n`;
+  const ending = `${suffix}.${domain}`;
+  if (!domain || !host.endsWith(ending) || host.length === ending.length) return new Response("Community not found", { status: 404 });
+  const slug = host.slice(0, -ending.length);
+  const staging = suffix ? " --staging" : "";
+  const text = `No site is published at ${host} yet.\n\nIf this is your community, build its site and deploy it:\n  npx @polynet/cli deploy --community ${slug}${staging}\n\nStart here: https://${frontDoorHost(env)}/llms.txt\n`;
   return new Response(text, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
-// polynet.page itself: where a founder's AI starts. The guide, and a page that says how.
+function frontDoorHost(env: Env): string {
+  return (env.POLYNET_SITES_FRONT_DOOR || env.POLYNET_SITES_DOMAIN || "").toLowerCase();
+}
+
+// polynet.page itself (staging.polynet.page on staging): where a founder's AI
+// starts. The guide, and a page that says how.
 export function frontDoor(url: URL, env: Env): Response | null {
   const domain = (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase();
+  const front = frontDoorHost(env);
   const host = url.hostname.toLowerCase();
-  if (!domain || (host !== domain && host !== `www.${domain}`)) return null;
-  if (host !== domain) return Response.redirect(`https://${domain}${url.pathname}${url.search}`, 301);
+  const www = front === domain ? `www.${domain}` : null;
+  if (!front || (host !== front && host !== www)) return null;
+  if (host !== front) return Response.redirect(`https://${front}${url.pathname}${url.search}`, 301);
   if (url.pathname === "/llms.txt" || url.pathname === "/__polynet/llms.txt") {
     return new Response(LLMS_TXT, { headers: {
       "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
   }
   if (url.pathname !== "/") return new Response("Not found", { status: 404 });
   const studio = env.POLYNET_AUTH_URL.replace(/\/+$/, "");
-  return new Response(FRONT_DOOR_HTML.replaceAll("{{DOMAIN}}", domain).replaceAll("{{STUDIO}}", studio), {
+  const example = `your-community${(env.POLYNET_SITES_HOST_SUFFIX ?? "").toLowerCase()}.${domain}`;
+  return new Response(FRONT_DOOR_HTML.replaceAll("{{SITE}}", example).replaceAll("{{FRONT}}", front).replaceAll("{{STUDIO}}", studio), {
     headers: {
       "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300, no-transform",
       "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff",
@@ -504,10 +519,10 @@ const FRONT_DOOR_HTML = `<!doctype html>
 </style></head>
 <body><main>
   <h1>Every Polynet community gets its own site.</h1>
-  <p>Your community runs on Polynet: members, payments, posts, events, courses, memory and its AI agent. Its site is yours to design, at <strong>your-community.{{DOMAIN}}</strong>.</p>
+  <p>Your community runs on Polynet: members, payments, posts, events, courses, memory and its AI agent. Its site is yours to design, at <strong>{{SITE}}</strong>.</p>
   <p>Build it with your AI. Tell it:</p>
   <pre>Build my community's site for &lt;your community slug&gt;.
-Read https://{{DOMAIN}}/llms.txt first.</pre>
+Read https://{{FRONT}}/llms.txt first.</pre>
   <p>Your AI deploys it with <code>npx @polynet/cli deploy</code>. You sign in once, as the community's owner or an admin.</p>
   <p><a href="/llms.txt">The builder guide</a> · <a href="{{STUDIO}}">Polynet</a></p>
 </main></body></html>

@@ -87,6 +87,16 @@ export function checkSite(files) {
     }
     if (/\.convex\.(cloud|site)\b/i.test(file.text)) problem("warning", file.path, "Calls Polynet's servers directly. Use the SDK at /__polynet/sdk.js.");
   }
+  const allScript = scripts.map((file) => file.text).join("\n") + pages.map((file) => file.text).join("\n");
+  // A CSS display rule beats the hidden attribute, so members-only sections show to visitors.
+  const togglesHidden = /\.hidden\s*=|\shidden[\s>]/i.test(allScript);
+  if (togglesHidden && /\bdisplay\s*:/i.test(allCss) && !/\[hidden\]/.test(allCss)) {
+    problem("warning", "/", "Sections are shown and hidden with the hidden attribute, but a CSS display rule can override it. Add [hidden] { display: none !important; }.");
+  }
+  // A public question to the agent is answered in that post's thread.
+  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript)) {
+    problem("warning", "/", "Posts can ask the agent (post(..., { askAgent })) but the site never reads threads, so the agent's answers won't appear. Show replies with polynet.thread().");
+  }
   return { errors, warnings };
 }
 

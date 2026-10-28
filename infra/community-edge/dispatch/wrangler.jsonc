@@ -19,15 +19,20 @@
     "staging": {
       "name": "polynet-edge-staging",
       "workers_dev": false,
+      // Staging shares polynet.page with production: <slug>-staging.polynet.page and
+      // the front door at staging.polynet.page. These routes are more specific than
+      // production's *.polynet.page, so they win.
       "routes": [
-        { "pattern": "*.polynet.page/*", "zone_name": "polynet.page" },
-        { "pattern": "polynet.page/*", "zone_name": "polynet.page" }
+        { "pattern": "*-staging.polynet.page/*", "zone_name": "polynet.page" },
+        { "pattern": "staging.polynet.page/*", "zone_name": "polynet.page" }
       ],
       "vars": {
         "POLYNET_API_URL": "https://quick-porcupine-949.convex.site",
         "POLYNET_AUTH_URL": "https://polynet-staging.vercel.app",
         "POLYNET_LIVE_URL": "https://quick-porcupine-949.convex.cloud",
-        "POLYNET_SITES_DOMAIN": "polynet.page"
+        "POLYNET_SITES_DOMAIN": "polynet.page",
+        "POLYNET_SITES_HOST_SUFFIX": "-staging",
+        "POLYNET_SITES_FRONT_DOOR": "staging.polynet.page"
       },
       "dispatch_namespaces": [{ "binding": "DISPATCHER", "namespace": "polynet-sites-staging" }],
       "kv_namespaces": [{ "binding": "ROUTES", "id": "1f354dc000c34b919cc2c69249363f9e" }]

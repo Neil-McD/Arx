@@ -64,7 +64,7 @@ async function authorizeDeploy(args: {
   if (!resolved.ok || !authority?.canUseBuilderProjection) {
     return { ok: false, response: reply(403, { ok: false, code: "not_a_builder", message: "Only the community's owner or admins can deploy its site." }) };
   }
-  const hostname = siteHostname(resolved.context.communitySlug, args.config.domain);
+  const hostname = siteHostname(resolved.context.communitySlug, args.config.domain, args.config.hostSuffix);
   if (!hostname) {
     return { ok: false, response: reply(400, { ok: false, code: "site_name_unavailable", message: "This community's name can't be used as a site address." }) };
   }

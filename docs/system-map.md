@@ -269,7 +269,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityAppHandoffs`.
 - **Contracts:** [infra/community-edge/README.md](../infra/community-edge/README.md),
   [research/community-frontend-hosting-20261016.md](research/community-frontend-hosting-20261016.md).
-- **Gap:** no production edge yet; the CLI targets staging.
+- **Addresses (Oct 28, POL-34):** production `<slug>.polynet.page`, staging
+  `<slug>-staging.polynet.page` on the same domain (`POLYNET_SITES_HOST_SUFFIX`);
+  production refuses names ending in `-staging`. The CLI targets production by
+  default (`--staging` for staging).
+- **Gap:** the production edge, namespace and settings are set up after POL-34's
+  code ships.
 
 ### 12. Billing and money — Keep (risk-high)
 

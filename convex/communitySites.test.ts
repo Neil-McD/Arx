@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { registerCommunitySiteRoutes } from "./httpCommunitySites";
 import { siteHostname, validateSiteManifest } from "./communitySites";
+import { readSitesConfig } from "./communitySiteDeploy";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const modules = import.meta.glob([
@@ -168,6 +169,9 @@ test("sites are bounded static files at a safe address", async () => {
   }
   expect(siteHostname("polynet", "polynet.page")).toBe("polynet.polynet.page");
   expect(siteHostname("www", "polynet.page")).toBeNull();
+  // Staging shares the domain with a suffix; production can't claim staging's names.
+  expect(siteHostname("run-club", "polynet.page", "-staging")).toBe("run-club-staging.polynet.page");
+  expect(siteHostname("run-club-staging", "polynet.page")).toBeNull();
   expect(validateSiteManifest({ "/a/b/c.css": { hash: HASH, size: 10 } })).toMatchObject({ ok: true, fileCount: 1, totalBytes: 10 });
 });
 
@@ -178,4 +182,12 @@ test("an address that belongs to another community is refused; unconfigured host
   expect(await f.post("publish", "owner", { community: "run-club", completion_jwt: "x" })).toMatchObject({ status: 409, body: { code: "site_address_taken" } });
   vi.stubEnv("CLOUDFLARE_API_TOKEN", "");
   expect(await f.post("start", "owner", { community: "run-club", manifest })).toMatchObject({ status: 503, body: { code: "sites_unconfigured" } });
+});
+
+test("the sites config reads the staging host suffix and refuses a malformed one", () => {
+  const base = { CLOUDFLARE_API_TOKEN: "t", CLOUDFLARE_ACCOUNT_ID: "a", POLYNET_SITES_NAMESPACE: "n", POLYNET_SITES_ROUTES_KV_ID: "k", POLYNET_SITES_DOMAIN: "polynet.page" };
+  expect(readSitesConfig(base)).toMatchObject({ domain: "polynet.page", hostSuffix: "" });
+  expect(readSitesConfig({ ...base, POLYNET_SITES_HOST_SUFFIX: "-staging" })).toMatchObject({ hostSuffix: "-staging" });
+  expect(readSitesConfig({ ...base, POLYNET_SITES_HOST_SUFFIX: ".evil" })).toBeNull();
+  expect(readSitesConfig({ ...base, POLYNET_SITES_DOMAIN: "" })).toBeNull();
 });

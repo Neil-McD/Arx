@@ -5,8 +5,20 @@ import { fileURLToPath } from "node:url";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
 import { isCheckedFile } from "./checks.mjs";
 
-// Until the production release, the only Polynet with site hosting is staging.
-export const DEFAULT_API_URL = "https://quick-porcupine-949.convex.site";
+// Production by default. Polynet's own staging (sites at <slug>-staging.polynet.page)
+// is reached with --staging, or "staging": true in polynet.json.
+export const DEFAULT_API_URL = "https://wry-hawk-715.convex.site";
+export const STAGING_API_URL = "https://quick-porcupine-949.convex.site";
+
+// POLYNET_API_URL overrides everything; otherwise --staging or the folder's
+// polynet.json choose staging.
+export function apiUrlFor({ env = {}, staging = false } = {}) {
+  return (env.POLYNET_API_URL || (staging ? STAGING_API_URL : DEFAULT_API_URL)).replace(/\/+$/, "");
+}
+
+export function siteAddress(community, staging = false) {
+  return `https://${community}${staging ? "-staging" : ""}.polynet.page`;
+}
 export const CALLBACK_PORT = 51789;
 export const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`;
 

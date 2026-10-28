@@ -33,7 +33,8 @@ SDK reference: `https://<slug>.polynet.page/__polynet/llms.txt`.
 ## Rules
 
 1. Every page shows `<polynet-account>`: members' account, communities,
-   Discover, messages and settings. Polynet adds `/__polynet/ui.js` to every
+   Discover, messages and settings. Signed out it is the "Sign in": don't add
+   another one next to it. Polynet adds `/__polynet/ui.js` to every
    page and a corner fallback where a page has none; place and style it into
    the design yourself, and never hide or rebuild it.
 2. Community data comes only through the SDK. No passwords, tokens or keys

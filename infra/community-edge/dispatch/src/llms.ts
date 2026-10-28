@@ -29,9 +29,6 @@ community's own domain, and it talks to Polynet only through the SDK below.
 4. Signed out, the site shows its public face. Sign in on the site to see
    member features.
 
-Preview: during the preview, polynet.page sites run against Polynet's
-staging environment.
-
 ## Design (before any code)
 
 There is no template: every site starts from its community's own world. Aim
@@ -97,9 +94,16 @@ What works signed out: session() (with the public fields above) and
 community(). Everything else (channels, posts, events, courses, knowledge,
 the agent) needs a signed-in member and otherwise throws sign_in_required.
 
-- Signed out: show the community's public face from the public fields, a
-  "Sign in" button that calls polynet.signIn(), and a "Join" link to
-  session.join_url. Anything else on the public page is yours to write.
+- Signed out: show the community's public face from the public fields and a
+  "Join" link to session.join_url. The shell (<polynet-account>, below) already
+  shows "Sign in": don't add a second one in the header. A quiet "Members, sign
+  in" link in the page body (polynet.signIn()) is fine. Anything else on the
+  public page is yours to write.
+- Members' sections appear once session() says signed_in. If you show and hide
+  them with the hidden attribute, add [hidden] { display: none !important; }:
+  any CSS display rule on the element otherwise wins, and visitors see the
+  member page. Links to those sections (#log) need a scroll after you reveal
+  them.
 - For an owner or admin (member.role), link to session.studio_url for what the
   site can't do: creating events and courses, settings, members, billing.
 - signIn(returnPath?) sends the visitor to Polynet and back here signed in.
@@ -189,6 +193,9 @@ Writing:
   askAgent asks the community agent to answer in the channel; Polynet puts
   "@<community name> " in front of the text, which is how agent mentions read
   everywhere. Editing that post later doesn't ask the agent again; keep the
+  The agent answers as a reply in that post's thread: a site that asks it in
+  public must show threads (reply_count, thread()), or the answer never
+  appears.
   prefix in the edit box.
 - edit(post, text) when post.can_edit; remove(post) when post.by_me.
 - react(ref, emoji, on) adds (on: true) or removes (on: false) the member's
