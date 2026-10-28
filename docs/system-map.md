@@ -70,13 +70,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Deleted Oct 28 (POL-23):** the funnel editor, drafts and publishing, the AI
   funnel builder (the `community_funnel_builder` invocation surface; the value
   stays in stored receipts and evidence only), draft previews, the external
-  website link, and the hero-media editor. `communityFunnel` now keeps only the
-  join page's intro media read plus four stand-ins for the cached production web
+  website link, and the hero-media editor. The join page is plain (it never
+  rendered custom content or intro media on the default page). `communityFunnel`
+  keeps only four stand-ins for the cached production web
   (`getCommunityFunnelConfig`, `getCommunityFunnelDraftPreview`,
   `setCommunityExternalFunnelUrl`, `setCommunityExternalFunnelActive`); delete
   them after the next production release. `communityFunnels` (validated by
-  `communityFunnelValidators`) stays for the intro media (4 live communities)
-  and drafts; move the media onto the community before dropping it.
+  `communityFunnelValidators`) has no live reader; it holds 6 unpublished drafts
+  and 4 unused intro-video links, dropped with Neil's OK.
 - **Hand-run:** `communityMaintenance` (purges orphaned user artifacts).
 - **Retiring tables:** `communityOnboardingSessions` (no writers),
   `communityOnboardingConfigs`. Deleted Oct 27: `communityFeatured`,

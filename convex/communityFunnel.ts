@@ -8,43 +8,23 @@ import {
   type CommunityLike,
 } from "./communityCore";
 
-// The funnel editor, drafts and publishing, the AI funnel builder and the
-// external funnel link are retired (POL-23). The public join page at /c/:slug
-// stays plain; it keeps one thing from the old funnel rows: the founder's intro
-// media (hero image or video), until that moves onto the community.
+// The funnel editor, drafts and publishing, the AI funnel builder, the external
+// funnel link and the hero-media editor are retired (POL-23). The public join
+// page at /c/:slug is plain: it never renders custom funnel content or intro
+// media (the default page never did), so nothing here reads communityFunnels.
 //
 // The four public functions below are stand-ins for the production web released
 // before POL-23, which still calls them. Delete them after the next production
 // release.
 
-type CommunityFunnelRowLike = {
-  heroMediaUrl?: string | null;
-  heroMediaKind?: "image" | "video" | null;
+/** Public projection for the join page: always the plain default. */
+export const COMMUNITY_FUNNEL_PUBLIC_CONFIG = {
+  hero_media_url: null,
+  hero_media_kind: "image" as const,
+  active_slot: "default" as const,
+  published_vsl_url: null,
+  published_content_v2: null,
 };
-
-function normalizeHeroMediaUrl(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  return raw.trim().slice(0, 2_000) || null;
-}
-
-/** Public projection for the join page: intro media only, never custom content. */
-export function buildCommunityFunnelPublicConfig(row: CommunityFunnelRowLike | null) {
-  return {
-    hero_media_url: normalizeHeroMediaUrl(row?.heroMediaUrl),
-    hero_media_kind: row?.heroMediaKind === "video" ? ("video" as const) : ("image" as const),
-    active_slot: "default" as const,
-    published_vsl_url: null,
-    published_content_v2: null,
-  };
-}
-
-export async function resolveCommunityFunnelConfigByCommunityId(ctx: any, communityId: any) {
-  const rows = (await ctx.db
-    .query("communityFunnels" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityFunnelRowLike[];
-  return buildCommunityFunnelPublicConfig(rows.find((row) => normalizeHeroMediaUrl(row.heroMediaUrl)) ?? null);
-}
 
 async function requireManager(args: { ctx: any; userId?: any; authSubject?: string | null; communityId: any }) {
   const userId = await resolveUserIdForAuthenticatedRequest({
@@ -58,7 +38,7 @@ async function requireManager(args: { ctx: any; userId?: any; authSubject?: stri
 async function retiredManagerConfig(ctx: any, communityId: any) {
   const community = (await ctx.db.get(communityId)) as CommunityLike | null;
   return {
-    ...(await resolveCommunityFunnelConfigByCommunityId(ctx, communityId)),
+    ...COMMUNITY_FUNNEL_PUBLIC_CONFIG,
     external_funnel_url: null,
     external_funnel_active: false,
     settings_revision: Math.max(0, Math.floor(Number(community?.settingsRevision ?? 0)) || 0),

@@ -77,14 +77,14 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
-test("the join page keeps the founder's intro video and never shows custom funnel content", async () => {
+test("the join page is the plain default: no custom funnel content or intro media", async () => {
   const t = convexTest(schema, modules);
   await createFixture(t);
   const result = await t.query(api.communityPublic.resolvePublicFunnelBySlug, { communitySlug: "funnel-authority" });
   expect(result.ok).toBe(true);
   expect((result as any).community.funnel).toEqual({
-    hero_media_url: "https://www.youtube.com/watch?v=intro",
-    hero_media_kind: "video",
+    hero_media_url: null,
+    hero_media_kind: "image",
     active_slot: "default",
     published_vsl_url: null,
     published_content_v2: null,

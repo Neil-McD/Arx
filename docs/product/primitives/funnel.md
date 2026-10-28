@@ -29,8 +29,8 @@ they need to do to join.
 
 Every community has one deterministic Polynet landing page assembled from its
 canonical identity and access state: name, branding, the one-line description
-and About when supplied, the founder's intro image or video when one was set,
-one join action, and any necessary access-status message. It is the join,
+and About when supplied, one join action, and any necessary access-status
+message. It is the join,
 sign-in, approval, and checkout destination.
 
 The custom funnel builder, its AI composer, draft previews, and the external

@@ -37,7 +37,7 @@ import {
   getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
 import { findAuthenticatedActorState } from "./authActor";
-import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
+import { COMMUNITY_FUNNEL_PUBLIC_CONFIG } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   communityMembershipRequiresManagerReapproval,
@@ -314,7 +314,6 @@ export const resolvePublicFunnelBySlug = query({
     const activePlan = pickPreferredActivePlan(mappedPlans);
     const branding = await resolveCommunityBrandingFields(ctx, community);
     const entryPolicy = resolveCommunityEntryPolicy(community);
-    const funnel = await resolveCommunityFunnelConfigByCommunityId(ctx, community._id);
     const owner = community.ownerId ? await ctx.db.get(community.ownerId) : null;
     const host = owner ? await resolvePublicProfileFaceFields(ctx, owner._id) : null;
 
@@ -336,7 +335,7 @@ export const resolvePublicFunnelBySlug = query({
         banner_zoom: branding.banner_zoom,
         visibility: community.visibility,
         entry_policy: entryPolicy,
-        funnel,
+        funnel: COMMUNITY_FUNNEL_PUBLIC_CONFIG,
       },
       active_plan: activePlan,
     };
