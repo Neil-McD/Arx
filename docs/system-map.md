@@ -256,8 +256,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 11. Community sites — Keep (staging only)
 
 - **Does:** each community's own vibe-coded site on `<slug>.polynet.page`:
-  sign-in with Polynet, the member experience through the SDK, the shared
-  `<polynet-account>` shell, deploys.
+  sign-in with Polynet, the member experience through the SDK (chat with
+  unread, mentions, typing and who's online; member profiles; events, courses,
+  memory, the agent), the shared `<polynet-account>` shell, deploys.
 - **Code:** `httpCommunityApps`, `communityApps`, `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
   `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, SDK `sdk.ts`, shell

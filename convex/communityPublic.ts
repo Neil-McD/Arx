@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityLike,
@@ -44,6 +44,7 @@ import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
   COMMUNITY_PRESENCE_FACE_LIMIT,
+  listCommunityOnlineMembers,
   renewCommunityPresenceLease,
   resolveAuthorizedCommunityPresenceWindow,
   resolveMemberCommunityPresenceSummary,
@@ -442,6 +443,26 @@ export const heartbeatCommunityPresence = mutation({
       ok: true,
       active_until: toIsoString(lease.activeUntil),
     };
+  },
+});
+
+// A community site's heartbeat for its signed-in member: the same lease Studio
+// renews, for the member the site session already established.
+export const heartbeatCommunityPresenceForUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const lease = await renewCommunityPresenceLease({ ctx, communityId: args.communityId, userId: args.userId });
+    return { active_until: toIsoString(lease.activeUntil) };
+  },
+});
+
+// Who's online, for a member reading through a site or their own harness.
+export const listCommunityOnlineMembersForUserInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    return await listCommunityOnlineMembers(ctx, community);
   },
 });
 

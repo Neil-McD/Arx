@@ -49,6 +49,7 @@ async function session(options) {
         if (error.code === "sign_in_required") current = Object.assign({ community_name: null }, edge, { signed_in: false, member: null, live: undefined });
       }
     }
+    keepPresence();
   }
   return current;
 }
@@ -148,8 +149,21 @@ async function channels() {
       return {
         slug: entry.slug, name: entry.name, path: entry.path, isGeneral: entry.is_general === true,
         canPost: !entry.capabilities || entry.capabilities.canPost !== false,
+        unread: entry.unread === true, mentioned: entry.mentioned === true,
       };
     });
+}
+
+// Mark a channel read, clearing its unread and mentioned: up to now, or up to
+// throughAt (the newest post the member saw, or a time). Never moves back.
+async function markRead(channel, throughAt) {
+  const input = { channel: channel };
+  if (throughAt !== undefined && throughAt !== null) {
+    const at = typeof throughAt === "number" ? throughAt : Date.parse(throughAt.created_at || throughAt);
+    if (!Number.isFinite(at)) throw new PolynetError("invalid_tool_args", "throughAt is a post or a time.");
+    input.through_at = Math.floor(at);
+  }
+  return call("community.channel.mark_read", input);
 }
 
 // Posts in a channel, oldest first. Each has ref, path, snippet, actor, reactions,
@@ -183,6 +197,8 @@ async function upload(file, options) {
 
 // Post to a channel, or reply when replyTo is a post ref. files: File[] to attach.
 // askAgent: true asks the community agent, which replies in the channel.
+// mentions: members (from members(), or their refs) to notify; the text must
+// contain each one's @handle.
 async function post(channel, text, options) {
   options = options || {};
   const key = newKey();
@@ -191,17 +207,38 @@ async function post(channel, text, options) {
     attachments.push(await upload(file, { channel: channel, key: key, replyTo: options.replyTo }));
   }
   let body = String(text || "").trim();
-  let mentions;
+  const mentions = (options.mentions || []).map(function (member) {
+    return { userId: String((member && member.ref) || member).replace("user:", "") };
+  });
   if (options.askAgent) {
     const name = (await community()).name;
     if (body.toLowerCase().indexOf(("@" + name).toLowerCase()) === -1) body = "@" + name + " " + body;
-    mentions = [{ agentKey: "community_agent" }];
+    mentions.push({ agentKey: "community_agent" });
   }
   const content = { text: body };
   if (options.replyTo) content.root_id = rootIdOf(options.replyTo);
   if (attachments.length) content.attachments = attachments;
-  if (mentions) content.mentions = mentions;
-  return write({ path: channelPath(channel), mode: options.replyTo ? "append" : "create", content: content, idempotency_key: key });
+  if (mentions.length) content.mentions = mentions;
+  const result = await write({ path: channelPath(channel), mode: options.replyTo ? "append" : "create", content: content, idempotency_key: key });
+  typing(channel, false, { thread: options.replyTo });
+  return result;
+}
+
+// Say the member is typing (on true) or has stopped (false), in a channel or,
+// with { thread: post.ref }, in that post's thread. Call it on every keystroke:
+// the SDK sends at most one renewal every couple of seconds. Others see it in
+// watch(); it fades on its own a few seconds after the last renewal.
+const typingSent = {};
+function typing(channel, on, options) {
+  const thread = options && options.thread ? String(options.thread.ref || options.thread) : null;
+  const key = channel + " " + (thread || "");
+  const now = Date.now();
+  if (on !== false ? typingSent[key] && now - typingSent[key] < 2000 : !typingSent[key]) return Promise.resolve();
+  if (on !== false) typingSent[key] = now;
+  else delete typingSent[key];
+  const input = { channel: channel, on: on !== false };
+  if (thread) input.thread_ref = thread;
+  return call("community.typing.set", input).then(function () {}, function () {});
 }
 
 // Edit or delete your own post or reply (entry from feed/thread, or its path).
@@ -243,11 +280,33 @@ async function readText(entry) {
   return text;
 }
 
-// The community's members: [{ name, role, ref, path }] ("owner", "admin", "moderator", "member").
+// The community's members: [{ name, role, ref, path, handle, avatar_url, online }]
+// (role "owner", "admin", "moderator", "member"; online: here right now).
 async function members() {
   return (await listAll(root() + "members/"))
     .filter(function (entry) { return entry.type === "member"; })
-    .map(function (entry) { return { name: entry.name || "Member", role: entry.role || "member", ref: entry.ref, path: entry.path }; });
+    .map(function (entry) {
+      return {
+        name: entry.name || "Member", role: entry.role || "member", ref: entry.ref, path: entry.path,
+        handle: entry.handle || null, avatar_url: entry.avatar_url || null, online: entry.online === true,
+      };
+    });
+}
+
+// One member's profile (a member from members(), or a handle): { ref, name,
+// handle, avatar_url, role, online, bio, links { youtube, x, instagram } }.
+// Only what any member of this community sees in Polynet.
+async function profile(member) {
+  const handle = typeof member === "string" ? member.replace(/^@/, "") : member && member.handle;
+  const path = handle ? root() + "members/" + handle + ".json"
+    : root() + "members/by-user/" + String((member && member.ref) || "").replace("user:", "") + ".json";
+  return JSON.parse((await read(path)).body);
+}
+
+// Who is here right now: { online_count, online_count_capped, members: [{ ref,
+// name, handle, avatar_url }] }. online_count_capped means "at least".
+async function online() {
+  return JSON.parse((await read(root() + "presence.json")).body);
 }
 
 // What the community knows: top memories, or a search.
@@ -314,10 +373,8 @@ function loadConvex() {
   });
 }
 
-// Live updates: onChange() runs whenever anything in the channel changes (posts,
-// replies, edits, deletions, reactions), and also when the session ends, so the
-// re-read surfaces sign_in_required. Re-read the channel then. Returns stop().
-async function watch(channel, onChange) {
+// The live signal for a path under this community (local, e.g. "presence.json").
+async function subscribe(local, onResult) {
   const s = await session();
   if (!s.signed_in || !s.live) throw new PolynetError("sign_in_required", "Sign in to watch this community.");
   const convex = await loadConvex();
@@ -326,10 +383,77 @@ async function watch(channel, onChange) {
     liveClient = new convex.ConvexClient(s.live.url);
     liveToken = s.live.token;
   }
-  return liveClient.onUpdate("communityLive:watch", { token: s.live.token, path: channelPath(channel) }, function (result) {
+  return liveClient.onUpdate("communityLive:watch", { token: s.live.token, path: root() + local }, function (result) {
     if ((!result || !result.ok) && current) current.signed_in = false;
+    onResult(result && result.ok ? result : null);
+  });
+}
+
+// Live updates: onChange(update) runs whenever anything in the channel changes
+// (posts, replies, edits, deletions, reactions), when someone starts or stops
+// typing there, and when the session ends, so the re-read surfaces
+// sign_in_required. update.changed is true when posts changed: re-read the
+// channel then. update.typing is who else is typing: [{ ref, name, avatar_url,
+// thread_ref }] (thread_ref is the post they're replying to, or null).
+// Returns stop().
+async function watch(channel, onChange) {
+  let version;
+  let shown = "[]";
+  let typists = [];
+  let timer = null;
+  function emit(changed) {
+    const now = Date.now();
+    typists = typists.filter(function (person) { return person.until > now; });
+    const list = typists.map(function (person) {
+      return { ref: person.ref, name: person.name, avatar_url: person.avatar_url, thread_ref: person.thread_ref };
+    });
+    clearTimeout(timer);
+    // A typist who stops renewing fades without another server update.
+    if (typists.length) timer = setTimeout(function () { emit(false); }, Math.min.apply(null, typists.map(function (person) { return person.until; })) - now + 50);
+    if (!changed && JSON.stringify(list) === shown) return;
+    shown = JSON.stringify(list);
+    onChange({ changed: changed, typing: list });
+  }
+  const stop = await subscribe("channels/" + channel + "/", function (result) {
+    const changed = !result || result.version !== version;
+    version = result ? result.version : undefined;
+    const now = Date.now();
+    typists = ((result && result.typing) || []).map(function (person) {
+      return Object.assign({}, person, { until: now + (person.expires_in_ms || 0) });
+    });
+    emit(changed);
+  });
+  return function () { clearTimeout(timer); stop(); };
+}
+
+// onChange() runs right away, whenever who's online changes, and when the
+// session ends: call online() then. Returns stop().
+async function watchOnline(onChange) {
+  let version;
+  return subscribe("presence.json", function (result) {
+    if (result && result.version === version) return;
+    version = result ? result.version : undefined;
     onChange();
   });
+}
+
+// Presence: while a signed-in member has the page open and visible, the
+// community sees them online (a heartbeat about once a minute). Hidden, it
+// pauses; signed out, it stops.
+let heartbeat = null;
+let presenceListening = false;
+function beat() {
+  if (!current || !current.signed_in) { clearInterval(heartbeat); heartbeat = null; return; }
+  if (document.visibilityState === "visible") call("community.presence.heartbeat", {}).catch(function () {});
+}
+function keepPresence() {
+  if (typeof document === "undefined" || !current || !current.signed_in || heartbeat !== null) return;
+  if (!presenceListening) {
+    presenceListening = true;
+    document.addEventListener("visibilitychange", function () { if (heartbeat !== null && document.visibilityState === "visible") beat(); });
+  }
+  heartbeat = setInterval(beat, 60000);
+  beat();
 }
 
 // The signed-in member's Polynet account, for the shell: { member { name,
@@ -446,7 +570,9 @@ const polynet = {
   version: VERSION, PolynetError: PolynetError,
   session: session, signIn: signIn, signOut: signOut, community: community, account: account,
   channels: channels, feed: feed, thread: thread, post: post, edit: edit, remove: remove, react: react, fileUrl: fileUrl, watch: watch,
+  markRead: markRead, typing: typing,
   events: events, resources: resources, readText: readText, knowledge: knowledge, members: members,
+  profile: profile, online: online, watchOnline: watchOnline,
   agentHistory: agentHistory, askAgent: askAgent, markdown: markdown,
   door: { list: list, read: read, search: search, write: write, call: call },
 };

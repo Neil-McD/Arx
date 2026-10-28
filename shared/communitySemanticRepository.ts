@@ -15,6 +15,8 @@ import { COMMUNITY_MEMBER_SELF_DIRECTORY, COMMUNITY_MEMBER_SELF_CONTEXT_PATH } f
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
+// Who is online now, as JSON (a member read; never the community agent).
+export const POLYNET_PRESENCE_DOCUMENT_PATH = "/presence.json";
 export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
 export const POLYNET_CHANNELS_DIRECTORY_PATH = "/channels/";
 export const POLYNET_EVENTS_DIRECTORY_PATH = "/events/";
@@ -110,6 +112,8 @@ export type MemberSemanticDirectorySource = {
     profilePath: string | null;
     displayName: string | null;
     handle: string | null;
+    avatarUrl: string | null;
+    online: boolean;
     role: "owner" | "admin" | "moderator" | "member";
     isSelf: boolean;
   }>;
@@ -580,7 +584,10 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
   if (repositoryPath.kind === "community") {
     // This self-only subtree is served by the canonical executor, not the
     // legacy local-path reader. Reuse fixed document/directory input rules.
-    if (repositoryPath.localPath === "/members/me/forms/" || /^\/members\/me\/forms\/[A-Za-z0-9]+\.json$/.test(repositoryPath.localPath)) {
+    if (repositoryPath.localPath === "/members/me/forms/" || /^\/members\/me\/forms\/[A-Za-z0-9]+\.json$/.test(repositoryPath.localPath) ||
+      // Who is online, and members' profiles as JSON, are executor documents too.
+      repositoryPath.localPath === POLYNET_PRESENCE_DOCUMENT_PATH ||
+      /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath)) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: repositoryPath.localPath === "/members/me/forms/" ? POLYNET_JOIN_REQUESTS_DIRECTORY_PATH : "/community.md" });
       return validated.ok ? { ...validated, path: repositoryPath.path } : validated;
@@ -962,6 +969,9 @@ export function listCommunitySemanticMembers(args: {
     name: string;
     role: "owner" | "admin" | "moderator" | "member";
     ref: string;
+    handle: string | null;
+    avatar_url: string | null;
+    online: boolean;
   }> = [];
   const paths = new Set<string>();
   for (const row of args.source.entries) {
@@ -985,6 +995,9 @@ export function listCommunitySemanticMembers(args: {
         row.role === "owner" || row.role === "admin" || row.role === "moderator"
           ? row.role
           : "member",
+      handle: validatedHandle.ok ? validatedHandle.normalizedHandle : null,
+      avatar_url: normalizeText(row.avatarUrl, 2_048),
+      online: row.online === true,
     });
   }
   const nextCursor = normalizeText(args.source.nextCursor, 2_048);

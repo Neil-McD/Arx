@@ -233,6 +233,8 @@ export async function resolveCommunityTypingPresence(args: {
   totalCountCapped: boolean;
   users: Array<{
     user_id: string;
+    // The users id, for surfaces that name members by it (community sites).
+    canonical_user_id: string;
     display_name: string | null;
     avatar_url: string | null;
     root_id: string | null;
@@ -316,6 +318,7 @@ export async function resolveCommunityTypingPresence(args: {
         user_id:
           (await resolvePublicUserId(args.ctx, row.userId, publicUserIdCache))
           ?? normalizeIdValue(row.userId),
+        canonical_user_id: normalizeIdValue(row.userId),
         ...(await resolveUserProfileDisplayProjection(args.ctx, row.userId)),
         root_id: normalizeTypingRootId(row.rootId),
         display_until_ms: row.displayUntil,

@@ -35,7 +35,9 @@ const modules = import.meta.glob([
   "./authActor.ts",
   "./authIdentity.ts",
   "./communityActivity.ts",
+  "./communityAttention.ts",
   "./communityCapabilityContext.ts",
+  "./communityChat.ts",
   "./communityChannels.ts",
   "./communityEvidenceAudit.ts",
   "./communityEvents.ts",
@@ -49,6 +51,7 @@ const modules = import.meta.glob([
   "./communityResources.ts",
   "./email.ts",
   "./polynetCanonicalReceipts.ts",
+  "./profiles.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -549,4 +552,153 @@ test("the shell shows the member's account: who they are, their role here, and l
   // Only the edge, with a session.
   expect((await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: ORIGIN, authorization: `Bearer ${token}` }, {})).status).toBe(401);
   expect((await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: ORIGIN, "x-polynet-edge-secret": EDGE_SECRET }, {})).status).toBe(401);
+});
+
+// A member action through the site's door: polynet_call on this community's capability.
+const capability = (f: Awaited<ReturnType<typeof fixture>>, token: string, operation: string, input: unknown, key: string) =>
+  f.call(token, { tool: "polynet_call", input: { target: `${COMMUNITY}/capabilities/${operation}.json`, operation, version: 1, idempotencyKey: key, input } });
+
+test("a front end sees which channels are unread or mention its member, and marks them read without moving back", async () => {
+  const f = await fixture();
+  await f.register();
+  const member = await f.signIn();
+  const owner = await f.signIn("apps-owner");
+  const general = async () => {
+    const listed = await f.call(member, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } });
+    return listed.body.value.entries.find((entry: any) => entry.slug === "general");
+  };
+  expect(await general()).toMatchObject({ unread: false, mentioned: false, latest_activity_at: null, seen_through_at: null });
+  const say = (content: Record<string, unknown>, key: string) => f.call(owner, { tool: "polynet_write",
+    input: { path: `${COMMUNITY}/channels/general/`, mode: "create", content, idempotency_key: key } });
+  expect((await say({ text: "Morning all" }, "o-1")).body).toMatchObject({ ok: true });
+  expect(await general()).toMatchObject({ unread: true, mentioned: false, latest_activity_at: expect.any(Number) });
+  expect((await say({ text: "@apps-member you in?", mentions: [{ userId: String(f.ids.memberId) }] }, "o-2")).body).toMatchObject({ ok: true });
+  expect(await general()).toMatchObject({ unread: true, mentioned: true });
+
+  for (const input of [{}, { channel: "general", extra: 1 }, { channel: "general", through_at: -1 }, { channel: "general", through_at: 1.5 }, { channel: "general", through_at: "soon" }]) {
+    expect((await capability(f, member, "community.channel.mark_read", input, "bad")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  }
+  expect((await capability(f, member, "community.channel.mark_read", { channel: "missing" }, "m-0")).body).toMatchObject({ ok: false, code: "channel_unavailable" });
+  const latest = (await general()).latest_activity_at;
+  expect((await capability(f, member, "community.channel.mark_read", { channel: "general" }, "m-1")).body)
+    .toMatchObject({ ok: true, value: { channel: "general", advanced: true, seen_through_at: latest } });
+  expect(await general()).toMatchObject({ unread: false, mentioned: false, seen_through_at: latest });
+  expect((await capability(f, member, "community.channel.mark_read", { channel: "general", through_at: 1 }, "m-2")).body)
+    .toMatchObject({ ok: true, value: { advanced: false, seen_through_at: latest } });
+  // The owner's own read state is theirs.
+  const ownerListed = await f.call(owner, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } });
+  expect(ownerListed.body.value.entries.find((entry: any) => entry.slug === "general")).toMatchObject({ mentioned: false });
+});
+
+test("a front end keeps its member present, shows who is online, and marks members online", async () => {
+  const f = await fixture();
+  await f.register();
+  const member = await f.signIn();
+  const owner = await f.signIn("apps-owner");
+  const online = async (token: string) => {
+    const read = await f.call(token, { tool: "polynet_read", input: { path: `${COMMUNITY}/presence.json` } });
+    if (!read.body.ok) return read.body;
+    return JSON.parse(read.body.value.body);
+  };
+  const watchToken = await deriveCommunityAppWatchToken(member);
+  const watchOnline = () => f.t.query(api.communityLive.watch, { token: watchToken, path: `${COMMUNITY}/presence.json` });
+  expect(await online(member)).toEqual({ online_count: 0, online_count_capped: false, members: [] });
+  expect(await watchOnline()).toEqual({ ok: true, version: "" });
+
+  expect((await capability(f, member, "community.presence.heartbeat", { here: true }, "h-0")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect((await capability(f, member, "community.presence.heartbeat", {}, "h-1")).body).toMatchObject({ ok: true, value: { active_until: expect.any(String) } });
+  expect(await online(owner)).toEqual({ online_count: 1, online_count_capped: false, members: [
+    { ref: `user:${f.ids.memberId}`, name: "apps-member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png" },
+  ] });
+  expect(await watchOnline()).toEqual({ ok: true, version: String(f.ids.memberId) });
+  await capability(f, owner, "community.presence.heartbeat", {}, "h-2");
+  expect(await watchOnline()).toEqual({ ok: true, version: [String(f.ids.memberId), String(f.ids.ownerId)].sort().join(",") });
+
+  const members = await f.call(member, { tool: "polynet_list", input: { path: `${COMMUNITY}/members/` } });
+  const entries = members.body.value.entries as Array<Record<string, unknown>>;
+  expect(entries.find((entry) => entry.ref === `user:${f.ids.memberId}`)).toMatchObject({
+    type: "member", name: "apps-member", role: "member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png", online: true,
+  });
+  expect(entries.find((entry) => entry.ref === `user:${f.ids.ownerId}`)).toMatchObject({ role: "owner", handle: "apps-owner", online: true });
+
+  // The capabilities folder offers the site its member actions.
+  const capabilities = await f.call(member, { tool: "polynet_list", input: { path: `${COMMUNITY}/capabilities/` } });
+  expect(capabilities.body.value.entries.map((entry: any) => entry.operation)).toEqual(expect.arrayContaining([
+    "community.channel.mark_read", "community.presence.heartbeat", "community.typing.set",
+  ]));
+
+  // Losing membership closes both the read and the watch.
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  expect(await online(member)).toMatchObject({ ok: false });
+  expect(await watchOnline()).toEqual({ ok: false, code: "watch_unavailable" });
+  expect((await capability(f, member, "community.presence.heartbeat", {}, "h-3")).body).toMatchObject({ ok: false });
+});
+
+test("a front end sets its member's typing; others see it live, the typist doesn't", async () => {
+  const f = await fixture();
+  await f.register();
+  const member = await f.signIn();
+  const owner = await f.signIn("apps-owner");
+  const general = `${COMMUNITY}/channels/general/`;
+  const watchAs = async (token: string) => f.t.query(api.communityLive.watch, { token: await deriveCommunityAppWatchToken(token), path: general });
+  const typing = (input: unknown, key: string) => capability(f, owner, "community.typing.set", input, key);
+  for (const input of [{ channel: "general" }, { channel: "general", on: "yes" }, { on: true },
+    { channel: "general", on: true, thread_ref: "interaction:reply:abc" }, { channel: "general", on: true, extra: 1 }]) {
+    expect((await typing(input, "bad")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  }
+  expect((await typing({ channel: "missing", on: true }, "t-0")).body).toMatchObject({ ok: false, code: "channel_unavailable" });
+
+  expect((await typing({ channel: "general", on: true }, "t-1")).body).toMatchObject({ ok: true, value: { on: true } });
+  expect((await typing({ channel: "general", on: true }, "t-2")).body).toMatchObject({ ok: true });
+  expect(await f.t.run((c) => c.db.query("communityTypingPresence").collect())).toHaveLength(1);
+  expect(await watchAs(member)).toMatchObject({ ok: true, typing: [{
+    ref: `user:${f.ids.ownerId}`, name: "apps-owner", avatar_url: "https://example.com/apps-owner.png", thread_ref: null,
+    lease_until: expect.any(Number),
+    expires_in_ms: expect.any(Number),
+  }] });
+  expect(await watchAs(owner)).toMatchObject({ ok: true, typing: [] });
+
+  const posted = await f.call(member, { tool: "polynet_write", input: { path: general, mode: "create", content: { text: "Run at 6?" }, idempotency_key: "p-1" } });
+  const thread = posted.body.value.ref as string;
+  expect((await typing({ channel: "general", on: true, thread_ref: thread }, "t-3")).body).toMatchObject({ ok: true });
+  expect(await watchAs(member)).toMatchObject({ typing: [{ ref: `user:${f.ids.ownerId}`, thread_ref: thread }] });
+  expect((await typing({ channel: "general", on: false, thread_ref: thread }, "t-4")).body).toMatchObject({ ok: true, value: { on: false } });
+  expect((await typing({ channel: "general", on: false, thread_ref: thread }, "t-5")).body).toMatchObject({ ok: true, value: { on: false } });
+  expect(await watchAs(member)).toMatchObject({ ok: true, typing: [] });
+});
+
+test("a front end reads a fellow member's profile: only what Studio shows another member, only inside this community", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://studio.example.com");
+  const f = await fixture();
+  await f.register();
+  const member = await f.signIn();
+  const owner = await f.signIn("apps-owner");
+  await f.t.run(async (c) => {
+    const detail = (await c.db.query("userProfileDetails").withIndex("by_user", (q) => q.eq("userId", f.ids.memberId)).first())!;
+    await c.db.patch(detail._id, { bio: "Runs at dawn", socialLinks: { youtube: "", x: "https://x.com/appsmember", instagram: "" },
+      timezone: "America/New_York", onboardingCompletedAt: 1 } as any);
+  });
+  const read = async (token: string, path: string) => {
+    const result = await f.call(token, { tool: "polynet_read", input: { path: `${COMMUNITY}/members/${path}` } });
+    return result.body.ok ? JSON.parse(result.body.value.body) : result.body;
+  };
+  const expected = {
+    ref: `user:${f.ids.memberId}`, name: "apps-member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png",
+    role: "member", online: false, bio: "Runs at dawn", links: { youtube: null, x: "https://x.com/appsmember", instagram: null },
+  };
+  expect(await read(owner, "apps-member.json")).toEqual(expected);
+  expect(await read(owner, `by-user/${f.ids.memberId}.json`)).toEqual(expected);
+  const raw = await f.call(owner, { tool: "polynet_read", input: { path: `${COMMUNITY}/members/apps-member.json` } });
+  expect(JSON.stringify(raw.body)).not.toMatch(/America\/New_York|onboarding|timezone/);
+  expect(await read(member, "apps-owner.json")).toMatchObject({ role: "owner", handle: "apps-owner" });
+  // Not a member here, or no such person: not found, the same way.
+  for (const path of ["apps-outsider.json", "nobody-here.json", `by-user/${f.ids.outsiderId}.json`]) {
+    expect(await read(member, path)).toMatchObject({ ok: false, code: "semantic_not_found" });
+  }
+  // The .md view still works.
+  expect((await f.call(member, { tool: "polynet_read", input: { path: `${COMMUNITY}/members/apps-owner.md` } })).body).toMatchObject({ ok: true });
+  // A member who leaves disappears, and a reader who leaves reads nothing.
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  expect(await read(owner, "apps-member.json")).toMatchObject({ ok: false, code: "semantic_not_found" });
+  expect(await read(member, "apps-owner.json")).toMatchObject({ ok: false });
 });

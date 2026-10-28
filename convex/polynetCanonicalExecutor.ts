@@ -14,6 +14,7 @@ import {
   POLYNET_EVENTS_DIRECTORY_PATH,
   POLYNET_MEMORY_DIRECTORY_PATH,
   POLYNET_MEMBERS_DIRECTORY_PATH,
+  POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
 } from "../shared/communitySemanticRepository.ts";
@@ -76,6 +77,11 @@ const SITE_DEPLOY_MAX_FILES = 200;
 const SITE_DEPLOY_MAX_BYTES = 5 * 1024 * 1024;
 const FORM_SUBMIT_OPERATION = "community.form.submit";
 const REACT_OPERATION = "community.interaction.react";
+const MARK_READ_OPERATION = "community.channel.mark_read";
+// Presence and typing say a person is here right now, so only a member's own
+// site (community_app) may set them, never an agent or harness acting for them.
+const PRESENCE_HEARTBEAT_OPERATION = "community.presence.heartbeat";
+const TYPING_SET_OPERATION = "community.typing.set";
 const SELF_FORMS_DIRECTORY = "/members/me/forms/";
 const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 
@@ -633,13 +639,18 @@ function capabilityDocument(args: {
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
   const isReactCapability = args.operation === REACT_OPERATION &&
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+  const isMarkReadCapability = args.operation === MARK_READ_OPERATION &&
+    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+  const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&
+    args.principalKind === "community_app";
   const isWorkflowApprovalCapability = args.operation === APPROVE_MILESTONE_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isSiteDeployCapability) {
+  if (!isMemberCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability &&
+    !isMarkReadCapability && !isPresenceCapability && !isSiteDeployCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -655,6 +666,21 @@ function capabilityDocument(args: {
       ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
       emoji: "up to 32 characters", on: "true adds your reaction, false removes it",
       effects: ["set_own_reaction"], forbidden_effects: ["react_as_someone_else"] };
+  } else if (isMarkReadCapability) {
+    operationDefinition.input = { required: ["channel"], optional: ["through_at"],
+      channel: "a channel slug from the channels listing",
+      through_at: "the newest activity the member saw, in epoch milliseconds (default: everything readable now)",
+      result: "{ channel, advanced, seen_through_at }",
+      effects: ["advance_own_read_position"], forbidden_effects: ["mark_read_for_someone_else", "move_read_position_back"] };
+  } else if (args.operation === PRESENCE_HEARTBEAT_OPERATION) {
+    operationDefinition.input = { required: [], result: "{ active_until }",
+      guidance: "Send about once a minute while the member has the site open and visible.",
+      effects: ["renew_own_presence"], forbidden_effects: ["presence_for_someone_else"] };
+  } else if (args.operation === TYPING_SET_OPERATION) {
+    operationDefinition.input = { required: ["channel", "on"], optional: ["thread_ref"],
+      channel: "a channel slug from the channels listing", on: "true while the member types (renew every few seconds), false when they stop",
+      thread_ref: "interaction:root:<id> when typing a reply in that post's thread",
+      effects: ["set_own_typing"], forbidden_effects: ["typing_for_someone_else"] };
   } else if (isSiteDeployCapability) {
     operationDefinition.input = {
       required: ["files"],
@@ -809,6 +835,13 @@ async function executeCanonicalList(args: {
     const channels = Array.isArray(value.channels)
       ? (value.channels as Array<Record<string, unknown>>)
       : [];
+    // The member's own read state per channel (Studio's unread dots). The
+    // community agent has none. Attention is a nicety: it never fails a listing.
+    const attention = args.principalKind === "community_agent" || channels.length === 0 ? [] : ((await args.ctx.runQuery(
+      (internal as any).communityAttention.listCommunityChannelAttentionForUserInternal,
+      { userId: args.userId, communityId: target.communityId,
+        channelSlugs: channels.flatMap((channel) => requiredString(channel.slug, 64) ?? []) },
+    ).catch(() => [])) as Array<Record<string, unknown>>);
     return {
       ok: true,
       value: virtualDirectory({
@@ -817,6 +850,8 @@ async function executeCanonicalList(args: {
           const slug = requiredString(channel.slug, 64);
           const channelId = requiredString(channel.id, 180);
           if (!slug) return [];
+          const row = attention.find((candidate) => channelId && candidate.channel_id
+            ? candidate.channel_id === channelId : candidate.channel_slug === slug);
           return [
             {
               ...channel,
@@ -824,6 +859,12 @@ async function executeCanonicalList(args: {
               kind: "directory",
               type: "channel",
               channel_id: channelId,
+              ...(args.principalKind === "community_agent" ? {} : {
+                unread: row?.chat === true,
+                mentioned: row?.mentions === true,
+                latest_activity_at: typeof row?.latest_activity_at === "number" ? row.latest_activity_at : null,
+                seen_through_at: typeof row?.chat_last_seen_at === "number" ? row.chat_last_seen_at : null,
+              }),
             },
           ];
         }),
@@ -1041,7 +1082,8 @@ async function executeCanonicalList(args: {
       ...(args.evidenceSurface === "community_funnel_builder"
         ? []
         : MEMBER_CAPABILITIES),
-      ...[REACT_OPERATION, FORM_SUBMIT_OPERATION, APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
+      ...[REACT_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
+        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -1283,6 +1325,27 @@ async function executeCanonicalRead(args: {
       "semantic_not_found",
       "Repository path not found or not accessible.",
     );
+  }
+
+  // Who is online, and one member's profile, as JSON for a member's site or
+  // harness. The community agent reads members through the .md paths only.
+  const memberProfileMatch = /^\/members\/(?:by-user\/([A-Za-z0-9_-]+)|([^/]+))\.json$/.exec(target.localPath);
+  if (target.localPath === POLYNET_PRESENCE_DOCUMENT_PATH || memberProfileMatch) {
+    if (args.principalKind === "community_agent" || args.evidenceSurface === "community_funnel_builder")
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    try {
+      const payload = memberProfileMatch
+        ? await args.ctx.runQuery((internal as any).profiles.readCommunityMemberProfileInternal, {
+          viewerUserId: args.userId, communityId: target.communityId,
+          ...(memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] }) })
+        : await args.ctx.runQuery((internal as any).communityPublic.listCommunityOnlineMembersForUserInternal,
+          { userId: args.userId, communityId: target.communityId });
+      if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload,
+        ref: memberProfileMatch ? payload.ref : null }), writable: false, searchable: false } };
+    } catch {
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    }
   }
 
   if (target.localPath.startsWith(SELF_FORMS_DIRECTORY)) {
@@ -2166,6 +2229,9 @@ async function executeCanonicalCall(args: {
       return { ok: true, value };
     } catch { return canonicalError("interaction_unavailable", "That post is not available to react to."); }
   }
+  if (operation === MARK_READ_OPERATION || operation === PRESENCE_HEARTBEAT_OPERATION || operation === TYPING_SET_OPERATION) {
+    return await executeLiveMemberCall({ ...args, target, operation, input });
+  }
   if (operation === FORM_SUBMIT_OPERATION) {
     const request = typeof rawInput.form_request_ref === "string" ? /^form-request:([A-Za-z0-9]+)$/.exec(rawInput.form_request_ref) : null;
     const versionRef = typeof rawInput.form_version_ref === "string" ? /^form-version:([A-Za-z0-9]+)$/.exec(rawInput.form_version_ref) : null;
@@ -2406,6 +2472,56 @@ async function executeSiteDeploy(args: {
       attemptToken: reservation.attemptToken, value: responseValue }) };
   } catch (error) {
     return await fail("site_deploy_failed", error instanceof Error ? error.message : "Site deploy failed.");
+  }
+}
+
+// Read position, presence and typing: the member's own, set (never toggled),
+// so retries are safe without a receipt. Inputs are exact.
+async function executeLiveMemberCall(args: {
+  ctx: any;
+  userId: string;
+  target: ResolvedCommunityTarget;
+  operation: string;
+  input: Record<string, unknown>;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const { input, target } = args;
+  const allowed = args.operation === MARK_READ_OPERATION ? ["channel", "through_at"]
+    : args.operation === TYPING_SET_OPERATION ? ["channel", "on", "thread_ref"] : [];
+  const channel = typeof input.channel === "string" ? input.channel.trim() : "";
+  const thread = input.thread_ref === undefined ? null : parseCommunityInteractionEvidenceRef(input.thread_ref);
+  const valid = target.localPath === `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${args.operation}.json` &&
+    Object.keys(input).every((key) => allowed.includes(key)) &&
+    (args.operation === PRESENCE_HEARTBEAT_OPERATION || (channel.length > 0 && channel.length <= 64)) &&
+    (args.operation !== MARK_READ_OPERATION || input.through_at === undefined ||
+      (Number.isSafeInteger(input.through_at) && (input.through_at as number) >= 0)) &&
+    (args.operation !== TYPING_SET_OPERATION || (typeof input.on === "boolean" &&
+      (input.thread_ref === undefined || thread?.objectType === "root")));
+  if (!valid) {
+    return canonicalError("invalid_tool_args", args.operation === MARK_READ_OPERATION
+      ? "A channel slug (and optionally through_at, epoch milliseconds) is required."
+      : args.operation === TYPING_SET_OPERATION
+        ? "A channel slug, on (true or false) and optionally thread_ref (interaction:root:<id>) are required."
+        : "The presence heartbeat takes no input.");
+  }
+  const scope = { userId: args.userId, communityId: target.communityId };
+  try {
+    if (args.operation === PRESENCE_HEARTBEAT_OPERATION) {
+      return { ok: true, value: await args.ctx.runMutation(
+        (internal as any).communityPublic.heartbeatCommunityPresenceForUserInternal, scope) };
+    }
+    if (args.operation === TYPING_SET_OPERATION) {
+      return { ok: true, value: await args.ctx.runMutation(
+        (internal as any).communityChat.setCommunityTypingForUserInternal,
+        { ...scope, channelSlug: channel, on: input.on, ...(thread ? { rootId: String(thread.objectId) } : {}) }) };
+    }
+    const value = await args.ctx.runMutation(
+      (internal as any).communityAttention.markCommunityChannelReadForUserInternal,
+      { ...scope, channelSlug: channel, ...(input.through_at === undefined ? {} : { throughAtMs: input.through_at }) });
+    return { ok: true, value: { channel, advanced: value.advanced === true,
+      seen_through_at: value.seenThroughAt > 0 ? value.seenThroughAt : null } };
+  } catch {
+    return canonicalError("channel_unavailable", args.operation === PRESENCE_HEARTBEAT_OPERATION
+      ? "Presence is not available in this community." : "That channel is not available.");
   }
 }
 

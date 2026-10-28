@@ -1,6 +1,6 @@
 ---
 name: polynet-sdk
-description: Read and write a Polynet community's data from its site with the Polynet SDK (session and sign-in, channels, posts, reactions, live updates, events, courses, knowledge, members, the community agent, safe markdown). Use whenever site code needs community data or a member action.
+description: Read and write a Polynet community's data from its site with the Polynet SDK (session and sign-in, channels, unread and mentions, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, safe markdown). Use whenever site code needs community data or a member action.
 ---
 
 # The Polynet SDK
@@ -87,6 +87,31 @@ const replies = await polynet.thread(general.slug, p.ref);       // the post, th
 Hide the composer when `channel.canPost` is false. `edit(p, text)` when
 `p.can_edit`; `remove(p)` when `p.by_me`. Attachments: `polynet.fileUrl(file)`.
 
+## Unread, mentions, typing, who's online
+
+```js
+const channels = await polynet.channels();      // each has unread and mentioned: show a dot
+await polynet.markRead(general.slug);           // the member is looking at it now
+
+// Mention a member: their @handle in the text, and the member in mentions.
+await polynet.post(general.slug, `@${sam.handle} 6am?`, { mentions: [sam] });
+
+// Typing: on every keystroke (the SDK throttles), off when the box empties.
+input.addEventListener("input", () => polynet.typing(general.slug, input.value !== ""));
+await polynet.watch(general.slug, async (update) => {
+  typingLine.textContent = update.typing.map((t) => t.name).join(", ");
+  if (update.changed) await renderFeed();       // only re-read when posts changed
+});
+
+// Who's here: presence is automatic while a signed-in member has the page open.
+await polynet.watchOnline(async () => {
+  const { online_count, members } = await polynet.online();
+  here.textContent = `${online_count} here now`;
+});
+const people = await polynet.members();          // each has handle, avatar_url, online
+const card = await polynet.profile(people[0]);   // bio, links { youtube, x, instagram }, role, online
+```
+
 ## Ask the agent, streaming
 
 ```js
@@ -108,7 +133,7 @@ words can take a few seconds while the agent uses tools.
 | Events | `events({ limit })`; show times in the event's `timezone` |
 | Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` |
 | What the community knows | `knowledge(query?)` |
-| Members | `members()` |
+| Members | `members()`, `profile(member)`, `online()` |
 
 ## Using a bundler
 

@@ -408,7 +408,9 @@ const modules = import.meta.glob([
   "./authActor.ts",
   "./authIdentity.ts",
   "./communityActivity.ts",
+  "./communityAttention.ts",
   "./communityCapabilityContext.ts",
+  "./communityChat.ts",
   "./communityChannels.ts",
   "./communityEvidenceAudit.ts",
   "./communityEvents.ts",
@@ -421,6 +423,7 @@ const modules = import.meta.glob([
   "./communityResourceEvidence.ts",
   "./communityResources.ts",
   "./polynetCanonicalReceipts.ts",
+  "./profiles.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -3183,3 +3186,42 @@ test.each(["draft","admin","private","foreign","revoked-source","superseded-cita
     }
     const s=await f.snapshot();expect(s.logs.filter(x=>x.injectedNodeIds.includes(f.node._id))).toHaveLength(1); // Only the earlier authorized control read.
   });
+
+test("site rails: the community agent gets no read state, presence, typing or member JSON; a member harness gets read state only", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const execute = (principalKind: "community_agent" | "external_mcp", toolName: "polynet_list" | "polynet_read" | "polynet_call", input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), authSubject: f.memberSubject,
+      userId: f.memberId, principalKind, evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock", toolName, input });
+  const community = "/communities/canonical-community";
+  const callInput = (operation: string, input: Record<string, unknown>) =>
+    ({ target: `${community}/capabilities/${operation}.json`, operation, version: 1, idempotencyKey: `${operation}-key`, input });
+
+  const agentChannels = await execute("community_agent", "polynet_list", { path: `${community}/channels/` });
+  if (!agentChannels.ok) throw new Error(agentChannels.code);
+  for (const entry of agentChannels.value.entries as Array<Record<string, unknown>>) {
+    expect(entry).not.toHaveProperty("unread");
+    expect(entry).not.toHaveProperty("seen_through_at");
+  }
+  for (const path of [`${community}/presence.json`, `${community}/members/canonical-owner.json`]) {
+    expect(await execute("community_agent", "polynet_read", { path })).toMatchObject({ ok: false, code: "semantic_not_found" });
+  }
+  for (const [operation, input] of [["community.channel.mark_read", { channel: "general" }], ["community.presence.heartbeat", {}],
+    ["community.typing.set", { channel: "general", on: true }]] as const) {
+    expect(await execute("community_agent", "polynet_call", callInput(operation, input))).toMatchObject({ ok: false, code: "operation_not_found" });
+  }
+
+  // A member's own harness sees and moves the member's read state, and can
+  // read who is online, but cannot claim the member is present or typing.
+  const memberChannels = await execute("external_mcp", "polynet_list", { path: `${community}/channels/` });
+  if (!memberChannels.ok) throw new Error(memberChannels.code);
+  expect((memberChannels.value.entries as Array<Record<string, unknown>>).find((entry) => entry.slug === "wins"))
+    .toMatchObject({ unread: false, mentioned: false, latest_activity_at: null, seen_through_at: null });
+  expect(await execute("external_mcp", "polynet_call", callInput("community.channel.mark_read", { channel: "wins" })))
+    .toMatchObject({ ok: true, value: { channel: "wins", advanced: false } });
+  expect(await execute("external_mcp", "polynet_read", { path: `${community}/presence.json` })).toMatchObject({ ok: true });
+  for (const [operation, input] of [["community.presence.heartbeat", {}], ["community.typing.set", { channel: "general", on: true }]] as const) {
+    expect(await execute("external_mcp", "polynet_call", callInput(operation, input))).toMatchObject({ ok: false, code: "operation_not_found" });
+  }
+  expect(await t.run((ctx) => ctx.db.query("communityPresence").collect())).toHaveLength(0);
+});

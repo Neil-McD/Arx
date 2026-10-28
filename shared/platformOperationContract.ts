@@ -190,6 +190,17 @@ const COMMUNITY_SEMANTIC_LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
             type: "string",
             maxLength: 80,
           },
+          handle: {
+            type: ["string", "null"],
+            maxLength: 120,
+          },
+          avatar_url: {
+            type: ["string", "null"],
+            maxLength: 2048,
+          },
+          online: {
+            type: "boolean",
+          },
         },
       },
     },

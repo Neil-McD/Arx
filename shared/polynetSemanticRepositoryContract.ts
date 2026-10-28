@@ -69,6 +69,9 @@ export type PolynetSemanticRepositoryEntry = {
   name?: string;
   ref?: string;
   role?: "owner" | "admin" | "moderator" | "member";
+  handle?: string | null;
+  avatar_url?: string | null;
+  online?: boolean;
 };
 
 export type PolynetSemanticDirectoryResult = {

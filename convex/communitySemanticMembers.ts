@@ -8,6 +8,8 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import { getUniqueUserByNormalizedHandle, getUniqueUserProfileDetailByUserId } from "./profileCore";
+import { resolveAuthorizedCommunityPresenceWindow } from "./communityPresenceCore";
+import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import type { ResolvedCommunityCapabilityContext } from "../shared/communityCapabilityContextContract";
 import type {
   MemberProfileSemanticSource,
@@ -27,6 +29,8 @@ type SemanticMemberUserRow = {
 
 type SemanticMemberProfileDetailRow = {
   displayName?: string;
+  avatarUrl?: string;
+  avatarStorageId?: any;
 };
 
 function normalizeSemanticMemberRole(
@@ -68,6 +72,7 @@ async function buildMemberDirectoryEntry(args: {
   communityId: any;
   userId: any;
   role: unknown;
+  onlineUserIds: Set<string>;
 }): Promise<{
   entry: MemberSemanticDirectorySource["entries"][number] | null;
   skippedIncomplete: boolean;
@@ -110,6 +115,8 @@ async function buildMemberDirectoryEntry(args: {
         : null,
       displayName: detail?.displayName ?? user.displayName ?? null,
       handle: validatedHandle.ok ? validatedHandle.normalizedHandle : null,
+      avatarUrl: (await resolveUserProfileDisplayProjectionForUser(args.ctx, user, detail)).avatar_url,
+      online: args.onlineUserIds.has(String(user._id)),
       role: normalizeSemanticMemberRole(args.role),
       isSelf,
     },
@@ -160,6 +167,11 @@ export async function listMemberSemanticDirectory(args: {
       role: normalizeCommunityRoleForOutput(row.role) || "member",
     });
   }
+  // Who is online, read once for the page.
+  const onlineUserIds = new Set(
+    (await resolveAuthorizedCommunityPresenceWindow(args.ctx, community)).entries
+      .map((entry) => String(entry.userId)),
+  );
   const entries: MemberSemanticDirectorySource["entries"] = [];
   let skippedIncomplete = 0;
   for (const candidate of candidates) {
@@ -172,6 +184,7 @@ export async function listMemberSemanticDirectory(args: {
       communityId,
       userId: candidate.userId,
       role: candidate.role,
+      onlineUserIds,
     }).catch(() => ({ entry: null, skippedIncomplete: true }));
     if (mapped.entry) entries.push(mapped.entry);
     if (mapped.skippedIncomplete) skippedIncomplete += 1;
