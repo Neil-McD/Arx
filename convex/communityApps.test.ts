@@ -918,9 +918,10 @@ test("twin settings: a new photo goes straight to storage and is confirmed; only
   expect((await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: "../x" })).body).toMatchObject({ code: "invalid_request" });
   expect((await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: "notastorageid" })).body).toMatchObject({ code: "profile_avatar_invalid" });
   expect((await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).body.profile.avatar_url).toBe(url);
-  // Removing it: no photo, and the file is gone, as in Studio.
+  // Removing it: no photo. The file stays in storage: a profile's photo isn't
+  // proven to be the member's own upload, so it's never deleted on replace.
   expect((await f.me(COMMUNITY_APP_MY_AVATAR_PATH, token, { storage_id: null })).body.profile.avatar_url).toBeNull();
-  expect(await f.t.run((c) => c.storage.getUrl(photo))).toBeNull();
+  expect(await f.t.run((c) => c.storage.getUrl(photo))).not.toBeNull();
 });
 
 test("twin settings: Studio's notification settings, this community's mute and the weekly digest", async () => {
