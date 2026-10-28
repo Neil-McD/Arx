@@ -59,9 +59,9 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     const access = await mapCommunityAccessRow({ ctx, community, membership: pickMostRelevantCommunityMembership(memberships), userId });
     admission = derivePublicCommunityAdmissionProjection({ access });
     const setup = await loadAccountSetupStatusForUserId(ctx, userId);
-    // An earlier request only counts while the community still asks for
-    // approval (as Studio's funnel): a community that went paid shows checkout.
-    const approvalGate = gate === "request_access";
+    // A request (or a manager's reapproval, after a removal) counts unless the
+    // community now sells a plan: a community that went paid shows checkout.
+    const approvalGate = gate !== "checkout";
     const state: CommunityAppJoinViewerState = access.is_blocked
       ? "blocked"
       : admission.canEnterCommunity

@@ -1407,6 +1407,20 @@ test("twin join: a paid plan goes to Studio's checkout, back only to this twin's
   expect(stripe.checkouts).toHaveLength(1);
 });
 
+test("twin join: in an open community, someone a manager removed asks to come back and waits, as Studio's join decides", async () => {
+  const f = await joinFixture();
+  await f.policy("open");
+  await f.t.run((c) => c.db.insert("communityMemberships", {
+    communityId: f.ids.communityId, userId: f.ids.outsiderId, role: "member", accessSource: "free_grant", active: false,
+    activationSequence: 1, activatedAt: 1, revokedAt: Date.now(), revokedReason: "removed_by_manager", createdAt: 1, updatedAt: 1,
+  }));
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  const asked = await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
+  expect(asked).toMatchObject({ status: 200, body: { outcome: "approval_pending", viewer: { state: "pending" } } });
+  expect((await f.read(token)).body.viewer).toMatchObject({ state: "pending" });
+  expect((await f.membership())?.active).toBe(false);
+});
+
 test("twin join: a community that went from approval to paid shows its checkout, whatever was asked before", async () => {
   stripe.checkouts.length = 0;
   const f = await joinFixture();
