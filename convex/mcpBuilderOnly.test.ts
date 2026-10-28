@@ -118,7 +118,7 @@ test("the targeted community comes from the path or the call target", () => {
 });
 
 // Pages that pass the site checks: language, title, zoomable viewport; the frame
-// Polynet's standard pages (/chat, /people) appear in.
+// Polynet's standard pages (/chat, /people, /events, ...) appear in.
 const PAGE = '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Run club</title>' +
   '<script type="module" src="/__polynet/ui.js"></script><polynet-account></polynet-account><h1>Run club</h1></html>';
 const FRAME = '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Run club</title>' +

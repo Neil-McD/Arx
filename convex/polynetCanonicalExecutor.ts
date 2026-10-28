@@ -601,6 +601,38 @@ function mountSearchResults(args: {
   };
 }
 
+const CANONICAL_JSON_DOCUMENT_MAX_CHARS = 24_000;
+const SHORTENED_MARKER = "\n\n[…shortened]";
+
+// Shortens the longest string values until the document fits, so the JSON stays valid.
+export function fitJsonDocument(payload: unknown, fullBody: string, maxChars: number): string {
+  if (fullBody.length <= maxChars) return fullBody;
+  let copy: unknown = JSON.parse(fullBody);
+  for (let pass = 0; pass < 20; pass += 1) {
+    const body = JSON.stringify(copy, null, 2) ?? "null";
+    if (body.length <= maxChars) return body;
+    let longest: { holder: any; key: string | number; length: number } | null = null;
+    const visit = (holder: any, key: string | number, value: unknown) => {
+      if (typeof value === "string") {
+        if (!longest || value.length > longest.length) longest = { holder, key, length: value.length };
+      } else if (value && typeof value === "object") {
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) visit(value, Array.isArray(value) ? Number(k) : k, v);
+      }
+    };
+    const root = { value: copy };
+    visit(root, "value", copy);
+    const target = longest as { holder: any; key: string | number; length: number } | null;
+    if (!target || target.length <= SHORTENED_MARKER.length) break;
+    const over = body.length - maxChars;
+    // JSON escaping can make a character cost more than one, so cut a little extra.
+    const keep = Math.max(0, target.length - Math.ceil(over * 1.1) - SHORTENED_MARKER.length - 16);
+    target.holder[target.key] = String(target.holder[target.key]).slice(0, keep) + SHORTENED_MARKER;
+    copy = root.value;
+  }
+  const last = JSON.stringify(copy, null, 2) ?? "null";
+  return last.length <= maxChars ? last : JSON.stringify({ truncated: true, error: "document_too_large" });
+}
+
 function canonicalJsonDocument(args: {
   target: ResolvedCommunityTarget;
   localPath: string;
@@ -609,14 +641,16 @@ function canonicalJsonDocument(args: {
   retrievalId?: unknown;
 }): Record<string, unknown> {
   const fullBody = JSON.stringify(args.payload, null, 2) ?? "null";
-  const body = fullBody.slice(0, 24_000);
+  const body = fitJsonDocument(args.payload, fullBody, CANONICAL_JSON_DOCUMENT_MAX_CHARS);
   return {
     path: mountedPath(args.target.communitySlug, args.localPath),
     body,
     truncated: body.length < fullBody.length,
     ...(args.ref ? { ref: args.ref } : {}),
     total_chars: fullBody.length,
-    next_offset: body.length < fullBody.length ? body.length : null,
+    // A JSON document can't be read in pages: an over-long one is shortened
+    // inside its longest text fields, so what comes back always parses.
+    next_offset: null,
     ...(args.retrievalId ? { retrieval_id: String(args.retrievalId) } : {}),
   };
 }
@@ -688,7 +722,7 @@ function capabilityDocument(args: {
       limits: { max_files: SITE_DEPLOY_MAX_FILES, max_total_bytes: SITE_DEPLOY_MAX_BYTES },
       result: "{ url }: the live site, https://<slug>.<sites domain>",
       guidance: "Build the site from the builder guide (polynet.page/llms.txt); larger sites deploy with npx @polynet/cli deploy.",
-      checks: "The site is checked first, as npx @polynet/cli check does: errors (no /index.html or /frame.html; a frame without exactly one <polynet-page> or with relative paths; the site's own /chat or /people page without that page's blocks; no lang, title or zoomable viewport; images without alt; unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
+      checks: "The site is checked first, as npx @polynet/cli check does: errors (no /index.html or /frame.html; a frame without exactly one <polynet-page> or with relative paths; the site's own version of a standard page (/chat, /people, /events, /learn, /knowledge, /ask) without that page's blocks; no lang, title or zoomable viewport; images without alt; unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
       effects: ["publish_community_site"],
       forbidden_effects: ["server_code", "change_access", "deploy_other_community"],
     };

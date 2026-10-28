@@ -1,7 +1,7 @@
 // @vitest-environment node
 // The blocks in a real browser: the exact text the edge serves, on a page with
 // a fake SDK the test drives (window.fake), so no Polynet backend is involved.
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,6 +14,10 @@ import { COMPOSER_SOURCE } from "./blocks/composer";
 import { MEMBERS_SOURCE } from "./blocks/members";
 import { PROFILE_SOURCE } from "./blocks/profile";
 import { PAGE_SOURCE } from "./blocks/page";
+import { EVENTS_SOURCE } from "./blocks/events";
+import { LEARN_SOURCE } from "./blocks/learn";
+import { KNOWLEDGE_SOURCE } from "./blocks/knowledge";
+import { ASK_SOURCE } from "./blocks/ask";
 import { UI_CSS, UI_SOURCE } from "./ui";
 
 const SITE = "https://run-club.polynet.test";
@@ -118,6 +122,52 @@ export default {
     }
     const f = document.createDocumentFragment(); f.append(p); return f;
   },
+  // Events from now (or options.from, or a cursor), in start order, a page at a time.
+  events: async (options) => {
+    fail();
+    options = options || {};
+    record("events", [options.from !== undefined ? "from" : options.cursor ? "cursor" : "now", options.limit]);
+    if (fake.failEvents) { const error = new Error("Nope."); error.code = "community_event_list_failed"; throw error; }
+    const from = options.cursor ? Number(options.cursor) : options.from !== undefined ? new Date(options.from).getTime() : Date.now();
+    const all = fake.events.filter((e) => Date.parse(e.starts_at) >= from).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+    const limit = options.limit || 20;
+    const page = all.slice(0, limit).map((e) => Object.assign({}, e));
+    page.cursor = all.length > limit ? String(Date.parse(page[page.length - 1].starts_at) + 1) : null;
+    return page;
+  },
+  event: async (ref) => {
+    fail();
+    record("event", [String(ref.ref || ref)]);
+    const found = fake.events.find((e) => e.ref === String(ref.ref || ref));
+    if (!found) { const error = new Error("Event not found."); error.code = "semantic_not_found"; throw error; }
+    return Object.assign({}, found);
+  },
+  resources: async (path) => { fail(); record("resources", [path || null]); return (fake.resources[path || ""] || []).map((e) => Object.assign({}, e)); },
+  readText: async (entry) => {
+    fail();
+    const path = entry.path || entry;
+    record("readText", [path]);
+    if (fake.failRead) { const error = new Error("Nope."); error.code = "semantic_not_found"; throw error; }
+    return fake.texts[path] || "";
+  },
+  knowledge: async (query) => {
+    fail();
+    record("knowledge", [query || null]);
+    const all = fake.memories.map((m) => Object.assign({}, m));
+    return query ? all.filter((m) => m.title.toLowerCase().indexOf(query.toLowerCase()) !== -1) : all;
+  },
+  agentHistory: async () => { fail(); record("agentHistory", []); return fake.agent.history.map((m) => Object.assign({}, m)); },
+  // Streams fake.agent.reply in two pieces; hold pauses after the first.
+  askAgent: async (text, options) => {
+    record("askAgent", [text, options.key || null]);
+    if (fake.agent.fail > 0) { fake.agent.fail -= 1; const error = new Error("The agent is busy right now."); error.code = "agent_failed"; throw error; }
+    const reply = fake.agent.reply;
+    const half = reply.slice(0, Math.ceil(reply.length / 2));
+    options.onDelta(half);
+    if (fake.agent.hold) await new Promise((resolve) => { fake.agent.release = resolve; });
+    options.onDelta(reply);
+    return reply;
+  },
   account: async () => fake.account || ({ member: {}, community: {}, links: { messages: "https://polynet.test/?dm=inbox" } }),
   signOut: async () => {},
 };
@@ -181,6 +231,13 @@ function fixture() {
     } as Record<string, object>,
     onlineWatchers: [] as unknown[],
     watchers: {},
+    events: [] as Array<Record<string, unknown>>,
+    failEvents: false,
+    resources: {} as Record<string, object[]>,
+    texts: {} as Record<string, string>,
+    failRead: false,
+    memories: [] as Array<{ title: string } & Record<string, unknown>>,
+    agent: { history: [] as object[], reply: "", fail: 0, hold: false } as Record<string, unknown>,
     calls: [] as unknown[],
   };
 }
@@ -208,7 +265,8 @@ async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}
     "/__polynet/ui.js": UI_SOURCE, "/__polynet/sdk.js": FAKE_SDK, "/__polynet/blocks/kit.js": KIT_SOURCE,
     "/__polynet/blocks/channels.js": CHANNELS_SOURCE, "/__polynet/blocks/chat.js": CHAT_SOURCE, "/__polynet/blocks/composer.js": COMPOSER_SOURCE,
     "/__polynet/blocks/members.js": MEMBERS_SOURCE, "/__polynet/blocks/profile.js": PROFILE_SOURCE, "/__polynet/ui.css": UI_CSS,
-    "/__polynet/blocks/page.js": PAGE_SOURCE,
+    "/__polynet/blocks/page.js": PAGE_SOURCE, "/__polynet/blocks/events.js": EVENTS_SOURCE, "/__polynet/blocks/learn.js": LEARN_SOURCE,
+    "/__polynet/blocks/knowledge.js": KNOWLEDGE_SOURCE, "/__polynet/blocks/ask.js": ASK_SOURCE,
   };
   await page.route(`${SITE}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -1383,7 +1441,8 @@ test("<polynet-page> at an address with no page: a quiet not-found inside the fr
   await expect.poll(() => host.getAttribute("page")).toBe("not-found");
   expect(await host.locator("h1").textContent()).toBe("Page not found");
   const links = host.locator(".pn-page-missing nav[aria-label='Pages here'] a");
-  expect(await links.evaluateAll((all) => all.map((a) => [a.textContent, a.getAttribute("href")]))).toEqual([["Home", "/"], ["Chat", "/chat"], ["People", "/people"]]);
+  expect(await links.evaluateAll((all) => all.map((a) => [a.textContent, a.getAttribute("href")]))).toEqual([["Home", "/"], ["Chat", "/chat"], ["People", "/people"],
+    ["Events", "/events"], ["Learn", "/learn"], ["Knowledge", "/knowledge"], ["Ask", "/ask"]]);
   expect(await page.locator("polynet-chat, polynet-members").count()).toBe(0);
   await page.close();
 });
@@ -1400,7 +1459,8 @@ test("the account menu: In this club links to the site's own pages, marking the 
   expect(await group.locator(".group-title").textContent()).toBe("In this club");
   const here = group.locator("a[part=item]");
   expect(await here.evaluateAll((all) => all.map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("aria-current")])))
-    .toEqual([["Chat", "/chat", null], ["People", "/people", "page"]]);
+    .toEqual([["Chat", "/chat", null], ["People", "/people", "page"], ["Events", "/events", null], ["Learn", "/learn", null],
+      ["Knowledge", "/knowledge", null], ["Ask", "/ask", null]]);
   const manage = shell.locator("[part=panel] a", { hasText: "Manage this community" });
   await expect.poll(() => manage.count()).toBe(1);
   expect(await manage.getAttribute("href")).toBe("https://polynet.test/c/run-club/settings/community");
@@ -1414,4 +1474,413 @@ test("the account menu: In this club links to the site's own pages, marking the 
   await home.locator("polynet-account [part=trigger]").click();
   expect(await home.locator("polynet-account [part=group] [aria-current]").count()).toBe(0);
   await home.close();
+});
+
+// The calendar, around now: one under way, two coming (one next month), one
+// recent, one long past. Times are in New York; the member reads them in London.
+const HOUR = 3_600_000;
+const DAYS = 24 * HOUR;
+function calendar(fake: ReturnType<typeof fixture>) {
+  const at = (ms: number) => new Date(Math.round(ms / 60_000) * 60_000);
+  const make = (id: string, title: string, start: Date, extra: object = {}) => ({
+    ref: `event:${id}:${start.getTime()}`, path: `/communities/run-club/events/event:${id}:${start.getTime()}.md`, title,
+    starts_at: start.toISOString(), ends_at: new Date(start.getTime() + 90 * 60_000).toISOString(), timezone: "America/New_York",
+    location_type: "physical", location_label: "Riverside steps", url: null, description_md: null, recurrence_frequency: "none", recurrence_interval: 1,
+    ...extra,
+  });
+  const now = Date.now();
+  fake.events = [
+    make("k0", "Ancient relay", at(now - 200 * DAYS)),
+    make("k1", "Hill repeats", at(now - 10 * DAYS)),
+    make("k2", "Sunrise loop", at(now - 30 * 60_000)),
+    make("k3", "Group run", at(now + 7 * DAYS), { location_type: "online", location_label: "Zoom", url: "https://zoom.example/j/1",
+      description_md: "Bring water, a headlamp and `grit`.", recurrence_frequency: "weekly", recurrence_interval: 2 }),
+    make("k4", "Trail day", at(now + 45 * DAYS), { ends_at: null }),
+  ];
+}
+const LONDON = { timezoneId: "Europe/London" };
+const eventsOf = (page: Page) => page.locator("polynet-events");
+const titles = (locator: ReturnType<Page["locator"]>) => locator.evaluateAll((all) => all.map((node) => node.textContent));
+
+test("events: under way and upcoming by month in the event's zone and the member's, past folded below; never the long past", async () => {
+  const page = await open(calendar, frame(), "/events", LONDON);
+  await expect.poll(() => page.locator("polynet-page").getAttribute("page")).toBe("events");
+  expect(await page.locator("polynet-page .pn-page-header h1").textContent()).toBe("Events");
+  const events = eventsOf(page);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  const upcoming = events.locator("[part=events] > [part=month] [part~=event-title]");
+  expect(await titles(upcoming)).toEqual(["NowSunrise loop", "Group run", "Trail day"]);
+  expect(await events.locator("[part~=event-now] [part=now-badge]").textContent()).toBe("Now");
+  expect(await events.locator("[part=events] > [part=month] [part=month-title]").count()).toBeGreaterThanOrEqual(2);
+  // Each in New York's time, with London's beside it.
+  const group = events.locator("[part~=event]", { hasText: "Group run" });
+  expect(await group.locator("[part=event-time]").textContent()).toMatch(/E[SD]T$/);
+  expect(await group.locator("[part=event-local-time]").textContent()).toMatch(/(GMT|BST)(\+1)? your time$/);
+  expect(await group.locator("[part=event-place]").textContent()).toBe("Online · Zoom");
+  const ref = (await page.evaluate(() => (window as any).fake.events[3].ref)) as string;
+  expect(await group.getAttribute("href")).toBe("/events/" + ref.slice(6).replace(/:(\d+)$/, "~$1"));
+  // Past: folded, newest first, the last 90 days only.
+  const past = events.locator("[part=past]");
+  expect(await past.getAttribute("open")).toBeNull();
+  expect(await past.locator("[part=past-summary]").textContent()).toBe("Past events (1)");
+  expect(await titles(past.locator("[part~=event-title]"))).toEqual(["Hill repeats"]);
+  expect((await calls(page, "events")).map((c: any) => c[1]).sort()).toEqual(["from", "from", "now"]);
+  await page.close();
+
+  // In New York there's no second clock.
+  const local = await open(calendar, frame(), "/events", { timezoneId: "America/New_York" });
+  await expect.poll(() => eventsOf(local).getAttribute("state")).toBe("ready");
+  expect(await eventsOf(local).locator("[part=event-local-time]").count()).toBe(0);
+  await local.close();
+});
+
+test("an event opens at its own address: when, where, the description, an .ics file and its link; Back returns to the list", async () => {
+  const page = await open(calendar, frame(), "/events", { ...LONDON, acceptDownloads: true, permissions: ["clipboard-read", "clipboard-write"] });
+  const events = eventsOf(page);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  await events.locator("[part~=event]", { hasText: "Group run" }).click();
+  const detail = events.locator("[part=detail]");
+  await expect.poll(() => detail.locator("[part=detail-title]").textContent()).toBe("Group run");
+  const address = await page.evaluate(() => location.pathname);
+  expect(address).toMatch(/^\/events\/k3~\d+$/);
+  // Focus follows the move.
+  expect(await events.evaluate((el) => el.shadowRoot!.activeElement?.getAttribute("part"))).toBe("detail-title");
+  expect(await detail.locator("[part=detail-when]").textContent()).toMatch(/E[SD]T.*your time.*Repeats every 2 weeks$/);
+  expect(await detail.locator("[part=detail-where]").textContent()).toBe("Online · ZoomJoin online");
+  const join = detail.locator("[part=detail-link]");
+  expect([await join.getAttribute("href"), await join.getAttribute("target"), await join.getAttribute("rel")]).toEqual(["https://zoom.example/j/1", "_blank", "noopener noreferrer"]);
+  expect(await detail.locator("[part=detail-description] code").textContent()).toBe("grit");
+
+  const [download] = await Promise.all([page.waitForEvent("download"), detail.locator("[part=add-to-calendar]").click()]);
+  expect(download.suggestedFilename()).toBe("group-run.ics");
+  const ics = readFileSync((await download.path())!, "utf8");
+  const start = await page.evaluate(() => (window as any).fake.events[3].starts_at);
+  expect(ics).toContain("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n");
+  expect(ics).toContain("DTSTART:" + start.replace(/[-:]/g, "").replace(/\.\d{3}/, "") + "\r\n");
+  expect(ics).toContain("SUMMARY:Group run\r\n");
+  expect(ics).toContain("LOCATION:Online · Zoom\r\n");
+  expect(ics.replace(/\r\n /g, "")).toContain("DESCRIPTION:Bring water\\, a headlamp and `grit`.\\n\\n" + SITE + address);
+  expect(ics.split("\r\n").every((line) => new TextEncoder().encode(line).length <= 75)).toBe(true);
+  expect(ics.endsWith("END:VEVENT\r\nEND:VCALENDAR\r\n")).toBe(true);
+
+  await detail.locator("[part=share]").click();
+  await expect.poll(() => detail.locator("[part=share-status]").textContent()).toBe("Link copied.");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(SITE + address);
+
+  await page.goBack();
+  await expect.poll(() => events.locator("[part=events] > [part=month]").count()).toBeGreaterThan(0);
+  expect(await page.evaluate(() => location.pathname)).toBe("/events");
+  await page.close();
+
+  // A shared link opens the event straight away; one that's gone says so, with the way back.
+  const direct = await open(calendar, frame(), address, LONDON);
+  await expect.poll(() => eventsOf(direct).locator("[part=detail-title]").textContent()).toBe("Group run");
+  await direct.close();
+  const gone = await open(calendar, frame(), "/events/k9~1700000000000", LONDON);
+  await expect.poll(() => eventsOf(gone).getAttribute("state")).toBe("missing");
+  expect(await eventsOf(gone).locator("[part=detail-title]").textContent()).toBe("This event isn't on the calendar");
+  expect(await eventsOf(gone).locator("[part=back]").getAttribute("href")).toBe("/events");
+  expect((await calls(gone, "event")).map((c: any) => c[1])).toEqual(["event:k9:1700000000000"]);
+  await gone.close();
+});
+
+test("events: in a busy community the one under way and the recent past still show", async () => {
+  const page = await open((fake) => {
+    calendar(fake);
+    const busy = Array.from({ length: 270 }, (_, i) => {
+      const start = new Date(Date.now() - 89 * DAYS + i * 6 * HOUR);
+      return { ...fake.events[1], ref: `event:b${i}:${start.getTime()}`, path: `/x/b${i}.md`, title: "Busy " + i, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + HOUR).toISOString() };
+    });
+    fake.events = fake.events.concat(busy);
+  }, frame(), "/events");
+  const events = eventsOf(page);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  expect(await events.locator("[part~=event-now]").count()).toBe(1);
+  expect(await events.locator("[part~=event-now]").textContent()).toContain("Sunrise loop");
+  await page.close();
+});
+
+test("events: an event that began days ago and is still running shows as under way", async () => {
+  const page = await open((fake) => {
+    calendar(fake);
+    const start = new Date(Date.now() - 4 * DAYS);
+    fake.events.push({ ...fake.events[1], ref: `event:long:${start.getTime()}`, path: "/x/long.md", title: "Week-long trip", starts_at: start.toISOString(), ends_at: new Date(Date.now() + DAYS).toISOString() });
+  }, frame(), "/events");
+  const events = eventsOf(page);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  expect((await titles(events.locator("[part~=event-now] [part=event-title]"))).some((t: string) => t.includes("Week-long trip"))).toBe(true);
+  await page.close();
+});
+
+test("events: a saved link to a cancelled event says so, with nothing to join or add", async () => {
+  const page = await open((fake) => {
+    fake.events = [{ ref: "event:ev9:1893456000000", title: "Harbour swim", starts_at: new Date(1893456000000).toISOString(), timezone: "UTC", status: "cancelled", url: "https://example.com/join" }];
+  }, frame(), "/events/ev9~1893456000000");
+  const events = page.locator("polynet-events");
+  await expect.poll(() => events.getAttribute("state")).toBe("cancelled");
+  expect(await events.locator("[part=cancelled]").textContent()).toBe("This event was cancelled.");
+  expect(await events.locator("[part=detail-title]").textContent()).toBe("Harbour swim");
+  expect(await events.locator("a[href='https://example.com/join']").count()).toBe(0);
+  expect(await events.getByText("Add to calendar").count()).toBe(0);
+  await page.close();
+});
+
+test("events elsewhere: limit shows the next few and a link to /events; signed out shows no event; empty says so", async () => {
+  const home = await open(calendar, `<!doctype html><html lang="en"><head><title>Run Club</title><script type="module" src="/__polynet/ui.js"></script></head>
+<body><polynet-events limit="2"></polynet-events></body></html>`, "/", LONDON);
+  const events = eventsOf(home);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  expect(await titles(events.locator("[part~=event-title]"))).toEqual(["NowSunrise loop", "Group run"]);
+  expect(await events.locator("[part=past], [part=more]").count()).toBe(0);
+  expect(await events.locator("[part=all]").getAttribute("href")).toBe("/events");
+  await home.close();
+
+  const out = await open((fake) => { calendar(fake); fake.session = { signed_in: false, community: "run-club", join_url: "https://polynet.test/c/run-club" } as any; }, frame(), "/events");
+  await expect.poll(() => eventsOf(out).getAttribute("state")).toBe("signed-out");
+  expect(await eventsOf(out).locator("[part=gate-text]").textContent()).toBe("Sign in to see what's on.");
+  expect(await eventsOf(out).locator("[part=join]").getAttribute("href")).toBe("https://polynet.test/c/run-club");
+  expect(await calls(out, "events")).toEqual([]);
+  expect(await calls(out, "event")).toEqual([]);
+  await out.close();
+
+  const empty = await open(() => {}, frame('<p data-block="polynet-events" slot="empty">No runs planned.</p>'), "/events");
+  await expect.poll(() => eventsOf(empty).getAttribute("state")).toBe("ready");
+  expect(await eventsOf(empty).locator("[part=empty] slot").evaluate((slot: HTMLSlotElement) => slot.assignedNodes().map((n) => n.textContent).join(""))).toBe("No runs planned.");
+  await empty.close();
+
+  const broken = await open((fake) => { fake.failEvents = true; }, frame(), "/events");
+  await expect.poll(() => eventsOf(broken).getAttribute("state")).toBe("error");
+  await broken.evaluate(() => { (window as any).fake.failEvents = false; });
+  await eventsOf(broken).locator("[part=retry]").click();
+  await expect.poll(() => eventsOf(broken).getAttribute("state")).toBe("ready");
+  await broken.close();
+});
+
+const COURSES = "/communities/run-club/resources/";
+function courses(fake: ReturnType<typeof fixture>) {
+  const start = COURSES + "start-here~m1/";
+  fake.resources = {
+    "": [
+      { path: start, kind: "directory", name: "Start here", ref: "resources://community/c/modules/m1" },
+      { path: COURSES + "pace-work~m2/", kind: "directory", name: "Pace work", ref: "resources://community/c/modules/m2" },
+      { path: COURSES + "Not.A.Course/", kind: "directory", name: "Odd" },
+    ],
+    [start]: [
+      { path: start + "first-steps~r1.md", kind: "document", name: "First steps" },
+      { path: start + "shoes~r2.md", kind: "document", name: "Shoes" },
+      { path: start + "your-first-5k~r3.md", kind: "document", name: "Your first 5k" },
+    ],
+    [COURSES + "pace-work~m2/"]: [],
+  };
+  fake.texts = { [start + "first-steps~r1.md"]: "Welcome to the club.", [start + "shoes~r2.md"]: "Pick shoes that `fit`.", [start + "your-first-5k~r3.md"]: "Go easy." };
+}
+const learnOf = (page: Page) => page.locator("polynet-learn");
+
+test("learn: the catalogue with lesson counts, a course's lessons in order, and the reader with previous and next; Back walks back", async () => {
+  const page = await open(courses, frame(), "/learn");
+  await expect.poll(() => page.locator("polynet-page").getAttribute("page")).toBe("learn");
+  const learn = learnOf(page);
+  await expect.poll(() => learn.getAttribute("state")).toBe("ready");
+  const cards = learn.locator("[part=course]");
+  expect(await titles(cards.locator("[part=course-title]"))).toEqual(["Start here", "Pace work"]);
+  await expect.poll(() => titles(cards.locator("[part=course-count]"))).toEqual(["3 lessons", "0 lessons"]);
+  expect(await cards.first().getAttribute("href")).toBe("/learn/start-here~m1");
+
+  await cards.first().click();
+  await expect.poll(() => learn.locator("[part=course-heading]").textContent()).toBe("Start here");
+  expect(await page.evaluate(() => location.pathname)).toBe("/learn/start-here~m1");
+  expect(await titles(learn.locator("[part=lesson]"))).toEqual(["1First steps", "2Shoes", "3Your first 5k"]);
+  expect(await learn.evaluate((el) => el.shadowRoot!.activeElement?.getAttribute("part"))).toBe("course-heading");
+
+  await learn.locator("[part=lesson]", { hasText: "Shoes" }).click();
+  await expect.poll(() => learn.locator("[part=lesson-heading]").textContent()).toBe("Shoes");
+  expect(await page.evaluate(() => location.pathname)).toBe("/learn/start-here~m1/shoes~r2");
+  expect(await learn.locator("[part=lesson-position]").textContent()).toBe("Lesson 2 of 3");
+  expect(await learn.locator("[part=lesson-body] code").textContent()).toBe("fit");
+  expect(await learn.locator("[part=back]").textContent()).toBe("Start here");
+  expect(await learn.locator("[part=previous]").textContent()).toBe("PreviousFirst steps");
+  expect(await learn.locator("[part=next]").textContent()).toBe("NextYour first 5k");
+
+  await learn.locator("[part=next]").click();
+  await expect.poll(() => learn.locator("[part=lesson-heading]").textContent()).toBe("Your first 5k");
+  expect(await learn.locator("[part=next]").count()).toBe(0);
+  await page.goBack();
+  await expect.poll(() => learn.locator("[part=lesson-heading]").textContent()).toBe("Shoes");
+  await page.goBack();
+  await expect.poll(() => learn.locator("[part=course-heading]").textContent()).toBe("Start here");
+  // Folders are read once a visit; each lesson once it opens.
+  expect((await calls(page, "resources")).map((c: any) => c[1])).toEqual([null, COURSES + "start-here~m1/", COURSES + "pace-work~m2/"]);
+  expect((await calls(page, "readText")).map((c: any) => c[1].split("/").pop())).toEqual(["shoes~r2.md", "your-first-5k~r3.md", "shoes~r2.md"]);
+  await page.close();
+});
+
+test("learn: a renamed course keeps its links; a missing course or lesson says so; signed out shows nothing; no courses says so", async () => {
+  const renamed = await open(courses, frame(), "/learn/old-name~m1/old-shoes~r2");
+  await expect.poll(() => learnOf(renamed).locator("[part=lesson-heading]").textContent()).toBe("Shoes");
+  expect(await renamed.evaluate(() => location.pathname)).toBe("/learn/start-here~m1/shoes~r2");
+  await renamed.close();
+
+  const lost = await open(courses, frame(), "/learn/start-here~m1/gone~r9");
+  await expect.poll(() => learnOf(lost).getAttribute("state")).toBe("missing");
+  expect(await learnOf(lost).locator("[part=heading]").textContent()).toBe("This lesson isn't here");
+  expect(await learnOf(lost).locator("[part=back]").getAttribute("href")).toBe("/learn/start-here~m1");
+  expect(await calls(lost, "readText")).toEqual([]);
+  await lost.close();
+
+  const noCourse = await open(courses, frame(), "/learn/nowhere~m9");
+  await expect.poll(() => learnOf(noCourse).getAttribute("state")).toBe("missing");
+  expect(await learnOf(noCourse).locator("[part=heading]").textContent()).toBe("This course isn't here");
+  await noCourse.close();
+
+  const out = await open((fake) => { courses(fake); fake.signedOut = true; }, frame(), "/learn/start-here~m1/shoes~r2");
+  await expect.poll(() => learnOf(out).getAttribute("state")).toBe("signed-out");
+  expect(await learnOf(out).locator("[part=gate-text]").textContent()).toBe("Sign in to see the courses.");
+  expect(await learnOf(out).evaluate((el) => el.shadowRoot!.textContent)).not.toContain("Shoes");
+  await out.close();
+
+  const none = await open(() => {}, frame(), "/learn");
+  await expect.poll(() => learnOf(none).getAttribute("state")).toBe("ready");
+  expect(await learnOf(none).locator("[part=empty]").textContent()).toBe("No courses yet.");
+  await none.close();
+});
+
+function memory(fake: ReturnType<typeof fixture>) {
+  fake.memories = [
+    { title: "Easy pace is conversational", type: "insight", applies_when: "Base weeks", path: "/communities/run-club/memory/n1.md", updated_at: "2026-10-03T12:00:00.000Z" },
+    { title: "Start the long run slow", type: "playbook", applies_when: null, path: "/communities/run-club/memory/n2.md", updated_at: null },
+  ];
+  fake.texts = { "/communities/run-club/memory/n1.md": "If you can't talk, **slow** down." };
+}
+const knowledgeOf = (page: Page) => page.locator("polynet-knowledge");
+
+test("knowledge: the community's memory, each readable in place, and a search", async () => {
+  const page = await open(memory, frame(), "/knowledge");
+  await expect.poll(() => page.locator("polynet-page").getAttribute("page")).toBe("knowledge");
+  const knowledge = knowledgeOf(page);
+  await expect.poll(() => knowledge.getAttribute("state")).toBe("ready");
+  expect(await knowledge.locator("[part=knowledge]").getAttribute("aria-label")).toBe("Community memory");
+  expect(await knowledge.locator("[part=intro]").textContent()).toContain("The community's memory");
+  expect(await titles(knowledge.locator("[part=memory-title]"))).toEqual(["Easy pace is conversational", "Start the long run slow"]);
+  expect(await titles(knowledge.locator("[part=memory-type]"))).toEqual(["Insight", "Playbook"]);
+  expect(await knowledge.locator("[part=memory-applies]").textContent()).toBe("When: Base weeks");
+  // Nothing is read until one opens.
+  expect(await calls(page, "readText")).toEqual([]);
+  const toggle = knowledge.locator("[part=memory-toggle]").first();
+  await toggle.click();
+  expect(await toggle.getAttribute("aria-expanded")).toBe("true");
+  const body = knowledge.locator("[part=memory-body]").first();
+  await expect.poll(() => body.locator("[part=memory-text]").textContent()).toBe("If you can't talk, **slow** down.");
+  expect(await body.locator("[part=memory-source]").textContent()).toMatch(/^From the community's memory · updated Oct 3, 2026$/);
+  await toggle.click();
+  expect(await body.isVisible()).toBe(false);
+  await toggle.click();
+  expect((await calls(page, "readText")).length).toBe(1);
+
+  const search = knowledge.locator("[part=search-input]");
+  await search.fill("long run");
+  await search.press("Enter");
+  await expect.poll(() => titles(knowledge.locator("[part=memory-title]"))).toEqual(["Start the long run slow"]);
+  expect(await knowledge.locator("[part=showing]").textContent()).toBe("Results for “long run”Show top memories");
+  await search.fill("marathon");
+  await knowledge.locator("[part=search-button]").click();
+  await expect.poll(() => knowledge.locator("[part=no-results]").textContent()).toBe("Nothing in the community's memory matches “marathon”.");
+  await knowledge.locator("[part=clear]").click();
+  await expect.poll(() => knowledge.locator("[part=memory-title]").count()).toBe(2);
+  expect((await calls(page, "knowledge")).map((c: any) => c[1])).toEqual([null, "long run", "marathon", null]);
+  await page.close();
+
+  const out = await open((fake) => { memory(fake); fake.signedOut = true; }, frame(), "/knowledge");
+  await expect.poll(() => knowledgeOf(out).getAttribute("state")).toBe("signed-out");
+  expect(await knowledgeOf(out).evaluate((el) => el.shadowRoot!.textContent)).not.toContain("Easy pace");
+  await out.close();
+
+  const empty = await open(() => {}, frame(), "/knowledge");
+  await expect.poll(() => knowledgeOf(empty).getAttribute("state")).toBe("ready");
+  expect(await knowledgeOf(empty).locator("[part=empty]").textContent()).toBe("Nothing in the community's memory yet.");
+  await empty.close();
+});
+
+const askOf = (page: Page) => page.locator("polynet-ask");
+function conversation(fake: ReturnType<typeof fixture>) {
+  fake.agent = { history: [
+    { role: "user", text: "When is the long run?", created_at: minutes(30) },
+    { role: "assistant", text: "Sunday at `7:00`.", created_at: minutes(29) },
+  ], reply: "Tuesdays and Thursdays at six.", fail: 0, hold: false };
+}
+
+test("ask: the member's private conversation, the reply streaming in, and a failed question back in the box", async () => {
+  const page = await open((fake) => { conversation(fake); fake.agent.hold = true; }, frame(), "/ask");
+  await expect.poll(() => page.locator("polynet-page").getAttribute("page")).toBe("ask");
+  const ask = askOf(page);
+  await expect.poll(() => ask.getAttribute("state")).toBe("ready");
+  expect(await ask.locator("[part=privacy]").textContent()).toContain("Only you can see this conversation.");
+  expect(await titles(ask.locator("[part=message-author]"))).toEqual(["You", "Run Club agent"]);
+  expect(await ask.locator("[part~=message-agent] [part=message-body] code").textContent()).toBe("7:00");
+  // With a conversation under way, no starters; the agent gets its mark.
+  expect(await ask.locator("[part=starters]").isVisible()).toBe(false);
+  expect(await ask.locator("[part~=message-agent] [part~=avatar-agent]").count()).toBe(1);
+  const box = await ask.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(384);
+
+  const input = ask.locator("[part=input]");
+  await input.fill("When are the track sessions?");
+  await input.press("Enter");
+  expect((await calls(page, "askAgent")).map((c: any) => c[1])).toEqual(["When are the track sessions?"]);
+  expect(await input.inputValue()).toBe("");
+  const last = ask.locator("[part~=message-agent]").last();
+  await expect.poll(() => last.locator("[part=message-body]").textContent()).toBe("Tuesdays and Th");
+  expect(await last.getAttribute("aria-busy")).toBe("true");
+  expect(await ask.locator("[part=send]").isDisabled()).toBe(true);
+  await page.evaluate(() => (window as any).fake.agent.release());
+  await expect.poll(() => last.locator("[part=message-body]").textContent()).toBe("Tuesdays and Thursdays at six.");
+  expect(await last.getAttribute("aria-busy")).toBeNull();
+  expect(await ask.locator("[part~=message]").count()).toBe(4);
+
+  await page.evaluate(() => { (window as any).fake.agent.fail = 1; (window as any).fake.agent.hold = false; });
+  await input.fill("And hills?");
+  await ask.locator("[part=send]").click();
+  await expect.poll(() => ask.locator("[part=problem]").textContent()).toBe("Not answered. The agent is busy right now. Try again");
+  expect(await input.inputValue()).toBe("And hills?");
+  expect(await ask.locator("[part~=message]").count()).toBe(4);
+  await ask.locator("[part=problem] [part=retry]").click();
+  await expect.poll(() => ask.locator("[part~=message]").count()).toBe(6);
+  expect(await ask.locator("[part=problem]").textContent()).toBe("");
+  expect((await calls(page, "askAgent")).map((c: any) => c[1])).toEqual(["When are the track sessions?", "And hills?", "And hills?"]);
+  // The retry keeps the failed question's key, so the server saves it once.
+  const keys = (await calls(page, "askAgent")).map((c: any) => c[2]);
+  expect(keys[2]).toBe(keys[1]);
+  expect(keys[1]).not.toBe(keys[0]);
+  await page.close();
+});
+
+test("ask: starters while the conversation is empty, the site's own too; signed out never reads it", async () => {
+  const page = await open((fake) => { conversation(fake); fake.agent.history = []; }, frame(), "/ask");
+  const ask = askOf(page);
+  await expect.poll(() => ask.getAttribute("state")).toBe("ready");
+  const starters = ask.locator("[part=starter]");
+  expect(await starters.count()).toBe(3);
+  await starters.first().click();
+  await expect.poll(() => ask.locator("[part~=message]").count()).toBe(2);
+  expect((await calls(page, "askAgent")).map((c: any) => c[1])).toEqual(["What's coming up here?"]);
+  expect(await ask.locator("[part=starters]").isVisible()).toBe(false);
+  await page.close();
+
+  const own = await open((fake) => { conversation(fake); fake.agent.history = []; },
+    frame('<div data-block="polynet-ask" slot="starters"><button type="button">Who runs Tuesdays?</button></div><p data-block="polynet-ask" slot="privacy">Just you and the coach.</p>'), "/ask");
+  const mine = askOf(own);
+  await expect.poll(() => mine.getAttribute("state")).toBe("ready");
+  // The site's starters replace Polynet's.
+  expect(await mine.locator("[part=starter]").first().isVisible()).toBe(false);
+  await mine.locator("button", { hasText: "Who runs Tuesdays?" }).click();
+  await expect.poll(async () => (await calls(own, "askAgent")).map((c: any) => c[1])).toEqual(["Who runs Tuesdays?"]);
+  expect(await mine.locator("[part=privacy] slot").evaluate((slot: HTMLSlotElement) => slot.assignedNodes().map((n) => n.textContent).join(""))).toBe("Just you and the coach.");
+  await own.close();
+
+  const out = await open((fake) => { conversation(fake); fake.signedOut = true; }, frame(), "/ask");
+  await expect.poll(() => askOf(out).getAttribute("state")).toBe("signed-out");
+  expect(await askOf(out).locator("[part=gate-text]").textContent()).toBe("Sign in to ask the community's agent.");
+  expect(await askOf(out).locator("[part=input]").isVisible()).toBe(false);
+  expect(await askOf(out).evaluate((el) => el.shadowRoot!.textContent)).not.toContain("long run");
+  expect(await calls(out, "askAgent")).toEqual([]);
+  await out.close();
 });

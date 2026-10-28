@@ -2,40 +2,56 @@
 // `polynet check`, `polynet deploy` and the MCP's community.site.deploy.
 // Errors block the deploy; warnings are printed. Every site has a frame
 // (/frame.html: its header, navigation and footer around one <polynet-page>),
-// so Polynet's standard pages (/chat, /people) appear inside the site's own
-// world on every site; a site that ships its own version of one must place
-// that page's blocks. They read the files as text (no browser), so they catch
+// so Polynet's standard pages (/chat, /people, /events, /learn, /knowledge,
+// /ask) appear inside the site's own world on every site; a site that ships
+// its own version of one must place that page's blocks. They read the files as text (no browser), so they catch
 // what is certain from the source and leave the rest to the
 // polynet-accessibility skill. Plain JavaScript with no imports, so it runs in
 // Node, in Polynet's backend and in the community edge alike.
 
-// The standard community pages every site has from its first deploy: the edge
-// serves the site's frame at each path the site doesn't serve itself, and
-// <polynet-page> fills it with these blocks. The one route table: the edge,
-// <polynet-page>, the shell's menu and these checks all read it. Later slices
-// add /events, /learn, /knowledge, /ask, /discover, /messages, /settings,
-// /manage, /communities and /join.
-export const STANDARD_PAGES = [
-  { path: "/chat", name: "chat", title: "Chat", blocks: ["polynet-channels", "polynet-chat"] },
-  // members: /people/<handle> is the same page with that member's profile open.
-  { path: "/people", name: "people", title: "People", blocks: ["polynet-members"], members: true },
-];
 // A handle as Polynet makes them (any case: the profile lowercases it). No dots,
 // so a site's own file under /people/ (photo.jpg) is never taken for a member.
 export const MEMBER_HANDLE = /^[A-Za-z0-9_-]{1,32}$/;
+// One event on the calendar: <event id>~<start in ms>, Polynet's event ref
+// (event:<id>:<ms>) with a URL-safe separator. Each occurrence of a recurring
+// event has its own start, so its own address.
+export const EVENT_ID = /^[A-Za-z0-9_-]{1,180}~[0-9]{1,16}$/;
+// A course or a lesson: <its name, as Polynet slugs it>~<its id>, the name in
+// Polynet's own path (/resources/<course>/<lesson>.md). The id decides; the
+// name only reads well. No dots, so no site file is taken for one.
+export const LEARN_SEGMENT = /^[a-z0-9-]{1,120}~[A-Za-z0-9_-]{1,180}$/;
 
-// Which standard page a path is: { page, handle, slash } or null. slash: it
-// ended in "/" (the edge sends /chat/ to /chat when it serves the frame).
+// The standard community pages every site has from its first deploy: the edge
+// serves the site's frame at each path the site doesn't serve itself, and
+// <polynet-page> fills it with these blocks. The one route table: the edge,
+// <polynet-page>, the shell's menu ("In this club", in this order) and these
+// checks all read it. below: the addresses under the page, one pattern per
+// level (/learn/<course>/<lesson>: either depth). Later slices add /discover,
+// /messages, /settings, /manage, /communities and /join.
+export const STANDARD_PAGES = [
+  { path: "/chat", name: "chat", title: "Chat", blocks: ["polynet-channels", "polynet-chat"], below: [] },
+  // members: /people/<handle> is the same page with that member's profile open.
+  { path: "/people", name: "people", title: "People", blocks: ["polynet-members"], members: true, below: [["handle", MEMBER_HANDLE]] },
+  { path: "/events", name: "events", title: "Events", blocks: ["polynet-events"], below: [["event", EVENT_ID]] },
+  { path: "/learn", name: "learn", title: "Learn", blocks: ["polynet-learn"], below: [["course", LEARN_SEGMENT], ["lesson", LEARN_SEGMENT]] },
+  { path: "/knowledge", name: "knowledge", title: "Knowledge", blocks: ["polynet-knowledge"], below: [] },
+  { path: "/ask", name: "ask", title: "Ask", blocks: ["polynet-ask"], below: [] },
+];
+
+// Which standard page a path is: { page, below, handle, slash } or null.
+// below: the segments under the page (["sam"], ["intro~k1", "welcome~k2"]);
+// handle: the member on /people/<handle>. slash: it ended in "/" (the edge
+// sends /chat/ to /chat when it serves the frame).
 export function standardPage(pathname) {
   const path = String(pathname || "");
   const slash = path.length > 1 && path.endsWith("/");
   const bare = slash ? path.slice(0, -1) : path;
   for (const page of STANDARD_PAGES) {
-    if (bare === page.path) return { page, handle: null, slash };
-    if (page.members && bare.startsWith(page.path + "/")) {
-      const handle = bare.slice(page.path.length + 1);
-      if (MEMBER_HANDLE.test(handle)) return { page, handle, slash };
-    }
+    if (bare === page.path) return { page, below: [], handle: null, slash };
+    if (!page.below.length || !bare.startsWith(page.path + "/")) continue;
+    const below = bare.slice(page.path.length + 1).split("/");
+    if (below.length > page.below.length || !below.every((segment, i) => page.below[i][1].test(segment))) continue;
+    return { page, below, handle: page.members ? below[0] : null, slash };
   }
   return null;
 }
@@ -98,10 +114,12 @@ function markupOnly(html) {
   return html.replace(/<!--[\s\S]*?-->/g, "").replace(/(<script\b[^>]*>)[\s\S]*?(<\/script\s*>)/gi, "$1$2");
 }
 
-// The frame is shown at /chat, /people and /people/<handle>, so a relative
-// path in it ("styles.css") points somewhere else on all but the first.
+// The frame is shown at /chat, /people/<handle>, /learn/<course>/<lesson>
+// and the rest, so a relative path in it ("styles.css") points somewhere else
+// on most of them.
 const URL_TAG = /<(a|link|script|img|source|iframe|video|audio)\b[^>]*>/gi;
-const FRAME_PATHS = STANDARD_PAGES.flatMap((page) => (page.members ? [page.path, `${page.path}/<handle>`] : [page.path])).join(", ");
+const FRAME_PATHS = STANDARD_PAGES.flatMap((page) =>
+  [page.path, ...page.below.map((_, depth) => [page.path, ...page.below.slice(0, depth + 1).map(([name]) => `<${name}>`)].join("/"))]).join(", ");
 const FROM_ROOT = /^(\/|#|\?|[a-z][a-z0-9+.-]*:|$)/i;
 function checkFrame(files, problem) {
   const frame = files.find((file) => file.path === "/frame.html");

@@ -17,9 +17,11 @@ one edge Worker in front of every community front end.
                          │                      members (<polynet-members>), composer (the chat's message boxes, imported
                          │                      by chat), profile (the profile panel: opened by blocks, ?member=<handle>
                          │                      links and the "polynet:profile" event), page (<polynet-page>, the
-                         │                      standard page inside the site's frame) and kit (what they share);
-                         │                      any other name is 404
-                         ├─ /chat, /people, /people/<handle> (GET/HEAD) → the standard pages (below)
+                         │                      standard page inside the site's frame), events (<polynet-events>),
+                         │                      learn (<polynet-learn>), knowledge (<polynet-knowledge>), ask
+                         │                      (<polynet-ask>) and kit (what they share); any other name is 404
+                         ├─ /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]],
+                         │  /knowledge, /ask (GET/HEAD) → the standard pages (below)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 
@@ -27,9 +29,20 @@ one edge Worker in front of every community front end.
 
 Every site has Polynet's standard pages, inside its own frame (`/frame.html`:
 the site's header, navigation and footer around one `<polynet-page>`). The
-route table is `STANDARD_PAGES` in `packages/polynet-cli/checks.mjs` (now
-`/chat` and `/people`, `/people/<handle>` with a handle of 1-32 of
-`A-Z a-z 0-9 _ -`). For a GET or HEAD there, in order:
+route table is `STANDARD_PAGES` in `packages/polynet-cli/checks.mjs`, with
+the addresses under each page:
+
+| Page | Block | Under it |
+| --- | --- | --- |
+| `/chat` | channels + chat | none |
+| `/people` | members | `/<handle>`: 1-32 of `A-Z a-z 0-9 _ -` (that profile open) |
+| `/events` | events | `/<id>~<start ms>`: Polynet's event ref `event:<id>:<start ms>` (one event; each occurrence of a recurring one has its own) |
+| `/learn` | learn | `/<course>`, `/<course>/<lesson>`: Polynet's resource path segments, `<a-z 0-9 ->~<id>` (the id decides, so renamed courses keep their links) |
+| `/knowledge` | knowledge | none |
+| `/ask` | ask | none |
+
+None of these patterns has a dot, so no file under them is taken for a page.
+For a GET or HEAD there, in order:
 
 1. The edge asks the site for the path as a plain fetch (`Sec-Fetch-Mode` and
    `Sec-Fetch-Dest` removed), so a single-page app's `index.html` fallback,
@@ -44,8 +57,11 @@ route table is `STANDARD_PAGES` in `packages/polynet-cli/checks.mjs` (now
 4. No frame (not 2xx HTML): Polynet's own page saying the site needs its
    frame, status 404, never blank.
 
-Other paths (`/people/a.b`, `/people/x/y`, `/chat/app.js`), other methods and
-`/__polynet/*` go where they always did.
+Other paths (`/people/a.b`, `/people/x/y`, `/chat/app.js`, `/events/123`,
+`/learn/intro`, `/ask/x`), other methods and `/__polynet/*` go where they
+always did. A site's own `/events` page doesn't cover `/events/<event>`: the
+frame shows those (with `<polynet-events>` reading the address), unless the
+site ships a file there too.
 
 `packages/polynet-cli/checks.mjs` fails `polynet check`, CLI deploys and MCP
 deploys without a root `index.html`, without `/frame.html` holding exactly
@@ -54,7 +70,7 @@ own version of a standard page lacks that page's blocks (a tag in the page, or
 the name in a script for framework builds; not in a comment). The shell needs
 no check: the edge injects it.
 A site to try the blocks and the frame on staging: `dispatch/examples/blocks-demo/`
-(deploy it with the CLI like any site; `/chat` and `/people` come from its `frame.html`).
+(deploy it with the CLI like any site; its standard pages come from its `frame.html`).
 
 ## Run locally
 

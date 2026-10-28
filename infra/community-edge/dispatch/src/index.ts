@@ -3,8 +3,9 @@
 //   /__polynet/auth/*  "Sign in with Polynet" for this community's own domain
 //   /__polynet/api     same-origin proxy to the Polynet backend, as the signed-in member
 //   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat> and its composer,
-//                      <polynet-members>, the profile panel, <polynet-page>), loaded by ui.js
-//   /chat, /people, /people/<handle>
+//                      <polynet-members>, the profile panel, <polynet-page>, <polynet-events>,
+//                      <polynet-learn>, <polynet-knowledge>, <polynet-ask>), loaded by ui.js
+//   /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]], /knowledge, /ask
 //                      Polynet's standard pages: the site's own file if it has one,
 //                      else the site's frame (/frame.html), which <polynet-page> fills
 //   everything else    the community's own front end (a user Worker with static assets)
@@ -23,6 +24,10 @@ import { COMPOSER_SOURCE } from "./blocks/composer";
 import { MEMBERS_SOURCE } from "./blocks/members";
 import { PROFILE_SOURCE } from "./blocks/profile";
 import { PAGE_SOURCE } from "./blocks/page";
+import { EVENTS_SOURCE } from "./blocks/events";
+import { LEARN_SOURCE } from "./blocks/learn";
+import { KNOWLEDGE_SOURCE } from "./blocks/knowledge";
+import { ASK_SOURCE } from "./blocks/ask";
 // The one route table for the standard pages, shared with the site checks.
 import { standardPage, type StandardPage } from "../../../../packages/polynet-cli/checks.mjs";
 // The live-updates client, served from this domain so no community site loads a third-party script.
@@ -31,7 +36,7 @@ import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js
 // Polynet's blocks, each its own module at /__polynet/blocks/<name>.js (ui.js loads them).
 const BLOCKS: Record<string, string> = {
   kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE, composer: COMPOSER_SOURCE, members: MEMBERS_SOURCE, profile: PROFILE_SOURCE,
-  page: PAGE_SOURCE,
+  page: PAGE_SOURCE, events: EVENTS_SOURCE, learn: LEARN_SOURCE, knowledge: KNOWLEDGE_SOURCE, ask: ASK_SOURCE,
 };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 

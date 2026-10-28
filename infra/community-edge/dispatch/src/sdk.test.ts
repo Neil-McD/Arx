@@ -80,6 +80,18 @@ test("feed returns posts oldest first; errors surface as PolynetError", async ()
   await expect(polynet.feed("missing")).rejects.toMatchObject({ name: "PolynetError", code: "semantic_not_found" });
 });
 
+test("readText never pages a .json document, even one that doesn't parse", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": () => ok({ path: "/communities/run-club/memory/m1.json", body: "{\"body_md\": \"cut", truncated: true, next_offset: 24000 }),
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const text = await polynet.readText("/communities/run-club/memory/m1.json");
+  expect(text).toBe("{\"body_md\": \"cut");
+  expect(calls.filter((call) => call.body?.tool === "polynet_read")).toHaveLength(1);
+});
+
 test("feed reads past a page of only replies instead of returning no posts", async () => {
   const calls = stubFetch({
     "/__polynet/auth/session": signedIn,
@@ -217,6 +229,70 @@ test("posts always carry their whole text; readText reads a post's blocks", asyn
   const posts = await polynet.feed("general");
   expect(posts.map((post: any) => [post.text, post.reply_count, post.can_edit])).toEqual([["Long and whole", 0, false], ["Short", 2, true]]);
   expect(await polynet.readText({ path: "/communities/run-club/channels/general/interaction:root:9.md" })).toBe("First part.\n\nSecond part.");
+});
+
+test("events lists from now, from a time or a cursor; event reads one by its ref and refuses anything else", async () => {
+  const event = { title: "Long run", starts_at: "2026-11-01T13:00:00.000Z", ends_at: null, timezone: "America/New_York", parent_event_id: "k1" };
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (input.path === "/communities/run-club/") return ok({ entries: [] });
+      if (tool === "polynet_read") return ok({ body: JSON.stringify(event, null, 2), ref: "event:k1:1793538000000" });
+      return ok({ entries: [{ ...event, ref: "event:k1:1793538000000", path: "/communities/run-club/events/event:k1:1793538000000.md" }], next_cursor: input.cursor === "5" ? null : "1793538000001" });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const upcoming = await polynet.events();
+  expect([upcoming.length, upcoming.cursor]).toEqual([1, "1793538000001"]);
+  expect((await polynet.events({ cursor: "5", limit: 50 })).cursor).toBeNull();
+  await polynet.events({ from: new Date(Date.UTC(2026, 7, 1)) });
+  await polynet.events({ from: "2026-08-01T00:00:00Z", limit: 5 });
+  const lists = calls.filter((call) => call.body?.tool === "polynet_list" && call.body.input.path.endsWith("/events/")).map((call) => call.body.input);
+  expect(lists).toEqual([
+    { path: "/communities/run-club/events/", limit: 20 },
+    { path: "/communities/run-club/events/", limit: 50, cursor: "5" },
+    { path: "/communities/run-club/events/", limit: 20, cursor: "1785542400000" },
+    { path: "/communities/run-club/events/", limit: 5, cursor: "1785542400000" },
+  ]);
+  await expect(polynet.events({ from: "soon" })).rejects.toMatchObject({ code: "invalid_tool_args" });
+
+  expect(await polynet.event("event:k1:1793538000000")).toMatchObject({ title: "Long run", ref: "event:k1:1793538000000", path: "/communities/run-club/events/event:k1:1793538000000.md" });
+  expect(await polynet.event(upcoming[0])).toMatchObject({ title: "Long run" });
+  const reads = calls.filter((call) => call.body?.tool === "polynet_read").map((call) => call.body.input.path);
+  expect(reads).toEqual(["/communities/run-club/events/event:k1:1793538000000.md", "/communities/run-club/events/event:k1:1793538000000.md"]);
+  // Only an event's own ref becomes a path: nothing else reaches the door.
+  for (const bad of ["event:k1", "event:k1:12:3", "event:../members/x:1", "k1~1793538000000", "", null]) {
+    await expect(polynet.event(bad), String(bad)).rejects.toMatchObject({ code: "invalid_tool_args" });
+  }
+  expect(calls.filter((call) => call.body?.tool === "polynet_read")).toHaveLength(2);
+});
+
+test("readText reads a long lesson a page at a time, forward only; a JSON document is read once", async () => {
+  const lesson = "# Week one\n\n" + "Run easy. ".repeat(30);
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (input.path === "/communities/run-club/") return ok({ entries: [] });
+      if (input.path.includes("/memory/")) return ok({ body: JSON.stringify({ title: "Pace", body_md: "Slow is smooth." }), next_offset: 40 });
+      if (input.path.includes("stuck")) return ok({ body: "Same page.", next_offset: 10 });
+      // The server's pages: 100 characters each.
+      const offset = input.offset ?? 0;
+      const body = lesson.slice(offset, offset + 100);
+      return ok({ body, next_offset: offset + 100 < lesson.length ? offset + 100 : null });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const path = "/communities/run-club/resources/start-here~k1/week-one~k2.md";
+  expect(await polynet.readText({ path })).toBe(lesson);
+  expect(calls.filter((call) => call.body?.input?.path === path).map((call) => call.body.input.offset ?? 0)).toEqual([0, 100, 200, 300]);
+  expect(await polynet.readText({ path: "/communities/run-club/memory/m1.md" })).toBe("Slow is smooth.");
+  expect(calls.filter((call) => call.body?.input?.path?.includes("/memory/"))).toHaveLength(1);
+  // A server that doesn't move on ends the read rather than looping.
+  expect(await polynet.readText("/communities/run-club/resources/a~k1/stuck~k3.md")).toBe("Same page.Same page.");
 });
 
 test("a signed-out member gets sign_in_required", async () => {

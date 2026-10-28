@@ -5,12 +5,13 @@ description: Build custom views beside Polynet's blocks with the Polynet SDK (se
 
 # The Polynet SDK
 
-Polynet's blocks carry the social core: `<polynet-channels>`,
-`<polynet-chat>` and `<polynet-members>` (on every site's `/chat` and
-`/people`, inside its frame; `polynet-build-site`).
-The SDK is for everything around them: the public face, events, courses,
-knowledge, the agent, and custom views like a route log or a "who's here
-now" strip. Custom views go beside the blocks, never instead of them.
+Polynet's blocks carry the community: `<polynet-channels>`,
+`<polynet-chat>`, `<polynet-members>`, `<polynet-events>`,
+`<polynet-learn>`, `<polynet-knowledge>` and `<polynet-ask>` (on every
+site's `/chat`, `/people`, `/events`, `/learn`, `/knowledge` and `/ask`,
+inside its frame; `polynet-build-site`). The SDK is for everything around
+them: the public face and custom views like a route log, a "this week"
+strip or a "who's here now" strip. Custom views go beside the blocks, never instead of them.
 
 The full reference: `https://polynet.page/llms.txt`, also served by every
 deployed site at `https://<slug>.polynet.page/__polynet/llms.txt` (staging:
@@ -168,8 +169,8 @@ words can take a few seconds while the agent uses tools.
 
 | Need | Call |
 |---|---|
-| Events | `events({ limit })`; show times in the event's `timezone` |
-| Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` |
+| Events | `events({ limit })` from now; `events({ from: date })` includes past ones; `events({ cursor: list.cursor })` the next page; `event(ref)` one. Show times in the event's `timezone`; link to `/events/<id>~<start ms>` (from `ref` `event:<id>:<start ms>`) for its page |
+| Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` (a long lesson is read whole); link to `/learn/<course segment>/<lesson segment>` (the last part of each `path`, without `.md`) |
 | What the community knows | `knowledge(query?)` |
 | Members | `members()`, `profile(member)`, `online()` (includes the signed-in member) |
 | Older posts | `feed(slug, { cursor: posts.cursor })`; `cursor` is null at the start |

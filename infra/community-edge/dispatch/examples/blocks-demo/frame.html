@@ -24,7 +24,7 @@
     body { margin: 0; font: 16px/1.5 "Instrument Sans", system-ui, sans-serif; background: #fbfaf7; color: #1c1917; }
     header { display: flex; align-items: center; gap: 24px; padding: 16px clamp(16px, 4vw, 40px); border-bottom: 1px solid #e7e5e4; }
     header .name { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; text-decoration: none; color: inherit; }
-    header nav { display: flex; gap: 16px; flex: 1; }
+    header nav { display: flex; flex-wrap: wrap; gap: 4px 16px; flex: 1; }
     header nav a { color: inherit; text-underline-offset: 4px; }
     header nav a[aria-current=page] { color: #c2410c; font-weight: 600; }
     main { padding: 24px clamp(16px, 4vw, 40px); }
@@ -36,7 +36,7 @@
 <body>
   <header>
     <a class="name" href="/" id="name">Community</a>
-    <nav aria-label="Pages"><a href="/chat">Chat</a><a href="/people">People</a></nav>
+    <nav aria-label="Pages"><a href="/chat">Chat</a><a href="/people">People</a><a href="/events">Events</a><a href="/learn">Learn</a><a href="/knowledge">Knowledge</a><a href="/ask">Ask</a></nav>
     <polynet-account></polynet-account>
   </header>
   <main>

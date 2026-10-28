@@ -68,11 +68,22 @@ any page without one. It grows into the rails:
 - **`<polynet-members>`**: everyone here, online first with a presence dot,
   searchable, each opening the profile drawer.
 
-### Recommended (the guide asks for them; deploy warns if missing)
+### On every site too (Polynet's /events, /learn, /knowledge and /ask carry them)
+
+- **`<polynet-events>`**: upcoming first by month (times in the event's zone,
+  and the member's when it differs), past folded below; each event at
+  `/events/<event>` with an .ics download and a copy-link. No RSVP (none in
+  the backend). `limit="n"` previews the next few anywhere.
+- **`<polynet-learn>`**: the course catalogue, a course's lessons in order,
+  and the lesson reader with previous/next.
+- **`<polynet-knowledge>`**: the community's memory, top memories and a
+  search, each opened in place and labelled as memory.
+- **`<polynet-ask>`**: the member's private conversation with the community
+  agent, streaming, with starter questions while it's empty.
+
+### Recommended (the guide asks for it)
 
 - **`<polynet-online>`**: a compact "who's here now" strip.
-- **`<polynet-knowledge>`**, **`<polynet-events>`**, **`<polynet-courses>`**.
-- **`<polynet-ask>`**: ask the community agent privately.
 
 ## Its own world (Oct 28)
 
@@ -96,7 +107,7 @@ standard page into it.**
   must place the same blocks (`checkSite`). Client-side routes can't override
   a standard page: only a file at that path does.
 - **Community pages** use blocks the site's code can already see (chat,
-  members, later events, courses, knowledge, ask). **Personal pages**
+  members, events, courses, knowledge, ask). **Personal pages**
   (Messages, Settings, Your communities, Join) and **admin** (Manage) come
   later inside a private isolated window on a separate origin, so site code
   never reads a member's DMs, other communities or settings; until then they
@@ -112,7 +123,9 @@ shell's menu ("In this club") and the checks.
 | --- | --- | --- |
 | `/chat` | channels + chat | 3a-1 (now) |
 | `/people`, `/people/<handle>` | members; the profile open for that handle | 3a-1 (now) |
-| `/events`, `/learn`, `/knowledge`, `/ask` | the recommended blocks as pages | with slice 4's blocks |
+| `/events`, `/events/<event>` | events; that event's page (`<id>~<start ms>`, from its ref) | 3a-2 (now) |
+| `/learn`, `/learn/<course>`, `/learn/<course>/<lesson>` | courses; a course's lessons; a lesson (Polynet's `<name>~<id>` path segments) | 3a-2 (now) |
+| `/knowledge`, `/ask` | the community's memory; the member's private agent conversation | 3a-2 (now) |
 | `/discover` | communities to join | 3a, isolated window |
 | `/messages`, `/settings`, `/communities`, `/join` | personal pages | 3a, isolated window |
 | `/manage` | community admin | after the isolated window |

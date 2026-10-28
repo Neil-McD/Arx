@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ../LICENSE-MIT)
 // The blocks kit, served at /__polynet/blocks/kit.js: what every Polynet block
 // shares (the token style, a DOM helper, avatars, time labels, the channel and
-// member URL contracts, the feed's grouping and @-tag links). It never calls
+// member URL contracts, the feed's grouping and @-tag links, the sign-in
+// prompt, markdown's look, and moving between a standard page's addresses). It never calls
 // Polynet on import, so tests import it as is. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
 export const KIT_SOURCE = String.raw`// SPDX-License-Identifier: MIT
@@ -37,6 +38,20 @@ export const BASE_STYLE = [
   ".quiet { background: none; border: 0; padding: .25em 0; text-decoration: underline; text-underline-offset: .2em; text-decoration-color: var(--pn-border); }",
   ".quiet:hover { text-decoration-color: currentColor; }",
   "@media (pointer: coarse) { .primary, .quiet { min-height: 44px; } }",
+].join("\n");
+
+// Markdown (polynet.markdown()) inside a .prose element, in the page's own type.
+export const PROSE_STYLE = [
+  ".prose { line-height: 1.6; overflow-wrap: anywhere; }",
+  ".prose > :first-child { margin-top: 0; } .prose > :last-child { margin-bottom: 0; }",
+  ".prose p { margin: 0 0 .75em; }",
+  ".prose h3, .prose h4, .prose h5 { margin: 1.1em 0 .35em; font-size: 1em; line-height: 1.3; } .prose h3 { font-size: 1.125em; }",
+  ".prose ul, .prose ol { margin: .25em 0 .75em; padding-left: 1.25em; } .prose ul { list-style: disc; } .prose ol { list-style: decimal; }",
+  ".prose blockquote { margin: .75em 0; padding-left: .875em; border-left: 2px solid var(--pn-border); color: var(--pn-muted); }",
+  ".prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .875em; background: var(--pn-tint); padding: .1em .3em; border-radius: 4px; }",
+  ".prose pre { margin: .75em 0; padding: .75em .875em; overflow-x: auto; background: var(--pn-tint); border-radius: calc(var(--pn-radius) * .6); }",
+  ".prose pre code { background: none; padding: 0; }",
+  ".prose a { text-decoration: underline; text-decoration-color: var(--pn-accent); text-underline-offset: .18em; }",
 ].join("\n");
 
 export function h(tag, attrs, children) {
@@ -212,6 +227,37 @@ export function readMembers(polynet, fresh) {
     promise.catch(function () { if (membersRead === promise) membersRead = null; });
   }
   return membersRead;
+}
+
+// Signed out (or not a member): a calm way in, and never a word of what's
+// inside. The site's slot="signed-out" replaces the line; Sign in and Join stay.
+export function signInGate(polynet, session, text) {
+  const join = session && session.join_url ? h("a", { class: "quiet", part: "join", href: session.join_url, text: "New here? Join" }) : null;
+  return h("div", { class: "gate", part: "gate" }, [
+    h("p", { part: "gate-text" }, [h("slot", { name: "signed-out" }, [text])]),
+    h("div", { class: "actions" }, [
+      h("button", { class: "primary", part: "sign-in", type: "button", onclick: () => polynet.signIn(), text: "Sign in" }),
+      join,
+    ]),
+  ]);
+}
+
+// Standard pages with addresses under them (/events/<event>,
+// /learn/<course>/<lesson>): where this address is, as the segments under
+// base ([] at base itself), or null when it isn't base's page at all.
+export function pagePath(base) {
+  const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, "") : location.pathname;
+  if (path === base) return [];
+  return path.indexOf(base + "/") === 0 ? path.slice(base.length + 1).split("/") : null;
+}
+// A link to one of base's addresses: on base's own page a plain click moves
+// there without a reload and calls onMove (Back returns: the block follows
+// popstate); anywhere else, or in a new tab, it is an ordinary link.
+export function followLink(event, base, onMove) {
+  if (pagePath(base) === null || !plainClick(event)) return;
+  event.preventDefault();
+  history.pushState(history.state, "", event.currentTarget.getAttribute("href"));
+  onMove();
 }
 
 // Roles worth a badge; members need none.
