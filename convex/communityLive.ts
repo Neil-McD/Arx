@@ -3,7 +3,10 @@ import { query } from "./_generated/server";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { hashCommunityAppSessionToken, isCommunityAppWatchToken } from "../shared/communityAppSession";
 import { parsePolynetSemanticRepositoryPath } from "../shared/polynetSemanticRepositoryContract";
-import { parseCommunityChannelSemanticPath } from "../shared/communitySemanticRepository";
+import { POLYNET_PRESENCE_DOCUMENT_PATH, parseCommunityChannelSemanticPath } from "../shared/communitySemanticRepository";
+import { requireCommunityChatAccess } from "./communityCore";
+import { resolveAuthorizedCommunityPresenceWindow } from "./communityPresenceCore";
+import { resolveCommunityTypingPresence } from "./communityTypingPresenceCore";
 
 // Live updates for community front ends. A front end subscribes to `watch` for
 // a channel path with its watch-only token and gets back a version that changes
@@ -11,6 +14,10 @@ import { parseCommunityChannelSemanticPath } from "../shared/communitySemanticRe
 // reaction, or the channel itself). It then re-reads the channel through the
 // door. The version carries no content, and access is re-checked on every run,
 // so losing membership or channel access turns the subscription off live.
+// A channel watch also says who else is typing there (expires_in_ms counts down
+// from this run, so the front end can drop a lease nobody renewed). Watching
+// presence.json gets a version that changes when the set of members online
+// changes; the front end then re-reads presence.json.
 
 const unavailable = { ok: false as const, code: "watch_unavailable" as const };
 
@@ -29,10 +36,19 @@ export const watch = query({
 
     const parsed = parsePolynetSemanticRepositoryPath(args.path);
     if (!parsed.ok || parsed.kind !== "community") return unavailable;
-    const channelPath = parseCommunityChannelSemanticPath(parsed.localPath);
-    if (channelPath?.kind !== "directory") return unavailable;
     const community = await ctx.db.get(session.communityId);
     if (!community || community.slug !== parsed.communitySlug) return unavailable;
+    if (parsed.localPath === POLYNET_PRESENCE_DOCUMENT_PATH) {
+      try {
+        await requireCommunityChatAccess({ ctx, communityId: community._id, userId: session.userId });
+      } catch {
+        return unavailable;
+      }
+      const online = await resolveAuthorizedCommunityPresenceWindow(ctx, community);
+      return { ok: true as const, version: online.entries.map((entry) => String(entry.userId)).sort().join(",") };
+    }
+    const channelPath = parseCommunityChannelSemanticPath(parsed.localPath);
+    if (channelPath?.kind !== "directory") return unavailable;
     const channel = await ctx.db
       .query("communityChannels")
       .withIndex("by_community_slug", (q) => q.eq("communityId", community._id).eq("slug", channelPath.slug))
@@ -58,9 +74,22 @@ export const watch = query({
       .withIndex("by_channel_updatedAt", (q) => q.eq("channelId", channel._id))
       .order("desc")
       .first();
+    let typing: Array<{ ref: string; name: string | null; avatar_url: string | null; thread_ref: string | null; expires_in_ms: number }> = [];
+    try {
+      const nowMs = Date.now();
+      const presence = await resolveCommunityTypingPresence({ ctx, community, channelId: channel._id, viewerUserId: session.userId });
+      typing = presence.users.map((user) => ({
+        ref: `user:${user.canonical_user_id}`, name: user.display_name, avatar_url: user.avatar_url,
+        thread_ref: user.root_id ? `interaction:root:${user.root_id}` : null,
+        expires_in_ms: Math.max(0, user.display_until_ms - nowMs),
+      }));
+    } catch {
+      // Typing is a nicety; the channel's version still drives re-reads.
+    }
     return {
       ok: true as const,
       version: Math.max(channel.updatedAt, latestRoot?.updatedAt ?? 0, latestReply?.updatedAt ?? 0),
+      typing,
     };
   },
 });

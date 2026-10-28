@@ -3,7 +3,14 @@ import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { validateProfileHandle } from "../shared/profileHandle";
-import { maybeDeleteStorageAsset } from "./communityCore";
+import {
+  communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
+  maybeDeleteStorageAsset,
+  normalizeCommunityRoleForOutput,
+  requireCommunityChatAccess,
+} from "./communityCore";
+import { communityPresenceLeaseIsActive } from "./communityPresenceCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
@@ -378,6 +385,57 @@ export const getProfileDetailByUserId = query({
     const viewer = await readAuthenticatedIdentityProfile(ctx).catch(() => null);
     if (viewer?.authSubject === user.authSubject) return profile;
     return { ...profile, timezone: null, onboarding_completed_at: null };
+  },
+});
+
+// A fellow member's profile as a community's site (or a member's own harness)
+// shows it: exactly what Studio shows another member, never the owner-only
+// time zone or onboarding state. Reader and subject must both be active in
+// this community; anyone else reads as not found (null).
+export const readCommunityMemberProfileInternal = internalQuery({
+  args: {
+    viewerUserId: v.id("users"),
+    communityId: v.id("communities"),
+    handle: v.optional(v.string()),
+    userId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.viewerUserId });
+    const handle = args.handle !== undefined ? validateProfileHandle(args.handle) : null;
+    const subjectId = args.userId !== undefined ? ctx.db.normalizeId("users", args.userId) : null;
+    const user = handle?.ok
+      ? await getUniqueUserByNormalizedHandle<UserRow>(ctx, handle.normalizedHandle)
+      : subjectId ? ((await ctx.db.get(subjectId)) as UserRow | null) : null;
+    if (!user) return null;
+    const isOwner = String(community.ownerId) === String(user._id);
+    const membership = isOwner ? null
+      : await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: user._id });
+    if (!isOwner && !communityMembershipRowIsActive(membership)) return null;
+    try {
+      await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: user._id });
+    } catch {
+      return null;
+    }
+    const profile = await mapProfileDetail(ctx, user, await findProfileDetailByUserId(ctx, user._id));
+    const presence = await ctx.db
+      .query("communityPresence")
+      .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", user._id))
+      .first();
+    const ownHandle = validateProfileHandle(user.normalizedHandle ?? user.handle);
+    return {
+      ref: `user:${String(user._id)}`,
+      name: profile.display_name ?? user.displayName ?? null,
+      handle: ownHandle.ok ? ownHandle.normalizedHandle : null,
+      avatar_url: profile.avatar_url,
+      role: isOwner ? "owner" : normalizeCommunityRoleForOutput(membership?.role) || "member",
+      online: communityPresenceLeaseIsActive(presence, Date.now()),
+      bio: profile.bio,
+      links: {
+        youtube: profile.social_links.youtube || null,
+        x: profile.social_links.x || null,
+        instagram: profile.social_links.instagram || null,
+      },
+    };
   },
 });
 

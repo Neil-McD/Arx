@@ -85,15 +85,15 @@ test("channels follows every page of the listing", async () => {
     "/__polynet/auth/session": signedIn,
     "/__polynet/api": (_url, init) => {
       const { input } = JSON.parse(String(init.body));
-      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true }], truncated: true, next_cursor: "page2" });
+      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true, unread: true, mentioned: true }], truncated: true, next_cursor: "page2" });
       return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false } }], truncated: false });
     },
   });
   const polynet = await loadSdk();
   await polynet.session();
   expect(await polynet.channels()).toEqual([
-    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true },
-    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false },
+    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, unread: true, mentioned: true },
+    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, unread: false, mentioned: false },
   ]);
   const channelCalls = calls.filter((call) => call.body?.input?.path === "/communities/run-club/channels/");
   expect(channelCalls.map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);
@@ -247,16 +247,159 @@ test("members() lists the community's members, following pages", async () => {
       const { input } = JSON.parse(String(init.body));
       if (input.path === "/communities/run-club/") return ok({ entries: [] });
       if (!input.cursor) return ok({ entries: [{ type: "member_self_context", path: "/communities/run-club/members/me/" },
-        { type: "member", name: "Sam", role: "owner", ref: "user:1", path: "/communities/run-club/members/sam.md" }], truncated: true, next_cursor: "p2" });
+        { type: "member", name: "Sam", role: "owner", ref: "user:1", path: "/communities/run-club/members/sam.md",
+          handle: "sam", avatar_url: "https://x/sam.png", online: true }], truncated: true, next_cursor: "p2" });
       return ok({ entries: [{ type: "member", name: "Ava", ref: "user:2", path: "/communities/run-club/members/ava.md" }] });
     },
   });
   const polynet = await loadSdk();
   await polynet.session();
   expect(await polynet.members()).toEqual([
-    { name: "Sam", role: "owner", ref: "user:1", path: "/communities/run-club/members/sam.md" },
-    { name: "Ava", role: "member", ref: "user:2", path: "/communities/run-club/members/ava.md" },
+    { name: "Sam", role: "owner", ref: "user:1", path: "/communities/run-club/members/sam.md", handle: "sam", avatar_url: "https://x/sam.png", online: true },
+    { name: "Ava", role: "member", ref: "user:2", path: "/communities/run-club/members/ava.md", handle: null, avatar_url: null, online: false },
   ]);
+});
+
+test("profile and online read the member's JSON documents; markRead and typing call their operations", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (tool === "polynet_read") return ok({ body: JSON.stringify({ read: input.path }) });
+      if (tool === "polynet_list") return ok({ entries: [] });
+      return ok({ ok: true });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  expect(await polynet.profile("@sam")).toEqual({ read: "/communities/run-club/members/sam.json" });
+  expect(await polynet.profile({ ref: "user:abc", handle: null })).toEqual({ read: "/communities/run-club/members/by-user/abc.json" });
+  expect(await polynet.online()).toEqual({ read: "/communities/run-club/presence.json" });
+
+  await polynet.markRead("general");
+  await polynet.markRead("general", { created_at: "2026-10-28T10:00:00.000Z" });
+  await expect(polynet.markRead("general", "not a time")).rejects.toMatchObject({ code: "invalid_tool_args" });
+  await polynet.typing("general", true);
+  await polynet.typing("general", true); // throttled
+  await polynet.typing("general", false, { thread: "interaction:root:abc" }); // never started there: nothing to clear
+  await polynet.typing("general", false);
+  const ops = calls.filter((call) => call.body?.tool === "polynet_call").map((call) => [call.body.input.operation, call.body.input.input]);
+  expect(ops).toEqual([
+    ["community.channel.mark_read", { channel: "general" }],
+    ["community.channel.mark_read", { channel: "general", through_at: Date.parse("2026-10-28T10:00:00.000Z") }],
+    ["community.typing.set", { channel: "general", on: true }],
+    ["community.typing.set", { channel: "general", on: false }],
+  ]);
+});
+
+test("post mentions members by ref, alongside an agent mention", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (tool === "polynet_list" && input.path === "/communities/run-club/") return ok({ community: { slug: "run-club", name: "Run Club" } });
+      return ok({});
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  await polynet.post("general", "@sam @ava see you at 6", { mentions: [{ ref: "user:sam1", handle: "sam" }, "user:ava2"], askAgent: true });
+  const write = calls.find((call) => call.body?.tool === "polynet_write")!.body.input;
+  expect(write.content.mentions).toEqual([{ userId: "sam1" }, { userId: "ava2" }, { agentKey: "community_agent" }]);
+});
+
+test("watch passes who's typing, says when posts changed, and drops a typist nobody renewed", async () => {
+  vi.useFakeTimers();
+  try {
+    stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ entries: [] }) });
+    let push: (result: unknown) => void = () => undefined;
+    vi.stubGlobal("convex", { ConvexClient: class {
+      onUpdate(_name: string, _args: unknown, callback: (result: unknown) => void) { push = callback; return () => undefined; }
+      close() {}
+    } });
+    const polynet = await loadSdk();
+    const updates: any[] = [];
+    await polynet.watch("general", (update: unknown) => { updates.push(update); });
+    const ava = { ref: "user:2", name: "Ava", avatar_url: null, thread_ref: null };
+    push({ ok: true, version: 1, typing: [] });
+    push({ ok: true, version: 1, typing: [{ ...ava, expires_in_ms: 5000 }] });
+    push({ ok: true, version: 1, typing: [{ ...ava, expires_in_ms: 5000 }] }); // nothing new: no call
+    push({ ok: true, version: 2, typing: [{ ...ava, expires_in_ms: 5000 }] });
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(updates).toEqual([
+      { changed: true, typing: [] },
+      { changed: false, typing: [ava] },
+      { changed: true, typing: [ava] },
+      { changed: false, typing: [] },
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("watchOnline watches presence.json and calls back only when who's online changes", async () => {
+  stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ entries: [] }) });
+  const paths: string[] = [];
+  let push: (result: unknown) => void = () => undefined;
+  vi.stubGlobal("convex", { ConvexClient: class {
+    onUpdate(_name: string, args: any, callback: (result: unknown) => void) { paths.push(args.path); push = callback; return () => undefined; }
+    close() {}
+  } });
+  const polynet = await loadSdk();
+  await polynet.session();
+  let changes = 0;
+  await polynet.watchOnline(() => { changes += 1; });
+  push({ ok: true, version: "a" });
+  push({ ok: true, version: "a" });
+  push({ ok: true, version: "a,b" });
+  expect(paths).toEqual(["/communities/run-club/presence.json"]);
+  expect(changes).toBe(2);
+});
+
+function fakeVisibleDocument() {
+  const listeners: Array<() => void> = [];
+  const doc = { visibilityState: "visible", addEventListener: (_type: string, listener: () => void) => { listeners.push(listener); } };
+  return { doc, show: (state: string) => { doc.visibilityState = state; listeners.forEach((listener) => listener()); } };
+}
+
+test("a signed-in member's open page sends a presence heartbeat about once a minute, paused while hidden", async () => {
+  vi.useFakeTimers();
+  try {
+    const page = fakeVisibleDocument();
+    vi.stubGlobal("document", page.doc);
+    const calls = stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ entries: [] }) });
+    const polynet = await loadSdk();
+    await polynet.session();
+    const beats = () => calls.filter((call) => call.body?.input?.operation === "community.presence.heartbeat").length;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(beats()).toBe(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(beats()).toBe(2);
+    page.show("hidden");
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(beats()).toBe(2);
+    page.show("visible");
+    expect(beats()).toBe(3);
+    expect(calls.find((call) => call.body?.input?.operation === "community.presence.heartbeat")!.body.input).toMatchObject({
+      target: "/communities/run-club/capabilities/community.presence.heartbeat.json", input: {},
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("signed out, no heartbeat is sent", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.stubGlobal("document", fakeVisibleDocument().doc);
+    const calls = stubFetch({ "/__polynet/auth/session": () => Response.json({ signed_in: false, community: "run-club", join_url: "x" }) });
+    const polynet = await loadSdk();
+    await polynet.session();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.map((call) => call.url)).toEqual(["/__polynet/auth/session"]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // Just enough DOM to see what markdown() builds: elements, attributes, text.

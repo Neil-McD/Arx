@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { resolveMentionRecipientSource } from "./communityNotificationAccess";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import {
   type CommunityMemberSettingsLike,
   type CommunityResourceModuleLike,
@@ -633,6 +633,40 @@ export const acknowledgeCommunityChatRead = mutation({
       userId,
       requestedThroughAt: args.throughAtMs,
     });
+  },
+});
+
+// Community sites: the trusted member's attention for the channels on one
+// listing page (by slug), read only. Rows match a listing by channel id, or by
+// slug for a General that has no stored row yet.
+export const listCommunityChannelAttentionForUserInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), channelSlugs: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId });
+    const channels: CommunityChannelLike[] = [];
+    for (const channelSlug of new Set(args.channelSlugs.slice(0, 100))) {
+      try {
+        channels.push(await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelSlug, actor, capability: "canRead" }));
+      } catch {
+        // A channel the member can no longer read simply has no attention.
+      }
+    }
+    return (await getCommunityAttentionRow(ctx, args.communityId, args.userId, channels)).channels;
+  },
+});
+
+// Community sites: mark one channel (by slug) read for the trusted member,
+// through the same clamped acknowledgement Studio uses.
+export const markCommunityChannelReadForUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), channelSlug: v.string(), throughAtMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId });
+    const channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId,
+      channelSlug: args.channelSlug, actor, capability: "canRead" });
+    return await acknowledgeCommunityChatReadForUser({ ctx, communityId: args.communityId,
+      channelId: channel._id ?? null, userId: args.userId, requestedThroughAt: args.throughAtMs ?? null });
   },
 });
 

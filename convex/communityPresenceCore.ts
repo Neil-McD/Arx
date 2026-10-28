@@ -17,6 +17,7 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
+import { validateProfileHandle } from "../shared/profileHandle";
 
 export {
   COMMUNITY_PRESENCE_FACE_LIMIT,
@@ -284,5 +285,36 @@ export async function resolveMemberCommunityPresenceSummary(
     onlineCountCapped: presenceWindow.countCapped,
     onlineFaces,
     onlineUserIds,
+  };
+}
+
+// Who's online, for a community's site: everyone in the authorized presence
+// window, named the way the site's member directory names them.
+export async function listCommunityOnlineMembers(
+  ctx: any,
+  community: CommunityLike,
+): Promise<{
+  online_count: number;
+  online_count_capped: boolean;
+  members: Array<{ ref: string; name: string; handle: string | null; avatar_url: string | null }>;
+}> {
+  const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(ctx, community);
+  const members = [];
+  for (const { userId } of presenceWindow.entries) {
+    const user = await ctx.db.get(userId);
+    if (!user) continue;
+    const display = await resolveUserProfileDisplayProjection(ctx, user._id);
+    const handle = validateProfileHandle(user.normalizedHandle ?? user.handle);
+    members.push({
+      ref: `user:${String(user._id)}`,
+      name: display.display_name ?? "Member",
+      handle: handle.ok ? handle.normalizedHandle : null,
+      avatar_url: display.avatar_url,
+    });
+  }
+  return {
+    online_count: presenceWindow.entries.length,
+    online_count_capped: presenceWindow.countCapped,
+    members,
   };
 }

@@ -164,8 +164,12 @@ Failed calls throw PolynetError with .code, .message and .status. Codes:
 
 ## Chat
 
-- channels() -> [{ slug, name, path, isGeneral, canPost }]. Use the one with
-  isGeneral as the default. Hide the composer when canPost is false.
+- channels() -> [{ slug, name, path, isGeneral, canPost, unread, mentioned }].
+  Use the one with isGeneral as the default. Hide the composer when canPost is
+  false. unread: posts the member hasn't seen; mentioned: someone @mentioned
+  them there. markRead(channelSlug, throughAt?) clears both, up to now or up
+  to throughAt (the newest post they saw, or a time); call it when the member
+  is looking at the channel.
 - feed(channelSlug, { limit }) -> the newest posts (default 50), oldest first
   (chat order; reverse() for newest-first). Older history isn't pageable yet.
 - thread(channelSlug, post.ref) -> the post, then its replies, oldest first.
@@ -188,8 +192,10 @@ Each post or reply has:
   created_at          // ISO time
 
 Writing:
-- post(channelSlug, text, { replyTo: post.ref, files: [File], askAgent: true })
-  posts, or replies when replyTo is set. Returns { ref, path, ... }.
+- post(channelSlug, text, { replyTo: post.ref, files: [File], askAgent: true,
+  mentions: [member] }) posts, or replies when replyTo is set. Returns { ref,
+  path, ... }. mentions notifies members (from members()); the text must
+  contain each one's "@" + member.handle.
   askAgent asks the community agent to answer in the channel; Polynet puts
   "@<community name> " in front of the text, which is how agent mentions read
   everywhere. Editing that post later doesn't ask the agent again; keep the
@@ -203,12 +209,19 @@ Writing:
 - fileUrl(attachment) -> a URL for <img src>, <video src> or a download link.
 
 Live updates:
-- const stop = await watch(channelSlug, onChange). onChange runs once right
-  away and again whenever anything in the channel changes (posts, replies,
-  edits, deletes, reactions): call feed() or thread() again then. Use it
-  instead of polling. Needs a signed-in member. When the session ends
-  (signed out elsewhere, expired), onChange runs once more and the re-read
-  throws sign_in_required: show sign-in then.
+- const stop = await watch(channelSlug, onChange). onChange(update) runs once
+  right away, whenever anything in the channel changes (posts, replies, edits,
+  deletes, reactions), and when someone starts or stops typing there. When
+  update.changed is true, call feed() or thread() again. update.typing is who
+  else is typing: [{ ref, name, avatar_url, thread_ref }] (thread_ref: the
+  post they're replying to, or null). Use it instead of polling. Needs a
+  signed-in member. When the session ends (signed out elsewhere, expired),
+  onChange runs once more and the re-read throws sign_in_required: show
+  sign-in then.
+- typing(channelSlug, on, { thread: post.ref }): call typing(slug, true) as
+  the member types (every keystroke is fine; the SDK sends a renewal every
+  couple of seconds) and typing(slug, false) when they stop or clear the box.
+  post() clears it. It fades on its own a few seconds after the last renewal.
 - Content-Security-Policy: scripts, styles and the SDK's connections come from
   this domain ('self'), but avatar_url images come from Polynet's storage
   host, so allow img-src 'self' https:.
@@ -229,8 +242,18 @@ own rather than avatar_url (which is the member's).
 - resources(path?) -> courses (kind "directory") and lessons (kind
   "document"). Pass a course's path to list its lessons.
 - readText(entry) -> the text of a lesson, a memory or a post (markdown).
-- members() -> [{ name, role, ref, path }], role "owner", "admin",
-  "moderator" or "member".
+- members() -> [{ name, role, ref, path, handle, avatar_url, online }], role
+  "owner", "admin", "moderator" or "member"; online: here right now.
+- profile(memberOrHandle) -> { ref, name, handle, avatar_url, role, online,
+  bio, links { youtube, x, instagram } } (links null when unset): what any
+  member sees of a fellow member in Polynet.
+- online() -> { online_count, online_count_capped, members: [{ ref, name,
+  handle, avatar_url }] }: who is here now (online_count_capped: "at least").
+  watchOnline(onChange): onChange() runs now and whenever that changes; call
+  online() then. Returns stop().
+- A signed-in member with the page open and visible counts as online: the SDK
+  sends their presence about once a minute after session(), and pauses while
+  the page is hidden. Nothing to call.
 - knowledge(query?) -> what the community knows: top memories, or a search.
   Each has title, type, grade, applies_when.
 

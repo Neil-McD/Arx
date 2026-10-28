@@ -249,6 +249,30 @@ Chat through the door, the same for every actor:
   community agent, which replies in the channel (community-funded).
 - `polynet_call` `community.interaction.react` sets the caller's reaction
   (`ref`, `emoji`, `on`), so retries are safe.
+- A post's `content.mentions` may also name members as `{ userId }` (the id in
+  a member's `ref`, `user:<id>`); the text must contain each one's `@handle`.
+
+Studio's member rails, through the door (a member's own read state and
+presence; never the community agent, never direct messages):
+
+- Each `channels/` entry carries the caller's `unread`, `mentioned`,
+  `latest_activity_at` and `seen_through_at` (milliseconds or null), from
+  Studio's attention projection; listing never moves them.
+- `polynet_call` `community.channel.mark_read` (`channel`, optional
+  `through_at` in milliseconds) advances the caller's read position through
+  Studio's clamped acknowledgement: never past what is readable, never back.
+- `polynet_call` `community.presence.heartbeat` (`{}`) renews the caller's
+  presence lease, and `community.typing.set` (`channel`, `on`, optional
+  `thread_ref`) sets or clears their typing lease. Both set rather than toggle,
+  and both are `community_app` only: an agent or harness never makes a member
+  look present.
+- `polynet_read` `presence.json` returns `{ online_count, online_count_capped,
+  members: [{ ref, name, handle, avatar_url }] }`; `members/<handle>.json` (or
+  `members/by-user/<id>.json`) returns `{ ref, name, handle, avatar_url, role,
+  online, bio, links }`, exactly what Studio shows a fellow member, when both
+  reader and subject are active here (otherwise `semantic_not_found`). Member
+  entries in `members/` carry `handle`, `avatar_url` and `online`. The
+  community agent reads neither JSON document.
 
 Community pages through the door: `events/` lists upcoming events with
 times, location and link; `resources/` lists module folders and resource
@@ -287,7 +311,10 @@ Convex URL and a **watch-only token** (`pnw_`), derived from the session token
 `communityLive:watch` with that token and a channel path; it returns only a
 version that changes when anything in the channel changes (posts, replies,
 edits, deletions, reactions, the channel itself), and the page re-reads the
-channel through the door. `watch` re-checks the session, membership and channel
+channel through the door. A channel watch also returns who else is typing there
+(`typing: [{ ref, name, avatar_url, thread_ref, expires_in_ms }]`). Watching
+`presence.json` returns a version that changes when the set of members online
+changes; the page re-reads `presence.json`. `watch` re-checks the session, membership and channel
 access on every run, so losing any of them turns the subscription off live. The
 watch token cannot call the API and carries no content.
 
