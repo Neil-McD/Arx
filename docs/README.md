@@ -41,7 +41,8 @@ not track status. Update the system map instead of adding status ledgers.
   [product/reference/billing-entitlements.md](product/reference/billing-entitlements.md),
   [legal/](legal/)
 - **Operations:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md),
-  [schema-data-migration-discipline.md](schema-data-migration-discipline.md)
+  [schema-data-migration-discipline.md](schema-data-migration-discipline.md),
+  [specs/cleanup-map-2026-10-28.md](specs/cleanup-map-2026-10-28.md)
 - **Being removed with their code:** [community-forms-v1.md](community-forms-v1.md),
   [community-member-workflows-foundation-v1.md](community-member-workflows-foundation-v1.md)
 
