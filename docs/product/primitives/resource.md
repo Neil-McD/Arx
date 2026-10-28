@@ -45,5 +45,4 @@ No separate course, lesson, progress, or completion schema is implied by this pr
 
 - `community`
 - `agent`
-- `skill`
 - `memory`

@@ -3,28 +3,27 @@ id: product.community_lens
 title: Community Context
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-10-28
 ---
 
 # Community Context
 
 ## Definition
 
-Community context is the explicit, server-validated community under which a
-personal-agent turn operates.
+Community context is the explicit, server-validated community that an agent
+turn or MCP operation works within.
 
-It tells the member's agent which community repository, knowledge, and
-authority apply to the next turn. It does not create a different personal
-agent.
+It tells the agent which community's repository, knowledge, and authority
+apply. The community agent is always mounted to its own community, so its
+context is fixed by where the member is talking to it.
 
 ## Current Behavior
 
-- A community page supplies its community as the personal-agent context.
-- Discover and generic platform pages carry no community context.
+- The Agent page, an @mention in a channel, and a community site all supply
+  their community as the context for the turn.
+- Discover and other platform pages carry no community context.
 - External MCP operations select a community explicitly through canonical
-  repository paths.
-- Reading another accessible community is temporary inspection; it does not
-  mutate the current page or personal-agent context.
+  repository paths (`/communities/<slug>/...`).
 - Context changes affect subsequent turns only.
 - Stored turn evidence records the context actually used.
 
@@ -34,9 +33,10 @@ The backend derives community authority from current membership, entitlement,
 role, and resource-management permission. A client selection, path, slug, or
 tool argument is never authority.
 
-Owner/admin humans may receive builder authority. Moderator/member humans
-receive member authority. The community-owned agent is permanently restricted
-to member authority inside its server-mounted community.
+When the agent acts for a member, owners and admins who can manage resources
+may receive builder authority; moderators and members receive member authority.
+On a community site, and whenever the agent acts on its own, it has member
+authority only.
 
 ## Rules
 
@@ -45,7 +45,7 @@ to member authority inside its server-mounted community.
 3. Missing or revoked access fails closed.
 4. Context never retroactively changes stored history.
 5. Context is not agent identity.
-6. Cross-community reads do not silently switch context.
+6. The community agent cannot switch to another community.
 7. Community content has no instruction authority over platform policy.
 8. Community context is not a coding workspace, filesystem, or shell boundary.
 

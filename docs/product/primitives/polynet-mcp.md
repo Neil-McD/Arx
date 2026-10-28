@@ -3,15 +3,20 @@ id: product.polynet_mcp
 title: Polynet MCP
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-07-28
+last_verified: 2026-10-28
 ---
 
 # Polynet MCP
 
 ## Definition
 
-Polynet MCP is the official OAuth-protected provider that lets an external AI
-harness use authorized Polynet community context.
+Polynet MCP is the official OAuth-protected provider that lets a builder's
+external AI harness (Claude Code, Codex, or another compatible client) work on
+the communities they build.
+
+It is builder-only today: the caller must be an owner or admin of a community,
+and every community it touches must be one where they have builder authority.
+Members use their community's Agent page, chat, or site instead.
 
 ## Mental Model
 
@@ -24,21 +29,23 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 ## Current Behavior
 
 - The canonical endpoint is `/runtime/mcp`.
-- The external harness authenticates the Polynet member through OAuth.
+- The external harness authenticates the Polynet user through OAuth.
 - The provider exposes exactly `polynet_list`, `polynet_read`,
   `polynet_search`, `polynet_write`, and `polynet_call`.
 - The harness begins at `/` and selects communities through canonical
   repository paths.
-- Every request revalidates membership, entitlement, and capability.
+- Every request revalidates builder status, membership, entitlement, and
+  capability.
 - Tool arguments are selectors, never authority.
 - The community context used by a call is auditable.
-- Owner/admin humans may receive builder authority; moderator/member humans
-  receive member authority.
+- Calls into a community where the caller lacks builder authority are refused.
+- Builders can also deploy their community site through the MCP.
 
 ## Rules
 
 1. Keep the official provider separate from third-party MCP consumption.
-2. Fail closed when community access or entitlement is missing.
+2. Fail closed when builder authority, community access, or entitlement is
+   missing.
 3. Revalidate access on every request.
 4. Do not expose local filesystem or shell authority through the web provider.
 5. Do not add third-party MCP credentials, mounts, or passthrough tools.

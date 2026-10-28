@@ -3,7 +3,7 @@ id: product.docs_index
 title: Product Documentation Index
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-10-28
 ---
 
 # Product Documentation Index
@@ -23,14 +23,20 @@ Product docs are downstream from platform doctrine and runtime contracts. If the
 
 ## Product Truth
 
-Polynet is an AI-native collective intelligence platform where builders can create custom AI agents, distribute them through communities, and monetize systems that become more valuable as the network learns and compounds.
+Polynet is an AI-native collective intelligence platform where founders build
+communities that can think, remember, and act with AI.
 
 The product combines:
 
-- agents as product surfaces
-- communities as distribution, trust, retention, and feedback systems
-- collective intelligence as the compounding asset
-- one canonical five-operation Polynet repository contract
+- communities as the product, distribution, trust, and authority boundary
+- one community agent per community, acting for each member inside that
+  member's permissions
+- resources and accepted memory as the compounding community knowledge
+- the join page as the one public entry path, with access and billing decided
+  by the backend
+- one canonical five-operation Polynet repository contract, shared by the
+  community agent and the official (builder-only) Polynet MCP
+- community sites on `polynet.page` (staging only for now)
 
 ## Documentation Rules
 
@@ -57,13 +63,13 @@ LLMs should read product docs in this order:
 2. `llms-full.txt`
 3. `primitives/polynet.md`
 4. `primitives/community.md`
-5. `primitives/funnel.md`
+5. `primitives/join-page.md`
 6. `primitives/agent.md`
 7. `primitives/community-lens.md`
 8. `primitives/memory.md`
 9. `primitives/voice.md`
 10. `primitives/polynet-mcp.md`
-11. `primitives/skill.md`
+11. `primitives/community-site.md`
 12. `primitives/resource.md`
 13. `primitives/entitlement.md`
 14. `primitives/role.md`
@@ -80,10 +86,10 @@ Builder path:
 1. `guides/builder-quickstart.md`
 2. `guides/launch-a-community.md`
 3. `guides/configure-community-agent.md`
-4. `guides/connect-polynet-mcp.md`
-5. `guides/create-and-use-skills.md`
-6. `guides/manage-resources.md`
-7. `guides/manage-access-billing-and-roles.md`
+4. `guides/manage-resources.md`
+5. `guides/manage-access-billing-and-roles.md`
+6. `guides/connect-polynet-mcp.md`
+7. `primitives/community-site.md`
 
 Member path:
 

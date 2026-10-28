@@ -3,7 +3,7 @@ id: product.guide.manage_access_billing_and_roles
 title: Manage Access, Billing, and Roles
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-08-08
+last_verified: 2026-10-28
 ---
 
 # Manage Access, Billing, and Roles
@@ -28,7 +28,7 @@ Community access can come from membership, approval, payment-derived entitlement
 
 The frontend can show gates, buttons, and status. The backend is authority.
 
-Published communities can still require entitlement. Unlisted communities can still be joined through a direct funnel link if the entry flow allows it.
+Published communities can still require entitlement. Unlisted communities can still be joined through a direct join page link if the entry flow allows it.
 
 ## Billing Model
 
@@ -42,14 +42,14 @@ When a paid community member is removed or banned, paid access should be ended t
 
 For a builder, the revenue path should be understandable:
 
-1. Define what members are paying for: the agent, community, resources, workflow, expertise, or access to a specialized system.
+1. Define what members are paying for: the people, expertise, resources, events, and the community agent.
 2. Configure the community and paid access model.
 3. Connect payout readiness through the supported provider path.
-4. Share the funnel link where prospects already are.
+4. Share the join page link where prospects already are.
 5. The member signs in, checks out, and receives access only after backend verification.
 6. The builder can see whether revenue collection and payouts are ready, pending, or blocked.
 
-The value proposition should be direct: builders are not just charging for a chat room. They are charging for access to a community intelligence system that combines expertise, people, resources, and an agent surface.
+The value proposition should be direct: builders are not just charging for a chat room. They are charging for access to a community intelligence system that combines expertise, people, resources, and the community agent.
 
 ## Payout Model
 
@@ -83,8 +83,7 @@ Moderator:
 Member:
 
 - participates in the community
-- uses allowed chat, resources, voice, and personal-agent community
-  context
+- uses allowed chat, resources, events, voice, and the community agent
 
 ## Launch Checklist
 
@@ -99,7 +98,7 @@ Before launch, verify:
 7. paid access is ended when removal/ban policy requires it
 8. paid community checkout reaches backend entitlement
 9. payout readiness is visible to the builder
-10. member-facing funnel copy matches the paid value actually delivered
+10. member-facing join page copy matches the paid value actually delivered
 
 ## Rules
 

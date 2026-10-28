@@ -7,14 +7,14 @@
       "slug": "primitives/polynet",
       "title": "Polynet",
       "section": "Primitives",
-      "summary": "What Polynet is, why it exists, and the alpha product model.",
+      "summary": "What Polynet is, why it exists, and the alpha product model: communities with one community agent.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/primitives/polynet.md",
       "search": {
-        "aliases": ["platform value prop", "services as software", "collective intelligence platform"],
-        "keywords": ["value prop", "business model", "builders", "communities", "agents", "monetization"],
-        "queries": ["what is polynet", "what is polynet value prop", "services as software platform"],
+        "aliases": ["platform value prop", "collective intelligence platform", "what polynet does"],
+        "keywords": ["value prop", "business model", "builders", "founders", "communities", "community agent", "monetization"],
+        "queries": ["what is polynet", "what is polynet value prop", "how does polynet work"],
         "relatedSlugs": ["guides/builder-quickstart", "reference/billing-entitlements"],
         "boost": 1.15
       }
@@ -32,16 +32,16 @@
     {
       "id": "product.agent",
       "slug": "primitives/agent",
-      "title": "Agent",
+      "title": "Community Agent",
       "section": "Primitives",
-      "summary": "The separate member-owned and community-owned agent identities and their authority.",
+      "summary": "The one agent each community has: where members reach it, its two permission modes, and its authority.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/primitives/agent.md",
       "search": {
-        "aliases": ["personal agent", "community agent", "community agent"],
-        "keywords": ["agent identity", "community context", "member authority", "builder authority"],
-        "queries": ["how does community context work", "personal agent versus community agent", "what can the community agent do"],
+        "aliases": ["community agent", "agent page", "@mention agent", "ai agent", "personal agent"],
+        "keywords": ["agent identity", "community context", "one agent per community", "agent page", "mention", "member permissions", "builder authority", "private conversation"],
+        "queries": ["how does community context work", "what can the community agent do", "how do members talk to the agent", "is there a personal agent"],
         "relatedSlugs": ["primitives/community-lens", "primitives/polynet-mcp"],
         "boost": 1.1
       }
@@ -81,14 +81,21 @@
       }
     },
     {
-      "id": "product.funnel",
-      "slug": "primitives/funnel",
-      "title": "Funnel",
+      "id": "product.join_page",
+      "slug": "primitives/join-page",
+      "title": "Join Page",
       "section": "Primitives",
-      "summary": "The canonical public entry surface for community joining and access.",
+      "summary": "The community's one public join page (/c/<slug>) for joining, approval, sign-in, and checkout.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/funnel.md"
+      "source": "docs/product/primitives/join-page.md",
+      "search": {
+        "aliases": ["community funnel", "funnel", "join link", "community landing page"],
+        "keywords": ["join page", "join", "entry", "gate", "checkout", "approval", "landing page"],
+        "queries": ["what is the join page", "where do members join", "community funnel link"],
+        "relatedSlugs": ["guides/joining-communities", "primitives/community-site"],
+        "boost": 1.1
+      }
     },
     {
       "id": "product.voice",
@@ -105,20 +112,34 @@
       "slug": "primitives/polynet-mcp",
       "title": "Polynet MCP",
       "section": "Primitives",
-      "summary": "The official external harness gateway into authorized Polynet context.",
+      "summary": "The official builder-only gateway for external AI harnesses into authorized Polynet context.",
       "audience": ["builder", "llm", "operator"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/polynet-mcp.md"
+      "source": "docs/product/primitives/polynet-mcp.md",
+      "search": {
+        "aliases": ["polynet mcp", "official mcp", "mcp server", "bring your own ai"],
+        "keywords": ["mcp", "oauth", "external harness", "claude code", "codex", "builder-only", "polynet_list", "polynet_call"],
+        "queries": ["what is the polynet mcp", "how do I connect Polynet MCP", "can members use the mcp"],
+        "relatedSlugs": ["guides/connect-polynet-mcp", "primitives/agent"],
+        "boost": 1.1
+      }
     },
     {
-      "id": "product.skill",
-      "slug": "primitives/skill",
-      "title": "Skill",
+      "id": "product.community_site",
+      "slug": "primitives/community-site",
+      "title": "Community Site",
       "section": "Primitives",
-      "summary": "Reusable instruction or capability packages for repeated behavior.",
-      "audience": ["builder", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/primitives/skill.md"
+      "summary": "A community's own website on polynet.page, built with @polynet/cli; staging only for now.",
+      "audience": ["builder", "member", "llm"],
+      "status": "planned",
+      "source": "docs/product/primitives/community-site.md",
+      "search": {
+        "aliases": ["community site", "polynet.page", "website", "vibe-coded site", "polynet cli"],
+        "keywords": ["site", "website", "cli", "deploy", "standard pages", "private twin", "frame", "staging"],
+        "queries": ["how do I build a community site", "what is polynet.page", "deploy a community website"],
+        "relatedSlugs": ["primitives/join-page", "primitives/polynet-mcp"],
+        "boost": 1.1
+      }
     },
     {
       "id": "product.resource",
@@ -179,7 +200,7 @@
       "slug": "guides/launch-a-community",
       "title": "Launch A Community",
       "section": "Builder Guides",
-      "summary": "How to create, configure, gate, and share a community.",
+      "summary": "How to create, configure, gate, and share a community through its join page.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/launch-a-community.md"
@@ -206,13 +227,13 @@
       "slug": "guides/configure-community-agent",
       "title": "Configure Community Agent",
       "section": "Builder Guides",
-      "summary": "How builders should shape the community agent and its context.",
+      "summary": "How builders shape the community agent with instructions and resources.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/configure-community-agent.md",
       "search": {
         "aliases": ["community agent prompt", "owner instructions", "agent configuration"],
-        "keywords": ["community prompt", "system prompt", "owner instructions", "resources", "skills"],
+        "keywords": ["community prompt", "system prompt", "owner instructions", "community instructions", "resources"],
         "queries": ["configure community agent", "community owner instructions", "system prompts community owner instructions"],
         "relatedSlugs": ["reference/prompt-context-model", "reference/context-model"],
         "boost": 1.1
@@ -223,20 +244,10 @@
       "slug": "guides/connect-polynet-mcp",
       "title": "Connect Polynet MCP",
       "section": "Builder Guides",
-      "summary": "How to connect an external harness to the official Polynet MCP provider.",
+      "summary": "How to connect your own AI harness to the official, builder-only Polynet MCP.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/connect-polynet-mcp.md"
-    },
-    {
-      "id": "product.guide.create_and_use_skills",
-      "slug": "guides/create-and-use-skills",
-      "title": "Create And Use Skills",
-      "section": "Builder Guides",
-      "summary": "How skills package repeatable agent behavior.",
-      "audience": ["builder", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/guides/create-and-use-skills.md"
     },
     {
       "id": "product.guide.manage_access_billing_and_roles",
@@ -260,7 +271,7 @@
       "slug": "guides/member-quickstart",
       "title": "Member Quickstart",
       "section": "Member Guides",
-      "summary": "How members join, use communities, and work with the agent.",
+      "summary": "How members join, use communities, and talk with the community agent.",
       "audience": ["member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/member-quickstart.md"
@@ -270,15 +281,15 @@
       "slug": "guides/joining-communities",
       "title": "Joining Communities",
       "section": "Member Guides",
-      "summary": "How members should understand funnels, access, and joining.",
+      "summary": "How members should understand the join page, access, and joining.",
       "audience": ["member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/joining-communities.md",
       "search": {
-        "aliases": ["join community", "join paid community", "community funnel", "membership access"],
-        "keywords": ["join", "joining", "paid community", "funnel", "membership", "approval", "payment", "grant"],
-        "queries": ["join a paid community", "how do members join communities", "community access funnel"],
-        "relatedSlugs": ["primitives/funnel", "reference/access-model", "reference/billing-entitlements"],
+        "aliases": ["join community", "join paid community", "community join page", "community funnel", "membership access"],
+        "keywords": ["join", "joining", "paid community", "join page", "membership", "approval", "payment", "grant"],
+        "queries": ["join a paid community", "how do members join communities", "community access join page"],
+        "relatedSlugs": ["primitives/join-page", "reference/access-model", "reference/billing-entitlements"],
         "boost": 1.25
       }
     },
@@ -320,7 +331,7 @@
       "source": "docs/product/reference/prompt-context-model.md",
       "search": {
         "aliases": ["system prompt", "prompt context", "prompt precedence", "community owner instructions"],
-        "keywords": ["system prompts", "owner instructions", "skills", "resources", "context stack", "prompt rules"],
+        "keywords": ["system prompts", "owner instructions", "community instructions", "resources", "context stack", "prompt rules"],
         "queries": ["system prompts community owner instructions", "prompt context model", "how should prompts use docs"],
         "relatedSlugs": ["guides/configure-community-agent", "reference/context-model"],
         "boost": 1.25

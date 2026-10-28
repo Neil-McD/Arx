@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-08-06
+last_verified: 2026-10-28
 ---
 
 # Builder Quickstart
@@ -12,7 +12,7 @@ last_verified: 2026-08-06
 
 Launch a community intelligence system that members can join, use, and pay for where appropriate.
 
-The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
+The first version should be simple: one clear community, one useful agent job, one believable access model, and enough shared knowledge for members to get value quickly.
 
 Each community uses its own $79 monthly Builder subscription for Polynet-hosted AI. Existing grandfathered communities may keep operating without Builder, but hosted AI remains unavailable until Builder is active. The canonical platform operator receives included Builder funding. There is no account-wide Builder entitlement, community BYOK option, personal Premium plan, or paid tool tier.
 
@@ -22,7 +22,7 @@ You need a clear answer to four questions:
 
 1. Who is this community for?
 2. What problem should the community help them solve?
-3. What should the agent be good at?
+3. What should the community agent be good at?
 4. What access model should members understand immediately?
 
 If those answers are vague, more settings will not fix the product.
@@ -32,21 +32,21 @@ If those answers are vague, more settings will not fix the product.
 1. Open the Builder offer from Create Community. Existing community funding actions remain available from Billing and Account.
 2. Complete the $79 monthly Builder checkout.
 3. Finish account setup, then name the funded community and define its purpose and public profile.
-4. Configure the community agent.
+4. Write the community agent's instructions.
 5. Add resources that represent durable community knowledge.
-6. Attach skills where repeatable agent behavior is needed.
-7. Configure member access, billing, and roles.
-8. Verify the official Polynet MCP handoff for external harness users.
-9. Publish and share the community funnel.
-10. Improve the system based on member participation and useful signal.
+6. Configure member access, billing, and roles.
+7. Optionally connect your own AI harness through the official Polynet MCP.
+8. Publish and share the community's join page link.
+9. Improve the community based on member participation and useful signal.
 
 ## Builder Mental Model
 
-You are not just creating a chat room. You are packaging expertise, workflows, and community context into an AI-native product.
+You are not just creating a chat room. You are packaging expertise, people, and community knowledge into an AI-native product.
 
-The community is the container. The agent is the active product surface.
-Resources are durable knowledge. Skills are repeatable behavior. The official
-Polynet MCP exposes authorized Polynet context to external harnesses.
+The community is the container. The community agent is the one AI that serves
+every member, inside each member's permissions. Resources are durable
+knowledge. Accepted memory is what the community has learned. The official
+Polynet MCP lets you work on your community from your own AI harness.
 Entitlements decide access.
 
 ## Revenue Mental Model
@@ -54,30 +54,28 @@ Entitlements decide access.
 Members should understand what they are paying for before they pay. A paid Polynet community should make the value legible:
 
 - the problem the community helps solve
-- the agent capability members can use
-- the resources or workflows members get access to
+- what the community agent can help members do
+- the resources and events members get access to
 - the people or expert context members join
 - the expected ongoing value of participating
 
-The cash path is simple: configure the community, define the paid access model, connect payout readiness, share the funnel, let members check out, and grant access only after backend entitlement exists.
+The cash path is simple: configure the community, define the paid access model, connect payout readiness, share the join page link, let members check out, and grant access only after backend entitlement exists.
 
 ## Recommended Build Order
 
 1. Start with the community purpose.
 2. Write the simplest public explanation of the community.
-3. Configure the agent for one primary job.
+3. Give the agent one primary job in its instructions.
 4. Add a small number of high-signal resources.
-5. Add only the skills needed for repeated workflows.
-6. Configure access, billing, and roles.
-7. Verify payout readiness if the community collects money.
-8. Test as a member before inviting people.
-9. Verify the Polynet MCP setup packet and OAuth handoff.
-10. Share the funnel link.
+5. Configure access, billing, and roles.
+6. Verify payout readiness if the community collects money.
+7. Test as a member before inviting people.
+8. Share the join page link.
 
 ## Current Alpha Boundaries
 
 - Visibility is `Published` or `Unlisted`.
-- The funnel is the canonical public entry surface.
+- The join page (`/c/<slug>`) is the canonical public entry surface. It is generated from community settings; there is no funnel editor.
 - Published does not mean ungated.
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
@@ -94,37 +92,36 @@ The cash path is simple: configure the community, define the paid access model, 
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
-- Polynet does not mount third-party MCP servers in member or community
-  harnesses.
-- Skills are package attachments and should be injected intentionally.
+- The official Polynet MCP is for builders (owners and admins) only.
+- Polynet does not mount third-party MCP servers or app integrations into
+  the community agent.
+- Community sites on `polynet.page` are staging-only until the production edge
+  is live.
 
 ## Rules
 
 1. Start with one useful community loop before adding complexity.
 2. Keep the agent's job concrete.
 3. Use resources for durable knowledge.
-4. Use skills for repeatable behavior.
-5. Keep access and billing simple enough for members to understand.
-6. Do not use prompts as the only place where important product truth lives.
-7. Do not add integrations before the core community loop works.
-8. Do not invite members before testing join, access, chat, resources, and the
-   member personal agent under community context.
+4. Keep access and billing simple enough for members to understand.
+5. Do not use prompts as the only place where important product truth lives.
+6. Do not invite members before testing join, access, chat, resources, and the
+   Agent page as a member.
 
 ## Common Mistakes
 
 - Launching with a vague agent job.
 - Adding many resources before curating the first useful few.
-- Expanding integrations before the core community loop is useful.
 - Treating a successful checkout redirect as membership before backend verification.
 - Giving admins or moderators more authority than they need.
-- Letting the public funnel say more than the product can currently do.
+- Letting public copy promise more than the product can currently do.
 
 ## Related Concepts
 
 - `community`
 - `agent`
-- `funnel`
+- `join-page`
 - `resource`
-- `skill`
+- `community-site`
 - `polynet-mcp`
 - `entitlement`
