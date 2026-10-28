@@ -47,6 +47,11 @@ these into the concept; never drop them:
   reactions, live updates) and its agent, plus events, courses and knowledge
   when the community has them. Give them pages or sections as the design
   wants; skip what the community doesn't have yet.
+- **The conversation through Polynet's blocks**: `<polynet-channels>` and
+  `<polynet-chat>` are the standard way to show channels and chat. Design
+  the room around them (placement, size, tokens, `::part()` styling, your
+  own words in their slots); `polynet-sdk` has the details. Custom views
+  built with the SDK go beside them, not instead.
 - **A way to Polynet Studio** for owners and admins: link `session.studio_url`
   for settings, members, billing and creating events or courses.
 

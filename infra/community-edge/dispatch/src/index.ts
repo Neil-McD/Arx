@@ -2,6 +2,7 @@
 //
 //   /__polynet/auth/*  "Sign in with Polynet" for this community's own domain
 //   /__polynet/api     same-origin proxy to the Polynet backend, as the signed-in member
+//   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat>), loaded by ui.js
 //   everything else    the community's own front end (a user Worker with static assets)
 //
 // The member session lives only in an HttpOnly cookie on the community's domain.
@@ -11,8 +12,15 @@
 import { SDK_SOURCE } from "./sdk";
 import { LLMS_TXT } from "./llms";
 import { UI_SOURCE } from "./ui";
+import { KIT_SOURCE } from "./blocks/kit";
+import { CHANNELS_SOURCE } from "./blocks/channels";
+import { CHAT_SOURCE } from "./blocks/chat";
 // The live-updates client, served from this domain so no community site loads a third-party script.
 import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
+
+// Polynet's blocks, each its own module at /__polynet/blocks/<name>.js (ui.js loads them).
+const BLOCKS: Record<string, string> = { kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE };
+const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
 
@@ -438,6 +446,19 @@ export default {
       });
     }
     if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
+    if (url.pathname.startsWith(BLOCKS_PREFIX)) {
+      const name = /^([a-z]+)\.js$/.exec(url.pathname.slice(BLOCKS_PREFIX.length))?.[1];
+      if (!name || !Object.hasOwn(BLOCKS, name)) {
+        return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      return new Response(BLOCKS[name], {
+        headers: {
+          "Content-Type": "text/javascript; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (url.pathname === "/__polynet/ui.js") {
       return new Response(UI_SOURCE, {
         headers: {

@@ -337,6 +337,33 @@ test("every site gets the shell (ui.js) and the member's account, read with thei
   expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBeTruthy();
 });
 
+test("every site serves Polynet's blocks as modules; ui.js loads them only where they're placed", async () => {
+  for (const name of ["kit", "channels", "chat"]) {
+    const res = await edge.fetch(request(`/__polynet/blocks/${name}.js`, { headers: { "sec-fetch-site": "cross-site" } }), env());
+    expect(res.status, name).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    const source = await res.text();
+    expect(source).not.toContain("https://");
+    if (name !== "kit") expect(source).toContain('import polynet from "/__polynet/sdk.js"');
+  }
+  expect(await (await edge.fetch(request("/__polynet/blocks/chat.js"), env())).text()).toContain('customElements.define("polynet-chat"');
+  expect(await (await edge.fetch(request("/__polynet/blocks/channels.js"), env())).text()).toContain('customElements.define("polynet-channels"');
+  // Unknown blocks are Polynet's 404, never the site's own fallback page.
+  const site = vi.fn(async () => new Response("<html>site</html>", { headers: { "content-type": "text/html" } }));
+  const e = { ...env(), DEV_USER_WORKER: { fetch: site } };
+  for (const path of ["/__polynet/blocks/members.js", "/__polynet/blocks/", "/__polynet/blocks/%2e%2e%2fui.js", "/__polynet/blocks/Chat.js", "/__polynet/blocks/chat.js.map", "/__polynet/blocks/constructor.js"]) {
+    const res = await edge.fetch(request(path), e);
+    expect(res.status, path).toBe(404);
+  }
+  expect(site).not.toHaveBeenCalled();
+
+  const ui = await (await edge.fetch(request("/__polynet/ui.js"), env())).text();
+  expect(ui).toContain('const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat" };');
+  expect(ui).toContain('import("/__polynet/blocks/" + BLOCKS[tag] + ".js")');
+});
+
 test("polynet.page itself is the front door: a page and the builder guide", async () => {
   const e = { ...env(), POLYNET_SITES_DOMAIN: "polynet.page" };
   const page = await edge.fetch(new Request("https://polynet.page/"), e);

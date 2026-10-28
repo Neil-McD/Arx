@@ -80,20 +80,44 @@ test("feed returns posts oldest first; errors surface as PolynetError", async ()
   await expect(polynet.feed("missing")).rejects.toMatchObject({ name: "PolynetError", code: "semantic_not_found" });
 });
 
+test("feed pages back through history with the list's cursor", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (!input.cursor) return ok({ entries: [{ ref: "interaction:root:2", object_type: "root" }], next_cursor: "1700", truncated: true });
+      return ok({ entries: [{ ref: "interaction:root:1", object_type: "root" }], next_cursor: null, truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const newest = await polynet.feed("general", { limit: 20 });
+  expect(newest.map((entry: any) => entry.ref)).toEqual(["interaction:root:2"]);
+  expect(newest.cursor).toBe("1700");
+  const older = await polynet.feed("general", { cursor: newest.cursor });
+  expect(older.map((entry: any) => entry.ref)).toEqual(["interaction:root:1"]);
+  expect(older.cursor).toBeNull();
+  const inputs = calls.filter((call) => call.body?.tool === "polynet_list").map((call) => call.body.input);
+  expect(inputs.slice(-2)).toEqual([
+    { path: "/communities/run-club/channels/general/", limit: 20 },
+    { path: "/communities/run-club/channels/general/", limit: 50, cursor: "1700" },
+  ]);
+});
+
 test("channels follows every page of the listing", async () => {
   const calls = stubFetch({
     "/__polynet/auth/session": signedIn,
     "/__polynet/api": (_url, init) => {
       const { input } = JSON.parse(String(init.body));
-      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true, unread: true, mentioned: true }], truncated: true, next_cursor: "page2" });
+      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true, unread: true, mentioned: true, seen_through_at: 1700 }], truncated: true, next_cursor: "page2" });
       return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false } }], truncated: false });
     },
   });
   const polynet = await loadSdk();
   await polynet.session();
   expect(await polynet.channels()).toEqual([
-    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, unread: true, mentioned: true },
-    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, unread: false, mentioned: false },
+    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, unread: true, mentioned: true, seenThroughAt: 1700 },
+    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, unread: false, mentioned: false, seenThroughAt: null },
   ]);
   const channelCalls = calls.filter((call) => call.body?.input?.path === "/communities/run-club/channels/");
   expect(channelCalls.map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);

@@ -150,6 +150,7 @@ async function channels() {
         slug: entry.slug, name: entry.name, path: entry.path, isGeneral: entry.is_general === true,
         canPost: !entry.capabilities || entry.capabilities.canPost !== false,
         unread: entry.unread === true, mentioned: entry.mentioned === true,
+        seenThroughAt: typeof entry.seen_through_at === "number" ? entry.seen_through_at : null,
       };
     });
 }
@@ -166,11 +167,18 @@ async function markRead(channel, throughAt) {
   return call("community.channel.mark_read", input);
 }
 
-// Posts in a channel, oldest first. Each has ref, path, snippet, actor, reactions,
-// reacted_by_me, by_me, reply_count, attachments, created_at.
+// Posts in a channel, newest page, oldest first. Each has ref, path, snippet, actor,
+// reactions, reacted_by_me, by_me, reply_count, attachments, created_at. The list's
+// cursor fetches the page before it (feed(channel, { cursor: posts.cursor })); null
+// at the start of the channel.
 async function feed(channel, options) {
-  const value = await list(channelPath(channel), { limit: (options && options.limit) || 50 });
-  return (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize);
+  options = options || {};
+  const input = { limit: options.limit || 50 };
+  if (options.cursor) input.cursor = options.cursor;
+  const value = await list(channelPath(channel), input);
+  const posts = (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize);
+  posts.cursor = value.next_cursor || null;
+  return posts;
 }
 
 // A post and its replies, oldest first.

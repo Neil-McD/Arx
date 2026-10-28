@@ -152,6 +152,89 @@ community only: { member { name, handle, avatar_url }, community { slug,
 name, role, studio_url }, links { communities, discover, settings, messages } }.
 The member's other communities are never readable from a site.
 
+## Blocks: channels and chat
+
+Polynet's blocks are the standard way to show a community's channels and
+conversation. Polynet owns how they behave (data, permissions, live updates,
+keyboard, screen readers); your site owns how they look. Place the tags;
+ui.js (on every page) loads each block only on pages that have it:
+
+    <polynet-channels></polynet-channels>
+    <polynet-chat></polynet-chat>
+
+- <polynet-channels>: the channels the member can read, as a nav of links,
+  with an unread dot and an "@" badge where someone mentioned them. Arrow
+  keys move between channels; Enter opens one.
+- <polynet-chat>: the current channel's feed, oldest to newest, live: posts
+  grouped by author, day dividers, a "New" divider at what the member hadn't
+  read, older posts as they scroll up, markdown, images and files,
+  reactions, typing ("Sam is typing…") and threads ("3 replies" opens the
+  thread beside the feed, or over it when the block is narrow; Esc closes
+  it). It marks the channel read when the member reaches the bottom.
+  Signed out (or not a member) it shows a sign-in and join prompt, never
+  posts. Give it a height (it scrolls inside): polynet-chat { height: 70vh }
+  is the default; set your own, e.g. height: 100% inside a sized layout.
+  channel="<slug>" pins it to one channel instead of following the page.
+
+Which channel: the URL says, ?channel=<slug> (no parameter: the General
+channel). Selecting a channel in <polynet-channels> updates the URL and
+fires "polynet:channel" on document with detail { slug }; <polynet-chat>
+follows it, and so can your own code. To switch channels from your own
+navigation, link to ?channel=<slug>, or dispatch the event yourself:
+
+    document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }));
+
+When the chat marks a channel read it fires "polynet:read" with { slug }.
+Each block reflects its state on the tag as state="loading" | "ready" |
+"signed-out" | "error" (the chat also "unavailable"), for your layout:
+polynet-chat[state=signed-out] { ... }.
+
+Theme: the blocks use the page's font and inherit its text color. They read
+the same tokens as the shell; set them once on :root:
+
+    :root {
+      --polynet-accent: #c2410c;   /* unread dot, "@" badge, agent name, "New", focus */
+      --polynet-on-accent: #fff;
+      --polynet-text: #1c1917;     /* default: the page's color */
+      --polynet-muted: #78716c;    /* times, dividers' labels (default: text at 62%) */
+      --polynet-border: #e7e5e4;   /* hairlines (default: text at 14%) */
+      --polynet-surface: #fbfaf7;  /* behind the narrow thread and "New messages" (set it on dark sites) */
+      --polynet-radius: 10px;
+    }
+
+Restyle any piece with ::part():
+- polynet-channels: nav, list, channel (each link; also channel-current,
+  channel-unread, channel-mentioned), channel-hash, channel-name,
+  unread-dot, mention-badge, status, retry.
+- polynet-chat: chat, header, title, feed, history, messages, message (also
+  message-grouped, message-agent, message-mine), avatar (avatar-agent),
+  message-author, message-time, message-body, message-edited, attachments,
+  attachment (attachment-image, attachment-video, attachment-file),
+  reactions, reaction (reaction-mine), replies, day-divider, new-divider,
+  empty, typing, jump, state, gate, gate-text, sign-in, join, retry,
+  thread-panel, thread-header, thread-close, thread-messages,
+  thread-divider, thread-typing.
+
+Slots, for your own words: slot="header" (polynet-channels and
+polynet-chat: replaces the chat's "#channel" title), slot="empty" (an empty
+channel), slot="signed-out" (the chat's sign-in line).
+
+Example, in your design's own layout:
+
+    <style>
+      .talk { display: grid; grid-template-columns: 220px 1fr; gap: 32px; }
+      .talk polynet-chat { height: calc(100dvh - 160px); }
+      polynet-chat::part(message-author) { text-transform: uppercase; letter-spacing: .06em; }
+      @media (max-width: 720px) { .talk { grid-template-columns: minmax(0, 1fr); } }
+    </style>
+    <section class="talk">
+      <polynet-channels></polynet-channels>
+      <polynet-chat><span slot="empty">Nothing logged yet. First one out?</span></polynet-chat>
+    </section>
+
+Build your own views with the SDK (below) beside the blocks when the design
+wants more.
+
 ## Errors
 
 Failed calls throw PolynetError with .code, .message and .status. Codes:
@@ -164,14 +247,17 @@ Failed calls throw PolynetError with .code, .message and .status. Codes:
 
 ## Chat
 
-- channels() -> [{ slug, name, path, isGeneral, canPost, unread, mentioned }].
+- channels() -> [{ slug, name, path, isGeneral, canPost, unread, mentioned,
+  seenThroughAt }] (seenThroughAt: when the member last read it, ms, or null).
   Use the one with isGeneral as the default. Hide the composer when canPost is
   false. unread: posts the member hasn't seen; mentioned: someone @mentioned
   them there. markRead(channelSlug, throughAt?) clears both, up to now or up
   to throughAt (the newest post they saw, or a time); call it when the member
   is looking at the channel.
-- feed(channelSlug, { limit }) -> the newest posts (default 50), oldest first
-  (chat order; reverse() for newest-first). Older history isn't pageable yet.
+- feed(channelSlug, { limit, cursor }) -> the newest posts (default and at
+  most 50), oldest first (chat order; reverse() for newest-first). The list
+  has .cursor: pass it back (feed(slug, { cursor: posts.cursor })) for the
+  page before; null means you reached the start of the channel.
 - thread(channelSlug, post.ref) -> the post, then its replies, oldest first.
 
 Each post or reply has:

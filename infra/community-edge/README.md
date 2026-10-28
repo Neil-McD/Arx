@@ -10,8 +10,15 @@ one edge Worker in front of every community front end.
                          ├─ /__polynet/api    → Polynet backend /runtime/app (server-side, edge secret + session cookie)
                          ├─ /__polynet/upload, /__polynet/files/<id> → /runtime/app/upload, /runtime/app/file
                          ├─ /__polynet/agent, /__polynet/agent/messages → /runtime/app/agent, /runtime/app/agent_messages (streamed)
+                         ├─ /__polynet/sdk.js, /__polynet/live.js, /__polynet/llms.txt → the builder kit (SDK, its live client, its doc)
+                         ├─ /__polynet/ui.js  → the shell (<polynet-account>), injected into every page; loads blocks on demand
+                         ├─ /__polynet/blocks/<name>.js → Polynet's blocks: channels (<polynet-channels>), chat (<polynet-chat>),
+                         │                      and kit (what they share); any other name is 404
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
+
+A page to try the blocks on a staging site: `dispatch/examples/blocks-demo/`
+(deploy it with the CLI like any site).
 
 ## Run locally
 

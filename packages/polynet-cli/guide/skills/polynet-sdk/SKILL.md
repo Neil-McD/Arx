@@ -39,6 +39,38 @@ if (!session.signed_in) {
 - `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show
   owners and admins a link to `session.studio_url`.
 
+## Channels and chat: the blocks
+
+The standard way to show channels and the conversation is Polynet's blocks.
+Place the tags; `ui.js` (on every page) loads each one only where it's used:
+
+```html
+<polynet-channels></polynet-channels>
+<polynet-chat><span slot="empty">Nothing logged yet. First one out?</span></polynet-chat>
+```
+
+- The channel lives in the URL: `?channel=<slug>` (none: General). Picking
+  one in `<polynet-channels>` updates the URL and fires `polynet:channel`
+  (`detail: { slug }`) on `document`; `<polynet-chat>` follows. Link to
+  `?channel=<slug>` or dispatch the event from your own navigation.
+  `channel="<slug>"` pins a chat to one channel.
+- The chat scrolls inside itself: give it a height
+  (`polynet-chat { height: calc(100dvh - 160px) }`).
+- They take the page's font and color and read the shell's tokens
+  (`--polynet-accent`, `--polynet-on-accent`, `--polynet-text`,
+  `--polynet-muted`, `--polynet-border`, `--polynet-surface`,
+  `--polynet-radius`). Set `--polynet-surface` on dark sites.
+- Restyle pieces with `::part()` (`channel`, `channel-current`,
+  `unread-dot`, `mention-badge`, `message`, `message-author`, `message-body`,
+  `message-agent`, `reaction`, `replies`, `day-divider`, `new-divider`,
+  `thread-panel`, `typing`, …; the full list is in llms.txt). Slots:
+  `header`, `empty`, `signed-out`.
+- `state="loading|ready|signed-out|error"` on each tag lets your layout
+  react, e.g. `polynet-chat[state=signed-out]`.
+
+Signed out, the chat shows a sign-in and join prompt and never posts. Build
+custom views with the SDK (below) beside the blocks, not instead of them.
+
 ## A live feed in your own markup
 
 ```html
@@ -90,7 +122,7 @@ Hide the composer when `channel.canPost` is false. `edit(p, text)` when
 ## Unread, mentions, typing, who's online
 
 ```js
-const channels = await polynet.channels();      // each has unread and mentioned: show a dot
+const channels = await polynet.channels();      // each has unread, mentioned and seenThroughAt
 await polynet.markRead(general.slug);           // the member is looking at it now
 
 // Mention a member: their @handle in the text, and the member in mentions.
@@ -134,6 +166,7 @@ words can take a few seconds while the agent uses tools.
 | Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` |
 | What the community knows | `knowledge(query?)` |
 | Members | `members()`, `profile(member)`, `online()` |
+| Older posts | `feed(slug, { cursor: posts.cursor })`; `cursor` is null at the start |
 
 ## Using a bundler
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ./LICENSE-MIT)
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to their account, their
-// communities, Discover, messages and settings. Its structure, keyboard
+// communities, Discover, messages and settings. It also loads Polynet's
+// blocks (/__polynet/blocks/<name>.js) on pages that place them. Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
 // CSS custom properties. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
@@ -262,4 +263,24 @@ function ensureShell() {
 const FALLBACK_DELAY_MS = 1500;
 if (document.readyState === "complete") setTimeout(ensureShell, FALLBACK_DELAY_MS);
 else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELAY_MS), { once: true });
+
+// Polynet's blocks load only on pages that place them, now or later (a
+// single-page app may render <polynet-chat> after a route change).
+const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat" };
+const pendingBlocks = new Set(Object.keys(BLOCKS));
+let blockCheck = false;
+function loadBlocks() {
+  blockCheck = false;
+  for (const tag of Array.from(pendingBlocks)) {
+    if (!document.querySelector(tag)) continue;
+    pendingBlocks.delete(tag);
+    import("/__polynet/blocks/" + BLOCKS[tag] + ".js").catch(() => pendingBlocks.add(tag));
+  }
+  if (!pendingBlocks.size) blockObserver.disconnect();
+}
+const blockObserver = new MutationObserver(() => {
+  if (!blockCheck) { blockCheck = true; queueMicrotask(loadBlocks); }
+});
+blockObserver.observe(document.documentElement, { childList: true, subtree: true });
+loadBlocks();
 `;
