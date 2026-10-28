@@ -170,6 +170,27 @@ test("every site places Polynet's channels, chat and members blocks", () => {
     .toContain("No page has <polynet-chat>");
 });
 
+test("a block named only in a JavaScript comment isn't placed; one in code beside URLs and regexes is", () => {
+  const shell = GOOD.replace(BLOCKS, '<div id="app"></div>');
+  const missing = (extra: Array<{ path: string; text: string }>, html = shell) =>
+    (problems(html, extra).errors.match(/No page has <polynet-[a-z]+>/g) ?? []).sort();
+  // Line and block comments, in a bundle, a module and an inline script.
+  expect(missing([
+    { path: "/assets/app.js", text: '// TODO: document.createElement("polynet-chat")\nmount();' },
+    { path: "/lib/people.mjs", text: '/* customElements: "polynet-members"\n   placed later */ export {};' },
+  ], shell.replace('<div id="app"></div>', '<script type="module">// <polynet-channels></polynet-channels>\n/* "polynet-chat" */ go();</script>'))).toEqual([
+    "No page has <polynet-channels>", "No page has <polynet-chat>", "No page has <polynet-members>",
+  ]);
+  // Strings with // in them, regex literals with /* in them, and a comment beside real code.
+  const bundle = 'const u="https://polynet.page//x",r=/[/*]/g,s=/https?:\\/\\//;\n' +
+    'h(`<polynet-members>`);/* chat */ document.createElement("polynet-chat"); // done\n' +
+    "x = a / b / c; jsx('polynet-channels', {});";
+  expect(missing([{ path: "/assets/index-abc.js", text: bundle }])).toEqual([]);
+  // Non-JavaScript scripts (a template, JSON) aren't treated as code.
+  expect(missing([], shell.replace('<div id="app"></div>',
+    '<script type="text/template"><a href=//x.test><polynet-chat></polynet-chat></a></script><polynet-channels></polynet-channels><polynet-members></polynet-members>'))).toEqual([]);
+});
+
 test("site checks warn about what needs a person's judgment", () => {
   const warned = problems(GOOD.replace("<polynet-account>", '<label>Name <input></label><input id="q"><label for="q">Search</label><input type="email"><polynet-account>'), [
     { path: "/app.css", text: "button:focus { outline: none } .x { animation: spin 1s }" },
