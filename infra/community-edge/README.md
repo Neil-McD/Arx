@@ -70,6 +70,15 @@ Production refuses site names ending in `-staging`. Sign-in cookies are
 | Secret | `POLYNET_EDGE_SECRET` (`wrangler secret put --env staging`), equal to the backend's `POLYNET_COMMUNITY_EDGE_SECRET` |
 | Backend | origin registered with `communityApps:registerCommunityDomainInternal` |
 
+Production uses the same zone:
+
+| Piece | Value |
+| --- | --- |
+| Edge Worker | `polynet-edge-production`, routes `*.polynet.page/*` and `polynet.page/*` (`wrangler deploy --env production`) |
+| Sites | namespace `polynet-sites-production` |
+| Hostname map | KV `polynet-routes-production` |
+| Secret | `POLYNET_EDGE_SECRET` (`wrangler secret put --env production`), equal to production's `POLYNET_COMMUNITY_EDGE_SECRET` |
+
 Deploy a community site (owner or admin; signs in through the browser once):
 
 ```bash
@@ -99,4 +108,4 @@ updating live, the community agent streaming, and only `/__polynet/sdk.js` and
 
 - Publish `@polynet/cli` 0.3.0 (production by default, `--staging` for staging; npm account `polynet` needs 2FA on).
 - Founders' own domains (Cloudflare for SaaS custom hostnames, `*/*` route).
-- The production edge (`--env production`), namespace and routes map, then `polynet.page` on the Public Suffix List.
+- `polynet.page` on the Public Suffix List (after renewing the domain: the list needs two years left).

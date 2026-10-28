@@ -1,5 +1,5 @@
 {
-  // Local dev (default) and the deployed staging edge (`--env staging`).
+  // Local dev (default), the staging edge (`--env staging`) and the production edge (`--env production`).
   // POLYNET_EDGE_SECRET is never committed: .dev.vars locally, a Worker secret when deployed.
   "name": "polynet-community-edge",
   "main": "src/index.ts",
@@ -36,6 +36,23 @@
       },
       "dispatch_namespaces": [{ "binding": "DISPATCHER", "namespace": "polynet-sites-staging" }],
       "kv_namespaces": [{ "binding": "ROUTES", "id": "1f354dc000c34b919cc2c69249363f9e" }]
+    },
+    // Every <community>.polynet.page site against production, and the front door at polynet.page.
+    "production": {
+      "name": "polynet-edge-production",
+      "workers_dev": false,
+      "routes": [
+        { "pattern": "*.polynet.page/*", "zone_name": "polynet.page" },
+        { "pattern": "polynet.page/*", "zone_name": "polynet.page" }
+      ],
+      "vars": {
+        "POLYNET_API_URL": "https://wry-hawk-715.convex.site",
+        "POLYNET_AUTH_URL": "https://www.polynet.ai",
+        "POLYNET_LIVE_URL": "https://wry-hawk-715.convex.cloud",
+        "POLYNET_SITES_DOMAIN": "polynet.page"
+      },
+      "dispatch_namespaces": [{ "binding": "DISPATCHER", "namespace": "polynet-sites-production" }],
+      "kv_namespaces": [{ "binding": "ROUTES", "id": "c95c9a88c955482aace6430832214b01" }]
     }
   }
 }
