@@ -221,9 +221,8 @@ still leave an untracked orphan; this slice does not claim transactional storage
 and database writes or run a historical storage sweep.
 
 The old thread chat and its ticketed upload route are deleted (POL-26). The
-composer still accepts the old inline attachment shape from the cached
-production web and refuses it with a reattach message; only uploaded attachment
-ids are honored. Deleted attachment rows stay tombstones and are never listed.
+composer accepts only uploaded attachment ids; the old inline attachment shape
+was removed from its validator once production ran 150828216 (POL-30). Deleted attachment rows stay tombstones and are never listed.
 
 Deployment must coordinate backend and web changes; stale raw-ID upload clients
 must refresh rather than use an insecure compatibility shim. Local streaming

@@ -122,7 +122,7 @@ test("concurrent retries produce one message and one claimed attachment", async 
   expect(rows[0].status).toBe("uploaded");
 });
 
-test.each(["human", "personal_agent", "community_agent"] as const)("%s roots and replies bind the original full payload to the retry key", async actor => {
+test.each(["human", "community_agent_for_member", "community_agent"] as const)("%s roots and replies bind the original full payload to the retry key", async actor => {
   for (const reply of [false, true]) {
     const { t, f, upload } = await setup();
     const a = await upload(reply ? { uploadRootId: f.rootId } : {});
@@ -134,7 +134,7 @@ test.each(["human", "personal_agent", "community_agent"] as const)("%s roots and
       ? t.withIdentity({ subject: "member" }).mutation(internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
           { userId: f.memberId, authSubject: "member", ...args, ...overrides })
       : t.withIdentity({ subject: "member" }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage,
-          { ...args, asPersonalAgent: actor === "personal_agent", ...overrides });
+          { ...args, asCommunityAgent: actor === "community_agent_for_member", ...overrides });
     await send();
     await send(); // Same attempt, including a response-lost retry, is accepted.
     for (const attachments of [[], [{ attachmentId: b.attachmentId }], args.attachments.concat({ attachmentId: b.attachmentId })]) {
@@ -283,15 +283,6 @@ test("duplicate references, raw storage IDs and inline persistence fail closed",
       communityId: f.communityId, channelId: f.channelId, idempotencyKey: "send-one", text: "send", attachments: [attachment],
     } as any)).rejects.toThrow();
   }
-});
-
-test("the cached client's old inline attachment shape is refused with a reattach message", async () => {
-  const { t, f, upload } = await setup();
-  const a = await upload();
-  await expect(t.withIdentity({ subject: "member" }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
-    communityId: f.communityId, channelId: f.channelId, idempotencyKey: "send-old", text: "send",
-    attachments: [{ name: "old.png", type: "image", size: PNG.length, storageId: a.storageId }],
-  } as any)).rejects.toThrow("reattach");
 });
 
 test("deleted canonical attachments are not listed", async () => {

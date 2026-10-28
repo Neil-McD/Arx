@@ -51,8 +51,8 @@ pairs. The online cutover therefore stops new drift before repairing old data.
    are verified.
 4. Add realtime request-list delivery only after the authority model is strict.
 
-The cached `community:getMyJoinRequestBySlug` compatibility operation was
-deleted in Oct 2026 (POL-25); no current client calls it.
+The cached `community:getMyJoinRequestBySlug` compatibility operation is
+deleted; access reads go through `communityAccessQueries:getMyCommunityAccessBySlug`.
 
 ## Public join page display freshness
 

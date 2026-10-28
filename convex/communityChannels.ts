@@ -169,20 +169,6 @@ export const renameCommunityChannel = mutation({
   },
 });
 
-// Cached clients may still call this name. Never accept a stale full-directory
-// rewrite: preserve the transport boundary only, with an explicit refresh error.
-export const reorderCommunityChannels = mutation({
-  args: {
-    userId: v.optional(v.id("users")), authSubject: v.optional(v.string()),
-    communityId: v.id("communities"), orderedChannelIds: v.array(v.id("communityChannels")),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    throw new Error("community_channel_refresh_required");
-  },
-});
-
 export const moveCommunityChannel = mutation({
   args: {
     userId: v.optional(v.id("users")),
