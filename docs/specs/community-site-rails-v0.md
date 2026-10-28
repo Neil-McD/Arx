@@ -57,7 +57,7 @@ any page without one. It grows into the rails:
   shows a **"← Back to {community}"** bar when it was opened from a site
   (`?from=` validated against the community's registered site origins).
 
-### Required on the site (a deploy fails without them)
+### On every site (Polynet's /chat and /people carry them; see *Its own world*)
 
 - **`<polynet-channels>`**: the channels the member can read, with unread
   counts and a mention badge. Selecting one drives the chat.
@@ -73,6 +73,52 @@ any page without one. It grows into the rails:
 - **`<polynet-online>`**: a compact "who's here now" strip.
 - **`<polynet-knowledge>`**, **`<polynet-events>`**, **`<polynet-courses>`**.
 - **`<polynet-ask>`**: ask the community agent privately.
+
+## Its own world (Oct 28)
+
+Approved by Neil: nothing a member presses on a community site drops them
+into Polynet's generic app. **The site draws one frame; Polynet fills every
+standard page into it.**
+
+- **The frame.** Every site ships `/frame.html`: its own header, navigation,
+  footer, fonts and colors around exactly one `<polynet-page></polynet-page>`.
+  Deploys fail without it (`checkSite`). Its links start from the root
+  (`/styles.css`), because it is shown at nested paths like `/people/sam`.
+- **Standard pages exist from the first deploy.** For a standard path the site
+  doesn't serve itself, the edge serves the site's frame there (status 200,
+  the usual shell injection, `<title>` set to "<Page> · <community>").
+  `<polynet-page>` (`/__polynet/blocks/page.js`) reads the address and renders
+  the page's blocks in the page's own DOM, so the site's CSS and `::part()`
+  rules style it. No frame: Polynet's own "this page needs the site's frame"
+  page (404), never a blank.
+- **Override rule.** A site may ship its own file at a standard path
+  (`chat.html`, `chat/index.html`, `people/...`); the site's file wins, and it
+  must place the same blocks (`checkSite`). Client-side routes can't override
+  a standard page: only a file at that path does.
+- **Community pages** use blocks the site's code can already see (chat,
+  members, later events, courses, knowledge, ask). **Personal pages**
+  (Messages, Settings, Your communities, Join) and **admin** (Manage) come
+  later inside a private isolated window on a separate origin, so site code
+  never reads a member's DMs, other communities or settings; until then they
+  keep their current Studio links.
+- **The two allowed hops** off the site: Polynet's sign-in page and Stripe's
+  checkout. Everything else stays on the site.
+
+The route table lives in one place (`STANDARD_PAGES` in
+`packages/polynet-cli/checks.mjs`), read by the edge, `<polynet-page>`, the
+shell's menu ("In this club") and the checks.
+
+| Path | Page | Slice |
+| --- | --- | --- |
+| `/chat` | channels + chat | 3a-1 (now) |
+| `/people`, `/people/<handle>` | members; the profile open for that handle | 3a-1 (now) |
+| `/events`, `/learn`, `/knowledge`, `/ask` | the recommended blocks as pages | with slice 4's blocks |
+| `/discover` | communities to join | 3a, isolated window |
+| `/messages`, `/settings`, `/communities`, `/join` | personal pages | 3a, isolated window |
+| `/manage` | community admin | after the isolated window |
+
+Until `/manage` exists, "Manage this community" opens Studio's community
+settings (`/c/<slug>/settings/community`), not the public join page.
 
 ## Private messages stay private
 
@@ -113,8 +159,11 @@ the community deletes them (existing `deleteCommunityPresenceForUser`).
 ## Enforcement
 
 - `checkSite` (shared by `polynet check`, CLI deploy and MCP deploy) fails
-  when the built output has no `<polynet-channels>`, `<polynet-chat>` or
-  `<polynet-members>`, and warns on missing recommended blocks.
+  without a root `index.html`, without `/frame.html` holding exactly one
+  `<polynet-page>`, when the frame uses relative paths, and when a site's own
+  standard page lacks that page's blocks. (Until Oct 28 it required the three
+  blocks somewhere on the site; the guaranteed `/chat` and `/people` replace
+  that rule.)
 - The guide (`AGENTS.md`, skills, `llms.txt`) leads with the blocks: design
   the world around them, then add custom views.
 - Existing staging sites get a grace warning for one release before deploys

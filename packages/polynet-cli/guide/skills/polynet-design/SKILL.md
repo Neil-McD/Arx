@@ -12,7 +12,8 @@ it isn't done.
 
 There is no template. Every site starts from its own concept. What every
 site shares is Polynet's blocks: `<polynet-channels>`, `<polynet-chat>` and
-`<polynet-members>` (required; deploys fail without them) and the
+`<polynet-members>` (on every site's `/chat` and `/people`, inside the
+site's own frame) and the
 `<polynet-account>` shell. They behave the same everywhere so members always
 know how to talk and find each other; how they look is your job. A
 direction isn't done until they look like they were made for it.

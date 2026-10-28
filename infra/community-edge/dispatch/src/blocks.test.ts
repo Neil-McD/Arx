@@ -13,6 +13,7 @@ import { CHAT_SOURCE } from "./blocks/chat";
 import { COMPOSER_SOURCE } from "./blocks/composer";
 import { MEMBERS_SOURCE } from "./blocks/members";
 import { PROFILE_SOURCE } from "./blocks/profile";
+import { PAGE_SOURCE } from "./blocks/page";
 import { UI_CSS, UI_SOURCE } from "./ui";
 
 const SITE = "https://run-club.polynet.test";
@@ -117,7 +118,7 @@ export default {
     }
     const f = document.createDocumentFragment(); f.append(p); return f;
   },
-  account: async () => ({ member: {}, community: {}, links: { messages: "https://polynet.test/?dm=inbox" } }),
+  account: async () => fake.account || ({ member: {}, community: {}, links: { messages: "https://polynet.test/?dm=inbox" } }),
   signOut: async () => {},
 };
 `;
@@ -207,6 +208,7 @@ async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}
     "/__polynet/ui.js": UI_SOURCE, "/__polynet/sdk.js": FAKE_SDK, "/__polynet/blocks/kit.js": KIT_SOURCE,
     "/__polynet/blocks/channels.js": CHANNELS_SOURCE, "/__polynet/blocks/chat.js": CHAT_SOURCE, "/__polynet/blocks/composer.js": COMPOSER_SOURCE,
     "/__polynet/blocks/members.js": MEMBERS_SOURCE, "/__polynet/blocks/profile.js": PROFILE_SOURCE, "/__polynet/ui.css": UI_CSS,
+    "/__polynet/blocks/page.js": PAGE_SOURCE,
   };
   await page.route(`${SITE}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -1292,4 +1294,124 @@ test("a thread's authors open profiles too", async () => {
   await thread.locator("[part=message-author]").nth(1).click();
   await expect.poll(() => panel(page).locator("[part=name]").textContent()).toBe("Sam Rivera");
   await page.close();
+});
+
+// A site's frame: its own header, navigation and footer around one <polynet-page>.
+const frame = (inside = "") => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Run Club</title>
+<link rel="stylesheet" href="/__polynet/ui.css"><script type="module" src="/__polynet/ui.js"></script></head>
+<body style="font-family: Georgia, serif; margin: 0">
+<header><nav aria-label="Run Club"><a href="/">Home</a> <a href="/chat">Talk</a> <a href="/people/">Crew</a></nav><polynet-account></polynet-account></header>
+<main style="padding: 16px"><polynet-page>${inside}</polynet-page></main>
+</body></html>`;
+const box = async (locator: ReturnType<Page["locator"]>) => (await locator.boundingBox())!;
+
+test("<polynet-page> at /chat: channels beside a chat with a height, in the page's own DOM; one column on a phone", async () => {
+  const page = await open(() => {}, frame(), "/chat?channel=crew");
+  const host = page.locator("polynet-page");
+  await expect.poll(() => host.getAttribute("page")).toBe("chat");
+  expect(await host.evaluate((el) => el.shadowRoot)).toBeNull();
+  expect(await host.locator(".pn-page-header > h1.pn-page-heading").textContent()).toBe("Chat");
+  const body = host.locator(".pn-page-body.pn-page-chat");
+  expect(await body.evaluate((el) => Array.from(el.children).map((c) => c.tagName.toLowerCase()))).toEqual(["polynet-channels", "polynet-chat"]);
+  const chat = body.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message-body]").count()).toBe(1);
+  expect(await chat.locator("[part~=message-body]").textContent()).toBe("Crew only: Saturday plan");
+  const [channels, feed] = [await box(body.locator("polynet-channels")), await box(chat)];
+  expect(feed.x).toBeGreaterThan(channels.x + channels.width);
+  expect(feed.height).toBeGreaterThanOrEqual(384);
+  // The frame's own navigation marks this page.
+  expect(await page.locator("header nav a[href='/chat']").getAttribute("aria-current")).toBe("page");
+  expect(await page.locator("header nav a[href='/people/']").getAttribute("aria-current")).toBeNull();
+  await page.close();
+
+  const phone = await open(() => {}, frame(), "/chat/", { viewport: { width: 390, height: 800 } });
+  const narrow = phone.locator("polynet-page .pn-page-chat");
+  await expect.poll(() => narrow.locator("polynet-chat").getAttribute("state")).toBe("ready");
+  const [top, below] = [await box(narrow.locator("polynet-channels")), await box(narrow.locator("polynet-chat"))];
+  expect(below.y).toBeGreaterThanOrEqual(top.y + top.height);
+  expect(Math.round(below.width)).toBe(Math.round(top.width));
+  await phone.close();
+});
+
+test("<polynet-page> at /people: the members, the site's own heading and block slots; the site's CSS wins", async () => {
+  const style = "<style>polynet-page[page=people] .pn-page-heading { color: rgb(200, 0, 0); } polynet-page .pn-page-people { max-width: 300px; }</style>";
+  const page = await open(crowd, frame('<h2 slot="people-heading" class="crew">The crew</h2><p data-block="polynet-members" slot="empty">Nobody yet.</p>' +
+    '<h2 slot="chat-heading">The wall</h2><p>Loading</p>').replace("</head>", style + "</head>"), "/people");
+  const host = page.locator("polynet-page");
+  await expect.poll(() => host.getAttribute("page")).toBe("people");
+  // The site's heading replaces Polynet's; another page's heading and stray content go.
+  expect(await host.locator(".pn-page-header").innerHTML()).toBe('<h2 class="crew">The crew</h2>');
+  expect(await host.textContent()).not.toContain("The wall");
+  expect(await host.textContent()).not.toContain("Loading");
+  const members = host.locator(".pn-page-people > polynet-members");
+  await expect.poll(() => members.getAttribute("state")).toBe("ready");
+  expect(await members.locator("> p[slot=empty]").textContent()).toBe("Nobody yet.");
+  expect(await members.locator("[part=member-name]").count()).toBe(6);
+  expect(Math.round((await box(host.locator(".pn-page-people"))).width)).toBe(300);
+  await page.close();
+
+  const bare = await open(crowd, frame().replace("<polynet-page>", "<polynet-page no-heading>"), "/people");
+  await expect.poll(() => bare.locator("polynet-page").getAttribute("page")).toBe("people");
+  expect(await bare.locator("polynet-page .pn-page-header").count()).toBe(0);
+  await bare.close();
+});
+
+test("<polynet-page> at /people/<handle> opens that profile over the list; Close and Back both land on /people", async () => {
+  const page = await open(crowd, frame(), "/people/Sam");
+  const sheet = panel(page);
+  await expect.poll(() => page.locator("polynet-profile").getAttribute("state")).toBe("ready");
+  expect(await sheet.locator("[part=name]").textContent()).toBe("Sam Rivera");
+  expect(await page.evaluate(() => location.pathname + location.search)).toBe("/people?member=sam");
+  await expect.poll(() => page.locator("polynet-page polynet-members").getAttribute("state")).toBe("ready");
+  await sheet.locator("[part=close]").click();
+  await expect.poll(() => sheet.isVisible()).toBe(false);
+  await expect.poll(() => page.evaluate(() => location.pathname + location.search)).toBe("/people");
+  await page.close();
+
+  const back = await open(crowd, frame(), "/people/ana");
+  await expect.poll(() => back.locator("polynet-profile").getAttribute("state")).toBe("ready");
+  await back.goBack();
+  await expect.poll(() => panel(back).isVisible()).toBe(false);
+  expect(await back.evaluate(() => location.pathname + location.search)).toBe("/people");
+  expect((await calls(back, "profile")).map((c: any) => c[1])).toEqual(["ana"]);
+  await back.close();
+});
+
+test("<polynet-page> at an address with no page: a quiet not-found inside the frame, with the way to every page", async () => {
+  const page = await open(() => {}, frame(), "/frame");
+  const host = page.locator("polynet-page");
+  await expect.poll(() => host.getAttribute("page")).toBe("not-found");
+  expect(await host.locator("h1").textContent()).toBe("Page not found");
+  const links = host.locator(".pn-page-missing nav[aria-label='Pages here'] a");
+  expect(await links.evaluateAll((all) => all.map((a) => [a.textContent, a.getAttribute("href")]))).toEqual([["Home", "/"], ["Chat", "/chat"], ["People", "/people"]]);
+  expect(await page.locator("polynet-chat, polynet-members").count()).toBe(0);
+  await page.close();
+});
+
+test("the account menu: In this club links to the site's own pages, marking the current one; Manage goes to Studio's settings", async () => {
+  const page = await open((fake) => {
+    (fake as any).account = { member: { name: "Me" }, community: { role: "owner", studio_url: "https://polynet.test/c/run-club/settings/community" },
+      links: { messages: "https://polynet.test/?dm=inbox", communities: "https://polynet.test/", discover: "https://polynet.test/discover", settings: "https://polynet.test/settings/profile" } };
+  }, frame(), "/people/");
+  const shell = page.locator("polynet-account");
+  await shell.locator("[part=trigger]").click();
+  const group = shell.locator("[part=group]");
+  expect(await group.getAttribute("role")).toBe("group");
+  expect(await group.locator(".group-title").textContent()).toBe("In this club");
+  const here = group.locator("a[part=item]");
+  expect(await here.evaluateAll((all) => all.map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("aria-current")])))
+    .toEqual([["Chat", "/chat", null], ["People", "/people", "page"]]);
+  const manage = shell.locator("[part=panel] a", { hasText: "Manage this community" });
+  await expect.poll(() => manage.count()).toBe(1);
+  expect(await manage.getAttribute("href")).toBe("https://polynet.test/c/run-club/settings/community");
+  // The keyboard reaches them: the first item is Chat.
+  await page.keyboard.press("Escape");
+  await shell.locator("[part=trigger]").press("ArrowDown");
+  expect(await shell.evaluate((el) => el.shadowRoot!.activeElement!.textContent)).toBe("Chat");
+  await page.close();
+
+  const home = await open(() => {}, PAGE, "/");
+  await home.locator("polynet-account [part=trigger]").click();
+  expect(await home.locator("polynet-account [part=group] [aria-current]").count()).toBe(0);
+  await home.close();
 });

@@ -10,12 +10,16 @@ and the Polynet SDK (`/__polynet/sdk.js`) for anything else.
 
 ## Non-negotiables
 
-1. **Every site places Polynet's three blocks**, on any page you like:
-   `<polynet-channels>` (the channels), `<polynet-chat>` (the conversation,
-   composer, threads, reactions and @-tags) and `<polynet-members>` (who's
-   here; each opens a profile with Message). `check` and `deploy` fail
-   without them. They are how members find each other on every Polynet
-   site, so never rebuild them, hide them or replace them with your own.
+1. **Every site has a frame**: `frame.html` at the root, the site's own
+   header, navigation and footer around exactly one
+   `<polynet-page></polynet-page>` (paths in it start with `/`). `check`
+   and `deploy` fail without it. Polynet's standard pages exist on every
+   site inside that frame: `/chat` (`<polynet-channels>` and
+   `<polynet-chat>`) and `/people` (`<polynet-members>`; `/people/<handle>`
+   opens that profile). Link to them from the site's navigation. A site
+   may ship its own `chat.html` or `people/index.html` instead; it must then
+   place the same blocks. The blocks are how members find each other on
+   every Polynet site, so never rebuild them, hide them or replace them.
 2. **The shell is automatic.** Polynet adds `/__polynet/ui.js` to every page
    and `<polynet-account>` (account, communities, Discover, messages,
    settings; "Sign in" when signed out) where a page has none. Place it into
@@ -68,6 +72,6 @@ to `https://<slug>-staging.polynet.page`.
 
 ## Commands
 
-    npx @polynet/cli check     # index.html, the blocks, accessibility basics
+    npx @polynet/cli check     # index.html, frame.html, accessibility basics
     npx @polynet/cli deploy    # check, then live in seconds (add --staging for staging)
     npx @polynet/cli skills    # update these skills

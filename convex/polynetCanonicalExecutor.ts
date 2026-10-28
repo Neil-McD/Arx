@@ -684,11 +684,11 @@ function capabilityDocument(args: {
   } else if (isSiteDeployCapability) {
     operationDefinition.input = {
       required: ["files"],
-      files: 'an object of "/path" -> { content, encoding }: the whole static site, with /index.html. encoding is "utf8" (default) or "base64" for images and fonts',
+      files: 'an object of "/path" -> { content, encoding }: the whole static site, with /index.html and /frame.html. encoding is "utf8" (default) or "base64" for images and fonts',
       limits: { max_files: SITE_DEPLOY_MAX_FILES, max_total_bytes: SITE_DEPLOY_MAX_BYTES },
       result: "{ url }: the live site, https://<slug>.<sites domain>",
       guidance: "Build the site from the builder guide (polynet.page/llms.txt); larger sites deploy with npx @polynet/cli deploy.",
-      checks: "The site is checked first, as npx @polynet/cli check does: errors (no <polynet-channels>, <polynet-chat> or <polynet-members> on any page; no lang, title or zoomable viewport; images without alt; unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
+      checks: "The site is checked first, as npx @polynet/cli check does: errors (no /index.html or /frame.html; a frame without exactly one <polynet-page> or with relative paths; the site's own /chat or /people page without that page's blocks; no lang, title or zoomable viewport; images without alt; unnamed buttons or links) stop the deploy with site_checks_failed; warnings come back with the result.",
       effects: ["publish_community_site"],
       forbidden_effects: ["server_code", "change_access", "deploy_other_community"],
     };

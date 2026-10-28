@@ -196,7 +196,7 @@ test("the session endpoint gives every visitor the community's public identity, 
   vi.stubGlobal("fetch", backend);
   const identity = {
     community: "apps-community", community_name: "Apps Club", community_one_liner: "We build.", community_about: "About us.", member_count: 12,
-    join_url: "https://polynet.example.com/c/apps-community", studio_url: "https://polynet.example.com/c/apps-community",
+    join_url: "https://polynet.example.com/c/apps-community", studio_url: "https://polynet.example.com/c/apps-community/settings/community",
   };
   const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
   expect(anonymous).toEqual({ signed_in: false, ...identity });
@@ -269,11 +269,13 @@ class FakeRewriter {
   scripts?: (element: any) => void;
   head?: (element: any) => void;
   body?: (element: any) => void;
+  title?: (element: any) => void;
   docEnd?: (end: any) => void;
   on(selector: string, handlers: { element(element: any): void }) {
     if (selector === "script[src]") this.scripts = handlers.element;
     if (selector === "head") this.head = handlers.element;
     if (selector === "body") this.body = handlers.element;
+    if (selector === "head > title") this.title = handlers.element;
     return this;
   }
   onDocument(handlers: { end(end: any): void }) { this.docEnd = handlers.end; return this; }
@@ -287,17 +289,24 @@ class FakeRewriter {
         const at = start.index + start[0].length;
         return { prepend: (content: string) => { html = html.slice(0, at) + content + html.slice(at); }, ...extra };
       };
+      const title = /(<head\b[\s\S]*?<title\b[^>]*>)([\s\S]*?)(<\/title>)/.exec(html);
+      if (title && this.title) {
+        this.title({ setInnerContent: (content: string) => {
+          const text = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          html = html.replace(title[0], title[1] + text + title[3]);
+        } });
+      }
       const head = opened("head");
-      if (head) this.head!(head);
-      for (const m of html.matchAll(/<script\b[^>]*\bsrc="([^"]*)"/g)) this.scripts!({ getAttribute: () => m[1] });
+      if (head && this.head) this.head(head);
+      if (this.scripts) for (const m of html.matchAll(/<script\b[^>]*\bsrc="([^"]*)"/g)) this.scripts({ getAttribute: () => m[1] });
       let endTag: ((tag: any) => void) | undefined;
       const body = opened("body", { onEndTag: (handler: (tag: any) => void) => { endTag = handler; } });
-      if (body) this.body!(body);
+      if (body && this.body) this.body(body);
       if (endTag && html.includes("</body>")) {
         const at = html.lastIndexOf("</body>");
         endTag({ before: (content: string) => { html = html.slice(0, at) + content + html.slice(at); } });
       }
-      this.docEnd!({ append: (content: string) => { html += content; } });
+      if (this.docEnd) this.docEnd({ append: (content: string) => { html += content; } });
       return html;
     };
     return new Response(new ReadableStream({ async start(c) { c.enqueue(new TextEncoder().encode(await run())); c.close(); } }), { headers: response.headers });
@@ -327,7 +336,7 @@ test("ui.css hides every Polynet tag until its script defines it, so slot conten
   expect(res.headers.get("content-type")).toBe("text/css; charset=utf-8");
   expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   const css = await res.text();
-  for (const tag of ["polynet-account", "polynet-channels", "polynet-chat", "polynet-members", "polynet-profile"]) {
+  for (const tag of ["polynet-account", "polynet-channels", "polynet-chat", "polynet-members", "polynet-profile", "polynet-page"]) {
     expect(css).toContain(`${tag}:not(:defined)`);
   }
   expect(css).toContain("{ visibility: hidden; }");
@@ -364,7 +373,7 @@ test("every site gets the shell (ui.js) and the member's account, read with thei
 });
 
 test("every site serves Polynet's blocks as modules; ui.js loads them only where they're placed", async () => {
-  for (const name of ["kit", "channels", "chat", "composer", "members", "profile"]) {
+  for (const name of ["kit", "channels", "chat", "composer", "members", "profile", "page"]) {
     const res = await edge.fetch(request(`/__polynet/blocks/${name}.js`, { headers: { "sec-fetch-site": "cross-site" } }), env());
     expect(res.status, name).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
@@ -372,7 +381,7 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
     expect(res.headers.get("cache-control")).toBe("public, max-age=300");
     const source = await res.text();
     expect(source).not.toContain("https://");
-    if (name !== "kit") expect(source).toContain('import polynet from "/__polynet/sdk.js"');
+    if (name !== "kit" && name !== "page") expect(source).toContain('import polynet from "/__polynet/sdk.js"');
   }
   expect(await (await edge.fetch(request("/__polynet/blocks/chat.js"), env())).text()).toContain('customElements.define("polynet-chat"');
   expect(await (await edge.fetch(request("/__polynet/blocks/channels.js"), env())).text()).toContain('customElements.define("polynet-channels"');
@@ -380,6 +389,7 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
   expect(await (await edge.fetch(request("/__polynet/blocks/composer.js"), env())).text()).toContain("export class Composer");
   expect(await (await edge.fetch(request("/__polynet/blocks/members.js"), env())).text()).toContain('customElements.define("polynet-members"');
   expect(await (await edge.fetch(request("/__polynet/blocks/profile.js"), env())).text()).toContain("export function openProfile");
+  expect(await (await edge.fetch(request("/__polynet/blocks/page.js"), env())).text()).toContain('customElements.define("polynet-page"');
   // Unknown blocks are Polynet's 404, never the site's own fallback page.
   const site = vi.fn(async () => new Response("<html>site</html>", { headers: { "content-type": "text/html" } }));
   const e = { ...env(), DEV_USER_WORKER: { fetch: site } };
@@ -390,9 +400,125 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
   expect(site).not.toHaveBeenCalled();
 
   const ui = await (await edge.fetch(request("/__polynet/ui.js"), env())).text();
-  expect(ui).toContain('const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members" };');
+  expect(ui).toContain('const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page" };');
   expect(ui).toContain('import("/__polynet/blocks/profile.js")');
   expect(ui).toContain('import("/__polynet/blocks/" + BLOCKS[tag] + ".js")');
+});
+
+// A deployed site as Cloudflare serves it: its files, /frame.html at /frame
+// (auto-trailing-slash), and for a path with no file, index.html to a browser
+// navigation (single-page-application) or 404 to anything else.
+function deployedSite(files: Record<string, string>) {
+  const seen: Array<{ path: string; navigate: boolean; conditional: boolean; cookie: string }> = [];
+  const fetch = vi.fn(async (req: Request) => {
+    const url = new URL(req.url);
+    const navigate = req.headers.get("sec-fetch-mode") === "navigate";
+    seen.push({ path: url.pathname + url.search, navigate, conditional: req.headers.has("if-none-match"), cookie: req.headers.get("cookie") ?? "" });
+    if (Object.hasOwn(files, url.pathname)) {
+      const body = files[url.pathname];
+      if (body.startsWith("redirect:")) return new Response(null, { status: 307, headers: { location: body.slice(9) } });
+      return new Response(req.method === "HEAD" ? null : body, { headers: { "content-type": "text/html; charset=utf-8", etag: '"frame-etag"', "cache-control": "public, max-age=0, must-revalidate" } });
+    }
+    if (navigate) return new Response(files["/"] ?? "", { headers: { "content-type": "text/html; charset=utf-8" } });
+    return new Response("Not found", { status: 404 });
+  });
+  return { fetch, seen };
+}
+const FRAME = '<!doctype html><html lang="en"><head><title>Apps Club</title></head><body><header>Apps</header><main><polynet-page></polynet-page></main></body></html>';
+const browse = (path: string, headers: Record<string, string> = {}) =>
+  request(path, { headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", ...headers } });
+const identity = (name: string) => vi.fn(async () => Response.json({ ok: true, community: { slug: "apps-community", name, one_liner: null, about: null, member_count: 3 } }));
+
+test("standard pages: the site's frame is served at /chat, /people and /people/<handle>, titled, with the shell", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME });
+  const e = { ...env(), DEV_USER_WORKER: site };
+  for (const [path, title] of [["/chat", "Chat"], ["/chat?channel=crew", "Chat"], ["/people", "People"], ["/people/sam", "People"], ["/people/Sam_R-2", "People"]]) {
+    site.seen.length = 0;
+    const res = await edge.fetch(browse(path, { "if-none-match": '"frame-etag"', cookie: `theme=dark; __Host-polynet_session=${TOKEN}` }), e);
+    expect(res.status, path).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`<title>${title} · Apps Club</title>`);
+    expect(html).toContain("<main><polynet-page></polynet-page></main>");
+    // The same injection as every other page: the stylesheet first, ui.js last.
+    expect(html).toContain('<head><link rel="stylesheet" href="/__polynet/ui.css">');
+    expect(html).toContain('<script type="module" src="/__polynet/ui.js"></script></body>');
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate, no-transform");
+    // One body per page, so the frame file's validator isn't passed on.
+    expect(res.headers.get("etag")).toBeNull();
+    // Asked first for its own page (not as a navigation, so no index.html fallback), then for the frame,
+    // never with Polynet's cookies, and the frame never as a conditional request.
+    expect(site.seen).toEqual([
+      { path, navigate: false, conditional: true, cookie: "theme=dark" },
+      { path: "/frame", navigate: false, conditional: false, cookie: "theme=dark" },
+    ]);
+  }
+  // HEAD gets the frame's headers, no body.
+  const head = await edge.fetch(request("/people", { method: "HEAD", headers: { "sec-fetch-mode": "navigate" } }), e);
+  expect([head.status, head.headers.get("content-type"), await head.text()]).toEqual([200, "text/html; charset=utf-8", ""]);
+});
+
+test("standard pages: the site's own page wins; /chat/ without one goes to /chat", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME, "/chat": "<html><body>our own chat</body></html>", "/people/": "<html><body>our crew</body></html>", "/people": "redirect:/people/" });
+  const e = { ...env(), DEV_USER_WORKER: site };
+  const own = await edge.fetch(browse("/chat"), e);
+  expect(own.status).toBe(200);
+  expect(await own.text()).toBe('<html><body><link rel="stylesheet" href="/__polynet/ui.css">our own chat<script type="module" src="/__polynet/ui.js"></script></body></html>');
+  // people/index.html: Cloudflare's own redirect to /people/ passes through, and /people/ is the site's.
+  const redirect = await edge.fetch(browse("/people"), e);
+  expect([redirect.status, redirect.headers.get("location")]).toEqual([307, "/people/"]);
+  expect(await (await edge.fetch(browse("/people/"), e)).text()).toContain("our crew");
+  expect(site.seen.map((s) => s.path)).not.toContain("/frame");
+
+  const bare = deployedSite({ "/": "<html>home</html>", "/frame": FRAME });
+  for (const [path, to] of [["/chat/", "/chat"], ["/people/sam/?x=1", "/people/sam?x=1"]]) {
+    const res = await edge.fetch(browse(path), { ...env(), DEV_USER_WORKER: bare });
+    expect([res.status, res.headers.get("location")], path).toEqual([307, to]);
+  }
+});
+
+test("standard pages on a site with no frame: Polynet's page says so, never a blank", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps <Club>"));
+  const site = deployedSite({ "/": "<html>home</html>" });
+  const res = await edge.fetch(browse("/people/sam"), { ...env(), POLYNET_SITES_DOMAIN: "polynet.page", DEV_USER_WORKER: site });
+  expect(res.status).toBe(404);
+  expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; style-src 'unsafe-inline'");
+  const html = await res.text();
+  expect(html).toContain("<title>People · Apps &#60;Club&#62;</title>");
+  expect(html).toContain("<h1>People isn't on this site yet.</h1>");
+  expect(html).toContain("Add frame.html");
+  expect(html).toContain('<a href="/">Go to the home page</a>');
+  expect(html).toContain("https://polynet.page/llms.txt");
+  expect(html).not.toContain("{{");
+  expect(html).not.toContain("<html>home</html>");
+});
+
+test("standard pages never shadow Polynet's paths, the site's files, other methods or what isn't a handle", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  const site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME, "/people/photo.jpg": "jpg" });
+  const e = { ...env(), DEV_USER_WORKER: site };
+  for (const path of ["/people/a.b", "/people/x/y", `/people/${"a".repeat(33)}`, "/people/s%20m", "/people/@sam", "/people/photo.jpg", "/chat/app.js", "/chats", "/Chat", "/frame"]) {
+    site.seen.length = 0;
+    const res = await edge.fetch(browse(path), e);
+    // Straight to the site, as the browser asked (a navigation keeps its index.html fallback).
+    expect(site.seen, path).toEqual([{ path, navigate: true, conditional: false, cookie: "" }]);
+    expect(res.status, path).toBe(200);
+  }
+  site.seen.length = 0;
+  await edge.fetch(request("/chat", { method: "POST", body: "x", headers: { "sec-fetch-mode": "navigate" } }), e);
+  expect(site.seen).toEqual([{ path: "/chat", navigate: true, conditional: false, cookie: "" }]);
+  site.seen.length = 0;
+  expect((await edge.fetch(request("/__polynet/ui.js"), e)).status).toBe(200);
+  expect((await edge.fetch(request("/__polynet/blocks/page.js"), e)).status).toBe(200);
+  expect(site.seen).toEqual([]);
 });
 
 test("polynet.page itself is the front door: a page and the builder guide", async () => {

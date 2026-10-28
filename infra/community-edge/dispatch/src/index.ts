@@ -3,7 +3,10 @@
 //   /__polynet/auth/*  "Sign in with Polynet" for this community's own domain
 //   /__polynet/api     same-origin proxy to the Polynet backend, as the signed-in member
 //   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat> and its composer,
-//                      <polynet-members>, the profile panel), loaded by ui.js
+//                      <polynet-members>, the profile panel, <polynet-page>), loaded by ui.js
+//   /chat, /people, /people/<handle>
+//                      Polynet's standard pages: the site's own file if it has one,
+//                      else the site's frame (/frame.html), which <polynet-page> fills
 //   everything else    the community's own front end (a user Worker with static assets)
 //
 // The member session lives only in an HttpOnly cookie on the community's domain.
@@ -19,12 +22,16 @@ import { CHAT_SOURCE } from "./blocks/chat";
 import { COMPOSER_SOURCE } from "./blocks/composer";
 import { MEMBERS_SOURCE } from "./blocks/members";
 import { PROFILE_SOURCE } from "./blocks/profile";
+import { PAGE_SOURCE } from "./blocks/page";
+// The one route table for the standard pages, shared with the site checks.
+import { standardPage, type StandardPage } from "../../../../packages/polynet-cli/checks.mjs";
 // The live-updates client, served from this domain so no community site loads a third-party script.
 import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
 
 // Polynet's blocks, each its own module at /__polynet/blocks/<name>.js (ui.js loads them).
 const BLOCKS: Record<string, string> = {
   kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE, composer: COMPOSER_SOURCE, members: MEMBERS_SOURCE, profile: PROFILE_SOURCE,
+  page: PAGE_SOURCE,
 };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
@@ -37,6 +44,7 @@ type RewriterText = { before(content: string, options?: { html?: boolean }): unk
 type RewriterElement = {
   getAttribute(name: string): string | null;
   prepend(content: string, options?: { html?: boolean }): unknown;
+  setInnerContent(content: string, options?: { html?: boolean }): unknown;
   onEndTag(handler: (tag: RewriterText) => void): void;
 };
 interface Rewriter {
@@ -295,9 +303,10 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
 
   if (action === "session" && request.method === "GET") {
     const token = String(readCookie(request, SESSION_COOKIE) ?? "");
-    // Joining (open, approval or paid) happens on Polynet's own join page, which
-    // is also where owners and admins manage the community (Polynet Studio).
+    // Joining (open, approval or paid) happens on Polynet's own join page;
+    // owners and admins manage the community in Studio's community settings.
     const joinUrl = new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
+    const studioUrl = new URL(`/c/${encodeURIComponent(route.community)}/settings/community`, env.POLYNET_AUTH_URL).toString();
     const identity = await publicIdentity(env, url.origin);
     const base = {
       community: route.community,
@@ -306,7 +315,7 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
       community_about: identity?.about ?? null,
       member_count: identity?.member_count ?? null,
       join_url: joinUrl,
-      studio_url: joinUrl,
+      studio_url: studioUrl,
     };
     if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, ...base });
     return json(200, { signed_in: true, ...base, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
@@ -490,9 +499,110 @@ export default {
     }
     const worker = userWorker(route.script, env);
     if (!worker) return new Response("Community front end unavailable", { status: 503 });
-    return withShell(untransformed(withoutPolynetSetCookies(await worker.fetch(withoutPolynetCookies(request)))));
+    const standard = request.method === "GET" || request.method === "HEAD" ? standardPage(url.pathname) : null;
+    if (standard) return await serveStandardPage(request, url, standard, worker, env);
+    return sitePage(await worker.fetch(withoutPolynetCookies(request)));
   },
 };
+
+// Every page the site serves reaches the member the same way: no Polynet
+// cookies set by it, untransformed, with the shell.
+function sitePage(response: Response): Response {
+  return withShell(untransformed(withoutPolynetSetCookies(response)));
+}
+
+// Headers that make a request a browser navigation (a site whose unknown paths
+// fall back to index.html answers a navigation with index.html, never 404),
+// and those that could make the frame answer 304 or a part of itself.
+const NAVIGATION_HEADERS = ["sec-fetch-mode", "sec-fetch-dest"];
+const CONDITIONAL_HEADERS = ["if-none-match", "if-modified-since", "if-match", "if-unmodified-since", "if-range", "range"];
+
+function siteRequest(request: Request, path: string, drop: string[]): Request {
+  const clean = withoutPolynetCookies(request);
+  const headers = new Headers(clean.headers);
+  for (const name of drop) headers.delete(name);
+  return new Request(new URL(path, request.url).toString(), { method: request.method === "HEAD" ? "HEAD" : "GET", headers });
+}
+
+// Polynet's standard pages exist on every site from its first deploy. The
+// site's own file at the path wins (asked for as a plain fetch, not a
+// navigation, so a single-page app's index.html fallback doesn't count as one).
+// Otherwise the site's frame (/frame.html: its header, navigation and footer
+// around one <polynet-page>) is served there with status 200, and
+// <polynet-page> renders the page inside it. No frame: Polynet says so.
+async function serveStandardPage(
+  request: Request, url: URL, standard: { page: StandardPage; slash: boolean }, worker: Fetcher, env: Env,
+): Promise<Response> {
+  const own = await worker.fetch(siteRequest(request, url.pathname + url.search, NAVIGATION_HEADERS));
+  if (own.status !== 404) return sitePage(own);
+  await own.body?.cancel();
+  // One address per page: /chat/ (with no file of its own) is /chat.
+  if (standard.slash) {
+    return new Response(null, { status: 307, headers: { Location: url.pathname.slice(0, -1) + url.search, "Cache-Control": "no-store" } });
+  }
+  // The community's name (for the title) is read beside the frame, from a short per-isolate cache.
+  const name = publicIdentity(env, url.origin).then((identity) => identity?.name ?? null);
+  // html_handling auto-trailing-slash serves /frame.html at /frame (and redirects /frame.html there).
+  const frame = await worker.fetch(siteRequest(request, "/frame", [...NAVIGATION_HEADERS, ...CONDITIONAL_HEADERS]));
+  const communityName = await name;
+  if (!frame.ok || !(frame.headers.get("content-type") ?? "").includes("text/html")) {
+    await frame.body?.cancel();
+    return frameMissing(standard.page, communityName, env);
+  }
+  // The body differs per page (its <title>), so the frame file's validators don't apply.
+  const headers = new Headers(frame.headers);
+  for (const header of ["etag", "last-modified", "content-length"]) headers.delete(header);
+  let page = new Response(frame.body, { status: 200, headers });
+  if (typeof HTMLRewriter !== "undefined" && page.body && communityName) {
+    const title = `${standard.page.title} · ${communityName}`;
+    page = new HTMLRewriter().on("head > title", { element(element) { element.setInnerContent(title); } }).transform(page);
+  }
+  return sitePage(page);
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
+// A site deployed before frames existed (or one that dropped its frame): a
+// clear page, never a blank, with a way home and what the builder should do.
+function frameMissing(page: StandardPage, communityName: string | null, env: Env): Response {
+  const front = frontDoorHost(env);
+  const here = communityName ? escapeHtml(communityName) : "This community";
+  const html = FRAME_MISSING_HTML
+    .replaceAll("{{TITLE}}", escapeHtml(communityName ? `${page.title} · ${communityName}` : page.title))
+    .replaceAll("{{PAGE}}", escapeHtml(page.title))
+    .replaceAll("{{HERE}}", here)
+    .replace("{{GUIDE}}", front ? ` The guide: <a href="https://${escapeHtml(front)}/llms.txt">https://${escapeHtml(front)}/llms.txt</a>.` : "");
+  return new Response(html, {
+    status: 404,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-transform",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+const FRAME_MISSING_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fbfaf7; --text: #1c1b19; --muted: #6b6760; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #131312; --text: #f1efe9; --muted: #a29d93; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 64px 20px; }
+  h1 { font-size: 26px; line-height: 1.25; margin: 0 0 12px; }
+  p { margin: 0 0 16px; }
+  .muted { color: var(--muted); font-size: 15px; }
+  a { color: inherit; }
+</style></head>
+<body><main>
+  <h1>{{PAGE}} isn't on this site yet.</h1>
+  <p>{{HERE}} shows its {{PAGE}} page inside its site's own frame, and the site doesn't have one yet.</p>
+  <p><a href="/">Go to the home page</a></p>
+  <p class="muted">Building this site? Add frame.html (your header, navigation and footer, with one &lt;polynet-page&gt;&lt;/polynet-page&gt; where the page goes) and deploy again.{{GUIDE}}</p>
+</main></body></html>
+`;
 
 // An address on the sites domain with nothing deployed yet says how to deploy;
 // anything else is simply not found.

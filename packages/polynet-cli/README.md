@@ -10,9 +10,11 @@ npx @polynet/cli deploy
 ```
 
 - Your site is a folder of static files with an `index.html` (HTML, CSS,
-  JavaScript, images). Every site places Polynet's three blocks,
-  `<polynet-channels>`, `<polynet-chat>` and `<polynet-members>`, styled to
-  fit your design; everything else comes from `/__polynet/sdk.js`. The guide
+  JavaScript, images) and a `frame.html`: your header, navigation and
+  footer around one `<polynet-page></polynet-page>`. Polynet's `/chat` and
+  `/people` pages (its blocks `<polynet-channels>`, `<polynet-chat>` and
+  `<polynet-members>`) appear in that frame on every site, styled to fit
+  your design; everything else comes from `/__polynet/sdk.js`. The guide
   is at `https://<slug>.polynet.page/__polynet/llms.txt`.
 - The first run opens your browser to sign in with Polynet. You must be the
   community's owner or an admin. The community is saved in `polynet.json`, so
@@ -26,8 +28,9 @@ npx @polynet/cli deploy
   folder, under `.agents/skills` and `.claude/skills`. Your agent asks about
   your community, shows you three directions live, and builds the one you
   pick. `polynet skills` adds or updates the skills in any site folder.
-- `polynet check` checks that the site has a root `index.html` and places
-  the three blocks, and the site's
+- `polynet check` checks that the site has a root `index.html` and
+  `frame.html` (with one `<polynet-page>`), that its own `/chat` or
+  `/people` page (if it ships one) places those blocks, and the site's
   accessibility basics (language, title, zoom, image alt text, named buttons
   and links). `deploy` runs it first and stops on errors.
 - Agent guides, `polynet.json`, dotfiles and `node_modules` are never uploaded.
