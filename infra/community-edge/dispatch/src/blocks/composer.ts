@@ -80,14 +80,16 @@ export function enterSends(event) {
     && !matchMedia("(pointer: coarse)").matches;
 }
 
-// "@sam" counts only as a whole word: not "@samuel", not "me@sam".
+// "@sam" counts only where the server counts it (communityInteractions.ts):
+// at the start or after a space, and as a whole word. Not "@samuel", not
+// "me@sam", not "(@sam".
 export function hasToken(text, token) {
   const lower = String(text).toLowerCase();
   const needle = token.toLowerCase();
   for (let from = lower.indexOf(needle); from !== -1; from = lower.indexOf(needle, from + 1)) {
     const before = from ? lower[from - 1] : "";
     const after = lower[from + needle.length] || "";
-    if (!/[a-z0-9_]/.test(before) && !/[a-z0-9_-]/.test(after)) return true;
+    if ((!before || /\s/.test(before)) && !/[a-z0-9_-]/.test(after)) return true;
   }
   return false;
 }
@@ -279,11 +281,12 @@ export class Composer {
     }
   }
 
-  // The "@word" just before the caret, if the member is tagging someone.
+  // The "@word" just before the caret, if the member is tagging someone. Only
+  // where a tag counts (see hasToken), so a picked tag always sends.
   mentionQuery() {
     const caret = this.input.selectionStart;
     if (caret !== this.input.selectionEnd) return null;
-    const match = /(^|[\s(\[{"'])@([^\s@]{0,32})$/.exec(this.input.value.slice(0, caret));
+    const match = /(^|\s)@([^\s@]{0,32})$/.exec(this.input.value.slice(0, caret));
     return match ? { start: caret - match[2].length - 1, query: match[2].toLowerCase() } : null;
   }
 

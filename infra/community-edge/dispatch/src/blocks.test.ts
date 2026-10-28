@@ -532,6 +532,32 @@ test("@ suggests members (online first) and the agent; arrows, Enter and Tab pic
   await page.close();
 });
 
+test("@ suggests and tags only where the server counts a tag: at the start or after a space", async () => {
+  const page = await open();
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  const input = chat.locator("[part=footer] [part=composer-input]");
+  const list = chat.locator("[part=footer] [part=mention-list]");
+  await input.focus();
+  // "(@sa" would never count as a tag on the server, so nothing is offered.
+  await page.keyboard.type("(@sa");
+  expect(await list.isVisible()).toBe(false);
+  await page.keyboard.type(" @sa");
+  await expect.poll(() => list.locator("[part~=mention-option]").count()).toBe(1);
+  await page.keyboard.press("Tab");
+  expect(await input.inputValue()).toBe("(@sa @sam ");
+  // A tag later edited to sit behind punctuation is dropped, not sent to fail.
+  await input.fill("(@sam see you");
+  await input.press("Enter");
+  await expect.poll(() => calls(page, "post")).toHaveLength(1);
+  expect((await calls(page, "post"))[0][3].mentions).toEqual([]);
+  // A string, so the import runs in the page and not through the test's bundler.
+  const tokens = await page.evaluate(`import("/__polynet/blocks/composer.js").then(({ hasToken }) =>
+    ["@sam hi", "hi\\n@sam", "hi @Sam.", "(@sam", "me@sam", "\\"@sam", "@samuel", "@sam-x"].map((text) => hasToken(text, "@sam")))`);
+  expect(tokens).toEqual([true, true, true, false, false, false, false, false]);
+  await page.close();
+});
+
 test("tagging the community agent inserts its mention token and asks it", async () => {
   const page = await open();
   const chat = page.locator("polynet-chat");
