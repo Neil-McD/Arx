@@ -9,7 +9,6 @@ export type WebCommunityReplyTarget = {
   mention_candidate?: MentionCandidate | null;
   interaction_root_id: string;
   interaction_reply_id?: string | null;
-  legacy_message_id?: string | null;
 };
 
 type CommunityInteractionRootLike = {
@@ -18,7 +17,6 @@ type CommunityInteractionRootLike = {
   actor_user_id: string | null;
   actor_agent_key: string | null;
   content_summary: string;
-  legacy_message_id: string | null;
 };
 
 export function buildCommunityRootReplyTarget(args: {
@@ -46,10 +44,9 @@ export function buildCommunityRootReplyTarget(args: {
     return null;
   }
 
-  const legacyMessageId = String(root.legacy_message_id ?? "").trim() || null;
   const communityName = String(args.communityName ?? "").trim();
   return {
-    id: legacyMessageId ?? rootId,
+    id: rootId,
     sender_id:
       isHumanTarget || isCanonicalPersonalAgentTarget
         ? humanUserId
@@ -60,6 +57,5 @@ export function buildCommunityRootReplyTarget(args: {
       : {}),
     interaction_root_id: rootId,
     interaction_reply_id: null,
-    legacy_message_id: legacyMessageId,
   };
 }

@@ -10,7 +10,6 @@ assert.match(channelAccess, /resolveCommunityChannelActor[\s\S]*await requireCom
   "channel actors must retain the canonical community access gate");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
-const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityInteractionsGateway.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -81,19 +80,14 @@ assert.match(
   /import \{[\s\S]*listCanonicalInteractionAttachmentsForTarget[\s\S]*\} from "\.\/communityInteractionAttachmentBridge";/,
   "canonical interaction core should import canonical attachment reads through the attachment bridge",
 );
-assert.match(
-  interactions,
-  /import \{ resolveLegacyMessageAttachments \} from "\.\/communityInteractionLegacyAttachments";/,
-  "canonical interaction core should import migration-only legacy attachment hydration",
-);
 assert.doesNotMatch(
   interactions,
-  /function resolveLegacyMessageAttachments|ctx\.storage\.getUrl/,
-  "canonical interaction core should not own legacy storage URL resolution",
+  /LegacyChatLink|resolveLegacyMessageAttachments|legacy_message_id|ctx\.storage\.getUrl/,
+  "canonical interaction core should not own storage URL resolution",
 );
 assert.match(
   attachmentBridge,
-  /listCanonicalInteractionAttachmentsForTarget[\s\S]*query\("communityInteractionAttachments" as any\)[\s\S]*withIndex\("by_root"[\s\S]*withIndex\("by_reply"[\s\S]*take\(MAX_LEGACY_INTERACTION_ATTACHMENTS\)/,
+  /listCanonicalInteractionAttachmentsForTarget[\s\S]*query\("communityInteractionAttachments" as any\)[\s\S]*withIndex\("by_root"[\s\S]*withIndex\("by_reply"[\s\S]*take\(COMMUNITY_ATTACHMENT_MAX_COUNT\)/,
   "canonical attachment reads should stay bounded and indexed in the attachment bridge",
 );
 assert.match(
@@ -105,16 +99,6 @@ assert.doesNotMatch(
   attachmentBridge,
   /query\("communityChatThreads"|query\("communityChatMessages"|\.collect\(\)/,
   "canonical attachment hydration should not scan legacy chat tables",
-);
-assert.match(
-  legacyAttachments,
-  /rawAttachments\.slice\(0, 8\)[\s\S]*ctx\.storage\.getUrl\(storageId as any\)/,
-  "legacy attachment hydration should stay bounded and isolated",
-);
-assert.doesNotMatch(
-  legacyAttachments,
-  /\.collect\(\)|query\("communityChatThreads"|query\("communityChatMessages"/,
-  "legacy attachment hydration should not scan legacy chat tables",
 );
 assert.doesNotMatch(
   interactions,
@@ -157,8 +141,8 @@ assert.match(
 );
 assert.match(
   mapRootBundle,
-  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*hasCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
-  "root bundle mapper must let canonical tombstones prevent legacy fallback",
+  /const attachments = await listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\);/,
+  "root bundle mapper reads canonical attachments only",
 );
 assert.doesNotMatch(
   mapRootBundle,
@@ -179,8 +163,8 @@ assert.match(
 );
 assert.match(
   mapReplyBundle,
-  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*hasCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
-  "reply bundle mapper must let canonical tombstones prevent legacy fallback",
+  /const attachments = await listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\);/,
+  "reply bundle mapper reads canonical attachments only",
 );
 
 const viewerReactionMap = functionBlock(interactions, "loadViewerReactionMapForTargets");

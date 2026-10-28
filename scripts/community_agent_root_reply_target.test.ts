@@ -9,7 +9,6 @@ const baseRoot = {
   actor_user_id: "user-1",
   actor_agent_key: null,
   content_summary: "Welcome to the thread.",
-  legacy_message_id: null,
 };
 
 describe("community root reply target", () => {
@@ -29,7 +28,6 @@ describe("community root reply target", () => {
       body: "Welcome to the thread.",
       interaction_root_id: "root-1",
       interaction_reply_id: null,
-      legacy_message_id: null,
     });
   });
 
@@ -49,7 +47,6 @@ describe("community root reply target", () => {
       reply_author_label: "Builders",
       interaction_root_id: "root-1",
       interaction_reply_id: null,
-      legacy_message_id: null,
     });
   });
 
@@ -68,7 +65,6 @@ describe("community root reply target", () => {
       body: "Welcome to the thread.",
       interaction_root_id: "root-1",
       interaction_reply_id: null,
-      legacy_message_id: null,
     });
   });
 

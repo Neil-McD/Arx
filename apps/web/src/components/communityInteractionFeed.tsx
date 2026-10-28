@@ -115,8 +115,8 @@ export function bundleText(blocks: CommunityInteractionContentBlock[], fallback:
   return text || fallback;
 }
 
-// The projection flattens legacy attachments to a "Shared attachment: name" text line. Now that the
-// real attachment renders, drop that redundant summary line from the displayed body.
+// An attachment-only post stores a "Shared attachment: name" summary line. The real attachment
+// renders, so drop that redundant line from the displayed body.
 export function stripSharedAttachmentSummary(text: string, hasAttachments: boolean): string {
   if (!hasAttachments) return text;
   return text
@@ -759,8 +759,8 @@ export function InteractionContent(
   );
 }
 
-// Render the attachments carried on a projected legacy chat message: images in a grid, video/audio
-// as inline players, and any other file as a download chip.
+// Render a post's attachments: images in a grid, video/audio as inline players, and any other
+// file as a download chip.
 function ProtectedInteractionAttachment({ attachment, onOpenImage }: {
   attachment: CommunityInteractionAttachment;
   onOpenImage?: (images: CommunityChatMediaImage[], index: number) => void;

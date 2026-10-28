@@ -638,25 +638,3 @@ export const acknowledgeCommunityChatRead = mutation({
 
 // Rolling-deployment adapter for clients deployed before the canonical
 // acknowledgeCommunityChatRead contract. It no longer owns a second data path.
-export const markCommunityChatReadAt = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    seenAtMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    return await acknowledgeCommunityChatReadForUser({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      requestedThroughAt: args.seenAtMs,
-    });
-  },
-});

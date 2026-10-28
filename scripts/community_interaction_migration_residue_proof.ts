@@ -20,11 +20,8 @@ const webChatController = read(
 );
 const interactions = read("convex/communityInteractions.ts");
 const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
-const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
-const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const communityChat = read("convex/communityChat.ts");
 const communityTypingCore = read("convex/communityTypingPresenceCore.ts");
-const backfill = read("convex/communityInteractionBackfill.ts");
 const schema = read("convex/schema.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -74,17 +71,20 @@ assert.match(
   /community-interaction-migration-residue-map\.md[\s\S]*KEEP TEMPORARILY[\s\S]*BLOCKED BY PARITY[\s\S]*DELETE CANDIDATE/,
   "substrate contract should point cleanup work at the residue map",
 );
-assert.match(
-  contract,
-  /communityInteractionLegacyBridge/,
-  "substrate contract should name the legacy bridge module as the compatibility owner",
-);
+for (const path of [
+  "convex/communityInteractionLegacyBridge.ts",
+  "convex/communityInteractionLegacyAttachments.ts",
+  "convex/communityInteractionBackfill.ts",
+  "convex/communityLegacyAttachmentUploads.ts",
+]) {
+  assert.equal(existsSync(join(root, path)), false, `${path} stays deleted with the old chat (POL-26)`);
+}
 
 [
-  "| R-001 | Legacy chat writer `communityChat:createThreadUserMessage` | `BLOCKED BY PARITY` |",
-  "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
-  "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
-  "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
+  "| R-001 | Legacy chat writer `communityChat:createThreadUserMessage` | Deleted Oct 28, 2026 (POL-26)",
+  "| R-003 | Legacy chat to interaction mapping table | Deleted Oct 28, 2026 (POL-26)",
+  "| R-004 | Legacy attachment hydration fallback in canonical read bundles | Deleted Oct 28, 2026 (POL-26)",
+  "| R-007 | Legacy chat backfill API | Deleted Oct 28, 2026 (POL-26)",
   "| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer.",
   "| R-005 | Projection feature flag and authenticated legacy client bootstrap | Deleted for production projection promotion.",
   "| R-006 | Legacy web timeline props and inactive client state | Deleted with the orphaned web data and mixed mutation controllers.",
@@ -93,67 +93,35 @@ assert.match(
   "The web interaction gateway must not call legacy chat mutations.",
   "The normal web chat UI must not mount legacy chat preload, realtime, or scroll-pagination lifecycles; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
-  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, production chat rendering, and community attention chat dots no longer require legacy chat row replacement; canonical sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
+  "Its tables (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) keep their rows until the table-drop release",
   "The web composer writes only through the canonical interaction gateway and has no legacy send fallback.",
   "Canonical projection reply targets without a canonical root id fail closed.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
-assert.match(
+assert.doesNotMatch(
   interactions,
-  /from "\.\/communityInteractionLegacyBridge"/,
-  "canonical interaction module should import legacy compatibility helpers from the bridge",
+  /communityInteractionLegacyBridge|communityInteractionLegacyAttachments|communityLegacyAttachmentUploads|LegacyChatLink|legacy_message_id|resolveLegacyMessageAttachments/,
+  "the canonical interaction module keeps no old chat bridge, id or attachment fallback",
 );
 assert.doesNotMatch(
   interactions,
   /ctx\.db\.(query|insert)\("communityChat(Messages|Threads)" as any\)|ctx\.db\.(query|insert)\("communityInteractionLegacyChatLinks" as any\)/,
   "canonical interaction module should not directly query or insert legacy chat/thread/link tables",
 );
-assert.match(
-  interactions,
-  /resolveLegacyMessageAttachments/,
-  "canonical read bundles may only hydrate legacy attachments through the migration-only attachment module",
-);
-assert.match(
-  interactions,
-  /listCanonicalInteractionAttachmentsForTarget[\s\S]*hasCanonicalInteractionAttachmentsForTarget[\s\S]*resolveLegacyMessageAttachments/,
-  "canonical row existence, including tombstones, must prevent legacy resurrection",
-);
-assert.match(
+assert.doesNotMatch(
   attachmentBridge,
-  /insertLegacyInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*listCanonicalInteractionAttachmentsForTarget/,
-  "canonical attachment bridge should own shadow-writing and reading canonical attachment rows",
-);
-
-assert.match(
-  legacyBridge,
-  /getLegacyChatLinkByMessage[\s\S]*insertLegacyChatLinkIfMissing[\s\S]*insert\("communityInteractionLegacyChatLinks" as any,/,
-  "legacy bridge should only own legacy chat link table helpers",
-);
-assert.doesNotMatch(
-  legacyBridge,
-  /communityChatThreads|communityChatMessages|upsertArchiveDocumentForChatMessage|createLegacyCompatibilityChatMessageForInteraction|mapLegacyCompatibilityMessageRow|ensureLegacyCompatibilityChatThread/,
-  "legacy bridge should not create canonical-composer compatibility rows",
-);
-assert.doesNotMatch(
-  legacyBridge,
-  /communityInteractionRoots" as any|communityInteractionReplies" as any|insertContentBlocksForTarget/,
-  "legacy bridge should not materialize canonical interaction roots, replies, or content blocks",
-);
-
-assert.match(
-  legacyAttachments,
-  /Migration-only bridge[\s\S]*communityInteractionAttachments/,
-  "legacy attachment bridge should document that it is migration-only",
+  /Legacy|communityChatMessages/,
+  "the attachment bridge reads and claims canonical attachment rows only",
 );
 assert.doesNotMatch(
   interactionGateway,
   /createThreadUserMessage|createCloudThreadUserMessageRows|communityChatMessages/,
   "web interaction gateway should not call legacy chat mutations or tables",
 );
-assert.match(
-  chatGateway,
-  /createCloudThreadUserMessageRows[\s\S]*communityChat:createThreadUserMessage/,
-  "legacy chat gateway should own the explicit legacy chat writer call",
+assert.doesNotMatch(
+  chatGateway + communityChat,
+  /createThreadUserMessage|listThreadMessages|ensureCommunityChatThread|MessageReaction|patchOwnMessageContent|deleteOwnMessage|AttachmentUploadUrl/,
+  "the old thread chat stays deleted; communityChat keeps typing presence only",
 );
 for (const [label, source] of [
   ["chat gateway", chatGateway],
@@ -283,31 +251,10 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  communityChat,
-  /createThreadUserMessage[\s\S]*recordLegacyChatMessageInteractionBestEffort/,
-  "legacy chat writer should still dual-write through the adapter during the migration",
-);
-assert.match(
-  schema,
-  /communityChatThreads: defineTable\(\{[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
-  "community chat threads should have a bounded canonical lookup index",
-);
-assert.match(
   schema,
   /communityTypingPresence: defineTable\(\{[\s\S]*\.index\("by_community_displayUntil", \["communityId", "displayUntil"\]\)/,
   "community typing presence should have a bounded active-window lookup index",
 );
-assert.match(
-  communityChat,
-  /withIndex\("by_community_createdAt", \(q: any\) => q\.eq\("communityId", communityId\)\)[\s\S]*\.order\("asc"\)[\s\S]*\.first\(\)/,
-  "canonical community chat thread lookup should be bounded by index + first",
-);
-assert.doesNotMatch(
-  communityChat,
-  /function listCommunityChatThreadsForCommunity|const rows = \(await ctx\.db\s*\.query\("communityChatThreads"\)\s*\.withIndex\("by_community",[\s\S]{0,300}\.collect\(\)|\.sort\(\(a, b\) => a\.createdAt - b\.createdAt/,
-  "canonical chat-thread lookup should not collect and sort all community threads",
-);
-
 assert.match(
   communityTypingCore,
   /COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT/,
@@ -327,28 +274,6 @@ assert.doesNotMatch(
   communityTypingCore,
   /\.collect\(\)/,
   "typing presence reads should not collect all community typing rows",
-);
-
-const deleteOwnMessage = extractExportedConst(communityChat, "deleteOwnMessage");
-assert.match(deleteOwnMessage, /MAX_REACTION_DELETE_ROWS/, "message delete should use a named reaction-delete cap");
-assert.match(
-  deleteOwnMessage,
-  /\.take\(MAX_REACTION_DELETE_ROWS \+ 1\)[\s\S]*message_reaction_delete_limit_exceeded/,
-  "message delete should fail closed instead of collecting unbounded reactions",
-);
-
-const listMessageReactions = extractExportedConst(communityChat, "listMessageReactions");
-assert.match(listMessageReactions, /MAX_REACTION_MESSAGE_IDS_PER_REQUEST/, "reaction reads should cap message ids");
-assert.match(listMessageReactions, /MAX_REACTIONS_PER_MESSAGE/, "reaction reads should cap reactions per message");
-assert.doesNotMatch(
-  listMessageReactions,
-  /\.collect\(\)/,
-  "reaction reads should not collect unbounded reactions per message",
-);
-assert.match(
-  backfill,
-  /backfillCommunityInteractionsFromLegacyChatBatch[\s\S]*dryRun[\s\S]*communityChatMessages/,
-  "legacy backfill should remain a bounded migration tool",
 );
 
 console.log("community_interaction_migration_residue_proof: ok");

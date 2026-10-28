@@ -133,7 +133,7 @@ and data are proven gone, following the two-release pattern in
 | Credit and workspace-compute tables, `legacyProgramGrants` | Neil decided Oct 27: delete after a production backup, with his sign-off |
 | AI feed tables | Feature retired; retirement module still present |
 | `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |
-| Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityInteractionLegacyChatLinks`) | **Still written:** `communityChat.createThreadUserMessage` and the legacy bridge. Duplicate substrate; prove callers and migrate first |
+| Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) | Code deleted Oct 28 (POL-26); 92 of 92 production messages already in the new chat. Drop with Neil's OK |
 | `communityFunnels` and the funnel editor | Code deleted Oct 28 (POL-23); a plain join page stays. The table has no live reader (6 unpublished drafts, 4 unused intro-video links): drop with Neil's OK |
 | Integrations and skills tables | Code deleted Oct 28 (POL-21, POL-22, incl. GitHub and Google Drive import); tables dropped next release with Neil's OK |
 

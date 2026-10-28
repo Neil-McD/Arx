@@ -1,4 +1,3 @@
-import { resolveLegacyComposerAttachments } from "./communityLegacyAttachmentUploads";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
@@ -6,8 +5,6 @@ import { fingerprintCommunityComposerPayload } from "./communityComposerReplay";
 import { v } from "convex/values";
 import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityManager,
@@ -18,22 +15,11 @@ import {
 } from "./communityCore";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 import {
-  getLegacyChatLinkByMessage,
-  getLegacyChatLinkByReply,
-  getLegacyChatLinkByRoot,
-  insertLegacyChatLinkIfMissing,
-  legacyChatIdempotencyKey,
-} from "./communityInteractionLegacyBridge";
-import {
   claimInteractionAttachmentsForTarget,
   resolveInteractionAttachmentClaims,
-  hasCanonicalInteractionAttachmentsForTarget,
-  insertCanonicalInteractionAttachmentsFromLegacyMessage,
   listCanonicalInteractionAttachmentsForTarget,
-  normalizeInteractionAttachmentInputs,
   type NormalizedInteractionAttachmentInput,
 } from "./communityInteractionAttachmentBridge";
-import { resolveLegacyMessageAttachments } from "./communityInteractionLegacyAttachments";
 import {
   requireSafeCommunitySourceUrl,
 } from "./communitySourceUrlPolicy";
@@ -57,7 +43,6 @@ import {
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import {
-  ensureGeneralChannel,
   clearPinnedRootIfMatches,
   ensureReplyChannelMatchesRoot,
   interactionBelongsToChannel,
@@ -332,56 +317,7 @@ async function resolveOptionalReplyTargetForCanonicalComposer(args: {
     return { targetReplyId: requireValidTargetReply(directReply)._id };
   }
 
-  const targetLink = await getLegacyChatLinkByMessage(args.ctx, requestedTargetId as any);
-  if (
-    !targetLink ||
-    normalizeIdValue(targetLink.communityId) !==
-      normalizeIdValue(args.root.communityId) ||
-    normalizeIdValue(targetLink.rootId) !== normalizeIdValue(args.root._id)
-  ) {
-    throw new Error("interaction_target_reply_invalid");
-  }
-  // Rolling compatibility: legacy root-message ids explicitly mean "reply to
-  // the root", which is represented canonically by the absence of a target.
-  if (targetLink.linkKind === "root" && !targetLink.replyId) return {};
-  if (targetLink.linkKind !== "reply" || !targetLink.replyId) {
-    throw new Error("interaction_target_reply_invalid");
-  }
-  const targetReply = (await args.ctx.db.get(targetLink.replyId as any)) as InteractionReplyRow | null;
-  return { targetReplyId: requireValidTargetReply(targetReply)._id };
-}
-
-function extractLegacyChatMessageText(message: CommunityChatMessageLike): string {
-  const contentJson = message.contentJson;
-  let text = "";
-  let attachments: unknown[] = [];
-  if (typeof contentJson === "string") {
-    text = contentJson.trim();
-  } else if (contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)) {
-    const record = contentJson as Record<string, unknown>;
-    text = String(record.text ?? record.body ?? "").trim();
-    attachments = Array.isArray(record.attachments) ? record.attachments : [];
-  }
-  const attachmentNames = attachments
-    .map((raw) => {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "";
-      const record = raw as Record<string, unknown>;
-      return String(record.name ?? "").trim();
-    })
-    .filter(Boolean)
-    .slice(0, 8);
-  if (attachmentNames.length > 0) {
-    const attachmentSummary =
-      attachmentNames.length === 1
-        ? `Shared attachment: ${attachmentNames[0]}`
-        : `Shared attachments: ${attachmentNames.join(", ")}`;
-    text = text ? `${text}\n\n${attachmentSummary}` : attachmentSummary;
-  }
-  return normalizeBoundedText(text || "Legacy chat message", MAX_INTERACTION_TEXT_CHARS);
-}
-
-function legacyChatContentBlocks(message: CommunityChatMessageLike): NormalizedContentBlock[] {
-  return [{ blockType: "markdown_text", text: extractLegacyChatMessageText(message) }];
+  throw new Error("interaction_target_reply_invalid");
 }
 
 const MAX_AUTO_LINK_BLOCKS = 2;
@@ -806,11 +742,7 @@ async function mapRootBundle(
   const blocks = await listContentBlocksForRoot(ctx, root._id);
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
-  const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
-  const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
-  const attachments = await hasCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id })
-    ? canonicalAttachments
-    : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
+  const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
   const publicActorUserId = root.actorUserId
     ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
     : null;
@@ -851,8 +783,6 @@ async function mapRootBundle(
       // the channel and is read through getCommunityChannelPinnedRoot.
       pinned_at: null,
       locked_at: typeof root.lockedAt === "number" ? toIsoString(root.lockedAt) : null,
-      legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
-      legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
       created_at: toIsoString(root.createdAt),
       updated_at: toIsoString(root.updatedAt),
       edited_at: typeof root.editedAt === "number" ? toIsoString(root.editedAt) : null,
@@ -874,11 +804,7 @@ async function mapReplyBundle(
   const blocks = await listContentBlocksForReply(ctx, reply._id);
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
-  const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
-  const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
-  const attachments = await hasCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id })
-    ? canonicalAttachments
-    : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
+  const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
   const publicActorUserId = reply.actorUserId
     ? await resolvePublicUserId(ctx, reply.actorUserId, userIdCache)
     : null;
@@ -900,9 +826,6 @@ async function mapReplyBundle(
       reaction_summary: mapReactionSummary(reply.reactionSummary),
       viewer_emojis: viewerEmojis ?? [],
       idempotency_key: reply.idempotencyKey,
-      legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
-      legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
-      legacy_target_message_id: legacyLink?.targetMessageId ? normalizeIdValue(legacyLink.targetMessageId) : null,
       created_at: toIsoString(reply.createdAt),
       updated_at: toIsoString(reply.updatedAt),
       edited_at: typeof reply.editedAt === "number" ? toIsoString(reply.editedAt) : null,
@@ -963,487 +886,6 @@ async function insertContentBlocksForTarget(args: {
     contentBlockIds.push(normalizeIdValue(contentBlockId));
   }
   return { contentBlockIds };
-}
-
-export type LegacyChatRootInteractionPlan =
-  | {
-      planKind: "existing_root";
-      root: InteractionRootRow;
-      communityId: any;
-      threadId: any;
-      messageId: any;
-      message: CommunityChatMessageLike;
-      nowMs: number;
-      needsLegacyLink: boolean;
-    }
-  | {
-      planKind: "create_root";
-      communityId: any;
-      threadId: any;
-      messageId: any;
-      message: CommunityChatMessageLike;
-      actorUserId?: any;
-      idempotencyKey: string;
-      contentBlocks: NormalizedContentBlock[];
-      summary: string;
-      createdAt: number;
-      updatedAt: number;
-      nowMs: number;
-    };
-
-export type LegacyChatReplyInteractionPlan =
-  | {
-      planKind: "existing_reply";
-      root: InteractionRootRow;
-      reply: InteractionReplyRow;
-      communityId: any;
-      threadId: any;
-      messageId: any;
-      message: CommunityChatMessageLike;
-      targetMessageId: any;
-      nowMs: number;
-      needsLegacyLink: boolean;
-    }
-  | {
-      planKind: "create_reply";
-      root: InteractionRootRow;
-      communityId: any;
-      threadId: any;
-      messageId: any;
-      message: CommunityChatMessageLike;
-      targetMessageId: any;
-      actorUserId?: any;
-      targetReplyId?: any;
-      idempotencyKey: string;
-      contentBlocks: NormalizedContentBlock[];
-      visibilityScope: InteractionVisibilityScope;
-      summary: string;
-      seq: number;
-      createdAt: number;
-      updatedAt: number;
-      nowMs: number;
-    };
-
-export async function planInteractionRootFromLegacyChatMessageCore(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}): Promise<LegacyChatRootInteractionPlan> {
-  if (normalizeIdValue(args.message.threadId) !== normalizeIdValue(args.thread._id)) {
-    throw new Error("legacy_chat_interaction_thread_mismatch");
-  }
-  if (args.message.replyToMessageId) {
-    throw new Error("legacy_chat_interaction_root_cannot_target_message");
-  }
-
-  const nowMs = args.nowMs ?? Date.now();
-  const existingLink = await getLegacyChatLinkByMessage(args.ctx, args.message._id);
-  if (existingLink) {
-    if (existingLink.linkKind !== "root" || !existingLink.rootId) {
-      throw new Error("legacy_chat_interaction_link_conflict");
-    }
-    const linkedRoot = (await args.ctx.db.get(existingLink.rootId as any)) as InteractionRootRow | null;
-    if (!linkedRoot) throw new Error("legacy_chat_interaction_link_target_missing");
-    if (normalizeIdValue(linkedRoot.communityId) !== normalizeIdValue(args.thread.communityId)) {
-      throw new Error("legacy_chat_interaction_link_target_invalid");
-    }
-    return {
-      planKind: "existing_root",
-      root: linkedRoot,
-      communityId: args.thread.communityId,
-      threadId: args.thread._id,
-      messageId: args.message._id,
-      message: args.message,
-      nowMs,
-      needsLegacyLink: false,
-    };
-  }
-
-  const idempotencyKey = legacyChatIdempotencyKey(args.message._id, "root");
-  const existingRoot = await getExistingRootByIdempotencyKey(args.ctx, args.thread.communityId, idempotencyKey);
-  if (existingRoot) {
-    return {
-      planKind: "existing_root",
-      root: existingRoot,
-      communityId: args.thread.communityId,
-      threadId: args.thread._id,
-      messageId: args.message._id,
-      message: args.message,
-      nowMs,
-      needsLegacyLink: true,
-    };
-  }
-
-  const contentBlocks = legacyChatContentBlocks(args.message);
-  const createdAt = Math.max(0, Math.floor(Number(args.message.createdAt) || nowMs));
-  const updatedAt = Math.max(0, Math.floor(Number(args.message.updatedAt) || nowMs));
-  return {
-    planKind: "create_root",
-    communityId: args.thread.communityId,
-    threadId: args.thread._id,
-    messageId: args.message._id,
-    message: args.message,
-    ...(args.message.senderUserId ? { actorUserId: args.message.senderUserId } : {}),
-    idempotencyKey,
-    contentBlocks,
-    summary: contentSummary(contentBlocks),
-    createdAt,
-    updatedAt,
-    nowMs,
-  };
-}
-
-export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: LegacyChatRootInteractionPlan) {
-  if (plan.planKind === "existing_root") {
-    await requireChannelForAddressableRoot({
-      ctx,
-      root: plan.root,
-      nowMs: plan.nowMs,
-    });
-    await insertCanonicalInteractionAttachmentsFromLegacyMessage({
-      ctx,
-      communityId: plan.communityId,
-      rootId: plan.root._id,
-      message: plan.message,
-      nowMs: plan.nowMs,
-    });
-    if (plan.needsLegacyLink) {
-      await insertLegacyChatLinkIfMissing({
-        ctx,
-        communityId: plan.communityId,
-        threadId: plan.threadId,
-        messageId: plan.messageId,
-        linkKind: "root",
-        rootId: plan.root._id,
-        nowMs: plan.nowMs,
-      });
-    }
-    await scheduleCommunityInteractionEvidenceSync({
-      ctx,
-      communityId: plan.communityId,
-      objectType: "root",
-      objectId: plan.root._id,
-    });
-    return await mapRootBundle(ctx, plan.root, true);
-  }
-
-  const channel = await ensureGeneralChannel({
-    ctx,
-    communityId: plan.communityId,
-    nowMs: plan.nowMs,
-  });
-  const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
-    communityId: plan.communityId,
-    channelId: channel._id,
-    actorType: "human",
-    ...(plan.actorUserId ? { actorUserId: plan.actorUserId } : {}),
-    kind: "discussion",
-    status: "live",
-    visibilityScope: "community",
-    contentSummary: plan.summary,
-    replyCount: 0,
-    reactionSummary: [],
-    idempotencyKey: plan.idempotencyKey,
-    createdAt: plan.createdAt,
-    updatedAt: plan.updatedAt,
-  });
-  await insertContentBlocksForTarget({
-    ctx,
-    communityId: plan.communityId,
-    channelId: channel._id,
-    rootId,
-    visibilityScope: "community",
-    blocks: plan.contentBlocks,
-    nowMs: plan.createdAt,
-  });
-  await insertCanonicalInteractionAttachmentsFromLegacyMessage({
-    ctx,
-    communityId: plan.communityId,
-    rootId,
-    message: plan.message,
-    nowMs: plan.nowMs,
-  });
-  await insertLegacyChatLinkIfMissing({
-    ctx,
-    communityId: plan.communityId,
-    threadId: plan.threadId,
-    messageId: plan.messageId,
-    linkKind: "root",
-    rootId,
-    nowMs: plan.nowMs,
-  });
-
-  const root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
-  if (!root) throw new Error("legacy_chat_interaction_root_create_failed");
-  await scheduleCommunityInteractionEvidenceSync({
-    ctx,
-    communityId: plan.communityId,
-    objectType: "root",
-    objectId: rootId,
-  });
-  return await mapRootBundle(ctx, root, false);
-}
-
-export async function createInteractionRootFromLegacyChatMessageCore(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}) {
-  const plan = await planInteractionRootFromLegacyChatMessageCore(args);
-  return await materializeLegacyChatRootInteractionPlan(args.ctx, plan);
-}
-
-export async function planInteractionReplyFromLegacyChatMessageCore(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}): Promise<LegacyChatReplyInteractionPlan> {
-  if (normalizeIdValue(args.message.threadId) !== normalizeIdValue(args.thread._id)) {
-    throw new Error("legacy_chat_interaction_thread_mismatch");
-  }
-  if (!args.message.replyToMessageId) {
-    throw new Error("legacy_chat_interaction_reply_target_required");
-  }
-
-  const nowMs = args.nowMs ?? Date.now();
-  const existingLink = await getLegacyChatLinkByMessage(args.ctx, args.message._id);
-  if (existingLink) {
-    if (existingLink.linkKind !== "reply" || !existingLink.replyId) {
-      throw new Error("legacy_chat_interaction_link_conflict");
-    }
-    const linkedReply = (await args.ctx.db.get(existingLink.replyId as any)) as InteractionReplyRow | null;
-    if (!linkedReply) throw new Error("legacy_chat_interaction_link_target_missing");
-    const linkedRoot = (await args.ctx.db.get(linkedReply.rootId as any)) as InteractionRootRow | null;
-    if (!linkedRoot) throw new Error("legacy_chat_interaction_link_target_missing");
-    if (normalizeIdValue(linkedRoot.communityId) !== normalizeIdValue(args.thread.communityId)) {
-      throw new Error("legacy_chat_interaction_link_target_invalid");
-    }
-    return {
-      planKind: "existing_reply",
-      root: linkedRoot,
-      reply: linkedReply,
-      communityId: linkedReply.communityId,
-      threadId: args.thread._id,
-      messageId: args.message._id,
-      message: args.message,
-      targetMessageId: args.message.replyToMessageId,
-      nowMs,
-      needsLegacyLink: false,
-    };
-  }
-
-  const targetLink = await getLegacyChatLinkByMessage(args.ctx, args.message.replyToMessageId);
-  if (!targetLink || !targetLink.rootId) {
-    throw new Error("legacy_chat_interaction_target_missing");
-  }
-  const root = (await args.ctx.db.get(targetLink.rootId as any)) as InteractionRootRow | null;
-  if (!root || normalizeIdValue(root.communityId) !== normalizeIdValue(args.thread.communityId)) {
-    throw new Error("legacy_chat_interaction_target_invalid");
-  }
-  if (root.status !== "live" || root.lockedAt) {
-    throw new Error("legacy_chat_interaction_root_closed");
-  }
-
-  let targetReplyId: any | undefined;
-  if (targetLink.replyId) {
-    const targetReply = (await args.ctx.db.get(targetLink.replyId as any)) as InteractionReplyRow | null;
-    if (!targetReply || normalizeIdValue(targetReply.rootId) !== normalizeIdValue(root._id)) {
-      throw new Error("legacy_chat_interaction_target_reply_invalid");
-    }
-    targetReplyId = targetReply._id;
-  }
-
-  const idempotencyKey = legacyChatIdempotencyKey(args.message._id, "reply");
-  const existingReply = await getExistingReplyByIdempotencyKey(args.ctx, root.communityId, idempotencyKey);
-  if (existingReply) {
-    if (normalizeIdValue(existingReply.rootId) !== normalizeIdValue(root._id)) {
-      throw new Error("legacy_chat_interaction_idempotency_key_conflict");
-    }
-    return {
-      planKind: "existing_reply",
-      root,
-      reply: existingReply,
-      communityId: root.communityId,
-      threadId: args.thread._id,
-      messageId: args.message._id,
-      message: args.message,
-      targetMessageId: args.message.replyToMessageId,
-      nowMs,
-      needsLegacyLink: true,
-    };
-  }
-
-  const contentBlocks = legacyChatContentBlocks(args.message);
-  const visibilityScope = resolveReplyVisibilityScope(root.visibilityScope, root.visibilityScope);
-  const seq = Math.max(0, Math.floor(root.replyCount ?? 0)) + 1;
-  const createdAt = Math.max(0, Math.floor(Number(args.message.createdAt) || nowMs));
-  const updatedAt = Math.max(0, Math.floor(Number(args.message.updatedAt) || nowMs));
-  return {
-    planKind: "create_reply",
-    root,
-    communityId: root.communityId,
-    threadId: args.thread._id,
-    messageId: args.message._id,
-    message: args.message,
-    targetMessageId: args.message.replyToMessageId,
-    ...(args.message.senderUserId ? { actorUserId: args.message.senderUserId } : {}),
-    ...(targetReplyId ? { targetReplyId } : {}),
-    idempotencyKey,
-    contentBlocks,
-    visibilityScope,
-    summary: contentSummary(contentBlocks),
-    seq,
-    createdAt,
-    updatedAt,
-    nowMs,
-  };
-}
-
-export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: LegacyChatReplyInteractionPlan) {
-  if (plan.planKind === "existing_reply") {
-    await ensureReplyChannelMatchesRoot({
-      ctx,
-      root: plan.root,
-      reply: plan.reply,
-      nowMs: plan.nowMs,
-    });
-    await insertCanonicalInteractionAttachmentsFromLegacyMessage({
-      ctx,
-      communityId: plan.communityId,
-      replyId: plan.reply._id,
-      message: plan.message,
-      nowMs: plan.nowMs,
-    });
-    if (plan.needsLegacyLink) {
-      await insertLegacyChatLinkIfMissing({
-        ctx,
-        communityId: plan.communityId,
-        threadId: plan.threadId,
-        messageId: plan.messageId,
-        targetMessageId: plan.targetMessageId,
-        linkKind: "reply",
-        rootId: plan.root._id,
-        replyId: plan.reply._id,
-        nowMs: plan.nowMs,
-      });
-    }
-    await scheduleCommunityInteractionEvidenceSync({
-      ctx,
-      communityId: plan.communityId,
-      objectType: "reply",
-      objectId: plan.reply._id,
-    });
-    return await mapReplyBundle(ctx, plan.reply, true);
-  }
-
-  const channel = await requireChannelForAddressableRoot({
-    ctx,
-    root: plan.root,
-    nowMs: plan.nowMs,
-  });
-  const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
-    communityId: plan.communityId,
-    channelId: channel._id,
-    rootId: plan.root._id,
-    seq: plan.seq,
-    actorType: "human",
-    ...(plan.actorUserId ? { actorUserId: plan.actorUserId } : {}),
-    ...(plan.targetReplyId ? { targetReplyId: plan.targetReplyId } : {}),
-    status: "live",
-    visibilityScope: plan.visibilityScope,
-    contentSummary: plan.summary,
-    reactionSummary: [],
-    idempotencyKey: plan.idempotencyKey,
-    createdAt: plan.createdAt,
-    updatedAt: plan.updatedAt,
-  });
-  await insertContentBlocksForTarget({
-    ctx,
-    communityId: plan.communityId,
-    channelId: channel._id,
-    replyId,
-    visibilityScope: plan.visibilityScope,
-    blocks: plan.contentBlocks,
-    nowMs: plan.createdAt,
-  });
-  await insertCanonicalInteractionAttachmentsFromLegacyMessage({
-    ctx,
-    communityId: plan.communityId,
-    replyId,
-    message: plan.message,
-    nowMs: plan.nowMs,
-  });
-  await ctx.db.patch(plan.root._id as any, {
-    replyCount: plan.seq,
-    lastReplyAt: plan.createdAt,
-    updatedAt: plan.nowMs,
-  });
-  await insertLegacyChatLinkIfMissing({
-    ctx,
-    communityId: plan.communityId,
-    threadId: plan.threadId,
-    messageId: plan.messageId,
-    targetMessageId: plan.targetMessageId,
-    linkKind: "reply",
-    rootId: plan.root._id,
-    replyId,
-    nowMs: plan.nowMs,
-  });
-
-  const reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
-  if (!reply) throw new Error("legacy_chat_interaction_reply_create_failed");
-  await scheduleCommunityInteractionEvidenceSync({
-    ctx,
-    communityId: plan.communityId,
-    objectType: "reply",
-    objectId: replyId,
-  });
-  return await mapReplyBundle(ctx, reply, false);
-}
-
-export async function createInteractionReplyFromLegacyChatMessageCore(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}) {
-  const plan = await planInteractionReplyFromLegacyChatMessageCore(args);
-  return await materializeLegacyChatReplyInteractionPlan(args.ctx, plan);
-}
-
-export async function recordLegacyChatMessageInteractionBestEffort(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}) {
-  if (args.message.replyToMessageId) {
-    let plan: LegacyChatReplyInteractionPlan;
-    try {
-      plan = await planInteractionReplyFromLegacyChatMessageCore(args);
-    } catch (error) {
-      return {
-        ok: false as const,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-    await materializeLegacyChatReplyInteractionPlan(args.ctx, plan);
-    return { ok: true as const, link_kind: "reply" as const };
-  }
-  let plan: LegacyChatRootInteractionPlan;
-  try {
-    plan = await planInteractionRootFromLegacyChatMessageCore(args);
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-  await materializeLegacyChatRootInteractionPlan(args.ctx, plan);
-  return { ok: true as const, link_kind: "root" as const };
 }
 
 async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
@@ -1682,6 +1124,8 @@ const communityInteractionComposerArgs = {
         }),
       ),
     ),
+    // The old inline attachment shape stays accepted for the cached production
+    // web until the next release; only uploaded attachment ids are honored.
     attachments: v.optional(v.array(v.union(interactionAttachmentInputValidator, legacyInteractionAttachmentInputValidator))),
     // The community's agent writing for this member (Agent page tool use).
     // asPersonalAgent is the older name, still accepted from cached clients.
@@ -1711,9 +1155,11 @@ async function createCommunityInteractionComposerMessageCore(
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    const attachmentInputs = await resolveLegacyComposerAttachments(ctx, {
-      ownerId: userId, communityId: args.communityId, channelId: args.channelId, rootId: args.rootId,
-      messageKey: args.idempotencyKey, attachments: args.attachments ?? [],
+    const attachmentInputs = (args.attachments ?? []).map((input: any) => {
+      if (!input.attachmentId) {
+        throw new Error("Please reattach this file before sending. Its upload ownership could not be verified.");
+      }
+      return { attachmentId: input.attachmentId };
     });
     const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
       actorUserId: userId, messageKey: args.idempotencyKey, rootId: args.rootId,
@@ -2733,9 +2179,6 @@ async function editCommunityInteractionTargetCore(args: {
   text: string;
   actorUserId: any;
   nowMs: number;
-  syncLegacyMessage: boolean;
-  legacyMessageId?: any;
-  legacyAttachments?: unknown[];
 }): Promise<void> {
   if (args.target.status !== "live") throw new Error("interaction_not_editable");
   const blocks: NormalizedContentBlock[] = args.text
@@ -2775,28 +2218,6 @@ async function editCommunityInteractionTargetCore(args: {
     editedAt: args.nowMs,
     updatedAt: args.nowMs,
   });
-  if (Array.isArray(args.legacyAttachments)) {
-    const parentField = args.targetType === "root" ? "rootId" : "replyId";
-    const parentIndex = args.targetType === "root" ? "by_root" : "by_reply";
-    const existingAttachments = await args.ctx.db
-      .query("communityInteractionAttachments" as any)
-      .withIndex(parentIndex, (q: any) => q.eq(parentField, args.target._id))
-      .take(33);
-    if (existingAttachments.length > 32) {
-      throw new Error("interaction_attachment_replace_limit_exceeded");
-    }
-    const normalizedAttachments = normalizeInteractionAttachmentInputs(args.legacyAttachments);
-    const matches = (row: any, input: NormalizedInteractionAttachmentInput) =>
-      row.status === "uploaded" && (input.storageId ? String(row.storageId) === input.storageId : row.externalUrl === input.dataUrl);
-    if (normalizedAttachments.some(input => !existingAttachments.some((row: any) => matches(row, input)))) {
-      throw new Error("community_attachment_legacy_edit_cannot_add");
-    }
-    for (const attachment of existingAttachments) {
-      if (attachment.status === "uploaded" && !normalizedAttachments.some(input => matches(attachment, input))) {
-        await args.ctx.db.patch(attachment._id, { status: "deleted", updatedAt: args.nowMs });
-      }
-    }
-  }
   await suppressPendingMentionsMissingFromInteractionText({
     ctx: args.ctx,
     targetType: args.targetType,
@@ -2804,21 +2225,6 @@ async function editCommunityInteractionTargetCore(args: {
     text: args.text,
     nowMs: args.nowMs,
   });
-  if (args.syncLegacyMessage) {
-    const legacyLink =
-      args.targetType === "root"
-        ? await getLegacyChatLinkByRoot(args.ctx, args.target._id)
-        : await getLegacyChatLinkByReply(args.ctx, args.target._id);
-    if (legacyLink?.messageId) {
-      const message = await args.ctx.db.get(legacyLink.messageId as any);
-      if (message) {
-        await args.ctx.db.patch(legacyLink.messageId as any, {
-          contentJson: { text: args.text },
-          updatedAt: args.nowMs,
-        });
-      }
-    }
-  }
   await args.ctx.db.insert("communityInteractionModerationEvents" as any, {
     communityId: args.communityId,
     targetType: args.targetType,
@@ -2834,53 +2240,6 @@ async function editCommunityInteractionTargetCore(args: {
     objectType: args.targetType,
     objectId: args.target._id,
   });
-}
-
-export async function syncLegacyChatMessageEditToInteractionCore(args: {
-  ctx: any;
-  communityId: any;
-  messageId: any;
-  text: string;
-  attachments: unknown[];
-  actorUserId: any;
-  nowMs: number;
-}): Promise<{ synced: boolean }> {
-  const link = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
-  if (!link) return { synced: false };
-  if (normalizeIdValue(link.communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_conflict");
-  }
-  const targetType = link.linkKind === "root" ? "root" : "reply";
-  const targetId = targetType === "root" ? link.rootId : link.replyId;
-  if (!targetId) throw new Error("legacy_chat_interaction_link_target_missing");
-  const { target, communityId } = await loadCommunityInteractionTarget({
-    ctx: args.ctx,
-    targetType,
-    targetId: normalizeIdValue(targetId),
-  });
-  if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_target_invalid");
-  }
-  // Hydrate only the persisted pre-edit message, never the submitted attachments.
-  const originalMessage = await args.ctx.db.get(args.messageId);
-  if (originalMessage) await insertCanonicalInteractionAttachmentsFromLegacyMessage({
-    ctx: args.ctx, communityId,
-    ...(targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
-    message: originalMessage, nowMs: args.nowMs,
-  });
-  await editCommunityInteractionTargetCore({
-    ctx: args.ctx,
-    targetType,
-    target,
-    communityId,
-    text: args.text,
-    actorUserId: args.actorUserId,
-    nowMs: args.nowMs,
-    syncLegacyMessage: false,
-    legacyMessageId: args.messageId,
-    legacyAttachments: args.attachments,
-  });
-  return { synced: true };
 }
 
 async function tombstoneCommunityInteractionTargetCore(args: {
@@ -2951,40 +2310,6 @@ async function tombstoneCommunityInteractionTargetCore(args: {
   });
 }
 
-export async function syncLegacyChatMessageDeleteToInteractionCore(args: {
-  ctx: any;
-  communityId: any;
-  messageId: any;
-  actorUserId: any;
-  nowMs: number;
-}): Promise<{ synced: boolean }> {
-  const link = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
-  if (!link) return { synced: false };
-  if (normalizeIdValue(link.communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_conflict");
-  }
-  const targetType = link.linkKind === "root" ? "root" : "reply";
-  const targetId = targetType === "root" ? link.rootId : link.replyId;
-  if (!targetId) throw new Error("legacy_chat_interaction_link_target_missing");
-  const { target, communityId } = await loadCommunityInteractionTarget({
-    ctx: args.ctx,
-    targetType,
-    targetId: normalizeIdValue(targetId),
-  });
-  if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_target_invalid");
-  }
-  await tombstoneCommunityInteractionTargetCore({
-    ctx: args.ctx,
-    targetType,
-    target,
-    communityId,
-    actorUserId: args.actorUserId,
-    nowMs: args.nowMs,
-  });
-  return { synced: true };
-}
-
 async function editCommunityInteractionMessageCore(ctx: any, args: {
   targetType: "root" | "reply"; targetId: string; text: string;
 }, userId: any) {
@@ -3012,7 +2337,6 @@ async function editCommunityInteractionMessageCore(ctx: any, args: {
     text,
     actorUserId: userId,
     nowMs: Date.now(),
-    syncLegacyMessage: true,
   });
   return { ok: true };
 }
