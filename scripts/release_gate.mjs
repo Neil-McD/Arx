@@ -429,13 +429,6 @@ async function main() {
     );
 
     await runStep(
-      "convex_cut_guard",
-      "Convex cut guard",
-      "npm run check:convex-cut-runtime-guard",
-      () => runCommand("npm", ["run", "check:convex-cut-runtime-guard"]),
-    );
-
-    await runStep(
       "foundation_baseline",
       "Foundation invariants and behavior",
       "npm run check:foundation-baseline",

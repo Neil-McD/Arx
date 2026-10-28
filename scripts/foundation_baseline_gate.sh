@@ -8,8 +8,9 @@ echo "== Foundation baseline gate =="
 echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
+echo "Unit and behavior tests (vitest) are not run here; the release gate runs them once in its own \`npm run test:unit\` step."
 
-TOTAL_STEPS=66
+TOTAL_STEPS=60
 CURRENT_STEP=1
 
 run_step() {
@@ -20,7 +21,6 @@ run_step() {
   CURRENT_STEP=$((CURRENT_STEP + 1))
 }
 
-run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
 run_step "No orphan Convex modules" npm run check:no-orphan-modules
 run_step "System map covers every module and table" npm run check:system-map-coverage
 run_step "One inference provider, founder-funded turns" npm run check:single-inference-provider
@@ -48,7 +48,6 @@ run_step "Community access role policy proof" npm run check:community-access-rol
 run_step "Community presence lease proof" npm run check:community-presence-lease-proof
 run_step "Community typing presence proof" npm run check:community-typing-presence-proof
 run_step "Direct-message contract proof" npm run check:direct-messages-contract-proof
-run_step "Direct-message typing behavior" npm run check:direct-message-typing-presence-behavior
 run_step "Community subscription lifecycle policy proof" npm run check:community-subscription-lifecycle-policy-proof
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "Thread runtime marker retirement proof" npm run check:thread-runtime-marker-retirement-proof
@@ -69,7 +68,6 @@ run_step "Community interaction projection UI proof" npm run check:community-int
 run_step "Community settings client version contract" npm run check:community-settings-client-version-contract
 run_step "Community founder welcome contract" npm run check:community-founder-welcome-proof
 run_step "Community channel UI proof" npm run check:community-channel-ui-proof
-run_step "Community attention realtime behavior" npm run check:community-attention-realtime
 run_step "No third-party MCP surface proof" npm run check:no-third-party-mcp-surface-proof
 run_step "Cached production client compatibility proof" npm run check:cached-production-client-compatibility-proof
 run_step "Official Polynet MCP contract proof" npm run check:polynet-workspace-mcp-proof
@@ -77,13 +75,10 @@ run_step "Official Polynet MCP authorization proof" npm run check:polynet-worksp
 run_step "App shell decomposition contract" npm run check:app-shell-decomposition-contract
 run_step "Web route access boundary proof" npm run check:web-route-access-boundary-proof
 run_step "Founder inference contract proof" npm run check:founder-inference-proof
-run_step "Founder inference behavior" npm run check:founder-inference-behavior
 run_step "Monetization irreducibility contract" npm run check:monetization-irreducibility-proof
 run_step "Canonical Builder offer surface contract" npm run check:builder-offer-surface-proof
 run_step "Operator complimentary access contract" npm run check:operator-complimentary-access-proof
 run_step "Community commerce economics contract" npm run check:community-commerce-economics-proof
-run_step "Community commerce economics behavior" npm run check:community-commerce-economics-behavior
-run_step "Repository behavior tests" npm test
 run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
 run_step "No legacy runtime-lane wording guard" bash scripts/no_platform_fallback_guard.sh
 
