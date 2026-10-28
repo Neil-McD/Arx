@@ -3,7 +3,7 @@ import {
   PROFILE_DISPLAY_NAME_MAX_CHARS,
 } from "./profileText.ts";
 
-export const MEMBER_AGENT_IDENTITY_CONTEXT_MAX_CHARS = 2400;
+export const COMMUNITY_AGENT_IDENTITY_CONTEXT_MAX_CHARS = 2400;
 
 export type MemberIdentityContextStatus =
   | "loaded"
@@ -19,7 +19,7 @@ const FIELD_LIMITS = {
   socialLink: 500,
 } as const;
 
-export type MemberAgentIdentityContextInput = {
+export type CommunityAgentIdentityContextInput = {
   displayName?: unknown;
   handle?: unknown;
   bio?: unknown;
@@ -84,8 +84,8 @@ function fitIdentityJson(
   return json;
 }
 
-export function renderMemberAgentIdentityContext(
-  input: MemberAgentIdentityContextInput | null | undefined,
+export function renderCommunityAgentIdentityContext(
+  input: CommunityAgentIdentityContextInput | null | undefined,
 ): string | null {
   if (!input) return null;
 
@@ -114,7 +114,7 @@ export function renderMemberAgentIdentityContext(
   ].join("\n");
   const json = fitIdentityJson(
     identity,
-    MEMBER_AGENT_IDENTITY_CONTEXT_MAX_CHARS - instructions.length - 1,
+    COMMUNITY_AGENT_IDENTITY_CONTEXT_MAX_CHARS - instructions.length - 1,
   );
 
   return `${instructions}\n${json}`;

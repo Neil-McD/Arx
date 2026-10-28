@@ -24,8 +24,8 @@ function main() {
   const runtimeTurnHandlers = readText(
     join(root, "convex/runtimeTurnHandlers.ts"),
   );
-  const memberAgentDock = readText(
-    join(root, "apps/web/src/components/WebMemberAgentDock.tsx"),
+  const communityAgentDock = readText(
+    join(root, "apps/web/src/components/WebCommunityAgentDock.tsx"),
   );
   const runtimeCommunityResourceLane = readText(
     join(root, "convex/runtimeCommunityResourceLane.ts"),

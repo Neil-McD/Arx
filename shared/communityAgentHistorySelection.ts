@@ -1,8 +1,8 @@
 import {
-  buildMemberAgentConversationEntries,
-  type MemberAgentConversationEntry,
-  type MemberAgentStoredMessage,
-} from "./memberAgentConversationContext.ts";
+  buildCommunityAgentConversationEntries,
+  type CommunityAgentConversationEntry,
+  type CommunityAgentStoredMessage,
+} from "./communityAgentConversationContext.ts";
 import {
   extractTextFromNativeToolMessageContent,
   type NativeToolAwareMessage,
@@ -13,10 +13,10 @@ import {
   type RuntimeProviderTransport,
 } from "./runtimeInputBudget.ts";
 
-export type MemberAgentHistorySelectionResult =
+export type CommunityAgentHistorySelectionResult =
   | {
       ok: true;
-      selectedEntries: MemberAgentConversationEntry[];
+      selectedEntries: CommunityAgentConversationEntry[];
       selectedEpisodeCount: number;
       loadedCompleteEpisodeCount: number;
       ignoredLeadingMessageCount: number;
@@ -33,12 +33,12 @@ export type MemberAgentHistorySelectionResult =
     };
 
 function groupCompleteConversationEpisodes(
-  entries: readonly MemberAgentConversationEntry[],
+  entries: readonly CommunityAgentConversationEntry[],
 ): {
-  episodes: MemberAgentConversationEntry[][];
+  episodes: CommunityAgentConversationEntry[][];
   ignoredLeadingMessageCount: number;
 } {
-  const episodes: MemberAgentConversationEntry[][] = [];
+  const episodes: CommunityAgentConversationEntry[][] = [];
   let ignoredLeadingMessageCount = 0;
   for (const entry of entries) {
     if (entry.role === "user") {
@@ -57,7 +57,7 @@ function groupCompleteConversationEpisodes(
 
 function toProviderMessages(
   systemPrompt: string,
-  episodes: readonly MemberAgentConversationEntry[][],
+  episodes: readonly CommunityAgentConversationEntry[][],
 ): NativeToolAwareMessage[] {
   return [
     { role: "system", content: systemPrompt },
@@ -73,16 +73,16 @@ function toProviderMessages(
   ];
 }
 
-export function selectMemberAgentHistoryForBudget(params: {
-  rows: readonly MemberAgentStoredMessage[];
+export function selectCommunityAgentHistoryForBudget(params: {
+  rows: readonly CommunityAgentStoredMessage[];
   expectedUserMessageKey: string;
   systemPrompt: string;
   transport: RuntimeProviderTransport;
   modelRef: string;
   toolSchemas: readonly unknown[];
   reservedOutputTokens: number;
-}): MemberAgentHistorySelectionResult {
-  const built = buildMemberAgentConversationEntries({
+}): CommunityAgentHistorySelectionResult {
+  const built = buildCommunityAgentConversationEntries({
     rows: params.rows,
     expectedUserMessageKey: params.expectedUserMessageKey,
   });

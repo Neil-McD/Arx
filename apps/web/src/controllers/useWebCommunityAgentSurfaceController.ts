@@ -5,11 +5,11 @@ import type {
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
 import type {
-  MemberAgentSurfaceContextV1,
-} from "../../../../shared/memberAgentSurfaceContext";
+  CommunityAgentSurfaceContextV1,
+} from "../../../../shared/communityAgentSurfaceContext";
 import type { WebCommunityRecord } from "../webAppContracts";
 
-export function useWebMemberAgentSurfaceController(params: {
+export function useWebCommunityAgentSurfaceController(params: {
   pageMode: boolean;
   activePage: AppPage;
   communityTab: CommunityTab;
@@ -19,14 +19,14 @@ export function useWebMemberAgentSurfaceController(params: {
   hasResolvedCommunities: boolean;
   isDirectMessagesOpen: boolean;
   isOnboardingModalOpen: boolean;
-  memberAgentVoiceUiState: string;
+  communityAgentVoiceUiState: string;
   cancelVoiceInput: () => void;
 }) {
   const community =
     params.activePage === "community"
       ? params.activeCommunity
       : null;
-  const surfaceContext: MemberAgentSurfaceContextV1 | null =
+  const surfaceContext: CommunityAgentSurfaceContextV1 | null =
     params.activePage === "community" && community?.id && community.slug
       ? {
           version: 1,
@@ -52,7 +52,7 @@ export function useWebMemberAgentSurfaceController(params: {
       previousVoiceScopeKeyRef.current !== voiceScopeKey;
     previousVoiceScopeKeyRef.current = voiceScopeKey;
     if (
-      params.memberAgentVoiceUiState !== "idle" &&
+      params.communityAgentVoiceUiState !== "idle" &&
       (!isVisible || params.isDirectMessagesOpen || scopeChanged)
     ) {
       params.cancelVoiceInput();
@@ -61,7 +61,7 @@ export function useWebMemberAgentSurfaceController(params: {
     isVisible,
     params.isDirectMessagesOpen,
     params.cancelVoiceInput,
-    params.memberAgentVoiceUiState,
+    params.communityAgentVoiceUiState,
     voiceScopeKey,
   ]);
 

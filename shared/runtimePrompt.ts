@@ -17,9 +17,9 @@ import {
   type RuntimeInvocationSurface,
 } from "./runtimeInvocationSurface.ts";
 import {
-  renderMemberAgentSurfaceContextForPrompt,
-  type MemberAgentSurfaceContextV1,
-} from "./memberAgentSurfaceContext.ts";
+  renderCommunityAgentSurfaceContextForPrompt,
+  type CommunityAgentSurfaceContextV1,
+} from "./communityAgentSurfaceContext.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -126,7 +126,7 @@ export type RuntimePlatformHarnessPromptParams =
     currentDateLabel?: string | null;
     currentTimeZone?: string | null;
     invocationSurface: RuntimeInvocationSurface;
-    memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+    communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
     memberIdentityContextMd?: string | null;
     communityMemoryRecallMd?: string | null;
     promptExtensions?: readonly RuntimePromptExtensionSection[];
@@ -635,10 +635,10 @@ export function buildPlatformHarnessRuntimePromptBundle(
             owner: "runtime",
             authority: "runtime_fact",
             source:
-              "shared/memberAgentSurfaceContext.ts#renderMemberAgentSurfaceContextForPrompt",
+              "shared/communityAgentSurfaceContext.ts#renderCommunityAgentSurfaceContextForPrompt",
             reason: "bounded current-page orientation",
-            text: renderMemberAgentSurfaceContextForPrompt(
-              params.memberAgentSurfaceContext,
+            text: renderCommunityAgentSurfaceContextForPrompt(
+              params.communityAgentSurfaceContext,
               params.communityName,
             ),
           }),
@@ -649,7 +649,7 @@ export function buildPlatformHarnessRuntimePromptBundle(
             owner: "user",
             authority: "evidence",
             source:
-              "shared/memberAgentIdentityContext.ts#renderMemberAgentIdentityContext",
+              "shared/communityAgentIdentityContext.ts#renderCommunityAgentIdentityContext",
             reason: "bounded deterministic member identity context",
             text: params.memberIdentityContextMd,
           }),

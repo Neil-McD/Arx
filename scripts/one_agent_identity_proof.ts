@@ -33,7 +33,7 @@ assert.match(read("convex/runtimeAgentLoop.ts"), /principalKind: communityOwned 
 
 const surface = read("shared/runtimeInvocationSurface.ts");
 assert.doesNotMatch(surface, /Polynet Intelligence|personal agent in Polynet|You do not belong to any community/, "the retired personal-agent prompt stays deleted");
-assert.match(surface, /return normalizedThreadKey\.startsWith\(`\$\{MEMBER_AGENT_THREAD_KEY_PREFIX\}:`\);/, "every member-agent conversation is read-only history");
+assert.match(surface, /return normalizedThreadKey\.startsWith\(`\$\{COMMUNITY_AGENT_THREAD_KEY_PREFIX\}:`\);/, "every member-agent conversation is read-only history");
 
 const interactions = read("convex/communityInteractions.ts");
 assert.match(interactions, /actor_type: presentInteractionActorType\(root\.actorType\)/, "old posts read as the community agent");

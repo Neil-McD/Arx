@@ -79,7 +79,7 @@ describe("community memory recall prompt section", () => {
     { path: memoryPath("a"), title: "Compare buildId before retrying", type: "playbook", grade: "B", appliesWhen: null },
   ]);
 
-  it("renders recalled memory as scoped community evidence for the member agent", () => {
+  it("renders recalled memory as scoped community evidence for the community agent", () => {
     const bundle = buildPlatformHarnessRuntimePromptBundle({
       ...base, invocationSurface: "member_agent_dock", communityMemoryRecallMd: recall,
     } as any);

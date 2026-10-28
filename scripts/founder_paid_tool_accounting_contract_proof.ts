@@ -98,11 +98,11 @@ assert.match(
 );
 assert.match(
   runtimeInvocationSurface,
-  /MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET[\s\S]*"web_research"/,
+  /COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET[\s\S]*"web_research"/,
 );
 assert.match(
   runtimeInvocationSurface,
-  /MEMBER_AGENT_DOCK_TOOL_NAME_SET[\s\S]*"web_research"[\s\S]*"web_crawl"/,
+  /COMMUNITY_AGENT_DOCK_TOOL_NAME_SET[\s\S]*"web_research"[\s\S]*"web_crawl"/,
 );
 assert.doesNotMatch(providerPricing, /WEB_RESEARCH_CREDITS_PER_CALL/);
 assert.doesNotMatch(providerPricing, /priceWebResearchCredits/);

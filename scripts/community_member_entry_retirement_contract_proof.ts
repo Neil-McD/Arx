@@ -32,10 +32,10 @@ const schema = read("convex/schema.ts");
 const app = read("apps/web/src/App.tsx");
 const composition = read("apps/web/src/components/WebAppCompositionRoot.tsx");
 const chat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const dock = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const settingsStyles = read("apps/web/src/styles/settings-runtime-and-theme-overrides.css");
-const dockStyles = read("apps/web/src/components/WebMemberAgentDock.css");
+const dockStyles = read("apps/web/src/components/WebCommunityAgentDock.css");
 const contract = read("docs/community-member-arrival-v1.md");
 
 assert.match(lifecycle, /type: "member_joined"/);
@@ -47,7 +47,7 @@ for (const [source, label] of [
   [app, "App"],
   [composition, "composition root"],
   [chat, "community chat"],
-  [dock, "member agent dock"],
+  [dock, "community agent dock"],
   [settings, "community settings"],
 ] as const) {
   assert.doesNotMatch(source, /CommunityOnboarding|communityOnboarding|community-onboarding/,

@@ -121,7 +121,7 @@ field. Before any data write:
 
 1. Prove the exact Release A SHA is live in Vercel and Convex.
 2. Prove retired public/internal writer functions are absent.
-3. Pass the authenticated Member Agent community-inspection canary.
+3. Pass the authenticated Community Agent community-inspection canary.
 4. Run a read-only Blaxel control-plane inventory and require zero
    Polynet-owned sandboxes and volumes, including every resource named by a
    persisted `pn-p-*` pointer. Shared-workspace resources that are not owned by

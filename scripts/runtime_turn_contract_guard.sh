@@ -15,7 +15,7 @@ RESOLUTION_FILE="convex/runtimeTurnResolution.ts"
 PERSISTENCE_FILE="convex/runtimeTurnPersistence.ts"
 THREADS_FILE="convex/threads.ts"
 LOOP_FILE="convex/runtimeAgentLoop.ts"
-MEMBER_AGENT_DOCK_FILE="apps/web/src/components/WebMemberAgentDock.tsx"
+COMMUNITY_AGENT_DOCK_FILE="apps/web/src/components/WebCommunityAgentDock.tsx"
 TURN_RUNNER_FILE="shared/useWebTurnRunnerController.ts"
 SCHEMA_FILE="convex/schema.ts"
 
@@ -47,8 +47,8 @@ if [[ ! -f "$LOOP_FILE" ]]; then
   echo "FAIL: missing $LOOP_FILE"
   exit 1
 fi
-if [[ ! -f "$MEMBER_AGENT_DOCK_FILE" ]]; then
-  echo "FAIL: missing $MEMBER_AGENT_DOCK_FILE"
+if [[ ! -f "$COMMUNITY_AGENT_DOCK_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_AGENT_DOCK_FILE"
   exit 1
 fi
 if [[ ! -f "$TURN_RUNNER_FILE" ]]; then
@@ -171,9 +171,9 @@ require_match_in_file "$THREADS_FILE" 'return existingByMessageKey;' \
   "threads mutation returns existing row for duplicate messageKey"
 
 echo "[11/11] Ensuring browser tool routing is structural, not heuristic..."
-require_match_in_file "$MEMBER_AGENT_DOCK_FILE" 'requestedAgenticTools: true' \
+require_match_in_file "$COMMUNITY_AGENT_DOCK_FILE" 'requestedAgenticTools: true' \
   "mounted member-agent turns stay tool-capable by default"
-forbid_match_in_file "$MEMBER_AGENT_DOCK_FILE" 'requiresWorkspaceTools' \
+forbid_match_in_file "$COMMUNITY_AGENT_DOCK_FILE" 'requiresWorkspaceTools' \
   "member-agent dock does not carry a workspace-mode flag"
 forbid_match_in_file "$TURN_RUNNER_FILE" 'resolveAuthenticatedTurnToolMode' \
   "turn runner does not use heuristic tool mode classification"
@@ -203,10 +203,10 @@ echo "OK: temporary threadRuntimeMarkerRetirement.ts is deleted"
 for file in \
   shared/cloudThreadsRead.ts \
   shared/cloudThreadsGateway.ts \
-  shared/cloudMemberAgentGateway.ts \
+  shared/cloudCommunityAgentConversationGateway.ts \
   shared/webTurnRunnerCore.ts \
   shared/useWebTurnRunnerController.ts \
-  apps/web/src/components/WebMemberAgentDock.tsx; do
+  apps/web/src/components/WebCommunityAgentDock.tsx; do
   forbid_match_in_file "$file" '\bruntimeEngine\b|\bruntime_engine\b' \
     "$file no longer transports the constant native runtime marker"
 done

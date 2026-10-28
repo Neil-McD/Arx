@@ -24,7 +24,7 @@ deployment status. Automated checks do not substitute for live visual acceptance
   and rechecks active community access before resolving anything.
 - Reuse memberAgentChannels -> memberAgentEpisodes -> threads. A new compound
   index resolves exactly (owner, community scope, community); creation occurs in
-  one Convex transaction. No per-member agent configuration table is added.
+  one Convex transaction. No per-community agent configuration table is added.
 - The reserved thread key binds community identity permanently. Context setters
   reject clearing or changing it. Generic thread creation cannot claim these keys.
 - Owned thread/message readers recheck community access for the new conversations.

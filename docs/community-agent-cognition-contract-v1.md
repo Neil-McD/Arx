@@ -210,7 +210,7 @@ Dedicated surface tools answer:
 What canonical surface state or evidence should the agent inspect now?
 ```
 
-This layer should arrive surface by surface as each boundary becomes stable. The platform-harness resource surface uses canonical semantic list/read for ordinary traversal, plus explicit batch-read and search operations where those capabilities are physically required. Canonical chat and AI Feed evidence now have typed search/read paths for the member agent, community Concierge, and external workspace MCP. Member runs see live modules and pages only; manager runs can additionally inspect builder-visible draft/source/health state. Neither lane exposes raw storage keys. Events and members remain deferred until their source and privacy contracts are equally clear.
+This layer should arrive surface by surface as each boundary becomes stable. The platform-harness resource surface uses canonical semantic list/read for ordinary traversal, plus explicit batch-read and search operations where those capabilities are physically required. Canonical chat and AI Feed evidence now have typed search/read paths for the community agent, community Concierge, and external workspace MCP. Member runs see live modules and pages only; manager runs can additionally inspect builder-visible draft/source/health state. Neither lane exposes raw storage keys. Events and members remain deferred until their source and privacy contracts are equally clear.
 
 | Surface | Future direct read role | Compiler-window role |
 | --- | --- | --- |
@@ -2092,7 +2092,7 @@ Two payment lanes, split by what the spend produces:
   subscription or the operator grant may fund a cycle. It is
   capped at two cycles per day and retains the owner off-switch
   (`communityAgentConfigs.agentEnabled`).
-- The member agent under an authorized community lens, direct Concierge chat,
+- The community agent under an authorized community lens, direct Concierge chat,
   autonomous cognition, and AI-assisted setup generation are
   community-founder-funded. A verified $79 monthly subscription attaches to exactly
   one community; the active platform-owner role is complimentary. Polynet supplies
@@ -2302,7 +2302,7 @@ but the canonical deployed surface contains only the memory runtime itself.
 ## Thirty-Second Implementation Slice: Canonical Retrieval Receipts
 
 Accepted-memory consumption now uses one privacy-safe receipt contract across
-the member agent, community Concierge, and external MCP:
+the community agent, community Concierge, and external MCP:
 
 ```txt
 search under one authenticated community lens

@@ -10,7 +10,7 @@ const accountGraphLifecycle = read(
   "apps/web/src/controllers/useWebAccountGraphLifecycle.ts",
 );
 const resetSessionState = read("apps/web/src/auth/resetSessionState.ts");
-const memberDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const memberDock = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const mcp = read("convex/httpMcp.ts");
 
 const sessionReadyBlock =

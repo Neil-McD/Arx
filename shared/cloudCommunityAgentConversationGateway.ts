@@ -1,7 +1,7 @@
 import type { AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 
-export type CloudMemberAgentChannel = {
+export type CloudCommunityAgentChannel = {
   channel_id: string;
   episode_id: string;
   episode_ordinal: number;
@@ -12,7 +12,7 @@ export type CloudMemberAgentChannel = {
   context_version: number;
 };
 
-function normalizeMemberAgentChannel(payload: CloudMemberAgentChannel | null): CloudMemberAgentChannel {
+function normalizeCommunityAgentChannel(payload: CloudCommunityAgentChannel | null): CloudCommunityAgentChannel {
   const threadKey = String(payload?.thread_key ?? "").trim();
   const channelId = String(payload?.channel_id ?? "").trim();
   const episodeId = String(payload?.episode_id ?? "").trim();
@@ -35,14 +35,14 @@ function normalizeMemberAgentChannel(payload: CloudMemberAgentChannel | null): C
   };
 }
 
-export async function ensureCloudCommunityAgentConversation(params: { session: AuthSessionLike; initialCommunityId: string | null }): Promise<CloudMemberAgentChannel> {
+export async function ensureCloudCommunityAgentConversation(params: { session: AuthSessionLike; initialCommunityId: string | null }): Promise<CloudCommunityAgentChannel> {
   if (!params.initialCommunityId) throw new Error("community_required");
   const { client } = await bootstrapConvexAuthenticatedClient(params.session);
-  return normalizeMemberAgentChannel(await client.mutation("threads:ensureCommunityAgentConversation" as any, { communityId: params.initialCommunityId }) as CloudMemberAgentChannel);
+  return normalizeCommunityAgentChannel(await client.mutation("threads:ensureCommunityAgentConversation" as any, { communityId: params.initialCommunityId }) as CloudCommunityAgentChannel);
 }
 
-export async function startNewCloudCommunityAgentConversation(params: { session: AuthSessionLike; initialCommunityId: string | null; expectedActiveEpisodeId: string }): Promise<CloudMemberAgentChannel> {
+export async function startNewCloudCommunityAgentConversation(params: { session: AuthSessionLike; initialCommunityId: string | null; expectedActiveEpisodeId: string }): Promise<CloudCommunityAgentChannel> {
   if (!params.initialCommunityId) throw new Error("community_required");
   const { client } = await bootstrapConvexAuthenticatedClient(params.session);
-  return normalizeMemberAgentChannel(await client.mutation("threads:startNewCommunityAgentConversation" as any, { communityId: params.initialCommunityId, expectedActiveEpisodeId: params.expectedActiveEpisodeId }) as CloudMemberAgentChannel);
+  return normalizeCommunityAgentChannel(await client.mutation("threads:startNewCommunityAgentConversation" as any, { communityId: params.initialCommunityId, expectedActiveEpisodeId: params.expectedActiveEpisodeId }) as CloudCommunityAgentChannel);
 }

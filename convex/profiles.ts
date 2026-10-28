@@ -144,7 +144,7 @@ async function findProfileDetailByUserId(ctx: any, userId: any): Promise<Profile
   return await getUniqueUserProfileDetailByUserId<ProfileDetailRow>(ctx, userId);
 }
 
-export const resolveMemberAgentIdentityContextInternal = internalQuery({
+export const resolveCommunityAgentIdentityContextInternal = internalQuery({
   args: {
     userId: v.id("users"),
   },

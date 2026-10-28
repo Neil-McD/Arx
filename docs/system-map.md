@@ -182,7 +182,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
   `communityAgentServeWorker`, `communityAppAgentTurn`, `httpRuntimeRoutes`,
   `httpStreaming`, `fundedInferenceGateway`, `founderInference*`,
-  `openAiNativeToolCompletion`, `httpInferenceConfig`, `httpMemberAgentAttachments`, `httpRuntimeSupport`,
+  `openAiNativeToolCompletion`, `httpInferenceConfig`, `httpCommunityAgentAttachments`, `httpRuntimeSupport`,
   `httpRuntimeTurnState`, `runtimeCancellation`, `runtimeHarnessTelemetry`,
   `runtimeToolCallEvents`; web research:
   `webResearchTools`, `webSearchTypes`, `openAiWebSearchTransport`,
@@ -213,7 +213,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   value on stored history only (`shared/communityAgentIdentity.ts`).
 - **Going:** the `asPersonalAgent` composer flag (after the production release);
   stored `personal_agent` values on 14 posts, 4 replies and 9 receipts (rewritten in
-  the table-drop release with Neil's OK); "member agent" code names (step 2b).
+  the table-drop release with Neil's OK); "community agent" code names (step 2b).
 - **Deleted Oct 27 (POL-10, Neil):** OpenRouter (`openRouterNativeTransport`, the
   failure answer now calls OpenAI directly), the free demo model, Claude, Gemini
   and Grok model entries, xAI web search (`xAiSearchTransport`), own-account
@@ -396,6 +396,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
    integrations. Read-only production usage check first; tables retire over two
    releases.
 3. **Legacy chat** retirement: code done Oct 28 (POL-26); tables drop in step 5.
-4. **One agent name:** identity done Oct 28 (POL-27); "member agent" code names next.
+4. **One agent name:** identity done Oct 28 (POL-27); "community agent" code names next.
 5. **Data deletion release:** production backup, then Neil signs off on each
    table's deletion.

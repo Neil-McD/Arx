@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { MemberAgentStoredMessage } from "../shared/memberAgentConversationContext.ts";
-import { selectMemberAgentHistoryForBudget } from "../shared/memberAgentHistorySelection.ts";
+import type { CommunityAgentStoredMessage } from "../shared/communityAgentConversationContext.ts";
+import { selectCommunityAgentHistoryForBudget } from "../shared/communityAgentHistorySelection.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -11,11 +11,11 @@ const threads = read("convex/threads.ts");
 const resolution = read("convex/runtimeTurnResolution.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 const runtimeLoop = read("convex/runtimeAgentLoop.ts");
-const contextBuilder = read("shared/memberAgentConversationContext.ts");
+const contextBuilder = read("shared/communityAgentConversationContext.ts");
 
 assert.match(
   threads,
-  /listMemberAgentRuntimeMessagesInternal = internalQuery[\s\S]*beforeSeq: v\.optional\(v\.number\(\)\)[\s\S]*lte\("seq", expected\.seq\)[\s\S]*lt\("seq", beforeSeq\)[\s\S]*take\(MEMBER_AGENT_CONTEXT_PAGE_SIZE \+ 1\)/,
+  /listCommunityAgentRuntimeMessagesInternal = internalQuery[\s\S]*beforeSeq: v\.optional\(v\.number\(\)\)[\s\S]*lte\("seq", expected\.seq\)[\s\S]*lt\("seq", beforeSeq\)[\s\S]*take\(COMMUNITY_AGENT_CONTEXT_PAGE_SIZE \+ 1\)/,
   "persisted history must use an authorized newest-first page with lookahead",
 );
 assert.match(
@@ -26,7 +26,7 @@ assert.match(
 assert.match(
   resolution,
   /usesPersistedConversation = invocationSurface === "member_agent_dock"[\s\S]*persistedConversationHistory = \{[\s\S]*expectedUserMessageKey/,
-  "member agent turns seed from persisted history",
+  "community agent turns seed from persisted history",
 );
 assert.equal(
   (handlers.match(/persistedConversationHistory,/g) ?? []).length,
@@ -35,12 +35,12 @@ assert.equal(
 );
 assert.match(
   runtimeLoop,
-  /while \(hasMore && !selection\.blockedByBudget\)[\s\S]*selectMemberAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
+  /while \(hasMore && !selection\.blockedByBudget\)[\s\S]*selectCommunityAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
   "the runtime must page until model budget or history exhaustion and persist selection lineage",
 );
 assert.doesNotMatch(
   `${runtimeLoop}\n${contextBuilder}`,
-  /MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN|max_pages_per_turn|page_limit/,
+  /COMMUNITY_AGENT_CONTEXT_MAX_PAGES_PER_TURN|max_pages_per_turn|page_limit/,
   "persisted history must not retain a fixed page-count ceiling under another name",
 );
 assert.match(
@@ -50,11 +50,11 @@ assert.match(
 );
 assert.doesNotMatch(
   contextBuilder,
-  /MEMBER_AGENT_CONTEXT_MAX_MESSAGES/,
+  /COMMUNITY_AGENT_CONTEXT_MAX_MESSAGES/,
   "the old fixed message ceiling must not survive under a legacy name",
 );
 
-const beyondSixtyRows: MemberAgentStoredMessage[] = [];
+const beyondSixtyRows: CommunityAgentStoredMessage[] = [];
 let seq = 1;
 for (let episode = 1; episode <= 31; episode += 1) {
   beyondSixtyRows.push({
@@ -77,7 +77,7 @@ beyondSixtyRows.push({
   contentJson: { text: "current question" },
 });
 
-const beyondSixty = selectMemberAgentHistoryForBudget({
+const beyondSixty = selectCommunityAgentHistoryForBudget({
   rows: beyondSixtyRows,
   expectedUserMessageKey: "user-current",
   systemPrompt: "You are a governed community agent.",
@@ -94,7 +94,7 @@ assert.equal(beyondSixty.blockedByBudget, false);
 assert.equal(beyondSixty.selectedEntries[0]?.messageKey, "user-1");
 assert.equal(beyondSixty.selectedEntries.at(-1)?.messageKey, "user-current");
 
-const beyondFormerPageCeilingRows: MemberAgentStoredMessage[] = [];
+const beyondFormerPageCeilingRows: CommunityAgentStoredMessage[] = [];
 seq = 1;
 for (let episode = 1; episode <= 970; episode += 1) {
   beyondFormerPageCeilingRows.push({
@@ -117,7 +117,7 @@ beyondFormerPageCeilingRows.push({
   contentJson: { text: "current" },
 });
 
-const beyondFormerPageCeiling = selectMemberAgentHistoryForBudget({
+const beyondFormerPageCeiling = selectCommunityAgentHistoryForBudget({
   rows: beyondFormerPageCeilingRows,
   expectedUserMessageKey: "deep-user-current",
   systemPrompt: "system",
@@ -137,7 +137,7 @@ assert.equal(
 );
 assert.equal(beyondFormerPageCeiling.blockedByBudget, false);
 
-const budgetBoundary = selectMemberAgentHistoryForBudget({
+const budgetBoundary = selectCommunityAgentHistoryForBudget({
   rows: [
     {
       messageKey: "old-user",
@@ -174,7 +174,7 @@ assert.deepEqual(
   "a large older episode must be omitted atomically without dropping the current turn",
 );
 
-const splitBoundary = selectMemberAgentHistoryForBudget({
+const splitBoundary = selectCommunityAgentHistoryForBudget({
   rows: [
     {
       messageKey: "orphan-assistant",
@@ -217,7 +217,7 @@ assert.deepEqual(
   "an orphan assistant at a page boundary must never become provider context",
 );
 
-const unknownCapacity = selectMemberAgentHistoryForBudget({
+const unknownCapacity = selectCommunityAgentHistoryForBudget({
   rows: [
     {
       messageKey: "current-user",

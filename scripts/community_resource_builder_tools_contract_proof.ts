@@ -14,7 +14,7 @@ const schema = read("convex/schema.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
-const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const communityAgentDock = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const communityContentController = read("apps/web/src/controllers/useWebCommunityContentController.ts");
 // One reload refreshes both courses and lessons (modules and resources).
 assert.match(
@@ -335,7 +335,7 @@ assert.match(
   "runtime changeset rendering should expose at most one active proposal",
 );
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /member_agent_resource_build[\s\S]*limit: 1[\s\S]*member_agent_resource_changeset_recovery[\s\S]*limit: 1/,
   "resource-build launch and recovery should request one canonical proposal",
 );
@@ -435,7 +435,7 @@ assert.match(
   "runtime timeline should delegate resource approval cards to the dedicated component",
 );
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /useWebTurnRunnerController[\s\S]*setRuntimeEventsByRunId/,
   "mounted member-agent dock should receive the live runtime event cache setter",
 );
@@ -445,17 +445,17 @@ assert.match(
   "live runtime events should be copied into the per-run cache before the streaming message is cleared",
 );
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /runtimeEvents\.length > 0[\s\S]*<RuntimeLiveTimeline[\s\S]*events=\{runtimeEvents\}/,
   "mounted member-agent dock should render live resource changeset events through the retained timeline",
 );
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /startResourceBuild[\s\S]*listCloudPendingCommunityResourceBuilderChangesets[\s\S]*pendingResourceBuildRef[\s\S]*composerFormRef\.current\?\.requestSubmit/,
   "resource launch must check durable pending state and reuse the mounted dock submit path",
 );
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /member_agent_resource_changeset_recovery[\s\S]*listCloudPendingCommunityResourceBuilderChangesets[\s\S]*setRecoveredResourceChangesetCards/,
   "mounted member-agent dock must recover staged proposals after a reload",
 );

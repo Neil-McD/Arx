@@ -37,8 +37,8 @@ type UseWebCommunityVoiceControllerParams = {
   openProfileSetup: () => void;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
-  appendMemberAgentTranscript: (transcript: string) => void;
-  focusMemberAgentInput: () => void;
+  appendCommunityAgentTranscript: (transcript: string) => void;
+  focusCommunityAgentInput: () => void;
 };
 
 export function useWebCommunityVoiceController(
@@ -61,8 +61,8 @@ export function useWebCommunityVoiceController(
     resolveCommunityTranscriptTarget: () => transcriptTargetRef.current,
     setCommunityMessageInput: params.setCommunityMessageInput,
     chatInputRef: params.chatInputRef,
-    appendMemberAgentTranscript: params.appendMemberAgentTranscript,
-    focusMemberAgentInput: params.focusMemberAgentInput,
+    appendCommunityAgentTranscript: params.appendCommunityAgentTranscript,
+    focusCommunityAgentInput: params.focusCommunityAgentInput,
   });
 
   const handleCommunityVoiceInputClick = useCallback(

@@ -15,9 +15,9 @@ import { WebDirectMessagesHost } from "./WebDirectMessagesHost";
 import { WebGlobalOverlayHost } from "./WebGlobalOverlayHost";
 import type { WebGlobalOverlayHostProps } from "./WebGlobalOverlayHost";
 import type {
-  WebMemberAgentDockHandle,
-  WebMemberAgentDockProps,
-} from "./WebMemberAgentDock";
+  WebCommunityAgentDockHandle,
+  WebCommunityAgentDockProps,
+} from "./WebCommunityAgentDock";
 import { WebShellChromeHost } from "./WebShellChromeHost";
 import type { WebShellChromeHostProps } from "./WebShellChromeHost";
 
@@ -27,16 +27,16 @@ const WebAppMainSurfaceHost = lazy(() =>
   })),
 );
 
-const WebMemberAgentDock = lazy(() =>
-  import("./WebMemberAgentDock").then((module) => ({
-    default: module.WebMemberAgentDock,
+const WebCommunityAgentDock = lazy(() =>
+  import("./WebCommunityAgentDock").then((module) => ({
+    default: module.WebCommunityAgentDock,
   })),
 );
 
 export function WebAppCompositionRoot(props: {
   globalOverlayHostProps: WebGlobalOverlayHostProps;
-  memberAgentDockRef: Ref<WebMemberAgentDockHandle>;
-  memberAgentDockProps: WebMemberAgentDockProps;
+  communityAgentDockRef: Ref<WebCommunityAgentDockHandle>;
+  communityAgentDockProps: WebCommunityAgentDockProps;
   directMessagesHostProps: WebDirectMessagesHostProps<AuthSession>;
   mainSurfaceHostProps: WebAppMainSurfaceHostProps;
   shellChromeHostProps: Omit<
@@ -44,16 +44,16 @@ export function WebAppCompositionRoot(props: {
     "mainSurface" | "globalOverlays"
   >;
 }) {
-  const agentSessionKey = communityAgentSessionKey(props.memberAgentDockProps.session?.user.id, props.memberAgentDockProps.community?.id);
-  const showAgentWorkspace = showCommunityAgentWorkspace(props.memberAgentDockProps);
+  const agentSessionKey = communityAgentSessionKey(props.communityAgentDockProps.session?.user.id, props.communityAgentDockProps.community?.id);
+  const showAgentWorkspace = showCommunityAgentWorkspace(props.communityAgentDockProps);
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...props.globalOverlayHostProps} />
-      {!props.memberAgentDockProps.pageMode && <Suspense fallback={null}>
-        <WebMemberAgentDock
+      {!props.communityAgentDockProps.pageMode && <Suspense fallback={null}>
+        <WebCommunityAgentDock
           key={agentSessionKey}
-          ref={props.memberAgentDockRef}
-          {...props.memberAgentDockProps}
+          ref={props.communityAgentDockRef}
+          {...props.communityAgentDockProps}
         />
       </Suspense>}
       <WebDirectMessagesHost {...props.directMessagesHostProps} />
@@ -68,9 +68,9 @@ export function WebAppCompositionRoot(props: {
       <WebAppMainSurfaceHost {...props.mainSurfaceHostProps} />
     </Suspense>
     </div>
-    {props.memberAgentDockProps.pageMode && <main className="workspace community-mode community-agent-workspace" style={{ display: showAgentWorkspace ? undefined : "none" }}>
+    {props.communityAgentDockProps.pageMode && <main className="workspace community-mode community-agent-workspace" style={{ display: showAgentWorkspace ? undefined : "none" }}>
       <Suspense fallback={<div role="status">Loading agent…</div>}>
-        <WebMemberAgentDock key={agentSessionKey} ref={props.memberAgentDockRef} {...props.memberAgentDockProps} />
+        <WebCommunityAgentDock key={agentSessionKey} ref={props.communityAgentDockRef} {...props.communityAgentDockProps} />
       </Suspense>
     </main>}
     </>

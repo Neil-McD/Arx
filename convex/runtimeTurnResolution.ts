@@ -21,7 +21,7 @@ import {
   normalizeMaxTokens,
 } from "./httpRuntimeSupport";
 import {
-  isReadOnlyLegacyMemberAgentThreadKey,
+  isReadOnlyLegacyCommunityAgentThreadKey,
   resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
@@ -29,14 +29,14 @@ import {
   type RuntimeInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
 import {
-  buildMemberAgentConversationContext,
-  type MemberAgentPersistedHistorySeed,
-  type MemberAgentRuntimeHistoryPage,
-} from "../shared/memberAgentConversationContext";
+  buildCommunityAgentConversationContext,
+  type CommunityAgentPersistedHistorySeed,
+  type CommunityAgentRuntimeHistoryPage,
+} from "../shared/communityAgentConversationContext";
 import {
-  normalizeMemberAgentSurfaceContext,
-  type MemberAgentSurfaceContextV1,
-} from "../shared/memberAgentSurfaceContext";
+  normalizeCommunityAgentSurfaceContext,
+  type CommunityAgentSurfaceContextV1,
+} from "../shared/communityAgentSurfaceContext";
 import type { NativeToolInputContentPart } from "../shared/nativeToolProtocol";
 import {
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
@@ -94,7 +94,7 @@ export type RuntimeTurnResolution = {
     role: "user" | "assistant";
     content: string | NativeToolInputContentPart[];
   }>;
-  persistedConversationHistory: MemberAgentPersistedHistorySeed | null;
+  persistedConversationHistory: CommunityAgentPersistedHistorySeed | null;
   requestedModelId: string;
   lane: "platform";
   modelRef: string;
@@ -114,7 +114,7 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
   invocationSurface: RuntimeInvocationSurface;
-  memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
+  communityAgentSurfaceContext: CommunityAgentSurfaceContextV1 | null;
   communityInferenceAdmission: CommunityInferenceFundingAdmission | null;
 };
 
@@ -306,7 +306,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         code: "invalid_invocation_surface",
         error: "invalid_invocation_surface",
         message:
-          "invocation_surface must explicitly match the canonical member agent thread.",
+          "invocation_surface must explicitly match the canonical community agent thread.",
       }),
     };
   }
@@ -337,24 +337,24 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  let memberAgentSurfaceContext =
+  let communityAgentSurfaceContext =
     invocationSurface === "member_agent_dock"
-      ? normalizeMemberAgentSurfaceContext(input.surface_context)
+      ? normalizeCommunityAgentSurfaceContext(input.surface_context)
       : null;
-  if (invocationSurface === "member_agent_dock" && !memberAgentSurfaceContext) {
+  if (invocationSurface === "member_agent_dock" && !communityAgentSurfaceContext) {
     return {
       ok: false,
       response: fail(400, {
         ok: false,
         code: "member_agent_surface_context_required",
         error: "member_agent_surface_context_required",
-        message: "The member agent turn requires a valid current surface.",
+        message: "The community agent turn requires a valid current surface.",
       }),
     };
   }
   if (
     invocationSurface === "member_agent_dock" &&
-    memberAgentSurfaceContext?.kind !== "community"
+    communityAgentSurfaceContext?.kind !== "community"
   ) {
     return {
       ok: false,
@@ -373,7 +373,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     content: string | NativeToolInputContentPart[];
   }>;
   let hasPersistedImageInput = false;
-  let persistedConversationHistory: MemberAgentPersistedHistorySeed | null = null;
+  let persistedConversationHistory: CommunityAgentPersistedHistorySeed | null = null;
   const usesPersistedConversation = invocationSurface === "member_agent_dock";
   if (usesPersistedConversation) {
     const expectedUserMessageKey = String(input.user_message_key ?? "").trim();
@@ -390,14 +390,14 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     }
     try {
       const historyPage = (await ctx.runQuery(
-        internal.threads.listMemberAgentRuntimeMessagesInternal as any,
+        internal.threads.listCommunityAgentRuntimeMessagesInternal as any,
         {
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
           expectedUserMessageKey,
         },
-      )) as MemberAgentRuntimeHistoryPage;
-      const context = buildMemberAgentConversationContext({
+      )) as CommunityAgentRuntimeHistoryPage;
+      const context = buildCommunityAgentConversationContext({
         rows: historyPage.rows,
         expectedUserMessageKey,
       });
@@ -478,7 +478,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
   if (
     invocationSurface === "member_agent_dock" &&
-    isReadOnlyLegacyMemberAgentThreadKey(threadKey)
+    isReadOnlyLegacyCommunityAgentThreadKey(threadKey)
   ) {
     return {
       ok: false,
@@ -490,8 +490,8 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  if (parseCommunityConversationIdentity({ threadKey, communityId: threadCommunityId ?? undefined }) && memberAgentSurfaceContext?.kind === "community") {
-    memberAgentSurfaceContext = { ...memberAgentSurfaceContext, community_conversation: true };
+  if (parseCommunityConversationIdentity({ threadKey, communityId: threadCommunityId ?? undefined }) && communityAgentSurfaceContext?.kind === "community") {
+    communityAgentSurfaceContext = { ...communityAgentSurfaceContext, community_conversation: true };
   }
   if (threadCommunityId) {
     try {
@@ -558,10 +558,10 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       };
     }
   }
-  if (invocationSurface === "member_agent_dock" && memberAgentSurfaceContext) {
+  if (invocationSurface === "member_agent_dock" && communityAgentSurfaceContext) {
     const surfaceCommunitySlug =
-      memberAgentSurfaceContext.kind === "community"
-        ? memberAgentSurfaceContext.community_slug
+      communityAgentSurfaceContext.kind === "community"
+        ? communityAgentSurfaceContext.community_slug
         : null;
     const lensMatchesSurface = surfaceCommunitySlug
       ? runtimeCommunitySlug === surfaceCommunitySlug
@@ -573,7 +573,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
           ok: false,
           code: "member_agent_surface_lens_mismatch",
           error: "member_agent_surface_lens_mismatch",
-          message: "The visible page changed before the member agent turn could start.",
+          message: "The visible page changed before the community agent turn could start.",
         }),
       };
     }
@@ -673,7 +673,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
       }),
       invocationSurface,
-      memberAgentSurfaceContext,
+      communityAgentSurfaceContext,
       communityInferenceAdmission,
     },
   };

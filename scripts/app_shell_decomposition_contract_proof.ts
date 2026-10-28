@@ -129,7 +129,7 @@ assert.match(
 );
 assert.match(
   compositionRoot,
-  /const WebMemberAgentDock = lazy/,
+  /const WebCommunityAgentDock = lazy/,
   "the secondary member-agent dock may retain its lazy boundary",
 );
 assert.match(
@@ -167,7 +167,7 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/useWebDirectMessagesChromeController.tsx",
   "apps/web/src/controllers/useWebDiscoverActivationController.ts",
   "apps/web/src/controllers/useWebJoinedCommunityEntryAction.ts",
-  "apps/web/src/controllers/useWebMemberAgentSurfaceController.ts",
+  "apps/web/src/controllers/useWebCommunityAgentSurfaceController.ts",
   "apps/web/src/controllers/useWebMobileChromeReadingModeLifecycle.ts",
   "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
   "apps/web/src/controllers/useWebPublicFunnelEntryController.ts",
@@ -208,7 +208,7 @@ for (const [ownerPath, requiredMarkers] of [
   ],
   [
     "apps/web/src/controllers/useWebCommunityVoiceController.ts",
-    ["useWebVoiceInputController", "appendMemberAgentTranscript"],
+    ["useWebVoiceInputController", "appendCommunityAgentTranscript"],
   ],
   [
     "apps/web/src/controllers/useWebTelemetryLifecycle.ts",

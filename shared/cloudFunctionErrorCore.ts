@@ -1,4 +1,4 @@
-import { COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE } from "./founderInference";
+import { COMMUNITY_AGENT_LIMIT_REACHED_CODE } from "./founderInference";
 
 export type CloudFunctionErrorCategory =
   | "auth"
@@ -86,7 +86,7 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
     code === "platform_inference_quota_exceeded" ||
     code === "provider_inference_quota_exceeded" ||
     code === "community_ai_usage_exhausted" ||
-    code === COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE
+    code === COMMUNITY_AGENT_LIMIT_REACHED_CODE
   )
     return "quota";
   if (

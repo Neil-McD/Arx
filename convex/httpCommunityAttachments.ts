@@ -1,8 +1,8 @@
 import { internal } from "./_generated/api";
-import type { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
+import type { registerCommunityAgentAttachmentRoutes } from "./httpCommunityAgentAttachments";
 import { COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, COMMUNITY_ATTACHMENT_UPLOAD_PATH, communityAttachmentByteLimit, detectCommunityAttachmentMime } from "../shared/communityAttachmentPolicy";
 
-type RouteDependencies = Parameters<typeof registerMemberAgentAttachmentRoutes>[0];
+type RouteDependencies = Parameters<typeof registerCommunityAgentAttachmentRoutes>[0];
 
 // Forward bounded bytes rather than buffering up to 50 MiB inside the runtime.
 // The storage upload URL and its storage ID never come from the browser.

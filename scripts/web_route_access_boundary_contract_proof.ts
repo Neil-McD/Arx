@@ -371,7 +371,7 @@ assert.match(
 );
 assert.match(
   app,
-  /useWebMemberAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*WebRouteAccessHold/,
+  /useWebCommunityAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*WebRouteAccessHold/,
   "the composition root must hold before rendering authorized overlays",
 );
 assert.match(

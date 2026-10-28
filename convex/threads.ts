@@ -19,26 +19,26 @@ import {
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
-  MEMBER_AGENT_GLOBAL_SCOPE_KEY,
-  isGlobalMemberAgentEpisodeThreadKey,
-  isMemberAgentThreadKeyForCommunity,
-  isReadOnlyLegacyMemberAgentThreadKey,
+  COMMUNITY_AGENT_GLOBAL_SCOPE_KEY,
+  isGlobalCommunityAgentEpisodeThreadKey,
+  isCommunityAgentThreadKeyForCommunity,
+  isReadOnlyLegacyCommunityAgentThreadKey,
 } from "../shared/runtimeInvocationSurface";
-import { MEMBER_AGENT_CONTEXT_PAGE_SIZE } from "../shared/memberAgentConversationContext";
+import { COMMUNITY_AGENT_CONTEXT_PAGE_SIZE } from "../shared/communityAgentConversationContext";
 import {
   MEMBER_CONVERSATION_LIST_DEFAULT_LIMIT,
   MEMBER_CONVERSATION_LIST_MAX_LIMIT,
   buildMemberConversationRecallTranscript,
   deriveMemberConversationTitle,
-} from "../shared/memberAgentEpisodeRecall";
+} from "../shared/communityAgentEpisodeRecall";
 import {
-  MEMBER_AGENT_MAX_IMAGE_ATTACHMENTS,
-  MEMBER_AGENT_MAX_IMAGE_BYTES,
-  MEMBER_AGENT_MAX_IMAGE_TOTAL_BYTES,
-  isAllowedMemberAgentImageMime,
-  normalizeMemberAgentImageMime,
-  normalizeMemberAgentImageName,
-} from "../shared/memberAgentAttachments";
+  COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS,
+  COMMUNITY_AGENT_MAX_IMAGE_BYTES,
+  COMMUNITY_AGENT_MAX_IMAGE_TOTAL_BYTES,
+  isAllowedCommunityAgentImageMime,
+  normalizeCommunityAgentImageMime,
+  normalizeCommunityAgentImageName,
+} from "../shared/communityAgentAttachments";
 import { projectRuntimeCommunityContextEventPayload } from "../shared/runtimeCommunityContextReceipt";
 import {
   RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
@@ -78,7 +78,7 @@ type CloudMessageLike = {
   createdAt: number;
 };
 
-type MemberAgentChannelLike = {
+type CommunityAgentChannelLike = {
   _id: any;
   ownerId: any;
   scopeKey?: "global" | "community";
@@ -90,7 +90,7 @@ type MemberAgentChannelLike = {
   updatedAt: number;
 };
 
-type MemberAgentEpisodeLike = {
+type CommunityAgentEpisodeLike = {
   _id: any;
   channelId: any;
   threadId: any;
@@ -140,12 +140,12 @@ type CloudThreadAttachmentUploadTicketLike = {
   claimedAt?: number;
 };
 
-const MEMBER_AGENT_ATTACHMENT_UPLOAD_RATE_WINDOW_MS = 60_000;
-const MEMBER_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT = 16;
-const MEMBER_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS = 10 * 60_000;
-const MEMBER_AGENT_ATTACHMENT_PENDING_TTL_MS = 60 * 60_000;
-const MEMBER_AGENT_ATTACHMENT_MAX_PENDING_COUNT = 8;
-const MEMBER_AGENT_ATTACHMENT_MAX_PENDING_BYTES = 50 * 1024 * 1024;
+const COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_WINDOW_MS = 60_000;
+const COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT = 16;
+const COMMUNITY_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS = 10 * 60_000;
+const COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS = 60 * 60_000;
+const COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_COUNT = 8;
+const COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_BYTES = 50 * 1024 * 1024;
 
 type RuntimeRunLike = {
   _id: any;
@@ -252,7 +252,7 @@ function normalizeStoredCloudMessageAttachments(raw: unknown): StoredCloudMessag
   return out;
 }
 
-async function normalizeMemberAgentMessageContent(args: {
+async function normalizeCommunityAgentMessageContent(args: {
   ctx: any;
   ownerId: any;
   thread: ThreadLike;
@@ -270,7 +270,7 @@ async function normalizeMemberAgentMessageContent(args: {
       : {};
   const text = String(record.text ?? "").trim();
   const rawAttachments = Array.isArray(record.attachments) ? record.attachments : [];
-  if (rawAttachments.length > MEMBER_AGENT_MAX_IMAGE_ATTACHMENTS) {
+  if (rawAttachments.length > COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS) {
     throw new Error("member_agent_attachment_limit_exceeded");
   }
   const attachments: StoredCloudMessageAttachment[] = [];
@@ -302,14 +302,14 @@ async function normalizeMemberAgentMessageContent(args: {
     if (claim.status !== "pending" && claim.status !== "attached") {
       throw new Error("member_agent_attachment_claim_invalid");
     }
-    if (!isAllowedMemberAgentImageMime(claim.mime)) {
+    if (!isAllowedCommunityAgentImageMime(claim.mime)) {
       throw new Error("member_agent_attachment_type_not_supported");
     }
-    if (claim.size <= 0 || claim.size > MEMBER_AGENT_MAX_IMAGE_BYTES) {
+    if (claim.size <= 0 || claim.size > COMMUNITY_AGENT_MAX_IMAGE_BYTES) {
       throw new Error("member_agent_attachment_too_large");
     }
     totalBytes += claim.size;
-    if (totalBytes > MEMBER_AGENT_MAX_IMAGE_TOTAL_BYTES) {
+    if (totalBytes > COMMUNITY_AGENT_MAX_IMAGE_TOTAL_BYTES) {
       throw new Error("member_agent_attachment_total_too_large");
     }
     attachments.push({
@@ -338,7 +338,7 @@ function listStoredCloudMessageStorageIds(contentJson: unknown): string[] {
     .filter(Boolean);
 }
 
-async function attachMemberAgentClaimsToMessage(args: {
+async function attachCommunityAgentClaimsToMessage(args: {
   ctx: any;
   ownerId: any;
   threadId: any;
@@ -373,7 +373,7 @@ async function attachMemberAgentClaimsToMessage(args: {
   }
 }
 
-async function deleteMemberAgentClaimsForMessage(args: {
+async function deleteCommunityAgentClaimsForMessage(args: {
   ctx: any;
   ownerId: any;
   threadId: any;
@@ -538,7 +538,7 @@ async function resolveRuntimeRunCanonicalCommunityLens(args: {
 }> {
   const threadCommunityId = normalizeIdValue(args.thread.communityId);
   if (communityConversationScope(args.thread)) {
-    await requireWritableMemberAgentThread({ ctx: args.ctx, ownerId: args.ownerId, thread: args.thread, role: "user" });
+    await requireWritableCommunityAgentThread({ ctx: args.ctx, ownerId: args.ownerId, thread: args.thread, role: "user" });
   }
   const requestedCommunityId = normalizeIdValue(args.requestedCommunityId);
   const hasRequestedContextVersion =
@@ -1301,7 +1301,7 @@ export const ensureCloudThread = mutation({
   },
 });
 
-async function requireWritableMemberAgentThread(args: {
+async function requireWritableCommunityAgentThread(args: {
   ctx: any;
   ownerId: any;
   thread: ThreadLike;
@@ -1315,7 +1315,7 @@ async function requireWritableMemberAgentThread(args: {
     if (episode.status !== "active" || channel.activeEpisodeId !== episode._id || typeof args.thread.archivedAt === "number") throw new Error("member_agent_episode_not_active");
     return;
   }
-  if (isReadOnlyLegacyMemberAgentThreadKey(threadKey)) {
+  if (isReadOnlyLegacyCommunityAgentThreadKey(threadKey)) {
     throw new Error("member_agent_legacy_episode_read_only");
   }
 }
@@ -1330,7 +1330,7 @@ async function requireWritableClaimedImageAttachmentThread(args: {
   thread: ThreadLike;
 }): Promise<void> {
   if (communityConversationScope(args.thread)) {
-    await requireWritableMemberAgentThread({
+    await requireWritableCommunityAgentThread({
       ctx: args.ctx,
       ownerId: args.ownerId,
       thread: args.thread,
@@ -1341,9 +1341,9 @@ async function requireWritableClaimedImageAttachmentThread(args: {
   throw new Error("member_agent_attachment_thread_required");
 }
 
-function buildMemberAgentChannelResponse(args: {
-  channel: MemberAgentChannelLike;
-  episode: MemberAgentEpisodeLike;
+function buildCommunityAgentChannelResponse(args: {
+  channel: CommunityAgentChannelLike;
+  episode: CommunityAgentEpisodeLike;
   thread: ThreadLike;
   communityId: string | null;
 }) {
@@ -1374,7 +1374,7 @@ async function ensureCommunityAgentConversationHandler(ctx: MutationCtx, args: O
       if (!episode || episode.channelId !== existing._id || episode.status !== "active") throw new Error("member_agent_active_episode_invalid");
       const thread = await requireOwnedCloudThread({ ctx, ownerId, threadId: episode.threadId });
       if (communityConversationScope(thread) !== args.communityId || typeof thread.archivedAt === "number") throw new Error("community_conversation_scope_mismatch");
-      return buildMemberAgentChannelResponse({ channel: existing, episode, thread, communityId: args.communityId });
+      return buildCommunityAgentChannelResponse({ channel: existing, episode, thread, communityId: args.communityId });
     }
     const now = Date.now();
     const threadKey = buildCommunityConversationThreadKey(args.communityId, 1);
@@ -1384,7 +1384,7 @@ async function ensureCommunityAgentConversationHandler(ctx: MutationCtx, args: O
     const channelId = await ctx.db.insert("memberAgentChannels", { ownerId, communityId: args.communityId, scopeKey: "community", nextOrdinal: 2, createdAt: now, updatedAt: now });
     const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId, ordinal: 1, status: "active", startedAt: now, createdAt: now, updatedAt: now });
     await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
-    return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channelId))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
+    return buildCommunityAgentChannelResponse({ channel: (await ctx.db.get(channelId))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
 }
 
 export const ensureCommunityAgentConversation = mutation({
@@ -1420,7 +1420,7 @@ export const startNewCommunityAgentConversation = mutation({
     const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId: channel._id, threadId, ordinal, status: "active", startedAt: now, createdAt: now, updatedAt: now });
     await ctx.db.patch(previous._id, { status: "closed", closedAt: now, updatedAt: now });
     await ctx.db.patch(channel._id, { activeEpisodeId: episodeId, nextOrdinal: ordinal + 1, updatedAt: now });
-    return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channel._id))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
+    return buildCommunityAgentChannelResponse({ channel: (await ctx.db.get(channel._id))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
   },
 });
 
@@ -1468,7 +1468,7 @@ export const listNewestCloudThreadMessagesForTrustedOwnerInternal = internalQuer
   handler: async (ctx, { trustedOwnerId, ...args }) => await listNewestCloudThreadMessagesHandler(ctx, args, trustedOwnerId),
 });
 
-export const listMemberAgentRuntimeMessagesInternal = internalQuery({
+export const listCommunityAgentRuntimeMessagesInternal = internalQuery({
   args: {
     ownerId: v.id("users"),
     threadId: v.id("threads"),
@@ -1480,7 +1480,7 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
     if (!thread || thread.ownerId !== args.ownerId || typeof thread.archivedAt === "number") {
       throw new Error("member_agent_thread_not_found");
     }
-    if (communityConversationScope(thread)) await requireWritableMemberAgentThread({ ctx, ownerId: args.ownerId, thread, role: "user" });
+    if (communityConversationScope(thread)) await requireWritableCommunityAgentThread({ ctx, ownerId: args.ownerId, thread, role: "user" });
     const expectedUserMessageKey = String(args.expectedUserMessageKey ?? "").trim();
     if (!expectedUserMessageKey) throw new Error("member_agent_user_message_key_required");
     const expected = (await ctx.db
@@ -1506,10 +1506,10 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
           : threadRange.lt("seq", beforeSeq);
       })
       .order("desc")
-      .take(MEMBER_AGENT_CONTEXT_PAGE_SIZE + 1)) as CloudMessageLike[];
+      .take(COMMUNITY_AGENT_CONTEXT_PAGE_SIZE + 1)) as CloudMessageLike[];
     const newestFirst = pageWithLookahead.slice(
       0,
-      MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+      COMMUNITY_AGENT_CONTEXT_PAGE_SIZE,
     );
     const rows = await Promise.all(
       newestFirst.map(async (row) => ({
@@ -1525,7 +1525,7 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
     return {
       expectedUserSeq: expected.seq,
       rows,
-      hasMore: pageWithLookahead.length > MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+      hasMore: pageWithLookahead.length > COMMUNITY_AGENT_CONTEXT_PAGE_SIZE,
       nextBeforeSeq:
         rows.length > 0 ? Math.min(...rows.map((row) => row.seq)) : null,
     };
@@ -1533,27 +1533,27 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
 });
 
 function isMemberConversationThreadForChannel(args: {
-  channel: MemberAgentChannelLike;
+  channel: CommunityAgentChannelLike;
   thread: ThreadLike;
   ownerId: any;
 }): boolean {
   if (args.thread.ownerId !== args.ownerId) return false;
   const threadKey = String(args.thread.threadKey ?? "").trim();
-  if (args.channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY) {
-    return isGlobalMemberAgentEpisodeThreadKey(threadKey);
+  if (args.channel.scopeKey === COMMUNITY_AGENT_GLOBAL_SCOPE_KEY) {
+    return isGlobalCommunityAgentEpisodeThreadKey(threadKey);
   }
   const communityId = String(args.channel.communityId ?? "").trim();
   return (
     Boolean(communityId) &&
     String(args.thread.communityId ?? "").trim() === communityId &&
-    isMemberAgentThreadKeyForCommunity(threadKey, communityId)
+    isCommunityAgentThreadKeyForCommunity(threadKey, communityId)
   );
 }
 
 async function buildMemberConversationLensHistory(args: {
   ctx: any;
   thread: ThreadLike;
-  channel: MemberAgentChannelLike;
+  channel: CommunityAgentChannelLike;
 }): Promise<Array<{ community_id: string; community_name: string | null }>> {
   const runs = (await args.ctx.db
     .query("runtimeRuns")
@@ -1596,13 +1596,13 @@ export const listMemberConversationsForToolInternal = internalQuery({
     const channels = (await ctx.db
       .query("memberAgentChannels")
       .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-      .collect()) as MemberAgentChannelLike[];
-    const candidates: Array<{ channel: MemberAgentChannelLike; episode: MemberAgentEpisodeLike }> = [];
+      .collect()) as CommunityAgentChannelLike[];
+    const candidates: Array<{ channel: CommunityAgentChannelLike; episode: CommunityAgentEpisodeLike }> = [];
     for (const channel of channels) {
       const episodes = (await ctx.db
         .query("memberAgentEpisodes")
         .withIndex("by_channel_ordinal", (q) => q.eq("channelId", channel._id))
-        .collect()) as MemberAgentEpisodeLike[];
+        .collect()) as CommunityAgentEpisodeLike[];
       for (const episode of episodes) candidates.push({ channel, episode });
     }
     candidates.sort(
@@ -1625,9 +1625,9 @@ export const listMemberConversationsForToolInternal = internalQuery({
         episode_id: String(episode._id),
         ordinal: episode.ordinal,
         status:
-          channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? episode.status : "historical",
+          channel.scopeKey === COMMUNITY_AGENT_GLOBAL_SCOPE_KEY ? episode.status : "historical",
         storage_scope:
-          channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? "global" : "legacy_community",
+          channel.scopeKey === COMMUNITY_AGENT_GLOBAL_SCOPE_KEY ? "global" : "legacy_community",
         title: deriveMemberConversationTitle({
           storedTitle: thread.title,
           communityName: channel.communityNameSnapshot,
@@ -1650,9 +1650,9 @@ export const readMemberConversationForToolInternal = internalQuery({
     episodeId: v.id("memberAgentEpisodes"),
   },
   handler: async (ctx, args) => {
-    const episode = (await ctx.db.get(args.episodeId)) as MemberAgentEpisodeLike | null;
+    const episode = (await ctx.db.get(args.episodeId)) as CommunityAgentEpisodeLike | null;
     if (!episode) throw new Error("member_conversation_not_found");
-    const channel = (await ctx.db.get(episode.channelId)) as MemberAgentChannelLike | null;
+    const channel = (await ctx.db.get(episode.channelId)) as CommunityAgentChannelLike | null;
     if (!channel || channel.ownerId !== args.ownerId) throw new Error("member_conversation_not_found");
     const thread = (await ctx.db.get(episode.threadId)) as ThreadLike | null;
     if (!thread || !isMemberConversationThreadForChannel({ channel, thread, ownerId: args.ownerId })) {
@@ -1689,9 +1689,9 @@ export const readMemberConversationForToolInternal = internalQuery({
       episode_id: String(episode._id),
       ordinal: episode.ordinal,
       status:
-        channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? episode.status : "historical",
+        channel.scopeKey === COMMUNITY_AGENT_GLOBAL_SCOPE_KEY ? episode.status : "historical",
       storage_scope:
-        channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? "global" : "legacy_community",
+        channel.scopeKey === COMMUNITY_AGENT_GLOBAL_SCOPE_KEY ? "global" : "legacy_community",
       title: deriveMemberConversationTitle({
         storedTitle: thread.title,
         communityName: channel.communityNameSnapshot,
@@ -1732,7 +1732,7 @@ export const readMemberConversationForToolInternal = internalQuery({
   },
 });
 
-export const prepareCloudMemberAgentAttachmentUploadInternal = internalMutation({
+export const prepareCloudCommunityAgentAttachmentUploadInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
     threadId: v.id("threads"),
@@ -1766,10 +1766,10 @@ export const prepareCloudMemberAgentAttachmentUploadInternal = internalMutation(
       .withIndex("by_owner_createdAt", (q) =>
         q
           .eq("ownerId", args.ownerId)
-          .gte("createdAt", nowMs - MEMBER_AGENT_ATTACHMENT_UPLOAD_RATE_WINDOW_MS),
+          .gte("createdAt", nowMs - COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_WINDOW_MS),
       )
       .collect()) as CloudThreadAttachmentUploadTicketLike[];
-    if (recentTickets.length >= MEMBER_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT) {
+    if (recentTickets.length >= COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT) {
       throw new Error("member_agent_attachment_upload_rate_limited");
     }
     const ticketKey = crypto.randomUUID();
@@ -1779,10 +1779,10 @@ export const prepareCloudMemberAgentAttachmentUploadInternal = internalMutation(
       ticketKey,
       messageKey,
       createdAt: nowMs,
-      expiresAt: nowMs + MEMBER_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS,
+      expiresAt: nowMs + COMMUNITY_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS,
     });
     await ctx.scheduler.runAfter(
-      MEMBER_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS,
+      COMMUNITY_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS,
       (internal as any).threads.cleanupCloudMemberAgentAttachmentUploadTicket,
       { ticketId },
     );
@@ -1792,7 +1792,7 @@ export const prepareCloudMemberAgentAttachmentUploadInternal = internalMutation(
   },
 });
 
-export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
+export const claimStoredCloudCommunityAgentAttachmentInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
     threadId: v.id("threads"),
@@ -1840,12 +1840,12 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
     if (!metadata) {
       throw new Error("member_agent_attachment_upload_missing");
     }
-    const mime = normalizeMemberAgentImageMime(metadata.contentType);
+    const mime = normalizeCommunityAgentImageMime(metadata.contentType);
     const size = Number(metadata.size);
-    if (!isAllowedMemberAgentImageMime(mime)) {
+    if (!isAllowedCommunityAgentImageMime(mime)) {
       throw new Error("member_agent_attachment_type_not_supported");
     }
-    if (!Number.isFinite(size) || size <= 0 || size > MEMBER_AGENT_MAX_IMAGE_BYTES) {
+    if (!Number.isFinite(size) || size <= 0 || size > COMMUNITY_AGENT_MAX_IMAGE_BYTES) {
       throw new Error("member_agent_attachment_too_large");
     }
     const recentClaims = (await ctx.db
@@ -1853,7 +1853,7 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
       .withIndex("by_owner_createdAt", (q) =>
         q
           .eq("ownerId", args.ownerId)
-          .gte("createdAt", nowMs - MEMBER_AGENT_ATTACHMENT_PENDING_TTL_MS),
+          .gte("createdAt", nowMs - COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS),
       )
       .collect()) as CloudThreadAttachmentClaimLike[];
     const pendingClaims = recentClaims.filter((claim) => claim.status === "pending");
@@ -1862,8 +1862,8 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
       0,
     );
     if (
-      pendingClaims.length >= MEMBER_AGENT_ATTACHMENT_MAX_PENDING_COUNT ||
-      pendingBytes + size > MEMBER_AGENT_ATTACHMENT_MAX_PENDING_BYTES
+      pendingClaims.length >= COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_COUNT ||
+      pendingBytes + size > COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_BYTES
     ) {
       throw new Error("member_agent_attachment_pending_limit_exceeded");
     }
@@ -1880,7 +1880,7 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
       storageId: args.storageId,
       messageKey,
       status: "pending",
-      name: normalizeMemberAgentImageName(args.name),
+      name: normalizeCommunityAgentImageName(args.name),
       mime,
       size: Math.floor(size),
       createdAt: nowMs,
@@ -1890,7 +1890,7 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
       claimedAt: nowMs,
     });
     await ctx.scheduler.runAfter(
-      MEMBER_AGENT_ATTACHMENT_PENDING_TTL_MS,
+      COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS,
       (internal as any).threads.cleanupPendingCloudThreadAttachment,
       { attachmentId: id },
     );
@@ -1900,7 +1900,7 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
   },
 });
 
-export const cancelCloudMemberAgentAttachmentUploadInternal = internalMutation({
+export const cancelCloudCommunityAgentAttachmentUploadInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
     ticketKey: v.string(),
@@ -1937,7 +1937,7 @@ export const cleanupPendingCloudThreadAttachment = internalMutation({
   handler: async (ctx, args) => {
     const attachment = (await ctx.db.get(args.attachmentId)) as CloudThreadAttachmentClaimLike | null;
     if (!attachment || attachment.status !== "pending") return { deleted: false };
-    if (attachment.createdAt > Date.now() - MEMBER_AGENT_ATTACHMENT_PENDING_TTL_MS) {
+    if (attachment.createdAt > Date.now() - COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS) {
       return { deleted: false };
     }
     await deleteCloudStorageObjectIfPresent(ctx, attachment.storageId);
@@ -2027,13 +2027,13 @@ async function addCloudThreadMessageHandler(ctx: MutationCtx, args: ObjectType<t
       }
     }
 
-    await requireWritableMemberAgentThread({
+    await requireWritableCommunityAgentThread({
       ctx,
       ownerId,
       thread,
       role: args.role,
     });
-    const normalizedContentJson = await normalizeMemberAgentMessageContent({
+    const normalizedContentJson = await normalizeCommunityAgentMessageContent({
       ctx,
       ownerId,
       thread,
@@ -2064,7 +2064,7 @@ async function addCloudThreadMessageHandler(ctx: MutationCtx, args: ObjectType<t
       runId: String(args.runId ?? "").trim() || undefined,
       createdAt,
     });
-    await attachMemberAgentClaimsToMessage({
+    await attachCommunityAgentClaimsToMessage({
       ctx,
       ownerId,
       threadId: thread._id,
@@ -2131,13 +2131,13 @@ async function upsertCloudThreadMessageByMessageKeyHandler(ctx: MutationCtx, arg
     const messageKey = String(args.messageKey ?? "").trim();
     if (!messageKey) throw new Error("message_key_required");
 
-    await requireWritableMemberAgentThread({
+    await requireWritableCommunityAgentThread({
       ctx,
       ownerId,
       thread,
       role: args.role,
     });
-    const normalizedContentJson = await normalizeMemberAgentMessageContent({
+    const normalizedContentJson = await normalizeCommunityAgentMessageContent({
       ctx,
       ownerId,
       thread,
@@ -2164,14 +2164,14 @@ async function upsertCloudThreadMessageByMessageKeyHandler(ctx: MutationCtx, arg
         modelId: String(args.modelId ?? "").trim() || undefined,
         runId: String(args.runId ?? "").trim() || undefined,
       });
-      await deleteMemberAgentClaimsForMessage({
+      await deleteCommunityAgentClaimsForMessage({
         ctx,
         ownerId,
         threadId: thread._id,
         messageKey,
         exceptStorageIds: new Set(listStoredCloudMessageStorageIds(normalizedContentJson)),
       });
-      await attachMemberAgentClaimsToMessage({
+      await attachCommunityAgentClaimsToMessage({
         ctx,
         ownerId,
         threadId: thread._id,
@@ -2210,7 +2210,7 @@ async function upsertCloudThreadMessageByMessageKeyHandler(ctx: MutationCtx, arg
       runId: String(args.runId ?? "").trim() || undefined,
       createdAt,
     });
-    await attachMemberAgentClaimsToMessage({
+    await attachCommunityAgentClaimsToMessage({
       ctx,
       ownerId,
       threadId: thread._id,
@@ -2293,7 +2293,7 @@ export const deleteCloudThreadMessage = mutation({
       return { ok: true, deleted: false };
     }
 
-    await deleteMemberAgentClaimsForMessage({
+    await deleteCommunityAgentClaimsForMessage({
       ctx,
       ownerId,
       threadId: thread._id,

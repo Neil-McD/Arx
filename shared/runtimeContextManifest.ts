@@ -7,11 +7,11 @@ import {
 import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
 import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket.ts";
 import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface.ts";
-import type { MemberIdentityContextStatus } from "./memberAgentIdentityContext.ts";
+import type { MemberIdentityContextStatus } from "./communityAgentIdentityContext.ts";
 import {
-  normalizeMemberAgentSurfaceContext,
-  type MemberAgentSurfaceContextV1,
-} from "./memberAgentSurfaceContext.ts";
+  normalizeCommunityAgentSurfaceContext,
+  type CommunityAgentSurfaceContextV1,
+} from "./communityAgentSurfaceContext.ts";
 import type {
   RuntimePromptSection,
   RuntimePromptSectionAuthority,
@@ -107,7 +107,7 @@ export type RuntimeContextManifestV2 = {
     resourceLane: CommunityResourceRuntimeLaneState["lane"];
     harnessName: string | null;
     inferenceSource: string | null;
-    memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
+    communityAgentSurfaceContext: CommunityAgentSurfaceContextV1 | null;
   };
   request: {
     latestUserText: string | null;
@@ -146,7 +146,7 @@ export type BuildRuntimeContextManifestInput = {
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   runtimeTurnContext?: RuntimeTurnContextPacket | null;
   invocationSurface?: RuntimeInvocationSurface | null;
-  memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+  communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
   memberIdentityContextMd?: string | null;
   memberIdentityContextStatus?: MemberIdentityContextStatus | null;
 };
@@ -286,7 +286,7 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       owner: "user",
       retrieval: "injected_excerpt",
       visibility: "private",
-      source: "profiles.resolveMemberAgentIdentityContextInternal",
+      source: "profiles.resolveCommunityAgentIdentityContextInternal",
       reason: "deterministic account identity for the member's private agent",
     });
   }
@@ -374,7 +374,7 @@ function buildRuntimeStateEntries(params: BuildRuntimeContextManifestInput): Run
     status: identityStatus,
     rendered: identityStatus === "loaded",
     redacted: true,
-    source: "profiles.resolveMemberAgentIdentityContextInternal",
+    source: "profiles.resolveCommunityAgentIdentityContextInternal",
     reason: "private deterministic identity projection status",
   });
   if (params.runtimeTurnEnvelope) {
@@ -519,8 +519,8 @@ export function buildRuntimeContextManifest(
       resourceLane: resourceLane.lane,
       harnessName: compactText(input.harnessName, 80),
       inferenceSource: compactText(input.inferenceSource, 80),
-      memberAgentSurfaceContext: normalizeMemberAgentSurfaceContext(
-        input.memberAgentSurfaceContext,
+      communityAgentSurfaceContext: normalizeCommunityAgentSurfaceContext(
+        input.communityAgentSurfaceContext,
       ),
     },
     request: {

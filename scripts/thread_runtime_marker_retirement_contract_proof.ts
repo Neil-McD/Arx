@@ -14,10 +14,10 @@ const runtimeHandlers = read("convex/runtimeTurnHandlers.ts");
 for (const path of [
   "shared/cloudThreadsRead.ts",
   "shared/cloudThreadsGateway.ts",
-  "shared/cloudMemberAgentGateway.ts",
+  "shared/cloudCommunityAgentConversationGateway.ts",
   "shared/webTurnRunnerCore.ts",
   "shared/useWebTurnRunnerController.ts",
-  "apps/web/src/components/WebMemberAgentDock.tsx",
+  "apps/web/src/components/WebCommunityAgentDock.tsx",
 ]) {
   assert.doesNotMatch(
     read(path),

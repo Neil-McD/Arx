@@ -74,10 +74,10 @@ import {
   buildRuntimeContextManifest,
 } from "../shared/runtimeContextManifest.ts";
 import {
-  renderMemberAgentIdentityContext,
+  renderCommunityAgentIdentityContext,
   type MemberIdentityContextStatus,
-} from "../shared/memberAgentIdentityContext.ts";
-import type { MemberAgentSurfaceContextV1 } from "../shared/memberAgentSurfaceContext.ts";
+} from "../shared/communityAgentIdentityContext.ts";
+import type { CommunityAgentSurfaceContextV1 } from "../shared/communityAgentSurfaceContext.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
@@ -116,11 +116,11 @@ import {
   resolveRuntimeProviderBudgetIdentity,
 } from "../shared/runtimeInputBudget.ts";
 import {
-  MEMBER_AGENT_CONTEXT_PAGE_SIZE,
-  type MemberAgentPersistedHistorySeed,
-  type MemberAgentRuntimeHistoryPage,
-} from "../shared/memberAgentConversationContext.ts";
-import { selectMemberAgentHistoryForBudget } from "../shared/memberAgentHistorySelection.ts";
+  COMMUNITY_AGENT_CONTEXT_PAGE_SIZE,
+  type CommunityAgentPersistedHistorySeed,
+  type CommunityAgentRuntimeHistoryPage,
+} from "../shared/communityAgentConversationContext.ts";
+import { selectCommunityAgentHistoryForBudget } from "../shared/communityAgentHistorySelection.ts";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -819,14 +819,14 @@ async function executeRetrievalAgentLoop(
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;
     messages: InferenceMessage[];
-    persistedConversationHistory?: MemberAgentPersistedHistorySeed | null;
+    persistedConversationHistory?: CommunityAgentPersistedHistorySeed | null;
     maxTokens: number;
     runId: string;
     harnessName: "chat_tools";
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface: RuntimeInvocationSurface;
-    memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+    communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
       communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
@@ -884,7 +884,7 @@ async function executeRetrievalAgentLoop(
     communityResourceLane: resolvedHarness.communityResourceLane,
     communityLensAuthority: params.communityLensAuthority ?? null,
     allowedToolNames: effectiveAllowedToolNames,
-    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
+    communityAgentSurfaceContext: params.communityAgentSurfaceContext,
   });
   try {
     await params.refreshRuntimeContextSnapshot?.("started", runtimeTurnEnvelope);
@@ -904,14 +904,14 @@ async function executeRetrievalAgentLoop(
   ).packet;
   let memberIdentityContextMd: string | null = null;
   let memberIdentityContextStatus: MemberIdentityContextStatus = "not_applicable";
-  if (params.invocationSurface === "member_agent_dock" && !(params.memberAgentSurfaceContext?.kind === "community" && params.memberAgentSurfaceContext.community_conversation)) {
+  if (params.invocationSurface === "member_agent_dock" && !(params.communityAgentSurfaceContext?.kind === "community" && params.communityAgentSurfaceContext.community_conversation)) {
     memberIdentityContextStatus = "empty";
     try {
       const identity = await params.ctx.runQuery(
-        internal.profiles.resolveMemberAgentIdentityContextInternal,
+        internal.profiles.resolveCommunityAgentIdentityContextInternal,
         { userId: params.userId as any },
       );
-      memberIdentityContextMd = renderMemberAgentIdentityContext(
+      memberIdentityContextMd = renderCommunityAgentIdentityContext(
         identity
           ? {
               displayName: identity.display_name,
@@ -963,8 +963,8 @@ async function executeRetrievalAgentLoop(
         },
         evidenceSurface: "member_agent_dock",
         communityBoundConversation:
-          params.memberAgentSurfaceContext?.kind === "community" &&
-          params.memberAgentSurfaceContext.community_conversation === true,
+          params.communityAgentSurfaceContext?.kind === "community" &&
+          params.communityAgentSurfaceContext.community_conversation === true,
       });
       if (recall.status === "ok") {
         const parsed = parseCommunityMemoryRecallEntries(recall.outputText, communityMemoryRecallSlug);
@@ -1011,7 +1011,7 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
     invocationSurface: params.invocationSurface,
-    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
+    communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
     communityMemoryRecallMd,
     promptExtensions: resolvedHarness.promptExtensions,
@@ -1043,7 +1043,7 @@ async function executeRetrievalAgentLoop(
     let pagesRead = 1;
     let hasMore = historySeed.hasMore;
     let nextBeforeSeq = historySeed.nextBeforeSeq;
-    let selection = selectMemberAgentHistoryForBudget({
+    let selection = selectCommunityAgentHistoryForBudget({
       rows: loadedRows,
       expectedUserMessageKey: historySeed.expectedUserMessageKey,
       systemPrompt,
@@ -1059,14 +1059,14 @@ async function executeRetrievalAgentLoop(
         }
         const previousBeforeSeq = nextBeforeSeq;
         const page = (await params.ctx.runQuery(
-          internal.threads.listMemberAgentRuntimeMessagesInternal as any,
+          internal.threads.listCommunityAgentRuntimeMessagesInternal as any,
           {
             ownerId: params.userId as any,
             threadId: params.threadId as any,
             expectedUserMessageKey: historySeed.expectedUserMessageKey,
             beforeSeq: previousBeforeSeq,
           },
-        )) as MemberAgentRuntimeHistoryPage;
+        )) as CommunityAgentRuntimeHistoryPage;
         if (
           page.expectedUserSeq !== historySeed.expectedUserSeq ||
           page.rows.some((row) => row.seq >= previousBeforeSeq) ||
@@ -1080,7 +1080,7 @@ async function executeRetrievalAgentLoop(
         pagesRead += 1;
         hasMore = page.hasMore;
         nextBeforeSeq = page.nextBeforeSeq;
-        selection = selectMemberAgentHistoryForBudget({
+        selection = selectCommunityAgentHistoryForBudget({
           rows: loadedRows,
           expectedUserMessageKey: historySeed.expectedUserMessageKey,
           systemPrompt,
@@ -1121,7 +1121,7 @@ async function executeRetrievalAgentLoop(
           loaded_row_count: loadedRows.length,
           loaded_complete_episode_count: selection.loadedCompleteEpisodeCount,
           ignored_leading_message_count: selection.ignoredLeadingMessageCount,
-          page_size: MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+          page_size: COMMUNITY_AGENT_CONTEXT_PAGE_SIZE,
           pages_read: pagesRead,
           has_older:
             hasMore ||
@@ -1177,7 +1177,7 @@ async function executeRetrievalAgentLoop(
     runtimeTurnEnvelope,
     runtimeTurnContext,
     invocationSurface: params.invocationSurface,
-    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
+    communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
     memberIdentityContextStatus,
   });
@@ -1700,7 +1700,7 @@ async function executeRetrievalAgentLoop(
                   params.invocationSurface === "member_agent_dock"
                     ? "member_agent_dock"
                     : "coding_harness",
-                communityBoundConversation: params.memberAgentSurfaceContext?.kind === "community" && params.memberAgentSurfaceContext.community_conversation === true,
+                communityBoundConversation: params.communityAgentSurfaceContext?.kind === "community" && params.communityAgentSurfaceContext.community_conversation === true,
                 signal,
               }),
           });
@@ -1963,12 +1963,12 @@ async function executeChatToolsAgentLoop(
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;
     messages: InferenceMessage[];
-    persistedConversationHistory?: MemberAgentPersistedHistorySeed | null;
+    persistedConversationHistory?: CommunityAgentPersistedHistorySeed | null;
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface: RuntimeInvocationSurface;
-    memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+    communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
       communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;

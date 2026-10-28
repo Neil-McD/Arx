@@ -2,44 +2,44 @@ import {
   extractTextFromContentJson,
   parseMessageAttachments,
 } from "./communityMessageParsing.ts";
-import { isAllowedMemberAgentImageMime } from "./memberAgentAttachments.ts";
+import { isAllowedCommunityAgentImageMime } from "./communityAgentAttachments.ts";
 import type { NativeToolInputContentPart } from "./nativeToolProtocol.ts";
 
-export const MEMBER_AGENT_CONTEXT_PAGE_SIZE = 60;
+export const COMMUNITY_AGENT_CONTEXT_PAGE_SIZE = 60;
 
-export type MemberAgentStoredMessage = {
+export type CommunityAgentStoredMessage = {
   messageKey: string;
   seq: number;
   role: "user" | "assistant" | "system";
   contentJson: unknown;
 };
 
-export type MemberAgentConversationMessage = {
+export type CommunityAgentConversationMessage = {
   role: "user" | "assistant";
   content: string | NativeToolInputContentPart[];
 };
 
-export type MemberAgentConversationEntry = MemberAgentConversationMessage & {
+export type CommunityAgentConversationEntry = CommunityAgentConversationMessage & {
   messageKey: string;
   seq: number;
 };
 
-export type MemberAgentRuntimeHistoryPage = {
+export type CommunityAgentRuntimeHistoryPage = {
   expectedUserSeq: number;
-  rows: MemberAgentStoredMessage[];
+  rows: CommunityAgentStoredMessage[];
   hasMore: boolean;
   nextBeforeSeq: number | null;
 };
 
-export type MemberAgentPersistedHistorySeed = MemberAgentRuntimeHistoryPage & {
+export type CommunityAgentPersistedHistorySeed = CommunityAgentRuntimeHistoryPage & {
   expectedUserMessageKey: string;
 };
 
-export type MemberAgentConversationEntriesResult =
+export type CommunityAgentConversationEntriesResult =
   | {
       ok: true;
       expectedUserSeq: number;
-      entries: MemberAgentConversationEntry[];
+      entries: CommunityAgentConversationEntry[];
       hasImageInput: boolean;
     }
   | {
@@ -50,11 +50,11 @@ export type MemberAgentConversationEntriesResult =
         | "expected_user_message_empty";
     };
 
-export type MemberAgentConversationContextResult =
+export type CommunityAgentConversationContextResult =
   | {
       ok: true;
       expectedUserSeq: number;
-      messages: MemberAgentConversationMessage[];
+      messages: CommunityAgentConversationMessage[];
       characterCount: number;
       hasImageInput: boolean;
     }
@@ -72,10 +72,10 @@ function normalizePositiveInteger(raw: unknown, fallback: number, ceiling: numbe
   return Math.max(1, Math.min(ceiling, Math.floor(value)));
 }
 
-export function buildMemberAgentConversationEntries(params: {
-  rows: readonly MemberAgentStoredMessage[];
+export function buildCommunityAgentConversationEntries(params: {
+  rows: readonly CommunityAgentStoredMessage[];
   expectedUserMessageKey: string;
-}): MemberAgentConversationEntriesResult {
+}): CommunityAgentConversationEntriesResult {
   const expectedUserMessageKey = String(params.expectedUserMessageKey ?? "").trim();
   const expected = params.rows.find(
     (row) => String(row.messageKey ?? "").trim() === expectedUserMessageKey,
@@ -88,7 +88,7 @@ export function buildMemberAgentConversationEntries(params: {
     const url = String(attachment.url ?? "").trim();
     return (
       attachment.type === "image" &&
-      isAllowedMemberAgentImageMime(attachment.mime) &&
+      isAllowedCommunityAgentImageMime(attachment.mime) &&
       /^https:\/\//i.test(url)
     );
   });
@@ -101,7 +101,7 @@ export function buildMemberAgentConversationEntries(params: {
     .slice()
     .sort((a, b) => b.seq - a.seq);
 
-  const newestFirst: MemberAgentConversationEntry[] = [];
+  const newestFirst: CommunityAgentConversationEntry[] = [];
   for (const row of eligible) {
     if (row.role !== "user" && row.role !== "assistant") continue;
     const content = extractTextFromContentJson(row.contentJson).trim();
@@ -142,12 +142,12 @@ export function buildMemberAgentConversationEntries(params: {
   };
 }
 
-export function buildMemberAgentConversationContext(params: {
-  rows: readonly MemberAgentStoredMessage[];
+export function buildCommunityAgentConversationContext(params: {
+  rows: readonly CommunityAgentStoredMessage[];
   expectedUserMessageKey: string;
   maxMessages?: number;
-}): MemberAgentConversationContextResult {
-  const built = buildMemberAgentConversationEntries(params);
+}): CommunityAgentConversationContextResult {
+  const built = buildCommunityAgentConversationEntries(params);
   if (!built.ok) return built;
   const maxMessages = normalizePositiveInteger(
     params.maxMessages,

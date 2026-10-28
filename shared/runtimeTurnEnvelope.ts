@@ -5,13 +5,13 @@ import {
 } from "./communityResourceLane.ts";
 import type { CommunityLensAuthority } from "./communityLensAuthority.ts";
 import type { ThreadWorkingStatePrompt } from "./runtimePrompt.ts";
-import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts";
+import type { CommunityAgentSurfaceContextV1 } from "./communityAgentSurfaceContext.ts";
 
 export type RuntimeTurnEnvelopeV1 = {
   version: 1;
   currentRequest: string | null;
   continuityGoal: string | null;
-  surfaceContext: MemberAgentSurfaceContextV1 | null;
+  surfaceContext: CommunityAgentSurfaceContextV1 | null;
   authority: {
     threadId: string | null;
     communityId: string | null;
@@ -72,7 +72,7 @@ export function buildRuntimeTurnEnvelope(params: {
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
   communityLensAuthority?: CommunityLensAuthority | null;
   allowedToolNames?: readonly (string | null | undefined)[] | null;
-  memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+  communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
 }): RuntimeTurnEnvelopeV1 {
   const allowedToolNames = uniqueToolNames(params.allowedToolNames).slice(0, 80);
   const communityResourceLane = params.communityResourceLane
@@ -85,7 +85,7 @@ export function buildRuntimeTurnEnvelope(params: {
     version: 1,
     currentRequest,
     continuityGoal: compactText(workingState?.goal, 280) ?? currentRequest,
-    surfaceContext: params.memberAgentSurfaceContext ?? null,
+    surfaceContext: params.communityAgentSurfaceContext ?? null,
     authority: {
       threadId: compactText(params.threadId, 120),
       communityId: compactText(params.communityId, 120),

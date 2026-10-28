@@ -6,7 +6,7 @@ function read(relativePath: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
-const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const communityAgentDock = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const operatorDashboardDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
 const operatorPlatformPanelView = read("apps/web/src/components/OperatorPlatformPanelView.tsx");
 const operatorBusinessPanelView = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
@@ -22,7 +22,7 @@ assert.doesNotMatch(
   "browser route reconciliation and App state must remain independent from deleted Workspace conversation state",
 );
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /activeThreadKeyRef[\s\S]*if \(activeThreadKeyRef\.current\) return;[\s\S]*ensureCloudCommunityAgentConversation/,
   "the mounted member-agent surface must own one explicit active channel without App-level auto-selection",
 );
