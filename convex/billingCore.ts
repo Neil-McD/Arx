@@ -212,7 +212,6 @@ export async function ensureCommunityMembership(args: {
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
-    role: "member",
     accessSource,
     pricePointId: args.pricePointId,
     activationReason: "billing_entitlement",

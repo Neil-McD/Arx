@@ -714,9 +714,6 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
     ctx: args.ctx,
     communityId: args.request.communityId,
     userId: args.request.userId,
-    role: existingMembership
-      ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
-      : "member",
     accessSource: restoredAccessSource,
     activationReason: args.grantReason,
     nowMs: args.nowMs,

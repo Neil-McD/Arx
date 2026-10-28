@@ -12,7 +12,6 @@ import {
   getUniqueCommunityMembershipByPair,
   listCanonicalCommunityMemberMembershipRows,
   mapActivePlanSummaries,
-  normalizeCommunityRoleForOutput,
   normalizeSlug,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
@@ -631,9 +630,6 @@ export async function joinPublicCommunityInternal(args: {
       ctx: args.ctx,
       communityId: args.community._id,
       userId: args.userId,
-      role: existingMembership
-        ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
-        : "member",
       accessSource: "free_grant",
       activationReason: "public_join",
       nowMs: args.nowMs,
