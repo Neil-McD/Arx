@@ -137,6 +137,10 @@ require_block_no_match() {
   local end_pattern="$3"
   local forbidden_pattern="$4"
   local description="$5"
+  if ! grep -Eq -- "$start_pattern" "$file"; then
+    echo "FAIL: block start not found for: $description" >&2
+    exit 1
+  fi
   if ! awk -v start="$start_pattern" -v end="$end_pattern" '
     $0 ~ start { in_block = 1 }
     in_block { print }
@@ -373,16 +377,9 @@ require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
 require_no_match "$WEB_MEMBER_DIALOG_FILE" \
   'Payment history|Historical payments unavailable|No payment history' \
   "member settings dialog does not expose unbacked payment-history placeholder text"
-require_block_no_match "$COMMUNITY_ADMIN_FILE" \
-  '^async function mapCommunityOwnerAdminMemberRow' \
-  '^async function mapCommunityAdminMembershipRow' \
-  'price_point_id|billing_period|amount_base_units|currency_decimals|communitySubscriptions|pricePoint' \
-  "owner roster row has no billing/detail fields"
-require_block_no_match "$COMMUNITY_ADMIN_FILE" \
-  '^async function mapCommunityAdminMembershipRow' \
-  '^async function endCommunitySubscriptionsForMembership' \
-  'price_point_id|billing_period|amount_base_units|currency_decimals|communitySubscriptions|pricePoint' \
-  "member roster rows do not hydrate billing detail"
+require_no_match "$COMMUNITY_ADMIN_FILE" \
+  'async function mapCommunity(OwnerAdminMember|AdminMembership)Row' \
+  "admin roster row mappers stay deleted; billing detail loads only through getCommunityMemberBillingHistory"
 require_no_match "$MEMBERSHIP_GATEWAY_FILE" \
   'price_point_id|billing_period|amount_base_units|currency_decimals|CommunityBillingPeriod' \
   "membership admin gateway row type excludes billing detail"
