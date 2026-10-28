@@ -158,8 +158,12 @@ export type RuntimeKernelResult<TToolName extends string = string> =
   | RuntimeKernelSuccess<TToolName>
   | RuntimeKernelFailure<TToolName>;
 
+// toolChoice "none" asks for an answer without tools: the kernel sends it once
+// the tool budget is spent. A runner that ignores it keeps the old behavior,
+// where a further tool call ends the turn as tool_budget_exhausted.
 export type RuntimeKernelRunCompletion<TToolName extends string> = (
   messages: NativeToolAwareMessage[],
+  options?: { toolChoice?: "none" },
 ) => Promise<
   NativeToolAwareCompletionSuccess<TToolName> | RuntimeKernelFailureInput
 >;

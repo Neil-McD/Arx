@@ -11,6 +11,10 @@ const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
 const COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2;
 const COMMUNITY_AGENT_HANDOFF_LEASE_MS = 30 * 60 * 1000;
+// A digest whose runs keep failing stops being retried, so a broken run cannot
+// bill its community on every heartbeat forever (POL-18). Failed runs count
+// from agentRetryCount, which starts at zero for digests from before the cap.
+const COMMUNITY_AGENT_HANDOFF_MAX_RETRIES = 5;
 const internalRefs = internal as any;
 
 function boundedText(raw: unknown, maxLength: number): string {
@@ -247,6 +251,36 @@ export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
   },
 });
 
+// An exhausted digest's evidence leaves the compiler queue, or the compiler
+// would rebuild the same digest version and starve newer evidence. A material
+// update to a trace returns it to pending through the normal lifecycle.
+async function quarantineExhaustedDigestEvidence(
+  ctx: any,
+  communityId: any,
+  digestId: any,
+  items: unknown,
+  nowMs: number,
+): Promise<void> {
+  for (const item of Array.isArray(items) ? items : []) {
+    const traceIds = Array.isArray(item?.sourceTraceIds) ? item.sourceTraceIds : [];
+    const revisions = Array.isArray(item?.sourceRevisions) ? item.sourceRevisions : [];
+    if (traceIds.length !== 1 || revisions.length !== 1) continue;
+    const trace = await ctx.db.get(traceIds[0] as any);
+    if (!trace || normalizeIdValue(trace.communityId) !== normalizeIdValue(communityId)) continue;
+    if (trace.compilerState !== "pending") continue;
+    // Evidence updated since the digest was built is newer work; leave it pending.
+    if (await buildCommunitySourceTraceRevision(trace as any) !== String(revisions[0])) continue;
+    await ctx.db.patch(trace._id, {
+      compilerState: "agent_retries_exhausted" as const,
+      compilerPendingSince: undefined,
+      compilerContinuationReady: undefined,
+      compilerLastHandledAt: nowMs,
+      compilerLastDigestId: digestId,
+      updatedAt: nowMs,
+    });
+  }
+}
+
 export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -277,6 +311,11 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
         throw new Error("community_compiler_handoff_unsettled");
       }
     }
+    const retryCount = Math.max(0, Number(digest.agentRetryCount ?? 0)) + (args.outcome === "retry" ? 1 : 0);
+    const retriesExhausted = args.outcome === "retry" && retryCount >= COMMUNITY_AGENT_HANDOFF_MAX_RETRIES;
+    if (retriesExhausted) {
+      await quarantineExhaustedDigestEvidence(ctx, args.communityId, args.digestId, digest.items, nowMs);
+    }
     await ctx.db.patch(args.digestId, args.outcome === "handled"
       ? {
           agentHandoffState: "handled" as const,
@@ -286,19 +325,31 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
           agentTerminalReason: "settled",
           updatedAt: nowMs,
         }
-      : {
-          agentHandoffState: "pending" as const,
-          agentClaimId: undefined,
-          agentClaimedAt: undefined,
-          agentHandledAt: undefined,
-          agentTerminalReason: undefined,
-          updatedAt: nowMs,
-        });
+      : retriesExhausted
+        ? {
+            agentHandoffState: "handled" as const,
+            agentClaimId: undefined,
+            agentClaimedAt: undefined,
+            agentHandledAt: nowMs,
+            agentTerminalReason: "retries_exhausted" as const,
+            agentRetryCount: retryCount,
+            updatedAt: nowMs,
+          }
+        : {
+            agentHandoffState: "pending" as const,
+            agentClaimId: undefined,
+            agentClaimedAt: undefined,
+            agentHandledAt: undefined,
+            agentTerminalReason: undefined,
+            agentRetryCount: retryCount,
+            updatedAt: nowMs,
+          });
     return {
       ok: true,
       digest_id: normalizeIdValue(args.digestId),
       version_key: boundedText(args.versionKey, 128),
-      state: args.outcome === "handled" ? "handled" : "pending",
+      state: args.outcome === "handled" || retriesExhausted ? "handled" : "pending",
+      ...(retriesExhausted ? { terminal_reason: "retries_exhausted" } : {}),
     };
   },
 });

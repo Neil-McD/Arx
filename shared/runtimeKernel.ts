@@ -528,10 +528,15 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     }
   };
 
+  // Once the tool budget is spent, ask for an answer from what the tools found
+  // instead of ending the turn with nothing to say.
   const runProviderCompletion = async (
     messages: NativeToolAwareMessage[],
   ): Promise<Awaited<ReturnType<RuntimeKernelRunCompletion<TToolName>>>> =>
-    await params.runCompletion(messages);
+    await params.runCompletion(
+      messages,
+      toolStepCount >= params.budget.maxToolSteps ? { toolChoice: "none" } : undefined,
+    );
 
   while (true) {
     let providerMessages = [...transcript];

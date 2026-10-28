@@ -1600,6 +1600,19 @@ test("community-root search returns canonical paths that round-trip through read
   });
   expect(memberSearch).toMatchObject({ ok: true });
   expect(communityAgentSearch).toMatchObject({ ok: true });
+  // The mention worker runs in the background with no Convex identity; its
+  // memory search must still read as the requesting member.
+  const backgroundAgentSearch = await executePolynetCanonicalTool({
+    ctx: executionContext(t as any),
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "community_agent",
+    mountedCommunityId: fixture.communityId,
+    evidenceSurface: "community_concierge",
+    toolName: "polynet_search",
+    input: { ...searchInput, path: "/communities/canonical-community/memory/" },
+  });
+  expect(backgroundAgentSearch).toMatchObject({ ok: true });
   const memberPaths =
     memberSearch.ok && Array.isArray(memberSearch.value.results)
       ? memberSearch.value.results.map((result) =>

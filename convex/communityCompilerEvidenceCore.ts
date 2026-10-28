@@ -22,7 +22,8 @@ export type SourceTraceCompilerState =
   | "dismissed_low_signal"
   | "carried_forward"
   | "excluded_by_visibility"
-  | "excluded_self_authored";
+  | "excluded_self_authored"
+  | "agent_retries_exhausted";
 type CompilerEligibleVisibility = typeof COMPILER_EVIDENCE_VISIBILITY_SCOPES[number];
 type TriggerReason =
   | "critical_evidence"

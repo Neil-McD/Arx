@@ -476,6 +476,16 @@ export async function runOpenAiNativeToolCompletion(params: {
             malformedMessage: "OpenAI returned malformed tool arguments.",
           });
         } catch (error) {
+          // Arguments cut off at the output limit look malformed; say which it was.
+          if (parsed.status === "incomplete" && parsed.incomplete_details?.reason === "max_output_tokens") {
+            return {
+              ok: false,
+              status: 502,
+              code: "model_output_truncated",
+              message: "OpenAI stopped at the output limit before finishing the tool arguments.",
+              ...failedResponseUsage,
+            };
+          }
           const message = error instanceof Error ? error.message : "OpenAI returned malformed tool arguments.";
           return {
             ok: false,

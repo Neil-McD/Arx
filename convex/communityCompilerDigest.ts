@@ -54,7 +54,7 @@ type CompilerDigestRow = {
   agentClaimId?: string;
   agentClaimedAt?: number;
   agentHandledAt?: number;
-  agentTerminalReason?: "settled" | "superseded";
+  agentTerminalReason?: "settled" | "superseded" | "retries_exhausted";
   agentAttemptCount?: number;
   windowStartedAt: number;
   windowEndedAt: number;
