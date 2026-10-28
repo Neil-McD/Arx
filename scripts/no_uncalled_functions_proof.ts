@@ -54,6 +54,8 @@ const ALLOWED = new Map<string, string>([
   ["platformDiagnostics:listPlatformDiagnosticEventsInternal", "operator diagnostic, run by hand"],
   ["profiles:backfillCompletedProfileBridgeSocialLinkFacts", "hand-run: scripts/backfill_bridge_social_link_facts.sh"],
   ["stagingSeedBriefLab:seedBriefLabInternal", "operator tool: seeds the staging brief lab"],
+  ["stagingSeedSunrise:seedSunriseInternal", "operator tool: seeds the staging Sunrise community"],
+  ["stagingSeedSunrise:simulateSunriseLiveInternal", "operator tool: a simulated second member for live site checks"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })

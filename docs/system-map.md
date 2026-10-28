@@ -312,6 +312,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   CLI targets production by default (`--staging` for staging).
 - **Gap:** the production edge, namespace and settings are set up after POL-34's
   code ships.
+- **Staging seed:** `stagingSeedSunrise` (hand-run, refuses unless
+  `POLYNET_ALLOW_SEED=1`). `seedSunriseInternal({ communityId, ownerUserId? })`
+  fills one community (Sunrise Climbing Club on staging) with four simulated
+  members (one moderator), a Beta channel, posts with replies and reactions, a
+  member post that @-mentions the owner (an unread mention), five events (three
+  upcoming, one past, one cancelled), the "Board basics" course and three
+  memories; rerunning replaces it. `simulateSunriseLiveInternal({ communityId,
+  action: "presence" | "typing" | "post", memberKey?, channelSlug?, text? })` is
+  the second person for live checks: presence and typing leases, or a real post
+  through the member composer.
 
 ### 12. Billing and money — Keep (risk-high)
 
