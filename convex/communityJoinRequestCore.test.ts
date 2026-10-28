@@ -317,6 +317,37 @@ describe("canonical join-request kernel", () => {
     ]);
   });
 
+  test("rejoining starts as a member; an active member keeps their role", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "rejoin-role");
+    const activate = (nowMs: number) => t.run(async (ctx) => activateCommunityMembershipCore({
+      ctx,
+      communityId: fixture.communityId,
+      userId: fixture.userId,
+      accessSource: "paid_subscription",
+      activationReason: "test",
+      nowMs,
+    }));
+    const row = (await activate(fixture.nowMs + 1)).membership;
+    expect(row.role).toBe("member");
+    await t.run(async (ctx) => ctx.db.patch(row._id, { role: "admin" }));
+    // A checkout or join for someone already active never changes their role.
+    expect((await activate(fixture.nowMs + 2)).membership.role).toBe("admin");
+    // Removed (or banned, or left), then back in: a member again.
+    for (const revokedReason of ["removed", "banned", "left"]) {
+      await t.run(async (ctx) => ctx.db.patch(row._id, { role: "admin", active: false, revokedAt: fixture.nowMs + 3, revokedReason }));
+      const back = await activate(fixture.nowMs + 4);
+      expect(back.membership).toMatchObject({ role: "member", active: true });
+    }
+    // An explicit role is still honored.
+    await t.run(async (ctx) => ctx.db.patch(row._id, { active: false, revokedAt: fixture.nowMs + 5, revokedReason: "left" }));
+    const moderator = await t.run(async (ctx) => activateCommunityMembershipCore({
+      ctx, communityId: fixture.communityId, userId: fixture.userId, role: "moderator",
+      accessSource: "manual_grant", activationReason: "test", nowMs: fixture.nowMs + 6,
+    }));
+    expect(moderator.membership.role).toBe("moderator");
+  });
+
   test("membership activation fails closed on duplicate membership authority", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t, "duplicate-membership");

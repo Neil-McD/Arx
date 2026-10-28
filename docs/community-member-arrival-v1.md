@@ -31,6 +31,12 @@ All open, approved, paid, and manual grants continue to converge
 through `activateCommunityMembershipCore`. That transition is the only writer
 allowed to project `member_joined`.
 
+**Roles across activation (Oct 28).** An already-active membership keeps its
+role on any replay (a repeat join, approval or checkout never changes it, so
+checkout can't demote an admin). A membership coming back after leaving,
+removal or a ban starts as `member`: a role held before is never restored by
+rejoining. Only a caller that passes an explicit role sets one.
+
 The projection is best effort: ambient activity failure must never roll back a
 valid membership. The membership row and its activation sequence contain enough
 durable truth for a bounded repair if one is ever needed.

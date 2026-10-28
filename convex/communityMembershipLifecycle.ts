@@ -64,9 +64,9 @@ export async function activateCommunityMembershipCore(args: {
   }
 
   const activationSequence = Math.max(0, Math.floor(Number(existing?.activationSequence ?? 0))) + 1;
-  const role = args.role ?? (
-    existing ? (normalizeCommunityRoleForOutput(existing.role) || "member") : "member"
-  );
+  // Coming back after leaving, removal or a ban starts as a member: a role
+  // held before is never restored by rejoining.
+  const role = args.role ?? "member";
   let membershipId: any;
   if (existing) {
     membershipId = existing._id;

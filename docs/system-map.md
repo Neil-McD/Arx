@@ -64,6 +64,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
   `memberEntryDestination`, `platformHomeCommunity`.
 - **Reached by:** Studio (`/c/<slug>`); community sites' `/join` (their private twin).
+- **Rules:** rejoining starts as `member` (an earlier role is never restored);
+  an active membership keeps its role through checkout. See
+  [community-member-arrival-v1.md](community-member-arrival-v1.md).
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`.

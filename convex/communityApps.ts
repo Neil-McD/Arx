@@ -41,9 +41,16 @@ async function memberHasAccess(ctx: any, communityId: any, userId: any): Promise
 
 // The member's role in an active community (owner, or an active membership),
 // or null: what every personal page and its live watch require of a session,
-// which can outlive the membership it was minted for.
+// which can outlive the membership it was minted for. Studio's own access
+// chain decides (the community can run, not blocked, entitled: a lapsed paid
+// membership is out); the role is only for the page.
 export async function communityAppMemberRole(ctx: any, community: any, userId: any): Promise<string | null> {
   if (!community || !communityIsActive(community)) return null;
+  try {
+    await requireCommunityChatAccess({ ctx, communityId: community._id, userId });
+  } catch {
+    return null;
+  }
   if (String(community.ownerId) === String(userId)) return "owner";
   const membership = await ctx.db
     .query("communityMemberships")

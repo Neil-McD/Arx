@@ -193,6 +193,11 @@ first-party cookie everywhere.
   Polynet's code runs there, every other personal page still requires
   membership, and the site API re-checks it on every call. The site's own
   sign-in still refuses them, and sends them to `/join`.
+- **Studio's access, every request.** A session outlives the membership it
+  was minted for, so every personal page and the live DM watch check the
+  member again with Studio's own chain (`requireCommunityChatAccess`: the
+  community can run, the member isn't blocked, and is entitled, so a lapsed
+  paid membership is out). The owner passes as owner.
 
 ### Settings (3b-2)
 
