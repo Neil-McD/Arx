@@ -782,8 +782,8 @@ assert.doesNotMatch(
 );
 assert.match(
   projection,
-  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*id: reply\.legacy_message_id \?\? reply\.id[\s\S]*mention_candidate: replyMentionCandidate[\s\S]*interaction_root_id: reply\.root_id[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null/,
-  "canonical drawer reply action should carry mention identity, canonical root id, and optional legacy metadata",
+  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*id: reply\.id,[\s\S]*mention_candidate: replyMentionCandidate[\s\S]*interaction_root_id: reply\.root_id[\s\S]*interaction_reply_id: reply\.id,/,
+  "canonical drawer reply action should carry mention identity and canonical root and reply ids",
 );
 assert.doesNotMatch(
   gateway,
