@@ -31,7 +31,7 @@ type DigestRow = {
   dedupeKey: string;
   versionKey?: string;
   agentHandoffState?: "pending" | "running" | "handled";
-  agentTerminalReason?: "settled" | "superseded";
+  agentTerminalReason?: "settled" | "superseded" | "retries_exhausted";
   agentClaimId?: string;
   windowStartedAt: number;
   windowEndedAt: number;

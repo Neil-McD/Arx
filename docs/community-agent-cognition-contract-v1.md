@@ -1575,6 +1575,14 @@ Rules:
 - The handoff state is autonomous execution state, not approval governance.
   `pending` is claimable, `running` has a bounded lease, and `handled` is
   terminal for the exact version.
+- A failed steward run returns the digest to `pending` and increments
+  `agentRetryCount`. The fifth failure marks it `handled` with
+  `agentTerminalReason: "retries_exhausted"`, so a broken run cannot bill the
+  community on every heartbeat. `agentAttemptCount` still counts every claim.
+- The steward settles every item of the digest in one write, so its output
+  limit grows with the digest: 2,000 tokens plus 450 per item, capped at 48,000.
+  Reasoning counts against the same limit. A tool call cut off at the limit is
+  reported as `model_output_truncated`.
 - A heartbeat rechecks the owner off-switch, daily cycle cap, and founder
   connection before inference. It then compiles eligible evidence if needed,
   claims one exact digest version, and passes `digestId + versionKey + workKey`

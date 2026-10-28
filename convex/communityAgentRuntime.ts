@@ -39,6 +39,23 @@ import { founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
 import { buildRuntimeContextProjectionEvidence } from "../shared/providerContextWindow.ts";
 
+// The steward settles every digest item in one write, so its answer grows with
+// the digest, and the model's reasoning counts against the same output limit. A
+// fixed 1,600-token limit cut long settlements off mid-JSON (POL-18).
+const STEWARD_BASE_OUTPUT_TOKENS = 2_000;
+const STEWARD_OUTPUT_TOKENS_PER_DIGEST_ITEM = 450;
+const STEWARD_MAX_OUTPUT_TOKENS = 48_000;
+
+export function stewardMaxOutputTokens(compilerWindow: unknown): number {
+  const items = (compilerWindow as { latest_digest?: { items?: unknown } } | undefined)?.latest_digest?.items;
+  const itemCount = Array.isArray(items) ? items.length : 0;
+  return Math.min(
+    STEWARD_MAX_OUTPUT_TOKENS,
+    STEWARD_BASE_OUTPUT_TOKENS + Math.max(1, itemCount) * STEWARD_OUTPUT_TOKENS_PER_DIGEST_ITEM,
+  );
+}
+
+
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
 const COMMUNITY_AGENT_RUNTIME_MAX_ERROR_CHARS = 500;
@@ -1097,6 +1114,7 @@ export const runCommunityAgentLoopInternal = internalAction({
       role: roleDefinition,
     });
       const messages = prompt.messages;
+      const stewardOutputTokens = stewardMaxOutputTokens(compilerWindow);
       const stewardProviderTools = buildCommunityAgentFunctionTools(
         roleDefinition?.toolNames,
       );
@@ -1138,7 +1156,7 @@ export const runCommunityAgentLoopInternal = internalAction({
         inputBudget: {
           transport: "openai_responses",
           modelRef: `openai/${modelId}`,
-          reservedOutputTokens: 1_600,
+          reservedOutputTokens: stewardOutputTokens,
           toolSchemas: stewardProviderTools,
           recordPlan: async (budgetPlan) => {
             await emitRequiredRunEvents([
@@ -1184,7 +1202,7 @@ export const runCommunityAgentLoopInternal = internalAction({
           }
           const completion = await fundingState.run.request({
             messages: kernelMessages,
-            maxTokens: 1600,
+            maxTokens: stewardOutputTokens,
             // Authority by absence: only this role's tool schemas are sent.
             tools: stewardProviderTools,
             parallelToolCalls: false,

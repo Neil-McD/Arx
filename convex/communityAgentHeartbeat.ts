@@ -11,6 +11,10 @@ const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
 const COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2;
 const COMMUNITY_AGENT_HANDOFF_LEASE_MS = 30 * 60 * 1000;
+// A digest whose runs keep failing stops being retried, so a broken run cannot
+// bill its community on every heartbeat forever (POL-18). Failed runs count
+// from agentRetryCount, which starts at zero for digests from before the cap.
+const COMMUNITY_AGENT_HANDOFF_MAX_RETRIES = 5;
 const internalRefs = internal as any;
 
 function boundedText(raw: unknown, maxLength: number): string {
@@ -277,6 +281,8 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
         throw new Error("community_compiler_handoff_unsettled");
       }
     }
+    const retryCount = Math.max(0, Number(digest.agentRetryCount ?? 0)) + (args.outcome === "retry" ? 1 : 0);
+    const retriesExhausted = args.outcome === "retry" && retryCount >= COMMUNITY_AGENT_HANDOFF_MAX_RETRIES;
     await ctx.db.patch(args.digestId, args.outcome === "handled"
       ? {
           agentHandoffState: "handled" as const,
@@ -286,19 +292,31 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
           agentTerminalReason: "settled",
           updatedAt: nowMs,
         }
-      : {
-          agentHandoffState: "pending" as const,
-          agentClaimId: undefined,
-          agentClaimedAt: undefined,
-          agentHandledAt: undefined,
-          agentTerminalReason: undefined,
-          updatedAt: nowMs,
-        });
+      : retriesExhausted
+        ? {
+            agentHandoffState: "handled" as const,
+            agentClaimId: undefined,
+            agentClaimedAt: undefined,
+            agentHandledAt: nowMs,
+            agentTerminalReason: "retries_exhausted" as const,
+            agentRetryCount: retryCount,
+            updatedAt: nowMs,
+          }
+        : {
+            agentHandoffState: "pending" as const,
+            agentClaimId: undefined,
+            agentClaimedAt: undefined,
+            agentHandledAt: undefined,
+            agentTerminalReason: undefined,
+            agentRetryCount: retryCount,
+            updatedAt: nowMs,
+          });
     return {
       ok: true,
       digest_id: normalizeIdValue(args.digestId),
       version_key: boundedText(args.versionKey, 128),
-      state: args.outcome === "handled" ? "handled" : "pending",
+      state: args.outcome === "handled" || retriesExhausted ? "handled" : "pending",
+      ...(retriesExhausted ? { terminal_reason: "retries_exhausted" } : {}),
     };
   },
 });

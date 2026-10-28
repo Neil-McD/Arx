@@ -248,6 +248,42 @@ describe("native runtime kernel behavioral baseline", () => {
     });
   });
 
+  it("asks for an answer without tools once the tool budget is spent", async () => {
+    const choices: Array<string | undefined> = [];
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget({ maxToolSteps: 2 }),
+      inputBudget,
+      runCompletion: async (_messages, options) => {
+        choices.push(options?.toolChoice);
+        if (options?.toolChoice === "none") return assistant("The long run starts at 6:30.");
+        return toolCall({ providerCallId: `call-${choices.length}`, arguments: { query: `q${choices.length}` } });
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => success("found something"),
+    });
+
+    expect(choices).toEqual([undefined, undefined, "none"]);
+    expect(result).toMatchObject({ ok: true, assistantText: "The long run starts at 6:30.", stepCount: 2 });
+  });
+
+  it("still ends as tool_budget_exhausted when a runner ignores the no-tools request", async () => {
+    let calls = 0;
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget({ maxToolSteps: 1 }),
+      inputBudget,
+      runCompletion: async () => {
+        calls += 1;
+        return toolCall({ providerCallId: `call-${calls}`, arguments: { query: `q${calls}` } });
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => success("found something"),
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "tool_budget_exhausted" });
+  });
+
   it("blocks an over-budget batch before executing any member of it", async () => {
     let executorCalls = 0;
     const startedToolCallIds: string[] = [];

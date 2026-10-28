@@ -3560,9 +3560,11 @@ export default defineSchema({
       v.union(
         v.literal("settled"),
         v.literal("superseded"),
+        v.literal("retries_exhausted"),
       ),
     ),
     agentAttemptCount: v.optional(v.number()),
+    agentRetryCount: v.optional(v.number()),
     windowStartedAt: v.number(),
     windowEndedAt: v.number(),
     summary: v.string(),
