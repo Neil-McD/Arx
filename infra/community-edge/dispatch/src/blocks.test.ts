@@ -159,7 +159,7 @@ export default {
   agentHistory: async () => { fail(); record("agentHistory", []); return fake.agent.history.map((m) => Object.assign({}, m)); },
   // Streams fake.agent.reply in two pieces; hold pauses after the first.
   askAgent: async (text, options) => {
-    record("askAgent", [text]);
+    record("askAgent", [text, options.key || null]);
     if (fake.agent.fail > 0) { fake.agent.fail -= 1; const error = new Error("The agent is busy right now."); error.code = "agent_failed"; throw error; }
     const reply = fake.agent.reply;
     const half = reply.slice(0, Math.ceil(reply.length / 2));
@@ -1584,6 +1584,19 @@ test("an event opens at its own address: when, where, the description, an .ics f
   await gone.close();
 });
 
+test("events: a saved link to a cancelled event says so, with nothing to join or add", async () => {
+  const page = await open((fake) => {
+    fake.events = [{ ref: "event:ev9:1893456000000", title: "Harbour swim", starts_at: new Date(1893456000000).toISOString(), timezone: "UTC", status: "cancelled", url: "https://example.com/join" }];
+  }, frame(), "/events/ev9~1893456000000");
+  const events = page.locator("polynet-events");
+  await expect.poll(() => events.getAttribute("state")).toBe("cancelled");
+  expect(await events.locator("[part=cancelled]").textContent()).toBe("This event was cancelled.");
+  expect(await events.locator("[part=detail-title]").textContent()).toBe("Harbour swim");
+  expect(await events.locator("a[href='https://example.com/join']").count()).toBe(0);
+  expect(await events.getByText("Add to calendar").count()).toBe(0);
+  await page.close();
+});
+
 test("events elsewhere: limit shows the next few and a link to /events; signed out shows no event; empty says so", async () => {
   const home = await open(calendar, `<!doctype html><html lang="en"><head><title>Run Club</title><script type="module" src="/__polynet/ui.js"></script></head>
 <body><polynet-events limit="2"></polynet-events></body></html>`, "/", LONDON);
@@ -1805,6 +1818,10 @@ test("ask: the member's private conversation, the reply streaming in, and a fail
   await expect.poll(() => ask.locator("[part~=message]").count()).toBe(6);
   expect(await ask.locator("[part=problem]").textContent()).toBe("");
   expect((await calls(page, "askAgent")).map((c: any) => c[1])).toEqual(["When are the track sessions?", "And hills?", "And hills?"]);
+  // The retry keeps the failed question's key, so the server saves it once.
+  const keys = (await calls(page, "askAgent")).map((c: any) => c[2]);
+  expect(keys[2]).toBe(keys[1]);
+  expect(keys[1]).not.toBe(keys[0]);
   await page.close();
 });
 

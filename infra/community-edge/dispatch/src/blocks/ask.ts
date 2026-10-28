@@ -12,6 +12,12 @@ export const ASK_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 import polynet from "/__polynet/sdk.js";
 import { BASE_STYLE, PROSE_STYLE, h, avatar, timeLabel, signInGate } from "/__polynet/blocks/kit.js";
 
+// A question's own key, kept across a retry.
+function newKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return "ask_" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   // A conversation needs a height to scroll in; the site sets its own on the element.
   ":host { display: block; height: 70vh; min-height: 320px; }",
@@ -225,7 +231,11 @@ class PolynetAsk extends HTMLElement {
     };
     this.announce.textContent = "The agent is answering…";
     try {
-      const answer = await polynet.askAgent(text, { onDelta: (soFar) => {
+      // A retry of the same question keeps its key, so the server keeps one copy.
+      const key = this.failed && this.failed.text === text ? this.failed.key : newKey();
+      this.failed = null;
+      this.pendingKey = key;
+      const answer = await polynet.askAgent(text, { key: key, onDelta: (soFar) => {
         if (generation !== this.generation) return;
         reply.text = soFar;
         if (!frame) frame = requestAnimationFrame(paint);
@@ -241,6 +251,7 @@ class PolynetAsk extends HTMLElement {
       if (generation !== this.generation) return;
       cancelAnimationFrame(frame);
       this.messages = this.messages.filter((message) => message !== question && message !== reply);
+      this.failed = { text: text, key: this.pendingKey };
       this.render();
       // The question goes back in the box (unless the member started another).
       if (!this.input.value.trim()) this.input.value = text;

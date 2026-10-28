@@ -468,12 +468,19 @@ async function agentHistory() {
 }
 
 // Ask the community agent. onDelta(textSoFar) streams the reply; resolves with the full reply.
+// key: your own key for this question (8-100 of A-Z a-z 0-9 _ -). Asking again
+// with the same key after a failure retries the answer without saving the
+// question twice.
 async function askAgent(text, options) {
-  const onDelta = (options && options.onDelta) || function () {};
+  options = options || {};
+  const onDelta = options.onDelta || function () {};
+  if (options.key !== undefined && !/^[A-Za-z0-9_-]{8,100}$/.test(String(options.key))) {
+    throw new PolynetError("invalid_tool_args", "key is 8-100 letters, digits, _ or -.");
+  }
   const res = await fetch("/__polynet/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: text, message_key: newKey() }),
+    body: JSON.stringify({ text: text, message_key: options.key ? String(options.key) : newKey(), run_key: newKey() }),
   });
   if (!res.ok || !res.body) {
     const body = await res.json().catch(function () { return {}; });

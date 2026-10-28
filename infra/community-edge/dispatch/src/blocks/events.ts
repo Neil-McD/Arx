@@ -351,6 +351,17 @@ class PolynetEvents extends HTMLElement {
     }
     if (generation !== this.generation) return;
     const back = h("a", { class: "quiet back", part: "back", href: BASE, text: "All events", onclick: (click) => followLink(click, BASE, () => this.load({ moved: true })) });
+    if (event && event.status === "cancelled") {
+      // A saved link to a cancelled event says so, with nothing to join or add.
+      this.setState("cancelled");
+      this.view.replaceChildren(h("div", { class: "detail", part: "detail" }, [
+        h("h2", { class: "detail-title", part: "detail-title", tabindex: "-1", text: event.title || "Event" }),
+        h("p", { class: "muted", part: "cancelled", text: "This event was cancelled." }),
+        back,
+      ]));
+      if (moved) this.focusFirst();
+      return;
+    }
     if (!event) {
       this.setState("missing");
       this.view.replaceChildren(h("div", { class: "detail", part: "detail" }, [

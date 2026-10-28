@@ -131,6 +131,8 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       const turnCtx = trustedMemberTurnContext(ctx, member);
       // The dock saves the member's message before the turn; so does a front end.
       const userMessageKey = `community-app:${messageKey}`;
+      const rawRunKey = typeof body?.run_key === "string" ? body.run_key.trim() : "";
+      const runKey = /^[A-Za-z0-9_-]{8,100}$/.test(rawRunKey) ? rawRunKey : messageKey;
       await turnCtx.runMutation(internal.threads.addCloudThreadMessageForTrustedOwnerInternal, {
         trustedOwnerId: session.userId as any, threadId: conversation.thread_id as any,
         messageKey: userMessageKey, role: "user", contentJson: { text },
@@ -153,7 +155,8 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
           surface_context: { version: 1, kind: "community", community_slug: community.slug, section: "chat" },
           requested_funding_source: "auto",
           requested_agentic_tools: true,
-          idempotency_key: `community-app-run:${messageKey}`,
+          // Each attempt runs: a retry keeps the question's key (saved once) with a new run key.
+          idempotency_key: `community-app-run:${runKey}`,
           user_message_key: userMessageKey,
         }),
       });
