@@ -67,7 +67,11 @@ assert.match(
 
 const block = exportedFunctionBlock(metabolizer, "settleCommunityMemorySignalsInternal");
 const errorBlock = exportedFunctionBlock(metabolizer, "recordCommunityMemoryMetabolizerErrorRunInternal");
-const listRunsBlock = exportedFunctionBlock(metabolizer, "listCommunityMemoryMetabolizerRuns");
+assert.doesNotMatch(
+  metabolizer,
+  /export const listCommunityMemoryMetabolizerRuns\b/,
+  "the unread metabolizer run listing stays deleted; runs remain an operational ledger",
+);
 assert.match(
   block,
   /export const settleCommunityMemorySignalsInternal = internalMutation/,
@@ -193,16 +197,6 @@ assert.match(
   heartbeat,
   /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId[\s\S]*trigger: "sweep"[\s\S]*recordCommunityMemoryMetabolizerErrorRunInternal[\s\S]*status|settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId[\s\S]*trigger: "sweep"[\s\S]*recordCommunityMemoryMetabolizerErrorRunInternal/,
   "memory sweep should pass the sweep trigger and record error runs without blocking the heartbeat",
-);
-assert.match(
-  listRunsBlock,
-  /export const listCommunityMemoryMetabolizerRuns = query/,
-  "metabolizer run ledger should expose a manager-readable query",
-);
-assert.match(
-  listRunsBlock,
-  /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\)[\s\S]*query\("communityMemoryMetabolizerRuns"[\s\S]*withIndex\("by_community_finishedAt"[\s\S]*q\.eq\("communityId", args\.communityId\)[\s\S]*\.take\(limit\)/,
-  "metabolizer run query should be manager-gated, same-community scoped, and bounded",
 );
 
 assert.match(

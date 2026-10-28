@@ -1,6 +1,30 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
+export const CRITICAL_AUDIT_EVENT_TYPES = [
+  "account_delete_blocked",
+  "account_delete_completed",
+  "community_checkout_attached_to_stripe",
+  "community_checkout_created",
+  "community_archived",
+  "community_archive_billing_cleanup_completed",
+  "community_archive_billing_cleanup_failed",
+  "community_restored",
+  "community_purchase_claim_created",
+  "community_purchase_claim_redeemed",
+  "community_operator_retirement_completed",
+  "community_subscription_synced",
+  "harness_app_source_provenance_backfill",
+  "operator_dashboard_accessed",
+  "operator_role_deactivated",
+  "operator_role_upserted",
+  "stripe_connect_onboarding_failed",
+  "stripe_connect_account_synced",
+  "stripe_webhook_failed",
+  "stripe_webhook_processed",
+  "stripe_webhook_received",
+] as const;
+
 const SEVERITY_VALIDATOR = v.union(v.literal("info"), v.literal("warning"), v.literal("error"));
 const STATUS_VALIDATOR = v.union(
   v.literal("started"),

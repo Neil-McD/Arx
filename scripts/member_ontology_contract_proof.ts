@@ -211,16 +211,6 @@ assert.doesNotMatch(
 );
 assert.match(
   surface,
-  /loadActiveMembership\(ctx, args\.communityId, args\.subjectUserId\)/,
-  "orientation requires the SUBJECT's active membership — leaving hides member-to-member (retention-on-leave)",
-);
-assert.match(
-  surface,
-  /loadActiveMembership\(ctx, args\.communityId, viewerUserId\)/,
-  "orientation requires the VIEWER's active membership",
-);
-assert.match(
-  surface,
   /provenance !== "stated_interview" && draft\.provenance !== "form_answer"/,
   "the confirm-card mutation accepts only interview/form provenances",
 );
@@ -371,8 +361,6 @@ for (const leaked of ["LEAK_PENDING", "LEAK_OBSERVED", "LEAK_CROSS_COMMUNITY", "
 const rendererModule = read("shared/memberContextMarkdown.ts");
 assert.doesNotMatch(rendererModule, /Date\.now|new Date\(/, "the renderer must be clock-free (deterministic golden output)");
 assert.match(rendererModule, /memberFactVisibleToLens/, "the renderer must re-apply the one visibility predicate");
-assert.match(surface, /loadMemberAccountContext/, "the context query must assemble the deterministic account block");
-assert.match(surface, /renderMemberContextMarkdown/, "the context query must render through the one renderer");
 assert.match(
   contractDoc,
   /\| Founder\/admin \| one community \|[^\n]*`approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed/,

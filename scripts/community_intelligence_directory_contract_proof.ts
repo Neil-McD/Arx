@@ -8,17 +8,6 @@ const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory
 
 assert.doesNotMatch(directory, /communityIntelligenceProposals|reviewCommunityIntelligenceProposal|needs_review/, "directory substrate should not use legacy queue naming");
 
-function exportedFunctionBlock(source: string, exportName: string): string {
-  const startToken = `export const ${exportName} =`;
-  const start = source.indexOf(startToken);
-  assert.notEqual(start, -1, `${exportName} should exist`);
-  const nextConst = source.indexOf("\nexport const ", start + startToken.length);
-  const nextAsync = source.indexOf("\nexport async function ", start + startToken.length);
-  const nextCandidates = [nextConst, nextAsync].filter((index) => index !== -1);
-  const next = nextCandidates.length ? Math.min(...nextCandidates) : -1;
-  return source.slice(start, next === -1 ? source.length : next);
-}
-
 function exportedAsyncFunctionBlock(source: string, exportName: string): string {
   const startToken = `export async function ${exportName}`;
   const start = source.indexOf(startToken);
@@ -28,28 +17,6 @@ function exportedAsyncFunctionBlock(source: string, exportName: string): string 
   const nextCandidates = [nextConst, nextAsync].filter((index) => index !== -1);
   const next = nextCandidates.length ? Math.min(...nextCandidates) : -1;
   return source.slice(start, next === -1 ? source.length : next);
-}
-
-function assertInternalCanonicalRepairFunction(functionName: string) {
-  const block = exportedFunctionBlock(directory, functionName);
-  assert.match(block, new RegExp(`export const ${functionName} = internalMutation`), `${functionName} should be internal-only repair infrastructure`);
-  assert.match(block, /resolveAdminTruthActor/, `${functionName} should use admin-only truth actor resolution`);
-  assert.doesNotMatch(block, /actorType: v\./, `${functionName} should not expose caller-selected actor identity`);
-  assert.doesNotMatch(block, /actorAgentKey/, `${functionName} should not expose agent attribution through direct repair writes`);
-  assert.doesNotMatch(block, /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/, `${functionName} should not allow autonomous actors to write canonical truth directly`);
-}
-
-function assertPolicyGatedApply(functionName: string) {
-  const block = exportedFunctionBlock(directory, functionName);
-  const trustedCore = exportedAsyncFunctionBlock(directory, "applyTrustedCommunityIntelligenceChangeRequestCore");
-  assert.match(block, /resolvePolicyDecisionActor/, `${functionName} should use policy decision actor resolution`);
-  assert.doesNotMatch(block, /actorAgentKey/, `${functionName} should not accept or write caller-supplied agent attribution`);
-  assert.doesNotMatch(block, /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/, `${functionName} should not allow public autonomous policy actors`);
-  assert.match(block, /applyTrustedCommunityIntelligenceChangeRequestCore/, `${functionName} should delegate canonical writes to the trusted apply core`);
-  assert.match(trustedCore, /changeRequest\.status !== "accepted"/, `${functionName} should require an accepted change request`);
-  assert.match(trustedCore, /requireChangeRequestTargetsCurrent/, `${functionName} should reject stale targets`);
-  assert.match(trustedCore, /insertMutationLog/, `${functionName} should still write audited mutations`);
-  assert.match(trustedCore, /policyDecisionId: normalizeIdValue\(changeRequest\._id\)/, `${functionName} should link mutations to the accepted change request`);
 }
 
 for (const tableName of [
@@ -120,10 +87,10 @@ assert.match(
   /\.index\("by_community_compilerState_visibility_pendingSince", \[[\s\S]*"communityId",[\s\S]*"compilerState",[\s\S]*"visibilityScope",[\s\S]*"compilerPendingSince",[\s\S]*\]\)/,
   "source traces should support bounded visibility-aware pending-backlog reads",
 );
-assert.match(
+assert.doesNotMatch(
   directory,
-  /createCommunityIntelligenceChangeRequest[\s\S]*insertChangeRequest/,
-  "activity should be able to create policy-gated directory change requests",
+  /export const (createCommunityIntelligenceChangeRequest|decideCommunityIntelligenceChangeRequest|applyCommunityIntelligenceChangeRequest|createCommunityIntelligenceNode|updateCommunityIntelligenceNode|createCommunityIntelligenceEdge|listCommunityIntelligenceEdges) =/,
+  "the uncalled directory change-request and node/edge endpoints stay deleted; outcomes enter through recordCommunityOutcomeObservationInternal",
 );
 assert.doesNotMatch(
   directory,
@@ -180,29 +147,6 @@ assert.match(
   /const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch\([\s\S]*ctx\.db\.insert\("communitySourceTraces"[\s\S]*\.\.\.compilerLifecyclePatch/,
   "new source traces should start from the visibility-aware compiler lifecycle patch",
 );
-{
-  const block = exportedFunctionBlock(directory, "createCommunityIntelligenceChangeRequest");
-  assert.match(
-    block,
-    /actorType: v\.optional\(\s*v\.union\(\s*v\.literal\("member"\),\s*v\.literal\("admin"\),?\s*\)/,
-    "public change requests should only allow member/admin actor identity",
-  );
-  assert.doesNotMatch(
-    block,
-    /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)|actorAgentKey/,
-    "public change requests should not impersonate community-agent or compiler actors",
-  );
-  assert.match(
-    block,
-    /if \(actor\.isManager\) \{[\s\S]*requireTraceIdsBelongToCommunity[\s\S]*\} else \{[\s\S]*requireTraceIdsReadableByViewer/,
-    "member change requests should validate trace readability, not only community ownership",
-  );
-  assert.match(
-    block,
-    /requireOutcomeIdsReadableByViewer[\s\S]*requireNodeIdsReadableByViewer[\s\S]*requireEdgeIdsReadableByViewer/,
-    "member change requests should validate readable outcomes, nodes, and edges",
-  );
-}
 assert.match(
   directory,
   /function canViewerReadTrace[\s\S]*row\.sourceVisibility === "redacted"[\s\S]*if \(isManager\) return true;[\s\S]*actorUserId[\s\S]*row\.visibilityScope === "private"[\s\S]*community_source_trace_not_readable/,
@@ -225,71 +169,18 @@ assert.match(
 );
 assert.match(
   directory,
-  /createCommunityIntelligenceChangeRequest[\s\S]*requireChangeRequestPayloadReferencesAllowed/,
-  "public change requests should validate payload references before insertion",
-);
-assert.match(
-  directory,
   /requireChangeRequestReferencesAllowedForApply[\s\S]*createdByActorType === "member"[\s\S]*createdByUserId[\s\S]*requireTraceIdsReadableByViewer[\s\S]*requireOutcomeIdsReadableByViewer[\s\S]*requireNodeIdsReadableByViewer[\s\S]*requireEdgeIdsReadableByViewer[\s\S]*requireChangeRequestPayloadReferencesAllowed/,
   "apply should revalidate member-authored change request references against the original requester readability",
 );
-assertInternalCanonicalRepairFunction("createCommunityIntelligenceNode");
-assertInternalCanonicalRepairFunction("updateCommunityIntelligenceNode");
-assertInternalCanonicalRepairFunction("createCommunityIntelligenceEdge");
-assertPolicyGatedApply("applyCommunityIntelligenceChangeRequest");
-assert.match(
-  directory,
-  /async function resolvePolicyDecisionActor[\s\S]*requireCommunityManager[\s\S]*actorType: "admin"/,
-  "public policy decisions should resolve to explicit admin override attribution only",
-);
-{
-  const block = exportedFunctionBlock(directory, "decideCommunityIntelligenceChangeRequest");
-  const trustedCore = exportedAsyncFunctionBlock(directory, "decideTrustedCommunityIntelligenceChangeRequestCore");
-  assert.match(
-    block,
-    /resolvePolicyDecisionActor[\s\S]*decideTrustedCommunityIntelligenceChangeRequestCore/,
-    "change request decisions should resolve a policy actor before delegating to the trusted decision core",
-  );
-  assert.match(
-    trustedCore,
-    /status: args\.status[\s\S]*decidedByActorType: actor\.actorType/,
-    "change request decisions should be attributed to a policy actor",
-  );
-  assert.doesNotMatch(
-    block,
-    /actorAgentKey|v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/,
-    "public change request decisions should not impersonate autonomous actors",
-  );
-}
 assert.doesNotMatch(
   directory,
   /export const (retrieveCommunityIntelligenceForWorkflow|recordCommunityIntelligenceRetrievalFeedback|recordCommunityOutcomeObservation) =/,
   "legacy workflow retrieval, receipt-wide feedback, and general public outcomes should be deleted",
 );
-assert.match(
-  directory,
-  /createCommunityIntelligenceNode[\s\S]*insertMutationLog\([\s\S]*operation: "create_node"/,
-  "node creation should write an audit mutation",
-);
-assert.match(
-  directory,
-  /updateCommunityIntelligenceNode[\s\S]*insertMutationLog\([\s\S]*beforeSnapshot[\s\S]*afterSnapshot/,
-  "node updates should audit before and after snapshots",
-);
-assert.match(
-  directory,
-  /createCommunityIntelligenceEdge[\s\S]*insertMutationLog\([\s\S]*operation: "create_edge"/,
-  "edge creation should write an audit mutation",
-);
 assert.equal(
   (directory.match(/insert\("communityIntelligenceRetrievalLogs"/g) ?? []).length,
   1,
   "the directory should have exactly one retrieval receipt writer",
-);
-assert.match(
-  directory,
-  /listCommunityIntelligenceEdges[\s\S]*canViewerReadEdge\(\{ ctx, communityId: args\.communityId, edge: row, userId, isManager \}\)/,
-  "edge listing should use the same readability gate as edge change request validation",
 );
 assert.match(
   directory,
@@ -305,10 +196,5 @@ assert.match(
   directory,
   /canViewerReadNode[\s\S]*MEMBER_READABLE_STATUSES/,
   "member directory reads should exclude draft and candidate nodes",
-);
-assert.match(
-  directory,
-  /export const createCommunityIntelligenceNode = internalMutation[\s\S]*resolveAdminTruthActor/,
-  "canonical node creation should be internal repair infrastructure with admin truth resolution",
 );
 console.log("community_intelligence_directory_contract_proof: ok");
