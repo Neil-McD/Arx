@@ -1158,3 +1158,131 @@ test("twin messages: the refusals read as Studio words them", async () => {
     expect(studio, code).toContain(JSON.stringify(MESSAGES_TEXT[code]));
   }
 });
+
+// Join on the twin: the community's own join page, through /__polynet/me/join*.
+const JOIN_ANSWER = {
+  ok: true, signed_in: true,
+  community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12,
+    avatar_url: "https://live.example.convex.cloud/api/storage/av", owner_email: "owner@example.com" },
+  gate: "checkout", available: true, action_label: "Join $10/month",
+  plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }],
+  viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false, user_id: "u1" },
+};
+const SHAPED_JOIN = {
+  ok: true, signed_in: true,
+  community: { name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, avatar_url: "https://live.example.convex.cloud/api/storage/av" },
+  gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }],
+  viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false },
+  enter_url: `${SITE}/__polynet/auth/start?return=%2Fchat`, setup_url: "https://polynet.example.com/onboarding",
+};
+const JOIN_ACTIONS = ["/__polynet/me/join", "/__polynet/me/join/cancel", "/__polynet/me/join/checkout", "/__polynet/me/join/finish"];
+
+test("twin join: join_url is the community's own /join on its twin, from the site and the twin; Polynet's join page where there's no twin", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  const e = sitesEnv();
+  for (const origin of [SITE, TWIN]) {
+    expect((await (await edge.fetch(at(origin, "/__polynet/auth/session"), e)).json()).join_url, origin).toBe(`${TWIN}/join`);
+  }
+  expect((await (await edge.fetch(request("/__polynet/auth/session"), env())).json()).join_url).toBe("https://polynet.example.com/c/apps-community");
+  // The site's /join goes to its twin; off the sites domain, to Polynet's join page unless the site has its own.
+  const res = await edge.fetch(at(SITE, "/join", { headers: { "sec-fetch-mode": "navigate" } }), e);
+  expect([res.status, res.headers.get("location")]).toEqual([302, `${TWIN}/join`]);
+  const local = deployedSite({ "/": "<html>home</html>" });
+  const off = await edge.fetch(request("/join", { headers: { "sec-fetch-mode": "navigate" } }), { ...env(), DEV_USER_WORKER: local });
+  expect([off.status, off.headers.get("location")]).toEqual([302, "https://polynet.example.com/c/apps-community"]);
+  const own = await edge.fetch(request("/join", { headers: { "sec-fetch-mode": "navigate" } }), { ...env(), DEV_USER_WORKER: deployedSite({ "/join": "<html>ours</html>" }) });
+  expect(await own.text()).toContain("ours");
+});
+
+test("twin join: the routes and the join module exist only on the twin, for its own pages; actions are small JSON POSTs with its session", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json(JOIN_ANSWER));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  for (const path of JOIN_ACTIONS) {
+    expect((await edge.fetch(settingsCall(SITE, path, "POST"), e)).status, `site ${path}`).toBe(404);
+    for (const site of ["same-site", "cross-site"]) expect((await edge.fetch(settingsCall(TWIN, path, "POST", { "sec-fetch-site": site }), e)).status, `${site} ${path}`).toBe(403);
+    // No session, no call; a form any page can post never reaches an action; 1 KB at most.
+    expect((await edge.fetch(at(TWIN, path, { method: "POST", body: "{}", headers: { "content-type": "application/json" } }), e)).status, path).toBe(401);
+    expect((await edge.fetch(settingsCall(TWIN, path, "POST", { "content-type": "application/x-www-form-urlencoded" }, "a=1"), e)).status, path).toBe(415);
+    expect((await edge.fetch(settingsCall(TWIN, path, "POST", {}, JSON.stringify({ x: "y".repeat(1100) })), e)).status, path).toBe(413);
+  }
+  for (const path of JOIN_ACTIONS.slice(1)) expect((await edge.fetch(settingsCall(TWIN, path, "GET"), e)).status, path).toBe(405);
+  expect((await edge.fetch(settingsCall(SITE, "/__polynet/me/join", "GET"), e)).status).toBe(404);
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/join", "GET", { "sec-fetch-site": "same-site" }), e)).status).toBe(403);
+  expect((await edge.fetch(at(SITE, "/__polynet/blocks/join.js"), e)).status).toBe(404);
+  expect(backend).not.toHaveBeenCalled();
+  const module = await edge.fetch(at(TWIN, "/__polynet/blocks/join.js"), e);
+  expect([module.status, module.headers.get("content-type")]).toEqual([200, "text/javascript; charset=utf-8"]);
+  const source = await module.text();
+  expect(source).toContain("export function mountJoin");
+  expect(source).not.toContain("__POLYNET_JOIN_MESSAGES__");
+  expect(source).not.toContain("innerHTML");
+});
+
+test("twin join: the read works signed out; signed in it carries the twin's session; only the fields the page draws leave the edge", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async (_url: string, _init?: RequestInit) => Response.json(JOIN_ANSWER));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  const anonymous = await edge.fetch(at(TWIN, "/__polynet/me/join"), e);
+  expect(anonymous.status).toBe(200);
+  expect(await anonymous.json()).toEqual(SHAPED_JOIN);
+  const [path, init] = backend.mock.calls[0];
+  expect(path).toBe("https://api.example.convex.site/runtime/app/me/join");
+  expect(init?.headers).toEqual({ "Content-Type": "application/json", Origin: TWIN, "x-polynet-edge-secret": "edge-secret" });
+  const signedIn = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join", "GET"), e);
+  expect(await signedIn.json()).toEqual(SHAPED_JOIN);
+  expect(backend.mock.calls[1][1]?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}` });
+  // An avatar anywhere but Polynet's storage isn't shown; an unknown state reads as signed out.
+  backend.mockImplementation(async () => Response.json({ ...JOIN_ANSWER, community: { ...JOIN_ANSWER.community, avatar_url: "https://tracker.example.com/a.png" }, viewer: { state: "superuser" } }));
+  expect(await (await edge.fetch(at(TWIN, "/__polynet/me/join"), e)).json()).toMatchObject({ community: { avatar_url: null }, viewer: null });
+  // A session the backend refuses reads as signed out, and is cleared: the pitch still shows.
+  const calls: Array<string | null> = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+    const auth = (init?.headers as Record<string, string>).Authorization ?? null;
+    calls.push(auth);
+    return auth ? Response.json({ ok: false }, { status: 401 }) : Response.json({ ...JOIN_ANSWER, signed_in: false, viewer: null });
+  }));
+  const refused = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join", "GET"), e);
+  expect([refused.status, (await refused.json()).signed_in]).toEqual([200, false]);
+  expect(refused.headers.get("set-cookie")).toMatch(/^__Host-polynet_session=; Path=\/; HttpOnly; SameSite=Lax; Max-Age=0; Secure$/);
+  expect(calls).toEqual([`Bearer ${TOKEN}`, null]);
+});
+
+test("twin join: each action goes to Studio's core with the twin's session; checkout only ever to Stripe's own page", async () => {
+  resetEdgeCaches();
+  const answers: Record<string, unknown> = {
+    "/runtime/app/me/join/request": { ...JOIN_ANSWER, outcome: "approval_pending", viewer: { state: "pending" } },
+    "/runtime/app/me/join/cancel": JOIN_ANSWER,
+    "/runtime/app/me/join/checkout": { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_a1", session_id: `chk_${"a".repeat(32)}` },
+    "/runtime/app/me/join/finish": { ...JOIN_ANSWER, status: "pending" },
+  };
+  const backend = vi.fn(async (url: string, _init?: RequestInit) => Response.json(answers[new URL(url).pathname] ?? { ok: false }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  const act = async (path: string, body = "{}") => {
+    const res = await edge.fetch(settingsCall(TWIN, path, "POST", {}, body), e);
+    return [res.status, await res.json()];
+  };
+  expect(await act("/__polynet/me/join")).toEqual([200, { ...SHAPED_JOIN, outcome: "approval_pending",
+    viewer: { state: "pending", can_request_again: false, reapply_at: null, setup_required: false } }]);
+  expect(await act("/__polynet/me/join/cancel")).toEqual([200, SHAPED_JOIN]);
+  const checkoutBody = JSON.stringify({ billing_period: "monthly" });
+  // The page gets the address the backend made with Stripe, and nothing else (not even our own session id).
+  expect(await act("/__polynet/me/join/checkout", checkoutBody)).toEqual([200, { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_a1" }]);
+  expect(await act("/__polynet/me/join/finish", JSON.stringify({ session_id: `chk_${"a".repeat(32)}` }))).toEqual([200, { ...SHAPED_JOIN, status: "pending" }]);
+  expect(backend.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+    "/runtime/app/me/join/request", "/runtime/app/me/join/cancel", "/runtime/app/me/join/checkout", "/runtime/app/me/join/finish"]);
+  for (const [, init] of backend.mock.calls) expect(init?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}`, "x-polynet-edge-secret": "edge-secret" });
+  expect(String(backend.mock.calls[2][1]?.body)).toBe(checkoutBody);
+  // A checkout address anywhere but Stripe's own page never reaches the page.
+  for (const url of ["https://evil.example.com/pay", "https://checkout.stripe.com.evil.example.com/x", "javascript:alert(1)"]) {
+    answers["/runtime/app/me/join/checkout"] = { ok: true, checkout_url: url };
+    expect(await act("/__polynet/me/join/checkout", checkoutBody), url).toEqual([502, { ok: false, code: "join_unavailable" }]);
+  }
+  // Studio's refusals keep their code, never their message.
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false, code: "community_checkout_unavailable", message: "<b>raw</b>" }, { status: 409 })));
+  expect(await act("/__polynet/me/join/checkout", checkoutBody)).toEqual([409, { ok: false, code: "community_checkout_unavailable" }]);
+});

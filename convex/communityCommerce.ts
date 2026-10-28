@@ -7,7 +7,7 @@ import {
   requireStripeConnectWebhookConfiguration,
 } from "./stripeCore";
 import {
-  buildCheckoutSuccessUrl,
+  fillCheckoutSuccessUrl,
   type CommunityLike,
   type CommunityPricePointLike,
   type PurchaseClaimLike,
@@ -1011,151 +1011,200 @@ export const startPublicCommunityCheckout = action({
     ctx,
     args,
   ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
-    const nowMs = Date.now();
+    // Studio's funnel: both return addresses on Studio's own origin.
     const cancelUrl = requireCanonicalCheckoutReturnUrl(
       args.cancelUrl,
       "checkout_cancel_url_invalid",
     );
-    const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
-    const checkoutConfig = (await ctx.runQuery(
-      internal.communityCommerce.resolvePublicCommunityCheckoutConfigInternal as any,
-      {
-        communitySlug: args.communitySlug,
-        billingPeriod,
-        nowMs,
-      },
-    )) as {
-      communityId: any;
-      communitySlug: string;
-      communityName: string;
-      billingPeriod: "monthly" | "annual";
-      pricePointId: any;
-      amountBaseUnits: number;
-      currency: string;
-      currencyDecimals: number;
-      providerPriceId: string | null;
-      providerAccountId: string;
-      platformFeeBps: number;
-      oneLiner: string | null;
-      communityLifecycleGeneration: number;
-    };
-    requireStripeConnectWebhookConfiguration();
-    const sessionId = newOpaqueToken("chk");
-    const claimToken = newOpaqueToken("claim");
-    const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-    if (!args.authSubject) {
-      throw new Error("auth_subject_required");
-    }
-    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+    const successUrl = requireCanonicalCheckoutReturnUrl(
+      args.successUrl,
+      "checkout_success_url_invalid",
+    );
+    return await startCommunityJoinCheckoutCore(ctx, {
+      communitySlug: args.communitySlug,
+      billingPeriod: args.billingPeriod,
+      successUrl,
+      cancelUrl,
+      authSubject: args.authSubject,
+    });
+  },
+});
+
+// The one checkout for a community's paid plan, for Studio's funnel and for
+// Join on the community site's private twin. Each caller validates its own
+// return addresses first (Studio's origin; the twin's own /join). Access comes
+// only from the provider's verified webhook, never from the return.
+export async function startCommunityJoinCheckoutCore(
+  ctx: any,
+  args: {
+    communitySlug: string;
+    billingPeriod: string;
+    successUrl: string;
+    cancelUrl: string;
+    authSubject?: string;
+    // Set only by a caller that verified the session itself (the twin's edge
+    // session, in an http action that has no Convex identity of its own).
+    trustedUserId?: string;
+  },
+): Promise<{ ok: true; session_id: string; checkout_url: string }> {
+  const nowMs = Date.now();
+  const cancelUrl = args.cancelUrl;
+  const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
+  const checkoutConfig = (await ctx.runQuery(
+    internal.communityCommerce.resolvePublicCommunityCheckoutConfigInternal as any,
+    {
+      communitySlug: args.communitySlug,
+      billingPeriod,
+      nowMs,
+    },
+  )) as {
+    communityId: any;
+    communitySlug: string;
+    communityName: string;
+    billingPeriod: "monthly" | "annual";
+    pricePointId: any;
+    amountBaseUnits: number;
+    currency: string;
+    currencyDecimals: number;
+    providerPriceId: string | null;
+    providerAccountId: string;
+    platformFeeBps: number;
+    oneLiner: string | null;
+    communityLifecycleGeneration: number;
+  };
+  requireStripeConnectWebhookConfiguration();
+  const sessionId = newOpaqueToken("chk");
+  const claimToken = newOpaqueToken("claim");
+  const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
+  if (!args.authSubject) {
+    throw new Error("auth_subject_required");
+  }
+  // Studio: the caller's verified Polynet identity. The twin: the member its
+  // edge-verified session belongs to.
+  const actor = (args.trustedUserId
+    ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
+      authSubject: args.authSubject, userId: args.trustedUserId,
+    })
+    : await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
       authSubject: args.authSubject,
     })) as { dbUserId?: unknown; email?: string | null } | null;
-    const ownerUserId: unknown = actor?.dbUserId;
-    const ownerEmail: string | null = actor?.email ?? null;
-    if (!ownerUserId) throw new Error("auth_subject_required");
-    await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
-      communityId: checkoutConfig.communityId,
-      userId: ownerUserId,
-    });
-    const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
-      ctx,
-      userId: ownerUserId,
-      email: ownerEmail,
-      providerAccountId: checkoutConfig.providerAccountId,
-      nowMs,
-    });
-    let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
-    if (!providerPriceId) {
-      const existingProviderPrice = (await ctx.runQuery(
-        internal.communityCommerce.getCommunityPricePointProviderPriceInternal as any,
-        {
-          pricePointId: checkoutConfig.pricePointId,
-          providerAccountId: checkoutConfig.providerAccountId,
-        },
-      )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
-      providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
-    }
-    if (!providerPriceId) {
-      const stripe = getStripeClient();
-      const pricePointId = String(checkoutConfig.pricePointId);
-      const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
-      const priceIdempotencyKey = `community-price:${checkoutConfig.providerAccountId}:${pricePointId}`;
-      const product = await stripe.products.create({
-        name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
-        description: checkoutConfig.oneLiner ?? undefined,
-        metadata: {
-          community_id: String(checkoutConfig.communityId),
-          community_slug: checkoutConfig.communitySlug,
-          community_price_point_id: String(checkoutConfig.pricePointId),
-          billing_period: checkoutConfig.billingPeriod,
-        },
-      }, {
-        stripeAccount: checkoutConfig.providerAccountId,
-        idempotencyKey: productIdempotencyKey,
-      });
-      const price = await stripe.prices.create({
-        currency: checkoutConfig.currency,
-        unit_amount: checkoutConfig.amountBaseUnits,
-        recurring: {
-          interval: checkoutConfig.billingPeriod === "annual" ? "year" : "month",
-        },
-        product: product.id,
-        metadata: {
-          community_id: String(checkoutConfig.communityId),
-          community_slug: checkoutConfig.communitySlug,
-          community_price_point_id: String(checkoutConfig.pricePointId),
-          billing_period: checkoutConfig.billingPeriod,
-        },
-      }, {
-        stripeAccount: checkoutConfig.providerAccountId,
-        idempotencyKey: priceIdempotencyKey,
-      });
-      const attachResult = (await ctx.runMutation(
-        internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
-        {
-          pricePointId: checkoutConfig.pricePointId,
-          providerAccountId: checkoutConfig.providerAccountId,
-          providerPriceId: price.id,
-          nowMs,
-        },
-      )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
-      providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
-      if (!providerPriceId) throw new Error("provider_price_id_required");
-    }
-    await ctx.runMutation(
-      internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
+  const ownerUserId: unknown = actor?.dbUserId;
+  const ownerEmail: string | null = actor?.email ?? null;
+  if (!ownerUserId) throw new Error("auth_subject_required");
+  await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
+    communityId: checkoutConfig.communityId,
+    userId: ownerUserId,
+  });
+  const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
+    ctx,
+    userId: ownerUserId,
+    email: ownerEmail,
+    providerAccountId: checkoutConfig.providerAccountId,
+    nowMs,
+  });
+  let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
+  if (!providerPriceId) {
+    const existingProviderPrice = (await ctx.runQuery(
+      internal.communityCommerce.getCommunityPricePointProviderPriceInternal as any,
       {
-        sessionId,
-        communityId: checkoutConfig.communityId,
-        communityLifecycleGeneration: checkoutConfig.communityLifecycleGeneration,
-        billingPeriod,
         pricePointId: checkoutConfig.pricePointId,
-        amountBaseUnits: checkoutConfig.amountBaseUnits,
-        currency: checkoutConfig.currency,
-        currencyDecimals: checkoutConfig.currencyDecimals,
         providerAccountId: checkoutConfig.providerAccountId,
-        providerPriceId,
-        ownerUserId: ownerUserId ?? undefined,
-        claimToken,
-        expiresAt,
+      },
+    )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
+    providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
+  }
+  if (!providerPriceId) {
+    const stripe = getStripeClient();
+    const pricePointId = String(checkoutConfig.pricePointId);
+    const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
+    const priceIdempotencyKey = `community-price:${checkoutConfig.providerAccountId}:${pricePointId}`;
+    const product = await stripe.products.create({
+      name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
+      description: checkoutConfig.oneLiner ?? undefined,
+      metadata: {
+        community_id: String(checkoutConfig.communityId),
+        community_slug: checkoutConfig.communitySlug,
+        community_price_point_id: String(checkoutConfig.pricePointId),
+        billing_period: checkoutConfig.billingPeriod,
+      },
+    }, {
+      stripeAccount: checkoutConfig.providerAccountId,
+      idempotencyKey: productIdempotencyKey,
+    });
+    const price = await stripe.prices.create({
+      currency: checkoutConfig.currency,
+      unit_amount: checkoutConfig.amountBaseUnits,
+      recurring: {
+        interval: checkoutConfig.billingPeriod === "annual" ? "year" : "month",
+      },
+      product: product.id,
+      metadata: {
+        community_id: String(checkoutConfig.communityId),
+        community_slug: checkoutConfig.communitySlug,
+        community_price_point_id: String(checkoutConfig.pricePointId),
+        billing_period: checkoutConfig.billingPeriod,
+      },
+    }, {
+      stripeAccount: checkoutConfig.providerAccountId,
+      idempotencyKey: priceIdempotencyKey,
+    });
+    const attachResult = (await ctx.runMutation(
+      internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
+      {
+        pricePointId: checkoutConfig.pricePointId,
+        providerAccountId: checkoutConfig.providerAccountId,
+        providerPriceId: price.id,
         nowMs,
       },
-    );
+    )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
+    providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
+    if (!providerPriceId) throw new Error("provider_price_id_required");
+  }
+  await ctx.runMutation(
+    internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
+    {
+      sessionId,
+      communityId: checkoutConfig.communityId,
+      communityLifecycleGeneration: checkoutConfig.communityLifecycleGeneration,
+      billingPeriod,
+      pricePointId: checkoutConfig.pricePointId,
+      amountBaseUnits: checkoutConfig.amountBaseUnits,
+      currency: checkoutConfig.currency,
+      currencyDecimals: checkoutConfig.currencyDecimals,
+      providerAccountId: checkoutConfig.providerAccountId,
+      providerPriceId,
+      ownerUserId: ownerUserId ?? undefined,
+      claimToken,
+      expiresAt,
+      nowMs,
+    },
+  );
 
-    let createdCheckoutSession: any = null;
-    try {
-      const stripe = getStripeClient();
-      const checkoutSession: any = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        customer: stripeCustomerId,
-        success_url: buildCheckoutSuccessUrl(args.successUrl, sessionId),
-        cancel_url: cancelUrl,
-        client_reference_id: sessionId,
-        line_items: [
-          {
-            price: providerPriceId,
-            quantity: 1,
-          },
-        ],
+  let createdCheckoutSession: any = null;
+  try {
+    const stripe = getStripeClient();
+    const checkoutSession: any = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: stripeCustomerId,
+      success_url: fillCheckoutSuccessUrl(args.successUrl, sessionId),
+      cancel_url: cancelUrl,
+      client_reference_id: sessionId,
+      line_items: [
+        {
+          price: providerPriceId,
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        local_session_id: sessionId,
+        claim_token: claimToken,
+        community_id: String(checkoutConfig.communityId),
+        community_slug: checkoutConfig.communitySlug,
+        community_price_point_id: String(checkoutConfig.pricePointId),
+        billing_period: billingPeriod,
+      },
+      subscription_data: {
+        application_fee_percent: checkoutConfig.platformFeeBps / 100,
         metadata: {
           local_session_id: sessionId,
           claim_token: claimToken,
@@ -1164,108 +1213,97 @@ export const startPublicCommunityCheckout = action({
           community_price_point_id: String(checkoutConfig.pricePointId),
           billing_period: billingPeriod,
         },
-        subscription_data: {
-          application_fee_percent: checkoutConfig.platformFeeBps / 100,
-          metadata: {
-            local_session_id: sessionId,
-            claim_token: claimToken,
-            community_id: String(checkoutConfig.communityId),
-            community_slug: checkoutConfig.communitySlug,
-            community_price_point_id: String(checkoutConfig.pricePointId),
-            billing_period: billingPeriod,
-          },
-        },
-      }, {
-        stripeAccount: checkoutConfig.providerAccountId,
-        idempotencyKey: `community-checkout:${checkoutConfig.providerAccountId}:${sessionId}`,
-      });
-      createdCheckoutSession = checkoutSession;
-      const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
-      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-      await ctx.runMutation(
-        internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal as any,
-        {
-          sessionId,
-          providerAccountId: checkoutConfig.providerAccountId,
-          providerCheckoutSessionId: checkoutSession.id,
-          providerCustomerId:
-            typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-          providerSubscriptionId:
-            typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
-          providerPriceId,
-          nowMs: Date.now(),
-        },
-      );
-      return {
-        ok: true,
-        session_id: sessionId,
-        checkout_url: checkoutUrl,
-      };
-    } catch (error) {
-      let providerCleanupComplete = !createdCheckoutSession?.id;
-      if (createdCheckoutSession?.id) {
-        try {
-          await ctx.runMutation(
-            internal.communityCommerce.recordStalePublicCommunityCheckoutSessionInternal as any,
-            {
-              sessionId,
-              providerAccountId: checkoutConfig.providerAccountId,
-              providerCheckoutSessionId: createdCheckoutSession.id,
-              providerCustomerId:
-                typeof createdCheckoutSession.customer === "string"
-                  ? createdCheckoutSession.customer
-                  : null,
-              providerSubscriptionId:
-                typeof createdCheckoutSession.subscription === "string"
-                  ? createdCheckoutSession.subscription
-                  : null,
-              nowMs: Date.now(),
-            },
-          );
-        } catch (persistenceError) {
-          console.error("stale_community_checkout_persistence_failed", {
-            sessionId,
-            error:
-              persistenceError instanceof Error
-                ? persistenceError.message
-                : String(persistenceError),
-          });
-        }
-        try {
-          const expired = await expireStripeCheckoutSessionIfOpen({
-            providerCheckoutSessionId: createdCheckoutSession.id,
-            providerAccountId: checkoutConfig.providerAccountId,
-          });
-          if (expired.providerSubscriptionId) {
-            await cancelStripeSubscriptionIfActive({
-              providerSubscriptionId: expired.providerSubscriptionId,
-              providerAccountId: checkoutConfig.providerAccountId,
-            });
-          }
-          providerCleanupComplete = true;
-        } catch (cleanupError) {
-          console.error("stale_community_checkout_cleanup_failed", {
-            sessionId,
-            error:
-              cleanupError instanceof Error
-                ? cleanupError.message
-                : String(cleanupError),
-          });
-        }
-      }
-      if (providerCleanupComplete) {
+      },
+    }, {
+      stripeAccount: checkoutConfig.providerAccountId,
+      idempotencyKey: `community-checkout:${checkoutConfig.providerAccountId}:${sessionId}`,
+    });
+    createdCheckoutSession = checkoutSession;
+    const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
+    if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
+    await ctx.runMutation(
+      internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal as any,
+      {
+        sessionId,
+        providerAccountId: checkoutConfig.providerAccountId,
+        providerCheckoutSessionId: checkoutSession.id,
+        providerCustomerId:
+          typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
+        providerSubscriptionId:
+          typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
+        providerPriceId,
+        nowMs: Date.now(),
+      },
+    );
+    return {
+      ok: true,
+      session_id: sessionId,
+      checkout_url: checkoutUrl,
+    };
+  } catch (error) {
+    let providerCleanupComplete = !createdCheckoutSession?.id;
+    if (createdCheckoutSession?.id) {
+      try {
         await ctx.runMutation(
-          internal.communityCommerce.expirePublicCommunityCheckoutSessionInternal as any,
+          internal.communityCommerce.recordStalePublicCommunityCheckoutSessionInternal as any,
           {
             sessionId,
+            providerAccountId: checkoutConfig.providerAccountId,
+            providerCheckoutSessionId: createdCheckoutSession.id,
+            providerCustomerId:
+              typeof createdCheckoutSession.customer === "string"
+                ? createdCheckoutSession.customer
+                : null,
+            providerSubscriptionId:
+              typeof createdCheckoutSession.subscription === "string"
+                ? createdCheckoutSession.subscription
+                : null,
             nowMs: Date.now(),
           },
         );
+      } catch (persistenceError) {
+        console.error("stale_community_checkout_persistence_failed", {
+          sessionId,
+          error:
+            persistenceError instanceof Error
+              ? persistenceError.message
+              : String(persistenceError),
+        });
       }
-      throw error;
+      try {
+        const expired = await expireStripeCheckoutSessionIfOpen({
+          providerCheckoutSessionId: createdCheckoutSession.id,
+          providerAccountId: checkoutConfig.providerAccountId,
+        });
+        if (expired.providerSubscriptionId) {
+          await cancelStripeSubscriptionIfActive({
+            providerSubscriptionId: expired.providerSubscriptionId,
+            providerAccountId: checkoutConfig.providerAccountId,
+          });
+        }
+        providerCleanupComplete = true;
+      } catch (cleanupError) {
+        console.error("stale_community_checkout_cleanup_failed", {
+          sessionId,
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
+        });
+      }
     }
-  },
-});
+    if (providerCleanupComplete) {
+      await ctx.runMutation(
+        internal.communityCommerce.expirePublicCommunityCheckoutSessionInternal as any,
+        {
+          sessionId,
+          nowMs: Date.now(),
+        },
+      );
+    }
+    throw error;
+  }
+}
 
 export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
   args: {
@@ -1294,76 +1332,84 @@ export const finalizeCheckoutSession = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = Date.now();
-    const sessionId = normalizeSessionId(args.sessionId);
-    const session = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId))
-      .first();
-    if (!session) {
-      return {
-        ok: true,
-        status: "pending",
-      };
-    }
-    if (!session.ownerUserId || String(session.ownerUserId) !== String(userId)) {
-      return {
-        ok: false,
-        status: "forbidden",
-        message: "checkout_session_forbidden",
-      };
-    }
-    if (session.expiresAt <= nowMs || session.status === "expired") {
-      return {
-        ok: false,
-        status: "expired",
-        message: "checkout_session_expired",
-      };
-    }
-    if (session.mode === "community_join") {
-      const community = session.communityId
-        ? await ctx.db.get(session.communityId)
-        : null;
-      if (
-        !community ||
-        !communityIsActive(community) ||
-        !communityLifecycleGenerationMatches(
-          community,
-          session.communityLifecycleGeneration,
-        )
-      ) {
-        return {
-          ok: false,
-          status: "expired",
-          message: "checkout_session_inactive",
-        };
-      }
-    }
-    if (session.status !== "complete" || !session.claimToken) {
-      return {
-        ok: true,
-        status: "pending",
-      };
-    }
-    const grantsAccess = communitySubscriptionStatusGrantsAccess(
-      normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active",
-    );
-    if (!grantsAccess) {
+    return await resolveCheckoutSessionFinalization(ctx, userId, args.sessionId);
+  },
+});
+
+// Where a checkout stands for its own buyer, read only from what the provider's
+// verified webhook recorded (never from a redirect): pending until then, and
+// its claim once it grants access. Studio's checkout return and the twin's Join
+// both read it.
+export async function resolveCheckoutSessionFinalization(ctx: any, userId: any, sessionIdRaw: unknown) {
+  const nowMs = Date.now();
+  const sessionId = normalizeSessionId(sessionIdRaw);
+  const session = await ctx.db
+    .query("checkoutSessions")
+    .withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId))
+    .first();
+  if (!session) {
+    return {
+      ok: true,
+      status: "pending",
+    };
+  }
+  if (!session.ownerUserId || String(session.ownerUserId) !== String(userId)) {
+    return {
+      ok: false,
+      status: "forbidden",
+      message: "checkout_session_forbidden",
+    };
+  }
+  if (session.expiresAt <= nowMs || session.status === "expired") {
+    return {
+      ok: false,
+      status: "expired",
+      message: "checkout_session_expired",
+    };
+  }
+  if (session.mode === "community_join") {
+    const community = session.communityId
+      ? await ctx.db.get(session.communityId)
+      : null;
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !communityLifecycleGenerationMatches(
+        community,
+        session.communityLifecycleGeneration,
+      )
+    ) {
       return {
         ok: false,
         status: "expired",
         message: "checkout_session_inactive",
       };
     }
+  }
+  if (session.status !== "complete" || !session.claimToken) {
     return {
       ok: true,
-      status: "succeeded",
-      claim: {
-        token: session.claimToken,
-      },
+      status: "pending",
     };
-  },
-});
+  }
+  const grantsAccess = communitySubscriptionStatusGrantsAccess(
+    normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active",
+  );
+  if (!grantsAccess) {
+    return {
+      ok: false,
+      status: "expired",
+      message: "checkout_session_inactive",
+    };
+  }
+  return {
+    ok: true,
+    status: "succeeded",
+    claim: {
+      token: session.claimToken,
+    },
+  };
+}
 
 export const redeemPurchaseClaim = mutation({
   args: {
@@ -1377,56 +1423,62 @@ export const redeemPurchaseClaim = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = Date.now();
-    const token = normalizeClaimToken(args.token);
-    const claim = (await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_claimToken", (q: any) => q.eq("claimToken", token))
-      .first()) as PurchaseClaimLike | null;
-    if (!claim) throw new Error("claim_not_found");
-    if (claim.ownerUserId && String(claim.ownerUserId) !== String(userId)) {
-      throw new Error("claim_owner_mismatch");
-    }
-    if (claim.expiresAt <= nowMs || claim.status === "expired") {
-      await ctx.db.patch(claim._id, {
-        status: "expired",
-        updatedAt: nowMs,
-      });
-      throw new Error("claim_expired");
-    }
-    if (claim.status === "redeemed" && claim.redeemedByUserId !== userId) {
-      throw new Error("claim_already_redeemed");
-    }
-
-    const redemption = await redeemClaimRow({
-      ctx,
-      claim,
-      userId,
-      nowMs,
-    });
-    await recordCriticalAuditEventBestEffort(ctx, {
-      eventKey: `community_purchase_claim_redeemed:${token}:${userId}`,
-      eventType: "community_purchase_claim_redeemed",
-      status: redemption.accessGranted ? "succeeded" : "ignored",
-      actorUserId: userId,
-      subjectUserId: userId,
-      communityId: claim.communityId,
-      checkoutSessionId: claim.sourceSessionId ?? undefined,
-      provider: "polynet",
-      providerObjectId: claim.claimToken,
-      metadata: {
-        accessGranted: redemption.accessGranted,
-        grantMarker: redemption.grantMarker,
-        pricePointId: claim.pricePointId ? String(claim.pricePointId) : null,
-      },
-      createdAt: nowMs,
-    });
-    const communityId = redemption.communityId;
-    if (!communityId) throw new Error("claim_not_redeemable");
-    const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
-    return [{ community_id: communityId, community_slug: String(community?.slug ?? "") || null }];
+    return await redeemPurchaseClaimForUser(ctx, userId, args.token);
   },
 });
+
+// A paid checkout's claim becomes membership only once the webhook marked its
+// checkout complete (redeemClaimRow checks): Studio's return and the twin's Join.
+export async function redeemPurchaseClaimForUser(ctx: any, userId: any, tokenRaw: unknown) {
+  const nowMs = Date.now();
+  const token = normalizeClaimToken(tokenRaw);
+  const claim = (await ctx.db
+    .query("purchaseClaims")
+    .withIndex("by_claimToken", (q: any) => q.eq("claimToken", token))
+    .first()) as PurchaseClaimLike | null;
+  if (!claim) throw new Error("claim_not_found");
+  if (claim.ownerUserId && String(claim.ownerUserId) !== String(userId)) {
+    throw new Error("claim_owner_mismatch");
+  }
+  if (claim.expiresAt <= nowMs || claim.status === "expired") {
+    await ctx.db.patch(claim._id, {
+      status: "expired",
+      updatedAt: nowMs,
+    });
+    throw new Error("claim_expired");
+  }
+  if (claim.status === "redeemed" && claim.redeemedByUserId !== userId) {
+    throw new Error("claim_already_redeemed");
+  }
+
+  const redemption = await redeemClaimRow({
+    ctx,
+    claim,
+    userId,
+    nowMs,
+  });
+  await recordCriticalAuditEventBestEffort(ctx, {
+    eventKey: `community_purchase_claim_redeemed:${token}:${userId}`,
+    eventType: "community_purchase_claim_redeemed",
+    status: redemption.accessGranted ? "succeeded" : "ignored",
+    actorUserId: userId,
+    subjectUserId: userId,
+    communityId: claim.communityId,
+    checkoutSessionId: claim.sourceSessionId ?? undefined,
+    provider: "polynet",
+    providerObjectId: claim.claimToken,
+    metadata: {
+      accessGranted: redemption.accessGranted,
+      grantMarker: redemption.grantMarker,
+      pricePointId: claim.pricePointId ? String(claim.pricePointId) : null,
+    },
+    createdAt: nowMs,
+  });
+  const communityId = redemption.communityId;
+  if (!communityId) throw new Error("claim_not_redeemable");
+  const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
+  return [{ community_id: communityId, community_slug: String(community?.slug ?? "") || null }];
+}
 
 export const listPendingPurchaseClaims = query({
   args: {

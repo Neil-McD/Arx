@@ -55,7 +55,7 @@ export const PERSONAL_PAGES = [
   { path: "/communities", name: "communities", title: "Your communities", ready: true, signIn: true, below: [] },
   { path: "/messages", name: "messages", title: "Messages", ready: true, signIn: true, below: [["conversation", CONVERSATION_SEGMENT]] },
   { path: "/settings", name: "settings", title: "Settings", ready: true, signIn: true, below: [] },
-  { path: "/join", name: "join", title: "Join", ready: false, signIn: false, below: [] },
+  { path: "/join", name: "join", title: "Join", ready: true, signIn: false, below: [] },
 ];
 
 // Which personal page a path is (exactly, or an address under it, with or

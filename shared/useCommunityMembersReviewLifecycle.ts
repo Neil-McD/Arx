@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
-import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "../apps/web/src/communityJoinPolicy";
+import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "./communityJoinPolicy";
 
 type CommunityLike = {
   id: string;

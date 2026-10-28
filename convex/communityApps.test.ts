@@ -31,7 +31,14 @@ import {
   COMMUNITY_APP_MY_MESSAGE_MUTE_PATH,
   COMMUNITY_APP_MY_MESSAGE_TYPING_PATH,
   COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH,
+  COMMUNITY_APP_MY_JOIN_PATH,
+  COMMUNITY_APP_MY_JOIN_REQUEST_PATH,
+  COMMUNITY_APP_MY_JOIN_CANCEL_PATH,
+  COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH,
+  COMMUNITY_APP_MY_JOIN_FINISH_PATH,
 } from "./httpCommunityApps";
+import { twinCheckoutReturnUrls } from "./communityAppJoin";
+import { deriveCommunityFunnelAction } from "../shared/communityJoinPolicy";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import {
   COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommunityAppSessionToken, signCommunityAppSignoutTicket,
@@ -76,6 +83,9 @@ const modules = import.meta.glob([
   "./profiles.ts",
   "./directMessages.ts",
   "./directMessageEmails.ts",
+  "./communityAppJoin.ts",
+  "./communityCommerce.ts",
+  "./creatorCommerce.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -84,6 +94,24 @@ const COMMUNITY = "/communities/apps-community";
 const STATE = "s".repeat(43);
 const BRIDGE_SECRET = "test-bridge-secret";
 const EDGE_SECRET = "test-edge-secret";
+
+// Stripe, stood in for: Join's checkout runs Studio's own checkout, which talks
+// to Stripe; the test sees what it was asked for and answers like test mode.
+const stripe = vi.hoisted(() => ({ checkouts: [] as Array<{ params: any; options: any }> }));
+vi.mock("./stripeCore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./stripeCore")>()),
+  requireStripeConnectWebhookConfiguration: () => {},
+  getStripeClient: () => ({
+    customers: {
+      retrieve: async (id: string) => ({ id }),
+      create: async () => ({ id: "cus_test_join" }),
+    },
+    checkout: { sessions: { create: async (params: any, options: any) => {
+      stripe.checkouts.push({ params, options });
+      return { id: `cs_test_${stripe.checkouts.length}`, url: `https://checkout.stripe.com/c/pay/cs_test_${stripe.checkouts.length}`, customer: "cus_test_join", subscription: null };
+    } } },
+  }),
+}));
 
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
@@ -1224,4 +1252,170 @@ test("twin messages live: only a private session's watch token, versions and typ
     await c.db.patch(row!._id, { kind: "site" });
   });
   expect(await watch(f.owner)).toEqual({ ok: false, code: "private_session_required" });
+});
+
+// Join on the twin: the community's own join page, deciding exactly as Studio's funnel does.
+async function joinFixture() {
+  const f = await twinFixture();
+  const read = (token: string | null = null, origin = f.twin, secret = EDGE_SECRET) =>
+    f.post(COMMUNITY_APP_MY_JOIN_PATH, { origin, "x-polynet-edge-secret": secret, ...(token ? { authorization: `Bearer ${token}` } : {}) }, {});
+  const policy = (entryPolicy: string) => f.t.run((c) => c.db.patch(f.ids.communityId, { entryPolicy } as any));
+  const membership = (userId = f.ids.outsiderId) => f.t.run((c) => c.db.query("communityMemberships")
+    .withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", userId)).first());
+  const studioJoin = () => f.t.withIdentity({ subject: "apps-outsider-subject" })
+    .mutation(api.communityPublic.joinPublicCommunityBySlug, { communitySlug: "apps-community" });
+  return { ...f, read, policy, membership, studioJoin };
+}
+
+test("twin join: anyone reads the pitch and the gate signed out, decided exactly as Studio's funnel decides it", async () => {
+  const f = await joinFixture();
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { name: "Apps Club", oneLiner: "We build.", about: "About us." } as any));
+  expect(await f.read()).toEqual({ status: 200, body: { ok: true, signed_in: false,
+    community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 2, avatar_url: null },
+    gate: "join", available: true, action_label: "Join free", plans: [], viewer: null } });
+  for (const entryPolicy of ["open", "approval", "paid_subscription"]) {
+    await f.policy(entryPolicy);
+    const funnel = await f.t.query(api.communityPublic.resolvePublicFunnelBySlug, { communitySlug: "apps-community" }) as any;
+    expect((await f.read()).body.gate, entryPolicy).toBe(deriveCommunityFunnelAction({ entry_policy: funnel.community.entry_policy }));
+  }
+  // Only the twin's origin, only through the edge.
+  expect(await f.read(null, f.site)).toMatchObject({ status: 404, body: { code: "community_unavailable" } });
+  expect((await f.read(null, f.twin, "wrong")).status).toBe(401);
+});
+
+test("twin join: someone who isn't a member signs in on the twin only, joins an open community through Studio's join, and is in", async () => {
+  const f = await joinFixture();
+  // The site still refuses them; its twin signs them in, for Join.
+  expect(await f.handoff("apps-outsider", { origin: f.site })).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  // That session reads nothing of the community and none of the member pages; it isn't ended for it.
+  expect((await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } }, f.twin)).body).toMatchObject({ ok: false });
+  expect(await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  expect(await f.me(COMMUNITY_APP_MY_MESSAGES_PATH, token)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  expect(await f.me(COMMUNITY_APP_ACCOUNT_PATH, token)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+  expect((await f.read(token)).body).toMatchObject({ signed_in: true, gate: "join",
+    viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false } });
+  // A site's own session (which the site's code holds) never acts here.
+  const siteToken = await f.signInAt(f.site);
+  for (const path of [COMMUNITY_APP_MY_JOIN_REQUEST_PATH, COMMUNITY_APP_MY_JOIN_CANCEL_PATH, COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, COMMUNITY_APP_MY_JOIN_FINISH_PATH]) {
+    expect(await f.me(path, siteToken, {}, f.site), path).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+    expect((await f.me(path, token, {}, f.twin, "wrong")).status, path).toBe(401);
+  }
+  expect(await f.read(siteToken, f.site)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+  const joined = await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
+  expect(joined).toMatchObject({ status: 200, body: { ok: true, outcome: "joined", viewer: { state: "member" }, action_label: "Enter community" } });
+  expect(await f.membership()).toMatchObject({ active: true, role: "member", accessSource: "free_grant" });
+  // Joining twice is still one membership; and now the site signs them in.
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body.outcome).toBe("joined");
+  expect(await f.handoff("apps-outsider", { origin: f.site })).toMatchObject({ status: 200, body: { ok: true } });
+});
+
+test("twin join: approval asks, waits, can be withdrawn, and a denial waits out its cooldown, exactly as Studio's join decides", async () => {
+  const f = await joinFixture();
+  await f.policy("approval");
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  const asked = await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
+  expect(asked).toMatchObject({ status: 200, body: { outcome: "approval_pending", viewer: { state: "pending" }, action_label: "Request pending" } });
+  // Studio's own join says the same for the same person.
+  expect((await f.studioJoin()).outcome).toBe("approval_pending");
+  expect(await f.membership()).toBeNull();
+  const withdrawn = await f.me(COMMUNITY_APP_MY_JOIN_CANCEL_PATH, token);
+  expect(withdrawn).toMatchObject({ status: 200, body: { viewer: { state: "visitor" } } });
+  expect(await f.t.run((c) => c.db.query("communityJoinRequests").collect())).toEqual([]);
+  // Denied, with a week to wait: the page says until when, and asking again changes nothing.
+  await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
+  const reapplyAt = Date.now() + 86_400_000;
+  await f.t.run(async (c) => {
+    const row = (await c.db.query("communityJoinRequests").collect())[0];
+    await c.db.patch(row._id, { status: "denied", deniedAt: Date.now(), reapplyAt });
+  });
+  expect((await f.read(token)).body.viewer).toEqual({ state: "denied", can_request_again: false, reapply_at: new Date(reapplyAt).toISOString(), setup_required: false });
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body).toMatchObject({ outcome: "approval_denied", viewer: { state: "denied" }, action_label: "Request denied" });
+  expect((await f.studioJoin()).outcome).toBe("approval_denied");
+  // Once it's over, they may ask again.
+  await f.t.run(async (c) => {
+    const row = (await c.db.query("communityJoinRequests").collect())[0];
+    await c.db.patch(row._id, { deniedAt: Date.now() - 2 * 86_400_000, reapplyAt: Date.now() - 1 });
+  });
+  expect((await f.read(token)).body).toMatchObject({ viewer: { state: "denied", can_request_again: true }, action_label: "Request again" });
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body).toMatchObject({ outcome: "approval_pending", viewer: { state: "pending" } });
+});
+
+test("twin join: someone the community has blocked can't join, in Studio's words", async () => {
+  const f = await joinFixture();
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  await f.t.run((c) => c.db.insert("communityBlocks", {
+    communityId: f.ids.communityId, userId: f.ids.outsiderId, createdByUserId: f.ids.ownerId, createdAt: Date.now(), updatedAt: Date.now(),
+  }));
+  expect((await f.read(token)).body.viewer).toMatchObject({ state: "blocked" });
+  expect(await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).toEqual({ status: 403, body: { ok: false, code: "community_user_blocked" } });
+  expect(await f.membership()).toBeNull();
+});
+
+test("twin join: a paid plan goes to Studio's checkout, back only to this twin's /join; the return grants nothing until Stripe's verified notice does", async () => {
+  stripe.checkouts.length = 0;
+  const f = await joinFixture();
+  const nowMs = Date.now();
+  await f.policy("paid_subscription");
+  await f.t.run(async (c) => {
+    await c.db.insert("communityPricePoints", {
+      communityId: f.ids.communityId, billingPeriod: "monthly", name: "Monthly", amountBaseUnits: 1000, currency: "usd", currencyDecimals: 2,
+      isCurrent: true, providerAccountId: "acct_test_owner", providerPriceId: "price_test_monthly", createdAt: nowMs, updatedAt: nowMs,
+    });
+    await c.db.insert("userStripeConnectAccounts", {
+      userId: f.ids.ownerId, stripeAccountId: "acct_test_owner", accountType: "express", transfersEnabled: true, status: "ready",
+      detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, requirementsCurrentlyDue: [], requirementsEventuallyDue: [], createdAt: nowMs, updatedAt: nowMs,
+    });
+  });
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  const price = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(10);
+  expect((await f.read(token)).body).toMatchObject({ gate: "checkout", action_label: `Join ${price}/month`,
+    plans: [{ billing_period: "monthly", name: "Monthly", label: `Join ${price}/month` }], viewer: { state: "visitor" } });
+  // Joining for free isn't a way around it: Studio's join says a plan is required.
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body.outcome).toBe("paid_plan_required");
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "weekly" })).status).toBe(400);
+  const started = await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" });
+  expect(started).toMatchObject({ status: 200, body: { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_1" } });
+  const sessionId = started.body.session_id as string;
+  expect(sessionId).toMatch(/^chk_[a-f0-9]{32}$/);
+  // Studio's checkout, on the founder's Stripe account, returning only to this twin's own /join.
+  expect(stripe.checkouts).toHaveLength(1);
+  expect(stripe.checkouts[0].params).toMatchObject({
+    mode: "subscription", success_url: `${f.twin}/join?checkout=${sessionId}`, cancel_url: `${f.twin}/join?checkout=canceled`,
+    line_items: [{ price: "price_test_monthly", quantity: 1 }], client_reference_id: sessionId,
+  });
+  expect(stripe.checkouts[0].options).toMatchObject({ stripeAccount: "acct_test_owner" });
+  // Back from Stripe before Stripe's notice: still not a member, however often it's asked.
+  const finish = (body: unknown, as = token) => f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, as, body);
+  for (let i = 0; i < 2; i += 1) expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "pending", viewer: { state: "visitor" } });
+  expect(await f.membership()).toBeNull();
+  expect((await finish({ session_id: "chk_../x" })).status).toBe(400);
+  // Someone else's checkout reads as none at all.
+  const memberTwin = await f.signInAt(f.twin);
+  expect((await finish({ session_id: sessionId }, memberTwin)).body).toMatchObject({ status: "not_found" });
+  // Stripe's verified notice (the webhook) completes it; then the return makes them a member, once.
+  await f.t.mutation(internal.communityCommerce.syncPendingCommunityCheckoutSubscriptionInternal, {
+    sessionId, providerAccountId: "acct_test_owner", providerCheckoutSessionId: "cs_test_1", providerCustomerId: "cus_test_join",
+    providerSubscriptionId: "sub_test_1", providerPriceId: "price_test_monthly", subscriptionStatus: "active",
+    currentPeriodStartAt: nowMs, currentPeriodEndAt: nowMs + 30 * 86_400_000, markComplete: true,
+  });
+  expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "joined", viewer: { state: "member" } });
+  expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "joined", viewer: { state: "member" } });
+  expect(await f.membership()).toMatchObject({ active: true });
+  expect(await f.t.run((c) => c.db.query("communityMemberships").withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", f.ids.outsiderId)).collect())).toHaveLength(1);
+  // A member doesn't start another checkout.
+  expect(await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).toMatchObject({ status: 409, body: { code: "already_member" } });
+  expect(stripe.checkouts).toHaveLength(1);
+});
+
+test("twin join: checkout returns only to this community's own twin", async () => {
+  const f = await joinFixture();
+  expect(twinCheckoutReturnUrls(f.twin)).toEqual({ successUrl: `${f.twin}/join?checkout={CHECKOUT_SESSION_ID}`, cancelUrl: `${f.twin}/join?checkout=canceled` });
+  for (const origin of [`${f.twin}/x`, "http://apps-community--me-staging.polynet.page", "https://u:p@x.example.com", "javascript:alert(1)"]) {
+    expect(twinCheckoutReturnUrls(origin), origin).toBeNull();
+  }
+  const own = (communityId: any, origin: string) => f.t.query(internal.communityAppJoin.isCommunityPrivateOriginInternal, { communityId, origin });
+  expect(await own(f.ids.communityId, f.twin)).toBe(true);
+  expect(await own(f.ids.communityId, f.site)).toBe(false);
+  expect(await own(f.ids.otherCommunityId, f.twin)).toBe(false);
 });

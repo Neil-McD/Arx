@@ -163,6 +163,9 @@ class PolynetAccount extends HTMLElement {
         if (error && error.code === "sign_in_required") {
           this.state.session = await polynet.session({ refresh: true });
           this.state.open = false;
+        } else if (error && error.code === "not_a_member") {
+          // Signed in on the private twin to join, not a member yet: the way in, not an error.
+          this.state.notMember = true;
         } else {
           this.state.error = "Couldn't load your account.";
         }
@@ -246,6 +249,12 @@ class PolynetAccount extends HTMLElement {
     ]));
     children.push(h("hr", { class: "sep" }));
     if (this.state.loading) children.push(h("p", { class: "status muted", role: "status", text: "Loading…" }));
+    if (this.state.notMember) {
+      children.push(h("div", { class: "status" }, [
+        h("p", { class: "muted", text: "You're not a member here yet." }),
+        session.join_url ? h("a", { class: "item", href: session.join_url, part: "item" }, [h("span", { class: "label", text: "Join" })]) : null,
+      ]));
+    }
     if (this.state.error) {
       children.push(h("div", { class: "status", role: "alert" }, [
         h("p", { class: "muted", text: this.state.error }),

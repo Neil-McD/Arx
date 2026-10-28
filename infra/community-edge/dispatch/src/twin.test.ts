@@ -6,7 +6,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, firefox, webkit, type BrowserType } from "playwright";
+import { chromium, firefox, webkit, type BrowserType, type Route } from "playwright";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import * as esbuild from "../../node_modules/esbuild/lib/main.js";
 import { Miniflare, convertV4MiniflareOptions } from "../../node_modules/miniflare/dist/src/index.js";
@@ -67,6 +67,7 @@ async function backend(request: Request): Promise<Response> {
     return Response.json({ ok: true, community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: null, about: null, member_count: 4 } });
   }
   if (auth === `Bearer ${REFUSED}`) return Response.json({ ok: false, code: "community_app_session_invalid" }, { status: 401 });
+  if (url.pathname === "/runtime/app/me/join" || url.pathname.startsWith("/runtime/app/me/join/")) return joinBackend(url.pathname, auth, JSON.parse(body || "{}"));
   if (url.pathname === "/runtime/app/me/communities") {
     return Response.json({ ok: true, communities: [
       { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", role: "member", avatar_url: null, site_url: SITE },
@@ -207,6 +208,55 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
       return refuse("not_found", 404);
   }
 }
+// The join routes, standing in for Studio's funnel projection and cores: the
+// test sets how the community lets people in and where the visitor stands.
+const CHECKOUT = `chk_${"c".repeat(32)}`;
+const joining = {
+  gate: "join", viewer: null as null | Record<string, unknown>, label: "Join free", plans: [] as any[],
+  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0,
+};
+function resetJoin(gate = "join", state: string | null = "visitor") {
+  Object.assign(joining, {
+    gate, label: gate === "checkout" ? "Join $10/month" : "Join free", calls: [], finishPending: 0, checkoutUrl: "",
+    viewer: state ? { state, can_request_again: false, reapply_at: null, setup_required: false } : null,
+    plans: gate === "checkout" ? [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }, { billing_period: "annual", name: "Annual", label: "Join $100/year" }] : [],
+  });
+}
+function joinBackend(path: string, auth: string | null, body: Record<string, any>): Response {
+  joining.calls.push([path, body]);
+  const projection = (signedIn: boolean) => ({
+    ok: true, signed_in: signedIn,
+    community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: "Dawn sessions at the crag.", about: "We climb at sunrise.\n\nAll levels <b>welcome</b>.",
+      member_count: 4, avatar_url: null },
+    gate: joining.gate, available: true, action_label: joining.label, plans: joining.plans, viewer: signedIn ? joining.viewer : null,
+  });
+  if (path === "/runtime/app/me/join") return Response.json(projection(Boolean(auth)));
+  if (!auth) return Response.json({ ok: false, code: "community_app_session_required" }, { status: 401 });
+  switch (path) {
+    case "/runtime/app/me/join/request":
+      if (joining.gate === "request_access") {
+        joining.viewer = { ...joining.viewer, state: "pending" };
+        joining.label = "Request pending";
+        return Response.json({ ...projection(true), outcome: "approval_pending" });
+      }
+      joining.viewer = { ...joining.viewer, state: "member" };
+      return Response.json({ ...projection(true), outcome: "joined" });
+    case "/runtime/app/me/join/cancel":
+      joining.viewer = { ...joining.viewer, state: "visitor" };
+      joining.label = "Join free";
+      return Response.json(projection(true));
+    case "/runtime/app/me/join/checkout":
+      return Response.json({ ok: true, checkout_url: joining.checkoutUrl, session_id: CHECKOUT });
+    case "/runtime/app/me/join/finish":
+      if (joining.finishPending > 0) { joining.finishPending -= 1; return Response.json({ ...projection(true), status: "pending" }); }
+      joining.viewer = { ...joining.viewer, state: "member" };
+      return Response.json({ ...projection(true), status: "joined" });
+    default:
+      return Response.json({ ok: false, code: "not_found" }, { status: 404 });
+  }
+}
+const joinCalls = (path: string) => joining.calls.filter(([called]) => called === `/runtime/app/me/join${path}`).map(([, body]) => body);
+
 const dmCalls = (path: string) => dm.calls.filter(([called]) => called === `/runtime/app/me/messages/${path}`).map(([, body]) => body);
 
 let mf: Miniflare;
@@ -279,10 +329,16 @@ test("the twin draws the site's frame with nothing of the site's left to run", a
 });
 
 // The page in a browser: the edge answers every request to the site and its twin.
-async function openTwin(type: BrowserType, path: string, token: string, siteToken?: string, options: { fakeLive?: boolean } = {}) {
+async function openTwin(type: BrowserType, path: string, token: string | null, siteToken?: string, options: { fakeLive?: boolean } = {}) {
   const browser = await type.launch();
   const context = await browser.newContext();
-  await context.addCookies([{ name: "__Host-polynet_session", value: token, url: `${TWIN}/`, secure: true, httpOnly: true, sameSite: "Lax" }]);
+  if (token) await context.addCookies([{ name: "__Host-polynet_session", value: token, url: `${TWIN}/`, secure: true, httpOnly: true, sameSite: "Lax" }]);
+  // Polynet's sign-in page and Stripe's checkout (the two hops off the site): each visit is recorded, never followed.
+  hops.length = 0;
+  await context.route(HOP, (route) => {
+    hops.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Away</title><p>Away</p>" });
+  });
   if (siteToken) await context.addCookies([{ name: "__Host-polynet_session", value: siteToken, url: `${SITE}/`, secure: true, httpOnly: true, sameSite: "Lax" }]);
   // Polynet's storage: a photo upload (Studio's flow, straight from the browser) and the photo itself.
   await context.route(`${STORAGE}/**`, async (route) => {
@@ -295,7 +351,11 @@ async function openTwin(type: BrowserType, path: string, token: string, siteToke
     }
     return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(PNG, "base64") });
   });
-  await context.route(/^https:\/\/[a-z0-9-]+\.polynet\.page\//, async (route) => {
+  await context.route(/^https:\/\/[a-z0-9-]+\.polynet\.page\//, (route) => serveEdge(route).catch((error) => {
+    // A page closed at the end of a test, with its last requests still in flight.
+    if (!/has been closed/.test(String(error?.message))) throw error;
+  }));
+  const serveEdge = async (route: Route) => {
     const request = route.request();
     const headers = await request.allHeaders();
     const res = await mf.dispatchFetch(request.url(), {
@@ -303,8 +363,15 @@ async function openTwin(type: BrowserType, path: string, token: string, siteToke
     }) as unknown as Response;
     const out: Record<string, string> = {};
     res.headers.forEach((value, name) => { out[name] = value; });
+    // A redirect off to Polynet's sign-in or Stripe: recorded there and stopped (its cookies kept).
+    const location = res.headers.get("location") ?? "";
+    if (res.status >= 300 && res.status < 400 && HOP.test(location)) {
+      hops.push(location);
+      delete out.location;
+      return route.fulfill({ status: 200, headers: { ...out, "content-type": "text/html" }, body: "<!doctype html><title>Away</title><p>Away</p>" });
+    }
     await route.fulfill({ status: res.status, headers: out, body: Buffer.from(await res.arrayBuffer()) });
-  });
+  };
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
   await page.addInitScript(() => {
@@ -330,6 +397,8 @@ async function openTwin(type: BrowserType, path: string, token: string, siteToke
   return { browser, page };
 }
 
+const hops: string[] = [];
+const HOP = /^https:\/\/(polynet\.example\.com|checkout\.stripe\.com)\//;
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const uploads: Array<{ type: string | undefined; bytes: number }> = [];
 
@@ -379,14 +448,151 @@ test("a session the backend refuses shows the page's own sign-in, never a loop",
   }
 }, 60_000);
 
-test("the other personal pages are quiet placeholders inside the frame for now", async () => {
+// Join: the community's pitch and its gate, inside the same stripped frame,
+// through the real edge, signed out and in.
+for (const [engine, type] of ENGINES) {
+  const installed = engine === "chromium" || existsSync(type.executablePath());
+  test.runIf(installed)(`${engine}: Join renders signed out inside the stripped frame; Join signs in through the normal hop, back to /join`, async () => {
+    resetJoin("join", null);
+    const { browser, page } = await openTwin(type, "/join", null);
+    try {
+      const personal = page.locator("polynet-personal");
+      await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
+      expect(await page.title()).toBe("Join · Sunrise Climbing Club");
+      expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Join");
+      expect(await personal.locator("[part=join-name]").textContent()).toBe("Sunrise Climbing Club");
+      expect(await personal.locator("[part=join-one-liner]").textContent()).toBe("Dawn sessions at the crag.");
+      expect(await personal.locator("[part=join-count]").textContent()).toBe("4 members");
+      // Text, never markup.
+      expect(await personal.locator("[part=join-about] p").allTextContents()).toEqual(["We climb at sunrise.", "All levels <b>welcome</b>."]);
+      expect(await personal.locator("[part=join-about] b").count()).toBe(0);
+      const action = personal.locator("[part=join-action]");
+      expect(await action.textContent()).toBe("Join free");
+      expect(await personal.locator("[part=gate-note]").textContent()).toBe("You'll sign in with Polynet first.");
+      // The frame is the site's, styled by its own stylesheet; nothing of the site's runs.
+      expect(await page.locator("header.chrome").evaluate((node) => getComputedStyle(node).borderBottomColor)).toBe("rgb(1, 2, 3)");
+      expect(await page.evaluate(() => (window as any).siteRan)).toBeUndefined();
+      expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+      // Join: Polynet's sign-in for the twin, back to /join.
+      await action.click();
+      await expect.poll(() => hops.length).toBe(1);
+      const hop = new URL(hops[0]);
+      expect([hop.origin + hop.pathname, hop.searchParams.get("community"), hop.searchParams.get("redirect_uri")])
+        .toEqual(["https://polynet.example.com/api/auth/community-handoff", "sunrise-climbing-club", `${TWIN}/__polynet/auth/callback`]);
+      const signin = (await page.context().cookies(`${TWIN}/`)).find((cookie) => cookie.name === "__Host-polynet_signin");
+      expect(decodeURIComponent(String(signin?.value).split(".")[1])).toBe("/join");
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
+}
+
+test("Join: a free join is one action with the twin's session, then into the site, signed in there through its own sign-in", async () => {
+  resetJoin("join", "visitor");
   const { browser, page } = await openTwin(chromium, "/join", TOKEN);
   try {
     const personal = page.locator("polynet-personal");
-    await expect.poll(() => personal.getAttribute("state")).toBe("soon");
-    expect(await personal.locator("[part=soon]").textContent()).toBe("This page is coming soon.");
-    expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Join");
-    expect(await page.evaluate(() => (window as any).siteRan)).toBeUndefined();
+    await expect.poll(() => personal.getAttribute("state")).toBe("visitor");
+    expect(await personal.locator("[part=gate-note]").count()).toBe(0);
+    await personal.locator("[part=join-action]").click();
+    // The site's own sign-in: silent for someone signed in to Polynet, and now a member, back to /chat.
+    await expect.poll(() => hops.length).toBe(1);
+    const hop = new URL(hops[0]);
+    expect([hop.pathname, hop.searchParams.get("redirect_uri")]).toEqual(["/api/auth/community-handoff", `${SITE}/__polynet/auth/callback`]);
+    const signin = (await page.context().cookies(`${SITE}/`)).find((cookie) => cookie.name === "__Host-polynet_signin");
+    expect(decodeURIComponent(String(signin?.value).split(".")[1])).toBe("/chat");
+    expect(joinCalls("/request")).toEqual([{}]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Join: a member sees they're in, with the way into the site; nothing moves on its own", async () => {
+  resetJoin("join", "member");
+  const { browser, page } = await openTwin(chromium, "/join", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("member");
+    expect(await personal.locator("[part=gate-title]").textContent()).toBe("You're in.");
+    const enter = personal.locator("[part=join-enter]");
+    expect([await enter.textContent(), await enter.getAttribute("href")]).toEqual(["Go to Sunrise Climbing Club", `${SITE}/__polynet/auth/start?return=%2Fchat`]);
+    expect(page.url()).toBe(`${TWIN}/join`);
+    expect(hops).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Join: approval asks and waits in Studio's words, can be withdrawn; a denial says until when", async () => {
+  resetJoin("request_access", "visitor");
+  const { browser, page } = await openTwin(chromium, "/join", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("visitor");
+    await personal.locator("[part=join-action]").click();
+    await expect.poll(() => personal.getAttribute("state")).toBe("pending");
+    expect(await personal.locator("[part=gate-title]").textContent()).toBe("Request pending");
+    expect(await personal.locator("[part=gate] p").last().textContent()).toBe("You're waiting for approval to join Sunrise Climbing Club.");
+    await personal.locator("[part=join-cancel]").click();
+    await expect.poll(() => personal.getAttribute("state")).toBe("visitor");
+    expect(joinCalls("/cancel")).toEqual([{}]);
+    joining.viewer = { state: "denied", can_request_again: false, reapply_at: "2026-11-04T12:00:00.000Z", setup_required: false };
+    await page.reload();
+    await expect.poll(() => personal.getAttribute("state")).toBe("denied");
+    const date = await page.evaluate(() => new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date("2026-11-04T12:00:00.000Z")));
+    expect(await personal.locator("[part=gate] p").last().textContent())
+      .toBe(`Your join request for Sunrise Climbing Club was denied. You can request access again on ${date}.`);
+    expect(await personal.locator("[part=join-action]").count()).toBe(0);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Join: a paid plan goes exactly where the backend's checkout said; back from Stripe it finishes only once Polynet has the payment", async () => {
+  resetJoin("checkout", "visitor");
+  joining.checkoutUrl = "https://checkout.stripe.com/c/pay/cs_test_a1B2#fidkdWxOYHwnPyd1blpxYHZxWjA0";
+  const { browser, page } = await openTwin(chromium, "/join", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("visitor");
+    expect(await personal.locator("[part=plan]").allTextContents()).toEqual(["$10/month", "$100/year"]);
+    const action = personal.locator("[part=join-action]");
+    expect(await action.textContent()).toBe("Join $10/month");
+    await personal.getByRole("radio", { name: "$100/year" }).check();
+    expect(await action.textContent()).toBe("Join $100/year");
+    await action.click();
+    await expect.poll(() => hops.length).toBe(1);
+    // The very address the backend returned, not one the page built.
+    await page.waitForURL(joining.checkoutUrl);
+    expect(page.url()).toBe(joining.checkoutUrl);
+    expect(joinCalls("/checkout")).toEqual([{ billing_period: "annual" }]);
+    // Back from Stripe: the redirect proves nothing; the page asks until Polynet has Stripe's notice.
+    hops.length = 0;
+    joining.finishPending = 2;
+    await page.goto(`${TWIN}/join?checkout=${CHECKOUT}`);
+    await expect.poll(() => personal.getAttribute("state")).toBe("finishing");
+    expect(await personal.locator("[part=join-status]").textContent()).toBe("Finishing up…");
+    await expect.poll(() => hops.length, { timeout: 15_000 }).toBe(1);
+    expect(joinCalls("/finish")).toEqual([{ session_id: CHECKOUT }, { session_id: CHECKOUT }, { session_id: CHECKOUT }]);
+    expect(new URL(hops[0]).searchParams.get("redirect_uri")).toBe(`${SITE}/__polynet/auth/callback`);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Join: canceled at Stripe, the page says so and offers the plans again; an address that isn't Stripe's is never followed", async () => {
+  resetJoin("checkout", "visitor");
+  joining.checkoutUrl = "https://evil.example.com/pay";
+  const { browser, page } = await openTwin(chromium, "/join?checkout=canceled", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("visitor");
+    expect(await personal.locator("[part=gate-note]").first().textContent()).toBe("Checkout canceled. You haven't been charged.");
+    expect(page.url()).toBe(`${TWIN}/join`);
+    await personal.locator("[part=join-action]").click();
+    await expect.poll(() => personal.locator("[part=join-error]").textContent()).toBe("That didn't work. Try again.");
+    expect(hops).toEqual([]);
+    expect(page.url()).toBe(`${TWIN}/join`);
   } finally {
     await browser.close();
   }
