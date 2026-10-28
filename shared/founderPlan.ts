@@ -39,6 +39,22 @@ export type FounderSubscriptionStatus =
   | "canceled"
   | "ended";
 
+// Whether the community itself runs: a paying plan, or one past due while
+// Stripe retries within the period it already started (the same grace members
+// get). AI spending doesn't get this grace (founderSubscriptionStatusGrantsAccess).
+export function founderSubscriptionKeepsCommunityRunning(args: {
+  status: unknown;
+  currentPeriodEndAt?: unknown;
+  nowMs: number;
+}): boolean {
+  const status = String(args.status ?? "").trim().toLowerCase();
+  if (status === "past_due") {
+    const currentPeriodEndAt = Number(args.currentPeriodEndAt ?? 0);
+    return Number.isFinite(currentPeriodEndAt) && currentPeriodEndAt > args.nowMs;
+  }
+  return founderSubscriptionStatusGrantsAccess(args);
+}
+
 export function founderSubscriptionStatusGrantsAccess(args: {
   status: unknown;
   currentPeriodEndAt?: unknown;

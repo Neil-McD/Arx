@@ -26,7 +26,7 @@ import {
   requireCommunityModerator,
   requireCommunityManager,
   requireCommunityUserNotBlocked,
-  resolveCommunityMembershipEntitlementState,
+  resolveCommunityLens,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
   buildCommunityVisualIdentity,
@@ -58,7 +58,6 @@ import {
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
@@ -274,22 +273,14 @@ async function resolveCommunityAdminMembersContext(args: {
     communityId: args.communityId,
     userId,
   });
-  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
-  const viewerEntitlement = await resolveCommunityMembershipEntitlementState({
-    ctx: args.ctx,
-    community,
-    membership: viewerMembership,
-    userId,
-  });
-  if (!viewerEntitlement.isEntitled) {
-    throw new Error("community_entitlement_required");
-  }
-  const viewerRole = normalizeCommunityRoleForOutput(viewerMembership?.role);
+  const lens = await resolveCommunityLens({ ctx: args.ctx, community, membership: viewerMembership, userId });
+  if (lens.unavailableCode) throw new Error(lens.unavailableCode);
+  if (lens.isBlocked) throw new Error("community_user_blocked");
+  if (!lens.can.readChat) throw new Error("community_entitlement_required");
   return {
     userId,
     community,
-    viewerCanManageMembers:
-      String(community.ownerId) === String(userId) || viewerRole === "admin",
+    viewerCanManageMembers: lens.can.manageMembers,
   };
 }
 
@@ -895,13 +886,8 @@ export const listCommunityMemberships = query({
       )) as CommunityLike | null;
       if (!community || !communityIsActive(community)) continue;
       if (String(community.ownerId) === String(row.userId)) continue;
-      const entitlement = await resolveCommunityMembershipEntitlementState({
-        ctx,
-        community,
-        membership: row,
-        userId: row.userId,
-      });
-      if (!entitlement.isEntitled) continue;
+      const lens = await resolveCommunityLens({ ctx, community, membership: row, userId: row.userId });
+      if (!lens.membershipEntitled) continue;
       if (out.some((entry) => entry.community_id === String(row.communityId)))
         continue;
       const role = normalizeCommunityRoleForOutput(row.role) || "member";

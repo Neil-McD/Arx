@@ -503,11 +503,14 @@ export function normalizeName(raw: unknown): string {
   return name.slice(0, 120);
 }
 
+// A requested visibility: exactly one of the two states. Anything else is
+// refused, never read as "published" (publishing must be asked for).
 export function normalizeVisibility(raw: unknown): "published" | "unlisted" {
   const visibility = String(raw ?? "")
     .trim()
     .toLowerCase();
-  return visibility === "unlisted" ? "unlisted" : "published";
+  if (visibility === "published" || visibility === "unlisted") return visibility;
+  throw new Error("community_visibility_invalid");
 }
 
 export function normalizeEntryPolicy(raw: unknown, fallback: CommunityEntryPolicy): CommunityEntryPolicy {
@@ -1187,30 +1190,136 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   };
 }
 
-export async function requireCommunityChatAccess(args: {
+// The one answer to "who is this person in this community, and what may they
+// do": every access check, Studio's access bundle, the twin, the site API and
+// the MCP read it. Relations and powers are granted only while the community
+// can run and the person is entitled and not blocked; the stored role alone
+// grants nothing.
+export type CommunityLens = {
+  community: CommunityLike;
+  membership: CommunityMembershipLike | null;
+  operational: boolean;
+  /** Why the community can't run, when it can't (as requireCommunityBuilderAccess throws it). */
+  unavailableCode: "community_archived" | "community_temporarily_unavailable" | null;
+  isOwner: boolean;
+  isBlocked: boolean;
+  /** The membership row's role, whether or not it grants anything now. */
+  storedRole: string;
+  entitlement: CommunityMembershipEntitlementState;
+  /** Entitled and not blocked, whether or not the community can run. */
+  membershipEntitled: boolean;
+  /** In the community right now: membershipEntitled and the community can run. */
+  entitled: boolean;
+  /** What they are here now; null when they aren't in. */
+  relation: "owner" | "admin" | "moderator" | "member" | null;
+  can: {
+    enter: boolean;
+    readChat: boolean;
+    postChat: boolean;
+    postMessage: boolean;
+    view: boolean;
+    moderateContent: boolean;
+    reviewJoinRequests: boolean;
+    manageMembers: boolean;
+    manageResources: boolean;
+    managePricing: boolean;
+    manageBranding: boolean;
+    managePublishing: boolean;
+    managePayouts: boolean;
+  };
+};
+
+export async function resolveCommunityLens(args: {
   ctx: any;
-  communityId: any;
+  community: CommunityLike;
+  membership: CommunityMembershipLike | null;
   userId: any;
-}): Promise<{ community: CommunityLike }> {
-  const { community, membership } = await getCommunityAndMembership(args);
-  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
-  if (String(community.ownerId) !== String(args.userId)) {
-    await requireCommunityUserNotBlocked({
-      ctx: args.ctx,
-      communityId: community._id,
-      userId: args.userId,
-    });
-  }
+}): Promise<CommunityLens> {
+  const { community, membership } = args;
+  const builderAccess = await resolveCommunityBuilderAccess({ ctx: args.ctx, community });
+  const operational = builderAccess.operational;
+  const isOwner = String(community.ownerId) === String(args.userId);
+  const isBlocked = isOwner
+    ? false
+    : await communityUserIsBlocked({ ctx: args.ctx, communityId: community._id, userId: args.userId });
+  const storedRole = normalizeCommunityRoleForOutput(membership?.role);
   const entitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
     community,
     membership,
     userId: args.userId,
   });
-  if (!entitlement.isEntitled) {
-    throw new Error("community_entitlement_required");
-  }
-  return { community };
+  const membershipEntitled = !isBlocked && entitlement.isEntitled;
+  const entitled = membershipEntitled && operational;
+  const isAdmin = !isOwner && membershipEntitled && storedRole === "admin";
+  const isModerator = !isOwner && membershipEntitled && storedRole === "moderator";
+  const relation = !entitled
+    ? null
+    : isOwner
+      ? "owner"
+      : isAdmin
+        ? "admin"
+        : isModerator
+          ? "moderator"
+          : "member";
+  const manager = operational && (isOwner || isAdmin);
+  const moderator = operational && (isOwner || isAdmin || isModerator);
+  return {
+    community,
+    membership,
+    operational,
+    unavailableCode: operational
+      ? null
+      : builderAccess.reason === "community_archived"
+        ? "community_archived"
+        : "community_temporarily_unavailable",
+    isOwner,
+    isBlocked,
+    storedRole,
+    entitlement,
+    membershipEntitled,
+    entitled,
+    relation,
+    can: {
+      enter: entitled,
+      readChat: entitled,
+      postChat: entitled,
+      postMessage: entitled,
+      view: !isBlocked && operational,
+      moderateContent: moderator,
+      reviewJoinRequests: moderator,
+      manageMembers: manager,
+      manageResources: manager,
+      managePricing: manager,
+      manageBranding: operational && isOwner,
+      managePublishing: operational && isOwner,
+      managePayouts: operational && isOwner,
+    },
+  };
+}
+
+// The lens for a community by id, refusing what any access check refuses
+// first: a community that can't run, then a blocked member (never the owner).
+async function requireCommunityLens(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<CommunityLens> {
+  const { community, membership } = await getCommunityAndMembership(args);
+  const lens = await resolveCommunityLens({ ctx: args.ctx, community, membership, userId: args.userId });
+  if (lens.unavailableCode) throw new Error(lens.unavailableCode);
+  if (lens.isBlocked) throw new Error("community_user_blocked");
+  return lens;
+}
+
+export async function requireCommunityChatAccess(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<{ community: CommunityLike }> {
+  const lens = await requireCommunityLens(args);
+  if (!lens.can.readChat) throw new Error("community_entitlement_required");
+  return { community: lens.community };
 }
 
 export async function resolveCommunityAccessBundle(args: {
@@ -1220,28 +1329,15 @@ export async function resolveCommunityAccessBundle(args: {
   userId: any;
 }) {
   requireActiveCommunity(args.community);
-  const builderAccess = await resolveCommunityBuilderAccess({
-    ctx: args.ctx,
-    community: args.community,
-  });
-  const role = normalizeCommunityRoleForOutput(args.membership?.role);
-  const isOwner = args.community.ownerId === args.userId;
-  const isBlocked = !isOwner
-    ? await communityUserIsBlocked({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        userId: args.userId,
-      })
-    : false;
+  const lens = await resolveCommunityLens(args);
+  const builderAccess = { operational: lens.operational };
+  const role = lens.storedRole;
+  const isOwner = lens.isOwner;
+  const isBlocked = lens.isBlocked;
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
-  const entitlement = await resolveCommunityMembershipEntitlementState({
-    ctx: args.ctx,
-    community: args.community,
-    membership: args.membership,
-    userId: args.userId,
-  });
-  const isMembershipEntitled = !isBlocked && entitlement.isEntitled;
-  const isEntitled = isMembershipEntitled && builderAccess.operational;
+  const entitlement = lens.entitlement;
+  const isMembershipEntitled = lens.membershipEntitled;
+  const isEntitled = lens.entitled;
   const isAdmin = !isOwner && isMembershipEntitled && role === "admin";
   const isModerator = !isOwner && isMembershipEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
@@ -1269,21 +1365,19 @@ export async function resolveCommunityAccessBundle(args: {
               ? "visitor"
               : null;
   const canViewLanding = true;
-  const canEnterCommunity = isEntitled;
-  const canReadChat = isEntitled;
-  const canPostChat = isEntitled;
-  const canView = !isBlocked && builderAccess.operational;
-  const canManageMembers = builderAccess.operational && (isOwner || isAdmin);
-  const canManageResources = builderAccess.operational && (isOwner || isAdmin);
-  const canModerateContent =
-    builderAccess.operational && (isOwner || isAdmin || isModerator);
-  const canReviewJoinRequests =
-    builderAccess.operational && (isOwner || isAdmin || isModerator);
-  const canManagePricing = builderAccess.operational && (isOwner || isAdmin);
-  const canManageBranding = builderAccess.operational && isOwner;
-  const canManagePublishing = builderAccess.operational && isOwner;
-  const canManagePayouts = builderAccess.operational && isOwner;
-  const canPostMessage = isEntitled;
+  const canEnterCommunity = lens.can.enter;
+  const canReadChat = lens.can.readChat;
+  const canPostChat = lens.can.postChat;
+  const canView = lens.can.view;
+  const canManageMembers = lens.can.manageMembers;
+  const canManageResources = lens.can.manageResources;
+  const canModerateContent = lens.can.moderateContent;
+  const canReviewJoinRequests = lens.can.reviewJoinRequests;
+  const canManagePricing = lens.can.managePricing;
+  const canManageBranding = lens.can.manageBranding;
+  const canManagePublishing = lens.can.managePublishing;
+  const canManagePayouts = lens.can.managePayouts;
+  const canPostMessage = lens.can.postMessage;
   const primaryCta: CommunityPrimaryCta = !builderAccess.operational
     ? isOwner
       ? "manage_billing"
@@ -1319,7 +1413,8 @@ export async function resolveCommunityAccessBundle(args: {
       typeof entitlement.subscriptionCurrentPeriodEndAt === "number"
         ? toIsoString(entitlement.subscriptionCurrentPeriodEndAt)
         : null,
-    effective_role: isOwner ? "owner" : role || null,
+    // What they are here now (null when they aren't in), not the stored role.
+    effective_role: lens.relation,
     can_view_landing: canViewLanding,
     can_enter_community: canEnterCommunity,
     can_read_chat: canReadChat,
@@ -1351,26 +1446,9 @@ export async function requireCommunityManager(args: {
   communityId: any;
   userId: any;
 }): Promise<{ community: CommunityLike }> {
-  const { community, membership } = await getCommunityAndMembership(args);
-  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
-  if (String(community.ownerId) !== String(args.userId)) {
-    await requireCommunityUserNotBlocked({
-      ctx: args.ctx,
-      communityId: community._id,
-      userId: args.userId,
-    });
-  }
-  const entitlement = await resolveCommunityMembershipEntitlementState({
-    ctx: args.ctx,
-    community,
-    membership,
-    userId: args.userId,
-  });
-  const role = normalizeCommunityRoleForOutput(membership?.role);
-  if (!(community.ownerId === args.userId || (entitlement.isEntitled && role === "admin"))) {
-    throw new Error("community_forbidden");
-  }
-  return { community };
+  const lens = await requireCommunityLens(args);
+  if (!lens.can.manageMembers) throw new Error("community_forbidden");
+  return { community: lens.community };
 }
 
 export async function requireCommunityOwner(args: {
@@ -1391,31 +1469,9 @@ export async function requireCommunityModerator(args: {
   communityId: any;
   userId: any;
 }): Promise<{ community: CommunityLike }> {
-  const { community, membership } = await getCommunityAndMembership(args);
-  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
-  if (String(community.ownerId) !== String(args.userId)) {
-    await requireCommunityUserNotBlocked({
-      ctx: args.ctx,
-      communityId: community._id,
-      userId: args.userId,
-    });
-  }
-  const entitlement = await resolveCommunityMembershipEntitlementState({
-    ctx: args.ctx,
-    community,
-    membership,
-    userId: args.userId,
-  });
-  const role = normalizeCommunityRoleForOutput(membership?.role);
-  if (
-    !(
-      community.ownerId === args.userId ||
-      (entitlement.isEntitled && (role === "admin" || role === "moderator"))
-    )
-  ) {
-    throw new Error("community_forbidden");
-  }
-  return { community };
+  const lens = await requireCommunityLens(args);
+  if (!lens.can.moderateContent) throw new Error("community_forbidden");
+  return { community: lens.community };
 }
 
 export function mapActivePlanSummaries<

@@ -1,5 +1,5 @@
 import {
-  founderSubscriptionStatusGrantsAccess,
+  founderSubscriptionKeepsCommunityRunning,
   parseCommunityBuilderAccessMode,
   type CommunityBuilderAccessMode,
   type FounderSubscriptionStatus,
@@ -197,7 +197,7 @@ export async function resolveCommunityBuilderAccess(args: {
   }
 
   if (
-    !founderSubscriptionStatusGrantsAccess({
+    !founderSubscriptionKeepsCommunityRunning({
       status: subscription.status,
       currentPeriodEndAt: subscription.currentPeriodEndAt,
       nowMs,

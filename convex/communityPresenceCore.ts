@@ -7,16 +7,14 @@ import {
 import {
   type CommunityLike,
   type CommunityMembershipLike,
-  communityUserIsBlocked,
   countCanonicalCommunityMembersFromRows,
   listCanonicalCommunityMemberMembershipRows,
   pickMostRelevantCommunityMembership,
   readCommunityActiveMemberCount,
-  resolveCommunityMembershipEntitlementState,
+  resolveCommunityLens,
   resolvePublicUserId,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { validateProfileHandle } from "../shared/profileHandle";
 
 export {
@@ -133,15 +131,9 @@ export async function resolveCommunityPresenceAuthorization(args: {
   community: CommunityLike;
   userId: any;
 }): Promise<{ authorized: boolean; membership: CommunityMembershipLike | null }> {
-  const builderAccess = await resolveCommunityBuilderAccess({
-    ctx: args.ctx,
-    community: args.community,
-  });
-  if (!builderAccess.operational) {
-    return { authorized: false, membership: null };
-  }
   if (String(args.community.ownerId) === String(args.userId)) {
-    return { authorized: true, membership: null };
+    const lens = await resolveCommunityLens({ ctx: args.ctx, community: args.community, membership: null, userId: args.userId });
+    return { authorized: lens.entitled, membership: null };
   }
   const membershipRows = (await args.ctx.db
     .query("communityMemberships")
@@ -150,22 +142,8 @@ export async function resolveCommunityPresenceAuthorization(args: {
     )
     .collect()) as CommunityMembershipLike[];
   const membership = pickMostRelevantCommunityMembership(membershipRows);
-  if (
-    await communityUserIsBlocked({
-      ctx: args.ctx,
-      communityId: args.community._id,
-      userId: args.userId,
-    })
-  ) {
-    return { authorized: false, membership };
-  }
-  const entitlement = await resolveCommunityMembershipEntitlementState({
-    ctx: args.ctx,
-    community: args.community,
-    membership,
-    userId: args.userId,
-  });
-  return { authorized: entitlement.isEntitled, membership };
+  const lens = await resolveCommunityLens({ ctx: args.ctx, community: args.community, membership, userId: args.userId });
+  return { authorized: lens.entitled, membership: lens.operational ? membership : null };
 }
 
 export async function communityPresenceUserRemainsAuthorized(args: {
