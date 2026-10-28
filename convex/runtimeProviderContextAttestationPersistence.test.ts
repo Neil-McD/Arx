@@ -43,7 +43,7 @@ async function createFixture(
       updatedAt: nowMs,
     });
     const communityIdText = String(communityId);
-    const threadKey = buildGlobalMemberAgentEpisodeThreadKey(1);
+    const threadKey = buildCommunityConversationThreadKey(communityIdText, 1);
     const threadId = await ctx.db.insert("threads", {
       ownerId: userId,
       threadKey,
@@ -54,6 +54,9 @@ async function createFixture(
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId: userId, communityId: communityIdText as any, scopeKey: "community", nextOrdinal: 2, createdAt: nowMs, updatedAt: nowMs });
+    const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId, ordinal: 1, status: "active", startedAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
     const runId = `run-${surface}`;
     await ctx.db.insert("runtimeRuns", {
       ownerId: userId,
@@ -155,16 +158,12 @@ test.each(["member_agent_dock"] as const)(
   },
 );
 
-test("community-bound threads retain canonical provider-context receipt validation", async () => {
+test("the retired personal agent's global conversations cannot record new attestations", async () => {
   const { t, ids, attestation } = await createFixture("member_agent_dock");
   await t.run(async ctx => {
-    const thread = await ctx.db.get(ids.threadId);
-    await ctx.db.patch(ids.threadId, { threadKey: buildCommunityConversationThreadKey(String(thread!.communityId), 1) });
-    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId: ids.userId, communityId: thread!.communityId as any, scopeKey: "community", nextOrdinal: 2, createdAt: 1000, updatedAt: 1000 });
-    const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId: ids.threadId, ordinal: 1, status: "active", startedAt: 1000, createdAt: 1000, updatedAt: 1000 });
-    await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
+    await ctx.db.patch(ids.threadId, { threadKey: buildGlobalMemberAgentEpisodeThreadKey(1) });
   });
-  await expect(t.mutation(internalRefs.threads.recordRuntimeProviderContextAttestationInternal, { ownerId: ids.userId, threadId: ids.threadId, runId: ids.runId, attestation, nowMs: 2000 })).resolves.toMatchObject({ ok: true, duplicate: false });
+  await expect(t.mutation(internalRefs.threads.recordRuntimeProviderContextAttestationInternal, { ownerId: ids.userId, threadId: ids.threadId, runId: ids.runId, attestation, nowMs: 2000 })).resolves.toMatchObject({ ok: false });
 });
 
 test("attestation persistence deduplicates exact retries and rejects conflicts", async () => {

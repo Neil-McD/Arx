@@ -1,3 +1,4 @@
+import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import {
   communityInteractionVisibilityIsEvidenceReadable,
   parseCommunityInteractionEvidenceRef,
@@ -14,7 +15,7 @@ export type CommunityInteractionEvidenceRow = {
   communityId: any;
   channelId?: any;
   rootId?: any;
-  actorType: "human" | "personal_agent" | "community_agent" | "system";
+  actorType: StoredInteractionActorType;
   actorUserId?: any;
   actorAgentKey?: string;
   targetReplyId?: any;

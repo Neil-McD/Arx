@@ -205,9 +205,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `/runtime/list_personal_memory_items`. Stored global conversations stay readable
   as history; `memberAgentChannels` and `memberAgentEpisodes` stay (community
   conversations use them).
-- **Going:** the `asPersonalAgent` argument alias (with the rename; old-client
-  contract first); internal `personal_agent` and "member agent" names, renamed to
-  the community agent.
+- **Two permission modes, one agent (Oct 28, POL-27):** `community_agent` acts on
+  its own (@mention replies, founder brief, memory work); `community_agent_for_member`
+  acts inside one member's permissions (Agent page, sites). All `member-agent`
+  conversations, including the retired personal agent's global episodes, are
+  read-only history. `one_agent_identity_proof` keeps the retired `personal_agent`
+  value on stored history only (`shared/communityAgentIdentity.ts`).
+- **Going:** the `asPersonalAgent` composer flag (after the production release);
+  stored `personal_agent` values on 14 posts, 4 replies and 9 receipts (rewritten in
+  the table-drop release with Neil's OK); "member agent" code names (step 2b).
 - **Deleted Oct 27 (POL-10, Neil):** OpenRouter (`openRouterNativeTransport`, the
   failure answer now calls OpenAI directly), the free demo model, Claude, Gemini
   and Grok model entries, xAI web search (`xAiSearchTransport`), own-account
@@ -390,6 +396,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
    integrations. Read-only production usage check first; tables retire over two
    releases.
 3. **Legacy chat** retirement: code done Oct 28 (POL-26); tables drop in step 5.
-4. **One agent name:** rename `personal_agent` and "member agent" in code.
+4. **One agent name:** identity done Oct 28 (POL-27); "member agent" code names next.
 5. **Data deletion release:** production backup, then Neil signs off on each
    table's deletion.

@@ -249,6 +249,7 @@
     "test:unit": "vitest run",
     "check:no-orphan-modules": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/no_orphan_modules_proof.ts",
     "check:no-uncalled-functions": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/no_uncalled_functions_proof.ts",
+    "check:one-agent-identity": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/one_agent_identity_proof.ts",
     "check:system-map-coverage": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/system_map_coverage_proof.ts",
     "check:single-inference-provider": "tsx scripts/single_inference_provider_contract_proof.ts",
     "check:chat-inline-markdown-proof": "tsx scripts/chat_inline_markdown_proof.ts",

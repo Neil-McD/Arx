@@ -54,7 +54,6 @@ export function actorLabel(
   }
   if (actor.actor_user_id) return displayName(actor.actor_user_id);
   if (actor.actor_agent_key) return actor.actor_agent_key.replace(/_/g, " ");
-  if (actor.actor_type === "personal_agent") return "Personal agent";
   if (actor.actor_type === "system") return "System";
   return "Member";
 }
@@ -75,7 +74,7 @@ export function kindChipLabel(kind: string): string | null {
 }
 
 export function agentBadgeLabel(actorType: string): string | null {
-  if (actorType === "community_agent" || actorType === "personal_agent") return "Agent";
+  if (actorType === "community_agent") return "Agent";
   return null;
 }
 

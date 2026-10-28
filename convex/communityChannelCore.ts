@@ -1,3 +1,4 @@
+import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { normalizeIdValue } from "./communityCore";
 import { getCommunityChannelCapabilities, requireCommunityChannelCapability, type ChannelActor, type ChannelCapabilities } from "./communityChannelAccess";
 
@@ -703,7 +704,7 @@ export async function moveActiveCommunityChannel(args: {
 
 type PinnableCommunityInteractionRoot = ChannelAddressableInteractionLike & {
   status: "live" | "hidden" | "deleted";
-  actorType: "human" | "personal_agent" | "community_agent" | "system";
+  actorType: StoredInteractionActorType;
 };
 
 async function insertChannelPinModerationEvent(args: {

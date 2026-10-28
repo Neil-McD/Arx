@@ -79,7 +79,7 @@ export type CommunityInteractionRootRecord = {
   id: string;
   community_id: string;
   channel_id: string | null;
-  actor_type: "human" | "personal_agent" | "community_agent" | "system" | string;
+  actor_type: "human" | "community_agent" | "system" | string;
   /** For a community agent post made for a member: who it acted for. */
   on_behalf_of_user_id?: string | null;
   actor_user_id: string | null;
@@ -108,7 +108,7 @@ export type CommunityInteractionReplyRecord = {
   channel_id: string | null;
   root_id: string;
   seq: number;
-  actor_type: "human" | "personal_agent" | "community_agent" | "system" | string;
+  actor_type: "human" | "community_agent" | "system" | string;
   /** For a community agent post made for a member: who it acted for. */
   on_behalf_of_user_id?: string | null;
   actor_user_id: string | null;

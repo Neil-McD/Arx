@@ -2,7 +2,7 @@ import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 const principalKindValidator = v.union(
-  v.literal("personal_agent"),
+  v.literal("community_agent_for_member"),
   v.literal("external_mcp"),
   v.literal("community_agent"),
   v.literal("community_app"),
@@ -22,7 +22,7 @@ function newAttemptToken(): string {
 async function findReceipt(ctx: any, args: {
   communityId: any;
   userId: any;
-  principalKind: "personal_agent" | "external_mcp" | "community_agent" | "community_app";
+  principalKind: "community_agent_for_member" | "external_mcp" | "community_agent" | "community_app";
   toolName: "polynet_write" | "polynet_call";
   idempotencyKey: string;
 }) {

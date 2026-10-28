@@ -215,7 +215,6 @@ assertExcludes(schemaPath, contentTable, "v.any()");
 const mentionsTable = schemaTable("communityInteractionMentions", "communityInteractionReactions");
 [
   'v.literal("user")',
-  'v.literal("personal_agent")',
   'v.literal("community_agent")',
   'v.literal("role")',
   "notifyState: v.union(",
@@ -223,6 +222,7 @@ const mentionsTable = schemaTable("communityInteractionMentions", "communityInte
   '.index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])',
   '.index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"])',
 ].forEach((needle) => assertIncludes(schemaPath, mentionsTable, needle));
+assertExcludes(schemaPath, mentionsTable, 'v.literal("personal_agent")');
 
 const reactionsTable = schemaTable("communityInteractionReactions", "communityInteractionModerationEvents");
 [

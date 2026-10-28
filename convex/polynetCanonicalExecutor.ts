@@ -621,7 +621,7 @@ function capabilityDocument(args: {
     args.evidenceSurface !== "community_funnel_builder" &&
     (MEMBER_CAPABILITIES as readonly string[]).includes(args.operation);
   // Builder decisions run only from a harness the founder operates directly. The native
-  // personal agent reads member-authored evidence and has no per-call human confirmation.
+  // community agent reads member-authored evidence and has no per-call human confirmation.
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;

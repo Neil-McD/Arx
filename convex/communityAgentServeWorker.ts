@@ -1,3 +1,4 @@
+import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
@@ -737,8 +738,8 @@ async function loadThreadParticipantContext(args: {
 function normalizeThreadActorType(
   value: unknown,
 ): CommunityAgentThreadActorType {
+  if (value === RETIRED_PERSONAL_AGENT_ACTOR_TYPE) return "community_agent";
   return value === "human" ||
-    value === "personal_agent" ||
     value === "community_agent" ||
     value === "system"
     ? value

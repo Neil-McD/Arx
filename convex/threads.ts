@@ -1301,18 +1301,6 @@ export const ensureCloudThread = mutation({
   },
 });
 
-async function getGlobalMemberAgentChannel(args: {
-  ctx: any;
-  ownerId: any;
-}): Promise<MemberAgentChannelLike | null> {
-  return (await args.ctx.db
-    .query("memberAgentChannels")
-    .withIndex("by_owner_scope", (q: any) =>
-      q.eq("ownerId", args.ownerId).eq("scopeKey", MEMBER_AGENT_GLOBAL_SCOPE_KEY),
-    )
-    .unique()) as MemberAgentChannelLike | null;
-}
-
 async function requireWritableMemberAgentThread(args: {
   ctx: any;
   ownerId: any;
@@ -1330,29 +1318,10 @@ async function requireWritableMemberAgentThread(args: {
   if (isReadOnlyLegacyMemberAgentThreadKey(threadKey)) {
     throw new Error("member_agent_legacy_episode_read_only");
   }
-  if (!isGlobalMemberAgentEpisodeThreadKey(threadKey)) return;
-  if (args.role !== "user") return;
-  const channel = await getGlobalMemberAgentChannel({
-    ctx: args.ctx,
-    ownerId: args.ownerId,
-  });
-  if (!channel?.activeEpisodeId) throw new Error("member_agent_episode_not_active");
-  const episode = (await args.ctx.db.get(
-    channel.activeEpisodeId,
-  )) as MemberAgentEpisodeLike | null;
-  if (
-    !episode ||
-    episode.channelId !== channel._id ||
-    episode.threadId !== args.thread._id ||
-    episode.status !== "active"
-  ) {
-    throw new Error("member_agent_episode_not_active");
-  }
 }
 
 function isClaimedImageAttachmentThread(thread: ThreadLike): boolean {
-  const threadKey = String(thread.threadKey ?? "").trim();
-  return isGlobalMemberAgentEpisodeThreadKey(threadKey) || Boolean(communityConversationScope(thread));
+  return Boolean(communityConversationScope(thread));
 }
 
 async function requireWritableClaimedImageAttachmentThread(args: {
@@ -1360,8 +1329,7 @@ async function requireWritableClaimedImageAttachmentThread(args: {
   ownerId: any;
   thread: ThreadLike;
 }): Promise<void> {
-  const threadKey = String(args.thread.threadKey ?? "").trim();
-  if (isGlobalMemberAgentEpisodeThreadKey(threadKey) || communityConversationScope(args.thread)) {
+  if (communityConversationScope(args.thread)) {
     await requireWritableMemberAgentThread({
       ctx: args.ctx,
       ownerId: args.ownerId,
@@ -2824,13 +2792,8 @@ export const recordRuntimeProviderContextAttestationInternal = internalMutation(
       return fail("runtime_provider_context_attestation_surface_conflict");
     }
 
-    const threadKey = String(thread.threadKey ?? "").trim();
     if (attestation.surface === "member_agent_dock") {
-      if (
-        !isGlobalMemberAgentEpisodeThreadKey(threadKey) &&
-        !communityConversationScope(thread) &&
-        !isMemberAgentThreadKeyForCommunity(threadKey, communityId)
-      ) {
+      if (!communityConversationScope(thread)) {
         return fail("runtime_provider_context_attestation_surface_conflict");
       }
     } else {

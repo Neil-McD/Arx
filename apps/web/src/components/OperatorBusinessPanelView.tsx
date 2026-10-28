@@ -466,7 +466,7 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
     <>
       <div className="operator-dashboard__section-heading" aria-label="User readiness">
         <h2>User readiness</h2>
-        <p>Profile, provider, and personal agent readiness across real users.</p>
+        <p>Profile and provider readiness across real users.</p>
       </div>
 
       <section className="operator-dashboard__metrics" aria-label="User readiness overview">

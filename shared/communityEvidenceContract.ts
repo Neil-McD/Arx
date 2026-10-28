@@ -1,3 +1,4 @@
+import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE, type StoredInteractionActorType } from "./communityAgentIdentity.ts";
 
 
 export const COMMUNITY_EVIDENCE_SURFACES = [
@@ -80,10 +81,7 @@ export type ParsedCommunityEvidenceRef =
     };
 
 export type CommunityInteractionLineageActorType =
-  | "human"
-  | "personal_agent"
-  | "community_agent"
-  | "system";
+  | StoredInteractionActorType;
 
 export type CommunityLineagePrincipal =
   | { type: "user"; user_id: string }
@@ -258,7 +256,7 @@ export function normalizeCommunityEvidenceSearchLimit(raw: unknown): number {
 
 /**
  * Current interaction writes are intentionally limited to attribution cases
- * that can be derived without guessing. Personal-agent evidence receives no
+ * that can be derived without guessing. Agent-written evidence receives no
  * human credit: a future publishing mutation must persist an explicit credit
  * decision before a human profile may claim that contribution.
  */
@@ -300,7 +298,7 @@ export function deriveCommunityInteractionLineageEnvelope(args: {
       authority = { type: "system" };
       attributionMode = "unattributed";
     }
-  } else if (args.actorType === "personal_agent") {
+  } else if (args.actorType === RETIRED_PERSONAL_AGENT_ACTOR_TYPE) {
     if (actorUserId) {
       authority = { type: "user", user_id: actorUserId };
       attributionMode = "on_behalf_of";

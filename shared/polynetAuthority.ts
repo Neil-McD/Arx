@@ -2,7 +2,7 @@ import type { CommunityAccess } from "./communityTypes.ts";
 
 export type PolynetHumanAuthorityLane = "member" | "builder";
 export type PolynetPrincipalKind =
-  | "personal_agent"
+  | "community_agent_for_member"
   | "external_mcp"
   | "community_agent"
   | "community_app";
@@ -33,7 +33,7 @@ function normalizeRelation(
 
 export function derivePolynetHumanAuthority(args: {
   access: Partial<CommunityAccess>;
-  principalKind: "personal_agent" | "external_mcp" | "community_app";
+  principalKind: "community_agent_for_member" | "external_mcp" | "community_app";
 }): PolynetResolvedAuthority | null {
   const relation = normalizeRelation(args.access.relation);
   if (

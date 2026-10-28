@@ -98,8 +98,8 @@ assert.deepEqual(
 assert.ok(bundle.sections.every((section) => section.owner !== "workspace"));
 assert.match(
   bundle.text,
-  /You are Polynet Intelligence, the authenticated member's personal agent in Polynet\.[\s\S]*You do not belong to any community\.[\s\S]*active community lens/,
-  "the member dock must use one platform-owned personal identity under the optional community lens",
+  /You are this community's agent in a private conversation with the authenticated member\.[\s\S]*requesting member's current permissions/,
+  "the Agent page speaks as the one community agent, inside the member's permissions",
 );
 assert.doesNotMatch(
   bundle.text,
@@ -152,10 +152,10 @@ const globalBundle = buildPlatformHarnessRuntimePromptBundle({
   } as const,
 });
 assert.doesNotMatch(globalBundle.text, /follow the returned me\/ directory/);
-assert.match(
+assert.doesNotMatch(
   globalBundle.text,
-  /Polynet Intelligence[\s\S]*No community lens is active on this surface/,
-  "the same personal agent must remain available without a community lens",
+  /Polynet Intelligence|personal agent|No community lens is active/,
+  "the retired personal-agent identity stays deleted",
 );
 
 assert.throws(

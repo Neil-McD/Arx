@@ -216,9 +216,9 @@ test("foreign-community and changed-member references cannot move or disclose an
 
 test("native personal agent cannot discover or execute owner milestone approval", async () => {
   const f = await approvalFixture(); const before = await f.snapshot();
-  const inventory = await f.execute("polynet_list", { path: "/communities/join-workflow/capabilities/" }, { principalKind: "personal_agent" });
+  const inventory = await f.execute("polynet_list", { path: "/communities/join-workflow/capabilities/" }, { principalKind: "community_agent_for_member" });
   expect(inventory).toMatchObject({ ok: true }); expect(JSON.stringify(inventory)).not.toContain(operation);
-  expect(await f.call(f.input, { principalKind: "personal_agent" })).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await f.call(f.input, { principalKind: "community_agent_for_member" })).toMatchObject({ ok: false, code: "operation_not_found" });
   expect(await f.snapshot()).toEqual(before);
   expect(await f.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
 });

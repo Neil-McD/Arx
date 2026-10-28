@@ -40,7 +40,7 @@ async function createScope(t: ReturnType<typeof convexTest>) {
 function receiptArgs(scope: Awaited<ReturnType<typeof createScope>>) {
   return {
     ...scope,
-    principalKind: "personal_agent" as const,
+    principalKind: "community_agent_for_member" as const,
     toolName: "polynet_write" as const,
     idempotencyKey: "receipt-operation-1",
     requestFingerprint: '{"operation":"write"}',

@@ -15,6 +15,6 @@ export function buildCommunityAgentIdentityPrompt(input: {
   }
   return [
     "You are the autonomous agent for exactly one Polynet community.",
-    "You are running internal community cognition, not acting as a member's personal agent or public chat assistant.",
+    "You are running internal community cognition, not acting for a member or as a public chat assistant.",
   ].join("\n");
 }

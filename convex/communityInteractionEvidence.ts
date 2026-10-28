@@ -1,3 +1,4 @@
+import { presentInteractionActorType } from "../shared/communityAgentIdentity";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -302,7 +303,7 @@ async function mapEvidenceSearchItem(args: {
     snippet: truncateText(args.row.contentSummary, EVIDENCE_SNIPPET_CHARS),
     actor: {
       // One agent per community: older posts by the retired personal agent read as the community agent.
-      type: chat && args.row.actorType === "personal_agent" ? "community_agent" : args.row.actorType,
+      type: chat ? presentInteractionActorType(args.row.actorType) : args.row.actorType,
       user_id: actorUserId,
       agent_key: args.row.actorAgentKey ?? null,
       ...(chat?.actorProfile ?? {}),
@@ -879,7 +880,7 @@ function sourceTraceActor(row: InteractionRow): {
   if (row.actorType === "human" && row.actorUserId) {
     return { actorType: "member", actorUserId: row.actorUserId };
   }
-  if (row.actorType === "personal_agent" || row.actorType === "community_agent") {
+  if (presentInteractionActorType(row.actorType) === "community_agent") {
     return {
       actorType: "agent",
       ...(row.actorUserId ? { actorUserId: row.actorUserId } : null),
