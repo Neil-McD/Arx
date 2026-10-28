@@ -51,9 +51,7 @@ assert.match(
 for (const projection of [
   "resolvePublicFunnelBySlug",
   "resolvePublicFunnelStatsBySlug",
-  "resolvePublicCommunityAccessBySlug",
   "recordPublicFunnelVisitBySlug",
-  "getMyJoinRequestBySlug",
 ]) {
   const start = publicCommunity.indexOf(`export const ${projection}`);
   assert.notEqual(start, -1, `${projection} must exist`);

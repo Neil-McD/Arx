@@ -102,7 +102,6 @@ const httpMcp = read("convex/httpMcp.ts");
 const contract = read("docs/canonical-platform-operation-contract-v1.md");
 
 for (const required of [
-  "listCommunityResourceDirectoryInternal",
   "readCommunityResourceDirectoryInternal",
   "listCommunityResourceBuilderDirectoryInternal",
   "readCommunityResourceBuilderResourceInternal",

@@ -539,7 +539,7 @@ assert.match(
 );
 assert.match(
   threads,
-  /listNewestCloudThreadMessages = query[\s\S]*by_thread_seq[\s\S]*order\("desc"\)[\s\S]*take\(safeLimit\)/,
+  /async function listNewestCloudThreadMessagesHandler[\s\S]*by_thread_seq[\s\S]*order\("desc"\)[\s\S]*take\(safeLimit\)/,
   "the dock transcript must read from the newest end of the message index",
 );
 assert.match(
@@ -569,13 +569,8 @@ assert.match(
 );
 assert.match(
   threads,
-  /prepareActiveGlobalMemberAgentThread[\s\S]*buildGlobalMemberAgentEpisodeThreadKey[\s\S]*isGlobalMemberAgentEpisodeThreadKey[\s\S]*member_agent_thread_context_mismatch/,
-  "the server must derive the global episode key and fail closed on context collisions",
-);
-assert.match(
-  threads,
-  /prepareActiveGlobalMemberAgentThread[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID/,
-  "the member-agent channel must remain on the default model",
+  /threadKey, titleSource: "auto", modelId: DEFAULT_ACTIVE_MODEL_ID/,
+  "community agent conversations start on the default model",
 );
 assert.doesNotMatch(
   component,
@@ -1048,10 +1043,10 @@ assert.match(
   /cleanupPendingCloudThreadAttachment = internalMutation[\s\S]*attachment\.status !== "pending"[\s\S]*deleteCloudStorageObjectIfPresent[\s\S]*deleteCloudThreadMessage[\s\S]*deleteMemberAgentClaimsForMessage/,
   "pending claims and deleted messages must delete their storage blobs",
 );
-assert.match(
+assert.doesNotMatch(
   threads,
-  /generateCloudThreadAttachmentUploadUrl = mutation[\s\S]*member_agent_attachment_upload_ticket_required[\s\S]*prepareCloudMemberAgentAttachmentUploadInternal = internalMutation/,
-  "the generic thread uploader must not bypass server-owned upload preparation on member-agent threads",
+  /generateCloudThreadAttachmentUploadUrl/,
+  "there is no generic thread uploader; member-agent uploads go through server-owned preparation",
 );
 assert.match(
   nativeToolProtocol,

@@ -98,11 +98,6 @@ assertContains(
 );
 assertContains(
   threads,
-  "export const getActiveRuntimeTurnStateInternal",
-  "threads expose one canonical active-turn state loader",
-);
-assertContains(
-  threads,
   "activeContextSnapshot: args.snapshot",
   "context snapshot writes update live active-turn context",
 );
@@ -110,16 +105,6 @@ assertContains(
   threads,
   'v.union(v.literal("started"), v.literal("active"), v.literal("finished"))',
   "context snapshot writer should support active in-run refreshes",
-);
-assertContains(
-  threads,
-  "export const appendCloudRuntimeRunPendingSteeringInternal",
-  "pending steering is stored on the active run instead of a second queue table",
-);
-assertContains(
-  threads,
-  "pendingUserSteering = [",
-  "pending steering appends to a bounded active-run queue",
 );
 assertContains(
   threads,

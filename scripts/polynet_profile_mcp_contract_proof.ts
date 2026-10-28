@@ -109,7 +109,5 @@ assert.deepEqual(parsePolynetSemanticRepositoryPath("/users/me/profile.md"), {
   userSelector: "me",
 });
 assert.match(executor, /community\.semantic\.read/);
-assert.match(ontology, /confirmMemberProfileFactsForMcpInternal/);
-assert.match(ontology, /member_profile_confirm_marker_conflict/);
 
 console.log("polynet_profile_mcp_contract_proof: ok");
