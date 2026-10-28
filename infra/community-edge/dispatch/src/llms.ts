@@ -165,16 +165,34 @@ ui.js (on every page) loads each block only on pages that have it:
 - <polynet-channels>: the channels the member can read, as a nav of links,
   with an unread dot and an "@" badge where someone mentioned them. Arrow
   keys move between channels; Enter opens one.
-- <polynet-chat>: the current channel's feed, oldest to newest, live: posts
-  grouped by author, day dividers, a "New" divider at what the member hadn't
-  read, older posts as they scroll up, markdown, images and files,
-  reactions, typing ("Sam is typing…") and threads ("3 replies" opens the
-  thread beside the feed, or over it when the block is narrow; Esc closes
-  it). It marks the channel read when the member reaches the bottom.
-  Signed out (or not a member) it shows a sign-in and join prompt, never
-  posts. Give it a height (it scrolls inside): polynet-chat { height: 70vh }
-  is the default; set your own, e.g. height: 100% inside a sized layout.
-  channel="<slug>" pins it to one channel instead of following the page.
+- <polynet-chat>: the current channel's conversation, live, and the box to
+  join it. The feed: posts grouped by author, day dividers, a "New" divider
+  at what the member hadn't read, older posts as they scroll up, markdown,
+  images and files, reactions, typing ("Sam is typing…") and threads ("3
+  replies" opens the thread beside the feed, or over it when the block is
+  narrow; Esc closes it). It marks the channel read when the member reaches
+  the bottom. Signed out (or not a member) it shows a sign-in and join
+  prompt, never posts. Give it a height (it scrolls inside):
+  polynet-chat { height: 70vh } is the default; set your own, e.g.
+  height: 100% inside a sized layout. channel="<slug>" pins it to one
+  channel instead of following the page.
+  What members can do in it, with nothing for you to build:
+  - Write in the message box under the feed, and reply in the box under a
+    thread. Enter sends and Shift+Enter starts a new line (on touch screens
+    Enter is a new line and Send sends). A message shows at once while it
+    sends; if it fails, it goes back in the box with Retry, and a retry
+    never posts twice. Drafts stay with their channel and thread.
+  - Tag people: "@" suggests members (online first, by name or handle) and
+    the community agent; arrows and Enter or Tab pick. A tagged member is
+    notified; tagging the agent asks it, and it answers in the thread.
+  - Attach files: the + button, paste, or drag and drop (up to 8 per
+    message; images up to 25 MB, video and audio 50 MB, other files 5 MB).
+  - React with common emoji, reply, and edit or delete their own messages
+    (on hover or focus with a mouse; behind "•••" on touch screens).
+  - Others see them typing.
+  Where the member can't post (or reply), the box is replaced by a quiet
+  note. Your site needs no composer of its own for chat; a custom one built
+  with the SDK (post(), below) is still possible beside the blocks.
 
 Which channel: the URL says, ?channel=<slug> (no parameter: the General
 channel). Selecting a channel in <polynet-channels> updates the URL and
@@ -214,10 +232,22 @@ Restyle any piece with ::part():
   empty, typing, jump, state, gate, gate-text, sign-in, join, retry,
   thread-panel, thread-header, thread-close, thread-messages,
   thread-divider, thread-typing.
+  Sending: message-pending, message-failed, message-status ("Not sent").
+  The member's controls on a message: message-actions, message-action
+  (message-action-reply, message-action-edit, message-action-delete),
+  reaction-add, reaction-picker, reaction-option, message-more (touch),
+  editor, edit-input, edit-save, edit-cancel, edit-error, delete-confirm,
+  delete-confirm-yes, delete-confirm-no, message-error.
+  The boxes (under the feed in footer, under a thread in thread-footer):
+  composer, composer-box, composer-input, composer-attach, composer-send,
+  composer-error, composer-retry, composer-note, attachment-chips,
+  attachment-chip, attachment-thumb, attachment-remove, mention-list,
+  mention-option (mention-agent), mention-online.
 
 Slots, for your own words: slot="header" (polynet-channels and
 polynet-chat: replaces the chat's "#channel" title), slot="empty" (an empty
-channel), slot="signed-out" (the chat's sign-in line).
+channel), slot="signed-out" (the chat's sign-in line), slot="read-only"
+(the chat's note where the member can't post).
 
 Example, in your design's own layout:
 
@@ -247,10 +277,11 @@ Failed calls throw PolynetError with .code, .message and .status. Codes:
 
 ## Chat
 
-- channels() -> [{ slug, name, path, isGeneral, canPost, unread, mentioned,
-  seenThroughAt }] (seenThroughAt: when the member last read it, ms, or null).
-  Use the one with isGeneral as the default. Hide the composer when canPost is
-  false. unread: posts the member hasn't seen; mentioned: someone @mentioned
+- channels() -> [{ slug, name, path, isGeneral, canPost, canReply, unread,
+  mentioned, seenThroughAt }] (seenThroughAt: when the member last read it,
+  ms, or null). Use the one with isGeneral as the default. In your own
+  composer, hide posting when canPost is false and replying when canReply
+  is. unread: posts the member hasn't seen; mentioned: someone @mentioned
   them there. markRead(channelSlug, throughAt?) clears both, up to now or up
   to throughAt (the newest post they saw, or a time); call it when the member
   is looking at the channel.
@@ -279,16 +310,19 @@ Each post or reply has:
 
 Writing:
 - post(channelSlug, text, { replyTo: post.ref, files: [File], askAgent: true,
-  mentions: [member] }) posts, or replies when replyTo is set. Returns { ref,
-  path, ... }. mentions notifies members (from members()); the text must
-  contain each one's "@" + member.handle.
+  mentions: [member], key }) posts, or replies when replyTo is set. Returns
+  { ref, path, ... }. mentions notifies members (from members()); the text
+  must contain each one's "@" + member.handle.
   askAgent asks the community agent to answer in the channel; Polynet puts
-  "@<community name> " in front of the text, which is how agent mentions read
-  everywhere. Editing that post later doesn't ask the agent again; keep the
-  The agent answers as a reply in that post's thread: a site that asks it in
-  public must show threads (reply_count, thread()), or the answer never
-  appears.
-  prefix in the edit box.
+  "@<community name> " in front of the text (unless it is already there),
+  which is how agent mentions read everywhere. The agent answers as a reply
+  in that post's thread: a site that asks it in public must show threads
+  (reply_count, thread()), or the answer never appears. Editing that post
+  later doesn't ask the agent again; keep the prefix in the edit box.
+  key (optional, 8-100 of A-Z a-z 0-9 _ -): your own idempotency key. Retry
+  a failed post with the same key, text and files and it never posts twice
+  (files already uploaded aren't sent again); make a new key for new
+  content.
 - edit(post, text) when post.can_edit; remove(post) when post.by_me.
 - react(ref, emoji, on) adds (on: true) or removes (on: false) the member's
   reaction on a post or reply. Returns { reacted, reaction_summary }.

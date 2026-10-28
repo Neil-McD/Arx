@@ -149,6 +149,7 @@ async function channels() {
       return {
         slug: entry.slug, name: entry.name, path: entry.path, isGeneral: entry.is_general === true,
         canPost: !entry.capabilities || entry.capabilities.canPost !== false,
+        canReply: !entry.capabilities || entry.capabilities.canReply !== false,
         unread: entry.unread === true, mentioned: entry.mentioned === true,
         seenThroughAt: typeof entry.seen_through_at === "number" ? entry.seen_through_at : null,
       };
@@ -203,16 +204,28 @@ async function upload(file, options) {
   return { attachmentId: body.attachment.attachmentId };
 }
 
+// Files already uploaded under a key, so a retry with that key doesn't send them twice.
+const uploaded = new WeakMap();
+
 // Post to a channel, or reply when replyTo is a post ref. files: File[] to attach.
 // askAgent: true asks the community agent, which replies in the channel.
 // mentions: members (from members(), or their refs) to notify; the text must
-// contain each one's @handle.
+// contain each one's @handle. key: your own idempotency key (8-100 of A-Z a-z
+// 0-9 _ -): retrying a failed post with the same key, text and files never
+// posts it twice.
 async function post(channel, text, options) {
   options = options || {};
-  const key = newKey();
+  if (options.key !== undefined && !/^[A-Za-z0-9_-]{8,100}$/.test(String(options.key))) {
+    throw new PolynetError("invalid_tool_args", "key is 8-100 letters, digits, _ or -.");
+  }
+  const key = options.key ? String(options.key) : newKey();
   const attachments = [];
   for (const file of options.files || []) {
-    attachments.push(await upload(file, { channel: channel, key: key, replyTo: options.replyTo }));
+    const done = uploaded.get(file);
+    if (done && done.key === key) { attachments.push({ attachmentId: done.attachmentId }); continue; }
+    const attachment = await upload(file, { channel: channel, key: key, replyTo: options.replyTo });
+    if (file && typeof file === "object") uploaded.set(file, { key: key, attachmentId: attachment.attachmentId });
+    attachments.push(attachment);
   }
   let body = String(text || "").trim();
   const mentions = (options.mentions || []).map(function (member) {

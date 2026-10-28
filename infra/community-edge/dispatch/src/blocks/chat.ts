@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ../LICENSE-MIT)
 // <polynet-chat>, served at /__polynet/blocks/chat.js: a channel's
 // conversation, live. It follows the page's channel (?channel=<slug> and the
-// "polynet:channel" event) unless channel="<slug>" pins one. This is the read
-// side; the composer arrives in the same block below the typing line. Kept as
-// text (a String.raw literal: no backticks or template placeholders inside) so
-// the edge serves exactly what is reviewed.
+// "polynet:channel" event) unless channel="<slug>" pins one. The feed, threads,
+// reactions and the member's own edits and deletes live here; the message boxes
+// come from composer.js, and this block sends what they hand it (optimistic,
+// with retry). Kept as text (a String.raw literal: no backticks or template
+// placeholders inside) so the edge serves exactly what is reviewed.
 export const CHAT_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-chat>. ui.js loads it on pages that place the tag.
 import polynet from "/__polynet/sdk.js";
@@ -12,12 +13,14 @@ import {
   BASE_STYLE, h, avatar, authorName, clockTime, fullTime, timeLabel, fileSize, typingText,
   feedItems, reconcile, channelFromUrl, pickChannel, readChannels,
 } from "/__polynet/blocks/kit.js";
+import { Composer, COMPOSER_STYLE, autosize, enterSends } from "/__polynet/blocks/composer.js";
 
-const STYLE = BASE_STYLE + "\n" + [
+const STYLE = BASE_STYLE + "\n" + COMPOSER_STYLE + "\n" + [
   // A chat needs a height to scroll in; the site sets its own on the element.
   ":host { display: block; height: 70vh; min-height: 320px; container-type: inline-size; }",
   ".chat { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; }",
   ".main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }",
+  ".stage { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }",
   ".header { padding: 0 .5em .625em; border-bottom: 1px solid var(--pn-border); font-weight: 600; }",
   ".hash { color: var(--pn-muted); font-weight: 400; margin-right: .1em; }",
   ".feed { position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 .5em; }",
@@ -26,6 +29,12 @@ const STYLE = BASE_STYLE + "\n" + [
   "ol { list-style: none; margin: 0; padding: 0; }",
   ".message { display: grid; grid-template-columns: 2.25em minmax(0, 1fr); column-gap: .75em; padding: .375em .625em .25em; margin-top: .5em; border-radius: calc(var(--pn-radius) * .6); }",
   ".message.grouped { margin-top: 0; padding-top: .0625em; }",
+  ".message { position: relative; }",
+  ".message.pending { opacity: .6; }",
+  ".message.failed .body { color: var(--pn-muted); }",
+  ".status-line { margin-top: .25em; font-size: .8125em; font-weight: 600; }",
+  ".sending { display: flex; flex-wrap: wrap; gap: .375em; margin-top: .375em; }",
+  ".sending span { padding: .25em .625em; border: 1px dashed var(--pn-border); border-radius: calc(var(--pn-radius) * .6); font-size: .8125em; }",
   "@media (hover: hover) { .message:hover { background: var(--pn-tint); } }",
   ".message:focus-within { background: var(--pn-tint); }",
   ".gutter { padding-top: .125em; }",
@@ -63,7 +72,7 @@ const STYLE = BASE_STYLE + "\n" + [
   ".divider.new { color: var(--pn-accent); font-weight: 600; flex-direction: row-reverse; margin-top: .75em; }",
   ".divider.new::after { border-color: var(--pn-accent); }",
   ".typing { min-height: 1.75em; padding: .25em .625em 0; color: var(--pn-muted); font-size: .8125em; }",
-  ".jump { position: absolute; left: 50%; bottom: 2.5em; transform: translateX(-50%); z-index: 1; border: 1px solid var(--pn-border); border-radius: 999px;",
+  ".jump { position: absolute; left: 50%; bottom: .75em; transform: translateX(-50%); z-index: 1; border: 1px solid var(--pn-border); border-radius: 999px;",
   "  background: var(--pn-surface); color: var(--pn-surface-text); padding: .4em 1em; font-size: .8125em; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,.12); }",
   ".thread { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; min-width: 0; min-height: 0;",
   "  background: var(--pn-surface); color: var(--pn-surface-text); }",
@@ -75,6 +84,34 @@ const STYLE = BASE_STYLE + "\n" + [
   ".close::before { transform: translate(-50%, -50%) rotate(45deg); } .close::after { transform: translate(-50%, -50%) rotate(-45deg); }",
   ".thread-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: .5em; }",
   ".thread .status { color: var(--pn-muted); padding: 1em .625em; margin: 0; }",
+  // The member's own controls on a message: on hover or focus with a mouse, behind "•••" on touch.
+  ".act { background: none; border: 0; border-radius: 999px; padding: .2em .6em; font-size: .75em; font-weight: 600; line-height: 1.6; color: var(--pn-muted); }",
+  ".act[aria-expanded=true] { color: inherit; background: var(--pn-tint); }",
+  ".more { display: none; }",
+  "@media (hover: hover) {",
+  "  .act:hover { color: inherit; background: var(--pn-tint); }",
+  "  .tools { display: flex; gap: .125em; position: absolute; top: .125em; right: .375em; z-index: 1; padding: .125em; opacity: 0;",
+  "    background: var(--pn-surface); color: var(--pn-surface-text); border: 1px solid var(--pn-border); border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }",
+  "  .message:hover .tools, .message:focus-within .tools { opacity: 1; }",
+  "}",
+  "@media (hover: none) {",
+  "  .message:not(.pending):not(.failed) { padding-right: 2.75em; }",
+  "  .tools { display: none; flex-wrap: wrap; gap: .25em; margin-top: .375em; }",
+  "  .message.open .tools { display: flex; }",
+  "  .more { display: block; position: absolute; top: 0; right: 0; width: 44px; height: 40px; border: 0; background: none; color: var(--pn-muted); font-size: .75em; letter-spacing: .1em; }",
+  "  .act { min-height: 36px; padding: .4em .8em; border: 1px solid var(--pn-border); }",
+  "}",
+  ".picker { display: flex; flex-wrap: wrap; gap: .25em; margin-top: .375em; }",
+  ".pick { border: 1px solid var(--pn-border); border-radius: 999px; background: none; padding: .0625em .5em; line-height: 1.6; }",
+  ".pick[aria-pressed=true] { border-color: var(--pn-accent); background: color-mix(in srgb, var(--pn-accent) 12%, transparent); }",
+  "@media (hover: hover) { .pick:hover { border-color: var(--pn-muted); } }",
+  ".editor { margin-top: .25em; }",
+  ".edit-input { display: block; width: 100%; max-height: 16em; overflow-y: auto; resize: none; margin: 0; padding: .5em .625em; font: inherit; line-height: 1.5;",
+  "  color: inherit; background: none; border: 1px solid var(--pn-border); border-radius: calc(var(--pn-radius) * .6); }",
+  ".edit-input:focus { outline: none; border-color: var(--pn-accent); }",
+  ".edit-bar, .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: .5em 1em; margin-top: .375em; font-size: .875em; }",
+  ".edit-bar .primary, .confirm .primary { min-height: 2em; padding: .25em .9em; }",
+  ".message-error { margin-top: .25em; font-size: .8125em; font-weight: 600; }",
   "@container (min-width: 720px) {",
   "  .chat.threaded { grid-template-columns: minmax(0, 1fr) minmax(16em, 40%); }",
   "  .thread { position: static; background: none; color: inherit; border-left: 1px solid var(--pn-border); margin-left: .75em; padding-left: .25em; }",
@@ -82,6 +119,7 @@ const STYLE = BASE_STYLE + "\n" + [
   "@media (pointer: coarse) {",
   "  .reaction { min-height: 36px; } .reaction::after { content: ''; position: absolute; inset: -4px -2px; }",
   "  .replies, .jump, .close { min-height: 44px; } .close { width: 44px; }",
+  "  .pick { min-width: 44px; min-height: 40px; } .edit-input { font-size: max(1em, 16px); }",
   "}",
   "@media (prefers-reduced-motion: no-preference) { .jump { animation: pn-rise .16s ease-out; } }",
   "@keyframes pn-rise { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translate(-50%, 0); } }",
@@ -91,6 +129,8 @@ const PAGE = 50;
 const NEAR_BOTTOM = 48;
 const NEAR_TOP = 160;
 const READ_DELAY_MS = 600;
+// "Add reaction" offers these; anything else members add elsewhere still shows and toggles.
+const QUICK_REACTIONS = [["👍", "thumbs up"], ["❤️", "heart"], ["😂", "laughing"], ["🎉", "celebrate"], ["🔥", "fire"], ["👀", "eyes"], ["🙏", "thank you"], ["✅", "done"]];
 let counter = 0;
 
 function at(post) { return Date.parse(post.created_at) || 0; }
@@ -105,6 +145,8 @@ class PolynetChat extends HTMLElement {
     this.generation = 0;
     this.status = "loading";
     this.channel = null;
+    // What the member sent and the server hasn't shown yet, in every channel.
+    this.outbox = [];
     this.reset();
     this.onChannel = (event) => this.follow(event.detail && event.detail.slug);
     this.onPop = () => this.follow(channelFromUrl());
@@ -129,6 +171,13 @@ class PolynetChat extends HTMLElement {
     this.threadRef = null;
     this.thread = [];
     this.threadStatus = "loading";
+    // Deletes waiting on the server (ref -> when it confirmed), and what's open on which message.
+    this.removing = new Map();
+    this.editing = null;
+    this.confirming = null;
+    this.picking = null;
+    this.menu = null;
+    this.actionError = null;
   }
 
   // The frame is built once; renders fill its regions.
@@ -150,8 +199,9 @@ class PolynetChat extends HTMLElement {
     this.threadList = h("ol", { part: "thread-messages", role: "list", "aria-live": "polite", "aria-relevant": "additions" });
     this.threadStatusLine = h("p", { class: "status", hidden: true });
     this.threadTyping = h("div", { class: "typing", part: "thread-typing" });
-    // 2b: the reply composer mounts in threadFooter, under the thread's typing line.
-    this.threadFooter = h("div", { class: "thread-footer", part: "thread-footer" });
+    this.composer = new Composer({ id: this.uid + "-composer", slot: true, onSend: (payload) => this.send(payload), onDiscard: (scope) => this.discard(scope) });
+    this.replyComposer = new Composer({ id: this.uid + "-reply", onSend: (payload) => this.send(payload), onDiscard: (scope) => this.discard(scope) });
+    this.threadFooter = h("div", { class: "thread-footer", part: "thread-footer" }, [this.replyComposer.element]);
     this.threadPanel = h("aside", { class: "thread", part: "thread-panel", id: this.uid + "-panel", "aria-labelledby": this.uid + "-thread", hidden: true }, [
       h("div", { class: "thread-head", part: "thread-header" }, [
         this.threadTitle,
@@ -161,12 +211,11 @@ class PolynetChat extends HTMLElement {
       this.threadTyping,
       this.threadFooter,
     ]);
-    // 2b: the channel composer mounts in this.footer, under the typing line.
-    this.footer = h("div", { class: "footer", part: "footer" });
+    this.footer = h("div", { class: "footer", part: "footer" }, [this.composer.element]);
     this.header = h("div", { class: "header", part: "header" }, [h("slot", { name: "header" }, [this.headerTitle])]);
     this.main = h("div", { class: "main" }, [
       this.header,
-      this.state, this.feed, this.jump, this.typing, this.footer,
+      this.state, h("div", { class: "stage" }, [this.feed, this.jump]), this.typing, this.footer,
     ]);
     this.frame = h("div", { class: "chat", part: "chat", onkeydown: (event) => {
       if (event.key === "Escape" && this.threadRef) { event.preventDefault(); this.closeThread(true); }
@@ -193,6 +242,9 @@ class PolynetChat extends HTMLElement {
     this.generation += 1;
     this.stopLive();
     clearTimeout(this.readTimer);
+    // Says the member stopped typing.
+    this.composer.show(null);
+    this.replyComposer.show(null);
   }
 
   attributeChangedCallback() {
@@ -217,6 +269,8 @@ class PolynetChat extends HTMLElement {
     this.feed.hidden = !ready;
     this.state.hidden = ready;
     this.typing.hidden = !ready;
+    this.footer.hidden = !ready;
+    if (!ready) this.composer.show(null);
     // The site's own header stays; the default title waits for a channel.
     this.header.hidden = !ready && !this.querySelector(":scope > [slot=header]");
     if (!ready) {
@@ -246,6 +300,8 @@ class PolynetChat extends HTMLElement {
       const session = await polynet.session();
       if (generation !== this.generation) return;
       this.communityName = session.community_name;
+      this.communitySlug = session.community;
+      this.me = session.member;
       if (!session.signed_in) { this.signedOut(session); return; }
       const pinned = this.getAttribute("channel");
       const channels = await readChannels(polynet);
@@ -263,14 +319,17 @@ class PolynetChat extends HTMLElement {
       this.needsRead = channel.unread || channel.mentioned;
       this.headerTitle.replaceChildren(h("span", { class: "hash", "aria-hidden": "true", text: "#" }), channel.name || channel.slug);
       this.feed.setAttribute("aria-label", "Messages in " + (channel.name || channel.slug));
+      const startedAt = Date.now();
       const page = await polynet.feed(channel.slug, { limit: PAGE });
       if (generation !== this.generation) return;
       this.cursor = page.cursor || null;
       this.merge(page, true);
+      this.settle(startedAt, null);
       // "New" marks what was unread on arrival; posts that come in while the
       // member watches don't get one.
       if (!page.some((post) => !post.by_me && at(post) > (this.seenThroughAt || 0))) this.seenThroughAt = null;
       this.setStatus("ready");
+      this.composer.show(this.composerScope(null));
       this.renderFeed({ quiet: true });
       this.toFirstUnread();
       this.markReadSoon();
@@ -338,11 +397,13 @@ class PolynetChat extends HTMLElement {
     this.refreshing = true;
     const generation = this.generation;
     try {
+      const startedAt = Date.now();
       const page = await polynet.feed(this.channel.slug, { limit: PAGE });
       if (generation !== this.generation) return;
       const before = new Map(Array.from(this.posts.values(), (post) => [post.ref, post.reply_count]));
       const stick = this.pinned;
       this.merge(page, true);
+      this.settle(startedAt, null);
       const arrivals = page.filter((post) => !before.has(post.ref));
       if (arrivals.length || page.some((post) => before.has(post.ref) && post.reply_count > before.get(post.ref))) this.needsRead = true;
       this.renderFeed({});
@@ -371,7 +432,8 @@ class PolynetChat extends HTMLElement {
   }
 
   sorted() {
-    return Array.from(this.posts.values()).sort((a, b) => at(a) - at(b) || (a.ref < b.ref ? -1 : 1));
+    return Array.from(this.posts.values()).filter((post) => !this.removing.has(post.ref))
+      .sort((a, b) => at(a) - at(b) || (a.ref < b.ref ? -1 : 1));
   }
 
   atBottom() {
@@ -483,10 +545,11 @@ class PolynetChat extends HTMLElement {
   renderFeed(options) {
     const focus = this.focusKey();
     if (options.quiet) this.feed.setAttribute("aria-busy", "true");
-    const items = feedItems(this.sorted(), { seenThroughAt: this.seenThroughAt });
+    // What the member just sent follows the server's posts until a re-read shows it.
+    const items = feedItems(this.sorted().concat(this.outgoing(null)), { seenThroughAt: this.seenThroughAt });
     const next = new Map();
     const nodes = items.map((item) => {
-      const signature = this.signature(item);
+      const signature = this.signature(item, false);
       const old = this.nodes.get(item.key);
       const node = old && old.signature === signature ? old.node : this.buildItem(item, false);
       next.set(item.key, { signature: signature, node: node });
@@ -494,17 +557,27 @@ class PolynetChat extends HTMLElement {
     });
     this.nodes = next;
     reconcile(this.list, nodes);
-    this.empty.hidden = this.posts.size > 0;
+    this.empty.hidden = items.length > 0;
     this.renderHistory();
     this.restoreFocus(focus);
     if (options.quiet) requestAnimationFrame(() => this.feed.removeAttribute("aria-busy"));
   }
 
-  signature(item) {
+  signature(item, inThread) {
     if (item.type !== "message") return item.type + ":" + item.label;
     const post = item.post;
     return JSON.stringify([item.grouped, post.text, post.edited_at, post.reactions, post.reacted_by_me, post.reply_count,
-      post.attachments, post.actor, this.threadRef === post.ref]);
+      post.attachments, post.actor, post.outgoing, post.files, this.threadRef === post.ref, this.canReply(), this.ui(post.ref, inThread)]);
+  }
+
+  // Which of the member's controls are open on a message (in the feed, or in the thread).
+  ui(ref, inThread) {
+    const here = (state) => !!state && state.ref === ref && state.inThread === inThread;
+    return {
+      editing: here(this.editing), editError: here(this.editing) ? this.editing.error : null,
+      confirming: here(this.confirming), picking: here(this.picking), menu: here(this.menu),
+      error: here(this.actionError) ? this.actionError.text : null,
+    };
   }
 
   buildItem(item, inThread) {
@@ -521,24 +594,38 @@ class PolynetChat extends HTMLElement {
       class: "time", part: "message-time", datetime: post.created_at, title: fullTime(date),
       text: inThread ? timeLabel(date) : clockTime(date),
     });
+    const ui = this.ui(post.ref, inThread);
     const parts = ["message"];
-    if (grouped) parts.push("message-grouped");
-    if (agent) parts.push("message-agent");
+    const classes = ["message"];
+    if (grouped) { parts.push("message-grouped"); classes.push("grouped"); }
+    if (agent) { parts.push("message-agent"); classes.push("agent"); }
     if (post.by_me) parts.push("message-mine");
-    const body = h("div", { class: "body", part: "message-body" }, [polynet.markdown(post.text)]);
-    if (post.edited_at) {
-      const edited = h("span", { class: "edited", part: "message-edited", text: " (edited)" });
-      const last = body.lastElementChild;
-      if (last && last.tagName === "P") last.append(edited);
-      else body.append(edited);
+    if (post.outgoing === "failed") { parts.push("message-failed"); classes.push("failed"); }
+    else if (post.outgoing) { parts.push("message-pending"); classes.push("pending"); }
+    if (ui.menu) classes.push("open");
+    let body;
+    if (ui.editing) {
+      body = this.buildEditor();
+    } else {
+      body = h("div", { class: "body", part: "message-body" }, [polynet.markdown(post.text)]);
+      if (post.edited_at) {
+        const edited = h("span", { class: "edited", part: "message-edited", text: " (edited)" });
+        const last = body.lastElementChild;
+        if (last && last.tagName === "P") last.append(edited);
+        else body.append(edited);
+      }
     }
-    return h("li", { class: "message" + (grouped ? " grouped" : "") + (agent ? " agent" : ""), part: parts.join(" "), "data-ref": post.ref }, [
+    return h("li", {
+      class: classes.join(" "), part: parts.join(" "), "data-ref": post.ref,
+      onkeydown: (event) => { if (event.key === "Escape" && this.dismiss(post.ref, inThread)) { event.preventDefault(); event.stopPropagation(); } },
+    }, [
       h("div", { class: "gutter" }, [grouped ? time : avatar(post.actor, name)]),
       h("div", { class: "content" }, [
         grouped ? h("span", { class: "sr", text: name + ": " })
           : h("div", { class: "head" }, [h("span", { class: "author", part: "message-author", text: name }), time]),
+        post.outgoing === "pending" ? h("span", { class: "sr", text: "Sending: " }) : null,
         body,
-        this.buildAttachments(post),
+        post.outgoing ? this.buildSending(post) : this.buildAttachments(post),
         this.buildReactions(post),
         !inThread && post.reply_count > 0 ? h("button", {
           class: "replies", part: "replies", type: "button", "data-key": "replies",
@@ -546,8 +633,80 @@ class PolynetChat extends HTMLElement {
           text: post.reply_count + (post.reply_count === 1 ? " reply" : " replies"),
           onclick: () => this.openThread(post.ref),
         }) : null,
+        post.outgoing === "failed" ? h("div", { class: "status-line", part: "message-status", text: "Not sent. It's back in the message box." }) : null,
+        ui.picking ? this.buildPicker(post, inThread) : null,
+        ui.confirming ? this.buildConfirm(post, inThread) : null,
+        ui.error ? h("div", { class: "message-error", part: "message-error", role: "alert", text: ui.error }) : null,
+        post.outgoing || ui.editing ? null : this.buildTools(post, inThread, ui),
       ]),
     ]);
+  }
+
+  // Files still on their way: names only, until the server's copy replaces them.
+  buildSending(post) {
+    if (!post.files || !post.files.length) return null;
+    return h("div", { class: "sending", part: "attachments" }, post.files.map((file) => h("span", { text: file.name || "Attachment" })));
+  }
+
+  // React for everyone; Reply on a post in the feed (where the member can
+  // reply); Edit and Delete on the member's own words only.
+  buildTools(post, inThread, ui) {
+    const ref = post.ref;
+    const act = (key, label, onclick, extra) => h("button", Object.assign({
+      class: "act", part: "message-action message-action-" + key, type: "button", "data-key": "act:" + key, text: label, onclick: onclick,
+    }, extra || {}));
+    const buttons = [act("react", "React", () => this.toggleUi("picking", ref, inThread), {
+      part: "message-action reaction-add", "aria-expanded": ui.picking ? "true" : "false",
+    })];
+    if (!inThread && this.canReply()) buttons.push(act("reply", "Reply", () => this.openThread(ref, true)));
+    if (post.by_me && post.can_edit) buttons.push(act("edit", "Edit", () => this.startEdit(ref, inThread)));
+    if (post.by_me) buttons.push(act("delete", "Delete", () => this.toggleUi("confirming", ref, inThread), { "aria-expanded": ui.confirming ? "true" : "false" }));
+    const tools = document.createDocumentFragment();
+    tools.append(
+      h("button", {
+        class: "more", part: "message-more", type: "button", "data-key": "more", "aria-label": "Message actions",
+        "aria-expanded": ui.menu ? "true" : "false", text: "•••", onclick: () => this.toggleUi("menu", ref, inThread),
+      }),
+      h("div", { class: "tools", part: "message-actions", role: "group", "aria-label": "Message actions" }, buttons),
+    );
+    return tools;
+  }
+
+  buildPicker(post, inThread) {
+    const mine = post.reacted_by_me || [];
+    return h("div", { class: "picker", part: "reaction-picker", role: "group", "aria-label": "Add a reaction" }, QUICK_REACTIONS.map((entry) => h("button", {
+      class: "pick", part: "reaction-option", type: "button", "data-key": "pick:" + entry[0], title: entry[1],
+      "aria-label": entry[1], "aria-pressed": mine.indexOf(entry[0]) !== -1 ? "true" : "false",
+      onclick: () => {
+        this.picking = null;
+        this.toggleReaction(post.ref, entry[0]);
+        this.focusControl(post.ref, inThread, "act:react");
+      },
+    }, [entry[0]])));
+  }
+
+  buildConfirm(post, inThread) {
+    return h("div", { class: "confirm", part: "delete-confirm", role: "group", "aria-label": "Delete this message?" }, [
+      h("span", { text: "Delete this message?" }),
+      h("button", { class: "primary", part: "delete-confirm-yes", type: "button", "data-key": "confirm:yes", text: "Delete", onclick: () => this.removePost(post.ref, inThread) }),
+      h("button", { class: "quiet", part: "delete-confirm-no", type: "button", "data-key": "confirm:no", text: "Cancel", onclick: () => this.dismiss(post.ref, inThread) }),
+    ]);
+  }
+
+  buildEditor() {
+    const editing = this.editing;
+    const input = h("textarea", {
+      class: "edit-input", part: "edit-input", rows: 1, "data-key": "edit", "aria-label": "Edit message",
+      oninput: () => { editing.text = input.value; autosize(input); },
+      onkeydown: (event) => { if (enterSends(event)) { event.preventDefault(); this.saveEdit(); } },
+    });
+    input.value = editing.text;
+    requestAnimationFrame(() => autosize(input));
+    return h("div", { class: "editor", part: "editor" }, [input, h("div", { class: "edit-bar" }, [
+      h("button", { class: "primary", part: "edit-save", type: "button", "data-key": "edit:save", text: "Save", onclick: () => this.saveEdit() }),
+      h("button", { class: "quiet", part: "edit-cancel", type: "button", "data-key": "edit:cancel", text: "Cancel", onclick: () => this.dismiss(editing.ref, editing.inThread) }),
+      editing.error ? h("span", { part: "edit-error", role: "alert", text: editing.error }) : null,
+    ])]);
   }
 
   buildAttachments(post) {
@@ -598,8 +757,10 @@ class PolynetChat extends HTMLElement {
     const before = copies.map((post) => ({ reactions: post.reactions, reacted_by_me: post.reacted_by_me }));
     for (const post of copies) {
       post.reacted_by_me = mine ? (post.reacted_by_me || []).filter((value) => value !== emoji) : (post.reacted_by_me || []).concat(emoji);
-      post.reactions = (post.reactions || []).map((reaction) => reaction.emoji === emoji
-        ? { emoji: emoji, count: reaction.count + (mine ? -1 : 1) } : reaction);
+      const known = (post.reactions || []).some((reaction) => reaction.emoji === emoji);
+      post.reactions = known ? post.reactions.map((reaction) => reaction.emoji === emoji
+        ? { emoji: emoji, count: reaction.count + (mine ? -1 : 1) } : reaction)
+        : (post.reactions || []).concat({ emoji: emoji, count: 1 });
     }
     this.rerender();
     try {
@@ -642,31 +803,40 @@ class PolynetChat extends HTMLElement {
       ? typingText(this.typists.filter((person) => person.thread_ref === this.threadRef)) : "";
   }
 
-  async openThread(ref) {
+  // Opens a post's thread; replyNow puts the member straight in its reply box.
+  async openThread(ref, replyNow) {
     const post = this.posts.get(ref);
     if (!post) return;
-    this.threadRef = ref;
-    this.thread = [Object.assign({}, post)];
-    this.threadNodes = new Map();
-    this.threadList.replaceChildren();
-    this.threadStatus = "loading";
-    this.threadPanel.hidden = false;
-    this.frame.classList.add("threaded");
-    this.renderThread();
-    this.renderFeed({});
-    this.renderTyping();
-    this.threadTitle.focus();
-    await this.loadThread();
+    const fresh = this.threadRef !== ref;
+    if (fresh) {
+      if (this.threadRef) this.replyComposer.show(null);
+      this.threadRef = ref;
+      this.thread = [Object.assign({}, post)];
+      this.threadNodes = new Map();
+      this.threadList.replaceChildren();
+      this.threadStatus = "loading";
+      this.threadPanel.hidden = false;
+      this.frame.classList.add("threaded");
+      this.replyComposer.show(this.composerScope(ref));
+      this.renderThread();
+      this.renderFeed({});
+      this.renderTyping();
+    }
+    if (replyNow && this.canReply()) this.replyComposer.focus();
+    else this.threadTitle.focus();
+    if (fresh) await this.loadThread();
   }
 
   async loadThread() {
     const ref = this.threadRef;
     const generation = this.generation;
     try {
+      const startedAt = Date.now();
       const entries = await polynet.thread(this.channel.slug, ref);
       if (ref !== this.threadRef || generation !== this.generation) return;
       this.thread = entries;
       this.threadStatus = "ready";
+      this.settle(startedAt, ref);
     } catch (error) {
       if (ref !== this.threadRef || generation !== this.generation) return;
       if (error && error.code === "sign_in_required") { this.fail(error); return; }
@@ -679,14 +849,14 @@ class PolynetChat extends HTMLElement {
     const focus = this.focusKey();
     const quiet = !this.threadNodes.size;
     if (quiet) this.threadList.setAttribute("aria-busy", "true");
-    const [root, ...replies] = this.thread;
+    const [root, ...replies] = this.thread.filter((post) => !this.removing.has(post.ref)).concat(this.outgoing(this.threadRef));
     const items = [];
     if (root) items.push({ type: "message", key: root.ref, post: root, grouped: false });
     if (replies.length) items.push({ type: "replies", key: "replies:" + replies.length, label: replies.length + (replies.length === 1 ? " reply" : " replies") });
     for (const reply of replies) items.push({ type: "message", key: reply.ref, post: reply, grouped: false });
     const next = new Map();
     const nodes = items.map((item) => {
-      const signature = this.signature(item);
+      const signature = this.signature(item, true);
       const old = this.threadNodes.get(item.key);
       const node = old && old.signature === signature ? old.node
         : item.type === "replies" ? h("li", { class: "divider", part: "thread-divider", role: "separator", text: item.label })
@@ -705,6 +875,7 @@ class PolynetChat extends HTMLElement {
   }
 
   hideThread() {
+    this.replyComposer.show(null);
     this.threadRef = null;
     this.thread = [];
     this.threadPanel.hidden = true;
@@ -724,6 +895,197 @@ class PolynetChat extends HTMLElement {
         const opener = message.querySelector("[data-key=replies]");
         if (opener) opener.focus();
       }
+    }
+  }
+
+  // Sending. Fails closed: no capability, no box.
+  canReply() {
+    const channel = this.channel;
+    return !!channel && (channel.canReply === true || (channel.canReply === undefined && channel.canPost === true));
+  }
+
+  composerScope(thread) {
+    const channel = this.channel;
+    return {
+      community: this.communitySlug || "", channel: channel.slug, channelName: channel.name || channel.slug, thread: thread || null,
+      canWrite: thread ? this.canReply() : channel.canPost === true, agentName: this.communityName || null, me: this.me || null,
+    };
+  }
+
+  // The member as their own posts show them, so a pending post groups with the ones before it.
+  myActor() {
+    const mine = Array.from(this.posts.values()).concat(this.thread).reverse()
+      .find((post) => post.by_me && post.actor && post.actor.type === "human");
+    if (mine) return mine.actor;
+    const me = this.me || {};
+    return { type: "human", display_name: me.name || null, handle: me.handle || null, avatar_url: me.avatar_url || null, user_id: null };
+  }
+
+  // The outbox as posts, for the channel (thread null) or a thread.
+  outgoing(thread) {
+    const slug = this.channel && this.channel.slug;
+    const shown = thread ? new Set(this.thread.map((post) => post.ref)) : this.posts;
+    const items = this.outbox.filter((item) => item.channel === slug && item.thread === thread && !(item.ref && shown.has(item.ref)));
+    if (!items.length) return [];
+    const actor = this.myActor();
+    return items.map((item) => ({
+      ref: "pending:" + item.key, outgoing: item.state === "failed" ? "failed" : "pending", text: item.text, files: item.files,
+      actor: actor, created_at: new Date(item.at).toISOString(), by_me: true, can_edit: false,
+      reactions: [], reacted_by_me: [], reply_count: 0, attachments: [], edited_at: null,
+    }));
+  }
+
+  // A read that started after the server confirmed a send (or a delete)
+  // shows the truth: the pending copy (or the hiding) can go.
+  settle(startedAt, thread) {
+    const slug = this.channel && this.channel.slug;
+    this.outbox = this.outbox.filter((item) => !(item.state === "sent" && item.channel === slug && item.thread === thread && item.sentAt <= startedAt));
+    if (!thread) for (const [ref, entry] of this.removing) if (entry.at <= startedAt) this.removing.delete(ref);
+  }
+
+  async send(payload) {
+    const scope = payload.scope;
+    const item = {
+      key: payload.key, channel: scope.channel, thread: scope.thread, text: payload.text, state: "pending", at: Date.now(), ref: null,
+      files: payload.files.map((entry) => ({ name: entry.file.name, size: entry.file.size })),
+    };
+    // A retry replaces what failed in the same place.
+    this.outbox = this.outbox.filter((other) => other.key !== item.key
+      && !(other.state === "failed" && other.channel === item.channel && other.thread === item.thread));
+    this.outbox.push(item);
+    const here = () => this.status === "ready" && this.channel && this.channel.slug === item.channel;
+    if (here()) {
+      this.rerender();
+      if (!item.thread) this.toBottom(false);
+    }
+    const composer = item.thread ? this.replyComposer : this.composer;
+    try {
+      const result = await polynet.post(item.channel, payload.text, {
+        files: payload.files.map((entry) => entry.file), replyTo: item.thread || undefined,
+        mentions: payload.mentions, askAgent: payload.askAgent, key: item.key,
+      });
+      item.state = "sent";
+      item.ref = (result && result.ref) || null;
+      item.sentAt = Date.now();
+      composer.sent(payload);
+      if (here()) this.refresh();
+    } catch (error) {
+      item.state = "failed";
+      composer.failed(payload, error);
+      if (error && error.code === "sign_in_required") { this.fail(error); return; }
+      if (here()) this.rerender();
+    }
+  }
+
+  // The member emptied a box that held a failed message: it's no longer pending anywhere.
+  discard(scope) {
+    this.outbox = this.outbox.filter((item) => !(item.state === "failed" && item.channel === scope.channel && item.thread === scope.thread));
+    this.rerender();
+  }
+
+  // One control open per kind; opening React closes Delete's question and back.
+  toggleUi(kind, ref, inThread) {
+    const open = !this.ui(ref, inThread)[kind];
+    if (kind !== "menu") { this.picking = null; this.confirming = null; }
+    else if (!open) { this.picking = null; this.confirming = null; }
+    this.actionError = null;
+    this[kind] = open ? { ref: ref, inThread: inThread } : null;
+    this.rerender();
+    if (kind === "picking" && open) this.focusControl(ref, inThread, "pick:" + QUICK_REACTIONS[0][0]);
+    else if (kind === "confirming" && open) this.focusControl(ref, inThread, "confirm:no");
+    else if (kind === "menu") this.focusControl(ref, inThread, "more");
+  }
+
+  // Esc and Cancel: closes what's open on a message and returns focus to its control.
+  dismiss(ref, inThread) {
+    const ui = this.ui(ref, inThread);
+    let key = null;
+    if (ui.editing) { this.editing = null; key = "act:edit"; }
+    else if (ui.confirming) { this.confirming = null; key = "act:delete"; }
+    else if (ui.picking) { this.picking = null; key = "act:react"; }
+    else if (ui.menu) { this.menu = null; key = "more"; }
+    if (!key) return false;
+    this.rerender();
+    this.focusControl(ref, inThread, key);
+    return true;
+  }
+
+  focusControl(ref, inThread, key) {
+    const scope = inThread ? this.threadList : this.list;
+    for (const message of scope.querySelectorAll("[data-ref]")) {
+      if (message.getAttribute("data-ref") !== ref) continue;
+      for (const control of message.querySelectorAll("[data-key]")) {
+        if (control.getAttribute("data-key") === key && control.getClientRects().length) { control.focus(); return; }
+      }
+    }
+    // On touch the control may be folded away: keep focus in the conversation.
+    (inThread ? this.threadTitle : this.feed).focus();
+  }
+
+  startEdit(ref, inThread) {
+    const post = this.copies(ref)[0];
+    if (!post || !post.can_edit) return;
+    this.editing = { ref: ref, inThread: inThread, text: post.text, error: null };
+    this.picking = null;
+    this.confirming = null;
+    this.actionError = null;
+    this.rerender();
+    this.focusControl(ref, inThread, "edit");
+    const input = this.root.activeElement;
+    if (input && input.tagName === "TEXTAREA") { autosize(input); input.setSelectionRange(input.value.length, input.value.length); }
+  }
+
+  // Saves at once on screen and settles with the server; a failure reopens the editor with the text.
+  async saveEdit() {
+    const editing = this.editing;
+    if (!editing) return;
+    const copies = this.copies(editing.ref);
+    const text = editing.text.trim();
+    if (!copies.length) { this.editing = null; this.rerender(); return; }
+    if (!text) {
+      this.editing = Object.assign({}, editing, { error: "A message can't be empty. Delete it instead." });
+      this.rerender();
+      this.focusControl(editing.ref, editing.inThread, "edit");
+      return;
+    }
+    if (text === copies[0].text) { this.dismiss(editing.ref, editing.inThread); return; }
+    const before = copies.map((post) => ({ text: post.text, edited_at: post.edited_at }));
+    for (const post of copies) { post.text = text; post.edited_at = new Date().toISOString(); }
+    this.editing = null;
+    this.rerender();
+    this.focusControl(editing.ref, editing.inThread, "act:edit");
+    try {
+      await polynet.edit(copies[0], text);
+    } catch (error) {
+      copies.forEach((post, index) => Object.assign(post, before[index]));
+      if (error && error.code === "sign_in_required") { this.fail(error); return; }
+      this.editing = Object.assign({}, editing, { error: "Couldn't save your edit. Try again." });
+      this.rerender();
+      this.focusControl(editing.ref, editing.inThread, "edit");
+    }
+  }
+
+  // Gone at once; back with a note if the server says no.
+  async removePost(ref, inThread) {
+    const post = this.copies(ref)[0];
+    this.confirming = null;
+    if (!post || !post.by_me) return;
+    this.removing.set(ref, { at: Infinity });
+    const generation = this.generation;
+    if (this.threadRef === ref) this.closeThread(false);
+    this.rerender();
+    (inThread && this.threadRef ? this.threadTitle : this.feed).focus();
+    try {
+      await polynet.remove(post);
+      if (generation !== this.generation) return;
+      this.removing.set(ref, { at: Date.now() });
+      this.refresh();
+    } catch (error) {
+      if (generation !== this.generation) return;
+      this.removing.delete(ref);
+      if (error && error.code === "sign_in_required") { this.fail(error); return; }
+      this.actionError = { ref: ref, inThread: inThread && this.threadRef ? true : false, text: "Couldn't delete it. Try again." };
+      this.rerender();
     }
   }
 }

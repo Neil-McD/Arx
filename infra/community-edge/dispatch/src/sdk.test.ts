@@ -110,14 +110,14 @@ test("channels follows every page of the listing", async () => {
     "/__polynet/api": (_url, init) => {
       const { input } = JSON.parse(String(init.body));
       if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true, unread: true, mentioned: true, seen_through_at: 1700 }], truncated: true, next_cursor: "page2" });
-      return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false } }], truncated: false });
+      return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false, canReply: false } }], truncated: false });
     },
   });
   const polynet = await loadSdk();
   await polynet.session();
   expect(await polynet.channels()).toEqual([
-    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, unread: true, mentioned: true, seenThroughAt: 1700 },
-    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, unread: false, mentioned: false, seenThroughAt: null },
+    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, canReply: true, unread: true, mentioned: true, seenThroughAt: 1700 },
+    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, canReply: false, unread: false, mentioned: false, seenThroughAt: null },
   ]);
   const channelCalls = calls.filter((call) => call.body?.input?.path === "/communities/run-club/channels/");
   expect(channelCalls.map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);
@@ -330,6 +330,36 @@ test("post mentions members by ref, alongside an agent mention", async () => {
   await polynet.post("general", "@sam @ava see you at 6", { mentions: [{ ref: "user:sam1", handle: "sam" }, "user:ava2"], askAgent: true });
   const write = calls.find((call) => call.body?.tool === "polynet_write")!.body.input;
   expect(write.content.mentions).toEqual([{ userId: "sam1" }, { userId: "ava2" }, { agentKey: "community_agent" }]);
+});
+
+test("a post retried with its own key reuses the key and never uploads a file twice", async () => {
+  let failWrites = 1;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/upload": (_url, init) => {
+      const name = decodeURIComponent((init.headers as Record<string, string>)["x-polynet-file-name"]);
+      return Response.json({ ok: true, attachment: { attachmentId: "att-" + name } });
+    },
+    "/__polynet/api": (_url, init) => {
+      const { tool } = JSON.parse(String(init.body));
+      if (tool === "polynet_write" && failWrites-- > 0) return Response.json({ ok: false, code: "community_chat_write_failed" });
+      return ok({ ref: "interaction:root:new" });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" });
+  const options = { files: [photo], key: "retry-key-1" };
+  await expect(polynet.post("general", "Look", options)).rejects.toMatchObject({ code: "community_chat_write_failed" });
+  expect(await polynet.post("general", "Look", options)).toMatchObject({ ref: "interaction:root:new" });
+  expect(calls.filter((call) => call.url === "/__polynet/upload")).toHaveLength(1);
+  const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
+  expect(writes.map((input) => input.idempotency_key)).toEqual(["retry-key-1", "retry-key-1"]);
+  expect(writes[1].content.attachments).toEqual([{ attachmentId: "att-photo.png" }]);
+  // A different key uploads again; a malformed one is refused before anything is sent.
+  await polynet.post("general", "Look", { files: [photo], key: "another-key" });
+  expect(calls.filter((call) => call.url === "/__polynet/upload")).toHaveLength(2);
+  await expect(polynet.post("general", "x", { key: "bad key!" })).rejects.toMatchObject({ code: "invalid_tool_args" });
 });
 
 test("watch passes who's typing, says when posts changed, and drops a typist nobody renewed", async () => {

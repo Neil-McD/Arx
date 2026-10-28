@@ -13,7 +13,8 @@ one edge Worker in front of every community front end.
                          ├─ /__polynet/sdk.js, /__polynet/live.js, /__polynet/llms.txt → the builder kit (SDK, its live client, its doc)
                          ├─ /__polynet/ui.js  → the shell (<polynet-account>), injected into every page; loads blocks on demand
                          ├─ /__polynet/blocks/<name>.js → Polynet's blocks: channels (<polynet-channels>), chat (<polynet-chat>),
-                         │                      and kit (what they share); any other name is 404
+                         │                      composer (the chat's message boxes, imported by chat) and kit (what
+                         │                      they share); any other name is 404
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 

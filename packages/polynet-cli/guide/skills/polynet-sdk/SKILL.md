@@ -56,15 +56,24 @@ Place the tags; `ui.js` (on every page) loads each one only where it's used:
   `channel="<slug>"` pins a chat to one channel.
 - The chat scrolls inside itself: give it a height
   (`polynet-chat { height: calc(100dvh - 160px) }`).
+- The chat is the whole conversation, composer included: members write and
+  reply (Enter sends, Shift+Enter is a new line; on touch, Send sends), tag
+  people and the community agent with `@`, attach files (button, paste,
+  drag and drop), react, and edit or delete their own messages. Sends show
+  at once and a failed one returns to the box with Retry. Where the member
+  can't post, a quiet note replaces the box. Don't build your own chat
+  composer; a custom one with `post()` (below) is still allowed beside it.
 - They take the page's font and color and read the shell's tokens
   (`--polynet-accent`, `--polynet-on-accent`, `--polynet-text`,
   `--polynet-muted`, `--polynet-border`, `--polynet-surface`,
   `--polynet-radius`). Set `--polynet-surface` on dark sites.
 - Restyle pieces with `::part()` (`channel`, `channel-current`,
   `unread-dot`, `mention-badge`, `message`, `message-author`, `message-body`,
-  `message-agent`, `reaction`, `replies`, `day-divider`, `new-divider`,
-  `thread-panel`, `typing`, …; the full list is in llms.txt). Slots:
-  `header`, `empty`, `signed-out`.
+  `message-agent`, `message-pending`, `reaction`, `replies`, `day-divider`,
+  `new-divider`, `thread-panel`, `typing`, `composer`, `composer-input`,
+  `composer-send`, `mention-list`, `mention-option`, `attachment-chip`,
+  `message-actions`, `message-action`, `edit-input`, …; the full list is in
+  llms.txt). Slots: `header`, `empty`, `signed-out`, `read-only`.
 - `state="loading|ready|signed-out|error"` on each tag lets your layout
   react, e.g. `polynet-chat[state=signed-out]`.
 
@@ -116,8 +125,11 @@ await polynet.react(p.ref, "🔥", !p.reacted_by_me.includes("🔥")); // toggle
 const replies = await polynet.thread(general.slug, p.ref);       // the post, then its replies
 ```
 
-Hide the composer when `channel.canPost` is false. `edit(p, text)` when
-`p.can_edit`; `remove(p)` when `p.by_me`. Attachments: `polynet.fileUrl(file)`.
+In a custom composer (the chat block already has one), hide posting when
+`channel.canPost` is false and replying when `channel.canReply` is; pass
+your own `key` to `post()` and reuse it to retry a failed send without
+posting twice. `edit(p, text)` when `p.can_edit`; `remove(p)` when
+`p.by_me`. Attachments: `polynet.fileUrl(file)`.
 
 ## Unread, mentions, typing, who's online
 

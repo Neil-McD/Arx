@@ -338,7 +338,7 @@ test("every site gets the shell (ui.js) and the member's account, read with thei
 });
 
 test("every site serves Polynet's blocks as modules; ui.js loads them only where they're placed", async () => {
-  for (const name of ["kit", "channels", "chat"]) {
+  for (const name of ["kit", "channels", "chat", "composer"]) {
     const res = await edge.fetch(request(`/__polynet/blocks/${name}.js`, { headers: { "sec-fetch-site": "cross-site" } }), env());
     expect(res.status, name).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
@@ -350,6 +350,8 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
   }
   expect(await (await edge.fetch(request("/__polynet/blocks/chat.js"), env())).text()).toContain('customElements.define("polynet-chat"');
   expect(await (await edge.fetch(request("/__polynet/blocks/channels.js"), env())).text()).toContain('customElements.define("polynet-channels"');
+  expect(await (await edge.fetch(request("/__polynet/blocks/chat.js"), env())).text()).toContain('from "/__polynet/blocks/composer.js"');
+  expect(await (await edge.fetch(request("/__polynet/blocks/composer.js"), env())).text()).toContain("export class Composer");
   // Unknown blocks are Polynet's 404, never the site's own fallback page.
   const site = vi.fn(async () => new Response("<html>site</html>", { headers: { "content-type": "text/html" } }));
   const e = { ...env(), DEV_USER_WORKER: { fetch: site } };
