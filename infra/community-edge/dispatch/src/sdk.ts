@@ -412,7 +412,9 @@ async function readText(entry) {
     // A JSON document is read whole: its next page would repeat the first.
     return text;
   } catch (error) {
-    // Markdown documents are already text.
+    // Markdown documents are already text. A .json path is never paged: its
+    // next page would repeat the first.
+    if (/\.json$/.test(String(path))) return text;
   }
   let next = value && value.next_offset;
   for (let page = 1; page < TEXT_PAGES && typeof next === "number" && next > 0; page += 1) {

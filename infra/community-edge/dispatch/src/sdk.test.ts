@@ -80,6 +80,18 @@ test("feed returns posts oldest first; errors surface as PolynetError", async ()
   await expect(polynet.feed("missing")).rejects.toMatchObject({ name: "PolynetError", code: "semantic_not_found" });
 });
 
+test("readText never pages a .json document, even one that doesn't parse", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": () => ok({ path: "/communities/run-club/memory/m1.json", body: "{\"body_md\": \"cut", truncated: true, next_offset: 24000 }),
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const text = await polynet.readText("/communities/run-club/memory/m1.json");
+  expect(text).toBe("{\"body_md\": \"cut");
+  expect(calls.filter((call) => call.body?.tool === "polynet_read")).toHaveLength(1);
+});
+
 test("feed reads past a page of only replies instead of returning no posts", async () => {
   const calls = stubFetch({
     "/__polynet/auth/session": signedIn,

@@ -8,7 +8,7 @@ import { COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS, ensurePendingCommunityJoinRequest }
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers();});
 
 import { api, internal } from "./_generated/api";
-import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
+import { fitJsonDocument, executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import schema from "./schema";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
@@ -3224,4 +3224,18 @@ test("site rails: the community agent gets no read state, presence, typing or me
     expect(await execute("external_mcp", "polynet_call", callInput(operation, input))).toMatchObject({ ok: false, code: "operation_not_found" });
   }
   expect(await t.run((ctx) => ctx.db.query("communityPresence").collect())).toHaveLength(0);
+});
+
+test("a JSON document over the limit is shortened inside its longest text and still parses", () => {
+  const payload = { title: "Long memory", body_md: "x".repeat(40_000), type: "memory" };
+  const full = JSON.stringify(payload, null, 2);
+  const body = fitJsonDocument(payload, full, 24_000);
+  expect(body.length).toBeLessThanOrEqual(24_000);
+  const parsed = JSON.parse(body);
+  expect(parsed.title).toBe("Long memory");
+  expect(parsed.type).toBe("memory");
+  expect(parsed.body_md.endsWith("[…shortened]")).toBe(true);
+  // Small documents are untouched.
+  const small = JSON.stringify({ a: 1 }, null, 2);
+  expect(fitJsonDocument({ a: 1 }, small, 24_000)).toBe(small);
 });
