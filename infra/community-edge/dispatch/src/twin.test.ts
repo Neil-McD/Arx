@@ -80,6 +80,12 @@ async function backend(request: Request): Promise<Response> {
     // The first sign-out hands back a ticket; the other origin's, with it, just ends.
     return Response.json(JSON.parse(body).ticket ? { ok: true } : { ok: true, signout_ticket: TICKET });
   }
+  if (url.pathname === "/runtime/app/me/messages/send" && dm.holdNextSend) {
+    const hold = dm.holdNextSend;
+    dm.holdNextSend = null;
+    dm.held += 1;
+    await hold;
+  }
   if (url.pathname === "/runtime/app/me/messages" || url.pathname.startsWith("/runtime/app/me/messages/")) return messagesBackend(url.pathname, JSON.parse(body || "{}"));
   if (url.pathname.startsWith("/runtime/app/me/") && url.pathname !== "/runtime/app/me/communities") return settingsBackend(url.pathname, JSON.parse(body || "{}"));
   return Response.json({ ok: true, value: {} });
@@ -138,6 +144,7 @@ const OWL = `owl${"2".repeat(29)}`;
 const NEWBIE = `new${"3".repeat(29)}`;
 const dm = {
   conversations: [] as any[], messages: {} as Record<string, any[]>, calls: [] as Array<[string, any]>, failSend: null as string | null,
+  holdNextSend: null as Promise<void> | null, held: 0,
 };
 function resetMessages() {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -156,6 +163,8 @@ function resetMessages() {
   };
   dm.calls = [];
   dm.failSend = null;
+  dm.holdNextSend = null;
+  dm.held = 0;
 }
 function messagesBackend(path: string, body: Record<string, any>): Response {
   dm.calls.push([path, body]);
@@ -175,7 +184,8 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
     case "/runtime/app/me/messages/send": {
       if (dm.failSend) { const code = dm.failSend; dm.failSend = null; return refuse(code, 429); }
       let row = body.to ? null : find(body.conversation_id);
-      if (body.to === "newbie") {
+      if (body.to === "newbie") row = find(NEWBIE) ?? null;
+      if (body.to === "newbie" && !row) {
         row = { id: NEWBIE, peer: { name: "Newbie", handle: "newbie", avatar_url: null }, community_name: "Sunrise Climbing Club", unread_count: 0, muted: false,
           blocked: false, last_seq: 0, read_seq: 0, peer_read_seq: 0, last_message: null };
         dm.conversations.unshift(row);
@@ -619,6 +629,72 @@ test("Messages: a profile's Message starts a conversation with the first message
     await page.goto(`${TWIN}/messages/new?to=outsider`);
     await expect.poll(() => personal.locator("[part=thread] [role=alert] p").textContent()).toBe("You can't message this person right now.");
     expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+// Holds the next send at the backend until the returned release is called.
+async function holdNextSend(): Promise<() => void> {
+  let release = () => {};
+  dm.holdNextSend = new Promise<void>((resolve) => { release = resolve; });
+  return release;
+}
+
+test("Messages: re-reading the same thread mid-send doesn't strand the send", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=thread-header] h2").textContent()).toBe("Sam Rivera");
+    const release = await holdNextSend();
+    await personal.locator("[part=input]").fill("Running late");
+    await personal.locator("[part=send]").click();
+    await expect.poll(() => dm.held).toBe(1);
+    // A refresh of this same thread (tab focus) lands while the send is out.
+    const reads = dmCalls("conversation").length;
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => dmCalls("conversation").length).toBeGreaterThan(reads);
+    release();
+    await expect.poll(() => personal.locator("[part~=message-pending]").count()).toBe(0);
+    await expect.poll(() => personal.locator("[part~=message-mine]").last().textContent()).toContain("Running late");
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: when the first message makes the thread, other sends and the draft stay", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, "/messages/new?to=newbie", TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=thread-header] h2").textContent()).toBe("Newbie");
+    const input = personal.locator("[part=input]");
+    const release = await holdNextSend();
+    await input.fill("Welcome!");
+    await personal.locator("[part=send]").click();
+    await expect.poll(() => dm.held).toBe(1);
+    // A second send is refused while the first is still out; then a draft.
+    dm.failSend = "dm_rate_limited";
+    await input.fill("Climb Saturday?");
+    await personal.locator("[part=send]").click();
+    const pending = personal.locator("[part~=message-pending]");
+    await expect.poll(() => pending.locator("[part=meta]").allTextContents()).toContainEqual(expect.stringContaining("too quickly"));
+    await input.fill("Bring shoes");
+    release();
+    await page.waitForURL(`${TWIN}/messages/${NEWBIE}`);
+    await expect.poll(() => personal.locator("[part=mute]").count()).toBe(1);
+    await expect.poll(() => personal.locator("[part~=message-mine]:not([part~=message-pending])").allTextContents()).toEqual([expect.stringContaining("Welcome!")]);
+    expect(await pending.count()).toBe(1);
+    expect(await pending.textContent()).toContain("Climb Saturday?");
+    expect(await personal.locator("[part=input]").inputValue()).toBe("Bring shoes");
+    // Its Retry now goes to the new thread, under the same key.
+    await pending.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(() => pending.count()).toBe(0);
+    const [refused, retried] = dmCalls("send").filter((call) => call.text === "Climb Saturday?");
+    expect(refused).toMatchObject({ to: "newbie" });
+    expect(retried).toMatchObject({ conversation_id: NEWBIE, client_message_id: refused.client_message_id });
+    expect(dm.messages[NEWBIE].map((message) => message.text)).toEqual(["Welcome!", "Climb Saturday?"]);
   } finally {
     await browser.close();
   }
