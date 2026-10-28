@@ -14,6 +14,7 @@ const ENTRY_MODULES = new Set(["auth.config", "crons", "http", "schema"]);
 // is either a hand-run operator tool or waiting on a decision or a later slice.
 const ALLOWED = new Map([
   ["stagingSeedBriefLab", "operator tool: seeds staging by hand"],
+  ["stagingSeedSunrise", "operator tool: seeds and simulates the staging Sunrise community by hand"],
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
   ["communityCognitionCleanup", "operator tool: drains a deleted community's cognition data"],
