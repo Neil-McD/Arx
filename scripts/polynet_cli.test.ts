@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 // @ts-expect-error plain ES module without types
-import { apiUrlFor, buildManifest, collectFiles, hashFile, installGuide, mimeType, pkce, readCheckedFiles, siteAddress, siteConfigPaths, uploadBuckets } from "../packages/polynet-cli/lib.mjs";
+import { apiUrlFor, buildManifest, collectFiles, hashFile, installGuide, mimeType, pkce, privateAddress, readCheckedFiles, siteAddress, siteConfigPaths, uploadBuckets } from "../packages/polynet-cli/lib.mjs";
 import { STANDARD_PAGES, checkSite, standardPage } from "../packages/polynet-cli/checks.mjs";
 
 function site() {
@@ -78,6 +78,10 @@ test("production is the default; --staging or an explicit API URL choose otherwi
   expect(apiUrlFor({ env: { POLYNET_API_URL: "https://example.convex.site/" }, staging: true })).toBe("https://example.convex.site");
   expect(siteAddress("run-club")).toBe("https://run-club.polynet.page");
   expect(siteAddress("run-club", true)).toBe("https://run-club-staging.polynet.page");
+  // Each site's private twin (members' own pages), from the one shared mapping.
+  expect(privateAddress("run-club")).toBe("https://run-club--me.polynet.page");
+  expect(privateAddress("run-club", true)).toBe("https://run-club--me-staging.polynet.page");
+  expect(privateAddress("club--me")).toBeNull();
 });
 
 test("create --staging remembers staging in polynet.json", () => {
@@ -198,6 +202,17 @@ test("every site has a frame: frame.html with exactly one <polynet-page>, linkin
     "The frame is shown at /chat, /people, /people/<handle>, /events, /events/<event>, /learn, /learn/<course>, /learn/<course>/<lesson>, /knowledge, /ask, /discover, " +
     "where those point somewhere else. Start them from the site's root: /styles.css.");
   expect(frame(FRAME.replace('href="/chat#top"', 'href="#main"').replace("</main>", '</main><a href="mailto:hi@run.club">Mail</a><a href="?x=1">Again</a>'))).toBe("");
+});
+
+test("a frame whose header or nav a script draws is warned: members' own pages show it with no scripts", () => {
+  const warnings = (text: string) => problems(GOOD, [{ path: "/frame.html", text }]).warnings;
+  const drawn = FRAME.replace(/<header>[\s\S]*<\/header>/, '<header id="top"></header><nav> </nav>').replace("</body>", '<script type="module" src="/app.js"></script></body>');
+  expect(warnings(drawn)).toContain("frame.html seems to build its header or navigation with a script.");
+  expect(warnings(drawn)).toContain("Members' own pages (Your communities, Messages, Settings) show the frame with every script removed");
+  // Polynet's own ui.js isn't the site's script; a header written in HTML is fine, scripts or not.
+  expect(warnings(drawn.replace('src="/app.js"', 'src="/__polynet/ui.js"'))).toBe("");
+  expect(warnings(FRAME.replace("</body>", '<script type="module" src="/app.js"></script></body>'))).toBe("");
+  expect(warnings(drawn.replace('<header id="top"></header>', '<header id="top"><a href="/">Run club</a></header>').replace("<nav> </nav>", ""))).toBe("");
 });
 
 test("a site's own version of a standard page must place that page's blocks", () => {

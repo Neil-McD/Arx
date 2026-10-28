@@ -25,8 +25,10 @@ work for every member.
 | A button or link with no name | Visible text, or `aria-label` for icon-only controls |
 
 Warnings (unlabelled fields, removed focus outlines, animation without
-reduced motion, `innerHTML`, positive `tabindex`) don't block. Fix them
-unless you're sure.
+reduced motion, `innerHTML`, positive `tabindex`, a frame whose header or nav
+a script draws) don't block. Fix them unless you're sure. A script-drawn
+frame header is empty on the member's own pages, which show the frame with
+every script removed: write the chrome into `frame.html`.
 
 ## What only you can check
 

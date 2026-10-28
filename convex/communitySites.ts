@@ -4,6 +4,7 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { normalizeCommunityAppOrigin } from "../shared/communityAppSession";
+import { privateTwinHost, siteSlugShapeOk } from "../packages/polynet-cli/checks.mjs";
 
 // Hostnames that never belong to a community, even if a slug matches.
 const RESERVED_SITE_NAMES = new Set([
@@ -19,16 +20,34 @@ export const SITE_MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 
 export type SiteManifest = Record<string, { hash: string; size: number }>;
 
-// Names ending in the staging suffix stay free for staging's addresses on the
-// shared domain, so no production community can claim one.
-const RESERVED_SITE_SUFFIX = "-staging";
-
+// The slug's shape is shared with the edge and the CLI (checks.mjs): names
+// ending in the staging suffix stay free for staging's addresses on the shared
+// domain, and names ending in the private twin's mark ("--me") are never a
+// site, so no site address is ever another community's private twin.
 export function siteHostname(communitySlug: string, sitesDomain: string, hostSuffix = ""): string | null {
   const slug = communitySlug.trim().toLowerCase();
-  if (!/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(slug)) return null;
+  if (!siteSlugShapeOk(slug)) return null;
   if (RESERVED_SITE_NAMES.has(slug) && !RESERVED_EXCEPTIONS.has(slug)) return null;
-  if (slug.endsWith(RESERVED_SITE_SUFFIX)) return null;
   return `${slug}${hostSuffix}.${sitesDomain}`;
+}
+
+// The community's own site on this environment's sites domain, when it has one
+// (that origin is registered to it); else null, and links go to Studio. The same
+// shapes the deploy accepts; anything else means no site links. Shared by
+// Discover and the member's communities.
+export function sitesDomainOk(sitesDomain: string, hostSuffix: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(sitesDomain)
+    && (hostSuffix === "" || /^-[a-z0-9-]{1,20}$/.test(hostSuffix));
+}
+
+export async function registeredSiteOrigin(
+  ctx: any, community: { _id: any; slug?: unknown }, sitesDomain: string, hostSuffix: string,
+): Promise<string | null> {
+  const host = sitesDomainOk(sitesDomain, hostSuffix) ? siteHostname(String(community.slug ?? ""), sitesDomain, hostSuffix) : null;
+  const origin = host ? `https://${host}` : null;
+  if (!origin) return null;
+  const registered = await ctx.db.query("communityDomains").withIndex("by_origin", (q: any) => q.eq("origin", origin)).first();
+  return registered && String(registered.communityId) === String(community._id) ? origin : null;
 }
 
 const SITE_MIME: Record<string, string> = {
@@ -88,31 +107,85 @@ export function validateSiteManifest(raw: unknown):
   return { ok: true, manifest, fileCount: entries.length, totalBytes };
 }
 
-// Publishing makes the site's origin the community's (sign-in may return there)
-// and records the deploy. An origin owned by another community is refused.
+// The site's origin and its private twin's, both registered to the community
+// for sign-in. The twin's sessions are "private" (members' own pages); the
+// site's are "site". An origin owned by another community is refused.
+async function registerSiteOrigins(ctx: any, communityId: any, hostname: string, sitesDomain: string, hostSuffix: string) {
+  const origin = normalizeCommunityAppOrigin(`https://${hostname}`);
+  if (!origin) throw new Error("community_site_hostname_invalid");
+  const twinHost = privateTwinHost(hostname, sitesDomain, hostSuffix);
+  const privateOrigin = twinHost ? normalizeCommunityAppOrigin(`https://${twinHost}`) : null;
+  const rows: Array<[string, "site" | "private"]> = [[origin, "site"]];
+  if (privateOrigin) rows.push([privateOrigin, "private"]);
+  const now = Date.now();
+  for (const [address] of rows) {
+    const existing = await ctx.db.query("communityDomains").withIndex("by_origin", (q: any) => q.eq("origin", address)).first();
+    if (existing && existing.communityId !== communityId) throw new Error("community_domain_taken");
+  }
+  const added: string[] = [];
+  for (const [address, kind] of rows) {
+    const existing = await ctx.db.query("communityDomains").withIndex("by_origin", (q: any) => q.eq("origin", address)).first();
+    if (!existing) {
+      await ctx.db.insert("communityDomains", { communityId, origin: address, createdAt: now, ...(kind === "private" ? { kind } : {}) });
+      added.push(address);
+    } else if (kind === "private" && existing.kind !== "private") {
+      await ctx.db.patch(existing._id, { kind });
+      added.push(address);
+    }
+  }
+  return { origin, privateOrigin, added };
+}
+
+// Publishing makes the site's origin (and its private twin's) the community's,
+// so sign-in may return there, and records the deploy.
 export const recordCommunitySiteDeployInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     userId: v.id("users"),
     hostname: v.string(),
+    sitesDomain: v.optional(v.string()),
+    hostSuffix: v.optional(v.string()),
     fileCount: v.number(),
     totalBytes: v.number(),
   },
   handler: async (ctx, args) => {
-    const origin = normalizeCommunityAppOrigin(`https://${args.hostname}`);
-    if (!origin) throw new Error("community_site_hostname_invalid");
-    const existing = await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", origin)).first();
-    if (existing && existing.communityId !== args.communityId) throw new Error("community_domain_taken");
-    const now = Date.now();
-    if (!existing) await ctx.db.insert("communityDomains", { communityId: args.communityId, origin, createdAt: now });
+    const { origin, privateOrigin } = await registerSiteOrigins(ctx, args.communityId, args.hostname, args.sitesDomain ?? "", args.hostSuffix ?? "");
     await ctx.db.insert("communitySiteDeploys", {
       communityId: args.communityId,
       userId: args.userId,
       hostname: args.hostname,
       fileCount: Math.max(0, Math.floor(args.fileCount)),
       totalBytes: Math.max(0, Math.floor(args.totalBytes)),
-      createdAt: now,
+      createdAt: Date.now(),
     });
-    return { origin };
+    return { origin, privateOrigin };
+  },
+});
+
+// Sites deployed before private twins existed: register each one's twin origin.
+// Run once per environment with its sites domain and host suffix, a page at a
+// time, until done:
+//   npx convex run communitySites:registerSitePrivateTwinsInternal '{"sitesDomain":"polynet.page","hostSuffix":"-staging"}'
+// Only origins that are exactly this environment's site addresses get a twin.
+export const registerSitePrivateTwinsInternal = internalMutation({
+  args: { sitesDomain: v.string(), hostSuffix: v.string(), cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communityDomains").paginate({ cursor: args.cursor ?? null, numItems: 100 });
+    const registered: string[] = [];
+    const refused: string[] = [];
+    for (const row of page.page) {
+      if (row.kind === "private") continue;
+      const host = (() => { try { return new URL(row.origin).hostname; } catch { return ""; } })();
+      const twin = row.origin === `https://${host}` ? privateTwinHost(host, args.sitesDomain, args.hostSuffix) : null;
+      if (!twin) continue;
+      if (args.dryRun) { registered.push(`https://${twin}`); continue; }
+      try {
+        const { added } = await registerSiteOrigins(ctx, row.communityId, host, args.sitesDomain, args.hostSuffix);
+        registered.push(...added);
+      } catch {
+        refused.push(`https://${twin}`);
+      }
+    }
+    return { registered, refused, continueCursor: page.continueCursor, isDone: page.isDone };
   },
 });

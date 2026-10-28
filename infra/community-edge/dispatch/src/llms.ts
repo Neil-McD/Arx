@@ -267,6 +267,15 @@ navigation, footer, fonts and colors as every other page, with exactly one
   not styles.css): it is shown at /chat, /people/<handle> and
   /learn/<course>/<lesson> alike. Deploys
   fail on relative paths there.
+- Draw the frame's header, navigation and footer in HTML and CSS, never
+  with a script. The member's own pages (Your communities, Messages,
+  Settings, Join) are shown in the frame too, on the site's private twin
+  (<slug>--me.polynet.page, where only Polynet's code runs): Polynet removes
+  every script, event handler and javascript: link from the frame there,
+  keeps its markup, classes, stylesheets, inline styles and fonts, and points
+  its links back at the site. A script may add to the chrome; if it draws it,
+  those pages get an empty header (polynet check warns). Link /communities
+  from the frame if you like: Polynet sends it to the twin.
 - Polynet sets each standard page's <title> to "<Page> · <community
   name>" (Chat · Port Wren Lantern Guild; also at /people/<handle> and the
   other addresses under a page). The frame's own <title> shows only where

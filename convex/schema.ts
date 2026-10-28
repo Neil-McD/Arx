@@ -2478,6 +2478,10 @@ export default defineSchema({
     communityId: v.id("communities"),
     origin: v.string(),
     createdAt: v.number(),
+    // "private": a site's private twin (<slug>--me<suffix>.<sites domain>),
+    // where members' own pages live; its sessions may read personal data.
+    // Absent: a site origin.
+    kind: v.optional(v.union(v.literal("site"), v.literal("private"))),
   }).index("by_origin", ["origin"])
     .index("by_community", ["communityId"]),
 
@@ -2501,6 +2505,9 @@ export default defineSchema({
     expiresAt: v.number(),
     // Hash of the watch-only token the edge derives from the session token.
     watchTokenHash: v.optional(v.string()),
+    // Recorded when the session is minted: "private" only on a private twin's
+    // origin. Personal endpoints refuse every other session. Absent: "site".
+    kind: v.optional(v.union(v.literal("site"), v.literal("private"))),
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_watchTokenHash", ["watchTokenHash"])

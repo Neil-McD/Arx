@@ -197,6 +197,8 @@ test("the session endpoint gives every visitor the community's public identity, 
   const identity = {
     community: "apps-community", community_name: "Apps Club", community_one_liner: "We build.", community_about: "About us.", member_count: 12,
     join_url: "https://polynet.example.com/c/apps-community", studio_url: "https://polynet.example.com/c/apps-community/settings/community",
+    // Off the sites domain there's no private twin.
+    site_origin: ORIGIN, private_origin: null,
   };
   const anonymous = await (await edge.fetch(request("/__polynet/auth/session"), env())).json();
   expect(anonymous).toEqual({ signed_in: false, ...identity });
@@ -347,8 +349,10 @@ test("ui.js puts a shell in the corner of a page that has none, and gives way to
   expect(source).toContain('shell.setAttribute("data-polynet-fallback", "")');
   expect(source).toContain('document.querySelectorAll("polynet-account[data-polynet-fallback]")');
   expect(source).toContain("position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));");
-  // It links out to the member's communities; it never lists them in the page.
-  expect(source).toContain('[links.communities, "Your communities"]');
+  // It links to the member's communities on the site's private twin (Polynet's list where
+  // there's none); it never lists them in the page.
+  expect(source).toContain('session.private_origin ? session.private_origin + "/communities" : links.communities');
+  expect(source).toContain('[mine, "Your communities", onMine]');
   expect(source).not.toContain("account.communities");
 });
 
@@ -691,4 +695,177 @@ test("return paths stay on the community's own site", () => {
   for (const unsafe of ["//evil.example.com", "https://evil.example.com", "/\\evil.example.com", "javascript:alert(1)", null]) {
     expect(safeReturnPath(unsafe)).toBe("/");
   }
+});
+
+// The private twin: each site on the sites domain, and its members' own pages beside it.
+const SITE = "https://apps-community-staging.polynet.page";
+const TWIN = "https://apps-community--me-staging.polynet.page";
+function sitesEnv(site = deployedSite({ "/": "<html>home</html>", "/frame": FRAME })): Env & { site: ReturnType<typeof deployedSite> } {
+  return {
+    ...env(), POLYNET_SITES_DOMAIN: "polynet.page", POLYNET_SITES_HOST_SUFFIX: "-staging", POLYNET_SITES_FRONT_DOOR: "staging.polynet.page",
+    DEV_ROUTES_JSON: JSON.stringify({ "apps-community-staging.polynet.page": { script: "site-apps-community", community: "apps-community" } }),
+    DEV_USER_WORKER: site, site,
+  };
+}
+const at = (origin: string, path: string, init: RequestInit = {}) => {
+  const headers = new Headers(init.headers);
+  if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin");
+  return new Request(`${origin}${path}`, { ...init, headers });
+};
+
+test("twin: one label beside the site's, mapped both ways by the shared helper, never a slug's own site", async () => {
+  const { privateTwinHost, siteHostOfTwin, siteSlugShapeOk, personalPage } = await import("../../../../packages/polynet-cli/checks.mjs");
+  expect(privateTwinHost("apps-community-staging.polynet.page", "polynet.page", "-staging")).toBe("apps-community--me-staging.polynet.page");
+  expect(privateTwinHost("apps-community.polynet.page", "polynet.page")).toBe("apps-community--me.polynet.page");
+  expect(siteHostOfTwin("apps-community--me-staging.polynet.page", "polynet.page", "-staging")).toBe("apps-community-staging.polynet.page");
+  expect(siteHostOfTwin("Apps-Community--ME.polynet.page", "polynet.page")).toBe("apps-community.polynet.page");
+  // A twin is never a site, and nothing else is a twin: other suffixes, other domains, deeper labels, bad slugs.
+  for (const host of ["apps-community.polynet.page", "apps-community--me-staging.polynet.page", "a.b--me.polynet.page", "x--me.polynet.page",
+    "apps-community--me.evil.page", "apps-community-staging--me.polynet.page", "apps--me--me.polynet.page", "--me.polynet.page"]) {
+    expect(siteHostOfTwin(host, "polynet.page"), host).toBeNull();
+  }
+  // Slugs ending in the twin's mark (or the staging suffix) never get a site, so no site is another's twin.
+  expect(siteSlugShapeOk("club--me")).toBe(false);
+  expect(siteSlugShapeOk("club-staging")).toBe(false);
+  expect(siteSlugShapeOk("club--mates")).toBe(true);
+  expect(privateTwinHost("club--me.polynet.page", "polynet.page")).toBeNull();
+  // Production's twin of a staging-looking host doesn't exist, and a twin has no twin.
+  expect(privateTwinHost("apps-community-staging.polynet.page", "polynet.page")).toBeNull();
+  expect(privateTwinHost("apps-community--me.polynet.page", "polynet.page")).toBeNull();
+  expect(privateTwinHost("apps-community.polynet.page", "polynet.page/..", "")).toBeNull();
+  expect(personalPage("/communities/")?.name).toBe("communities");
+  expect(personalPage("/communities/x")).toBeNull();
+});
+
+test("twin: personal endpoints and the personal block never answer on the site, whoever asks", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json({ ok: true, communities: [] }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  for (const path of ["/__polynet/me/communities", "/__polynet/me/anything", "/__polynet/blocks/personal.js"]) {
+    const res = await edge.fetch(at(SITE, path, { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), e);
+    expect(res.status, path).toBe(404);
+  }
+  expect(backend).not.toHaveBeenCalled();
+  // On the twin, the personal block is served; another site's page (same site, other origin) can't call the data.
+  const block = await edge.fetch(at(TWIN, "/__polynet/blocks/personal.js"), e);
+  expect([block.status, block.headers.get("content-type")]).toEqual([200, "text/javascript; charset=utf-8"]);
+  expect(await block.text()).toContain('customElements.define("polynet-personal"');
+  const fromSite = await edge.fetch(at(TWIN, "/__polynet/me/communities", { headers: { "sec-fetch-site": "same-site", cookie: `__Host-polynet_session=${TOKEN}` } }), e);
+  expect(fromSite.status).toBe(403);
+  expect(backend).not.toHaveBeenCalled();
+});
+
+test("twin: your communities, read with the twin's own session, only the fields a card shows", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ ok: true, communities: [
+    { slug: "apps-community", name: "Apps Club", role: "owner", avatar_url: "https://live.example.convex.cloud/api/storage/abc", site_url: SITE, email: "never@example.com" },
+    { slug: "trail-club", name: "Trail Club", role: "superuser", avatar_url: "https://tracker.example.com/a.png", site_url: "https://evil.example.com" },
+    { slug: "../x", name: "Bad" },
+  ] }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  expect((await edge.fetch(at(TWIN, "/__polynet/me/communities"), e)).status).toBe(401);
+  expect(backend).not.toHaveBeenCalled();
+  const res = await edge.fetch(at(TWIN, "/__polynet/me/communities", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), e);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+  expect(await res.json()).toEqual({ ok: true, communities: [
+    { slug: "apps-community", name: "Apps Club", role: "owner", avatar_url: "https://live.example.convex.cloud/api/storage/abc", url: SITE, has_site: true, here: true },
+    // Another host's avatar isn't shown (the page's policy allows only Polynet's storage), nor a site link that isn't its own.
+    { slug: "trail-club", name: "Trail Club", role: "member", avatar_url: null, url: "https://polynet.example.com/c/trail-club", has_site: false, here: false },
+  ] });
+  const [path, init] = backend.mock.calls[0];
+  expect(path).toBe("https://api.example.convex.site/runtime/app/me/communities");
+  expect(init?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}`, "x-polynet-edge-secret": "edge-secret" });
+  expect(JSON.parse(String(init?.body))).toEqual({ sites_domain: "polynet.page", host_suffix: "-staging" });
+  // A session the backend refuses is cleared.
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false }, { status: 401 })));
+  const refused = await edge.fetch(at(TWIN, "/__polynet/me/communities", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), e);
+  expect(refused.status).toBe(401);
+  expect(refused.headers.get("set-cookie")).toMatch(/^__Host-polynet_session=; Path=\/; HttpOnly; SameSite=Lax; Max-Age=0; Secure$/);
+});
+
+test("twin: signs in through the same hop to its own callback, and its session names both origins", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  const e = sitesEnv();
+  const start = await edge.fetch(at(TWIN, "/__polynet/auth/start?return=/communities"), e);
+  const location = new URL(start.headers.get("location")!);
+  expect(location.searchParams.get("community")).toBe("apps-community");
+  expect(location.searchParams.get("redirect_uri")).toBe(`${TWIN}/__polynet/auth/callback`);
+  expect(start.headers.get("set-cookie")).toMatch(/^__Host-polynet_signin=[^;]+; Path=\/; HttpOnly; SameSite=Lax; Max-Age=600; Secure$/);
+  const onTwin = await (await edge.fetch(at(TWIN, "/__polynet/auth/session"), e)).json();
+  expect(onTwin).toMatchObject({ community: "apps-community", community_name: "Apps Club", site_origin: SITE, private_origin: TWIN });
+  const onSite = await (await edge.fetch(at(SITE, "/__polynet/auth/session"), e)).json();
+  expect(onSite).toMatchObject({ site_origin: SITE, private_origin: TWIN });
+});
+
+test("twin: personal pages only; everything else is the site's, and a member with no session here signs in first", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  const e = sitesEnv();
+  const nav = (path: string, headers: Record<string, string> = {}) =>
+    edge.fetch(at(TWIN, path, { headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", ...headers } }), e);
+  for (const [path, to] of [["/", `${SITE}/`], ["/chat?channel=crew", `${SITE}/chat?channel=crew`], ["/?polynet=join", `${SITE}/?polynet=join`], ["/styles.css", `${SITE}/styles.css`]]) {
+    const res = await nav(path);
+    expect([res.status, res.headers.get("location")], path).toEqual([302, to]);
+  }
+  // Never a script, and nothing but reads.
+  expect((await nav("/app.js", { "sec-fetch-dest": "script" })).status).toBe(404);
+  expect((await edge.fetch(at(TWIN, "/chat", { method: "POST", body: "x" }), e)).status).toBe(404);
+  const slash = await nav("/communities/?x=1");
+  expect([slash.status, slash.headers.get("location")]).toEqual([307, "/communities?x=1"]);
+  for (const path of ["/communities", "/messages", "/settings"]) {
+    const res = await nav(path);
+    expect([res.status, res.headers.get("location")], path).toEqual([302, `/__polynet/auth/start?return=${encodeURIComponent(path)}`]);
+  }
+  expect(e.site.seen).toEqual([]);
+  // Join is for someone who isn't a member yet.
+  expect((await nav("/join")).status).toBe(200);
+  // A twin of a site that doesn't exist is simply not found.
+  expect((await edge.fetch(at("https://nobody--me-staging.polynet.page", "/communities"), e)).status).toBe(404);
+});
+
+test("twin: with no rewriter to strip the frame, never the site's frame: Polynet's plain page, under the twin's policy", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps <Club>"));
+  const e = sitesEnv(deployedSite({ "/": "<html>home</html>", "/frame": '<html><body><script>steal()</script><polynet-page></polynet-page></body></html>' }));
+  const res = await edge.fetch(at(TWIN, "/communities", { headers: { "sec-fetch-mode": "navigate", cookie: `theme=dark; __Host-polynet_session=${TOKEN}` } }), e);
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  expect(html).not.toContain("steal()");
+  expect(html).toContain("<title>Your communities · Apps &#60;Club&#62;</title>");
+  expect(html).toContain(`<a href="${SITE}/">Back to Apps &#60;Club&#62;</a>`);
+  expect(html).toContain("<main><polynet-page></polynet-page></main>");
+  expect(html).toContain('<script type="module" src="/__polynet/ui.js"></script>');
+  const policy = res.headers.get("content-security-policy")!;
+  expect(policy).toMatch(/^default-src 'none'; script-src 'self'; style-src 'self' https:\/\/apps-community-staging\.polynet\.page https:\/\/fonts\.googleapis\.com 'sha256-[A-Za-z0-9+/=]+'; /);
+  for (const part of ["font-src https://apps-community-staging.polynet.page https://fonts.gstatic.com data:",
+    "img-src 'self' data: https://apps-community-staging.polynet.page https://live.example.convex.cloud", "connect-src 'self'",
+    "form-action 'self'", "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'"]) expect(policy).toContain(part);
+  expect(policy).not.toContain("unsafe-inline");
+  expect(Object.fromEntries(["x-frame-options", "referrer-policy", "cache-control", "cross-origin-opener-policy", "cross-origin-resource-policy", "x-content-type-options", "origin-agent-cluster"]
+    .map((name) => [name, res.headers.get(name)]))).toEqual({
+    "x-frame-options": "DENY", "referrer-policy": "same-origin", "cache-control": "no-store", "cross-origin-opener-policy": "same-origin",
+    "cross-origin-resource-policy": "same-origin", "x-content-type-options": "nosniff", "origin-agent-cluster": "?1",
+  });
+  // The frame is asked for as the site's own file, without Polynet's cookies.
+  expect(e.site.seen).toEqual([{ path: "/frame", navigate: false, conditional: false, cookie: "theme=dark" }]);
+  // No frame at all: the same plain page.
+  const bare = sitesEnv(deployedSite({ "/": "<html>home</html>" }));
+  const plain = await edge.fetch(at(TWIN, "/settings", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), bare);
+  expect([plain.status, await plain.text()]).toEqual([200, expect.stringContaining("<title>Settings · Apps &#60;Club&#62;</title>")]);
+});
+
+test("twin: the site sends its members' own pages to its twin, unless it has its own file there", async () => {
+  resetEdgeCaches();
+  const e = sitesEnv(deployedSite({ "/": "<html>home</html>", "/frame": FRAME, "/join": "<html><body>our join page</body></html>" }));
+  const res = await edge.fetch(at(SITE, "/communities?from=menu", { headers: { "sec-fetch-mode": "navigate" } }), e);
+  expect([res.status, res.headers.get("location")]).toEqual([302, `${TWIN}/communities?from=menu`]);
+  expect(e.site.seen).toEqual([{ path: "/communities?from=menu", navigate: false, conditional: false, cookie: "" }]);
+  expect(await (await edge.fetch(at(SITE, "/join", { headers: { "sec-fetch-mode": "navigate" } }), e)).text()).toContain("our join page");
+  // Off the sites domain there's no twin: the site's own, as before.
+  const local = await edge.fetch(request("/communities", { headers: { "sec-fetch-mode": "navigate" } }), env());
+  expect(local.status).toBe(200);
 });

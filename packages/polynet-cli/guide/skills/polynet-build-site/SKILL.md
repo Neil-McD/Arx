@@ -27,6 +27,11 @@ world, and every standard page lives inside it.
   also sets each of those pages' `<title>` to `<Page> · <community name>`
   (`Chat · Port Wren Lantern Guild`); the frame's own `<title>` shows only
   where Polynet can't read the community's name, so make it that name.
+  Write the header, nav and footer in HTML and CSS: the member's own pages
+  (Your communities, Messages, Settings, Join) show the same frame on the
+  site's private twin (`<slug>--me.polynet.page`) with every script, event
+  handler and `javascript:` link removed, so a script-drawn header comes out
+  empty there (`check` warns).
 - **The standard pages**, automatic, in this order in the shell's menu
   (Discover sits apart: it's every community, not this one):
 

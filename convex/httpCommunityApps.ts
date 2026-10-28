@@ -32,6 +32,8 @@ export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revok
 export const COMMUNITY_EDGE_PUBLIC_PATH = "/runtime/community_edge/public";
 export const COMMUNITY_EDGE_DISCOVER_PATH = "/runtime/community_edge/discover";
 export const COMMUNITY_APP_ACCOUNT_PATH = "/runtime/app/account";
+// Members' own pages: only sessions minted on a site's private twin.
+export const COMMUNITY_APP_MY_COMMUNITIES_PATH = "/runtime/app/me/communities";
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -74,7 +76,7 @@ function fromEdge(req: Request): boolean {
   return secretMatches(req.headers.get("x-polynet-edge-secret"), readEnv("POLYNET_COMMUNITY_EDGE_SECRET"));
 }
 
-type AppSession = { userId: string; authSubject: string; communityId: string };
+type AppSession = { userId: string; authSubject: string; communityId: string; kind: "site" | "private" };
 
 // Every front-end route: only the edge, with the member session from its
 // HttpOnly cookie, for the community domain it was issued to.
@@ -91,6 +93,18 @@ async function requireAppSession(ctx: any, req: Request): Promise<AppSession | R
   })) as { ok: false } | ({ ok: true } & AppSession);
   if (!session.ok) {
     return reply(401, { ok: false, code: "community_app_session_invalid", message: "The session is invalid or expired." });
+  }
+  return session;
+}
+
+// Every personal endpoint (the member's communities now; messages and settings
+// next): a session minted on the site's private twin, where only Polynet's code
+// runs. A site's own session, whatever its page's code asks, is refused.
+async function requirePrivateAppSession(ctx: any, req: Request): Promise<AppSession | Response> {
+  const session = await requireAppSession(ctx, req);
+  if (session instanceof Response) return session;
+  if (session.kind !== "private") {
+    return reply(403, { ok: false, code: "private_session_required", message: "Open this from your own pages." });
   }
   return session;
 }
@@ -394,6 +408,24 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       });
       if (!account) return reply(401, { ok: false, code: "community_app_session_invalid", message: "Sign in to this community." });
       return reply(200, { ok: true, account });
+    }),
+  });
+
+  // Your communities, on a site's private twin only.
+  args.http.route({
+    path: COMMUNITY_APP_MY_COMMUNITIES_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      if (!body) return reply(400, { ok: false, code: "invalid_request" });
+      const communities = await ctx.runQuery(internal.communityApps.listCommunityAppMemberCommunitiesInternal, {
+        userId: session.userId as any,
+        sitesDomain: typeof body.sites_domain === "string" ? body.sites_domain : undefined,
+        hostSuffix: typeof body.host_suffix === "string" ? body.host_suffix : undefined,
+      });
+      return reply(200, { ok: true, communities });
     }),
   });
 

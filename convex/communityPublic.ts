@@ -53,7 +53,7 @@ import {
   listSharedChannelReadableRows,
 } from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { siteHostname } from "./communitySites";
+import { registeredSiteOrigin } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
 import {
   requireCommunityBuilderAccess,
@@ -565,25 +565,17 @@ export const listSiteDiscoverCommunitiesInternal = internalQuery({
   handler: async (ctx, args) => {
     const domain = String(args.sitesDomain ?? "").trim().toLowerCase();
     const suffix = String(args.hostSuffix ?? "").trim().toLowerCase();
-    // The same shapes the deploy accepts; anything else means no site links.
-    const sitesOk = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(domain)
-      && (suffix === "" || /^-[a-z0-9-]{1,20}$/.test(suffix));
     const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
     return await Promise.all((await listDiscoverableCommunities(ctx, 100)).map(async (community) => {
       const slug = String(community.slug ?? "");
       const branding = await resolveCommunityBrandingFields(ctx, community);
-      const host = sitesOk ? siteHostname(slug, domain, suffix) : null;
-      const origin = host ? `https://${host}` : null;
-      const registered = origin
-        ? await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", origin)).first()
-        : null;
       return {
         slug,
         name: text(community.name, 120) ?? slug,
         one_liner: text(community.oneLiner, 300),
         avatar_url: branding.avatar_url,
         member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
-        site_url: registered && String(registered.communityId) === String(community._id) ? origin : null,
+        site_url: await registeredSiteOrigin(ctx, community, domain, suffix),
       };
     }));
   },

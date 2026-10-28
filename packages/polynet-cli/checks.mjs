@@ -28,8 +28,8 @@ export const LEARN_SEGMENT = /^[a-z0-9-]{1,120}~[A-Za-z0-9_-]{1,180}$/;
 // <polynet-page>, the shell's menu ("In this club", in this order) and these
 // checks all read it. below: the addresses under the page, one pattern per
 // level (/learn/<course>/<lesson>: either depth). network: a Polynet-wide page,
-// not this club's own (the menu lists it apart from "In this club"). Later
-// slices add /messages, /settings, /manage, /communities and /join.
+// not this club's own (the menu lists it apart from "In this club"). /manage
+// comes later; the member's own pages (PERSONAL_PAGES) live on the private twin.
 export const STANDARD_PAGES = [
   { path: "/chat", name: "chat", title: "Chat", blocks: ["polynet-channels", "polynet-chat"], below: [] },
   // members: /people/<handle> is the same page with that member's profile open.
@@ -41,6 +41,66 @@ export const STANDARD_PAGES = [
   // Public: every published community, signed in or not, in this site's style.
   { path: "/discover", name: "discover", title: "Discover", blocks: ["polynet-discover"], network: true, below: [] },
 ];
+
+// The member's own pages. They never run on the community's site: each site
+// <slug><suffix>.<sites domain> has a private twin, <slug>--me<suffix>.<sites
+// domain>, where the edge draws the site's frame with every script removed and
+// only Polynet's code runs, so the site's code can never read a member's
+// messages, settings or other communities. ready: built; the rest say "coming
+// soon" until their slice lands. signIn: only for a signed-in member (Join is
+// for someone who isn't one yet).
+export const PERSONAL_PAGES = [
+  { path: "/communities", name: "communities", title: "Your communities", ready: true, signIn: true },
+  { path: "/messages", name: "messages", title: "Messages", ready: false, signIn: true },
+  { path: "/settings", name: "settings", title: "Settings", ready: false, signIn: true },
+  { path: "/join", name: "join", title: "Join", ready: false, signIn: false },
+];
+
+// Which personal page a path is (exactly, or with one trailing slash), or null.
+export function personalPage(pathname) {
+  const path = String(pathname || "");
+  const bare = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  return PERSONAL_PAGES.find((page) => page.path === bare) ?? null;
+}
+
+// The shape of a community slug that can have a site on the sites domain. A
+// slug never ends in "-staging" (staging's addresses share the domain) or in
+// the twin's mark "--me", so no site address is ever another site's twin.
+// (Community slugs may contain "--", so the mark is reserved as an ending.)
+const SITE_SLUG = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/;
+export const PRIVATE_TWIN_MARK = "--me";
+const RESERVED_SLUG_ENDINGS = ["-staging", PRIVATE_TWIN_MARK];
+export function siteSlugShapeOk(slug) {
+  return typeof slug === "string" && SITE_SLUG.test(slug) && !RESERVED_SLUG_ENDINGS.some((end) => slug.endsWith(end));
+}
+
+const DOMAIN_SHAPE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const SUFFIX_SHAPE = /^(|-[a-z0-9-]{1,20})$/;
+
+// The one mapping between a site's host and its private twin's, used by the
+// edge, the backend (which registers both origins for sign-in) and the CLI.
+// Either returns null for anything that isn't exactly that shape.
+//   sunrise-climbing-club-staging.polynet.page <-> sunrise-climbing-club--me-staging.polynet.page
+export function privateTwinHost(siteHost, sitesDomain, hostSuffix = "") {
+  const slug = siteSlugOf(siteHost, sitesDomain, hostSuffix);
+  return slug ? `${slug}${PRIVATE_TWIN_MARK}${hostSuffix}.${sitesDomain}` : null;
+}
+
+export function siteHostOfTwin(twinHost, sitesDomain, hostSuffix = "") {
+  const host = String(twinHost || "").toLowerCase();
+  const ending = `${PRIVATE_TWIN_MARK}${hostSuffix}.${sitesDomain}`;
+  if (!DOMAIN_SHAPE.test(String(sitesDomain || "")) || !SUFFIX_SHAPE.test(String(hostSuffix ?? "")) || !host.endsWith(ending)) return null;
+  const slug = host.slice(0, -ending.length);
+  return siteSlugShapeOk(slug) ? `${slug}${hostSuffix}.${sitesDomain}` : null;
+}
+
+function siteSlugOf(siteHost, sitesDomain, hostSuffix) {
+  const host = String(siteHost || "").toLowerCase();
+  const ending = `${hostSuffix}.${sitesDomain}`;
+  if (!DOMAIN_SHAPE.test(String(sitesDomain || "")) || !SUFFIX_SHAPE.test(String(hostSuffix ?? "")) || !host.endsWith(ending)) return null;
+  const slug = host.slice(0, -ending.length);
+  return siteSlugShapeOk(slug) ? slug : null;
+}
 
 // Which standard page a path is: { page, below, handle, slash } or null.
 // below: the segments under the page (["sam"], ["intro~k1", "welcome~k2"]);
@@ -154,7 +214,19 @@ function checkFrame(files, problem) {
       `The frame is shown at ${FRAME_PATHS}, where those point somewhere else. ` +
       `Start them from the site's root: /${list[0].replace(/^(\.{1,2}\/)+/, "")}.`);
   }
+  // Members' own pages show the frame with every script removed, so a header or
+  // nav that a script fills in comes out empty there. A guess from the markup:
+  // the frame runs its own scripts and has a header or nav with no links or text.
+  const ownScripts = [...markup.matchAll(/<script\b[^>]*>/gi)].filter((m) => !SHELL_SCRIPT.test(attr(m[0], "src") ?? ""));
+  const emptyChrome = [...markup.matchAll(/<(header|nav)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi)]
+    .some((m) => !/<a\b/i.test(m[2]) && m[2].replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim().length < 2);
+  if (ownScripts.length && emptyChrome) {
+    problem("warning", frame.path, "frame.html seems to build its header or navigation with a script. Members' own pages " +
+      "(Your communities, Messages, Settings) show the frame with every script removed, so they'd have an empty header. " +
+      "Write the header, nav and footer into frame.html as HTML and CSS; scripts may add to them, not draw them.");
+  }
 }
+const SHELL_SCRIPT = /^\/__polynet\/ui\.js(\?.*)?$/;
 
 // Where a page file is served: /chat.html and /chat/index.html are /chat.
 function servedPath(path) {

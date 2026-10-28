@@ -1,5 +1,6 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
+import { internal } from "./_generated/api";
 import schema from "./schema";
 import { registerCommunitySiteRoutes } from "./httpCommunitySites";
 import { siteHostname, validateSiteManifest } from "./communitySites";
@@ -128,15 +129,16 @@ test("the owner deploys: upload pass, publish, address mapped and registered, re
   expect(calls[2]).toEqual({ method: "PUT", url: `${CF}/storage/kv/namespaces/routes-kv/values/${encodeURIComponent("host:run-club.polynet.page")}`, body: { script: "site-run-club", community: "run-club" } });
 
   const records = await f.t.run(async (ctx) => ({
-    domains: (await ctx.db.query("communityDomains").collect()).map((row) => [row.origin, row.communityId]),
+    domains: (await ctx.db.query("communityDomains").collect()).map((row) => [row.origin, row.communityId, row.kind ?? "site"]),
     deploys: (await ctx.db.query("communitySiteDeploys").collect()).map((row) => [row.hostname, row.fileCount, row.totalBytes, row.userId]),
   }));
-  expect(records.domains).toEqual([["https://run-club.polynet.page", f.ids.runClub]]);
+  // The site's origin and its private twin's (members' own pages), both the community's for sign-in.
+  expect(records.domains).toEqual([["https://run-club.polynet.page", f.ids.runClub, "site"], ["https://run-club--me.polynet.page", f.ids.runClub, "private"]]);
   expect(records.deploys).toEqual([["run-club.polynet.page", 2, 3120, f.ids.owner]]);
 
   // A redeploy keeps the address and adds a record.
   expect((await f.post("publish", "owner", { community: "run-club", completion_jwt: "done-2" })).status).toBe(200);
-  expect(await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").collect()).length)).toBe(1);
+  expect(await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").collect()).length)).toBe(2);
   expect(await f.t.run(async (ctx) => (await ctx.db.query("communitySiteDeploys").collect()).length)).toBe(2);
 });
 
@@ -172,6 +174,9 @@ test("sites are bounded static files at a safe address", async () => {
   // Staging shares the domain with a suffix; production can't claim staging's names.
   expect(siteHostname("run-club", "polynet.page", "-staging")).toBe("run-club-staging.polynet.page");
   expect(siteHostname("run-club-staging", "polynet.page")).toBeNull();
+  // A name ending in the private twin's mark is never a site: it would be another community's twin.
+  expect(siteHostname("run-club--me", "polynet.page")).toBeNull();
+  expect(siteHostname("run--club", "polynet.page")).toBe("run--club.polynet.page");
   expect(validateSiteManifest({ "/a/b/c.css": { hash: HASH, size: 10 } })).toMatchObject({ ok: true, fileCount: 1, totalBytes: 10 });
 });
 
@@ -190,4 +195,37 @@ test("the sites config reads the staging host suffix and refuses a malformed one
   expect(readSitesConfig({ ...base, POLYNET_SITES_HOST_SUFFIX: "-staging" })).toMatchObject({ hostSuffix: "-staging" });
   expect(readSitesConfig({ ...base, POLYNET_SITES_HOST_SUFFIX: ".evil" })).toBeNull();
   expect(readSitesConfig({ ...base, POLYNET_SITES_DOMAIN: "" })).toBeNull();
+});
+
+test("a twin address that belongs to another community refuses the deploy", async () => {
+  const f = await fixture();
+  fakeCloudflare();
+  await f.t.run((ctx) => ctx.db.insert("communityDomains", { communityId: f.ids.other, origin: "https://run-club--me.polynet.page", createdAt: 1 }));
+  expect(await f.post("publish", "owner", { community: "run-club", completion_jwt: "x" })).toMatchObject({ status: 409, body: { code: "site_address_taken" } });
+  expect(await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").collect()).length)).toBe(1);
+});
+
+test("sites deployed before twins get theirs from the backfill: only this environment's site addresses, once", async () => {
+  const f = await fixture();
+  await f.t.run(async (ctx) => {
+    for (const [communityId, origin] of [
+      [f.ids.runClub, "https://run-club-staging.polynet.page"],
+      // Production's address, a custom domain and an operator's local origin aren't staging's sites.
+      [f.ids.runClub, "https://run-club.polynet.page"],
+      [f.ids.admin, "https://admin.example.com"],
+      [f.ids.admin, "http://admin.localhost:8787"],
+      [f.ids.other, "https://other-club-staging.polynet.page"],
+    ] as const) await ctx.db.insert("communityDomains", { communityId, origin, createdAt: 1 });
+    // Someone else already holds other-club's twin address: refused, never moved.
+    await ctx.db.insert("communityDomains", { communityId: f.ids.admin, origin: "https://other-club--me-staging.polynet.page", createdAt: 1 });
+  });
+  const backfill = (args: Record<string, unknown> = {}) =>
+    f.t.mutation(internal.communitySites.registerSitePrivateTwinsInternal, { sitesDomain: "polynet.page", hostSuffix: "-staging", ...args });
+  expect(await backfill({ dryRun: true })).toMatchObject({ registered: ["https://run-club--me-staging.polynet.page", "https://other-club--me-staging.polynet.page"], isDone: true });
+  expect(await backfill()).toMatchObject({ registered: ["https://run-club--me-staging.polynet.page"], refused: ["https://other-club--me-staging.polynet.page"], isDone: true });
+  expect(await backfill()).toMatchObject({ registered: [], refused: ["https://other-club--me-staging.polynet.page"] });
+  const rows = await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").collect()).map((row) => [row.origin, row.communityId, row.kind ?? "site"]));
+  expect(rows).toContainEqual(["https://run-club--me-staging.polynet.page", f.ids.runClub, "private"]);
+  expect(rows).toContainEqual(["https://other-club--me-staging.polynet.page", f.ids.admin, "site"]);
+  expect(rows).toHaveLength(7);
 });

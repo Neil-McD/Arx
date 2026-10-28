@@ -85,7 +85,9 @@ export async function uploadSiteFiles(
   return token;
 }
 
-// Put the uploaded files live: the site's script, its address, its origin for sign-in, a record.
+// Put the uploaded files live: the site's script, its address, its origins (the
+// site's and its private twin's) for sign-in, a record. The twin needs no route of
+// its own: the edge finds it through the site's.
 export async function publishSite(args: {
   ctx: any; config: SitesConfig; site: SiteTarget; completionJwt: string; files: number; bytes: number;
 }): Promise<{ ok: true; url: string } | { ok: false; code: string; message: string }> {
@@ -113,6 +115,7 @@ export async function publishSite(args: {
   try {
     await args.ctx.runMutation((internal as any).communitySites.recordCommunitySiteDeployInternal, {
       communityId: site.communityId, userId: site.userId, hostname: site.hostname,
+      sitesDomain: config.domain, hostSuffix: config.hostSuffix,
       fileCount: args.files, totalBytes: args.bytes,
     });
   } catch (error) {
