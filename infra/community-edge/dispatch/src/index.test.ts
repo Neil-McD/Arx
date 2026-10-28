@@ -737,6 +737,10 @@ test("twin: one label beside the site's, mapped both ways by the shared helper, 
   expect(privateTwinHost("apps-community.polynet.page", "polynet.page/..", "")).toBeNull();
   expect(personalPage("/communities/")?.name).toBe("communities");
   expect(personalPage("/communities/x")).toBeNull();
+  // Messages has addresses under it: a conversation, or a new one.
+  expect(personalPage("/messages/new")?.name).toBe("messages");
+  expect(personalPage(`/messages/${"k".repeat(32)}/`)?.name).toBe("messages");
+  for (const path of ["/messages/new/x", "/messages/short", "/messages/has.dot.in.it.abcdefghijklmnop", "/messages/../settings"]) expect(personalPage(path), path).toBeNull();
 });
 
 test("twin: personal endpoints and the personal block never answer on the site, whoever asks", async () => {
@@ -844,7 +848,7 @@ test("twin: with no rewriter to strip the frame, never the site's frame: Polynet
   const policy = res.headers.get("content-security-policy")!;
   expect(policy).toMatch(/^default-src 'none'; script-src 'self'; style-src 'self' https:\/\/apps-community-staging\.polynet\.page https:\/\/fonts\.googleapis\.com 'sha256-[A-Za-z0-9+/=]+'; /);
   for (const part of ["font-src https://apps-community-staging.polynet.page https://fonts.gstatic.com data:",
-    "img-src 'self' data: https://apps-community-staging.polynet.page https://live.example.convex.cloud", "connect-src 'self' https://live.example.convex.cloud;",
+    "img-src 'self' data: https://apps-community-staging.polynet.page https://live.example.convex.cloud", "connect-src 'self' https://live.example.convex.cloud wss://live.example.convex.cloud;",
     "form-action 'self'", "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'"]) expect(policy).toContain(part);
   expect(policy).not.toContain("unsafe-inline");
   expect(Object.fromEntries(["x-frame-options", "referrer-policy", "cache-control", "cross-origin-opener-policy", "cross-origin-resource-policy", "x-content-type-options", "origin-agent-cluster"]
@@ -1012,4 +1016,145 @@ test("twin settings: the profile refusals read exactly as Studio words them", as
   const profileCodes = Object.keys(SETTINGS_MESSAGES).filter((code) => code.startsWith("profile_"));
   expect(profileCodes.length).toBe(12);
   for (const code of profileCodes) expect(SETTINGS_MESSAGES[code], code).toBe((PROFILE_MUTATION_ERROR_MESSAGES as Record<string, string>)[code]);
+});
+
+// Messages on the twin: the member's DMs through /__polynet/me/messages*.
+const CONVERSATION = "k".repeat(32);
+const MESSAGE_PATHS: Array<[string, "GET" | "POST"]> = [
+  ["/__polynet/me/messages", "GET"], [`/__polynet/me/messages/conversation?id=${CONVERSATION}`, "GET"], ["/__polynet/me/messages/start?to=sam", "GET"],
+  ["/__polynet/me/messages/send", "POST"], ["/__polynet/me/messages/upload", "POST"], ["/__polynet/me/messages/read", "POST"],
+  ["/__polynet/me/messages/mute", "POST"], ["/__polynet/me/messages/typing", "POST"], ["/__polynet/me/messages/block", "POST"],
+];
+
+test("twin messages: the routes and the messages module exist only on the twin, for its own pages", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  for (const [path, method] of MESSAGE_PATHS) {
+    expect((await edge.fetch(settingsCall(SITE, path, method), e)).status, `site ${path}`).toBe(404);
+    for (const site of ["same-site", "cross-site"]) {
+      expect((await edge.fetch(settingsCall(TWIN, path, method, { "sec-fetch-site": site }), e)).status, `${site} ${path}`).toBe(403);
+    }
+    // No session, no call; the other method, refused.
+    expect((await edge.fetch(at(TWIN, path, { method, body: method === "POST" ? "{}" : undefined, headers: { "content-type": "application/json" } }), e)).status, path).toBe(401);
+    expect((await edge.fetch(settingsCall(TWIN, path, method === "GET" ? "POST" : "GET"), e)).status, path).toBe(405);
+    if (method === "POST") expect((await edge.fetch(settingsCall(TWIN, path, method, { "content-type": "text/plain" }), e)).status, path).toBe(415);
+  }
+  expect((await edge.fetch(at(SITE, "/__polynet/blocks/messages.js"), e)).status).toBe(404);
+  // Addresses the page never makes are refused before the backend.
+  for (const path of ["/__polynet/me/messages/conversation?id=../x", "/__polynet/me/messages/conversation", `/__polynet/me/messages/conversation?id=${CONVERSATION}&before=0`,
+    "/__polynet/me/messages/start?to=a%20b", "/__polynet/me/messages/start"]) {
+    expect((await edge.fetch(settingsCall(TWIN, path, "GET"), e)).status, path).toBe(400);
+  }
+  // Sizes: a message up to Studio's 4,000 characters of any script fits, more doesn't; the rest take 1 KB.
+  const send = (text: string) => settingsCall(TWIN, "/__polynet/me/messages/send", "POST", {}, JSON.stringify({ conversation_id: CONVERSATION, text }));
+  expect((await edge.fetch(send("😀".repeat(7000)), e)).status).toBe(413);
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/messages/typing", "POST", {}, JSON.stringify({ x: "y".repeat(2000) })), e)).status).toBe(413);
+  expect(backend).not.toHaveBeenCalled();
+  expect((await edge.fetch(send("😀".repeat(4000)), e)).status).toBe(502);
+  expect(backend).toHaveBeenCalledTimes(1);
+  const module = await edge.fetch(at(TWIN, "/__polynet/blocks/messages.js"), e);
+  expect([module.status, module.headers.get("content-type")]).toEqual([200, "text/javascript; charset=utf-8"]);
+  const source = await module.text();
+  expect(source).toContain("export function mountMessages");
+  expect(source).toContain('"communityLive:watchMessages"');
+  expect(source).not.toContain("__POLYNET_MESSAGES_TEXT__");
+  expect(source).not.toContain("innerHTML");
+});
+
+test("twin messages: forwarded with the twin's session; only what the page draws comes back", async () => {
+  resetEdgeCaches();
+  const storage = "https://live.example.convex.cloud/api/storage";
+  const conversation = {
+    id: CONVERSATION, peer: { name: "Sam", handle: "sam", avatar_url: "https://tracker.example.com/a.png", user_id: "sam-subject", email: "sam@example.com" },
+    community_name: "Apps Club", unread_count: 2, muted: false, blocked: false, last_seq: 2, read_seq: 0, peer_read_seq: 2,
+    last_message: { preview: "Hi", from_me: false, at: "2026-10-28T10:00:00.000Z", sender_user_id: "sam-subject" }, participants: [{ user_id: "x" }],
+  };
+  const message = { id: "m1", seq: 1, from_me: false, text: "Hi", created_at: "2026-10-28T10:00:00.000Z", client_message_id: "key-1", sender_user_id: "sam-subject",
+    attachments: [{ id: "a1", name: "wall.png", kind: "image", mime: "image/png", size: 4, url: `${storage}/f1`, storage_id: "kg1" },
+      { id: "a2", name: "x.html", kind: "file", mime: "text/html", size: 4, url: "https://evil.example.com/x.html" }] };
+  const answers: Record<string, unknown> = {
+    "/runtime/app/me/messages": { ok: true, conversations: [conversation, { id: "../bad" }] },
+    "/runtime/app/me/messages/conversation": { ok: true, conversation, messages: [message], has_more: true },
+    "/runtime/app/me/messages/start": { ok: true, conversation_id: null, peer: conversation.peer },
+    "/runtime/app/me/messages/send": { ok: true, conversation_id: CONVERSATION, message },
+    "/runtime/app/me/messages/upload": { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" },
+    "/runtime/app/me/messages/block": { ok: true, conversation: { ...conversation, blocked: true } },
+    "/runtime/app/me/messages/typing": { ok: true, typing: true, by: "x" },
+  };
+  const backend = vi.fn(async (url: string, _init?: RequestInit) => Response.json(answers[new URL(url).pathname] ?? { ok: false }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  const read = async (path: string, method = "GET", body = "{}") => {
+    const res = await edge.fetch(settingsCall(TWIN, path, method, {}, body), e);
+    return [res.status, await res.json()];
+  };
+  const shaped = {
+    id: CONVERSATION, peer: { name: "Sam", handle: "sam", avatar_url: null }, community_name: "Apps Club", unread_count: 2, muted: false, blocked: false,
+    last_seq: 2, read_seq: 0, peer_read_seq: 2, last_message: { preview: "Hi", from_me: false, at: "2026-10-28T10:00:00.000Z" },
+  };
+  const shapedMessage = { id: "m1", seq: 1, from_me: false, text: "Hi", created_at: "2026-10-28T10:00:00.000Z", client_message_id: "key-1",
+    attachments: [{ id: "a1", name: "wall.png", kind: "image", mime: "image/png", size: 4, url: `${storage}/f1` }] };
+  expect(await read("/__polynet/me/messages")).toEqual([200, { ok: true, conversations: [shaped] }]);
+  const [path, init] = backend.mock.calls[0];
+  expect(path).toBe("https://api.example.convex.site/runtime/app/me/messages");
+  expect(init?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}`, "x-polynet-edge-secret": "edge-secret" });
+  expect(await read(`/__polynet/me/messages/conversation?id=${CONVERSATION}&before=7`)).toEqual([200, { ok: true, conversation: shaped, messages: [shapedMessage], has_more: true }]);
+  expect(JSON.parse(String(backend.mock.calls[1][1]?.body))).toEqual({ conversation_id: CONVERSATION, before_seq: 7 });
+  expect(await read("/__polynet/me/messages/start?to=%40sam")).toEqual([200, { ok: true, conversation_id: null, peer: { name: "Sam", handle: "sam", avatar_url: null } }]);
+  expect(JSON.parse(String(backend.mock.calls[2][1]?.body))).toEqual({ handle: "@sam" });
+  const sendBody = JSON.stringify({ to: "sam", text: "Hi", client_message_id: "key-1" });
+  expect(await read("/__polynet/me/messages/send", "POST", sendBody)).toEqual([200, { ok: true, conversation_id: CONVERSATION, message: shapedMessage }]);
+  expect(String(backend.mock.calls[3][1]?.body)).toBe(sendBody);
+  expect(await read("/__polynet/me/messages/upload", "POST", JSON.stringify({ conversation_id: CONVERSATION }))).toEqual([200, { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" }]);
+  expect(await read("/__polynet/me/messages/block", "POST", JSON.stringify({ conversation_id: CONVERSATION, blocked: true }))).toEqual([200, { ok: true, conversation: { ...shaped, blocked: true } }]);
+  expect(await read("/__polynet/me/messages/typing", "POST", JSON.stringify({ conversation_id: CONVERSATION, typing: true }))).toEqual([200, { ok: true, typing: true }]);
+  // Nothing about anyone's account, and no storage ids, ever leaves the edge.
+  expect(JSON.stringify(await Promise.all(["/__polynet/me/messages", `/__polynet/me/messages/conversation?id=${CONVERSATION}`].map((p) => read(p))))).not.toMatch(/subject|example\.com\/x|storage_id|kg1|participants/);
+  // An upload address anywhere but Polynet's storage is never handed to the page.
+  answers["/runtime/app/me/messages/upload"] = { ok: true, upload_url: "https://evil.example.com/api/storage/upload?token=t" };
+  expect(await read("/__polynet/me/messages/upload", "POST", "{}")).toEqual([502, { ok: false, code: "messages_unavailable" }]);
+  // A core's refusal keeps its code (never its message); a session the backend refuses is cleared.
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false, code: "dm_rate_limited", message: "<b>raw</b>" }, { status: 429 })));
+  expect(await read("/__polynet/me/messages/send", "POST", sendBody)).toEqual([429, { ok: false, code: "dm_rate_limited" }]);
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false }, { status: 401 })));
+  const refused = await edge.fetch(settingsCall(TWIN, "/__polynet/me/messages", "GET"), e);
+  expect(refused.status).toBe(401);
+  expect(refused.headers.get("set-cookie")).toMatch(/^__Host-polynet_session=; Path=\/; HttpOnly; SameSite=Lax; Max-Age=0; Secure$/);
+});
+
+test("twin messages: the addresses under /messages are the twin's pages, and the site sends them there", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", identity("Apps Club"));
+  const e = sitesEnv();
+  const nav = (origin: string, path: string, headers: Record<string, string> = {}) =>
+    edge.fetch(at(origin, path, { headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", ...headers } }), e);
+  // A profile's Message on the site: to the twin, the handle kept.
+  for (const path of ["/messages/new?to=sam", `/messages/${CONVERSATION}`]) {
+    const res = await nav(SITE, path);
+    expect([res.status, res.headers.get("location")], path).toEqual([302, `${TWIN}${path}`]);
+  }
+  // On the twin: signed in first (back to the same address), then the page in the site's frame.
+  const out = await nav(TWIN, "/messages/new?to=sam");
+  expect([out.status, out.headers.get("location")]).toEqual([302, `/__polynet/auth/start?return=${encodeURIComponent("/messages/new?to=sam")}`]);
+  const cookie = `__Host-polynet_session=${TOKEN}`;
+  const page = await nav(TWIN, `/messages/${CONVERSATION}`, { cookie });
+  expect(page.status).toBe(200);
+  expect(await page.text()).toContain("<title>Messages · Apps Club</title>");
+  const slash = await nav(TWIN, `/messages/${CONVERSATION}/`, { cookie });
+  expect([slash.status, slash.headers.get("location")]).toEqual([307, `/messages/${CONVERSATION}`]);
+  // Anything else under /messages isn't a page here.
+  const other = await nav(TWIN, "/messages/../../x", { cookie });
+  expect(other.status).toBe(302);
+  expect(other.headers.get("location")).toMatch(new RegExp(`^${SITE.replace(/\./g, "\\.")}/`));
+});
+
+test("twin messages: the refusals read as Studio words them", async () => {
+  const { MESSAGES_TEXT } = await import("./blocks/messages");
+  const { readFileSync } = await import("node:fs");
+  const studio = readFileSync(new URL("../../../../apps/web/src/components/WebDirectMessagesHost.tsx", import.meta.url), "utf8");
+  for (const code of ["dm_rate_limited", "dm_conversation_access_required", "dm_target_not_found", "dm_message_payload_required", "dm_attachment_invalid"]) {
+    expect(studio, code).toContain(JSON.stringify(MESSAGES_TEXT[code]));
+  }
 });

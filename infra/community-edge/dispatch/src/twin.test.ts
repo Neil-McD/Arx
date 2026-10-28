@@ -80,6 +80,7 @@ async function backend(request: Request): Promise<Response> {
     // The first sign-out hands back a ticket; the other origin's, with it, just ends.
     return Response.json(JSON.parse(body).ticket ? { ok: true } : { ok: true, signout_ticket: TICKET });
   }
+  if (url.pathname === "/runtime/app/me/messages" || url.pathname.startsWith("/runtime/app/me/messages/")) return messagesBackend(url.pathname, JSON.parse(body || "{}"));
   if (url.pathname.startsWith("/runtime/app/me/") && url.pathname !== "/runtime/app/me/communities") return settingsBackend(url.pathname, JSON.parse(body || "{}"));
   return Response.json({ ok: true, value: {} });
 }
@@ -129,6 +130,84 @@ function settingsBackend(path: string, body: Record<string, any>): Response {
       return refuse("not_found", 404);
   }
 }
+
+// The messages routes, standing in for Studio's DM helpers: two conversations,
+// a person who can be messaged anew, and one who can't.
+const SAM = `sam${"1".repeat(29)}`;
+const OWL = `owl${"2".repeat(29)}`;
+const NEWBIE = `new${"3".repeat(29)}`;
+const dm = {
+  conversations: [] as any[], messages: {} as Record<string, any[]>, calls: [] as Array<[string, any]>, failSend: null as string | null,
+};
+function resetMessages() {
+  const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  dm.conversations = [
+    { id: SAM, peer: { name: "Sam Rivera", handle: "sam", avatar_url: null }, community_name: "Sunrise Climbing Club", unread_count: 2, muted: false, blocked: false,
+      last_seq: 2, read_seq: 0, peer_read_seq: 0, last_message: { preview: "See you at 7?", from_me: false, at: at(1) } },
+    { id: OWL, peer: { name: "Night <b>Owl</b>", handle: "owl", avatar_url: null }, community_name: "Night Owls", unread_count: 0, muted: true, blocked: false,
+      last_seq: 1, read_seq: 1, peer_read_seq: 1, last_message: { preview: "You: thanks", from_me: true, at: at(90) } },
+  ];
+  dm.messages = {
+    [SAM]: [
+      { id: "m1", seq: 1, from_me: false, text: "Morning! Route: https://example.com/route <b>x</b>", attachments: [], created_at: at(3), client_message_id: null },
+      { id: "m2", seq: 2, from_me: false, text: "See you at 7?", attachments: [], created_at: at(1), client_message_id: null },
+    ],
+    [OWL]: [{ id: "o1", seq: 1, from_me: true, text: "thanks", attachments: [], created_at: at(90), client_message_id: null }],
+  };
+  dm.calls = [];
+  dm.failSend = null;
+}
+function messagesBackend(path: string, body: Record<string, any>): Response {
+  dm.calls.push([path, body]);
+  const refuse = (code: string, status = 400) => Response.json({ ok: false, code }, { status });
+  const find = (id: string) => dm.conversations.find((row) => row.id === id);
+  switch (path) {
+    case "/runtime/app/me/messages":
+      return Response.json({ ok: true, conversations: dm.conversations });
+    case "/runtime/app/me/messages/conversation": {
+      const row = find(body.conversation_id);
+      return row ? Response.json({ ok: true, conversation: row, messages: dm.messages[row.id], has_more: false }) : refuse("dm_conversation_not_found", 404);
+    }
+    case "/runtime/app/me/messages/start":
+      if (body.handle === "sam") return Response.json({ ok: true, conversation_id: SAM, peer: null });
+      if (body.handle === "newbie") return Response.json({ ok: true, conversation_id: null, peer: { name: "Newbie", handle: "newbie", avatar_url: null } });
+      return refuse("dm_conversation_access_required", 403);
+    case "/runtime/app/me/messages/send": {
+      if (dm.failSend) { const code = dm.failSend; dm.failSend = null; return refuse(code, 429); }
+      let row = body.to ? null : find(body.conversation_id);
+      if (body.to === "newbie") {
+        row = { id: NEWBIE, peer: { name: "Newbie", handle: "newbie", avatar_url: null }, community_name: "Sunrise Climbing Club", unread_count: 0, muted: false,
+          blocked: false, last_seq: 0, read_seq: 0, peer_read_seq: 0, last_message: null };
+        dm.conversations.unshift(row);
+        dm.messages[NEWBIE] = [];
+      }
+      if (!row) return refuse("dm_conversation_not_found", 404);
+      row.last_seq += 1;
+      row.read_seq = row.last_seq;
+      const message = { id: `sent${row.last_seq}`, seq: row.last_seq, from_me: true, text: body.text, created_at: new Date().toISOString(), client_message_id: body.client_message_id,
+        attachments: (body.attachments ?? []).map((file: any, index: number) => ({ id: `a${index}`, name: file.name, kind: file.type, mime: "image/png", size: 4, url: `${STORAGE}/api/storage/${file.storage_id}` })) };
+      dm.messages[row.id].push(message);
+      row.last_message = { preview: `You: ${body.text}`, from_me: true, at: message.created_at };
+      return Response.json({ ok: true, conversation_id: row.id, message });
+    }
+    case "/runtime/app/me/messages/upload":
+      return Response.json({ ok: true, upload_url: `${STORAGE}/api/storage/upload?token=dm` });
+    case "/runtime/app/me/messages/read": {
+      const row = find(body.conversation_id);
+      Object.assign(row, { read_seq: Math.max(row.read_seq, body.through_seq), unread_count: 0 });
+      return Response.json({ ok: true, conversation: row });
+    }
+    case "/runtime/app/me/messages/mute":
+      return Response.json({ ok: true, conversation: Object.assign(find(body.conversation_id), { muted: body.muted }) });
+    case "/runtime/app/me/messages/block":
+      return Response.json({ ok: true, conversation: Object.assign(find(body.conversation_id), { blocked: body.blocked }) });
+    case "/runtime/app/me/messages/typing":
+      return Response.json({ ok: true, typing: body.typing });
+    default:
+      return refuse("not_found", 404);
+  }
+}
+const dmCalls = (path: string) => dm.calls.filter(([called]) => called === `/runtime/app/me/messages/${path}`).map(([, body]) => body);
 
 let mf: Miniflare;
 beforeAll(async () => {
@@ -200,7 +279,7 @@ test("the twin draws the site's frame with nothing of the site's left to run", a
 });
 
 // The page in a browser: the edge answers every request to the site and its twin.
-async function openTwin(type: BrowserType, path: string, token: string, siteToken?: string) {
+async function openTwin(type: BrowserType, path: string, token: string, siteToken?: string, options: { fakeLive?: boolean } = {}) {
   const browser = await type.launch();
   const context = await browser.newContext();
   await context.addCookies([{ name: "__Host-polynet_session", value: token, url: `${TWIN}/`, secure: true, httpOnly: true, sameSite: "Lax" }]);
@@ -231,6 +310,21 @@ async function openTwin(type: BrowserType, path: string, token: string, siteToke
   await page.addInitScript(() => {
     (window as any).violations = [];
     document.addEventListener("securitypolicyviolation", (event) => (window as any).violations.push(`${event.violatedDirective} ${event.blockedURI}`));
+  });
+  // Polynet's live updates, stood in for: each subscription is recorded, and the test answers it.
+  if (options.fakeLive) await page.addInitScript(() => {
+    const watches: any[] = [];
+    (window as any).liveWatches = watches;
+    (window as any).convex = { ConvexClient: class {
+      url: string;
+      constructor(url: string) { this.url = url; }
+      onUpdate(name: string, args: any, callback: (result: unknown) => void) {
+        const entry = { name, args, callback, url: this.url, live: true };
+        watches.push(entry);
+        return () => { entry.live = false; };
+      }
+      close() {}
+    } };
   });
   await page.goto(TWIN + path);
   return { browser, page };
@@ -286,12 +380,12 @@ test("a session the backend refuses shows the page's own sign-in, never a loop",
 }, 60_000);
 
 test("the other personal pages are quiet placeholders inside the frame for now", async () => {
-  const { browser, page } = await openTwin(chromium, "/messages", TOKEN);
+  const { browser, page } = await openTwin(chromium, "/join", TOKEN);
   try {
     const personal = page.locator("polynet-personal");
     await expect.poll(() => personal.getAttribute("state")).toBe("soon");
     expect(await personal.locator("[part=soon]").textContent()).toBe("This page is coming soon.");
-    expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Messages");
+    expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Join");
     expect(await page.evaluate(() => (window as any).siteRan)).toBeUndefined();
   } finally {
     await browser.close();
@@ -409,6 +503,209 @@ test("Settings: signing out ends the twin's session and the site's, then lands o
       [SITE, { token: siteToken, ticket: TICKET }],
     ]);
     expect(await page.context().cookies([`${TWIN}/`, `${SITE}/`])).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+// Messages: the member's inbox and conversations, inside the same stripped
+// frame, through the real edge; live updates through a stand-in for Polynet's.
+type Page = Awaited<ReturnType<typeof openTwin>>["page"];
+const answerWatch = (page: Page, conversation: string | null, result: unknown) => page.evaluate(([id, value]) => {
+  for (const watch of (window as any).liveWatches) if (watch.live && (watch.args.conversation ?? null) === id) watch.callback(value);
+}, [conversation, result] as const);
+const watching = (page: Page) => page.evaluate(() => (window as any).liveWatches.filter((watch: any) => watch.live)
+  .map((watch: any) => [watch.name, watch.url, watch.args.conversation ?? null, /^pnw_[A-Za-z0-9_-]{43}$/.test(watch.args.token)]));
+
+for (const [engine, type] of ENGINES) {
+  const installed = engine === "chromium" || existsSync(type.executablePath());
+  test.runIf(installed)(`${engine}: Messages renders the inbox and a conversation inside the stripped frame; send, typing and read state, live`, async () => {
+    resetMessages();
+    const { browser, page } = await openTwin(type, "/messages", TOKEN, undefined, { fakeLive: true });
+    try {
+      const personal = page.locator("polynet-personal");
+      await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+      expect(await page.title()).toBe("Messages · Sunrise Climbing Club");
+      expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Messages");
+      // The inbox: newest first, unread and muted marked, names as text, never markup.
+      const rows = personal.locator("[part=conversation]");
+      await expect.poll(() => rows.count()).toBe(2);
+      expect(await personal.locator("[part=conversation-name]").allTextContents()).toEqual(["Sam Rivera", "Night <b>Owl</b>"]);
+      expect(await rows.first().locator("[part=unread]").textContent()).toBe("2");
+      expect(await rows.nth(1).locator("[part=muted-mark]").textContent()).toBe("Muted");
+      expect(await personal.locator("[part=conversation-preview]").allTextContents()).toEqual(["See you at 7?", "You: thanks"]);
+      // Search by name.
+      await personal.locator("[part=search]").fill("owl");
+      await expect.poll(() => rows.count()).toBe(1);
+      await personal.locator("[part=search]").fill("");
+      // Live: one watch, at Polynet's live origin, with the twin session's watch token.
+      await expect.poll(() => watching(page)).toEqual([["communityLive:watchMessages", STORAGE, null, true]]);
+      // Open Sam's: the conversation at its own address, read up to the newest message.
+      await rows.first().click();
+      await page.waitForURL(`${TWIN}/messages/${SAM}`);
+      const log = personal.locator("[part=log]");
+      await expect.poll(() => log.locator("[part~=message]").count()).toBe(2);
+      expect(await personal.locator("[part=thread-header] h2").textContent()).toBe("Sam Rivera");
+      expect(await personal.locator("[part=peer-link]").getAttribute("href")).toBe(`${SITE}/people/sam`);
+      // Text stays text; web addresses are links that open apart.
+      const first = log.locator("[part~=message]").first();
+      expect(await first.locator("[part=bubble]").textContent()).toBe("Morning! Route: https://example.com/route <b>x</b>");
+      expect(await first.locator("[part=bubble] b").count()).toBe(0);
+      expect(await first.locator("a").evaluate((link) => [link.getAttribute("href"), link.getAttribute("target"), link.getAttribute("rel")]))
+        .toEqual(["https://example.com/route", "_blank", "noopener noreferrer nofollow"]);
+      await expect.poll(() => dmCalls("read")).toEqual([{ conversation_id: SAM, through_seq: 2 }]);
+      await expect.poll(() => rows.first().locator("[part=unread]").count()).toBe(0);
+      expect(await rows.first().getAttribute("aria-current")).toBe("page");
+      await expect.poll(() => watching(page)).toEqual([["communityLive:watchMessages", STORAGE, null, true], ["communityLive:watchMessages", STORAGE, SAM, true]]);
+      // Typing out: Studio's lease, renewed while typing; sending clears it.
+      const input = personal.locator("[part=input]");
+      await input.pressSequentially("Hello Sam");
+      await expect.poll(() => dmCalls("typing")[0]).toEqual({ conversation_id: SAM, typing: true });
+      await input.press("Enter");
+      await expect.poll(() => dmCalls("send").length).toBe(1);
+      expect(dmCalls("send")[0]).toEqual({ conversation_id: SAM, text: "Hello Sam", attachments: [], client_message_id: expect.stringMatching(/^[0-9a-f]{32}$/) });
+      await expect.poll(() => log.locator("[part~=message-mine]").allTextContents()).toEqual([expect.stringContaining("Hello Sam")]);
+      expect(dmCalls("typing").at(-1)).toEqual({ conversation_id: SAM, typing: false });
+      expect(await input.inputValue()).toBe("");
+      // Live: Sam replies and is typing; the page re-reads and says so. Then Sam stops.
+      dm.messages[SAM].push({ id: "m4", seq: 4, from_me: false, text: "On my way", attachments: [], created_at: new Date().toISOString(), client_message_id: null });
+      await answerWatch(page, SAM, { ok: true, version: "v2", typing: { lease_until: Date.now() + 4000, expires_in_ms: 4000 } });
+      await expect.poll(() => log.locator("[part~=message-theirs]").last().textContent()).toContain("On my way");
+      expect(await personal.locator("[part=typing]").textContent()).toBe("Sam Rivera is typing…");
+      await answerWatch(page, SAM, { ok: true, version: "v2", typing: null });
+      await expect.poll(() => personal.locator("[part=typing]").textContent()).toBe("");
+      // Read state: once Sam has read the member's last message, it says so.
+      dm.messages[SAM].push({ id: "sent5", seq: 5, from_me: true, text: "See you there", attachments: [], created_at: new Date().toISOString(), client_message_id: null });
+      dm.conversations[0].peer_read_seq = 5;
+      await answerWatch(page, SAM, { ok: true, version: "v3", typing: null });
+      await expect.poll(() => personal.locator("[part=seen]").textContent()).toBe("Seen");
+      // The inbox follows its own signal.
+      dm.conversations[1].unread_count = 4;
+      await answerWatch(page, null, { ok: true, version: "i2" });
+      await expect.poll(() => rows.nth(1).locator("[part=unread]").textContent()).toBe("4");
+      // Back to the inbox, by the browser's Back.
+      await page.goBack();
+      await expect.poll(() => watching(page)).toEqual([["communityLive:watchMessages", STORAGE, null, true]]);
+      expect(await page.evaluate(() => (window as any).siteRan)).toBeUndefined();
+      expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
+}
+
+test("Messages: a profile's Message starts a conversation with the first message; one that exists opens directly; a refusal says so", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, "/messages/new?to=newbie", TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=thread-header] h2").textContent()).toBe("Newbie");
+    expect(await personal.locator("[part=log] [part=empty]").textContent()).toBe("Say hello to Newbie.");
+    // Nothing to mute or block until there's a conversation, and nothing created yet.
+    expect(await personal.locator("[part=mute], [part=block]").count()).toBe(0);
+    expect(dmCalls("send")).toEqual([]);
+    const input = personal.locator("[part=input]");
+    await input.fill("Welcome to the club!");
+    await personal.locator("[part=send]").click();
+    await page.waitForURL(`${TWIN}/messages/${NEWBIE}`);
+    expect(dmCalls("send")).toEqual([{ to: "newbie", text: "Welcome to the club!", attachments: [], client_message_id: expect.any(String) }]);
+    await expect.poll(() => personal.locator("[part~=message-mine]").allTextContents()).toEqual([expect.stringContaining("Welcome to the club!")]);
+    await expect.poll(() => personal.locator("[part=conversation-name]").first().textContent()).toBe("Newbie");
+    // Someone the member already talks to: straight to that conversation (Back skips the hop).
+    await page.goto(`${TWIN}/messages/new?to=sam`);
+    await page.waitForURL(`${TWIN}/messages/${SAM}`);
+    await expect.poll(() => personal.locator("[part=thread-header] h2").textContent()).toBe("Sam Rivera");
+    // Someone they can't message: Studio's words, and the way back.
+    await page.goto(`${TWIN}/messages/new?to=outsider`);
+    await expect.poll(() => personal.locator("[part=thread] [role=alert] p").textContent()).toBe("You can't message this person right now.");
+    expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: mute; attachments straight to storage; a failed send kept with Retry under the same key; block asks first", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    const mute = personal.locator("[part=mute]");
+    await expect.poll(() => mute.getAttribute("aria-pressed")).toBe("false");
+    await mute.click();
+    await expect.poll(() => mute.getAttribute("aria-pressed")).toBe("true");
+    expect(dmCalls("mute")).toEqual([{ conversation_id: SAM, muted: true }]);
+    await expect.poll(() => personal.locator("[part=conversation]").first().locator("[part=muted-mark]").count()).toBe(1);
+    // A photo: an upload address from the twin, the file straight to Polynet's storage.
+    uploads.length = 0;
+    await personal.locator("input[type=file]").setInputFiles({ name: "wall.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
+    const chip = personal.locator("[part=chip]");
+    await expect.poll(() => chip.getAttribute("data-state")).toBe("ready");
+    expect(uploads).toEqual([{ type: "image/png", bytes: expect.any(Number) }]);
+    expect(dmCalls("upload")).toEqual([{ conversation_id: SAM }]);
+    // Something that can't be sent never uploads.
+    await personal.locator("input[type=file]").setInputFiles({ name: "run.exe", mimeType: "application/x-msdownload", buffer: Buffer.from("MZ") });
+    await expect.poll(() => personal.locator("[part=composer] [part=error]").textContent()).toBe("run.exe: That kind of file can't be sent.");
+    expect(uploads).toHaveLength(1);
+    // Refused: kept on screen with Studio's words and Retry; the retry is the same message.
+    dm.failSend = "dm_rate_limited";
+    await personal.locator("[part=input]").fill("The wall today");
+    await personal.locator("[part=send]").click();
+    const pending = personal.locator("[part~=message-pending]");
+    await expect.poll(() => pending.locator("[part=meta]").textContent()).toContain("You're sending messages too quickly. Give it a minute and try again.");
+    await pending.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(() => dmCalls("send").length).toBe(2);
+    const [failed, retried] = dmCalls("send");
+    expect(retried).toEqual(failed);
+    expect(retried).toMatchObject({ conversation_id: SAM, text: "The wall today", attachments: [{ storage_id: "kg2photo", name: "wall.png", type: "image" }] });
+    await expect.poll(() => personal.locator("[part~=message-mine] img").getAttribute("src")).toBe(`${STORAGE}/api/storage/kg2photo`);
+    await expect.poll(() => pending.count()).toBe(0);
+    // Block asks first; Cancel changes nothing.
+    await personal.locator("[part=block]").click();
+    expect(await personal.locator("[part=confirm] p").first().textContent())
+      .toBe("Block Sam Rivera? Neither of you will be able to message the other. You can unblock them later.");
+    await personal.getByRole("button", { name: "Cancel" }).click();
+    expect(dmCalls("block")).toEqual([]);
+    await personal.locator("[part=block]").click();
+    await personal.locator("[part=block-confirm]").click();
+    await expect.poll(() => personal.locator("[part=blocked-note]").textContent()).toBe("You blocked Sam Rivera. Unblock them to message each other again.");
+    expect(dmCalls("block")).toEqual([{ conversation_id: SAM, blocked: true }]);
+    expect(await personal.locator("[part=input]").count()).toBe(0);
+    expect(await personal.locator("[part=block]").textContent()).toBe("Unblock");
+    expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: the real live client loads from the twin and opens its socket to Polynet's live origin, inside the page's policy", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, "/messages", TOKEN);
+  try {
+    // The test's live origin doesn't exist, so the socket fails to connect, after the page's policy let it try.
+    const console: string[] = [];
+    page.on("console", (message) => console.push(message.text()));
+    await page.reload();
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=conversation]").count()).toBe(2);
+    await expect.poll(() => page.evaluate(() => typeof (window as any).convex?.ConvexClient)).toBe("function");
+    await expect.poll(() => console.some((line) => line.includes("WebSocket connection to 'wss://live.example.convex.cloud/"))).toBe(true);
+    expect(console.filter((line) => /Content Security Policy|Refused to/i.test(line))).toEqual([]);
+    expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: a session the backend refuses shows the page's own sign-in, and nothing of anyone's messages", async () => {
+  resetMessages();
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, REFUSED, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
+    expect(await personal.locator("[part=signin]").textContent()).toBe("Sign in");
+    expect(await personal.textContent()).not.toContain("Sam");
+    // Nothing left watching once it's signed out.
+    await expect.poll(() => watching(page)).toEqual([]);
   } finally {
     await browser.close();
   }

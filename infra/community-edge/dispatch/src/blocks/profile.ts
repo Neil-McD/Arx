@@ -89,8 +89,10 @@ function urlWith(handle) {
   return location.pathname + (search ? "?" + search : "") + location.hash;
 }
 
-// Message opens the member's Polynet inbox for now (Polynet has no link to one
-// person's conversation yet). Read once per page.
+// Message opens the conversation with this member on the site's private twin
+// (the member's own pages, where the site's code never runs), in the same tab:
+// /messages/new?to=<handle> opens the one they already have, or starts one.
+// Where a site has no twin: the member's inbox in Polynet, read once per page.
 let messagesRead = null;
 function readMessagesLink() {
   if (!messagesRead) {
@@ -99,6 +101,12 @@ function readMessagesLink() {
     promise.catch(() => { if (messagesRead === promise) messagesRead = null; });
   }
   return messagesRead;
+}
+async function messageLink(session, handle) {
+  const twin = typeof session.private_origin === "string" && /^https?:\/\//.test(session.private_origin) ? session.private_origin : null;
+  if (twin) return { href: (twin === location.origin ? "" : twin) + "/messages/new?to=" + encodeURIComponent(handle), studio: false };
+  const studio = await readMessagesLink().catch(() => null);
+  return studio ? { href: studio, studio: true } : null;
 }
 
 class PolynetProfile extends HTMLElement {
@@ -206,11 +214,11 @@ class PolynetProfile extends HTMLElement {
       this.setStatus("ready");
       // Nobody messages themselves.
       if (this.mine) return;
-      const link = await readMessagesLink().catch(() => null);
+      const link = handle ? await messageLink(session, handle) : null;
       if (generation !== this.generation || !link || !this.reach) return;
       this.reach.replaceChildren(
-        h("a", { class: "primary", part: "message", href: link, "aria-label": "Message " + (this.data.name || "@" + handle), text: "Message" }),
-        h("p", { class: "note", part: "message-note", text: "Opens your messages in Polynet." }),
+        h("a", { class: "primary", part: "message", href: link.href, "aria-label": "Message " + (this.data.name || "@" + handle), text: "Message" }),
+        link.studio ? h("p", { class: "note", part: "message-note", text: "Opens your messages in Polynet." }) : null,
       );
     } catch (error) {
       if (generation !== this.generation) return;

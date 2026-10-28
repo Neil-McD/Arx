@@ -165,6 +165,7 @@ export type DirectMessageParticipant = {
   id: string;
   participant_type: "user" | "agent";
   user_id: string | null;
+  handle?: string | null;
   display_name: string | null;
   avatar_url: string | null;
   avatar_focus_x?: number | null;

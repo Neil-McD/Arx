@@ -22,6 +22,7 @@ import {
   verifyCommunityAppSignoutTicket,
 } from "../shared/communityAppSession";
 import type { PolynetCanonicalToolName } from "../shared/polynetCanonicalToolContract";
+import { SITE_DM_TEXT_MAX_CHARS } from "../shared/directMessageSiteShape";
 
 export const COMMUNITY_APP_RUNTIME_PATH = "/runtime/app";
 export const COMMUNITY_APP_UPLOAD_PATH = "/runtime/app/upload";
@@ -46,6 +47,18 @@ export const COMMUNITY_APP_MY_AVATAR_PATH = "/runtime/app/me/avatar";
 export const COMMUNITY_APP_MY_NOTIFICATIONS_PATH = "/runtime/app/me/notifications";
 export const COMMUNITY_APP_MY_LEAVE_PATH = "/runtime/app/me/leave";
 const SETTINGS_MAX_BYTES = 8 * 1024;
+// Messages: the member's direct messages, each through the helper Studio's own
+// DM functions run (convex/directMessages.ts).
+export const COMMUNITY_APP_MY_MESSAGES_PATH = "/runtime/app/me/messages";
+export const COMMUNITY_APP_MY_CONVERSATION_PATH = "/runtime/app/me/messages/conversation";
+export const COMMUNITY_APP_MY_MESSAGE_START_PATH = "/runtime/app/me/messages/start";
+export const COMMUNITY_APP_MY_MESSAGE_SEND_PATH = "/runtime/app/me/messages/send";
+export const COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH = "/runtime/app/me/messages/upload";
+export const COMMUNITY_APP_MY_MESSAGE_READ_PATH = "/runtime/app/me/messages/read";
+export const COMMUNITY_APP_MY_MESSAGE_MUTE_PATH = "/runtime/app/me/messages/mute";
+export const COMMUNITY_APP_MY_MESSAGE_TYPING_PATH = "/runtime/app/me/messages/typing";
+export const COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH = "/runtime/app/me/messages/block";
+const MESSAGE_SEND_MAX_BYTES = 24 * 1024;
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -109,9 +122,9 @@ async function requireAppSession(ctx: any, req: Request): Promise<AppSession | R
   return session;
 }
 
-// Every personal endpoint (the member's communities now; messages and settings
-// next): a session minted on the site's private twin, where only Polynet's code
-// runs. A site's own session, whatever its page's code asks, is refused.
+// Every personal endpoint (the member's communities, settings and messages): a
+// session minted on the site's private twin, where only Polynet's code runs. A
+// site's own session, whatever its page's code asks, is refused.
 async function requirePrivateAppSession(ctx: any, req: Request): Promise<AppSession | Response> {
   const session = await requireAppSession(ctx, req);
   if (session instanceof Response) return session;
@@ -121,8 +134,8 @@ async function requirePrivateAppSession(ctx: any, req: Request): Promise<AppSess
   return session;
 }
 
-// Settings: a private session, of someone still in this community (a session
-// outlives a member who leaves or is removed). Their role here, for the page.
+// Settings and Messages: a private session, of someone still in this community
+// (a session outlives a member who leaves or is removed). Their role here, for the page.
 async function requirePrivateMemberSession(ctx: any, req: Request): Promise<(AppSession & { community: { name: string; role: string } }) | Response> {
   const session = await requirePrivateAppSession(ctx, req);
   if (session instanceof Response) return session;
@@ -186,6 +199,65 @@ function optionalText(body: Record<string, unknown>, key: string): { ok: true; v
   if (!(key in body)) return { ok: true };
   const value = body[key];
   return value === null || typeof value === "string" ? { ok: true, value } : { ok: false };
+}
+
+// Studio's DM refusals, by code, for the twin to explain. Not being in a
+// conversation reads exactly as there being no such conversation.
+const MESSAGE_REFUSALS: Record<string, { status: number; code: string }> = {
+  dm_rate_limited: { status: 429, code: "dm_rate_limited" },
+  dm_conversation_access_required: { status: 403, code: "dm_conversation_access_required" },
+  dm_target_not_found: { status: 404, code: "dm_target_not_found" },
+  dm_target_self: { status: 400, code: "dm_target_self" },
+  dm_message_payload_required: { status: 400, code: "dm_message_payload_required" },
+  dm_attachment_storage_required: { status: 400, code: "dm_attachment_invalid" },
+  dm_attachment_type_not_supported: { status: 400, code: "dm_attachment_type_not_supported" },
+  dm_attachment_too_large: { status: 400, code: "dm_attachment_too_large" },
+  dm_attachment_limit_exceeded: { status: 400, code: "dm_attachment_limit_exceeded" },
+  dm_attachment_total_too_large: { status: 400, code: "dm_attachment_total_too_large" },
+  dm_conversation_not_found: { status: 404, code: "dm_conversation_not_found" },
+  dm_participant_required: { status: 404, code: "dm_conversation_not_found" },
+};
+async function runMessages(run: () => Promise<unknown>): Promise<{ ok: true; value: any } | Response> {
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    const data = (error as { data?: unknown } | null)?.data;
+    const text = typeof (data as { code?: unknown } | null)?.code === "string"
+      ? String((data as { code: string }).code) : String((error as { message?: unknown } | null)?.message ?? "");
+    const known = Object.keys(MESSAGE_REFUSALS).find((code) => text === code || text.includes(code));
+    if (known) return reply(MESSAGE_REFUSALS[known].status, { ok: false, code: MESSAGE_REFUSALS[known].code });
+    return reply(500, { ok: false, code: "messages_unavailable", message: "That didn't work. Try again." });
+  }
+}
+
+// What the twin may name: a conversation by its id, a person by their handle.
+const CONVERSATION_ID_PATTERN = /^[A-Za-z0-9]{20,40}$/;
+const MESSAGE_HANDLE_PATTERN = /^@?[A-Za-z0-9_-]{1,32}$/;
+const CLIENT_MESSAGE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+function conversationIdOf(body: Record<string, unknown> | null): string | null {
+  return typeof body?.conversation_id === "string" && CONVERSATION_ID_PATTERN.test(body.conversation_id) ? body.conversation_id : null;
+}
+// Exactly one of a conversation id or a handle ("to"), for a first message.
+function messageTarget(body: Record<string, unknown> | null): { conversationId: string } | { handle: string } | null {
+  const conversationId = conversationIdOf(body);
+  const to = typeof body?.to === "string" && MESSAGE_HANDLE_PATTERN.test(body.to) ? body.to : null;
+  if (conversationId && body?.to === undefined) return { conversationId };
+  if (to && body?.conversation_id === undefined) return { handle: to };
+  return null;
+}
+// Attachments as the twin sends them after uploading: what storage gave back and the file's name.
+function messageAttachments(raw: unknown): Array<{ storage_id: string; name: string; type: "image" | "file" }> | null {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > 8) return null;
+  const out: Array<{ storage_id: string; name: string; type: "image" | "file" }> = [];
+  for (const item of raw) {
+    const row = (item ?? {}) as Record<string, unknown>;
+    if (typeof row.storage_id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(row.storage_id)) return null;
+    if (typeof row.name !== "string" || !row.name.trim() || row.name.length > 256) return null;
+    if (row.type !== "image" && row.type !== "file") return null;
+    out.push({ storage_id: row.storage_id, name: row.name.trim(), type: row.type });
+  }
+  return out;
 }
 
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
@@ -652,6 +724,170 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       }));
       if (left instanceof Response) return left;
       return reply(200, { ok: true });
+    }),
+  });
+
+  // Messages on a site's private twin only: the member's direct messages,
+  // through the helpers Studio's own DM functions run, so its rules, rate
+  // limits, blocks and refusals hold here too.
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGES_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const read = await runMessages(() => ctx.runQuery(internal.directMessages.listSiteDirectConversationsForTrustedUserInternal, {
+        userId: session.userId as any,
+      }));
+      if (read instanceof Response) return read;
+      return reply(200, { ok: true, conversations: read.value });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_CONVERSATION_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const conversationId = conversationIdOf(body);
+      const before = body?.before_seq;
+      if (!conversationId || (before !== undefined && !(Number.isInteger(before) && (before as number) > 0))) {
+        return reply(400, { ok: false, code: "invalid_request" });
+      }
+      const read = await runMessages(() => ctx.runQuery(internal.directMessages.readSiteDirectConversationForTrustedUserInternal, {
+        userId: session.userId as any, conversationId, ...(before !== undefined ? { beforeSeq: before as number } : {}),
+      }));
+      if (read instanceof Response) return read;
+      return reply(200, { ok: true, ...read.value });
+    }),
+  });
+
+  // "Message @handle": the existing conversation, or who they are if the member may message them.
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_START_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      if (typeof body?.handle !== "string" || !MESSAGE_HANDLE_PATTERN.test(body.handle)) return reply(400, { ok: false, code: "invalid_request" });
+      const started = await runMessages(() => ctx.runQuery(internal.directMessages.startSiteDirectConversationForTrustedUserInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, handle: body.handle as string,
+      }));
+      if (started instanceof Response) return started;
+      return reply(200, { ok: true, ...started.value });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_SEND_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, MESSAGE_SEND_MAX_BYTES);
+      const target = messageTarget(body);
+      const attachments = messageAttachments(body?.attachments);
+      const key = body?.client_message_id;
+      if (!body || !target || !attachments || typeof body.text !== "string" || (key !== undefined && !(typeof key === "string" && CLIENT_MESSAGE_ID_PATTERN.test(key)))) {
+        return reply(400, { ok: false, code: "invalid_request" });
+      }
+      // Studio's limit, said rather than silently cut.
+      if (body.text.trim().length > SITE_DM_TEXT_MAX_CHARS) return reply(400, { ok: false, code: "dm_message_too_long" });
+      const sent = await runMessages(() => ctx.runMutation(internal.directMessages.sendSiteDirectMessageForTrustedUserInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, ...target,
+        text: body.text as string, attachments, ...(typeof key === "string" ? { clientMessageId: key } : {}),
+      }));
+      if (sent instanceof Response) return sent;
+      return reply(200, { ok: true, ...sent.value });
+    }),
+  });
+
+  // Step 1 of Studio's attachment flow: the browser sends the file straight to storage.
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const target = messageTarget(await readJsonObject(req, 1024));
+      if (!target) return reply(400, { ok: false, code: "invalid_request" });
+      const issued = await runMessages(() => ctx.runMutation(internal.directMessages.generateSiteDirectMessageUploadUrlForTrustedUserInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, ...target,
+      }));
+      if (issued instanceof Response) return issued;
+      return reply(200, { ok: true, upload_url: (issued.value as { uploadUrl: string }).uploadUrl });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_READ_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const conversationId = conversationIdOf(body);
+      const through = body?.through_seq;
+      if (!conversationId || !(Number.isInteger(through) && (through as number) >= 0)) return reply(400, { ok: false, code: "invalid_request" });
+      const marked = await runMessages(() => ctx.runMutation(internal.directMessages.markSiteDirectConversationReadForTrustedUserInternal, {
+        userId: session.userId as any, conversationId, throughSeq: through as number,
+      }));
+      if (marked instanceof Response) return marked;
+      return reply(200, { ok: true, conversation: marked.value });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_MUTE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const conversationId = conversationIdOf(body);
+      if (!conversationId || typeof body?.muted !== "boolean") return reply(400, { ok: false, code: "invalid_request" });
+      const muted = await runMessages(() => ctx.runMutation(internal.directMessages.setSiteDirectConversationMutedForTrustedUserInternal, {
+        userId: session.userId as any, conversationId, muted: body.muted as boolean,
+      }));
+      if (muted instanceof Response) return muted;
+      return reply(200, { ok: true, conversation: muted.value });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_TYPING_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const conversationId = conversationIdOf(body);
+      if (!conversationId || typeof body?.typing !== "boolean") return reply(400, { ok: false, code: "invalid_request" });
+      const typing = await runMessages(() => ctx.runMutation(internal.directMessages.setSiteDirectTypingForTrustedUserInternal, {
+        userId: session.userId as any, conversationId, typing: body.typing as boolean,
+      }));
+      if (typing instanceof Response) return typing;
+      return reply(200, { ok: true, ...typing.value });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const conversationId = conversationIdOf(body);
+      if (!conversationId || typeof body?.blocked !== "boolean") return reply(400, { ok: false, code: "invalid_request" });
+      const blocked = await runMessages(() => ctx.runMutation(internal.directMessages.setSiteDirectMessageBlockForTrustedUserInternal, {
+        userId: session.userId as any, conversationId, blocked: body.blocked as boolean,
+      }));
+      if (blocked instanceof Response) return blocked;
+      return reply(200, { ok: true, conversation: blocked.value });
     }),
   });
 

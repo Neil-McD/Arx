@@ -25,7 +25,7 @@ one edge Worker in front of every community front end.
                          │                      share); any other name is 404
                          ├─ /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]],
                          │  /knowledge, /ask, /discover (GET/HEAD) → the standard pages (below)
-                         ├─ /communities, /messages, /settings, /join (GET/HEAD) → 302 to the private twin
+                         ├─ /communities, /messages[/<conversation>|/new], /settings, /join (GET/HEAD) → 302 to the private twin
                          │                      (unless the site has its own file there)
                          ├─ /__polynet/me/*, /__polynet/blocks/personal.js → 404 (personal: the twin's only)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
@@ -33,9 +33,9 @@ one edge Worker in front of every community front end.
 <slug>--me<suffix>.<sites domain> (the site's private twin: the member's own pages)
                          ├─ found through the site's route (no KV entry of its own); unknown site → 404
                          ├─ /__polynet/* as on the site (its own sign-in, session cookie, API, blocks, shell),
-                         │  plus /__polynet/blocks/personal.js, settings.js and /__polynet/me/*
+                         │  plus /__polynet/blocks/personal.js, settings.js, messages.js and /__polynet/me/*
                          │                    → /runtime/app/me/* (private session only)
-                         ├─ /communities, /messages, /settings, /join → the site's frame, stripped (below)
+                         ├─ /communities, /messages[/<conversation>|/new], /settings, /join → the site's frame, stripped (below)
                          ├─ other GET/HEAD    → 302 to the same path on the site (never for a script)
                          └─ anything else     → 404
 ```
@@ -128,6 +128,42 @@ revokes its own session only if the backend accepts the ticket for the same
 member, clears its cookie, and returns to the site (`return` is a path). The
 shell and the settings page follow `then`; site code's `polynet.signOut()`
 ends only the site's session.
+
+Messages (`/messages`, `/messages/<conversation id>`, `/messages/new?to=<handle>`;
+`blocks/messages.ts`), twin only, same-origin only; each forwarded with the
+twin's session to the backend, which also requires current membership and runs
+the helpers Studio's own DM functions run (`convex/directMessages.ts`: every
+relationship rule, block, rate limit and refusal is Studio's). The page names a
+conversation by its id and a person by their handle; no user id or storage id
+ever reaches it.
+
+| Edge | Backend | Studio helper |
+| --- | --- | --- |
+| `GET /__polynet/me/messages` | `/runtime/app/me/messages` | the inbox (`listMyDirectConversations`, newest 50) |
+| `GET /__polynet/me/messages/conversation?id=[&before=]` | `/runtime/app/me/messages/conversation` | `listDirectMessages`, 50 a page, participants only |
+| `GET /__polynet/me/messages/start?to=` | `/runtime/app/me/messages/start` | the existing conversation, or who they are if the member may message them |
+| `POST /__polynet/me/messages/send` (≤ 24 KB) | `/runtime/app/me/messages/send` | `sendDirectMessage`, or `sendDirectMessageToUser` for a first message (`to`) |
+| `POST /__polynet/me/messages/upload` (≤ 1 KB) | `/runtime/app/me/messages/upload` | Studio's attachment upload URL |
+| `POST /__polynet/me/messages/read` (≤ 1 KB) | `/runtime/app/me/messages/read` | `markDirectConversationRead` |
+| `POST /__polynet/me/messages/mute` (≤ 1 KB) | `/runtime/app/me/messages/mute` | `setDirectConversationMuted` |
+| `POST /__polynet/me/messages/typing` (≤ 1 KB) | `/runtime/app/me/messages/typing` | `setDirectTyping` / `clearDirectTyping` |
+| `POST /__polynet/me/messages/block` (≤ 1 KB) | `/runtime/app/me/messages/block` | block / unblock the other person in that conversation |
+
+Attachments follow Studio's flow (upload URL, the file straight to Polynet's
+storage, then the send names it); the twin's send takes only a file uploaded in
+the last hour, with the size and type storage recorded. Only the fields the
+page draws leave the edge; attachment and avatar URLs only from Polynet's
+storage.
+
+Live: the page subscribes to `communityLive:watchMessages` (Convex, at
+`POLYNET_LIVE_URL`; the twin's `connect-src` allows exactly that origin, over
+`https` and `wss`) with the twin session's watch token. The query answers only
+a token derived from a private session on an origin that is still private, of
+a current member, and only with a version for the inbox or for one of the
+member's own conversations (and, there, whether the other person is typing).
+Never content, names or ids: on a new version the page re-reads through
+`/__polynet/me/messages*`. The site's own watch token, which site code holds,
+gets `private_session_required`.
 
 ### Standard pages (the site's frame)
 

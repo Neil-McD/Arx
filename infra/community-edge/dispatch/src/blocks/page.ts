@@ -19,9 +19,11 @@ export const PAGE_ROUTES_JSON = JSON.stringify(STANDARD_PAGES.map((page) => ({
 
 // The member's own pages, which the edge serves only on the site's private
 // twin: each is one <polynet-personal page="<name>"> (its data stays in that
-// block's shadow root, out of the frame's reach).
+// block's shadow root, out of the frame's reach), at its own address and the
+// ones under it (/messages/<conversation>).
 export const PERSONAL_ROUTES_JSON = JSON.stringify(PERSONAL_PAGES.map((page) => ({
-  path: page.path, name: page.name, title: page.title, blocks: ["polynet-personal"], members: false, network: false, personal: true, below: [],
+  path: page.path, name: page.name, title: page.title, blocks: ["polynet-personal"], members: false, network: false, personal: true,
+  below: page.below.map(([, pattern]) => pattern.source),
 })));
 
 export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
@@ -43,24 +45,25 @@ export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // scripts never run) are .pn-page-communities, .pn-page-messages,
 // .pn-page-settings and .pn-page-join (communities-heading and so on).
 // The blocks read the rest of the address themselves (/events/<event>,
-// /learn/<course>/<lesson>).
+// /learn/<course>/<lesson>, /messages/<conversation>).
 import { h } from "/__polynet/blocks/kit.js";
 
 const PAGES = __POLYNET_PAGE_ROUTES__;
 for (const page of PAGES) page.below = page.below.map((source) => new RegExp(source));
 const PERSONAL = __POLYNET_PERSONAL_ROUTES__;
+for (const page of PERSONAL) page.below = page.below.map((source) => new RegExp(source));
 
-// Which page this address is: { page, handle } or null (the edge's standardPage).
+// Which page this address is: { page, handle } or null (the edge's standardPage
+// and personalPage).
 function route(pathname) {
   const path = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
-  for (const page of PAGES) {
+  for (const page of PAGES.concat(PERSONAL)) {
     if (path === page.path) return { page: page, handle: null };
     if (!page.below.length || path.indexOf(page.path + "/") !== 0) continue;
     const below = path.slice(page.path.length + 1).split("/");
     if (below.length > page.below.length || !below.every((segment, i) => page.below[i].test(segment))) continue;
     return { page: page, handle: page.members ? below[0].toLowerCase() : null };
   }
-  for (const page of PERSONAL) if (path === page.path) return { page: page, handle: null };
   return null;
 }
 

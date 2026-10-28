@@ -56,40 +56,43 @@ const dmEnsureConversationMutation = directMessages.slice(
   directMessages.indexOf("export const ensureDirectConversationFromCommunity"),
   directMessages.indexOf("export const listNetworkPeopleForViewer"),
 );
+// Each Studio function is a thin wrapper over a helper that the private
+// twin's Messages runs too; each slice is the helper and its wrapper.
 const dmInboxQuery = directMessages.slice(
-  directMessages.indexOf("export const listMyDirectConversations"),
-  directMessages.indexOf("export const markDirectConversationRead"),
+  directMessages.indexOf("export async function listMyDirectConversationsForUser"),
+  directMessages.indexOf("export const listDirectMessagePeerPresenceForViewer"),
 );
 const dmListMessagesQuery = directMessages.slice(
-  directMessages.indexOf("export const listDirectMessages"),
-  directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrl"),
+  directMessages.indexOf("async function listDirectMessagesForUser"),
+  directMessages.indexOf("async function generateDirectMessageAttachmentUploadUrlForConversation"),
 );
 const dmAttachmentUploadMutation = directMessages.slice(
-  directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrl"),
-  directMessages.indexOf("export const sendDirectMessage"),
+  directMessages.indexOf("async function generateDirectMessageAttachmentUploadUrlForConversation"),
+  directMessages.indexOf("async function sendDirectMessageForUser"),
 );
 const dmExistingConversationSendMutation = directMessages.slice(
-  directMessages.indexOf("export const sendDirectMessage = mutation"),
-  directMessages.indexOf("export const sendDirectMessageToUser = mutation"),
+  directMessages.indexOf("async function sendDirectMessageForUser"),
+  directMessages.indexOf("async function sendDirectMessageToTargetForUser"),
 );
 const dmFirstSendMutation = directMessages.slice(
-  directMessages.indexOf("export const sendDirectMessageToUser = mutation"),
-  directMessages.indexOf("export const blockDirectMessageUser = mutation"),
+  directMessages.indexOf("async function sendDirectMessageToTargetForUser"),
+  directMessages.indexOf("async function setDirectMessageBlockForUser"),
 );
 const dmFirstAttachmentUploadMutation = directMessages.slice(
-  directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrlForUser = mutation"),
+  directMessages.indexOf("async function generateDirectMessageAttachmentUploadUrlForTarget"),
+  directMessages.indexOf("const SITE_DM_UPLOAD_MAX_AGE_MS"),
 );
 const dmSetTypingMutation = directMessages.slice(
-  directMessages.indexOf("export const setDirectTyping"),
-  directMessages.indexOf("export const clearDirectTyping"),
+  directMessages.indexOf("async function setDirectTypingForUser"),
+  directMessages.indexOf("async function clearDirectTypingForUser"),
 );
 const dmClearTypingMutation = directMessages.slice(
-  directMessages.indexOf("export const clearDirectTyping"),
-  directMessages.indexOf("export const listDirectTyping"),
+  directMessages.indexOf("async function clearDirectTypingForUser"),
+  directMessages.indexOf("async function listDirectTypingForUser"),
 );
 const dmListTypingQuery = directMessages.slice(
-  directMessages.indexOf("export const listDirectTyping"),
-  directMessages.indexOf("export const listDirectMessages"),
+  directMessages.indexOf("async function listDirectTypingForUser"),
+  directMessages.indexOf("async function listDirectMessagesForUser"),
 );
 const dmAppendMessageHelper = directMessages.slice(
   directMessages.indexOf("async function appendDirectMessageFromUser"),
@@ -260,7 +263,8 @@ assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw ne
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*listConversationParticipants[\s\S]*participantType === "user"[\s\S]*peerParticipants\.length !== 1/, "DM send access guard must require exactly one active human peer");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*requireDirectMessageRelationshipAccess\(\{[\s\S]*targetUserId: peerUserId,[\s\S]*preferredCommunityId: args\.conversation\.createdFromCommunityId/, "DM send access guard must prefer the original community while allowing any current mutual community");
 assert.doesNotMatch(directMessages, /requireDirectConversationSendAccess[\s\S]*requiredCommunityId: args\.conversation\.createdFromCommunityId/, "DM sends must not treat createdFromCommunityId as the only permanent authorization source");
-assert.match(directMessages, /sendDirectMessage = mutation[\s\S]*requireDirectConversationSendAccess\(\{[\s\S]*conversation,[\s\S]*viewerUserId/, "send mutation must enforce continuous shared-community access before appending");
+assert.match(dmExistingConversationSendMutation, /requireDirectConversationSendAccess\(\{[\s\S]*conversation,[\s\S]*viewerUserId[\s\S]*appendDirectMessageFromUser/, "send mutation must enforce continuous shared-community access before appending");
+assert.match(dmExistingConversationSendMutation, /export const sendDirectMessage = mutation[\s\S]*sendDirectMessageForUser\(ctx, viewerUserId/, "Studio's send must run the shared send helper");
 assert.match(dmSendMutation, /attachments: v\.optional\(v\.array\(v\.any\(\)\)\)/, "send mutation must accept bounded attachment metadata");
 assert.match(dmAppendMessageHelper, /normalizeStoredDirectMessageAttachments\(args\.attachments,[\s\S]*enforceWritePolicy: true/, "shared send append must normalize DM attachments with write policy enforcement");
 assert.match(dmAppendMessageHelper, /dm_message_payload_required/, "shared send append must allow attachment-only messages but reject empty payloads");
