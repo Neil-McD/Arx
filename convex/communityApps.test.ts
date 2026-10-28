@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import { COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED } from "../shared/founderPlan";
 import { afterEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -1207,6 +1208,35 @@ test("twin messages: attachments go straight to storage; only a fresh upload is 
   vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60 * 60 * 1000);
   expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: old, name: "old.png", type: "image" }] }))
     .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_invalid" } });
+});
+
+test("twin pages follow Studio's access: a lapsed paid membership or a community that can't run gets nothing", async () => {
+  const f = await messagesFixture();
+  const watch = async (token: string) => f.t.query(api.communityLive.watchMessages, { token: await deriveCommunityAppWatchToken(token) });
+  const shut = async (token: string) => {
+    expect(await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+    expect(await f.me(COMMUNITY_APP_MY_MESSAGES_PATH, token)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
+    expect(await watch(token)).toEqual({ ok: false, code: "watch_unavailable" });
+  };
+  const open = async (token: string) => {
+    expect((await f.me(COMMUNITY_APP_MY_SETTINGS_PATH, token)).status).toBe(200);
+    expect((await f.me(COMMUNITY_APP_MY_MESSAGES_PATH, token)).status).toBe(200);
+    expect(await watch(token)).toMatchObject({ ok: true });
+  };
+  await open(f.member);
+  // Paid to join, and the member's paid access has lapsed (no live subscription): the row is still active.
+  await f.t.run(async (c) => {
+    await c.db.patch(f.ids.communityId, { entryPolicy: "paid_subscription" } as any);
+    await c.db.patch(f.ids.membershipId, { accessSource: "paid_subscription" });
+  });
+  await shut(f.member);
+  await open(f.owner);
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { accessSource: "free_grant" }));
+  await open(f.member);
+  // The community can't run (its builder plan is required and missing): nobody's twin pages work.
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED } as any));
+  await shut(f.member);
+  await shut(f.owner);
 });
 
 test("twin messages live: only a private session's watch token, versions and typing only", async () => {
