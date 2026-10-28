@@ -483,7 +483,10 @@ class Messages {
     // Sends acknowledged after the server took this snapshot stay.
     const newest = fresh.length ? fresh[fresh.length - 1].seq : Infinity;
     const later = first ? [] : this.messages.filter((message) => message.seq > newest);
+    const before = this.conversation;
     this.conversation = res.body.conversation;
+    // Blocked or muted elsewhere (Studio, another tab): the header and composer follow.
+    const headChanged = !first && !!before && (!!before.blocked !== !!this.conversation.blocked || !!before.muted !== !!this.conversation.muted);
     this.messages = earlier.concat(fresh, later);
     if (first || gap) this.hasMore = res.body.has_more === true;
     else if (!earlier.length) this.hasMore = res.body.has_more === true;
@@ -491,7 +494,10 @@ class Messages {
     const keys = new Set(this.messages.map((message) => message.client_message_id).filter(Boolean));
     this.pending = this.pending.filter((item) => !keys.has(item.key));
     if (first || !this.log) this.drawThread();
-    else this.renderLog(false);
+    else if (headChanged) {
+      this.carryDraft = true;
+      this.drawThread();
+    } else this.renderLog(false);
     this.updateInboxRow(this.conversation);
     this.markRead();
     return true;

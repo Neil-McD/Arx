@@ -736,6 +736,32 @@ test("Messages: a refresh that read the thread before a send landed doesn't drop
   }
 }, 60_000);
 
+test("Messages: unblocked or muted elsewhere, the open thread follows on refresh", async () => {
+  resetMessages();
+  dm.conversations[0].blocked = true;
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=blocked-note]").count()).toBe(1);
+    expect(await personal.locator("[part=block]").textContent()).toBe("Unblock");
+    // Unblocked and muted in Studio; this tab comes back into view.
+    dm.conversations[0].blocked = false;
+    dm.conversations[0].muted = true;
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => personal.locator("[part=input]").count()).toBe(1);
+    expect(await personal.locator("[part=block]").textContent()).toBe("Block");
+    expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
+    // A draft survives the next change.
+    await personal.locator("[part=input]").fill("Sorry about that");
+    dm.conversations[0].muted = false;
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("false");
+    expect(await personal.locator("[part=input]").inputValue()).toBe("Sorry about that");
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
 test("Messages: text typed while a just-made thread loads is kept", async () => {
   resetMessages();
   const { browser, page } = await openTwin(chromium, "/messages/new?to=newbie", TOKEN, undefined, { fakeLive: true });
