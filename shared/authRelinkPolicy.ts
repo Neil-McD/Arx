@@ -13,14 +13,3 @@ export function isAnonymousAuthSubject(value: unknown): boolean {
   const normalized = String(value ?? "").trim();
   return normalized.startsWith("anon:");
 }
-
-export function classifyAuthRelinkBucket(args: {
-  authSubject: string | null;
-  normalizedEmail: string | null;
-  authenticatedEmailClusterSize: number;
-}): AuthRelinkBucket {
-  if (!args.authSubject) return "manual_other";
-  if (!args.normalizedEmail) return "manual_missing_email";
-  if (args.authenticatedEmailClusterSize !== 1) return "manual_duplicate_email";
-  return "safe_auto_relink";
-}

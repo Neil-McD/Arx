@@ -66,10 +66,6 @@ async function recordLegalAcceptanceIfMissing(ctx: any, args: {
   });
 }
 
-export async function hasAcceptedCurrentPlatformLegal(ctx: any, userId: any): Promise<boolean> {
-  return hasAcceptedCurrentPlatformLegalFromRows(await listLegalAcceptancesForUser(ctx, userId));
-}
-
 export async function listPlatformLegalAcceptancesForUser(ctx: any, userId: any): Promise<LegalAcceptanceRow[]> {
   return await listLegalAcceptancesForUser(ctx, userId);
 }

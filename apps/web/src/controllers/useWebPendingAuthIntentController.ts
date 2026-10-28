@@ -3,24 +3,12 @@ import { useCallback, useRef } from "react";
 import {
   consumeAuthResumeStateIfCurrent,
   readAuthResumeState,
-  storeAuthResumeState,
 } from "../../../../shared/authResumeState";
 import { routePendingAuthIntent } from "../../../../shared/authResumeRouter";
 import type {
   CreateCommunityIntentDraft,
 } from "../../../../shared/createCommunityIntent";
 import type { AuthSession } from "../auth";
-
-export function persistWebCreateCommunityIntent(
-  draft: CreateCommunityIntentDraft,
-): void {
-  storeAuthResumeState({
-    intent: {
-      reason: "create_community",
-      payload: { draft },
-    },
-  });
-}
 
 export function useWebPendingAuthIntentController(params: {
   session: AuthSession | null;

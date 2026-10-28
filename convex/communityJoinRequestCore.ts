@@ -297,31 +297,3 @@ export async function cancelPendingCommunityJoinRequest(args: {
   await deletePairRowsExcept({ ctx: args.ctx, rows: pair.rows });
   return { outcome: "canceled" };
 }
-
-export async function deletePendingCommunityJoinRequestsBatch(args: {
-  ctx: any;
-  communityId: any;
-  limit: number;
-}): Promise<{ deletedCount: number; hasMore: boolean }> {
-  const rows = (await args.ctx.db
-    .query("communityJoinRequests")
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", args.communityId).eq("status", "pending"),
-    )
-    .order("asc")
-    .take(args.limit + 1)) as CommunityJoinRequestLike[];
-  const batch = rows.slice(0, args.limit);
-  for (const row of batch) {
-    assertCanonicalCommunityJoinRequest(row);
-    const pair = await loadCompatibleCommunityJoinRequestPair({
-      ctx: args.ctx,
-      communityId: row.communityId,
-      userId: row.userId,
-    });
-    if (!pair.current || String(pair.current._id) !== String(row._id)) {
-      throw new Error("community_join_request_state_ambiguous");
-    }
-    await deletePairRowsExcept({ ctx: args.ctx, rows: pair.rows });
-  }
-  return { deletedCount: batch.length, hasMore: rows.length > args.limit };
-}

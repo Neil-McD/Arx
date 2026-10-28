@@ -82,28 +82,3 @@ export function ReactionSummary(props: {
     </div>
   );
 }
-
-// The thread/reply affordance — same markup/classes as the feed's reply pill so it reads identically.
-export function ThreadReplyPill(props: {
-  replyCount: number;
-  lastReplyLabel?: string | null;
-  unread?: boolean;
-  onOpen: () => void;
-}) {
-  if (props.replyCount <= 0) return null;
-  return (
-    <div className="community-interaction-thread-row">
-      <button
-        type="button"
-        className={`community-interaction-reply-pill${props.unread ? " is-unread" : ""}`}
-        onClick={props.onOpen}
-      >
-        {props.unread ? <span className="community-interaction-unread-dot" aria-hidden="true" /> : null}
-        {props.replyCount === 1 ? "1 reply" : `${props.replyCount} replies`}
-      </button>
-      {props.lastReplyLabel ? (
-        <span className="community-interaction-thread-time">Last reply {props.lastReplyLabel}</span>
-      ) : null}
-    </div>
-  );
-}

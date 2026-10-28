@@ -1,11 +1,9 @@
 import {
   normalizeCommunityCapabilityRelation,
-  projectCommunityAccessCapabilities,
 } from "./communityCapabilityContract.ts";
 import {
   normalizeCommunityCapabilitySlug,
   type CommunityMembershipProjection,
-  type ResolvedCommunityCapabilityContext,
 } from "./communityCapabilityContextContract.ts";
 
 export const COMMUNITY_READ_SCOPES = ["joined", "discover"] as const;
@@ -115,34 +113,5 @@ export function projectPublicDiscoverCommunityReadSummary(args: {
     visibility: "published",
     entry_policy: normalizeEntryPolicy(args.community.entry_policy),
     relation: args.accessibleSummary?.relation ?? "no_access",
-  };
-}
-
-export function projectResolvedCommunityReadDetail(
-  context: ResolvedCommunityCapabilityContext,
-): CommunityReadDetail | null {
-  const summary = projectCommunityMembershipReadSummary(context.membership);
-  if (!summary) return null;
-  const capabilities = projectCommunityAccessCapabilities(context.access);
-  return {
-    ...summary,
-    about: boundedString(context.membership.communities?.about, 4000),
-    relation: normalizeCommunityCapabilityRelation(context.access.relation),
-    is_entitled: context.access.is_entitled === true,
-    capabilities: {
-      can_view: capabilities.canView,
-      can_enter_community: capabilities.canEnterCommunity,
-      can_read_chat: capabilities.canReadChat,
-      can_post_chat: capabilities.canPostChat,
-      can_post_message: capabilities.canPostMessage,
-      can_manage_resources: capabilities.canManageResources,
-      can_moderate_content: capabilities.canModerateContent,
-      can_manage_members: capabilities.canManageMembers,
-      can_review_join_requests: capabilities.canReviewJoinRequests,
-      can_manage_pricing: capabilities.canManagePricing,
-      can_manage_branding: capabilities.canManageBranding,
-      can_manage_publishing: capabilities.canManagePublishing,
-      can_manage_payouts: capabilities.canManagePayouts,
-    },
   };
 }

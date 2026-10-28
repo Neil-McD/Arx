@@ -83,31 +83,6 @@ export function parseMessageAttachments(contentJson: unknown): CommunityMessageA
   return out;
 }
 
-export function buildReplyPrefix(sender: string, preview: string): string {
-  return `> ↪︎ ${sender}: ${preview}\n\n`;
-}
-
-export function parseReplyPrefix(body: string): ReplyPrefix | null {
-  if (!body.startsWith(">")) return null;
-  const lines = body.split(/\r?\n/);
-  if (lines.length === 0) return null;
-  const first = lines[0] ?? "";
-  const match = first.match(/^>\s*↪︎\s*(.+)$/);
-  if (!match) return null;
-  const content = (match[1] ?? "").trim();
-  const colonIndex = content.indexOf(":");
-  if (colonIndex === -1) return null;
-  const sender = content.slice(0, colonIndex).trim();
-  const preview = content.slice(colonIndex + 1).trim();
-
-  let start = 1;
-  while (start < lines.length && (lines[start]?.trim() ?? "") === "") {
-    start += 1;
-  }
-  const rest = lines.slice(start).join("\n");
-  return { sender, preview, rest };
-}
-
 export function truncateReplyPreview(body: string): string {
   const singleLine = body.replace(/\s+/g, " ").trim();
   if (singleLine.length <= 90) return singleLine;

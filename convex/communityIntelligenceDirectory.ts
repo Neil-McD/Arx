@@ -2395,24 +2395,6 @@ function actorUserPatch(actor: PolicyDecisionActor, userField: string, agentFiel
       };
 }
 
-function typeMatchesView(type: NodeType, view: string): boolean {
-  if (view === "all" || view === "workflow_context") return true;
-  if (view === "playbooks") return type === "playbook";
-  if (view === "insights") return type === "insight";
-  if (view === "examples") return type === "example";
-  if (view === "warnings") return type === "warning_failure";
-  if (view === "decisions") return type === "decision_judgment";
-  if (view === "open_questions") return type === "open_question";
-  return true;
-}
-
-function statusMatchesView(status: NodeStatus, view: string): boolean {
-  if (view === "canonical") return status === "canonical";
-  if (view === "contested") return status === "contested";
-  if (view === "stale") return status === "stale";
-  return true;
-}
-
 function textScore(node: IntelligenceNodeRow, queryText: string): number {
   const query = queryText.trim().toLowerCase();
   if (!query) return 0;
@@ -2978,46 +2960,6 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
     updatedAt: nowMs,
   });
   return mapChangeRequestRow(await getChangeRequestOrThrow(args.ctx, changeRequest._id));
-}
-
-export async function listCommunityIntelligenceDirectoryViewCore(args: {
-  ctx: any;
-  userId: any;
-  communityId: any;
-  view?: string;
-  workflowId?: string;
-  limit?: number;
-}) {
-  await requireCommunityChatAccess({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    userId: args.userId,
-  });
-  const isManager = await viewerCanManageCommunity(args.ctx, args.communityId, args.userId);
-  const view = args.view ?? "all";
-  const workflowId = normalizeWorkflowId(args.workflowId);
-  const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
-  const rows = (await args.ctx.db
-    .query("communityIntelligenceNodes" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-    .collect()) as IntelligenceNodeRow[];
-  const readableRows: IntelligenceNodeRow[] = [];
-  for (const row of rows) {
-    if (await canViewerReadNodeWithCurrentEvidence({ ctx: args.ctx, node: row, isManager })) {
-      readableRows.push(row);
-    }
-  }
-  return readableRows
-    .filter((row) => typeMatchesView(row.type, view))
-    .filter((row) => statusMatchesView(row.status, view))
-    .filter((row) => {
-      if (view !== "workflow_context" || !workflowId) return true;
-      if ((row.workflowIds ?? []).length === 0) return true;
-      return (row.workflowIds ?? []).includes(workflowId);
-    })
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, limit)
-    .map(mapNodeRow);
 }
 
 export const getCommunityPolynetOverview = query({

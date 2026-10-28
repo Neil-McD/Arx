@@ -7,10 +7,6 @@ export type SessionLike = {
   };
 };
 
-export type CommunityMemberLike = {
-  user_id: string;
-};
-
 export type UserProfileLike = {
   user_id: string;
   display_name: string | null;

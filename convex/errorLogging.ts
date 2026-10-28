@@ -34,27 +34,6 @@ export function summarizeErrorForLog(error: unknown): ErrorSummary {
   return { name, message, stackPreview };
 }
 
-export function formatLogPreview(
-  value: unknown,
-  maxLength = 2000,
-): string | null {
-  if (value === null || value === undefined) return null;
-  const raw =
-    typeof value === "string"
-      ? value
-      : (() => {
-          try {
-            return JSON.stringify(value);
-          } catch {
-            return String(value);
-          }
-        })();
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength)}…`;
-}
-
 export function logStructuredError(
   event: string,
   args: Record<string, unknown> & { error: unknown },

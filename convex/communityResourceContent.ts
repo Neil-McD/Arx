@@ -36,19 +36,6 @@ async function getCommunityResourceContentRow(
     .first()) as CommunityResourceContentLike | null) ?? null;
 }
 
-export async function readCommunityResourceBodyMd(
-  ctx: { db: any },
-  resource: CommunityResourceLike | null | undefined,
-): Promise<string | null> {
-  if (!resource) return null;
-  const legacyBody = String(resource.bodyMd ?? "").trim();
-  if (legacyBody) return String(resource.bodyMd ?? "");
-  const content = await getCommunityResourceContentRow(ctx, resource._id);
-  if (!content) return null;
-  if (normalizeIdValue(content.communityId) !== normalizeIdValue(resource.communityId)) return null;
-  return String(content.bodyMd ?? "").trim() ? String(content.bodyMd ?? "") : null;
-}
-
 export async function hydrateCommunityResourceBody(
   ctx: { db: any },
   resource: CommunityResourceLike | null | undefined,

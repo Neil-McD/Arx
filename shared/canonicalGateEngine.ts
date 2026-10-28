@@ -186,14 +186,6 @@ export function resolveActiveCapabilityFamiliesForGate(
   });
 }
 
-export function resolveHarnessProfileForGate(input: Partial<CanonicalGateInput>): string {
-  const active = resolveActiveCapabilityFamiliesForGate(input);
-  return resolveHarnessProfileFromActiveCapabilities({
-    authState: input?.authState,
-    activeCapabilityFamilies: active,
-  });
-}
-
 function deny(code: GateCode, cta: GateCta): Omit<CanonicalGateDecision, "effectiveTier"> {
   return {
     allowed: false,
@@ -349,15 +341,4 @@ export function resolveCanonicalGatePolicy(
     activeCapabilityFamilies,
     harnessProfile,
   };
-}
-
-export function normalizeTierForGate(rawTier: unknown): CanonicalTier {
-  return normalizeCanonicalTier(rawTier);
-}
-
-export function resolveEffectiveTierForGate(input: {
-  authState: AuthState;
-  tier?: string | null;
-}): EffectiveTier {
-  return resolveEffectiveTier(input);
 }

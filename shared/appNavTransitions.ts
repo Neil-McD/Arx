@@ -41,14 +41,6 @@ export function deriveOpenCommunityTabTransition<TTab extends CommunityTab>(
   };
 }
 
-export function deriveOpenCommunityChatTransition(
-  state: AppNavState,
-  nextCommunityId: string,
-): OpenCommunityChatTransition {
-  const transition = deriveOpenCommunityTabTransition(state, nextCommunityId, "chat");
-  return transition;
-}
-
 export type OpenDiscoverTransition = {
   shouldPushSnapshot: boolean;
   nextPage: "discover";

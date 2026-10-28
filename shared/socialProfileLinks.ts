@@ -16,14 +16,6 @@ const SOCIAL_PROFILE_HOSTS: Record<SocialProfileKind, readonly string[]> = {
 
 const MAX_SOCIAL_PROFILE_URL_LENGTH = 240;
 
-export function emptySocialProfileLinks(): SocialProfileLinks {
-  return {
-    youtube: "",
-    x: "",
-    instagram: "",
-  };
-}
-
 export function normalizeSocialProfileUrl(kind: SocialProfileKind, raw: unknown): string | null {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return null;

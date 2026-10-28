@@ -19,7 +19,3 @@ export function toCanonicalCommunityVisibility(
 export function isPublishedCommunityVisibility(raw: unknown): boolean {
   return toCanonicalCommunityVisibility(raw) === "published";
 }
-
-export function formatCommunityVisibilityLabel(raw: unknown): "Published" | "Unlisted" {
-  return isPublishedCommunityVisibility(raw) ? "Published" : "Unlisted";
-}

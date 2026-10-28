@@ -8,8 +8,6 @@ import {
 
 export const COMMUNITY_EVIDENCE_POLICY_VERSION = "citation_v1" as const;
 export const MAX_COMMUNITY_EVIDENCE_CITATIONS_PER_CHANGE_REQUEST = 50;
-
-export type CommunityEvidencePolicyVersion = typeof COMMUNITY_EVIDENCE_POLICY_VERSION;
 export type CommunityEvidenceActorType =
   | "member"
   | "admin"

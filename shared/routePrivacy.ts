@@ -12,13 +12,6 @@ const SENSITIVE_ROUTE_SEARCH_PARAM_NAMES = new Set([
   "token",
 ]);
 
-const ATTRIBUTION_ROUTE_SEARCH_PARAM_NAMES = new Set([
-  ...SENSITIVE_ROUTE_SEARCH_PARAM_NAMES,
-  "affiliate",
-  "partner",
-  "ref",
-]);
-
 function normalizePathname(pathname: unknown): string {
   const value = String(pathname ?? "").trim();
   if (!value) return "/";
@@ -64,32 +57,4 @@ export function buildPathWithSearchParamsRemoved(input: {
   const nextSearch = params.toString();
   const hash = input.dropHash ? "" : String(input.hash ?? "");
   return `${pathname}${nextSearch ? `?${nextSearch}` : ""}${hash}`;
-}
-
-export function buildAttributionRouteLabel(input: {
-  href?: unknown;
-  pathname?: unknown;
-  search?: unknown;
-}): string {
-  let pathname = input.pathname;
-  let search = input.search;
-  const href = String(input.href ?? "").trim();
-  if (href) {
-    try {
-      const url = new URL(href, "https://polynet.local");
-      pathname = url.pathname;
-      search = url.search;
-    } catch {
-      const withoutHash = href.split("#")[0] ?? "";
-      const questionIndex = withoutHash.indexOf("?");
-      pathname = questionIndex >= 0 ? withoutHash.slice(0, questionIndex) : withoutHash;
-      search = questionIndex >= 0 ? withoutHash.slice(questionIndex + 1) : "";
-    }
-  }
-  return buildPathWithSearchParamsRemoved({
-    pathname,
-    search,
-    paramNames: Array.from(ATTRIBUTION_ROUTE_SEARCH_PARAM_NAMES),
-    dropHash: true,
-  }).slice(0, 2048);
 }

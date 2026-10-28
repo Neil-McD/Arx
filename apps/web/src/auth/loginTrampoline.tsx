@@ -3,7 +3,6 @@ import { beginOAuthSignIn } from "../auth";
 import {
   applyShellVariantToAppPath,
   DEFAULT_POST_SIGN_IN_PATH,
-  MOBILE_SHELL_PATH_PREFIX,
   readShellVariantFromPathname,
   stripShellVariantFromPathname,
 } from "../../../../shared/webAppRouteState";
@@ -27,14 +26,6 @@ function sanitizeReturnToPath(raw: string | null | undefined, shellVariant: "sta
 
 export function isLoginTrampolinePathname(pathname: string): boolean {
   return stripShellVariantFromPathname(pathname || "/") === "/login";
-}
-
-export function buildLoginTrampolinePath(returnTo: string): string {
-  const shellVariant = readShellVariantFromPathname(window.location.pathname || "/");
-  const basePath = shellVariant === "mobile" ? `${MOBILE_SHELL_PATH_PREFIX}/login` : "/login";
-  const url = new URL(basePath, window.location.origin);
-  url.searchParams.set("returnTo", sanitizeReturnToPath(returnTo, shellVariant));
-  return `${url.pathname}${url.search}`;
 }
 
 function readLoginRouteReturnTo(): string {

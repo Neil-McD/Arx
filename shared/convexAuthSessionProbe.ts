@@ -75,9 +75,3 @@ export async function probeConvexAuthenticatedActorSessionDetailed(
     };
   }
 }
-
-export async function probeConvexAuthenticatedActorSession(
-  session: AuthSessionLike,
-): Promise<boolean> {
-  return (await probeConvexAuthenticatedActorSessionDetailed(session)).accepted;
-}

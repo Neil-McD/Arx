@@ -79,15 +79,6 @@ export function agentBadgeLabel(actorType: string): string | null {
   return null;
 }
 
-export function hostnameOf(url: string | null): string {
-  if (!url) return "";
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-}
-
 export function sortedBlocks(blocks: CommunityInteractionContentBlock[]): CommunityInteractionContentBlock[] {
   return [...blocks].sort((left, right) => left.block_order - right.block_order);
 }
@@ -875,7 +866,6 @@ export function InteractionAttachments(props: {
     </div>
   );
 }
-
 
 export function CommunityInteractionFeedList(
   props: WebCommunityInteractionProjectionProps & {

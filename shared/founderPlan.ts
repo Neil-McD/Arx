@@ -1,15 +1,11 @@
-import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "./founderInference";
 
-export const POLYNET_FOUNDER_PLAN_NAME = "Polynet Founder";
 export const POLYNET_BUILDER_OFFER_NAME = "Builder";
-export const POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_USD = 79;
 export const POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900;
 export const POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000;
 // Operator-funded communities get the same monthly ceiling as a Builder
 // subscription; the operator grant waives payment, not cost bounds.
 export const POLYNET_OPERATOR_GRANT_MONTHLY_INCLUDED_COST_MICROS = 20_000_000;
 export const POLYNET_FOUNDER_PLAN_INCLUDED_COMMUNITIES = 1;
-export const POLYNET_FOUNDER_PLAN_MODEL_ID = COMMUNITY_OWNER_FUNDED_MODEL_ID;
 export const POLYNET_FOUNDER_PLAN_PRICING_VERSION = "founder_plan_luna_v1";
 export const POLYNET_COMMUNITY_PLATFORM_FEE_BPS = 290;
 
@@ -34,14 +30,6 @@ export function parseCommunityBuilderAccessMode(
     return value;
   }
   return null;
-}
-
-export function normalizeCommunityBuilderAccessMode(
-  value: unknown,
-): CommunityBuilderAccessMode {
-  const parsed = parseCommunityBuilderAccessMode(value);
-  if (!parsed) throw new Error("community_builder_access_mode_invalid");
-  return parsed;
 }
 
 export type FounderSubscriptionStatus =

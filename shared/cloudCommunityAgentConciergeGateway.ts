@@ -1,10 +1,5 @@
 import { api } from "../convex/_generated/api";
-import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
-
-type CloudCommunityAgentConciergeGatewayParams<SessionT> = {
-  session: SessionT;
-};
 
 export type CloudCommunityAgentServeIssue = {
   id: string;
@@ -43,19 +38,6 @@ function coerceCommunityAgentServeIssue(payload: unknown): CloudCommunityAgentSe
     message: coerceNullableString(row.message) ?? "Community AI is temporarily unavailable.",
     created_at: createdAt,
   };
-}
-
-export async function getCloudCommunityAgentServeIssue<SessionT>(
-  params: CloudCommunityAgentConciergeGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudCommunityAgentServeIssue | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityAgentConcierge:getMyLatestCommunityAgentServeIssue" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return coerceCommunityAgentServeIssue(payload);
 }
 
 export function subscribeCloudCommunityAgentServeIssue(params: {

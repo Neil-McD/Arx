@@ -13,15 +13,7 @@ export function normalizeRuntimeEngine(raw: unknown): RuntimeEngine | null {
     : null;
 }
 
-export function normalizeActiveRuntimeEngine(raw: unknown): RuntimeEngine {
-  return normalizeRuntimeEngine(raw) ?? DEFAULT_ACTIVE_RUNTIME_ENGINE;
-}
-
 export type RuntimeEngineAccessLevel = "included";
-
-export function getRuntimeEngineDisplayName(_engine: RuntimeEngine | null): string {
-  return "Polynet";
-}
 
 export function getRuntimeEngineAccessLevel(_engine: RuntimeEngine | null): RuntimeEngineAccessLevel {
   return "included";

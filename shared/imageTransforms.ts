@@ -1,9 +1,4 @@
-import { bytesToBase64 } from "./voiceCapture";
 
-export async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  return bytesToBase64(new Uint8Array(buffer));
-}
 
 export async function readCommunityAvatarFileAsDataUrlWithinLimit(
   file: File,

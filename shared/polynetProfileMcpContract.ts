@@ -9,42 +9,6 @@ export const POLYNET_PROFILE_CONFIRM_MAX_FACTS = 12;
 export const POLYNET_PROFILE_CONFIRM_MARKER_MAX_LENGTH = 120;
 export const POLYNET_PROFILE_CONFIRM_MARKER_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$";
 
-export const POLYNET_PROFILE_CONFIRM_INPUT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["confirm_marker", "facts"],
-  properties: {
-    confirm_marker: {
-      type: "string",
-      minLength: 1,
-      maxLength: POLYNET_PROFILE_CONFIRM_MARKER_MAX_LENGTH,
-      pattern: POLYNET_PROFILE_CONFIRM_MARKER_PATTERN,
-      description: "Stable identifier for this exact member-approved profile batch.",
-    },
-    facts: {
-      type: "array",
-      minItems: 1,
-      maxItems: POLYNET_PROFILE_CONFIRM_MAX_FACTS,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["kind", "body"],
-        properties: {
-          kind: {
-            type: "string",
-            enum: [...MEMBER_FACT_KINDS],
-          },
-          body: {
-            type: "string",
-            minLength: 1,
-            maxLength: MAX_MEMBER_FACT_BODY_LENGTH,
-          },
-        },
-      },
-    },
-  },
-};
-
 export type PolynetProfileConfirmedFactInput = {
   kind: MemberFactKind;
   body: string;

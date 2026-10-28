@@ -1,16 +1,4 @@
-export function formatRelativeTimeFromEpochSeconds(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp * 1000;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
 
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  if (hours < 24) return `${hours}h`;
-  if (days < 7) return `${days}d`;
-  return new Date(timestamp * 1000).toLocaleDateString();
-}
 
 export function formatRelativeTimeFromIso(iso: string): string {
   const ms = new Date(iso).getTime();
@@ -48,14 +36,6 @@ export function formatChatTime(value: string): string {
   return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${timeStr}`;
 }
 
-export function parseContentRangeTotal(value: string | null): number | null {
-  if (!value) return null;
-  const parts = value.split("/");
-  if (parts.length !== 2) return null;
-  const total = Number(parts[1]);
-  return Number.isFinite(total) ? total : null;
-}
-
 export function formatCount(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "—";
   return value.toLocaleString();
@@ -82,25 +62,4 @@ export function formatMoneyBaseUnits(
   } catch {
     return major.toFixed(Math.min(Math.max(currencyDecimals, 0), 6));
   }
-}
-
-export function dateKeyLocal(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function csvEscape(value: unknown): string {
-  const str = value === null || value === undefined ? "" : String(value);
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-export function buildCsv(columns: string[], rows: Array<Record<string, unknown>>): string {
-  const header = columns.map(csvEscape).join(",");
-  const lines = rows.map((row) => columns.map((col) => csvEscape(row[col])).join(","));
-  return [header, ...lines].join("\n");
 }

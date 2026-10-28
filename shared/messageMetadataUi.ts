@@ -28,22 +28,6 @@ export function communityInitials(name: string): string {
   return combined || trimmed.slice(0, 2).toUpperCase();
 }
 
-export function parseMessageText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (content && typeof content === "object") {
-    const record = content as Record<string, unknown>;
-    const text = record.text;
-    if (typeof text === "string") return text;
-    const contentField = record.content;
-    if (typeof contentField === "string") return contentField;
-  }
-  try {
-    return JSON.stringify(content, null, 2);
-  } catch {
-    return "";
-  }
-}
-
 export function parseMemoryUsedArray(value: unknown): MemoryUsedItem[] {
   if (!Array.isArray(value)) return [];
   const out: MemoryUsedItem[] = [];
@@ -65,43 +49,6 @@ export function parseMemoryUsedArray(value: unknown): MemoryUsedItem[] {
   return out;
 }
 
-export function parseMessageMemoryUsed(content: unknown): MemoryUsedItem[] {
-  if (!content || typeof content !== "object") return [];
-  const record = content as Record<string, unknown>;
-  const meta = record.meta;
-  if (meta && typeof meta === "object") {
-    const metaRecord = meta as Record<string, unknown>;
-    const fromMeta = parseMemoryUsedArray(metaRecord.memory_used);
-    if (fromMeta.length > 0) return fromMeta;
-  }
-  return parseMemoryUsedArray(record.memory_used);
-}
-
-function parseMemorySuggestionsArray(value: unknown): MemorySuggestion[] {
-  if (!Array.isArray(value)) return [];
-  const out: MemorySuggestion[] = [];
-  for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue;
-    const record = raw as Record<string, unknown>;
-    const content = typeof record.content === "string" ? record.content.trim() : "";
-    if (!content) continue;
-    out.push({ content, pinned: Boolean(record.pinned) });
-  }
-  return out.slice(0, 6);
-}
-
-export function parseMessageMemorySuggestions(content: unknown): MemorySuggestion[] {
-  if (!content || typeof content !== "object") return [];
-  const record = content as Record<string, unknown>;
-  const meta = record.meta;
-  if (meta && typeof meta === "object") {
-    const metaRecord = meta as Record<string, unknown>;
-    const fromMeta = parseMemorySuggestionsArray(metaRecord.memory_suggestions);
-    if (fromMeta.length > 0) return fromMeta;
-  }
-  return parseMemorySuggestionsArray(record.memory_suggestions);
-}
-
 export function parseHistoryUsedArray(value: unknown): HistoryUsedItem[] {
   if (!Array.isArray(value)) return [];
   const out: HistoryUsedItem[] = [];
@@ -120,40 +67,4 @@ export function parseHistoryUsedArray(value: unknown): HistoryUsedItem[] {
     });
   }
   return out.slice(0, 12);
-}
-
-export function parseMessageHistoryUsed(content: unknown): HistoryUsedItem[] {
-  if (!content || typeof content !== "object") return [];
-  const record = content as Record<string, unknown>;
-  const meta = record.meta;
-  if (meta && typeof meta === "object") {
-    const metaRecord = meta as Record<string, unknown>;
-    const fromMeta = parseHistoryUsedArray(metaRecord.history_used);
-    if (fromMeta.length > 0) return fromMeta;
-  }
-  return parseHistoryUsedArray(record.history_used);
-}
-
-export function parseMessageMemoryAdded(content: unknown): MemoryUsedItem[] {
-  if (!content || typeof content !== "object") return [];
-  const record = content as Record<string, unknown>;
-  const meta = record.meta;
-  if (meta && typeof meta === "object") {
-    const metaRecord = meta as Record<string, unknown>;
-    const fromMeta = parseMemoryUsedArray(metaRecord.memory_added);
-    if (fromMeta.length > 0) return fromMeta;
-  }
-  return parseMemoryUsedArray(record.memory_added);
-}
-
-export function extractRememberIntent(text: string): string | null {
-  const input = (text ?? "").trim();
-  if (!input) return null;
-  if (input.includes("?")) return null;
-  const match = input.match(/^(?:please\s+)?remember(?:\s+that)?[:\s]+(.+)$/i);
-  const content = match?.[1]?.trim() ?? "";
-  if (!content) return null;
-  if (/^(?:this|that|it|these|those)$/i.test(content)) return null;
-  if (content.length < 4) return null;
-  return content;
 }

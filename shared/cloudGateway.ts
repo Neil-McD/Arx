@@ -3,25 +3,6 @@ import {
   type ConvexClient,
 } from "./convexAuthenticatedClient";
 
-export type CloudAuthFetch<SessionT> = (
-  url: string,
-  init: RequestInit,
-  session: SessionT,
-) => Promise<Response>;
-
-export type CloudPublicFetch = (url: string, init?: RequestInit) => Promise<Response>;
-export type CloudReadError = (response: Response) => Promise<string>;
-
-export type CloudGatewayAuthMode = "public" | "authenticated" | "hybrid";
-export type CloudGatewayOperation =
-  | "read"
-  | "mutation"
-  | "action"
-  | "upload_bridge"
-  | "runtime_transport";
-export type CloudGatewayFailurePolicy = "fail_soft" | "fail_closed" | "mixed";
-export type CloudGatewaySessionPolicy = "caller_hardened" | "not_applicable";
-
 export function coerceGatewayRows<TRow>(payload: unknown): TRow[] {
   if (Array.isArray(payload)) return payload as TRow[];
   if (!payload || typeof payload !== "object") return [];

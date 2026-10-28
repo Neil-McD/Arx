@@ -63,16 +63,6 @@ export const COMMUNITY_SETTINGS_PANES = [
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
-const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
-  "settings",
-  "workflows",
-  "analytics",
-]);
-
-export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
-  return COMMUNITY_ROUTE_MANAGED_TAB_SET.has(tab);
-}
-
 export type CommunityTabAccess = {
   canViewSettings: boolean;
   canManageMembers: boolean;

@@ -191,35 +191,6 @@ export function parseNativeToolArguments(params: {
   }
 }
 
-export function buildToolObservationMessage(params: {
-  summaryText: string;
-  imageUrl: string;
-}): Extract<NativeToolAwareMessage, { role: "user" }> {
-  const summaryText = String(params.summaryText ?? "").trim();
-  const imageUrl = String(params.imageUrl ?? "").trim();
-  if (!summaryText) {
-    throw new Error("tool_observation_summary_required");
-  }
-  if (!imageUrl) {
-    throw new Error("tool_observation_image_required");
-  }
-  return {
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text: summaryText,
-        source: "computer_use_observation",
-      },
-      {
-        type: "image",
-        imageUrl,
-        source: "computer_use_observation",
-      },
-    ],
-  };
-}
-
 export function isComputerUseObservationMessage(
   message: NativeToolAwareMessage,
 ): message is Extract<NativeToolAwareMessage, { role: "user" }> {
