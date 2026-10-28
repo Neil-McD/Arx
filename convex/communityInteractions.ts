@@ -1,3 +1,4 @@
+import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE, presentInteractionActorType, type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
@@ -29,7 +30,9 @@ import {
   type ConciergeMentionRow,
   intakeCommunityAgentTurn,
 } from "./communityAgentConciergeCore";
-import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import {
+  CANONICAL_COMMUNITY_AGENT_KEY,
+} from "../shared/communityAgentToolProtocol";
 import {
   buildCommunityFounderWelcomeText,
   communityFounderWelcomeIdempotencyKey,
@@ -53,12 +56,12 @@ import {
   type CommunityChannelLike,
 } from "./communityChannelCore";
 
-type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
+type InteractionActorType = StoredInteractionActorType;
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
 type InteractionStatus = "live" | "hidden" | "deleted";
 type InteractionVisibilityScope = "private" | "admin" | "community" | "public";
 type WorkspaceRefKind = "thread" | "project" | "file" | "artifact" | "run" | "resource";
-type MentionKind = "user" | "personal_agent" | "community_agent" | "role";
+type MentionKind = "user" | "community_agent" | "role";
 
 type InteractionRootRow = {
   _id: any;
@@ -257,6 +260,10 @@ function normalizeBeforeNumber(raw: unknown): number | null {
   return Math.max(0, Math.floor(parsed));
 }
 
+function presentedAgentKey(row: { actorType: InteractionActorType; actorAgentKey?: string }): string | null {
+  return row.actorType === RETIRED_PERSONAL_AGENT_ACTOR_TYPE ? CANONICAL_COMMUNITY_AGENT_KEY : row.actorAgentKey ?? null;
+}
+
 function authorFields(actorType: string, userId: string | null) {
   return actorType === "community_agent"
     ? { actor_user_id: null, on_behalf_of_user_id: userId }
@@ -266,12 +273,10 @@ function authorFields(actorType: string, userId: string | null) {
 function composerIdempotencyKey(
   idempotencyKey: string,
   kind: "root" | "reply",
-  actorType: "human" | "personal_agent" | "community_agent" = "human",
+  actorType: "human" | "community_agent" = "human",
 ): string {
   const namespace =
-    actorType === "personal_agent"
-      ? "community_personal_agent"
-      : actorType === "community_agent"
+    actorType === "community_agent"
         ? "community_canonical_agent"
         : "community_composer";
   return `${namespace}:${kind}:${idempotencyKey}`.slice(
@@ -762,11 +767,11 @@ async function mapRootBundle(
       id: normalizeIdValue(root._id),
       community_id: normalizeIdValue(root.communityId),
       channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
-      actor_type: root.actorType,
+      actor_type: presentInteractionActorType(root.actorType),
       // The community agent's post made for a member: the agent is the author,
       // the member is who it acted for.
-      ...authorFields(root.actorType, publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null)),
-      actor_agent_key: root.actorAgentKey ?? null,
+      ...authorFields(presentInteractionActorType(root.actorType), publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null)),
+      actor_agent_key: presentedAgentKey(root),
       kind: root.kind,
       status: root.status,
       visibility_scope: root.visibilityScope,
@@ -816,9 +821,9 @@ async function mapReplyBundle(
       channel_id: reply.channelId ? normalizeIdValue(reply.channelId) : null,
       root_id: normalizeIdValue(reply.rootId),
       seq: Math.max(0, Math.floor(reply.seq ?? 0)),
-      actor_type: reply.actorType,
-      ...authorFields(reply.actorType, publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null)),
-      actor_agent_key: reply.actorAgentKey ?? null,
+      actor_type: presentInteractionActorType(reply.actorType),
+      ...authorFields(presentInteractionActorType(reply.actorType), publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null)),
+      actor_agent_key: presentedAgentKey(reply),
       target_reply_id: reply.targetReplyId ? normalizeIdValue(reply.targetReplyId) : null,
       status: reply.status,
       visibility_scope: reply.visibilityScope,
@@ -1150,7 +1155,7 @@ async function createCommunityInteractionComposerMessageCore(
     const forMember = args.asCommunityAgent === true || args.asPersonalAgent === true;
     const channelActor = await resolveCommunityChannelActor({
       ctx, communityId: args.communityId, userId,
-      kind: forMember ? "personal_agent" : "human",
+      kind: forMember ? "community_agent_for_member" : "human",
     });
     await requireProfileSetupCompleteForUser(ctx, userId);
 

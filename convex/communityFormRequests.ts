@@ -164,7 +164,7 @@ export const readOwnFormInternal = internalQuery({ args: { ...selfScope, request
   return formDocument(row, record.version);
 } });
 export const submitOwnFormInternal = internalMutation({ args: { ...selfScope,
-  principalKind: v.union(v.literal("personal_agent"), v.literal("external_mcp"), v.literal("community_app")),
+  principalKind: v.union(v.literal("community_agent_for_member"), v.literal("external_mcp"), v.literal("community_app")),
   requestId: v.id("communityFormRequests"), versionId: v.id("communityFormVersions"), expectedRevision: v.number(),
   answers: v.record(v.string(), v.union(v.string(), v.array(v.string()))), idempotencyKey: v.string(),
 }, handler: async (ctx, args): Promise<Record<string, any>> => {

@@ -772,8 +772,8 @@ assert.match(
 );
 assert.match(
   rootReplyTarget,
-  /root\.actor_type === "human"[\s\S]*Boolean\(humanUserId\)[\s\S]*root\.actor_type === "personal_agent"[\s\S]*root\.actor_agent_key === `personal_agent:\$\{humanUserId\}`[\s\S]*root\.actor_type === "community_agent"[\s\S]*root\.actor_agent_key === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*!isHumanTarget[\s\S]*!isCanonicalPersonalAgentTarget[\s\S]*!isCanonicalCommunityAgentTarget[\s\S]*interaction_root_id: rootId[\s\S]*interaction_reply_id: null/,
-  "root replies should support humans and canonical personal/community agents without inventing a user or reply target",
+  /root\.actor_type === "human"[\s\S]*Boolean\(humanUserId\)[\s\S]*root\.actor_type === "community_agent"[\s\S]*root\.actor_agent_key === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*!isHumanTarget[\s\S]*!isCanonicalCommunityAgentTarget[\s\S]*interaction_root_id: rootId[\s\S]*interaction_reply_id: null/,
+  "root replies should support humans and the community agent without inventing a user or reply target",
 );
 assert.doesNotMatch(
   chatPanel,
@@ -792,12 +792,12 @@ assert.doesNotMatch(
 );
 assert.match(
   interactions,
-  /mapRootBundle[\s\S]*resolvePublicUserId\(ctx, root\.actorUserId[\s\S]*authorFields\(root\.actorType, publicActorUserId/,
+  /mapRootBundle[\s\S]*resolvePublicUserId\(ctx, root\.actorUserId[\s\S]*authorFields\(presentInteractionActorType\(root\.actorType\), publicActorUserId/,
   "root read bundles should expose public actor user ids (or the member a community agent post was for) for UI profile hydration",
 );
 assert.match(
   interactions,
-  /mapReplyBundle[\s\S]*resolvePublicUserId\(ctx, reply\.actorUserId[\s\S]*authorFields\(reply\.actorType, publicActorUserId/,
+  /mapReplyBundle[\s\S]*resolvePublicUserId\(ctx, reply\.actorUserId[\s\S]*authorFields\(presentInteractionActorType\(reply\.actorType\), publicActorUserId/,
   "reply read bundles should expose public actor user ids (or the member a community agent post was for) for UI profile hydration",
 );
 

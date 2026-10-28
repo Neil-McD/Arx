@@ -47,7 +47,7 @@ test("exact private-room lookup and scoped search do not enumerate a large direc
   await expect(t.query(internal.communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal, search)).rejects.toThrow("community_channel_unavailable");
 });
 
-test.each<ChannelActorKind>(["human", "personal_agent", "external_mcp", "community_agent"])(
+test.each<ChannelActorKind>(["human", "community_agent_for_member", "external_mcp", "community_agent"])(
   "%s keeps shared-room participation without gaining management", (kind) => {
     expect(evaluateCommunityChannelCapabilities({
       channel: shared, actor: { communityId: "community", kind, principalKey: kind, isManager: false }, hasGrant: false,
@@ -62,7 +62,7 @@ test("announcement publishing, replies and management are separate capabilities"
     .toEqual({ canRead: true, canPost: false, canReply: true, canManage: false });
   expect(evaluateCommunityChannelCapabilities({ channel: { ...channel, replyPolicy: "disabled" }, actor, hasGrant: true }).canReply).toBe(false);
   expect(evaluateCommunityChannelCapabilities({ channel, actor: { ...actor, isManager: true }, hasGrant: false }).canManage).toBe(true);
-  expect(evaluateCommunityChannelCapabilities({ channel, actor: { ...actor, kind: "personal_agent", isManager: true }, hasGrant: false }))
+  expect(evaluateCommunityChannelCapabilities({ channel, actor: { ...actor, kind: "community_agent_for_member", isManager: true }, hasGrant: false }))
     .toEqual({ canRead: true, canPost: true, canReply: true, canManage: false });
   const agent = { ...actor, kind: "community_agent" as const, isManager: true };
   expect(evaluateCommunityChannelCapabilities({ channel, actor: agent, hasGrant: false }).canPost).toBe(false);
@@ -129,7 +129,7 @@ test("restricted-room grants are exact, revocable, and distinct from sponsor aut
       status: "active", createdByUserId: f.users.owner, createdAt: 1, updatedAt: 1,
     });
     expect((await getCommunityChannelCapabilities({ ctx, channel, actor: member })).canRead).toBe(true);
-    for (const kind of ["personal_agent", "external_mcp"] as const) {
+    for (const kind of ["community_agent_for_member", "external_mcp"] as const) {
       const delegated = await resolveCommunityChannelActor({ ctx, communityId: f.communityId, userId: f.users.member, kind });
       expect(delegated.principalKey).toBe(member.principalKey);
       expect((await getCommunityChannelCapabilities({ ctx, channel, actor: delegated })).canRead).toBe(true);
@@ -159,7 +159,7 @@ test("owner/admin oversight is explicit; moderator is not private-room authority
     }
     await expect(resolveCommunityChannelActor({ ctx, communityId: f.communityId, userId: f.users.outsider })).rejects.toThrow();
     await ctx.db.patch(f.memberships.member, { active: false, revokedAt: 2 });
-    for (const kind of ["human", "personal_agent", "external_mcp", "community_agent"] as const) {
+    for (const kind of ["human", "community_agent_for_member", "external_mcp", "community_agent"] as const) {
       await expect(resolveCommunityChannelActor({ ctx, communityId: f.communityId, userId: f.users.member, kind })).rejects.toThrow();
     }
   });
@@ -223,7 +223,7 @@ test("an invited member uses canonical roots and replies; removal denies exact I
     communityId: f.communityId, channelId: f.channelId,
   })).roots).toHaveLength(1);
   expect((await member.query(api.communityInteractions.listCommunityInteractionReplies, { rootId })).replies).toHaveLength(1);
-  for (const actorKind of ["personal_agent", "external_mcp"] as const) {
+  for (const actorKind of ["community_agent_for_member", "external_mcp"] as const) {
     const evidence = await t.query(internal.communityInteractionEvidence.readCommunityInteractionEvidenceInternal, {
       userId: f.users.member, communityId: f.communityId, actorKind, expectedChannelId: f.channelId,
       ref: buildCommunityInteractionEvidenceRef({ objectType: "root", objectId: rootId }),

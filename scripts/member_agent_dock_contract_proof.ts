@@ -173,7 +173,7 @@ assert.equal(isGlobalMemberAgentEpisodeThreadKey("member-agent:global:episode:2"
 assert.equal(isGlobalMemberAgentEpisodeThreadKey("member-agent:community_1:episode:2"), false);
 assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:community_1:episode:2"), true);
 assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:community_1"), true);
-assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:global:episode:2"), false);
+assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:global:episode:2"), true);
 assert.equal(isReadOnlyLegacyMemberAgentThreadKey("workspace:thread_1"), false);
 assert.throws(() => buildGlobalMemberAgentEpisodeThreadKey(0), /member_agent_episode_ordinal_invalid/);
 assert.throws(() => buildMemberAgentThreadKey(""), /member_agent_community_required/);
@@ -246,8 +246,8 @@ assert.deepEqual(
   ],
 );
 assert.match(
-  buildRuntimeInvocationSurfacePrompt("member_agent_dock") ?? "",
-  /member's own Polynet agent[\s\S]*not the community's agent[\s\S]*episodes belong to this member across Polynet[\s\S]*Never claim to remember/,
+  buildRuntimeInvocationSurfacePrompt("member_agent_dock"),
+  /this community's agent in a private conversation with the authenticated member[\s\S]*requesting member's current permissions/,
 );
 
 assert.deepEqual(normalizeToolArguments("member_conversations_list", { limit: 99 }), { limit: 12 });
@@ -488,18 +488,13 @@ assert.match(
 );
 assert.match(
   threads,
-  /requireWritableMemberAgentThread[\s\S]*isReadOnlyLegacyMemberAgentThreadKey\(threadKey\)[\s\S]*member_agent_legacy_episode_read_only[\s\S]*args\.role !== "user"[\s\S]*getGlobalMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
-  "new user messages must fail closed when addressed to a closed member-agent episode",
+  /requireWritableMemberAgentThread[\s\S]*communityConversationScope\(args\.thread\)[\s\S]*member_agent_episode_not_active[\s\S]*isReadOnlyLegacyMemberAgentThreadKey\(threadKey\)[\s\S]*member_agent_legacy_episode_read_only/,
+  "new messages go only to the active community conversation; every member-agent conversation is read-only history",
 );
 assert.doesNotMatch(
   threads,
   /ensureMemberAgentCommunityThread|startNewMemberAgentCommunityEpisode|ensureMemberAgentCommunityChannelCore/,
   "legacy per-community channels must not retain a public writer or episode rotator",
-);
-assert.match(
-  threads,
-  /getGlobalMemberAgentChannel[\s\S]*\.withIndex\("by_owner_scope"[\s\S]*MEMBER_AGENT_GLOBAL_SCOPE_KEY[\s\S]*\.unique\(\)/,
-  "global channel lookup must fail closed if the one-channel-per-member invariant is violated",
 );
 assert.match(
   communityLifecycle,
@@ -638,7 +633,7 @@ assert.match(
 );
 assert.match(
   runtimeLoop,
-  /POLYNET_CANONICAL_TOOL_NAMES[\s\S]*executePolynetCanonicalTool[\s\S]*principalKind:[\s\S]*"personal_agent"/,
+  /POLYNET_CANONICAL_TOOL_NAMES[\s\S]*executePolynetCanonicalTool[\s\S]*principalKind:[\s\S]*"community_agent_for_member"/,
   "the native runtime adapter must delegate the canonical five to the same shared executor",
 );
 assert.match(

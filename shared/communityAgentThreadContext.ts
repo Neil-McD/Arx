@@ -6,7 +6,6 @@ export const COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CHARS = 7_800;
 
 export type CommunityAgentThreadActorType =
   | "human"
-  | "personal_agent"
   | "community_agent"
   | "system";
 
@@ -204,9 +203,7 @@ function renderTurn(
       })
     : turn.actorType === "community_agent"
       ? boundedText(turn.displayName, 80) || "Community agent"
-      : turn.actorType === "personal_agent"
-        ? boundedText(turn.displayName, 80) || "Personal agent"
-        : "System";
+      : "System";
   const target = turn.targetReplyId ? ` replying_to=${turn.targetReplyId}` : "";
   const seq = turn.kind === "root" ? "root" : `reply:${Math.max(0, Math.floor(Number(turn.seq ?? 0)))}`;
   const edited = turn.editedAt ? ` edited_at=${new Date(turn.editedAt).toISOString()}` : "";

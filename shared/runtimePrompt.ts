@@ -572,10 +572,7 @@ export function buildPlatformHarnessRuntimePromptBundle(
   params: RuntimePlatformHarnessPromptParams,
 ): RuntimePromptBundle {
   const communityId = String(params.communityId ?? "").trim();
-  const invocationSurfacePrompt = buildRuntimeInvocationSurfacePrompt(
-    params.invocationSurface,
-    params.memberAgentSurfaceContext,
-  );
+  const invocationSurfacePrompt = buildRuntimeInvocationSurfacePrompt(params.invocationSurface);
   const stablePromptBlocks = [
     buildRuntimePromptSection({
       id: "platform_doctrine",

@@ -1,3 +1,4 @@
+import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { internal } from "./_generated/api";
 import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
@@ -40,7 +41,7 @@ export type ConciergeMentionRow = {
 type InteractionRootRow = {
   _id: any;
   communityId: any;
-  actorType: "human" | "personal_agent" | "community_agent" | "system";
+  actorType: StoredInteractionActorType;
   actorUserId?: any;
   actorAgentKey?: string;
   status: "live" | "hidden" | "deleted";
@@ -51,7 +52,7 @@ type InteractionReplyRow = {
   _id: any;
   communityId: any;
   rootId: any;
-  actorType: "human" | "personal_agent" | "community_agent" | "system";
+  actorType: StoredInteractionActorType;
   actorUserId?: any;
   actorAgentKey?: string;
   targetReplyId?: any;

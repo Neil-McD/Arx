@@ -29,16 +29,11 @@ export function buildCommunityRootReplyTarget(args: {
 
   const humanUserId = String(root.actor_user_id ?? "").trim();
   const isHumanTarget = root.actor_type === "human" && Boolean(humanUserId);
-  const isCanonicalPersonalAgentTarget =
-    root.actor_type === "personal_agent" &&
-    Boolean(humanUserId) &&
-    root.actor_agent_key === `personal_agent:${humanUserId}`;
   const isCanonicalCommunityAgentTarget =
     root.actor_type === "community_agent" &&
     root.actor_agent_key === CANONICAL_COMMUNITY_AGENT_KEY;
   if (
     !isHumanTarget &&
-    !isCanonicalPersonalAgentTarget &&
     !isCanonicalCommunityAgentTarget
   ) {
     return null;
@@ -48,7 +43,7 @@ export function buildCommunityRootReplyTarget(args: {
   return {
     id: rootId,
     sender_id:
-      isHumanTarget || isCanonicalPersonalAgentTarget
+      isHumanTarget
         ? humanUserId
         : CANONICAL_COMMUNITY_AGENT_KEY,
     body: root.content_summary ?? "",

@@ -2,7 +2,7 @@ import { getFunctionName } from "convex/server";
 import { internal } from "./_generated/api";
 import { buildCommunityResourceRuntimeLaneState } from "../shared/communityResourceLane";
 
-// A member's personal agent, run from a community front end. The front end has
+// The community agent acting for a member, run from a community front end. The front end has
 // no Convex identity: the member was authenticated by its session. Studio's
 // runtime turn re-checks the Convex identity in a few places, so the turn runs
 // on a context that sends exactly those calls to internal twins carrying the
@@ -35,7 +35,7 @@ const REDIRECTS: Record<string, Redirect> = {
   "communityIntelligenceDirectory:readCommunityMemoryInternal": userTwin(internal.communityIntelligenceDirectory.readCommunityMemoryInternal),
   "communityIntelligenceDirectory:recordCommunityOutcomeObservationInternal":
     userTwin(internal.communityIntelligenceDirectory.recordCommunityOutcomeObservationInternal),
-  // The door's authority for a personal agent: resolved for the trusted member.
+  // The door's authority for the agent acting for a member: resolved for the trusted member.
   "communityCapabilityContext:resolveCommunityCapabilityContextInternal": (args, member) => ({
     ref: internal.communityCapabilityContext.resolveCommunityCapabilityContextForTrustedActorInternal,
     args: { ...args, userId: member.userId },

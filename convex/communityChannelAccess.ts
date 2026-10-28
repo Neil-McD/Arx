@@ -4,7 +4,7 @@ import {
   requireCommunityChatAccess,
 } from "./communityCore";
 
-export type ChannelActorKind = "human" | "personal_agent" | "external_mcp" | "community_agent";
+export type ChannelActorKind = "human" | "community_agent_for_member" | "external_mcp" | "community_agent";
 export type ChannelCapabilities = { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
 export type ChannelPolicy = {
   _id?: any;
@@ -30,7 +30,7 @@ export async function resolveCommunityChannelActor(args: {
   ctx: any; communityId: any; userId: any; kind?: ChannelActorKind;
 }): Promise<ChannelActor> {
   const kind = args.kind ?? "human";
-  if (!["human", "personal_agent", "external_mcp", "community_agent"].includes(kind)) {
+  if (!["human", "community_agent_for_member", "external_mcp", "community_agent"].includes(kind)) {
     throw new Error("community_channel_actor_invalid");
   }
   const { community } = await requireCommunityChatAccess(args);
@@ -60,7 +60,7 @@ export function evaluateCommunityChannelCapabilities(args: {
   const { channel, actor, hasGrant } = args;
   const denied = { canRead: false, canPost: false, canReply: false, canManage: false };
   if (
-    !["human", "personal_agent", "external_mcp", "community_agent"].includes(actor.kind) ||
+    !["human", "community_agent_for_member", "external_mcp", "community_agent"].includes(actor.kind) ||
     !actor.principalKey ||
     !normalizeIdValue(channel.communityId) ||
     normalizeIdValue(channel.communityId) !== normalizeIdValue(actor.communityId) ||

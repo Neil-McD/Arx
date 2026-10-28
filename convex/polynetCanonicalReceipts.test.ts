@@ -40,7 +40,7 @@ async function createScope(t: ReturnType<typeof convexTest>) {
 function receiptArgs(scope: Awaited<ReturnType<typeof createScope>>) {
   return {
     ...scope,
-    principalKind: "personal_agent" as const,
+    principalKind: "community_agent_for_member" as const,
     toolName: "polynet_write" as const,
     idempotencyKey: "receipt-operation-1",
     requestFingerprint: '{"operation":"write"}',
@@ -184,6 +184,33 @@ test("completed receipts from before lease fields existed remain replayable", as
     ok: true,
     status: "completed",
     result: { retained: true },
+  });
+});
+
+test("a write completed under the retired personal_agent name is not repeated after the rename", async () => {
+  const t = convexTest(schema, modules);
+  const args = receiptArgs(await createScope(t));
+  await t.run(async (ctx) => {
+    await ctx.db.insert("polynetCanonicalOperationReceipts", {
+      ...args,
+      principalKind: "personal_agent",
+      status: "completed",
+      result: { posted: "before-deploy" },
+      createdAt: 1_760_000_000_000,
+      updatedAt: 1_760_000_000_000,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).polynetCanonicalReceipts
+        .reserveCanonicalOperationReceiptInternal,
+      args,
+    ),
+  ).resolves.toMatchObject({
+    ok: true,
+    status: "completed",
+    result: { posted: "before-deploy" },
   });
 });
 

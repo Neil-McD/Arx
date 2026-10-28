@@ -340,7 +340,7 @@ export async function executeRetrievalHarnessTool(params: {
       ctx: params.ctx,
       authSubject,
       userId: params.userId,
-      principalKind: communityOwned ? "community_agent" : "personal_agent",
+      principalKind: communityOwned ? "community_agent" : "community_agent_for_member",
       ...(communityMounted && params.communityId
         ? { mountedCommunityId: params.communityId }
         : {}),

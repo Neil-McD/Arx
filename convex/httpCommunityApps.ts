@@ -106,7 +106,7 @@ async function ensureMemberAgentConversation(ctx: any, session: AppSession) {
 const noStoreHeaders = () => new Headers({ "Cache-Control": "no-store" });
 
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
-  // A turn with the member's personal agent, pinned to this community's
+  // A turn with the community agent acting for the member, pinned to this community's
   // conversation and the member lane. The page sends only text; it cannot pick
   // the thread, community, model or funding.
   args.http.route({
