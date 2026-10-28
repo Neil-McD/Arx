@@ -25,11 +25,9 @@ import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   MEMBER_AGENT_GLOBAL_SCOPE_KEY,
   buildGlobalMemberAgentEpisodeThreadKey,
-  isCommunityFunnelThreadKeyForCommunity,
   isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
-  resolveCommunityFunnelThreadSlotForCommunity,
 } from "../shared/runtimeInvocationSurface";
 import { MEMBER_AGENT_CONTEXT_PAGE_SIZE } from "../shared/memberAgentConversationContext";
 import {
@@ -1615,12 +1613,7 @@ async function requireWritableMemberAgentThread(args: {
 
 function isClaimedImageAttachmentThread(thread: ThreadLike): boolean {
   const threadKey = String(thread.threadKey ?? "").trim();
-  if (isGlobalMemberAgentEpisodeThreadKey(threadKey) || communityConversationScope(thread)) return true;
-  const communityId = String(thread.communityId ?? "").trim();
-  return Boolean(
-    communityId &&
-      isCommunityFunnelThreadKeyForCommunity(threadKey, communityId),
-  );
+  return isGlobalMemberAgentEpisodeThreadKey(threadKey) || Boolean(communityConversationScope(thread));
 }
 
 async function requireWritableClaimedImageAttachmentThread(args: {
@@ -1635,18 +1628,6 @@ async function requireWritableClaimedImageAttachmentThread(args: {
       ownerId: args.ownerId,
       thread: args.thread,
       role: "user",
-    });
-    return;
-  }
-  const communityId = String(args.thread.communityId ?? "").trim();
-  if (
-    communityId &&
-    isCommunityFunnelThreadKeyForCommunity(threadKey, communityId)
-  ) {
-    await requireCommunityManager({
-      ctx: args.ctx,
-      communityId,
-      userId: args.ownerId,
     });
     return;
   }
@@ -3520,13 +3501,7 @@ export const recordRuntimeProviderContextAttestationInternal = internalMutation(
         return fail("runtime_provider_context_attestation_surface_conflict");
       }
     } else {
-      const funnelSlot = resolveCommunityFunnelThreadSlotForCommunity(
-        threadKey,
-        communityId,
-      );
-      if (!funnelSlot || funnelSlot !== attestation.scope.funnel_slot) {
-        return fail("runtime_provider_context_attestation_surface_conflict");
-      }
+      return fail("runtime_provider_context_attestation_surface_conflict");
     }
 
     const eventKey = `${runId}:${RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE}:initial:1`;

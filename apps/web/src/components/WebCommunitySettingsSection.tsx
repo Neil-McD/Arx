@@ -16,7 +16,6 @@ import { buildStripeConnectPresentation } from "../controllers/buildStripeConnec
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
-import { WebCommunityExternalFunnelLink } from "./WebCommunityExternalFunnelLink";
 import {
   platformTabId,
   platformTabPanelId,
@@ -54,11 +53,6 @@ type WebCommunitySettingsSectionProps = {
   canManageCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   aiAgentProps: ComponentProps<typeof WebCommunityAiAgentSection>;
-  externalWebsite: {
-    isLoading: boolean;
-    error: string | null;
-    controls: ComponentProps<typeof WebCommunityExternalFunnelLink>;
-  };
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
   communityPlatformFeeBps: number | null;
@@ -737,7 +731,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canManageCommunitySettings,
     canManageMembersActiveCommunity,
     aiAgentProps,
-    externalWebsite,
     requireSignIn,
     accountCommerceStatus,
     communityPlatformFeeBps,
@@ -888,18 +881,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     />
                   </div>
                 </div>
-                {canManageMembersActiveCommunity ? (
-                  externalWebsite.error ? (
-                    <div className="settings-section auth-error">{externalWebsite.error}</div>
-                  ) : externalWebsite.isLoading ? (
-                    <div className="settings-section">Loading website settings…</div>
-                  ) : (
-                    <WebCommunityExternalFunnelLink
-                      key={externalWebsite.controls.communityId}
-                      {...externalWebsite.controls}
-                    />
-                  )
-                ) : null}
                 {state.communitySettingsError ? (
                   <div className="auth-error">
                     {state.communitySettingsError}

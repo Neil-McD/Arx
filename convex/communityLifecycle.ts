@@ -26,10 +26,6 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
-  normalizeCommunityFunnelConfigInput,
-  saveCommunityFunnelConfigInternal,
-} from "./communityFunnel";
-import {
   requireAccountSetupCompleteForUser,
   requireProfileSetupCompleteForUser,
 } from "./accountSetupCore";
@@ -1184,41 +1180,6 @@ export const saveCommunityOneLiner = mutation({
   },
 });
 
-
-export const saveCommunityPublicPresentation = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    config: v.any(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const normalizedFunnel = normalizeCommunityFunnelConfigInput(args.config);
-    const funnel = await saveCommunityFunnelConfigInternal(
-      ctx,
-      args.communityId,
-      normalizedFunnel,
-      nowMs,
-    );
-    return {
-      community_id: String(community._id),
-      updated_at: toIsoString(nowMs),
-      funnel,
-    };
-  },
-});
 
 export const deleteCommunity = mutation({
   args: {

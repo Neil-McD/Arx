@@ -71,10 +71,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   aiAgentInstructionsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["instructionsEditorProps"];
-  isLoadingCommunityFunnel: WebCommunitySecondaryPanelsProps["funnel"]["isLoadingCommunityFunnel"];
-  isCommunityFunnelReady: WebCommunitySecondaryPanelsProps["funnel"]["isCommunityFunnelReady"];
-  communityFunnelError: WebCommunitySecondaryPanelsProps["funnel"]["communityFunnelError"];
-  funnelEditorProps: WebCommunitySecondaryPanelsProps["funnel"]["editorProps"];
   workflows: WebCommunitySecondaryPanelsProps["workflows"];
   canViewActiveCommunityAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewActiveCommunityAnalytics"];
   canViewPlatformAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewPlatformAnalytics"];
@@ -208,16 +204,6 @@ export function buildWebCommunitySurfaceProjection(
       communityAgentConfigError: params.communityAgentConfigError,
       onRequireSignIn: params.requireSignIn,
       instructionsEditorProps: params.aiAgentInstructionsEditorProps,
-    },
-    funnel: {
-      activeCommunity: params.activeCommunity,
-      hasSession: params.hasAuthenticatedPresentation,
-      canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
-      isLoadingCommunityFunnel: params.isLoadingCommunityFunnel,
-      isCommunityFunnelReady: params.isCommunityFunnelReady,
-      communityFunnelError: params.communityFunnelError,
-      onRequireSignIn: params.requireSignIn,
-      editorProps: params.funnelEditorProps,
     },
     workflows: params.workflows,
     analytics: {

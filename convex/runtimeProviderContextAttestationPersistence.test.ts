@@ -11,7 +11,6 @@ import {
   type RuntimeProviderContextAttestationV1,
 } from "../shared/runtimeProviderContextAttestation";
 import {
-  buildCommunityFunnelThreadKey,
   buildGlobalMemberAgentEpisodeThreadKey,
 } from "../shared/runtimeInvocationSurface";
 
@@ -44,10 +43,7 @@ async function createFixture(
       updatedAt: nowMs,
     });
     const communityIdText = String(communityId);
-    const threadKey =
-      surface === "community_funnel_builder"
-        ? buildCommunityFunnelThreadKey(communityIdText, "custom_2")
-        : buildGlobalMemberAgentEpisodeThreadKey(1);
+    const threadKey = buildGlobalMemberAgentEpisodeThreadKey(1);
     const threadId = await ctx.db.insert("threads", {
       ownerId: userId,
       threadKey,
@@ -97,7 +93,7 @@ async function createFixture(
     threadId: String(ids.threadId),
     communityId: String(ids.communityId),
     communityContextVersion: 4,
-    funnelSlot: surface === "community_funnel_builder" ? "custom_2" : null,
+    funnelSlot: null,
     requestedModelId: "gpt-test",
     inferenceSource: "platform",
     modelRef: "openai/gpt-test",
@@ -126,7 +122,7 @@ async function createFixture(
   return { t, ids, attestation };
 }
 
-test.each(["member_agent_dock", "community_funnel_builder"] as const)(
+test.each(["member_agent_dock"] as const)(
   "%s attestation persists in the existing event table",
   async (surface) => {
     const { t, ids, attestation } = await createFixture(surface);

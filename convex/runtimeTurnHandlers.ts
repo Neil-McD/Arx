@@ -26,10 +26,6 @@ import {
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import {
-  communityFunnelTurnPostconditionPassed,
-  isCommunityFunnelDraftWriteReceiptEvent,
-} from "../shared/communityFunnelTurnPostcondition";
-import {
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
 import {
@@ -398,7 +394,6 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityChannels,
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
-      runtimeCommunityFunnelSlot,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
@@ -566,113 +561,6 @@ export async function handleRuntimeTurnRequest(args: {
         errorCode:
           typeof result?.errorCode === "string" ? result.errorCode : null,
       };
-    };
-    let funnelDraftWriteObserved = false;
-    const observeFunnelDraftWriteEvent = (event: {
-      eventType: string;
-      payload: Record<string, unknown>;
-    }): void => {
-      if (isCommunityFunnelDraftWriteReceiptEvent(event)) {
-        funnelDraftWriteObserved = true;
-      }
-    };
-    const funnelDraftPostconditionBefore =
-      invocationSurface === "community_funnel_builder" &&
-      runtimeCommunityId &&
-      runtimeCommunityFunnelSlot
-        ? ((await ctx.runQuery(
-            (internal as any).communityFunnel.getCommunityFunnelDraftInternal as any,
-            {
-              communityId: runtimeCommunityId as any,
-              slot: runtimeCommunityFunnelSlot,
-            },
-          )) as {
-            selected_funnel?: {
-              draft_revision?: unknown;
-              draft_content_v2?: unknown;
-            } | null;
-          })
-        : null;
-    const verifyFunnelDraftPostcondition = async (): Promise<{
-      ok: boolean;
-      beforeRevision: number;
-      afterRevision: number;
-    }> => {
-      if (invocationSurface !== "community_funnel_builder") {
-        return { ok: true, beforeRevision: 0, afterRevision: 0 };
-      }
-      const beforeRevision = Math.max(
-        0,
-        Math.floor(Number(
-          funnelDraftPostconditionBefore?.selected_funnel?.draft_revision ?? 0,
-        )),
-      );
-      if (!runtimeCommunityId || !runtimeCommunityFunnelSlot) {
-        return { ok: false, beforeRevision, afterRevision: beforeRevision };
-      }
-      try {
-        const after = (await ctx.runQuery(
-          (internal as any).communityFunnel.getCommunityFunnelDraftInternal as any,
-          {
-            communityId: runtimeCommunityId as any,
-            slot: runtimeCommunityFunnelSlot,
-          },
-        )) as {
-          selected_funnel?: {
-            draft_revision?: unknown;
-            draft_content_v2?: unknown;
-          } | null;
-        };
-        const afterRevision = Math.max(
-          0,
-          Math.floor(Number(after?.selected_funnel?.draft_revision ?? 0)),
-        );
-        const ok = communityFunnelTurnPostconditionPassed({
-          before: {
-            draftRevision: beforeRevision,
-            hasDraftContent: Boolean(
-              funnelDraftPostconditionBefore?.selected_funnel?.draft_content_v2,
-            ),
-          },
-          after: {
-            draftRevision: afterRevision,
-            hasDraftContent: Boolean(after?.selected_funnel?.draft_content_v2),
-          },
-          writeReceiptObserved: funnelDraftWriteObserved,
-        });
-        await appendRunEvent({
-          eventType: "community_funnel_draft_postcondition_checked",
-          eventKey: `${runId}:community_funnel_draft_postcondition_checked:1`,
-          payload: {
-            run_id: runId,
-            community_id: runtimeCommunityId,
-            slot: runtimeCommunityFunnelSlot,
-            before_revision: beforeRevision,
-            after_revision: afterRevision,
-            write_receipt_observed: funnelDraftWriteObserved,
-            draft_content_present: Boolean(
-              after?.selected_funnel?.draft_content_v2,
-            ),
-            status: ok ? "passed" : "failed",
-          },
-        });
-        return { ok, beforeRevision, afterRevision };
-      } catch {
-        return { ok: false, beforeRevision, afterRevision: beforeRevision };
-      }
-    };
-    const funnelDraftPostconditionFailure = {
-      code: "community_funnel_draft_not_saved",
-      message:
-        "The composer finished without saving this funnel. Try the revision again.",
-    } as const;
-    const finishFunnelDraftPostconditionFailure = async (): Promise<void> => {
-      await finishRunBestEffortForRun({
-        status: "error",
-        reason: funnelDraftPostconditionFailure.code,
-        errorCode: funnelDraftPostconditionFailure.code,
-        errorMessage: funnelDraftPostconditionFailure.message,
-      });
     };
     const appendContextIntegrityCheckBestEffortForRun = async (): Promise<void> => {
       await appendRuntimeContextIntegrityCheckBestEffort({
@@ -982,10 +870,7 @@ export async function handleRuntimeTurnRequest(args: {
       }
     };
     const communityInferenceSurface: CommunityInferenceSurface | null =
-      invocationSurface === "member_agent_dock" ||
-      invocationSurface === "community_funnel_builder"
-        ? invocationSurface
-        : null;
+      invocationSurface === "member_agent_dock" ? invocationSurface : null;
     let communityFundingProviderStarted = false;
     const communityFundingUsage = createFounderInferenceUsageTotals(requestedModelId);
     const claimCommunityFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
@@ -1192,7 +1077,6 @@ export async function handleRuntimeTurnRequest(args: {
           eventKey?: string;
           payload: Record<string, unknown>;
         }): Promise<void> => {
-          observeFunnelDraftWriteEvent(event);
           const created = await appendRunEvent(event);
           await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
           const mapped = mapPersistedRuntimeEventRow(created);
@@ -1238,7 +1122,6 @@ export async function handleRuntimeTurnRequest(args: {
             communityChannels: runtimeCommunityChannels,
             communitySystemPrompt: runtimeCommunitySystemPrompt,
             communityLensAuthority: runtimeCommunityLensAuthority,
-            communityFunnelSlot: runtimeCommunityFunnelSlot,
             communityContextVersion: runtimeCommunityId
               ? runtimeCommunityContextVersion
               : null,
@@ -1336,17 +1219,10 @@ export async function handleRuntimeTurnRequest(args: {
           });
           return;
         }
-        const funnelPostcondition = loopResult.ok
-          ? await verifyFunnelDraftPostcondition()
-          : { ok: true, beforeRevision: 0, afterRevision: 0 };
         try {
           await finalizeCommunityFundingForLoopResult({
             session: communityFundingSession,
             result: loopResult,
-            outcomeCode:
-              !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
-                ? "community_funnel_builder_postcondition_failed"
-                : undefined,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1476,19 +1352,6 @@ export async function handleRuntimeTurnRequest(args: {
               error: loopResult.message,
               message: loopResult.message,
               status: loopResult.status,
-            },
-          });
-          return;
-        }
-        if (!funnelPostcondition.ok) {
-          await finishFunnelDraftPostconditionFailure();
-          writer.send({
-            event: "error",
-            data: {
-              code: funnelDraftPostconditionFailure.code,
-              error: funnelDraftPostconditionFailure.message,
-              message: funnelDraftPostconditionFailure.message,
-              status: 409,
             },
           });
           return;
@@ -1627,7 +1490,6 @@ export async function handleRuntimeTurnRequest(args: {
             communityChannels: runtimeCommunityChannels,
         communitySystemPrompt: runtimeCommunitySystemPrompt,
         communityLensAuthority: runtimeCommunityLensAuthority,
-        communityFunnelSlot: runtimeCommunityFunnelSlot,
         communityContextVersion: runtimeCommunityId
           ? runtimeCommunityContextVersion
           : null,
@@ -1636,7 +1498,6 @@ export async function handleRuntimeTurnRequest(args: {
         invocationSurface,
         memberAgentSurfaceContext,
         appendRunEvent: async (event): Promise<void> => {
-          observeFunnelDraftWriteEvent(event);
           await appendRunEvent(event);
           await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
         },
@@ -1726,17 +1587,10 @@ export async function handleRuntimeTurnRequest(args: {
         run_id: runId,
       });
     }
-    const funnelPostcondition = loopResult.ok
-      ? await verifyFunnelDraftPostcondition()
-      : { ok: true, beforeRevision: 0, afterRevision: 0 };
     try {
       await finalizeCommunityFundingForLoopResult({
         session: communityFundingSession,
         result: loopResult,
-        outcomeCode:
-          !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
-            ? "community_funnel_builder_postcondition_failed"
-            : undefined,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1838,16 +1692,6 @@ export async function handleRuntimeTurnRequest(args: {
         code: loopResult.code,
         error: loopResult.code,
         message: loopResult.message,
-        run_id: runId,
-      });
-    }
-    if (!funnelPostcondition.ok) {
-      await finishFunnelDraftPostconditionFailure();
-      return runtimeJsonResponse(409, {
-        ok: false,
-        code: funnelDraftPostconditionFailure.code,
-        error: funnelDraftPostconditionFailure.code,
-        message: funnelDraftPostconditionFailure.message,
         run_id: runId,
       });
     }

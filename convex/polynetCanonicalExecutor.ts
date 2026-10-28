@@ -39,7 +39,6 @@ import {
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import { checkSite, formatProblems, isCheckedFile } from "../packages/polynet-cli/checks.mjs";
-import type { CommunityCustomFunnelSlot } from "../shared/communityTypes.ts";
 
 export type PolynetCanonicalExecutionResult =
   | { ok: true; value: Record<string, unknown> }
@@ -79,33 +78,6 @@ const FORM_SUBMIT_OPERATION = "community.form.submit";
 const REACT_OPERATION = "community.interaction.react";
 const SELF_FORMS_DIRECTORY = "/members/me/forms/";
 const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
-
-const COMMUNITY_FUNNEL_UPDATE_OPERATION =
-  "community.funnel.update_draft" as const;
-
-function projectSelectedFunnelCurrentState(
-  value: Record<string, unknown>,
-  slot: CommunityCustomFunnelSlot,
-): Record<string, unknown> {
-  const selected =
-    value.selected_funnel &&
-    typeof value.selected_funnel === "object" &&
-    !Array.isArray(value.selected_funnel)
-      ? value.selected_funnel as Record<string, unknown>
-      : {};
-  return {
-    selected_slot: slot,
-    active_slot: value.active_slot ?? "default",
-    draft_vsl_url: selected.draft_vsl_url ?? null,
-    draft_content_v2: selected.draft_content_v2 ?? null,
-    draft_revision: Number(selected.draft_revision ?? 0),
-    draft_updated_at: selected.draft_updated_at ?? null,
-    published_vsl_url: selected.published_vsl_url ?? null,
-    published_content_v2: selected.published_content_v2 ?? null,
-    published_draft_revision: Number(selected.published_draft_revision ?? 0),
-    published_at: selected.published_at ?? null,
-  };
-}
 
 function canonicalError(
   code: string,
@@ -645,16 +617,9 @@ function capabilityDocument(args: {
   evidenceSurface: CommunityEvidenceSurface;
   principalKind: PolynetPrincipalKind;
 }): Record<string, unknown> | null {
-  // Retained only for historical receipts; do not advertise or run new draft writes.
-  if (args.operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) return null;
   const isMemberCapability =
     args.evidenceSurface !== "community_funnel_builder" &&
     (MEMBER_CAPABILITIES as readonly string[]).includes(args.operation);
-  const isFunnelCapability =
-    args.operation === COMMUNITY_FUNNEL_UPDATE_OPERATION &&
-    args.evidenceSurface === "community_funnel_builder" &&
-    args.principalKind === "personal_agent" &&
-    args.target.authority.canUseBuilderProjection;
   // Builder decisions run only from a harness the founder operates directly. The native
   // personal agent reads member-authored evidence and has no per-call human confirmation.
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
@@ -670,7 +635,7 @@ function capabilityDocument(args: {
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isFunnelCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isSiteDeployCapability) {
+  if (!isMemberCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isSiteDeployCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -678,7 +643,7 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isFunnelCapability || isAdmissionCapability || isWorkflowApprovalCapability || isSiteDeployCapability ? "builder" : "member",
+    authority_lane: isAdmissionCapability || isWorkflowApprovalCapability || isSiteDeployCapability ? "builder" : "member",
     idempotency_required: true,
   };
   if (isReactCapability) {
@@ -717,14 +682,6 @@ function capabilityDocument(args: {
         : ["record_denial", "seven_day_reapplication_cooldown"],
       forbidden_effects: ["paid_access", "restore_membership", "change_role", "bulk_decision",
         ...(args.operation === ADMISSION_APPROVE_OPERATION ? ["deny"] : ["grant_access", "extend_existing_cooldown", "send_email", "run_workflow"])],
-    };
-  } else if (isFunnelCapability) {
-    operationDefinition.input = {
-      required: ["expected_revision", "content"],
-      expected_revision: "non-negative integer",
-      content_contract: "community_funnel_content:v2",
-      effects: ["replace_manager_draft"],
-      forbidden_effects: ["publish", "change_access", "change_pricing"],
     };
   } else if (args.operation === "community.memory.record_outcome") {
     operationDefinition.input = {
@@ -1279,7 +1236,6 @@ async function executeCanonicalRead(args: {
   principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
-  funnelDraftSlot?: CommunityCustomFunnelSlot | null;
   input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {
   const parsed = parsePolynetSemanticRepositoryPath(args.input.path);
@@ -1550,29 +1506,11 @@ async function executeCanonicalRead(args: {
         "Capability not found or not authorized.",
       );
     }
-    const currentState =
-      operation === COMMUNITY_FUNNEL_UPDATE_OPERATION
-        ? projectSelectedFunnelCurrentState(
-            (await args.ctx.runQuery(
-              (internal as any).communityFunnel
-                .getCommunityFunnelDraftInternal,
-              {
-                communityId: target.communityId,
-                slot: args.funnelDraftSlot ?? "custom_1",
-              },
-            )) as Record<string, unknown>,
-            args.funnelDraftSlot ?? "custom_1",
-          )
-        : null;
     return {
       ok: true,
       value: {
         path: mountedPath(target.communitySlug, target.localPath),
-        body: JSON.stringify(
-          currentState ? { ...definition, current_state: currentState } : definition,
-          null,
-          2,
-        ),
+        body: JSON.stringify(definition, null, 2),
         truncated: false,
       },
     };
@@ -1594,7 +1532,6 @@ async function executeCanonicalRead(args: {
         {
           userId: args.userId,
           communityId: target.communityId,
-          slot: args.funnelDraftSlot ?? "custom_1",
           ref: builderResourceMatch[1],
         },
       )) as Record<string, unknown>;
@@ -2144,7 +2081,6 @@ async function executeCanonicalCall(args: {
   principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
-  funnelDraftSlot?: CommunityCustomFunnelSlot | null;
   input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {
   const targetPath = requiredString(args.input.target, 1_024);
@@ -2170,10 +2106,7 @@ async function executeCanonicalCall(args: {
     !Array.isArray(args.input.input)
       ? (args.input.input as Record<string, unknown>)
       : {};
-  const input =
-    operation === COMMUNITY_FUNNEL_UPDATE_OPERATION
-      ? rawInput
-      : omitNullishObjectFields(rawInput);
+  const input = omitNullishObjectFields(rawInput);
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
   if (version !== 1) {
     return canonicalError(
@@ -2285,88 +2218,6 @@ async function executeCanonicalCall(args: {
       return canonicalError("admission_request_unavailable", "Admission request not available or decision not authorized.");
     }
   }
-  if (operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) {
-    const funnelDraftSlot = args.funnelDraftSlot ?? "custom_1";
-    const receiptIdempotencyKey = `community-funnel:${funnelDraftSlot}:${idempotencyKey}`;
-    const expectedRevision = Number(input.expected_revision);
-    if (
-      !Number.isSafeInteger(expectedRevision) ||
-      expectedRevision < 0 ||
-      !input.content ||
-      typeof input.content !== "object" ||
-      Array.isArray(input.content)
-    ) {
-      return canonicalError(
-        "invalid_tool_args",
-        "expected_revision and Funnel V2 content are required.",
-      );
-    }
-    const reservation = await reserveMutatingOperation({
-      ...args,
-      target,
-      toolName: "polynet_call",
-      idempotencyKey: receiptIdempotencyKey,
-    });
-    if (!reservation.ok) return reservation.result;
-    if (reservation.status === "completed") {
-      return { ok: true, value: reservation.completedValue };
-    }
-    try {
-      const result = (await args.ctx.runMutation(
-        (internal as any).communityFunnel.saveCommunityFunnelDraftInternal,
-        {
-          userId: args.userId,
-          communityId: target.communityId,
-          slot: funnelDraftSlot,
-          expectedDraftRevision: expectedRevision,
-          content: input.content,
-        },
-      )) as Record<string, unknown>;
-      const responseValue = {
-        ok: true,
-        operation,
-        result: projectSelectedFunnelCurrentState(
-          result,
-          funnelDraftSlot,
-        ),
-        deduped: false,
-        receipt: canonicalReceipt({
-          toolName: "polynet_call",
-          principalKind: args.principalKind,
-          target,
-          idempotencyKey,
-          deduped: false,
-        }),
-      };
-      return {
-        ok: true,
-        value: await completeMutatingOperation({
-          ...args,
-          target,
-          toolName: "polynet_call",
-          idempotencyKey: receiptIdempotencyKey,
-          requestFingerprint: reservation.requestFingerprint,
-          attemptToken: reservation.attemptToken,
-          value: responseValue,
-        }),
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Funnel draft update failed.";
-      await failMutatingOperation({
-        ...args,
-        target,
-        toolName: "polynet_call",
-        idempotencyKey: receiptIdempotencyKey,
-        requestFingerprint: reservation.requestFingerprint,
-        attemptToken: reservation.attemptToken,
-        errorCode: "community_funnel_update_failed",
-        errorMessage,
-      });
-      return canonicalError("community_funnel_update_failed", errorMessage);
-    }
-  }
-
   const candidate = String(input.result_status ?? "");
   if (
     candidate !== "worked" &&
@@ -2564,7 +2415,6 @@ export async function executePolynetCanonicalTool(args: {
   principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
-  funnelDraftSlot?: CommunityCustomFunnelSlot | null;
   toolName: PolynetCanonicalToolName;
   input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {

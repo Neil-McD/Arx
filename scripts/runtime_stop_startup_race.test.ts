@@ -10,15 +10,8 @@ describe("runtime Stop startup race", () => {
       path.join(root, "apps/web/src/components/WebMemberAgentDock.tsx"),
       "utf8",
     );
-    const funnelEditor = fs.readFileSync(
-      path.join(root, "apps/web/src/components/WebCommunityFunnelEditor.tsx"),
-      "utf8",
-    );
     expect(memberDock).toMatch(
       /\{runtimeEvents\.length > 0 && threadKey \? \([\s\S]*?aria-label="Stop"/,
-    );
-    expect(funnelEditor).toMatch(
-      /\{runtimeEvents\.length > 0 \? \([\s\S]*?aria-label="Stop"/,
     );
   });
 

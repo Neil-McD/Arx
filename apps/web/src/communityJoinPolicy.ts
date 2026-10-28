@@ -46,14 +46,12 @@ export function derivePublicCommunityAdmissionProjection(args: {
     join_request_status?: unknown;
     join_request_reapply_at?: unknown;
   } | null;
-  isPreviewMode?: boolean;
   nowMs?: number;
 }): PublicCommunityAdmissionProjection {
-  const isPreviewMode = args.isPreviewMode === true;
-  const canEnterCommunity = !isPreviewMode && Boolean(
+  const canEnterCommunity = Boolean(
     args.access && (args.access.can_enter_community || args.access.is_owner),
   );
-  const rawStatus = !isPreviewMode && !canEnterCommunity
+  const rawStatus = !canEnterCommunity
     ? args.access?.join_request_status
     : null;
   const joinRequestStatus: CommunityJoinRequestStatus | null =

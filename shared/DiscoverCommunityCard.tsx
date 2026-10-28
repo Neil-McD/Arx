@@ -19,7 +19,6 @@ type DiscoverCommunityCardProps = {
   bannerFocusY?: number | null;
   bannerZoom?: number | null;
   priceLabel: string;
-  websiteHost?: string | null;
   clickable?: boolean;
   ariaLabel?: string;
   onActivate?: () => void;
@@ -57,7 +56,6 @@ export function DiscoverCommunityCard({
   bannerFocusY,
   bannerZoom,
   priceLabel,
-  websiteHost,
   clickable = false,
   ariaLabel,
   onActivate,
@@ -125,7 +123,6 @@ export function DiscoverCommunityCard({
           </div>
         </div>
         <div className="discover-card-desc">{oneLiner}</div>
-        {websiteHost ? <div className="discover-card-website">Website · {websiteHost}</div> : null}
       </div>
     </div>
   );

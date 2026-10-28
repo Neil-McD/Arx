@@ -25,14 +25,12 @@ import {
 } from "./httpRuntimeSupport";
 import {
   isReadOnlyLegacyMemberAgentThreadKey,
-  resolveCommunityFunnelThreadSlotForCommunity,
   resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
   type RuntimeInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
-import type { CommunityCustomFunnelSlot } from "../shared/communityTypes";
 import {
   buildMemberAgentConversationContext,
   type MemberAgentPersistedHistorySeed,
@@ -115,7 +113,6 @@ export type RuntimeTurnResolution = {
   runtimeCommunityChannels: Array<{ slug: string; name: string }>;
   runtimeCommunitySystemPrompt: string | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
-  runtimeCommunityFunnelSlot: CommunityCustomFunnelSlot | null;
   allowedToolNames: RetrievalToolName[];
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
@@ -322,7 +319,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         code: "invalid_invocation_surface",
         error: "invalid_invocation_surface",
         message:
-          "invocation_surface must explicitly match the canonical member agent or funnel thread.",
+          "invocation_surface must explicitly match the canonical member agent thread.",
       }),
     };
   }
@@ -390,9 +387,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }>;
   let hasPersistedImageInput = false;
   let persistedConversationHistory: MemberAgentPersistedHistorySeed | null = null;
-  const usesPersistedConversation =
-    invocationSurface === "member_agent_dock" ||
-    invocationSurface === "community_funnel_builder";
+  const usesPersistedConversation = invocationSurface === "member_agent_dock";
   if (usesPersistedConversation) {
     const expectedUserMessageKey = String(input.user_message_key ?? "").trim();
     if (!expectedUserMessageKey) {
@@ -494,24 +489,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunitySystemPrompt: string | null = null;
   let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
-  const runtimeCommunityFunnelSlot =
-    invocationSurface === "community_funnel_builder" && threadCommunityId
-      ? resolveCommunityFunnelThreadSlotForCommunity(threadKey, threadCommunityId)
-      : null;
-  if (
-    invocationSurface === "community_funnel_builder" &&
-    (!threadCommunityId || !runtimeCommunityFunnelSlot)
-  ) {
-    return {
-      ok: false,
-      response: fail(403, {
-        ok: false,
-        code: "community_funnel_thread_context_required",
-        error: "community_funnel_thread_context_required",
-        message: "The funnel builder requires its canonical community thread.",
-      }),
-    };
-  }
   if (
     invocationSurface === "member_agent_dock" &&
     isReadOnlyLegacyMemberAgentThreadKey(threadKey)
@@ -614,20 +591,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       };
     }
   }
-  if (
-    invocationSurface === "community_funnel_builder" &&
-    (!runtimeCommunityId || runtimeCommunityLensAuthority?.canManage !== true)
-  ) {
-    return {
-      ok: false,
-      response: fail(403, {
-        ok: false,
-        code: "community_manager_required",
-        error: "community_manager_required",
-        message: "Only community managers can use the funnel builder.",
-      }),
-    };
-  }
 
   let communityInferenceAdmission: CommunityInferenceFundingAdmission | null = null;
   if (!runtimeCommunityId) {
@@ -716,7 +679,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityChannels,
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
-      runtimeCommunityFunnelSlot,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile: resolveHarnessProfileFromActiveCapabilities({

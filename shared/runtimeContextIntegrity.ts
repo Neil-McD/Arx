@@ -269,9 +269,7 @@ export async function buildRuntimeContextIntegrityCheck(params: {
   const manifestSummary = asRecord(manifest?.summary);
   const run = asRecord(params.run ?? null);
   const invocationSurface = normalizeText(contextResolved?.invocation_surface);
-  const providerContextAttestationRequired =
-    invocationSurface === "member_agent_dock" ||
-    invocationSurface === "community_funnel_builder";
+  const providerContextAttestationRequired = invocationSurface === "member_agent_dock";
   const requiredEventTypes = providerContextAttestationRequired
     ? [...BASE_REQUIRED_EVENT_TYPES, RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE]
     : BASE_REQUIRED_EVENT_TYPES;

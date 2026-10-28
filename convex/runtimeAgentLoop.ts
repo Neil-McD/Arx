@@ -57,7 +57,6 @@ import {
   normalizeToolArguments as normalizeRegistryToolArguments,
 } from "../shared/toolRegistry";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract";
-import type { CommunityCustomFunnelSlot } from "../shared/communityTypes";
 import {
   buildPlatformHarnessRuntimePromptBundle,
   type RuntimeCommunityPromptFields,
@@ -236,7 +235,6 @@ export async function executeRetrievalHarnessTool(params: {
   toolName: RetrievalToolName;
   args: Record<string, unknown>;
   evidenceSurface?: CommunityEvidenceSurface;
-  communityFunnelSlot?: CommunityCustomFunnelSlot | null;
   communityBoundConversation?: boolean;
   signal?: AbortSignal;
 }): Promise<NativeToolExecutionResult> {
@@ -324,7 +322,7 @@ export async function executeRetrievalHarnessTool(params: {
     const communityOwned =
       params.evidenceSurface === "community_concierge";
     const communityMounted =
-      communityOwned || params.evidenceSurface === "community_funnel_builder" || params.communityBoundConversation === true;
+      communityOwned || params.communityBoundConversation === true;
     if (params.communityBoundConversation && !params.communityId) throw new Error("community_context_required");
     if (params.communityBoundConversation) {
       const path = String(normalizedArgs.path ?? "").trim();
@@ -347,7 +345,6 @@ export async function executeRetrievalHarnessTool(params: {
         ? { mountedCommunityId: params.communityId }
         : {}),
       evidenceSurface: params.evidenceSurface ?? "member_agent_dock",
-      funnelDraftSlot: params.communityFunnelSlot ?? null,
       toolName: params.toolName as PolynetCanonicalToolName,
       input: normalizedArgs,
     });
@@ -830,8 +827,7 @@ async function executeRetrievalAgentLoop(
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
-    communityFunnelSlot?: CommunityCustomFunnelSlot | null;
-    communitySystemPrompt?: string | null;
+      communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
@@ -1345,10 +1341,7 @@ async function executeRetrievalAgentLoop(
     };
     const loopStartedAt = Date.now();
     const attestedSurface =
-      params.invocationSurface === "member_agent_dock" ||
-      params.invocationSurface === "community_funnel_builder"
-        ? params.invocationSurface
-        : null;
+      params.invocationSurface === "member_agent_dock" ? params.invocationSurface : null;
     let initialProviderContextAttested = !attestedSurface;
     const ensureInitialProviderContextAttestation = async (
       providerMessages: NativeToolAwareMessage[],
@@ -1371,7 +1364,6 @@ async function executeRetrievalAgentLoop(
           threadId: params.threadId,
           communityId: params.communityId,
           communityContextVersion: params.communityContextVersion,
-          funnelSlot: params.communityFunnelSlot ?? null,
           requestedModelId: params.requestedModelId,
           inferenceSource: params.inferenceSource,
           modelRef: params.modelRef,
@@ -1707,10 +1699,7 @@ async function executeRetrievalAgentLoop(
                 evidenceSurface:
                   params.invocationSurface === "member_agent_dock"
                     ? "member_agent_dock"
-                    : params.invocationSurface === "community_funnel_builder"
-                      ? "community_funnel_builder"
-                      : "coding_harness",
-                communityFunnelSlot: params.communityFunnelSlot ?? null,
+                    : "coding_harness",
                 communityBoundConversation: params.memberAgentSurfaceContext?.kind === "community" && params.memberAgentSurfaceContext.community_conversation === true,
                 signal,
               }),
@@ -1980,8 +1969,7 @@ async function executeChatToolsAgentLoop(
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
-    communityFunnelSlot?: CommunityCustomFunnelSlot | null;
-    communitySystemPrompt?: string | null;
+      communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     appendRunEvent: (params: {

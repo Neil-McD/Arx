@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildAppRoutePath,
-  buildCommunityFunnelPreviewPath,
   buildCommunityHomePath,
   buildCommunityTabPath,
   deriveWebDestinationFromAppRoute,
@@ -145,9 +144,6 @@ describe("community channel routes", () => {
   });
 
   it("routes retired draft previews to the public landing page", () => {
-    expect(buildCommunityFunnelPreviewPath("polynet")).toBe(
-      "/c/polynet/preview?slot=default",
-    );
     vi.stubGlobal("window", {
       location: {
         pathname: "/c/polynet/preview",

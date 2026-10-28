@@ -89,13 +89,8 @@ describe("community memory recall prompt section", () => {
     expect(bundle.text).toContain(memoryPath("a"));
   });
 
-  it("is absent when nothing was recalled and outside the member agent", () => {
+  it("is absent when nothing was recalled", () => {
     const empty = buildPlatformHarnessRuntimePromptBundle({ ...base, invocationSurface: "member_agent_dock" } as any);
     expect(empty.sections.find((section) => section.id === "community_memory_recall")?.rendered).toBe(false);
-    const funnel = buildPlatformHarnessRuntimePromptBundle({
-      ...base, invocationSurface: "community_funnel_builder", communityMemoryRecallMd: recall,
-    } as any);
-    expect(funnel.sections.some((section) => section.id === "community_memory_recall")).toBe(false);
-    expect(funnel.text).not.toContain(memoryPath("a"));
   });
 });

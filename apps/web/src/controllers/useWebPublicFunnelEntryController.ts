@@ -22,7 +22,6 @@ export function useWebPublicFunnelEntryController(params: {
   checkoutClaimToken: string | null;
   publicRouteClaimToken: string | null;
   manualClaimToken: string;
-  isPreviewRoute: boolean;
   publicCommunity: PublicCommunity | null;
   publicCommunityAccess: PublicCommunityAccess | null;
   canEnterCommunity: boolean;
@@ -61,7 +60,7 @@ export function useWebPublicFunnelEntryController(params: {
     ).trim() || readPendingPurchaseClaimToken();
 
   const handlePrimaryAction = () => {
-    if (params.isPreviewRoute || !params.publicCommunity) return;
+    if (!params.publicCommunity) return;
     if (
       params.canEnterCommunity &&
       params.publicCommunityAccess?.community_id
