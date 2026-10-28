@@ -680,6 +680,24 @@ test("a message over 8,000 characters stays in the box with a note saying how mu
   await page.close();
 });
 
+test("an edit over 8,000 characters keeps the editor open and saves nothing", async () => {
+  const page = await open(mine);
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(6);
+  const own = chat.locator("[part~=message-mine]");
+  await own.locator("[part~=message-action-edit]").click();
+  const editor = chat.locator("[part=edit-input]");
+  await editor.fill("y".repeat(8003));
+  await editor.press("Enter");
+  await expect.poll(() => chat.locator("[part=edit-error]").textContent()).toContain("Trim 3 to save");
+  expect(await calls(page, "edit")).toHaveLength(0);
+  expect((await editor.inputValue()).length).toBe(8003);
+  // Cancel: the post is unchanged.
+  await chat.locator("[part=edit-cancel]").click();
+  await expect.poll(() => own.locator("[part~=message-body]").textContent()).toBe("My plan");
+  await page.close();
+});
+
 test("drafts stay with their channel when the member switches away and back", async () => {
   const page = await open();
   const chat = page.locator("polynet-chat");

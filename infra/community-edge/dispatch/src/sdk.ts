@@ -336,7 +336,10 @@ function typing(channel, on, options) {
 }
 
 // Edit or delete your own post or reply (entry from feed/thread, or its path).
-const edit = function (entry, text) { return write({ path: entry.path || entry, mode: "update", content: { text: text } }); };
+const edit = function (entry, text) {
+  checkLength(String(text || "").trim());
+  return write({ path: entry.path || entry, mode: "update", content: { text: text } });
+};
 const remove = function (entry) { return write({ path: entry.path || entry, mode: "delete", content: {} }); };
 
 // Set your reaction on a post or reply: on true adds it, false removes it.

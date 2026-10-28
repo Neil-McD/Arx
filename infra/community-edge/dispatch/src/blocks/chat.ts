@@ -15,6 +15,8 @@ import {
 } from "/__polynet/blocks/kit.js";
 import { Composer, COMPOSER_STYLE, autosize, enterSends } from "/__polynet/blocks/composer.js";
 
+// The server's limit for a message (communityInteractions.ts).
+const MAX_TEXT_CHARS = 8000;
 const STYLE = BASE_STYLE + "\n" + COMPOSER_STYLE + "\n" + [
   // A chat needs a height to scroll in; the site sets its own on the element.
   ":host { display: block; height: 70vh; min-height: 320px; container-type: inline-size; }",
@@ -1053,6 +1055,13 @@ class PolynetChat extends HTMLElement {
     if (!copies.length) { this.editing = null; this.rerender(); return; }
     if (!text) {
       this.editing = Object.assign({}, editing, { error: "A message can't be empty. Delete it instead." });
+      this.rerender();
+      this.focusControl(editing.ref, editing.inThread, "edit");
+      return;
+    }
+    if (text.length > MAX_TEXT_CHARS) {
+      // Longer would be cut short on the server; keep the editor open and say by how much.
+      this.editing = Object.assign({}, editing, { error: "Messages can be up to " + MAX_TEXT_CHARS.toLocaleString("en-US") + " characters. Trim " + (text.length - MAX_TEXT_CHARS).toLocaleString("en-US") + " to save." });
       this.rerender();
       this.focusControl(editing.ref, editing.inThread, "edit");
       return;
