@@ -141,7 +141,8 @@ shell's menu ("In this club") and the checks.
 | `/knowledge`, `/ask` | the community's memory; the member's private agent conversation | 3a-2 (now) |
 | `/discover` | every published community, public; the shell's "Discover communities" | 3a-3 (now) |
 | `/communities` | Your communities: every community the member is in, each linking to its own site (else Studio) | 3b-1 (now), private twin |
-| `/messages`, `/settings`, `/join` | personal pages ("coming soon" in the twin's frame until built) | 3b, private twin |
+| `/settings` | the member's settings: profile, this community's notifications, leave, sign out (see *Settings* below) | 3b-2 (now), private twin |
+| `/messages`, `/join` | personal pages ("coming soon" in the twin's frame until built) | 3b, private twin |
 | `/manage` | community admin | after the personal pages |
 
 Until `/manage` exists, "Manage this community" opens Studio's community
@@ -186,8 +187,40 @@ first-party cookie everywhere.
   session minted there is recorded as `kind: "private"`. Every personal
   endpoint requires a private session, and the site answers them 404.
   Everything the site's endpoints do works on both.
-- **Not yet:** Messages, Settings and Join are "coming soon" placeholders in
-  the twin's frame; the menu's Messages and Settings still open Studio.
+- **Not yet:** Messages and Join are "coming soon" placeholders in the twin's
+  frame; the menu's Messages still opens Studio.
+
+### Settings (3b-2)
+
+The menu's Settings opens the twin's `/settings` (Polynet's own settings
+where a site has no twin). It shows and edits exactly what Studio's member
+settings do, through the same backend cores, so every rule and refusal is
+Studio's:
+
+- **Your profile:** name, handle (checked as it's typed), bio, YouTube, X and
+  Instagram links, and the photo. The photo follows Studio's upload flow: an
+  upload URL from the twin, the file (resized to 1024px and re-encoded in the
+  browser, as Studio does) straight to Polynet's storage, then a confirm. The
+  twin's confirm takes only an image uploaded in the last hour, never an
+  existing file. No framing editor yet: a new photo starts centered.
+- **Notifications:** Studio's two: mute this community, and the weekly
+  community digest (one setting for every community, as in Studio).
+- **Leave this community:** asks inline, then goes to `/communities`. The
+  owner can't leave, and the page says so.
+- **Sign out:** ends this browser's sessions on the site and its twin, nowhere
+  else (the member's other devices stay signed in). Each origin keeps its own
+  host-only cookie, which only a visit there can clear, so the first sign-out
+  returns a ticket (two minutes, signed by the backend, bound to the member and
+  community) and the browser visits the other origin's
+  `/__polynet/auth/signout`, which ends its session only with a valid ticket for
+  the same member. The shell's Sign out does the same from either side. (Site
+  code's own `polynet.signOut()` still ends only the site's session.)
+- **Account and billing on Polynet:** the one link out, to Studio's
+  `/settings/account`, in the same tab.
+
+Every settings endpoint is `/__polynet/me/*` on the twin only (same-origin,
+writes as small JSON POSTs), forwarded to `/runtime/app/me/*`, which answers
+only a private session of someone still in the community.
 
 ## Private messages stay private
 
@@ -246,8 +279,8 @@ the community deletes them (existing `deleteCommunityPresenceForUser`).
    typing, threads, reactions, attachments) and `<polynet-members>`; the
    theming contract; `checkSite` enforcement; guide and skills rewritten.
 3. **Shell rails**: the profile drawer, the private twin (3b-1: the stripped
-   frame, its session and Your communities; then Messages, Settings and Join
-   on it), and Studio's back bar.
+   frame, its session and Your communities; 3b-2: Settings; then Messages
+   and Join on it), and Studio's back bar.
 4. **Recommended blocks**: online, knowledge, events, courses, ask.
 5. **Proof**: a fresh agent builds Sunrise Climbing Club from the guide alone,
    twice, with different design directions. Every block is present and both

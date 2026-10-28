@@ -175,7 +175,8 @@ the agent) needs a signed-in member and otherwise throws sign_in_required.
 - Someone on Polynet who is not a member yet comes back to "/?polynet=join",
   still signed out. Show "Join" (session.join_url opens the join page: free,
   approval or paid), then "Sign in" again once they have joined.
-- signOut() signs out and refreshes session().
+- signOut() signs out of the site and refreshes session(). The shell's own
+  Sign out also signs out of the site's private twin.
 - polynet.community() -> { name, slug } (the same name as community_name).
 
 ## The Polynet shell (required on every page)
@@ -193,9 +194,10 @@ keep it visible on every page and at every width. Signed out it shows "Join"
 those on polynet-account itself, with a matching --polynet-surface; signed
 in, the member's avatar opens their account menu: "In this club" (the
 site's own standard pages, the current one marked), "Manage this
-community" for owners and admins (Studio), Messages, "Your communities"
-and Settings (Polynet, for now), and "Discover communities" (this site's
-own /discover). Don't rebuild these yourself.
+community" for owners and admins (Studio), Messages (Polynet, for now),
+"Your communities" and Settings (the member's own pages, on the site's
+private twin), and "Discover communities" (this site's own /discover).
+Don't rebuild these yourself.
 
 Polynet adds /__polynet/ui.js and /__polynet/ui.css to every HTML page it
 serves (the script only where the page doesn't load it already), so the
@@ -325,8 +327,9 @@ navigation, footer, fonts and colors as every other page, with exactly one
   <polynet-discover>). Only a file counts; a
   client-side route can't replace a standard page. Your own events.html
   doesn't cover /events/<event>: those still show in the frame.
-- Messages, settings, your communities and joining open in Polynet for now;
-  they come later in a private window the site's code can't read.
+- Your communities and Settings are the member's own pages on the site's
+  private twin, where the site's code never runs; Messages and joining open
+  in Polynet for now and move there next.
 
 ## Blocks: channels, chat and members
 

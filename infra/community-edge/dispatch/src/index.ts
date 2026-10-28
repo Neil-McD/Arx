@@ -14,7 +14,7 @@
 //                      private twin, <slug>--me<suffix>.<sites domain> (twin.ts),
 //                      which draws the site's frame with every script removed, so
 //                      only Polynet's code runs there. The site sends them there.
-//   /__polynet/me/*    personal data, on the twin only, for its own session
+//   /__polynet/me/*    personal data and settings, on the twin only, for its own session
 //   everything else    the community's own front end (a user Worker with static assets);
 //                      on the twin, a redirect to the site
 //
@@ -38,6 +38,7 @@ import { KNOWLEDGE_SOURCE } from "./blocks/knowledge";
 import { ASK_SOURCE } from "./blocks/ask";
 import { DISCOVER_SOURCE } from "./blocks/discover";
 import { PERSONAL_SOURCE } from "./blocks/personal";
+import { SETTINGS_SOURCE } from "./blocks/settings";
 import {
   plainStyleHash, plainTwinPage, stripFrame, twinPageHeaders, twinPolicy, withTwinHeaders, type StripRewriterClass,
 } from "./twin";
@@ -56,7 +57,7 @@ const BLOCKS: Record<string, string> = {
   discover: DISCOVER_SOURCE,
 };
 // Blocks that only the private twin serves: they read the member's own data.
-const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE };
+const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
@@ -138,6 +139,7 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const ATTACHMENT_ID_PATTERN = /^[a-z0-9]{20,40}$/;
 const SIGNIN_TTL_SECONDS = 600;
 const TOKEN_PATTERN = /^pna_[A-Za-z0-9_-]{43}$/;
+const SIGNOUT_TICKET_PATTERN = /^[0-9]{13}\.[A-Za-z0-9_-]{43}$/;
 const STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 // Hostname lookups are cached briefly per isolate, so a page load costs one KV
@@ -202,6 +204,16 @@ const MEMBER_PATHS = new Set([`${AUTH_PREFIX}session`, `${AUTH_PREFIX}logout`, "
 // The member's own data: only the private twin answers it, only to its own pages.
 const PERSONAL_API_PREFIX = "/__polynet/me/";
 const MY_COMMUNITIES_PATH = "/__polynet/me/communities";
+// Settings: reads are GET; writes are POST with a small JSON body.
+const MY_SETTINGS: Record<string, { method: "GET" | "POST"; backend: string; maxBytes: number }> = {
+  "/__polynet/me/settings": { method: "GET", backend: "/runtime/app/me/settings", maxBytes: 0 },
+  "/__polynet/me/handle": { method: "GET", backend: "/runtime/app/me/handle", maxBytes: 0 },
+  "/__polynet/me/profile": { method: "POST", backend: "/runtime/app/me/profile", maxBytes: 8 * 1024 },
+  "/__polynet/me/avatar/upload": { method: "POST", backend: "/runtime/app/me/avatar_upload", maxBytes: 1024 },
+  "/__polynet/me/avatar": { method: "POST", backend: "/runtime/app/me/avatar", maxBytes: 1024 },
+  "/__polynet/me/notifications": { method: "POST", backend: "/runtime/app/me/notifications", maxBytes: 1024 },
+  "/__polynet/me/leave": { method: "POST", backend: "/runtime/app/me/leave", maxBytes: 1024 },
+};
 
 function isMemberEndpoint(pathname: string): boolean {
   return MEMBER_PATHS.has(pathname) || pathname.startsWith(`${API_PREFIX}/`) || pathname.startsWith(FILES_PREFIX) || pathname.startsWith(PERSONAL_API_PREFIX);
@@ -442,12 +454,37 @@ async function handleAuth(request: Request, url: URL, route: Route, place: Place
     return json(200, { signed_in: true, ...base, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });
   }
 
+  // Signing out of the site signs out of its private twin too, and back. The
+  // other origin's cookie only goes away on a visit there, so the answer names
+  // it ("then"): its sign-out, with the backend's short-lived ticket for this
+  // member, returning to the site (the twin's pages are the member's own).
   if (action === "logout" && request.method === "POST") {
     const token = readCookie(request, SESSION_COOKIE);
+    let ticket: string | null = null;
     if (token && TOKEN_PATTERN.test(token)) {
-      await backend(env, "/runtime/community_edge/session_revoke", { token }, url.origin).catch(() => null);
+      const revoked = await backend(env, "/runtime/community_edge/session_revoke", { token }, url.origin).catch(() => null);
+      const body = revoked?.ok ? ((await revoked.json().catch(() => null)) as { signout_ticket?: unknown } | null) : null;
+      ticket = typeof body?.signout_ticket === "string" && SIGNOUT_TICKET_PATTERN.test(body.signout_ticket) ? body.signout_ticket : null;
     }
-    return json(200, { ok: true }, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
+    const other = place.twin ? place.siteOrigin : place.privateOrigin;
+    const back = place.twin ? "/" : safeReturnPath(url.searchParams.get("return"));
+    const then = ticket && other ? `${other}${AUTH_PREFIX}signout?ticket=${ticket}&return=${encodeURIComponent(back)}` : null;
+    return json(200, { ok: true, ...(then ? { then } : {}) }, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
+  }
+
+  // The other half: a top-level visit from the site (or its twin). It ends this
+  // origin's session only with a valid ticket for the same member; anything
+  // else (a sibling site bouncing a member here) just passes through. Then on
+  // to the site.
+  if (action === "signout" && request.method === "GET") {
+    const token = readCookie(request, SESSION_COOKIE);
+    const ticket = url.searchParams.get("ticket") ?? "";
+    const headers = new Headers({ Location: `${place.siteOrigin}${safeReturnPath(url.searchParams.get("return"))}`, "Cache-Control": "no-store" });
+    if (token && TOKEN_PATTERN.test(token) && SIGNOUT_TICKET_PATTERN.test(ticket)) {
+      const revoked = await backend(env, "/runtime/community_edge/session_revoke", { token, ticket }, url.origin).catch(() => null);
+      if (revoked?.ok) headers.append("Set-Cookie", cookie(SESSION_COOKIE, "", 0));
+    }
+    return new Response(null, { status: 302, headers });
   }
 
   return json(404, { ok: false, code: "not_found" });
@@ -595,6 +632,91 @@ async function proxyMyCommunities(request: Request, url: URL, route: Route, env:
   return json(200, { ok: true, communities });
 }
 
+// Settings, for the twin's own page: each call forwarded with the twin's
+// session (the backend refuses any other kind and runs Studio's own cores),
+// writes only as small same-origin JSON, and only the fields the page shows
+// leave the edge.
+async function proxyMySettings(request: Request, url: URL, env: Env): Promise<Response> {
+  const route = MY_SETTINGS[url.pathname];
+  if (request.method !== route.method) return json(405, { ok: false, code: "method_not_allowed" });
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
+  let body = "{}";
+  if (route.method === "POST") {
+    // JSON only: a plain form (which any page can send) never reaches a write.
+    if (!/^application\/json(;|$)/i.test(request.headers.get("content-type") ?? "")) return json(415, { ok: false, code: "json_required" });
+    if (Number(request.headers.get("content-length") ?? 0) > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
+    body = await request.text();
+    if (body.length > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
+  } else if (url.pathname === "/__polynet/me/handle") {
+    body = JSON.stringify({ handle: (url.searchParams.get("handle") ?? "").slice(0, 64) });
+  }
+  const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}${route.backend}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, Authorization: `Bearer ${token}`,
+      "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+    },
+    body,
+  });
+  const answer = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
+  if (upstream.status === 401) return json(401, { ok: false, code: "sign_in_required" }, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
+  if (!upstream.ok || !answer || answer.ok !== true) {
+    const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : "settings_unavailable";
+    return json(upstream.ok ? 502 : upstream.status, { ok: false, code });
+  }
+  const shaped = mySettingsAnswer(url.pathname, answer, env);
+  return shaped ? json(200, { ok: true, ...shaped }) : json(502, { ok: false, code: "settings_unavailable" });
+}
+
+const SETTINGS_ROLES = new Set(["owner", "admin", "moderator", "member"]);
+function mySettingsAnswer(path: string, answer: Record<string, unknown>, env: Env): Record<string, unknown> | null {
+  const storage = storageOrigin(env);
+  const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
+  const profile = (raw: unknown) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const links = (row.social_links ?? {}) as Record<string, unknown>;
+    const avatar = typeof row.avatar_url === "string" && storage && row.avatar_url.startsWith(`${storage}/api/storage/`) ? row.avatar_url : null;
+    return {
+      display_name: text(row.display_name, 120), handle: text(row.handle, 32), bio: text(row.bio, 500), avatar_url: avatar,
+      social_links: { youtube: text(links.youtube, 240) ?? "", x: text(links.x, 240) ?? "", instagram: text(links.instagram, 240) ?? "" },
+    };
+  };
+  const notifications = (raw: unknown) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    return {
+      ...(typeof row.muted === "boolean" ? { muted: row.muted } : {}),
+      ...(typeof row.weekly_digest === "boolean" ? { weekly_digest: row.weekly_digest } : {}),
+    };
+  };
+  switch (path) {
+    case "/__polynet/me/settings": {
+      const community = (answer.community ?? {}) as Record<string, unknown>;
+      return {
+        profile: profile(answer.profile),
+        community: { name: text(community.name, 120) ?? "", role: typeof community.role === "string" && SETTINGS_ROLES.has(community.role) ? community.role : "member" },
+        notifications: notifications(answer.notifications),
+        // The one way out for account-level things: Polynet's own account settings.
+        account_url: new URL("/settings/account", env.POLYNET_AUTH_URL).toString(),
+      };
+    }
+    case "/__polynet/me/handle":
+      return { available: answer.available === true, status: text(answer.status, 32) ?? "invalid_format", handle: text(answer.handle, 32) };
+    case "/__polynet/me/profile":
+    case "/__polynet/me/avatar":
+      return { profile: profile(answer.profile) };
+    case "/__polynet/me/avatar/upload": {
+      // The file goes straight to Polynet's storage, nowhere else.
+      const upload = typeof answer.upload_url === "string" && storage && answer.upload_url.startsWith(`${storage}/api/storage/upload?`) ? answer.upload_url : null;
+      return upload ? { upload_url: upload } : null;
+    }
+    case "/__polynet/me/notifications":
+      return { notifications: notifications(answer.notifications) };
+    default:
+      return {};
+  }
+}
+
 // Where Polynet's files (avatars) are served from: the deployment's storage.
 function storageOrigin(env: Env): string | null {
   try {
@@ -630,7 +752,7 @@ export default {
 
 async function serve(request: Request, url: URL, route: Route, place: Place, env: Env): Promise<Response> {
   // The member's own data never answers on the site, whoever asks.
-  if (!place.twin && (url.pathname.startsWith(PERSONAL_API_PREFIX) || url.pathname.startsWith(`${BLOCKS_PREFIX}personal`))) {
+  if (!place.twin && (url.pathname.startsWith(PERSONAL_API_PREFIX) || Object.keys(TWIN_BLOCKS).some((name) => url.pathname.startsWith(`${BLOCKS_PREFIX}${name}`)))) {
     return json(404, { ok: false, code: "not_found" });
   }
   if (isMemberEndpoint(url.pathname) && !fromThisSite(request, url)) {
@@ -642,6 +764,7 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (url.pathname === "/__polynet/sdk.js") return polynetAsset(SDK_SOURCE, "text/javascript", 300);
   if (url.pathname === "/__polynet/llms.txt") return polynetAsset(LLMS_TXT, "text/plain", 300);
   if (url.pathname === MY_COMMUNITIES_PATH) return await proxyMyCommunities(request, url, route, env);
+  if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMySettings(request, url, env);
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
   if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
   if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);

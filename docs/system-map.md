@@ -278,7 +278,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   CLI and MCP deploys without the frame, or when a site's own standard page
   lacks its blocks. Sites style them only through tokens, `::part()`, slots
   and the page's `.pn-page-*` classes. A member's own pages (`/communities`
-  now; `/messages`, `/settings`, `/join` say "coming soon") live on the
+  and `/settings` now; `/messages`, `/join` say "coming soon") live on the
   site's **private twin**, `<slug>--me<suffix>.polynet.page`: the edge draws
   the site's frame there with every script, handler and dangerous URL
   stripped (`twin.ts`, HTMLRewriter), adds only Polynet's scripts under a

@@ -52,7 +52,7 @@ export const STANDARD_PAGES = [
 export const PERSONAL_PAGES = [
   { path: "/communities", name: "communities", title: "Your communities", ready: true, signIn: true },
   { path: "/messages", name: "messages", title: "Messages", ready: false, signIn: true },
-  { path: "/settings", name: "settings", title: "Settings", ready: false, signIn: true },
+  { path: "/settings", name: "settings", title: "Settings", ready: true, signIn: true },
   { path: "/join", name: "join", title: "Join", ready: false, signIn: false },
 ];
 

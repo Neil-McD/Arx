@@ -76,7 +76,61 @@ async function backend(request: Request): Promise<Response> {
   if (url.pathname === "/runtime/app") {
     return Response.json({ ok: true, value: { community: { name: "Sunrise Climbing Club" }, viewer: { display_name: "Mo", handle: "mo" } } });
   }
+  if (url.pathname === "/runtime/community_edge/session_revoke") {
+    // The first sign-out hands back a ticket; the other origin's, with it, just ends.
+    return Response.json(JSON.parse(body).ticket ? { ok: true } : { ok: true, signout_ticket: TICKET });
+  }
+  if (url.pathname === "/runtime/app/me/profile" && settings.holdProfile) await settings.holdProfile;
+  if (url.pathname.startsWith("/runtime/app/me/") && url.pathname !== "/runtime/app/me/communities") return settingsBackend(url.pathname, JSON.parse(body || "{}"));
   return Response.json({ ok: true, value: {} });
+}
+
+// The settings routes, standing in for Studio's cores: what they answer and refuse.
+const TICKET = `${Date.now() + 60_000}.${"k".repeat(43)}`;
+const settings = {
+  profile: {} as Record<string, any>, community: { name: "Sunrise Climbing Club", role: "member" },
+  notifications: { muted: false, weekly_digest: true }, failNotifications: false, left: false,
+  holdProfile: null as Promise<void> | null,
+};
+function resetSettings(role = "member") {
+  settings.profile = { display_name: "Mo Climber", handle: "mo", bio: "Bouldering.", avatar_url: null, social_links: { youtube: "", x: "", instagram: "" } };
+  settings.community = { name: "Sunrise Climbing Club", role };
+  settings.notifications = { muted: false, weekly_digest: true };
+  settings.failNotifications = false;
+  settings.left = false;
+  settings.holdProfile = null;
+}
+function settingsBackend(path: string, body: Record<string, any>): Response {
+  const refuse = (code: string, status = 400) => Response.json({ ok: false, code }, { status });
+  switch (path) {
+    case "/runtime/app/me/settings":
+      return Response.json({ ok: true, profile: settings.profile, community: settings.community, notifications: settings.notifications });
+    case "/runtime/app/me/handle":
+      return Response.json(body.handle === "taken"
+        ? { ok: true, available: false, status: "taken", handle: "taken" } : { ok: true, available: true, status: "available", handle: body.handle });
+    case "/runtime/app/me/profile": {
+      if (body.handle === "taken") return refuse("profile_handle_taken");
+      if (String(body.social_links?.x ?? "").includes("nope")) return refuse("profile_link_invalid_x");
+      const links = Object.fromEntries(Object.entries(body.social_links ?? {}).map(([kind, value]) => [kind, value ? `https://${String(value).replace(/^https:\/\//, "")}` : ""]));
+      settings.profile = { ...settings.profile, display_name: String(body.display_name).trim(), handle: String(body.handle).replace(/^@/, "").toLowerCase(), bio: body.bio, social_links: links };
+      return Response.json({ ok: true, profile: settings.profile });
+    }
+    case "/runtime/app/me/avatar_upload":
+      return Response.json({ ok: true, upload_url: `${STORAGE}/api/storage/upload?token=up` });
+    case "/runtime/app/me/avatar":
+      settings.profile = { ...settings.profile, avatar_url: body.storage_id ? `${STORAGE}/api/storage/${body.storage_id}` : null };
+      return Response.json({ ok: true, profile: settings.profile });
+    case "/runtime/app/me/notifications":
+      if (settings.failNotifications) return refuse("settings_unavailable", 500);
+      settings.notifications = { ...settings.notifications, ...body };
+      return Response.json({ ok: true, notifications: body });
+    case "/runtime/app/me/leave":
+      if (settings.community.role === "owner") return refuse("community_owner_cannot_leave");
+      settings.left = true;
+      return Response.json({ ok: true });
+    default:
+      return refuse("not_found", 404);
+  }
 }
 
 let mf: Miniflare;
@@ -149,10 +203,22 @@ test("the twin draws the site's frame with nothing of the site's left to run", a
 });
 
 // The page in a browser: the edge answers every request to the site and its twin.
-async function openTwin(type: BrowserType, path: string, token: string) {
+async function openTwin(type: BrowserType, path: string, token: string, siteToken?: string) {
   const browser = await type.launch();
   const context = await browser.newContext();
   await context.addCookies([{ name: "__Host-polynet_session", value: token, url: `${TWIN}/`, secure: true, httpOnly: true, sameSite: "Lax" }]);
+  if (siteToken) await context.addCookies([{ name: "__Host-polynet_session", value: siteToken, url: `${SITE}/`, secure: true, httpOnly: true, sameSite: "Lax" }]);
+  // Polynet's storage: a photo upload (Studio's flow, straight from the browser) and the photo itself.
+  await context.route(`${STORAGE}/**`, async (route) => {
+    const request = route.request();
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "POST" };
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    if (new URL(request.url()).pathname === "/api/storage/upload") {
+      uploads.push({ type: request.headers()["content-type"], bytes: request.postDataBuffer()?.length ?? 0 });
+      return route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify({ storageId: "kg2photo" }) });
+    }
+    return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(PNG, "base64") });
+  });
   await context.route(/^https:\/\/[a-z0-9-]+\.polynet\.page\//, async (route) => {
     const request = route.request();
     const headers = await request.allHeaders();
@@ -164,6 +230,7 @@ async function openTwin(type: BrowserType, path: string, token: string) {
     await route.fulfill({ status: res.status, headers: out, body: Buffer.from(await res.arrayBuffer()) });
   });
   const page = await context.newPage();
+  page.setDefaultTimeout(10_000);
   await page.addInitScript(() => {
     (window as any).violations = [];
     document.addEventListener("securitypolicyviolation", (event) => (window as any).violations.push(`${event.violatedDirective} ${event.blockedURI}`));
@@ -171,6 +238,9 @@ async function openTwin(type: BrowserType, path: string, token: string) {
   await page.goto(TWIN + path);
   return { browser, page };
 }
+
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const uploads: Array<{ type: string | undefined; bytes: number }> = [];
 
 // Chromium always; WebKit and Firefox when they're installed here (npx playwright install webkit firefox).
 const ENGINES: Array<[string, BrowserType]> = [["chromium", chromium], ["webkit", webkit], ["firefox", firefox]];
@@ -226,6 +296,147 @@ test("the other personal pages are quiet placeholders inside the frame for now",
     expect(await personal.locator("[part=soon]").textContent()).toBe("This page is coming soon.");
     expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Messages");
     expect(await page.evaluate(() => (window as any).siteRan)).toBeUndefined();
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+// Settings: the member's profile, this community's notifications, leaving and
+// signing out, inside the same stripped frame, through the real edge.
+for (const [engine, type] of ENGINES) {
+  const installed = engine === "chromium" || existsSync(type.executablePath());
+  test.runIf(installed)(`${engine}: Settings renders inside the stripped frame, saves with feedback, and keeps what was typed on a refusal`, async () => {
+    resetSettings();
+    const { browser, page } = await openTwin(type, "/settings", TOKEN);
+    try {
+      const personal = page.locator("polynet-personal");
+      await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+      expect(await page.title()).toBe("Settings · Sunrise Climbing Club");
+      expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Settings");
+      expect(await personal.locator("[part=section-title]").allTextContents()).toEqual(["Your profile", "Notifications", "Leave this community", "Sign out", "Your Polynet account"]);
+      const name = personal.getByLabel("Name", { exact: true });
+      const handle = personal.getByLabel("Handle", { exact: true });
+      expect([await name.inputValue(), await handle.inputValue(), await personal.getByLabel("Bio").inputValue()]).toEqual(["Mo Climber", "mo", "Bouldering."]);
+      // The handle is checked as it's typed, as in Studio.
+      await handle.fill("taken");
+      await expect.poll(() => personal.locator("[part~=field-handle] [part=hint]").textContent()).toBe("That handle is already taken.");
+      // A refusal: Studio's words under the field, everything typed still there.
+      await name.fill("Mo the Climber");
+      await personal.getByLabel("X", { exact: true }).fill("x.com/mo");
+      await personal.locator("[part=save]").click();
+      const handleError = personal.locator("[part~=field-handle] [part=field-error]");
+      await expect.poll(() => handleError.textContent()).toBe("That handle is already taken.");
+      expect(await handle.getAttribute("aria-invalid")).toBe("true");
+      expect([await name.inputValue(), await handle.inputValue(), await personal.getByLabel("X", { exact: true }).inputValue()]).toEqual(["Mo the Climber", "taken", "x.com/mo"]);
+      // Fixed and saved: feedback, and the saved (normalized) values.
+      await handle.fill("@Mo_C");
+      await personal.locator("[part=save]").click();
+      await expect.poll(() => personal.locator("[part~=section-profile] [part=status]").textContent()).toBe("Saved.");
+      expect(await handleError.isHidden()).toBe(true);
+      expect([await handle.inputValue(), await personal.getByLabel("X", { exact: true }).inputValue()]).toEqual(["mo_c", "https://x.com/mo"]);
+      expect(settings.profile).toMatchObject({ display_name: "Mo the Climber", handle: "mo_c" });
+      // Notifications: each switch saves at once; a failure puts it back and says so.
+      const mute = personal.getByRole("switch", { name: "Mute Sunrise Climbing Club" });
+      expect(await mute.getAttribute("aria-checked")).toBe("false");
+      await mute.click();
+      await expect.poll(() => personal.locator("[part~=section-notifications] [part=status]").textContent()).toBe("Saved.");
+      expect([await mute.getAttribute("aria-checked"), settings.notifications.muted]).toEqual(["true", true]);
+      settings.failNotifications = true;
+      const digest = personal.getByRole("switch", { name: "Weekly community digest" });
+      await digest.click();
+      await expect.poll(() => personal.locator("[part~=section-notifications] [part=error]").textContent()).toBe("That didn't save. Try again.");
+      expect([await digest.getAttribute("aria-checked"), settings.notifications.weekly_digest]).toEqual(["true", true]);
+      // A new photo: straight to Polynet's storage, then confirmed; the page's policy allows exactly that.
+      uploads.length = 0;
+      await personal.locator("input[type=file]").setInputFiles({ name: "me.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
+      await expect.poll(() => personal.locator("[part=avatar-status]").textContent()).toBe("Photo updated.");
+      expect(uploads).toHaveLength(1);
+      expect(uploads[0].bytes).toBeGreaterThan(0);
+      expect(await personal.locator("[part=avatar] img").getAttribute("src")).toBe(`${STORAGE}/api/storage/kg2photo`);
+      // Polynet's link out for the account itself, in the same tab.
+      const account = personal.locator("[part=account-link]");
+      expect([await account.textContent(), await account.getAttribute("href"), await account.getAttribute("target")])
+        .toEqual(["Account and billing on Polynet", "https://polynet.example.com/settings/account", null]);
+      expect(await page.evaluate(() => (window as any).siteRan)).toBeUndefined();
+      expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
+}
+
+test("Settings: edits made while a save is in flight are kept, and the page says they aren't saved yet", async () => {
+  resetSettings();
+  const { browser, page } = await openTwin(chromium, "/settings", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    let release = () => {};
+    settings.holdProfile = new Promise<void>((resolve) => { release = resolve; });
+    const name = personal.getByLabel("Name", { exact: true });
+    const bio = personal.getByLabel("Bio");
+    await name.fill("  Mo the Climber ");
+    await personal.locator("[part=save]").click();
+    await expect.poll(() => personal.locator("[part~=section-profile] [part=status]").textContent()).toBe("Saving…");
+    await bio.fill("Bouldering and ropes.");
+    release();
+    const status = personal.locator("[part~=section-profile] [part=status]");
+    await expect.poll(() => status.textContent()).toBe("Saved. Save again to keep your newer edits.");
+    // The untouched field shows the saved (trimmed) value; the edited one keeps the newer text.
+    expect([await name.inputValue(), await bio.inputValue()]).toEqual(["Mo the Climber", "Bouldering and ropes."]);
+    expect(settings.profile.bio).toBe("Bouldering.");
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Settings: leaving asks first, then goes to Your communities; the owner is told they can't", async () => {
+  resetSettings("owner");
+  const owner = await openTwin(chromium, "/settings", TOKEN);
+  try {
+    const personal = owner.page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    expect(await personal.locator("[part=leave-owner]").textContent()).toBe("You own Sunrise Climbing Club. Owners can't leave their own community.");
+    expect(await personal.locator("[part=leave]").count()).toBe(0);
+  } finally {
+    await owner.browser.close();
+  }
+  resetSettings();
+  const { browser, page } = await openTwin(chromium, "/settings", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    await personal.locator("[part=leave]").click();
+    expect(await personal.locator("[part=leave-confirm-box] p").first().textContent()).toBe("Leave Sunrise Climbing Club? You'll lose access immediately.");
+    // Cancel leaves nothing changed.
+    await personal.getByRole("button", { name: "Cancel" }).click();
+    expect(settings.left).toBe(false);
+    await personal.locator("[part=leave]").click();
+    await personal.locator("[part=leave-confirm]").click();
+    await page.waitForURL(`${TWIN}/communities`);
+    expect(settings.left).toBe(true);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Settings: signing out ends the twin's session and the site's, then lands on the site", async () => {
+  resetSettings();
+  backendCalls.length = 0;
+  const siteToken = `pna_${"s".repeat(43)}`;
+  const { browser, page } = await openTwin(chromium, "/settings", TOKEN, siteToken);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    await personal.locator("[part=signout]").click();
+    await page.waitForURL(`${SITE}/`);
+    // Both origins revoked their own session, the site's with the twin's ticket; both cookies are gone.
+    const revokes = backendCalls.filter((call) => call.path === "/runtime/community_edge/session_revoke");
+    expect(revokes.map((call) => [call.origin, JSON.parse(call.body)])).toEqual([
+      [TWIN, { token: TOKEN }],
+      [SITE, { token: siteToken, ticket: TICKET }],
+    ]);
+    expect(await page.context().cookies([`${TWIN}/`, `${SITE}/`])).toEqual([]);
   } finally {
     await browser.close();
   }

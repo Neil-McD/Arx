@@ -2,7 +2,7 @@
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to this community's own pages ("In
 // this club": the standard pages, on this site), their account, their
-// communities (on the site's private twin), Discover, messages and settings. It also loads Polynet's
+// communities and settings (on the site's private twin), Discover and messages. It also loads Polynet's
 // blocks (/__polynet/blocks/<name>.js) on pages that place them, and opens the
 // profile panel for ?member= links and "polynet:profile". Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
@@ -200,9 +200,22 @@ class PolynetAccount extends HTMLElement {
     }
   }
 
+  // Out of this site and its private twin both: the other one ends its own
+  // session on a visit there (the edge hands back where), then comes back here.
   async signOut() {
-    await polynet.signOut();
-    location.reload();
+    const session = this.state.session || {};
+    let then = null;
+    try {
+      const res = await fetch("/__polynet/auth/logout?return=" + encodeURIComponent(location.pathname + location.search), { method: "POST" });
+      const body = await res.json();
+      then = body && typeof body.then === "string" ? body.then : null;
+    } catch (error) {
+      then = null;
+    }
+    const other = location.origin === session.private_origin ? session.site_origin : session.private_origin;
+    if (then && other && then.indexOf(other + "/__polynet/auth/signout?") === 0) location.assign(then);
+    else if (session.private_origin && location.origin === session.private_origin) location.assign(session.site_origin + "/");
+    else location.reload();
   }
 
   renderSignedOut(session) {
@@ -249,8 +262,11 @@ class PolynetAccount extends HTMLElement {
       // pages, where the site's code never runs); Polynet's list where there's none.
       const mine = session.private_origin ? session.private_origin + "/communities" : links.communities;
       const onMine = Boolean(session.private_origin) && location.origin === session.private_origin && location.pathname === "/communities";
+      // Settings too (Polynet's own settings where there's no twin).
+      const settings = session.private_origin ? session.private_origin + "/settings" : links.settings;
+      const onSettings = Boolean(session.private_origin) && location.origin === session.private_origin && location.pathname === "/settings";
       // Discover is a page of this site too (/discover, in its frame), so it never leaves.
-      everyday.push([links.messages, "Messages"], [mine, "Your communities", onMine], [sitePath(session, "/discover"), "Discover communities"], [links.settings, "Settings"]);
+      everyday.push([links.messages, "Messages"], [mine, "Your communities", onMine], [sitePath(session, "/discover"), "Discover communities"], [settings, "Settings", onSettings]);
       for (const [href, label, here] of everyday) {
         if (href) children.push(h("a", { class: "item", href: href, part: "item", "aria-current": here || href === current ? "page" : null }, [h("span", { class: "label", text: label })]));
       }

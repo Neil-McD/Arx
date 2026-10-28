@@ -17,6 +17,9 @@ import {
   isCommunityAppTool,
   normalizeCommunityAppOrigin,
   readCommunityAppBearerToken,
+  isCommunityAppSignoutTicket,
+  signCommunityAppSignoutTicket,
+  verifyCommunityAppSignoutTicket,
 } from "../shared/communityAppSession";
 import type { PolynetCanonicalToolName } from "../shared/polynetCanonicalToolContract";
 
@@ -34,6 +37,15 @@ export const COMMUNITY_EDGE_DISCOVER_PATH = "/runtime/community_edge/discover";
 export const COMMUNITY_APP_ACCOUNT_PATH = "/runtime/app/account";
 // Members' own pages: only sessions minted on a site's private twin.
 export const COMMUNITY_APP_MY_COMMUNITIES_PATH = "/runtime/app/me/communities";
+// Settings, each through the same core Studio's settings use.
+export const COMMUNITY_APP_MY_SETTINGS_PATH = "/runtime/app/me/settings";
+export const COMMUNITY_APP_MY_HANDLE_PATH = "/runtime/app/me/handle";
+export const COMMUNITY_APP_MY_PROFILE_PATH = "/runtime/app/me/profile";
+export const COMMUNITY_APP_MY_AVATAR_UPLOAD_PATH = "/runtime/app/me/avatar_upload";
+export const COMMUNITY_APP_MY_AVATAR_PATH = "/runtime/app/me/avatar";
+export const COMMUNITY_APP_MY_NOTIFICATIONS_PATH = "/runtime/app/me/notifications";
+export const COMMUNITY_APP_MY_LEAVE_PATH = "/runtime/app/me/leave";
+const SETTINGS_MAX_BYTES = 8 * 1024;
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -109,6 +121,18 @@ async function requirePrivateAppSession(ctx: any, req: Request): Promise<AppSess
   return session;
 }
 
+// Settings: a private session, of someone still in this community (a session
+// outlives a member who leaves or is removed). Their role here, for the page.
+async function requirePrivateMemberSession(ctx: any, req: Request): Promise<(AppSession & { community: { name: string; role: string } }) | Response> {
+  const session = await requirePrivateAppSession(ctx, req);
+  if (session instanceof Response) return session;
+  const account = (await ctx.runQuery(internal.communityApps.getCommunityAppAccountInternal, {
+    userId: session.userId as any, currentCommunityId: session.communityId as any,
+  })) as { community: { name: string; role: string } } | null;
+  if (!account) return reply(403, { ok: false, code: "not_a_member", message: "Join this community to change its settings." });
+  return { ...session, community: account.community };
+}
+
 // The member's agent conversation for the session's community: the same one
 // Studio's agent dock shows for that community.
 async function ensureSiteAgentConversation(ctx: any, session: AppSession) {
@@ -119,6 +143,50 @@ async function ensureSiteAgentConversation(ctx: any, session: AppSession) {
 }
 
 const noStoreHeaders = () => new Headers({ "Cache-Control": "no-store" });
+
+// The refusals Studio's settings cores give, by code, for the twin to explain.
+// Anything else is a plain failure (never the core's raw message).
+const SETTINGS_REFUSALS = [
+  "profile_display_name_too_long", "profile_bio_too_long", "profile_handle_taken", "profile_handle_empty",
+  "profile_handle_reserved", "profile_handle_too_short", "profile_handle_too_long", "profile_handle_invalid_format",
+  "profile_avatar_invalid", "profile_link_invalid_youtube", "profile_link_invalid_x", "profile_link_invalid_instagram",
+  "community_owner_cannot_leave", "community_forbidden", "community_entitlement_required", "community_not_found",
+];
+function settingsRefusal(error: unknown): string | null {
+  const data = (error as { data?: unknown } | null)?.data;
+  const code = typeof (data as { code?: unknown } | null)?.code === "string" ? String((data as { code: string }).code) : "";
+  const message = code || String((error as { message?: unknown } | null)?.message ?? "");
+  return SETTINGS_REFUSALS.find((known) => message === known || message.includes(known)) ?? null;
+}
+
+async function runSettingsWrite(run: () => Promise<unknown>): Promise<{ ok: true; value: any } | Response> {
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    const code = settingsRefusal(error);
+    if (code) return reply(400, { ok: false, code });
+    return reply(500, { ok: false, code: "settings_unavailable", message: "That didn't save. Try again." });
+  }
+}
+
+// The profile fields the twin's settings page shows: what Studio's own read returns.
+function settingsProfile(profile: any) {
+  const links = profile?.social_links ?? {};
+  return {
+    display_name: profile?.display_name ?? null,
+    handle: profile?.handle ?? null,
+    bio: profile?.bio ?? null,
+    avatar_url: profile?.avatar_url ?? null,
+    social_links: { youtube: links.youtube ?? "", x: links.x ?? "", instagram: links.instagram ?? "" },
+  };
+}
+
+// Text or nothing (null clears), as Studio's profile write takes it; any other type is refused.
+function optionalText(body: Record<string, unknown>, key: string): { ok: true; value?: string | null } | { ok: false } {
+  if (!(key in body)) return { ok: true };
+  const value = body[key];
+  return value === null || typeof value === "string" ? { ok: true, value } : { ok: false };
+}
 
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
   // A turn with the community agent acting for the member, pinned to this community's
@@ -429,6 +497,164 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
     }),
   });
 
+  // Settings on a site's private twin only. The page shows and edits what
+  // Studio's member settings do, through the same cores.
+  args.http.route({
+    path: COMMUNITY_APP_MY_SETTINGS_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const ids = { userId: session.userId as any };
+      const here = { ...ids, communityId: session.communityId as any };
+      const [profile, email, member] = await Promise.all([
+        ctx.runQuery(internal.profiles.readOwnProfileDetailForTrustedUserInternal, ids),
+        ctx.runQuery(internal.emailPreferences.getEmailPreferencesForTrustedUserInternal, ids),
+        ctx.runQuery(internal.communityAdmin.getCommunityMemberSettingsForTrustedUserInternal, here).catch(() => null),
+      ]);
+      return reply(200, {
+        ok: true,
+        profile: settingsProfile(profile),
+        community: { name: session.community.name, role: session.community.role },
+        notifications: { muted: Boolean((member as { muted?: boolean } | null)?.muted), weekly_digest: (email as { weekly_digest_enabled: boolean }).weekly_digest_enabled },
+      });
+    }),
+  });
+
+  // Whether a handle is free, as Studio checks it while the member types.
+  args.http.route({
+    path: COMMUNITY_APP_MY_HANDLE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      if (typeof body?.handle !== "string") return reply(400, { ok: false, code: "invalid_request" });
+      const result = (await ctx.runQuery(internal.profiles.checkHandleAvailabilityForTrustedUserInternal, {
+        userId: session.userId as any, handle: body.handle,
+      })) as { available: boolean; status: string; handle: string | null };
+      return reply(200, { ok: true, available: result.available, status: result.status, handle: result.handle });
+    }),
+  });
+
+  // Name, handle, bio and links, through Studio's profile write.
+  args.http.route({
+    path: COMMUNITY_APP_MY_PROFILE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, SETTINGS_MAX_BYTES);
+      if (!body) return reply(400, { ok: false, code: "invalid_request" });
+      const update: Record<string, unknown> = { userId: session.userId };
+      for (const [key, field] of [["display_name", "displayName"], ["handle", "handle"], ["bio", "bio"]] as const) {
+        const text = optionalText(body, key);
+        if (!text.ok) return reply(400, { ok: false, code: "invalid_request" });
+        if (text.value !== undefined) update[field] = text.value;
+      }
+      if ("social_links" in body) {
+        const raw = body.social_links;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return reply(400, { ok: false, code: "invalid_request" });
+        const links: Record<string, string | null> = {};
+        for (const kind of ["youtube", "x", "instagram"]) {
+          const text = optionalText(raw as Record<string, unknown>, kind);
+          if (!text.ok) return reply(400, { ok: false, code: "invalid_request" });
+          if (text.value !== undefined) links[kind] = text.value;
+        }
+        update.socialLinks = links;
+      }
+      const written = await runSettingsWrite(() => ctx.runMutation(internal.profiles.updateProfileDetailForTrustedUserInternal, update as any));
+      if (written instanceof Response) return written;
+      return reply(200, { ok: true, profile: settingsProfile(written.value) });
+    }),
+  });
+
+  // A new photo, step 1 of Studio's flow: where to send the file. The browser
+  // sends it straight to Polynet's storage, then confirms it below.
+  args.http.route({
+    path: COMMUNITY_APP_MY_AVATAR_UPLOAD_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const issued = await runSettingsWrite(() => ctx.runMutation(internal.profiles.generateProfileAvatarUploadUrlForTrustedUserInternal, {
+        userId: session.userId as any,
+      }));
+      if (issued instanceof Response) return issued;
+      return reply(200, { ok: true, upload_url: (issued.value as { uploadUrl: string }).uploadUrl });
+    }),
+  });
+
+  // Step 2: the uploaded file becomes the photo (or null removes it).
+  args.http.route({
+    path: COMMUNITY_APP_MY_AVATAR_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const storageId = body?.storage_id;
+      if (!body || !(storageId === null || (typeof storageId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(storageId)))) {
+        return reply(400, { ok: false, code: "invalid_request" });
+      }
+      const written = await runSettingsWrite(() => ctx.runMutation(internal.profiles.updateProfileDetailForTrustedUserInternal, {
+        userId: session.userId as any, avatarStorageId: storageId as any,
+      }));
+      if (written instanceof Response) return written;
+      return reply(200, { ok: true, profile: settingsProfile(written.value) });
+    }),
+  });
+
+  // Studio's two notification settings: mute this community, and the weekly
+  // digest (one setting for every community, as in Studio).
+  args.http.route({
+    path: COMMUNITY_APP_MY_NOTIFICATIONS_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const muted = body?.muted;
+      const digest = body?.weekly_digest;
+      if (!body || (muted !== undefined && typeof muted !== "boolean") || (digest !== undefined && typeof digest !== "boolean") || (muted === undefined && digest === undefined)) {
+        return reply(400, { ok: false, code: "invalid_request" });
+      }
+      const ids = { userId: session.userId as any };
+      const written = await runSettingsWrite(async () => ({
+        member: typeof muted === "boolean"
+          ? await ctx.runMutation(internal.communityAdmin.saveCommunityMemberSettingsForTrustedUserInternal, { ...ids, communityId: session.communityId as any, muted })
+          : null,
+        email: typeof digest === "boolean"
+          ? await ctx.runMutation(internal.emailPreferences.updateWeeklyDigestForTrustedUserInternal, { ...ids, weeklyDigestEnabled: digest })
+          : null,
+      }));
+      if (written instanceof Response) return written;
+      const value = written.value as { member: { muted: boolean } | null; email: { weekly_digest_enabled: boolean } | null };
+      return reply(200, {
+        ok: true,
+        notifications: {
+          ...(value.member ? { muted: value.member.muted } : {}),
+          ...(value.email ? { weekly_digest: value.email.weekly_digest_enabled } : {}),
+        },
+      });
+    }),
+  });
+
+  // Leaving this community, as Studio's Leave community does. The owner can't.
+  args.http.route({
+    path: COMMUNITY_APP_MY_LEAVE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const left = await runSettingsWrite(() => ctx.runMutation(internal.communityAdmin.leaveCommunityForTrustedUserInternal, {
+        userId: session.userId as any, communityId: session.communityId as any,
+      }));
+      if (left instanceof Response) return left;
+      return reply(200, { ok: true });
+    }),
+  });
+
   // The community's public identity for its site, signed in or not.
   args.http.route({
     path: COMMUNITY_EDGE_PUBLIC_PATH,
@@ -468,10 +694,26 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
     handler: args.httpAction(async (ctx, req) => {
       if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
       const body = await readJsonObject(req, 1024);
-      if (!isCommunityAppSessionToken(body?.token)) return reply(400, { ok: false, code: "invalid_request" });
-      await ctx.runMutation(internal.communityApps.revokeCommunityAppSessionInternal, {
-        tokenHash: await hashCommunityAppSessionToken(body.token as string),
-      });
+      const ticket = body?.ticket;
+      if (!isCommunityAppSessionToken(body?.token) || (ticket !== undefined && !isCommunityAppSignoutTicket(ticket))) {
+        return reply(400, { ok: false, code: "invalid_request" });
+      }
+      const tokenHash = await hashCommunityAppSessionToken(body.token as string);
+      const secret = readEnv("POLYNET_COMMUNITY_EDGE_SECRET");
+      // The other half of a sign-out: only the same member's session in the same community ends.
+      if (ticket !== undefined) {
+        const owner = (await ctx.runQuery(internal.communityApps.readCommunityAppSessionOwnerInternal, { tokenHash })) as
+          { userId: string; communityId: string } | null;
+        if (!owner || !(await verifyCommunityAppSignoutTicket(secret, ticket as string, owner.userId, owner.communityId, Date.now()))) {
+          return reply(403, { ok: false, code: "signout_ticket_invalid" });
+        }
+      }
+      const revoked = (await ctx.runMutation(internal.communityApps.revokeCommunityAppSessionInternal, { tokenHash })) as
+        { revoked: boolean; userId?: string; communityId?: string };
+      // A first sign-out hands back the ticket that ends the site's other origin too.
+      if (ticket === undefined && revoked.revoked && revoked.userId && revoked.communityId) {
+        return reply(200, { ok: true, signout_ticket: await signCommunityAppSignoutTicket(secret, revoked.userId, revoked.communityId, Date.now()) });
+      }
       return reply(200, { ok: true });
     }),
   });

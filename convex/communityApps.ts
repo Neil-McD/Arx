@@ -285,7 +285,22 @@ export const revokeCommunityAppSessionInternal = internalMutation({
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
       .first();
     if (session) await ctx.db.delete(session._id);
-    return { revoked: Boolean(session) };
+    return session
+      ? { revoked: true, userId: String(session.userId), communityId: String(session.communityId) }
+      : { revoked: false };
+  },
+});
+
+// Whose session this is, so a sign-out ticket from the site's other origin can
+// be checked against it before anything is revoked.
+export const readCommunityAppSessionOwnerInternal = internalQuery({
+  args: { tokenHash: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("communityAppSessions")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
+      .first();
+    return session ? { userId: String(session.userId), communityId: String(session.communityId) } : null;
   },
 });
 

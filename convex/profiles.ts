@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
@@ -270,33 +270,54 @@ export const checkHandleAvailability = query({
   },
   handler: async (ctx, args) => {
     const validation = validateProfileHandle(args.handle);
-    if (!validation.ok) {
-      return {
-        available: false,
-        status: validation.reason,
-        handle: null,
-        normalized_handle: null,
-      };
-    }
-
-    const currentUserId = args.authSubject
+    const currentUserId = validation.ok && args.authSubject
       ? await resolveUserIdForAuthenticatedRequest({
           ctx,
           authSubject: args.authSubject,
         })
       : null;
-    const existing = await getUniqueUserByNormalizedHandle<UserRow>(
-      ctx,
-      validation.normalizedHandle,
-    );
-    const ownedByCurrentUser = Boolean(existing && currentUserId && String(existing._id) === String(currentUserId));
-    const available = !existing || ownedByCurrentUser;
+    return await readHandleAvailability(ctx, args.handle, currentUserId);
+  },
+});
+
+// Whether a handle is free for this user (their own counts as free): Studio's
+// check (checkHandleAvailability) and the private twin's.
+async function readHandleAvailability(ctx: any, rawHandle: string, currentUserId: any) {
+  const validation = validateProfileHandle(rawHandle);
+  if (!validation.ok) {
     return {
-      available,
-      status: available ? "available" : "taken",
-      handle: validation.handle,
-      normalized_handle: validation.normalizedHandle,
+      available: false,
+      status: validation.reason,
+      handle: null,
+      normalized_handle: null,
     };
+  }
+  const existing = await getUniqueUserByNormalizedHandle<UserRow>(
+    ctx,
+    validation.normalizedHandle,
+  );
+  const ownedByCurrentUser = Boolean(existing && currentUserId && String(existing._id) === String(currentUserId));
+  const available = !existing || ownedByCurrentUser;
+  return {
+    available,
+    status: available ? "available" : "taken",
+    handle: validation.handle,
+    normalized_handle: validation.normalizedHandle,
+  };
+}
+
+export const checkHandleAvailabilityForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users"), handle: v.string() },
+  handler: async (ctx, args) => await readHandleAvailability(ctx, args.handle, args.userId),
+});
+
+// The member's own profile as Studio's settings read it, for the private twin.
+export const readOwnProfileDetailForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = (await ctx.db.get(args.userId)) as UserRow | null;
+    if (!user) return null;
+    return await mapProfileDetail(ctx, user, await findProfileDetailByUserId(ctx, args.userId));
   },
 });
 
@@ -453,6 +474,17 @@ export const generateProfileAvatarUploadUrl = mutation({
   },
 });
 
+// The private twin's photo upload, step 1 of Studio's flow: an upload URL for
+// a member whose twin session the caller already checked. The browser sends
+// the file straight to storage; step 2 is the profile write with its id.
+export const generateProfileAvatarUploadUrlForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    if (!(await ctx.db.get(args.userId))) throwProfileMutationError("user_not_found");
+    return { uploadUrl: await ctx.storage.generateUploadUrl() };
+  },
+});
+
 export const resolveOnboardingProfileDetail = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -527,163 +559,241 @@ export const upsertProfileDetail = mutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const displayNameValidation =
-      args.displayName === undefined ? null : validateProfileDisplayName(args.displayName);
-    if (displayNameValidation && !displayNameValidation.ok) {
-      throwProfileMutationError("profile_display_name_too_long");
-    }
-    const bioValidation = args.bio === undefined ? null : validateProfileBio(args.bio);
-    if (bioValidation && !bioValidation.ok) {
-      throwProfileMutationError("profile_bio_too_long");
-    }
-    const normalizedDisplayName = displayNameValidation?.value;
-    const normalizedBio = bioValidation?.value;
+    const text = validateProfileDetailText(args);
     const actor = await ensureAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,
       nowMs,
-      displayName: normalizedDisplayName,
+      displayName: text.displayName,
       avatarUrl: args.avatarStorageId ? undefined : args.avatarUrl,
     });
     const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
     if (requestedSubject !== actor.authSubject) {
       throwProfileMutationError("profile_forbidden");
     }
+    return await writeProfileDetailForUser(ctx, actor.dbUserId, args, nowMs, text);
+  },
+});
 
-    const userPatch: Record<string, unknown> = { updatedAt: nowMs };
-    if (args.displayName !== undefined) {
-      userPatch.displayName = normalizedDisplayName ?? undefined;
-    }
-    if (args.handle !== undefined) {
-      const rawHandle = String(args.handle ?? "").trim();
-      if (!rawHandle) {
-        userPatch.handle = undefined;
-        userPatch.normalizedHandle = undefined;
-      } else {
-        const handle = validateProfileHandle(rawHandle);
-        if (!handle.ok) throwProfileMutationError(`profile_handle_${handle.reason}`);
-        await assertHandleAvailable(ctx, handle.normalizedHandle, actor.dbUserId);
-        userPatch.handle = handle.handle;
-        userPatch.normalizedHandle = handle.normalizedHandle;
-      }
-    }
-    if (args.avatarUrl !== undefined || args.avatarStorageId !== undefined) {
-      userPatch.avatarUrl = args.avatarStorageId ? undefined : normalizeOptionalText(args.avatarUrl);
-    }
-    await ctx.db.patch(actor.dbUserId, userPatch);
+type ProfileDetailWrite = {
+  displayName?: string | null;
+  handle?: string | null;
+  avatarStorageId?: any;
+  avatarUrl?: string | null;
+  avatarFocusX?: number;
+  avatarFocusY?: number;
+  avatarZoom?: number;
+  bio?: string | null;
+  socialLinks?: { youtube?: string | null; x?: string | null; instagram?: string | null } | null;
+  markOnboardingDismissed?: boolean;
+  completeOnboarding?: boolean;
+  termsOfServiceVersion?: string | null;
+  privacyPolicyVersion?: string | null;
+};
 
-    const existingDetail = await findProfileDetailByUserId(ctx, actor.dbUserId);
-    if (args.avatarStorageId) {
-      await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
-    }
-    const termsOfServiceVersion = normalizeOptionalText(args.termsOfServiceVersion);
-    const privacyPolicyVersion = normalizeOptionalText(args.privacyPolicyVersion);
-    if (termsOfServiceVersion || privacyPolicyVersion) {
-      if (!termsOfServiceVersion || !privacyPolicyVersion) {
-        throwProfileMutationError("platform_legal_versions_required");
-      }
-      await recordCurrentPlatformLegalAcceptance(ctx, {
-        userId: actor.dbUserId,
-        termsVersion: termsOfServiceVersion,
-        privacyPolicyVersion,
-        source: "account_onboarding_profile",
-        acceptedAt: Date.now(),
-      });
-    }
-    const nextDisplayName =
-      args.displayName !== undefined
-        ? normalizedDisplayName ?? undefined
-        : existingDetail?.displayName;
-    const nextAvatarStorageId =
-      args.avatarStorageId !== undefined
-        ? args.avatarStorageId ?? undefined
-        : existingDetail?.avatarStorageId;
-    const nextAvatarUrl =
-      nextAvatarStorageId
-        ? undefined
-        : args.avatarUrl !== undefined || args.avatarStorageId !== undefined
-          ? normalizeOptionalText(args.avatarUrl)
-          : existingDetail?.avatarUrl;
-    const nextAvatarFocusX =
-      args.avatarFocusX !== undefined
-        ? normalizeAvatarFocus(args.avatarFocusX)
-        : normalizeAvatarFocus(existingDetail?.avatarFocusX);
-    const nextAvatarFocusY =
-      args.avatarFocusY !== undefined
-        ? normalizeAvatarFocus(args.avatarFocusY)
-        : normalizeAvatarFocus(existingDetail?.avatarFocusY);
-    const nextAvatarZoom =
-      args.avatarZoom !== undefined
-        ? normalizeAvatarZoom(args.avatarZoom)
-        : normalizeAvatarZoom(existingDetail?.avatarZoom);
-    const nextBio = args.bio !== undefined ? normalizedBio ?? undefined : existingDetail?.bio;
-    const nextSocialLinks =
-      args.socialLinks === undefined
-        ? existingDetail?.socialLinks
-        : normalizeProfileSocialLinksForStorage(args.socialLinks);
-    const shouldMarkOnboardingDismissed =
-      args.markOnboardingDismissed === true || args.completeOnboarding === true;
-    const shouldSeedFirstCompletionBridgeFacts =
-      args.completeOnboarding === true && !existingDetail?.onboardingCompletedAt;
-    const bridgeSocialLinks = shouldSeedFirstCompletionBridgeFacts
-      ? listBridgeSocialLinks(nextSocialLinks)
-      : [];
+// Name and bio limits, checked before anything is written.
+function validateProfileDetailText(args: Pick<ProfileDetailWrite, "displayName" | "bio">) {
+  const displayNameValidation =
+    args.displayName === undefined ? null : validateProfileDisplayName(args.displayName);
+  if (displayNameValidation && !displayNameValidation.ok) {
+    throwProfileMutationError("profile_display_name_too_long");
+  }
+  const bioValidation = args.bio === undefined ? null : validateProfileBio(args.bio);
+  if (bioValidation && !bioValidation.ok) {
+    throwProfileMutationError("profile_bio_too_long");
+  }
+  return { displayName: displayNameValidation?.value, bio: bioValidation?.value };
+}
 
-    if (!existingDetail) {
-      await ctx.db.insert("userProfileDetails", {
-        userId: actor.dbUserId,
-        displayName: nextDisplayName,
-        avatarUrl: nextAvatarUrl,
-        avatarStorageId: nextAvatarStorageId,
-        avatarFocusX: nextAvatarFocusX,
-        avatarFocusY: nextAvatarFocusY,
-        avatarZoom: nextAvatarZoom,
-        bio: nextBio,
-        socialLinks: nextSocialLinks,
-        ...(shouldMarkOnboardingDismissed ? { onboardingCompletedAt: nowMs } : null),
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
+// The one profile write, once the caller knows whose profile it is: Studio's
+// signed-in user (upsertProfileDetail) or a community site's private twin
+// (updateProfileDetailForTrustedUserInternal). Same validation, same rows.
+async function writeProfileDetailForUser(
+  ctx: any,
+  userId: any,
+  args: ProfileDetailWrite,
+  nowMs: number,
+  text: { displayName: string | null | undefined; bio: string | null | undefined },
+) {
+  const normalizedDisplayName = text.displayName;
+  const normalizedBio = text.bio;
+  const actor = { dbUserId: userId };
+  const userPatch: Record<string, unknown> = { updatedAt: nowMs };
+  if (args.displayName !== undefined) {
+    userPatch.displayName = normalizedDisplayName ?? undefined;
+  }
+  if (args.handle !== undefined) {
+    const rawHandle = String(args.handle ?? "").trim();
+    if (!rawHandle) {
+      userPatch.handle = undefined;
+      userPatch.normalizedHandle = undefined;
     } else {
-      await ctx.db.patch(existingDetail._id, {
-        displayName: nextDisplayName,
-        avatarUrl: nextAvatarUrl,
-        avatarStorageId: nextAvatarStorageId,
-        avatarFocusX: nextAvatarFocusX,
-        avatarFocusY: nextAvatarFocusY,
-        avatarZoom: nextAvatarZoom,
-        bio: nextBio,
-        socialLinks: nextSocialLinks,
-        ...(shouldMarkOnboardingDismissed && !existingDetail.onboardingCompletedAt
-          ? { onboardingCompletedAt: nowMs }
-          : null),
-        updatedAt: nowMs,
+      const handle = validateProfileHandle(rawHandle);
+      if (!handle.ok) throwProfileMutationError(`profile_handle_${handle.reason}`);
+      await assertHandleAvailable(ctx, handle.normalizedHandle, actor.dbUserId);
+      userPatch.handle = handle.handle;
+      userPatch.normalizedHandle = handle.normalizedHandle;
+    }
+  }
+  if (args.avatarUrl !== undefined || args.avatarStorageId !== undefined) {
+    userPatch.avatarUrl = args.avatarStorageId ? undefined : normalizeOptionalText(args.avatarUrl);
+  }
+  await ctx.db.patch(actor.dbUserId, userPatch);
+
+  const existingDetail = await findProfileDetailByUserId(ctx, actor.dbUserId);
+  if (args.avatarStorageId) {
+    await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
+  }
+  const termsOfServiceVersion = normalizeOptionalText(args.termsOfServiceVersion);
+  const privacyPolicyVersion = normalizeOptionalText(args.privacyPolicyVersion);
+  if (termsOfServiceVersion || privacyPolicyVersion) {
+    if (!termsOfServiceVersion || !privacyPolicyVersion) {
+      throwProfileMutationError("platform_legal_versions_required");
+    }
+    await recordCurrentPlatformLegalAcceptance(ctx, {
+      userId: actor.dbUserId,
+      termsVersion: termsOfServiceVersion,
+      privacyPolicyVersion,
+      source: "account_onboarding_profile",
+      acceptedAt: Date.now(),
+    });
+  }
+  const nextDisplayName =
+    args.displayName !== undefined
+      ? normalizedDisplayName ?? undefined
+      : existingDetail?.displayName;
+  const nextAvatarStorageId =
+    args.avatarStorageId !== undefined
+      ? args.avatarStorageId ?? undefined
+      : existingDetail?.avatarStorageId;
+  const nextAvatarUrl =
+    nextAvatarStorageId
+      ? undefined
+      : args.avatarUrl !== undefined || args.avatarStorageId !== undefined
+        ? normalizeOptionalText(args.avatarUrl)
+        : existingDetail?.avatarUrl;
+  const nextAvatarFocusX =
+    args.avatarFocusX !== undefined
+      ? normalizeAvatarFocus(args.avatarFocusX)
+      : normalizeAvatarFocus(existingDetail?.avatarFocusX);
+  const nextAvatarFocusY =
+    args.avatarFocusY !== undefined
+      ? normalizeAvatarFocus(args.avatarFocusY)
+      : normalizeAvatarFocus(existingDetail?.avatarFocusY);
+  const nextAvatarZoom =
+    args.avatarZoom !== undefined
+      ? normalizeAvatarZoom(args.avatarZoom)
+      : normalizeAvatarZoom(existingDetail?.avatarZoom);
+  const nextBio = args.bio !== undefined ? normalizedBio ?? undefined : existingDetail?.bio;
+  const nextSocialLinks =
+    args.socialLinks === undefined
+      ? existingDetail?.socialLinks
+      : normalizeProfileSocialLinksForStorage(args.socialLinks);
+  const shouldMarkOnboardingDismissed =
+    args.markOnboardingDismissed === true || args.completeOnboarding === true;
+  const shouldSeedFirstCompletionBridgeFacts =
+    args.completeOnboarding === true && !existingDetail?.onboardingCompletedAt;
+  const bridgeSocialLinks = shouldSeedFirstCompletionBridgeFacts
+    ? listBridgeSocialLinks(nextSocialLinks)
+    : [];
+
+  if (!existingDetail) {
+    await ctx.db.insert("userProfileDetails", {
+      userId: actor.dbUserId,
+      displayName: nextDisplayName,
+      avatarUrl: nextAvatarUrl,
+      avatarStorageId: nextAvatarStorageId,
+      avatarFocusX: nextAvatarFocusX,
+      avatarFocusY: nextAvatarFocusY,
+      avatarZoom: nextAvatarZoom,
+      bio: nextBio,
+      socialLinks: nextSocialLinks,
+      ...(shouldMarkOnboardingDismissed ? { onboardingCompletedAt: nowMs } : null),
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  } else {
+    await ctx.db.patch(existingDetail._id, {
+      displayName: nextDisplayName,
+      avatarUrl: nextAvatarUrl,
+      avatarStorageId: nextAvatarStorageId,
+      avatarFocusX: nextAvatarFocusX,
+      avatarFocusY: nextAvatarFocusY,
+      avatarZoom: nextAvatarZoom,
+      bio: nextBio,
+      socialLinks: nextSocialLinks,
+      ...(shouldMarkOnboardingDismissed && !existingDetail.onboardingCompletedAt
+        ? { onboardingCompletedAt: nowMs }
+        : null),
+      updatedAt: nowMs,
+    });
+  }
+
+  if (shouldSeedFirstCompletionBridgeFacts) {
+    if (bridgeSocialLinks.length > 0) {
+      await insertMissingBridgeSocialLinkFacts(ctx, {
+        userId: actor.dbUserId,
+        links: bridgeSocialLinks,
+        createdByUserId: actor.dbUserId,
+        confirmMarker: "bridge:account_setup_completed",
+        nowMs,
       });
     }
+  }
 
-    if (shouldSeedFirstCompletionBridgeFacts) {
-      if (bridgeSocialLinks.length > 0) {
-        await insertMissingBridgeSocialLinkFacts(ctx, {
-          userId: actor.dbUserId,
-          links: bridgeSocialLinks,
-          createdByUserId: actor.dbUserId,
-          confirmMarker: "bridge:account_setup_completed",
-          nowMs,
-        });
+  // A replaced photo's file is left in storage, never deleted here: the file
+  // a profile points at isn't proven to be the member's own upload, and
+  // deleting it could remove someone else's file (another photo, a banner, an
+  // attachment) that a member pointed their profile at.
+
+  const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
+  const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);
+
+  if (!refreshedUser) throwProfileMutationError("user_not_found");
+
+  return await mapProfileDetailWithSetup(ctx, refreshedUser, detail);
+}
+
+const PROFILE_AVATAR_CLAIM_WINDOW_MS = 60 * 60 * 1000;
+
+// A member's own profile from a community site's private twin: the session
+// already says who they are. Only what the twin's settings page edits, through
+// Studio's own write.
+export const updateProfileDetailForTrustedUserInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    displayName: v.optional(v.union(v.string(), v.null())),
+    handle: v.optional(v.union(v.string(), v.null())),
+    // Any text: a storage id is checked below, so a bad one is the profile's own refusal.
+    avatarStorageId: v.optional(v.union(v.string(), v.null())),
+    bio: v.optional(v.union(v.string(), v.null())),
+    socialLinks: v.optional(
+      v.object({
+        youtube: v.optional(v.union(v.string(), v.null())),
+        x: v.optional(v.union(v.string(), v.null())),
+        instagram: v.optional(v.union(v.string(), v.null())),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const { userId, avatarStorageId: rawAvatar, ...fields } = args;
+    const text = validateProfileDetailText(fields);
+    if (!(await ctx.db.get(userId))) throwProfileMutationError("user_not_found");
+    let avatar: { avatarStorageId?: any; avatarFocusX?: number; avatarFocusY?: number; avatarZoom?: number } = {};
+    if (rawAvatar === null) avatar = { avatarStorageId: null };
+    if (typeof rawAvatar === "string") {
+      // Only a photo just uploaded (upload URLs last an hour), never another
+      // member's existing file: replacing a photo deletes the old one.
+      const storageId = ctx.db.system.normalizeId("_storage", rawAvatar);
+      const file = storageId ? await ctx.db.system.get(storageId) : null;
+      if (!file || !String(file.contentType ?? "").startsWith("image/") || file._creationTime < nowMs - PROFILE_AVATAR_CLAIM_WINDOW_MS) {
+        throwProfileMutationError("profile_avatar_invalid");
       }
+      // A new photo starts centered, as it does in Studio.
+      avatar = { avatarStorageId: storageId, avatarFocusX: 0.5, avatarFocusY: 0.5, avatarZoom: 1 };
     }
-
-    // A replaced photo's file is left in storage, never deleted here: the file
-    // a profile points at isn't proven to be the member's own upload, and
-    // deleting it could remove someone else's file (another photo, a banner,
-    // an attachment) that a member pointed their profile at.
-
-    const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
-    const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);
-
-    if (!refreshedUser) throwProfileMutationError("user_not_found");
-
-    return await mapProfileDetailWithSetup(ctx, refreshedUser, detail);
+    return await writeProfileDetailForUser(ctx, userId, { ...fields, ...avatar }, nowMs, text);
   },
 });
 

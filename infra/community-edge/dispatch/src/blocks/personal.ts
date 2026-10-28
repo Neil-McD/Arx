@@ -6,13 +6,15 @@
 // every script removed, so only Polynet's code runs beside it, and this block
 // keeps its data in its shadow root, where the frame's CSS reaches only
 // ::part(). Its data comes from /__polynet/me/*, which answers only the twin's
-// own session. Kept as text (a String.raw literal: no backticks or template
+// own session. Settings is its own module (blocks/settings.ts), loaded only
+// on that page. Kept as text (a String.raw literal: no backticks or template
 // placeholders inside) so the edge serves exactly what is reviewed.
 export const PERSONAL_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-personal page="communities|messages|settings|join">.
 // Only on a site's private twin, inside <polynet-page>. Style it with ::part():
 // communities, community, community-avatar, community-name, community-role,
-// community-here, community-elsewhere, empty, soon, signin, retry.
+// community-here, community-elsewhere, empty, soon, signin, retry, and the
+// settings page's parts (see /__polynet/blocks/settings.js).
 import { BASE_STYLE, h, styled, avatar } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + [
@@ -54,6 +56,7 @@ class PolynetPersonal extends HTMLElement {
   load() {
     const page = this.getAttribute("page");
     if (page === "communities") return this.loadCommunities();
+    if (page === "settings") return this.loadSettings();
     // The rest are built next; until then a quiet note in the site's own frame.
     this.show("soon", [h("div", { class: "state", part: "soon" }, [h("p", { class: "muted", text: "This page is coming soon." })])]);
   }
@@ -70,7 +73,7 @@ class PolynetPersonal extends HTMLElement {
       res = null;
     }
     if (generation !== this.generation) return;
-    if (res && res.status === 401) return this.signedOut();
+    if (res && res.status === 401) return this.signedOut("Sign in to see your communities.");
     if (!res || !res.ok || !body || !body.ok || !Array.isArray(body.communities)) {
       return this.show("error", [h("div", { class: "state", role: "alert" }, [
         h("p", { text: "Couldn't load your communities." }),
@@ -87,11 +90,30 @@ class PolynetPersonal extends HTMLElement {
       communities.map((community) => this.card(community)))]);
   }
 
+  async loadSettings() {
+    const generation = ++this.generation;
+    this.show("loading", [h("p", { class: "muted", role: "status", text: "Loading…" })]);
+    let settings = null;
+    try {
+      settings = await import("/__polynet/blocks/settings.js");
+    } catch (error) {
+      settings = null;
+    }
+    if (generation !== this.generation) return;
+    if (!settings) {
+      return this.show("error", [h("div", { class: "state", role: "alert" }, [
+        h("p", { text: "Couldn't load your settings." }),
+        h("button", { class: "quiet", part: "retry", type: "button", onclick: () => this.loadSettings(), text: "Try again" }),
+      ])]);
+    }
+    return settings.mountSettings(this, generation);
+  }
+
   // Signed out here (the session ended): the same hop as the site's sign-in.
-  signedOut() {
+  signedOut(text) {
     const back = location.pathname + location.search;
     this.show("signed-out", [h("div", { class: "state" }, [
-      h("p", { text: "Sign in to see your communities." }),
+      h("p", { text: text }),
       h("div", { class: "actions" }, [
         h("button", { class: "primary", part: "signin", type: "button", text: "Sign in",
           onclick: () => { location.href = "/__polynet/auth/start?return=" + encodeURIComponent(back); } }),
