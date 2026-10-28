@@ -15,7 +15,6 @@ const schema = read("convex/schema.ts");
 const core = read("convex/communityCore.ts");
 const resources = read("convex/communityResources.ts");
 const sourceUrlPolicy = read("convex/communitySourceUrlPolicy.ts");
-const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
@@ -28,6 +27,21 @@ assert.match(
   packageJson,
   /"check:community-source-ingestion-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_ingestion_contract_proof\.ts"/,
   "source ingestion proof should be wired into package scripts",
+);
+assert.match(
+  resources,
+  /function isIngestibleCommunitySource\(row: CommunityResourceLike\): boolean \{\n  return isPlainUrlSource\(row\) \|\| isPlainFileSource\(row\);\n\}/,
+  "only manual link and file sources are ingested; GitHub and Google Drive import is retired",
+);
+assert.match(
+  resources,
+  /ingestionKind === "google_drive" \|\| ingestionKind === "github"[\s\S]*"retired_provider"[\s\S]*"community_source_provider_retired"/,
+  "a claimed GitHub or Google Drive source fails closed instead of being fetched",
+);
+assert.doesNotMatch(
+  resources + http + gateway,
+  /SourceOAuth|source-integrations|getGoogleDriveConnectionRow|getGitHubConnectionRow|GITHUB_OAUTH|GOOGLE_DRIVE_OAUTH/,
+  "GitHub and Google Drive connections, OAuth and import stay deleted",
 );
 assert.match(
   packageJson,
@@ -130,16 +144,6 @@ assert.match(
   schema,
   /communitySourceCrawlJobs:[\s\S]*provider: v\.union\(v\.literal\("simple"\), v\.literal\("crawl4ai"\), v\.literal\("firecrawl"\)\)[\s\S]*rootUrl: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("crawling"\)[\s\S]*v\.literal\("saving_sources"\)[\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*sourceResourceIds:[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
   "source crawling should persist durable crawl job state, tolerate legacy firecrawl rows, and keep status, limits, counts, and saved source ids",
-);
-assert.match(
-  schema,
-  /userSourceIntegrationConnections:[\s\S]*provider: v\.union\(v\.literal\("google_drive"\), v\.literal\("github"\)\)[\s\S]*authKind: v\.literal\("oauth_tokens"\)[\s\S]*encryptedSecretHex:[\s\S]*secretIvHex:[\s\S]*secretVersion:[\s\S]*accountLogin:[\s\S]*accessTokenExpiresAt:[\s\S]*\.index\("by_user_provider", \["userId", "provider"\]\)/,
-  "source integrations should store Drive and GitHub OAuth tokens as encrypted per-user connections",
-);
-assert.match(
-  schema,
-  /userSourceIntegrationAuthStates:[\s\S]*provider: v\.union\(v\.literal\("google_drive"\), v\.literal\("github"\)\)[\s\S]*communityId:[\s\S]*codeVerifier:[\s\S]*redirectUri:[\s\S]*callbackCodeEncryptedHex:[\s\S]*callbackCodeIvHex:[\s\S]*finalizeTokenHash:[\s\S]*\.index\("by_state", \["state"\]\)/,
-  "source integration OAuth state should persist verifier and callback evidence without storing plaintext codes",
 );
 assert.match(
   schema,
@@ -386,11 +390,6 @@ assert.match(
   /function isPlainUrlSource[\s\S]*!isSourceIntegrationSource\(row\)[\s\S]*function isPlainFileSource[\s\S]*!isSourceIntegrationSource\(row\)/,
   "manual link/file source filters should exclude Drive and GitHub integration rows",
 );
-assert.match(
-  resources,
-  /function isIngestibleCommunitySource[\s\S]*isPlainUrlSource\(row\) \|\| isPlainFileSource\(row\) \|\| hasGoogleDriveSource \|\| hasGitHubSource[\s\S]*const urlSources = sources\.filter\(isPlainUrlSource\)[\s\S]*const fileSources = sources\.filter\(isPlainFileSource\)/,
-  "the one combined ingestion path should select valid manual, Drive, and GitHub sources",
-);
 assert.doesNotMatch(
   resources,
   /communitySourceMatchesIngestionKind|function countPendingSourceIngestion|sourceKind:|resultKind:/,
@@ -461,187 +460,16 @@ assert.doesNotMatch(
   /buildPageDraftBodyFromSource/,
   "source ingestion must not retain the obsolete one-source page copier",
 );
-assert.match(
-  resources,
-  /GOOGLE_DRIVE_OAUTH_AUTHORIZE_URL = "https:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth"[\s\S]*GOOGLE_DRIVE_OAUTH_TOKEN_URL = "https:\/\/oauth2\.googleapis\.com\/token"[\s\S]*GOOGLE_DRIVE_API_BASE_URL = "https:\/\/www\.googleapis\.com\/drive\/v3"[\s\S]*https:\/\/www\.googleapis\.com\/auth\/drive\.readonly/,
-  "Google Drive source integration should use Google's OAuth and Drive API endpoints with readonly scope",
-);
-assert.match(
-  resources,
-  /ARX_GOOGLE_DRIVE_OAUTH_CALLBACK_BASE_URL[\s\S]*ARX_APP_OAUTH_CALLBACK_BASE_URL[\s\S]*CONVEX_SITE_URL[\s\S]*\/source-integrations\/google-drive\/callback/,
-  "Google Drive OAuth should resolve an explicit Convex HTTP callback origin",
-);
-assert.match(
-  resources,
-  /beginGoogleDriveSourceOAuth = action\([\s\S]*resolveAuthenticatedActionUserId[\s\S]*requireCommunityManagerForAction[\s\S]*code_challenge[\s\S]*code_challenge_method", "S256"[\s\S]*access_type", "offline"/,
-  "starting Google Drive OAuth should be authenticated, manager-gated, and PKCE/offline-token based",
-);
-assert.match(
-  resources,
-  /completeGoogleDriveSourceOAuthCallbackInternal = internalAction\([\s\S]*encryptSecret\(code\)[\s\S]*finalizeTokenHash: await sha256HexText\(finalizeToken\)[\s\S]*buildSourceIntegrationRedirectUrl/,
-  "Google Drive OAuth callback should encrypt the authorization code and return only a one-shot finalize token",
-);
-assert.match(
-  resources,
-  /finalizeGoogleDriveSourceOAuth = action\([\s\S]*sourceCommunityId[\s\S]*decryptStoredSecret[\s\S]*exchangeGoogleDriveCodeForTokens[\s\S]*encryptSecret\(encodeStoredGoogleDriveAuth\(tokenBundle\)\)[\s\S]*upsertGoogleDriveSourceConnectionInternal[\s\S]*community_id: sourceCommunityId/,
-  "Google Drive OAuth finalize should exchange, encrypt, store tokens server-side only, and return source community identity",
-);
-assert.match(
-  resources,
-  /resolveFreshGoogleDriveAccessToken[\s\S]*decryptStoredSecret\(row\)[\s\S]*refreshGoogleDriveTokens[\s\S]*encryptSecret\(encodeStoredGoogleDriveAuth\(refreshed\)\)/,
-  "Google Drive API calls should refresh expiring encrypted tokens without exposing raw tokens to the web",
-);
-assert.match(
-  resources,
-  /disconnectGoogleDriveSourceConnection = mutation\([\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManagerForAction\(ctx, userId, args\.communityId\)[\s\S]*getGoogleDriveConnectionRow\(ctx, userId\)[\s\S]*ctx\.db\.delete\(row\._id as any\)[\s\S]*toPublicGoogleDriveConnection\(null\)/,
-  "Google Drive disconnect should be manager-gated and delete only the stored credential connection",
-);
-assert.match(
-  resources,
-  /disconnectGitHubSourceConnection = mutation\([\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManagerForAction\(ctx, userId, args\.communityId\)[\s\S]*getGitHubConnectionRow\(ctx, userId\)[\s\S]*ctx\.db\.delete\(row\._id as any\)[\s\S]*toPublicGitHubConnection\(null\)/,
-  "GitHub disconnect should be manager-gated and delete only the stored credential connection",
-);
-assert.match(
-  resources,
-  /listGoogleDriveSourceFiles = action\([\s\S]*requireCommunityManagerForAction[\s\S]*supportsAllDrives[\s\S]*includeItemsFromAllDrives[\s\S]*isSupportedGoogleDriveSourceMimeType/,
-  "Google Drive file listing should be manager-gated, shared-drive aware, and limited to readable source types",
-);
-assert.match(
-  resources,
-  /listGoogleDriveSourceFiles = action\([\s\S]*folderId: v\.optional\(v\.string\(\)\)[\s\S]*pageToken: v\.optional\(v\.string\(\)\)[\s\S]*nextPageToken,files\(id,name,mimeType,webViewLink,modifiedTime,size\)[\s\S]*if \(pageToken\) url\.searchParams\.set\("pageToken", pageToken\)[\s\S]*kind: isGoogleDriveFolderMimeType\(file\.mimeType\) \? "folder" : "file"[\s\S]*importable:[\s\S]*next_page_token:/,
-  "Google Drive file listing should expose folder navigation, cursor pagination, and file-only importability",
-);
-assert.match(
-  gateway,
-  /CloudGoogleDriveSourceFile = \{[\s\S]*kind: "file" \| "folder"[\s\S]*importable: boolean[\s\S]*CloudGoogleDriveSourceFileListResult = \{[\s\S]*folder_id: string \| null[\s\S]*query: string \| null[\s\S]*next_page_token: string \| null[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*folderId\?: string \| null[\s\S]*pageToken\?: string \| null[\s\S]*folderId: String\(params\.folderId[\s\S]*pageToken: String\(params\.pageToken/,
-  "Google Drive gateway should preserve folder, query, pagination, and importability metadata",
-);
-assert.match(
-  resources,
-  /importGoogleDriveSourceFiles = action\([\s\S]*requireCommunityManagerForAction[\s\S]*for \(const fileId of fileIds\)[\s\S]*try \{[\s\S]*getCommunitySourceByExternalIdInternal[\s\S]*insertGoogleDriveSourceResourceInternal[\s\S]*catch \(error\)[\s\S]*failures\.push[\s\S]*ok: failed === 0/,
-  "Google Drive file import should be manager-gated, dedupe by external file identity, and report per-file failures",
-);
-const googleDriveImportSection =
-  resources.match(/export const importGoogleDriveSourceFiles[\s\S]*?\n}\);\n\nexport const getGitHubSourceConnectionStatus/)?.[0] ?? "";
 assert.doesNotMatch(
-  googleDriveImportSection,
-  /const resources: unknown\[\]|resources\.push|resources,\s*\n/,
-  "Google Drive import should not return dead resource payloads that the web gateway ignores",
-);
-assert.match(
-  resources,
-  /insertGoogleDriveSourceResourceInternal[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "queued"[\s\S]*sourceIngestionKind: "google_drive"[\s\S]*sourceExternalProvider: GOOGLE_DRIVE_SOURCE_PROVIDER[\s\S]*sourceExternalConnectionUserId: args\.userId[\s\S]*sourceExternalId:/,
-  "Google Drive imports should create canonical queued source resources with external identity and credential authority",
-);
-assert.match(
-  resources,
-  /getCommunitySourceIngestionStateInternal[\s\S]*google_drive_sources:[\s\S]*pending_google_drive_sources:[\s\S]*claimNextCommunitySourceIngestionInternal[\s\S]*sourceExternalProvider:[\s\S]*sourceExternalConnectionUserId: normalizeIdValue\([\s\S]*row\.sourceExternalConnectionUserId \?\? row\.createdByUserId[\s\S]*sourceExternalId:[\s\S]*sourceExternalMimeType:/,
-  "source ingestion state should count Drive work while the atomic claim returns its credential authority",
-);
-assert.match(
-  resources,
-  /runCommunitySourceIngestion[\s\S]*externalConnectionUserId[\s\S]*kind === "google_drive"[\s\S]*extractSourceTextFromGoogleDrive[\s\S]*userId: externalConnectionUserId \|\| actingUserId[\s\S]*buildIngestedGoogleDriveSourceBody[\s\S]*finalizeClaim\(\{[\s\S]*status: "ready"[\s\S]*pending_google_drive_sources:/,
-  "source ingestion should read Drive file text with stored credential authority and persist ready Google Drive source bodies",
-);
-assert.match(
-  resources,
-  /GITHUB_OAUTH_AUTHORIZE_URL = "https:\/\/github\.com\/login\/oauth\/authorize"[\s\S]*GITHUB_OAUTH_TOKEN_URL = "https:\/\/github\.com\/login\/oauth\/access_token"[\s\S]*GITHUB_API_BASE_URL = "https:\/\/api\.github\.com"[\s\S]*Alpha-only OAuth fallback[\s\S]*GITHUB_SOURCE_SCOPES = \["read:user", "user:email", "repo"\]/,
-  "GitHub source integration should flag broad repository OAuth as alpha-only",
-);
-assert.match(
-  resources,
-  /ARX_GITHUB_OAUTH_CALLBACK_BASE_URL[\s\S]*ARX_APP_OAUTH_CALLBACK_BASE_URL[\s\S]*CONVEX_SITE_URL[\s\S]*\/source-integrations\/github\/callback/,
-  "GitHub OAuth should resolve an explicit Convex HTTP callback origin",
-);
-assert.match(
-  resources,
-  /beginGitHubSourceOAuth = action\([\s\S]*resolveAuthenticatedActionUserId[\s\S]*requireCommunityManagerForAction[\s\S]*codeVerifier[\s\S]*codeChallenge[\s\S]*GITHUB_SOURCE_SCOPES[\s\S]*code_challenge[\s\S]*code_challenge_method", "S256"[\s\S]*allow_signup/,
-  "starting GitHub OAuth should be authenticated, manager-gated, and PKCE based",
-);
-assert.match(
-  resources,
-  /completeGitHubSourceOAuthCallbackInternal = internalAction\([\s\S]*encryptSecret\(code\)[\s\S]*finalizeTokenHash: await sha256HexText\(finalizeToken\)[\s\S]*buildSourceIntegrationRedirectUrl/,
-  "GitHub OAuth callback should encrypt the authorization code and return only a one-shot finalize token",
-);
-assert.match(
-  resources,
-  /finalizeGitHubSourceOAuth = action\([\s\S]*sourceCommunityId[\s\S]*decryptStoredSecret[\s\S]*exchangeGitHubCodeForToken[\s\S]*codeVerifier: row\.codeVerifier[\s\S]*fetchGitHubViewer[\s\S]*encryptSecret\(encodeStoredGitHubAuth\(tokenBundle\)\)[\s\S]*upsertGitHubSourceConnectionInternal[\s\S]*community_id: sourceCommunityId/,
-  "GitHub OAuth finalize should exchange, validate, encrypt, store tokens server-side only, and return source community identity",
-);
-assert.match(
-  resources,
-  /listGitHubSourceRepositories = action\([\s\S]*requireCommunityManagerForAction[\s\S]*\/user\/repos[\s\S]*affiliation", "owner,collaborator,organization_member"/,
-  "GitHub repository listing should be manager-gated and scoped to repositories the connected user can access",
-);
-assert.match(
-  resources,
-  /listGitHubSourceFiles = action\([\s\S]*requireCommunityManagerForAction[\s\S]*\/git\/trees\/[\s\S]*recursive", "1"[\s\S]*const readableFiles[\s\S]*mapGitHubFileCandidate[\s\S]*slice\(0, GITHUB_SOURCE_FILE_LIST_LIMIT\)[\s\S]*truncated: payload\.truncated === true \|\| readableFiles\.length > GITHUB_SOURCE_FILE_LIST_LIMIT[\s\S]*file_limit: GITHUB_SOURCE_FILE_LIST_LIMIT/,
-  "GitHub file listing should be manager-gated, limited to readable source file paths, and disclose tree/list truncation",
-);
-assert.match(
-  resources,
-  /importGitHubSourceFiles = action\([\s\S]*requireCommunityManagerForAction[\s\S]*for \(const externalId of fileIds\)[\s\S]*try \{[\s\S]*getCommunitySourceByExternalIdInternal[\s\S]*insertGitHubSourceResourceInternal[\s\S]*catch \(error\)[\s\S]*failures\.push[\s\S]*ok: failed === 0/,
-  "GitHub file import should be manager-gated, dedupe by external file identity, and report per-file failures",
-);
-assert.match(
-  resources,
-  /insertGitHubSourceResourceInternal[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "queued"[\s\S]*sourceIngestionKind: "github"[\s\S]*sourceExternalProvider: GITHUB_SOURCE_PROVIDER[\s\S]*sourceExternalConnectionUserId: args\.userId[\s\S]*sourceExternalId:/,
-  "GitHub imports should create canonical queued source resources with external identity and credential authority",
-);
-assert.match(
-  resources,
-  /isIngestibleCommunitySource[\s\S]*parseGitHubFileExternalId[\s\S]*getCommunitySourceIngestionStateInternal[\s\S]*github_sources:[\s\S]*pending_github_sources:[\s\S]*claimNextCommunitySourceIngestionInternal/,
-  "source ingestion state should count GitHub work while the atomic claim selects valid GitHub files",
-);
-assert.match(
-  resources,
-  /runCommunitySourceIngestion[\s\S]*kind === "github"[\s\S]*extractSourceTextFromGitHub[\s\S]*userId: externalConnectionUserId \|\| actingUserId[\s\S]*buildIngestedGitHubSourceBody[\s\S]*finalizeClaim\(\{[\s\S]*status: "ready"[\s\S]*pending_github_sources:/,
-  "source ingestion should read GitHub file text with stored credential authority and persist ready GitHub source bodies",
-);
-const publicGoogleDriveConnectionSection =
-  resources.match(/function toPublicGoogleDriveConnection[\s\S]*?function toPublicGitHubConnection/)?.[0] ?? "";
-assert.match(
-  publicGoogleDriveConnectionSection,
-  /connected:[\s\S]*email:[\s\S]*account_id:[\s\S]*scope:[\s\S]*access_token_expires_at:/,
-  "Google Drive public connection status should expose only connection metadata",
-);
-assert.doesNotMatch(
-  publicGoogleDriveConnectionSection,
-  /\b(accessToken|refreshToken|encryptedSecretHex|secretIvHex)\b/,
-  "Google Drive public connection status must not return raw or encrypted OAuth tokens",
-);
-const publicGitHubConnectionSection =
-  resources.match(/function toPublicGitHubConnection[\s\S]*?async function resolveCommunityLaunchKnowledgeSourceCredentialStatus/)?.[0] ?? "";
-assert.match(
-  publicGitHubConnectionSection,
-  /connected:[\s\S]*email:[\s\S]*account_id:[\s\S]*login:[\s\S]*scope:[\s\S]*access_token_expires_at:/,
-  "GitHub public connection status should expose only connection metadata",
-);
-assert.doesNotMatch(
-  publicGitHubConnectionSection,
-  /\b(accessToken|encryptedSecretHex|secretIvHex)\b/,
-  "GitHub public connection status must not return raw or encrypted OAuth tokens",
-);
-assert.match(
-  sourceIntegrationHttp,
-  /path: "\/source-integrations\/google-drive\/callback"[\s\S]*completeGoogleDriveSourceOAuthCallbackInternal[\s\S]*redirectResponse/,
-  "Convex HTTP should register the Google Drive OAuth callback and redirect back to the app",
-);
-assert.match(
-  sourceIntegrationHttp,
-  /path: "\/source-integrations\/github\/callback"[\s\S]*completeGitHubSourceOAuthCallbackInternal[\s\S]*redirectResponse/,
-  "Convex HTTP should register the GitHub OAuth callback and redirect back to the app",
-);
-assert.match(
   http,
-  /registerCommunitySourceIntegrationRoutes\(\{[\s\S]*http,[\s\S]*httpAction/,
-  "main Convex HTTP router should mount source integration callback routes",
+  /registerCommunitySourceIntegrationRoutes/,
+  "the GitHub and Google Drive callback routes stay unmounted",
 );
 
 assert.match(
   gateway,
-  /(?=[\s\S]*communityResources:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlerStatus" as any)(?=[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*client\.action\("communityResources:crawlCommunitySourceRoot" as any)(?=[\s\S]*getCloudCommunitySourceCrawlJob[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlJob" as any)(?=[\s\S]*listCloudCommunitySourceCrawlJobs[\s\S]*communityResources:listCommunitySourceCrawlJobs)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("communityResources:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*communityResources:listCommunityLaunchKnowledgeSources)(?=[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*communityResources:beginGoogleDriveSourceOAuth)(?=[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*communityResources:beginGitHubSourceOAuth)(?=[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection[\s\S]*communityResources:disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectCloudCommunityGitHubSourceConnection[\s\S]*communityResources:disconnectGitHubSourceConnection)(?=[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*communityResources:finalizeGoogleDriveSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*communityResources:finalizeGitHubSourceOAuth)(?=[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*communityResources:listGoogleDriveSourceFiles)(?=[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*communityResources:listGitHubSourceRepositories)(?=[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*communityResources:listGitHubSourceFiles)(?=[\s\S]*file_limit:[\s\S]*payload\?\.file_limit)(?=[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*communityResources:importGoogleDriveSourceFiles)(?=[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*communityResources:importGitHubSourceFiles)/,
-  "web gateway should call source ingestion and Drive/GitHub integration actions",
+  /(?=[\s\S]*communityResources:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlerStatus" as any)(?=[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*client\.action\("communityResources:crawlCommunitySourceRoot" as any)(?=[\s\S]*getCloudCommunitySourceCrawlJob[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlJob" as any)(?=[\s\S]*listCloudCommunitySourceCrawlJobs[\s\S]*communityResources:listCommunitySourceCrawlJobs)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("communityResources:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*communityResources:listCommunityLaunchKnowledgeSources)/,
+  "web gateway should call the source upload, crawler and ingestion actions",
 );
 assert.match(
   gateway,
@@ -657,15 +485,5 @@ assert.match(
   sourceIntake,
   /const failedCount = result\.ingestion\?\.failed_sources \?\? 0/,
   "source intake feedback should use persisted failed-source truth",
-);
-assert.match(
-  gateway,
-  /finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*community_id:[\s\S]*payload\?\.community_id[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*community_id:[\s\S]*payload\?\.community_id/,
-  "web gateway should preserve source integration OAuth source community identity",
-);
-assert.match(
-  gateway,
-  /importCloudCommunityGoogleDriveSourceFiles[\s\S]*failed:[\s\S]*failures: Array\.isArray\(payload\?\.failures\)[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*failed:[\s\S]*failures: Array\.isArray\(payload\?\.failures\)/,
-  "web gateway should preserve Drive/GitHub per-file import failures",
 );
 console.log("community_source_ingestion_contract_proof: ok");
