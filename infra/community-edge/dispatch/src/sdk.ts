@@ -204,8 +204,37 @@ async function upload(file, options) {
   return { attachmentId: body.attachment.attachmentId };
 }
 
-// Files already uploaded under a key, so a retry with that key doesn't send them twice.
+// Files already uploaded under a key, so a retry with that key doesn't send
+// them twice: file -> { key, attachmentId, at }. The server holds an upload the
+// post hasn't claimed for 30 minutes (communityAttachmentUploads.ts), so one
+// older than UPLOAD_REUSE_MS is uploaded again, unless a write with its key
+// has already gone out: the server's receipt for that key names those uploads.
+const UPLOAD_REUSE_MS = 25 * 60 * 1000;
 const uploaded = new WeakMap();
+const keysSent = new Set();
+// A key whose uploads lapsed before its post claimed them can never post: the
+// key that replaced it.
+const keysReplaced = new Map();
+
+function attachmentClaimFailed(error) {
+  return !!error && error.code === "community_chat_write_failed"
+    && /community_attachment_(claim_invalid|already_claimed)/.test(String(error.message || ""));
+}
+
+async function uploadAll(files, channel, key, replyTo) {
+  const attachments = [];
+  for (const file of files) {
+    const done = uploaded.get(file);
+    if (done && done.key === key && (keysSent.has(key) || Date.now() - done.at < UPLOAD_REUSE_MS)) {
+      attachments.push({ attachmentId: done.attachmentId });
+      continue;
+    }
+    const attachment = await upload(file, { channel: channel, key: key, replyTo: replyTo });
+    if (file && typeof file === "object") uploaded.set(file, { key: key, attachmentId: attachment.attachmentId, at: Date.now() });
+    attachments.push(attachment);
+  }
+  return attachments;
+}
 
 // Post to a channel, or reply when replyTo is a post ref. files: File[] to attach.
 // askAgent: true asks the community agent, which replies in the channel.
@@ -218,15 +247,10 @@ async function post(channel, text, options) {
   if (options.key !== undefined && !/^[A-Za-z0-9_-]{8,100}$/.test(String(options.key))) {
     throw new PolynetError("invalid_tool_args", "key is 8-100 letters, digits, _ or -.");
   }
-  const key = options.key ? String(options.key) : newKey();
-  const attachments = [];
-  for (const file of options.files || []) {
-    const done = uploaded.get(file);
-    if (done && done.key === key) { attachments.push({ attachmentId: done.attachmentId }); continue; }
-    const attachment = await upload(file, { channel: channel, key: key, replyTo: options.replyTo });
-    if (file && typeof file === "object") uploaded.set(file, { key: key, attachmentId: attachment.attachmentId });
-    attachments.push(attachment);
-  }
+  let key = options.key ? String(options.key) : newKey();
+  while (keysReplaced.has(key)) key = keysReplaced.get(key);
+  const files = options.files || [];
+  let attachments = await uploadAll(files, channel, key, options.replyTo);
   let body = String(text || "").trim();
   const mentions = (options.mentions || []).map(function (member) {
     return { userId: String((member && member.ref) || member).replace("user:", "") };
@@ -240,7 +264,25 @@ async function post(channel, text, options) {
   if (options.replyTo) content.root_id = rootIdOf(options.replyTo);
   if (attachments.length) content.attachments = attachments;
   if (mentions.length) content.mentions = mentions;
-  const result = await write({ path: channelPath(channel), mode: options.replyTo ? "append" : "create", content: content, idempotency_key: key });
+  const send = function () {
+    keysSent.add(key);
+    return write({ path: channelPath(channel), mode: options.replyTo ? "append" : "create", content: content, idempotency_key: key });
+  };
+  let result;
+  try {
+    result = await send();
+  } catch (error) {
+    if (!attachments.length || !attachmentClaimFailed(error)) throw error;
+    // The uploads lapsed before the post claimed them, so nothing posted under
+    // this key, and its receipt ties the key to them. Upload again, once,
+    // under a new key, and send later retries of the old key there too.
+    const fresh = newKey();
+    keysReplaced.set(key, fresh);
+    key = fresh;
+    attachments = await uploadAll(files, channel, key, options.replyTo);
+    content.attachments = attachments;
+    result = await send();
+  }
   typing(channel, false, { thread: options.replyTo });
   return result;
 }

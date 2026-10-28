@@ -362,6 +362,69 @@ test("a post retried with its own key reuses the key and never uploads a file tw
   await expect(polynet.post("general", "x", { key: "bad key!" })).rejects.toMatchObject({ code: "invalid_tool_args" });
 });
 
+test("a retry uploads again a file whose upload the server has let lapse, if no write has claimed it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    let uploads = 0;
+    const calls = stubFetch({
+      "/__polynet/auth/session": signedIn,
+      "/__polynet/upload": (_url, init) => {
+        const name = decodeURIComponent((init.headers as Record<string, string>)["x-polynet-file-name"]);
+        // The second file fails the first time, so no write goes out.
+        if (name === "notes.pdf" && uploads++ === 0) return Response.json({ ok: false, code: "upload_failed" }, { status: 500 });
+        return Response.json({ ok: true, attachment: { attachmentId: "att-" + name + "-" + Date.now() } });
+      },
+      "/__polynet/api": () => ok({ ref: "interaction:root:new" }),
+    });
+    const polynet = await loadSdk();
+    await polynet.session();
+    const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+    const notes = new File([new Uint8Array([2])], "notes.pdf", { type: "application/pdf" });
+    const options = { files: [photo, notes], key: "lapsed-key-1" };
+    await expect(polynet.post("general", "Look", options)).rejects.toMatchObject({ code: "upload_failed" });
+    vi.setSystemTime(Date.now() + 26 * 60_000);
+    await polynet.post("general", "Look", options);
+    const uploaded = calls.filter((call) => call.url === "/__polynet/upload");
+    expect(uploaded).toHaveLength(4);
+    const [write] = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
+    expect(write.idempotency_key).toBe("lapsed-key-1");
+    expect(write.content.attachments.map((a: any) => a.attachmentId)).toEqual([`att-photo.png-${Date.now()}`, `att-notes.pdf-${Date.now()}`]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a post whose uploads lapsed before it claimed them uploads once more under a new key, which later retries keep", async () => {
+  const writeResults = [
+    Response.json({ ok: false, code: "community_chat_write_failed", message: "Server Error\nUncaught Error: community_attachment_claim_invalid" }),
+    Response.json({ ok: false, code: "community_chat_write_failed", message: "Try again." }),
+  ];
+  let uploads = 0;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/upload": () => Response.json({ ok: true, attachment: { attachmentId: "att-" + ++uploads } }),
+    "/__polynet/api": (_url, init) => {
+      const { tool } = JSON.parse(String(init.body));
+      if (tool === "polynet_write") return writeResults.shift() ?? ok({ ref: "interaction:root:new" });
+      return ok({});
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+  const options = { files: [photo], key: "claimed-key-1" };
+  await expect(polynet.post("general", "Look", options)).rejects.toMatchObject({ code: "community_chat_write_failed", message: "Try again." });
+  expect(await polynet.post("general", "Look", options)).toMatchObject({ ref: "interaction:root:new" });
+  const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
+  const [first, second, third] = writes.map((input) => input.idempotency_key);
+  expect(writes).toHaveLength(3);
+  expect(first).toBe("claimed-key-1");
+  expect(second).toMatch(/^[a-f0-9]{32}$/);
+  expect(third).toBe(second);
+  expect(writes.map((input) => input.content.attachments)).toEqual([[{ attachmentId: "att-1" }], [{ attachmentId: "att-2" }], [{ attachmentId: "att-2" }]]);
+  expect(calls.filter((call) => call.url === "/__polynet/upload")).toHaveLength(2);
+});
+
 test("watch passes who's typing, says when posts changed, and drops a typist nobody renewed", async () => {
   vi.useFakeTimers();
   try {
