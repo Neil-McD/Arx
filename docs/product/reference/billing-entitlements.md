@@ -28,7 +28,7 @@ Community operation is resolved in this order:
 
 Existing grandfathered communities retain ordinary platform operation without Builder. Hosted AI for those communities still requires Builder. Newly created non-operator communities are subscription-required: Builder authorizes both ordinary platform operation and hosted AI for that attached community.
 
-Funding suspension does not mutate or delete the community, memberships, visibility, content, or history. A subscription-required community without current funding is removed from Discover and rejects private entry, public joins, and new paid-member checkout. Its direct funnel may remain visible with a neutral unavailable state and an owner billing-recovery action.
+Funding suspension does not mutate or delete the community, memberships, visibility, content, or history. A subscription-required community without current funding is removed from Discover and rejects private entry, public joins, and new paid-member checkout. Its join page may remain visible with a neutral unavailable state and an owner billing-recovery action.
 
 ## Payment-First Builder Sequence
 
@@ -71,7 +71,7 @@ Paid-member pricing and payouts are independent from AI funding, but checkout re
 
 1. The owner completes Stripe Connect payout onboarding.
 2. The builder configures `paid_subscription` entry and an active price point.
-3. A member enters through the canonical community funnel and completes `community_join` checkout on the builder's connected account.
+3. A member enters through the community's join page and completes `community_join` checkout on the builder's connected account.
 4. Provider/webhook verification creates the purchase claim, subscription lifecycle, membership, and access truth.
 5. The connected account owns the customer, subscription, charge, processor fee, and payout. Polynet keeps its 2.9% application fee.
 
@@ -115,4 +115,4 @@ Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain 
 - `builder-access-mode`
 - `entitlement`
 - `membership`
-- `funnel`
+- `join-page`

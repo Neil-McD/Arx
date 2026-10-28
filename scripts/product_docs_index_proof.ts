@@ -236,6 +236,9 @@ function validateCurrentProductTruth(index: ProductDocsIndex): void {
     "primitives/thread",
     "guides/workspace",
     "guides/community-lens",
+    "primitives/skill",
+    "guides/create-and-use-skills",
+    "primitives/funnel",
   ];
   const slugs = new Set(index.docs.map((doc) => doc.slug));
   for (const slug of retiredSlugs) {
@@ -251,6 +254,18 @@ function validateCurrentProductTruth(index: ProductDocsIndex): void {
     "current personal memory",
     "switching a thread lens",
     "thread-level community context switching",
+    "bottom-right",
+    "personal-agent dock",
+    "member's personal agent",
+    "member personal agent",
+    "your personal agent",
+    "community-owned agent",
+    "create custom ai agents",
+    "attach skills",
+    "skills are",
+    "connected apps",
+    "funnel builder",
+    "funnel link",
   ];
   for (const claim of retiredClaims) {
     assert(
@@ -269,8 +284,16 @@ function validateCurrentProductTruth(index: ProductDocsIndex): void {
   assert(mcp, "Missing canonical Polynet MCP primitive.");
 
   assert(
-    /member's personal agent[\s\S]*community-owned agent/i.test(agent.content),
-    "Agent docs must keep member and community agent identities distinct.",
+    /exactly one agent: the community agent/i.test(agent.content),
+    "Agent docs must describe one agent per community.",
+  );
+  assert(
+    /no separate Polynet assistant/i.test(agent.content),
+    "Agent docs must state there is no separate personal assistant.",
+  );
+  assert(
+    /Acting for a member[\s\S]*Acting on its own[\s\S]*member authority only/i.test(agent.content),
+    "Agent docs must keep the member and autonomous permission modes separate.",
   );
   assert(
     /accepted[\s\S]*community-owned intelligence/i.test(memory.content),
@@ -297,6 +320,17 @@ function validateCurrentProductTruth(index: ProductDocsIndex): void {
       mcp.content,
     ),
     "Polynet MCP docs must reject third-party MCP consumption.",
+  );
+  assert(
+    /builder-only/i.test(mcp.content),
+    "Polynet MCP docs must say the MCP is builder-only.",
+  );
+
+  const site = getProductDocFromIndex(index, "primitives/community-site");
+  assert(site, "Missing community site primitive.");
+  assert(
+    /Staging only/i.test(site.content) && /not live yet/i.test(site.content),
+    "Community site docs must say sites are staging-only until the production edge is live.",
   );
 }
 

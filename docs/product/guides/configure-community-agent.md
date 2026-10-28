@@ -1,18 +1,26 @@
 ---
 id: product.guide.configure_community_agent
-title: Configure a Community Agent
+title: Configure the Community Agent
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-10-28
 ---
 
-# Configure a Community Agent
+# Configure the Community Agent
 
 ## Goal
 
-Shape how the community agent behaves without hiding product truth in one giant prompt.
+Shape how your community's one agent behaves without hiding product truth in
+one giant prompt.
 
-The best community agent starts with a clear job, a small set of durable resources, and repeatable skills for the workflows that actually recur.
+The best community agent starts with a clear job, short community instructions,
+and a small set of durable resources.
+
+## Where To Configure It
+
+Owners and admins edit the agent's community instructions in Community
+Settings → Agent. These instructions add to the platform's locked identity,
+security, and authority rules; they never replace them.
 
 ## Inputs
 
@@ -20,7 +28,6 @@ The best community agent starts with a clear job, a small set of durable resourc
 - builder methodology
 - audience and member needs
 - resources
-- skills
 - access and safety boundaries
 
 ## Agent Job
@@ -48,55 +55,53 @@ Weak agent jobs are vague:
 Use the right layer for the right kind of information:
 
 - stable product truth belongs in product docs
-- community-specific behavior belongs in community agent instructions
+- community-specific behavior belongs in the community instructions
 - reusable knowledge belongs in resources
-- repeatable workflows belong in skills
-- native tool capability belongs in explicit runtime policy
-- access and safety boundaries belong in backend policy
+- learned community knowledge becomes accepted memory over time
+- tool capability belongs to runtime policy
+- access and safety boundaries belong to backend policy
 
 ## Prompt Boundary
 
-Community instructions sit below platform rules, access rules, and runtime policy.
+Community instructions sit below platform rules, access rules, and runtime
+policy.
 
-Do not put secrets, billing assumptions, private member data, or access decisions into prompts. The agent can follow community behavior rules, but it cannot grant membership, invent payment state, or bypass entitlement checks.
+Do not put secrets, billing assumptions, private member data, or access
+decisions into instructions. The agent can follow community behavior rules,
+but it cannot grant membership, invent payment state, or bypass entitlement
+checks.
 
-## Good Agent Configuration
+## Good Agent Instructions
 
-A good configuration includes:
+Good instructions cover:
 
 - who the agent helps
-- what domain it is focused on
+- what domain it focuses on
 - what it should ask before acting
 - what resources it should prefer
-- what skills it can use
 - what it should not do
 - how it should respond when it lacks access, tools, or evidence
 
 ## Rules
 
 1. Keep the agent job concrete.
-2. Put stable product truth in docs, not prompts.
+2. Put stable product truth in docs, not instructions.
 3. Put reusable knowledge in resources.
-4. Put repeatable behavior in skills.
-5. Keep owner instructions below platform safety and access rules.
-6. Do not ask the agent to use community context for users who lack access.
-7. Do not claim a tool is available unless it is exposed and allowed by the
-   runtime.
-8. Keep skills separate from tool authority.
-9. Prefer references to docs/resources over copying large blobs into prompts.
+4. Keep community instructions below platform safety and access rules.
+5. Do not ask the agent to use community context for users who lack access.
+6. Do not claim a tool is available unless the runtime exposes and allows it.
+7. Prefer pointing to resources over copying large blobs into instructions.
 
 ## Common Mistakes
 
-- Creating one giant prompt instead of using docs, resources, and skills.
+- Writing one giant prompt instead of using docs and resources.
 - Asking the agent to make access decisions from text instructions.
 - Treating descriptive configuration as runtime capability.
-- Dumping every skill into every turn.
 - Making the agent sound impressive before making it useful.
 
 ## Related Concepts
 
 - `agent`
-- `skill`
 - `resource`
-- `polynet-mcp`
+- `memory`
 - `prompt-context-model`

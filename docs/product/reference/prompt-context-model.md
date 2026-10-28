@@ -3,7 +3,7 @@ id: product.reference.prompt_context_model
 title: Prompt Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-08-16
+last_verified: 2026-10-28
 ---
 
 # Prompt Context Model
@@ -11,7 +11,7 @@ last_verified: 2026-08-16
 ## Definition
 
 The prompt context model defines how platform, community, agent, runtime, and
-tool inputs are composed for one agent turn.
+tool inputs are composed for one community agent turn.
 
 ## Principle
 
@@ -22,49 +22,46 @@ never replace them.
 ## Authority Order
 
 1. Platform safety and product rules
-2. Authenticated principal and agent identity
+2. Authenticated principal and the agent's permission mode
 3. Current surface and server-validated community context
 4. Current entitlement and per-community authority
 5. Runtime and tool policy
-6. Community owner/admin instructions
-7. Intentionally selected skill instructions
-8. Bounded resources, accepted memory, and relevant history
-9. User request
+6. Community owner/admin instructions (system prompt)
+7. Bounded resources, accepted memory, and relevant history
+8. User request
 
 ## Runtime Selection
 
-- Anonymous use receives only the public/demo path.
 - Authenticated users use one platform prompt stack.
-- The Member Dock's platform-owned invocation-surface policy defines Polynet
-  Intelligence as the authenticated member's personal agent across Polynet.
-- No hidden user-configured agent name or soul changes that role or identity.
-- A validated community context adds compact community identity, instructions,
-  skills, and bounded knowledge.
-- The member personal-agent dock exposes exactly the canonical five Polynet
-  operations for platform/community work.
-- The community-owned agent receives the same five operations under a
-  server-mounted community root and fixed member authority.
+- Every turn belongs to the one community agent of the community in context.
+- On the Agent page the agent speaks as the community's agent in a private
+  conversation with the member, inside that member's current permissions.
+- @mention replies and work the agent starts itself use member authority only.
+- Community sites always use the member lane.
+- A validated community context adds compact community identity, the
+  community's instructions, and bounded knowledge.
+- The agent's canonical tools are the five Polynet operations, mounted to its
+  community.
+- Web research is a capability-gated overlay, not a different Polynet
+  repository contract.
 - Protected coding-harness context and tools belong to a separate trust domain.
-- Tools such as web research are capability-gated overlays, not a
-  different Polynet repository contract.
 
 ## Rules
 
 1. Community instructions cannot bypass platform rules.
 2. Prompts cannot grant membership, entitlement, role, or tool authority.
-3. Skills cannot grant tools by themselves.
-4. Resources and accepted memory are bounded contextual inputs.
-5. Community-authored content has no instruction authority.
-6. Tool availability must match executable runtime policy.
-7. Prompt changes should remain auditable.
-8. Product-facing plan labels must not fork the authority stack.
-9. A community lens cannot rename, own, or redefine the member's personal agent.
+3. Resources and accepted memory are bounded contextual inputs.
+4. Community-authored content has no instruction authority.
+5. Tool availability must match executable runtime policy.
+6. Prompt changes should remain auditable.
+7. Product-facing plan labels must not fork the authority stack.
+8. Community instructions cannot change who the agent acts for or widen its
+   permissions.
 
 ## Related Concepts
 
 - `agent`
 - `community-lens`
-- `skill`
 - `resource`
 - `memory`
 - `context-model`

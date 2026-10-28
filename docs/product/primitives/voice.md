@@ -3,36 +3,41 @@ id: product.voice
 title: Voice Input
 audience: member, builder, llm
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-10-28
 ---
 
 # Voice Input
 
 ## Definition
 
-Voice input lets an authenticated user dictate into the personal-agent dock or
-community chat surfaces and turn speech into text for the agent or community
-message composer.
+Voice input lets a signed-in user dictate into the community chat composer,
+direct messages, or the community's Agent page. Speech becomes text in the
+message box.
 
 ## Why It Exists
 
-Voice reduces friction for members who want to capture thoughts quickly, especially on mobile or during active work.
+Voice reduces friction for members who want to capture thoughts quickly,
+especially on mobile or during active work.
 
 ## User Mental Model
 
-Voice is an input method. It helps the user write a message or prompt. It is not a separate agent, memory system, or permission bypass.
+Voice is an input method. It helps the user write a message or a request to the
+community agent. It is not a separate agent, memory system, or permission
+bypass.
 
 ## System Mental Model
 
-Voice capture happens in the client. Transcription is handled through the runtime voice transcription route. The transcript is merged into the relevant text input.
+Audio is captured in the client and transcribed through Polynet's voice
+transcription route. The transcript is merged into the relevant text input.
 
 ## Rules
 
 1. Voice requires sign-in.
 2. Community voice input requires community access.
-3. Voice transcription should fail clearly when audio capture, auth, or provider configuration is unavailable.
-4. The transcript should be treated like user-entered text after transcription.
-5. Voice input must not bypass community access, plan gates, or tool policy.
+3. Voice should fail clearly when audio capture, sign-in, or transcription is
+   unavailable.
+4. The transcript is treated like user-entered text.
+5. Voice input must not bypass community access, plan limits, or tool policy.
 
 ## Related Concepts
 
