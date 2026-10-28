@@ -7,14 +7,6 @@ export type AppNavState = {
   activeCommunityId: string | null;
 };
 
-export type OpenCommunityChatTransition = {
-  shouldPushSnapshot: boolean;
-  nextPage: "community";
-  nextView: "home";
-  nextCommunityTab: "chat";
-  nextCommunityId: string;
-};
-
 export type OpenCommunityTabTransition<TTab extends CommunityTab = CommunityTab> = {
   shouldPushSnapshot: boolean;
   nextPage: "community";

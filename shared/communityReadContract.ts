@@ -19,26 +19,6 @@ export type CommunityReadSummary = {
   relation: "owner" | "admin" | "moderator" | "member" | "pending" | "no_access";
 };
 
-export type CommunityReadDetail = CommunityReadSummary & {
-  about: string | null;
-  is_entitled: boolean;
-  capabilities: {
-    can_view: boolean;
-    can_enter_community: boolean;
-    can_read_chat: boolean;
-    can_post_chat: boolean;
-    can_post_message: boolean;
-    can_manage_resources: boolean;
-    can_moderate_content: boolean;
-    can_manage_members: boolean;
-    can_review_join_requests: boolean;
-    can_manage_pricing: boolean;
-    can_manage_branding: boolean;
-    can_manage_publishing: boolean;
-    can_manage_payouts: boolean;
-  };
-};
-
 export type PublicDiscoverCommunityProjection = {
   slug?: unknown;
   name?: unknown;

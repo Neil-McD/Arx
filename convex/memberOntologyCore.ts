@@ -16,10 +16,6 @@ import {
   type MemberFactProvenance,
   type MemberOntologyLens,
 } from "../shared/memberOntology";
-import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
-import { communityMembershipRowIsActive } from "./communityCore";
-import { getUniqueUserProfileDetailByUserId } from "./profileCore";
-import { communityIsActive } from "../shared/communityLifecycle";
 
 export type MemberFactRow = MemberFactLike & {
   _id: any;
@@ -273,62 +269,6 @@ export async function readBoundedMemberOrientationFacts(ctx: any, args: {
     kind: "member_orientation", communityId: String(args.communityId),
   })).sort((a, b) => b.updatedAt - a.updatedAt || String(a._id).localeCompare(String(b._id)));
   return { facts: visible.slice(0, 12), truncated: rows.length > scanLimit || visible.length > 12 };
-}
-
-/* The deterministic account block for member.md — assembled from data the
-   platform already holds; nothing here is asked of the member. */
-export async function loadMemberAccountContext(
-  ctx: any,
-  userId: any,
-  nowMs: number,
-): Promise<MemberAccountContextLike> {
-  const [user, detail, membershipRows, ownedRows] =
-    await Promise.all([
-      ctx.db.get(userId),
-      getUniqueUserProfileDetailByUserId(ctx, userId),
-      ctx.db
-        .query("communityMemberships")
-        .withIndex("by_user", (q: any) => q.eq("userId", userId))
-        .collect(),
-      ctx.db
-        .query("communities")
-        .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
-        .collect(),
-    ]);
-
-  const activeMemberships = (membershipRows as any[]).filter((row) =>
-    communityMembershipRowIsActive(row),
-  );
-  const memberships = (await Promise.all(
-    activeMemberships.map(async (row) => {
-      const community = await ctx.db.get(row.communityId);
-      if (!community || !communityIsActive(community)) return null;
-      return {
-        communityName: String(community?.name ?? "Community"),
-        role: String(row.role ?? "member"),
-        accessSource: String(row.accessSource ?? "unknown"),
-      };
-    }),
-  )).filter((row): row is {
-    communityName: string;
-    role: string;
-    accessSource: string;
-  } => row !== null);
-
-  const socialLinks = Object.values((detail?.socialLinks ?? {}) as Record<string, unknown>)
-    .map((link) => String(link ?? "").trim())
-    .filter(Boolean);
-
-  return {
-    displayName: detail?.displayName ?? null,
-    handle: user?.handle ?? null,
-    timezone: detail?.timezone ?? null,
-    socialLinks,
-    memberships,
-    ownedCommunities: (ownedRows as any[])
-      .filter((row) => communityIsActive(row))
-      .map((row) => ({ name: String(row.name ?? "Community") })),
-  };
 }
 
 export async function readMemberSpine(ctx: any, userId: any): Promise<{

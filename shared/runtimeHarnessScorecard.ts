@@ -36,59 +36,6 @@ export type RuntimeHarnessScorecardRunSummary = {
   blockerReasonCounts: Record<string, number>;
 };
 
-export type RuntimeHarnessScorecard = {
-  generatedAt: number;
-  window: {
-    runCount: number;
-    finishedRunCount: number;
-    userVisibleRunCount: number;
-    internalHiddenRunCount: number;
-    runsWithToolScheduleTelemetry: number;
-    runsWithBatchTelemetry: number;
-    runsWithParallelExecution: number;
-  };
-  runStatusCounts: Record<string, number>;
-  latency: {
-    averageRunWallTimeMs: number | null;
-    medianRunWallTimeMs: number | null;
-    p95RunWallTimeMs: number | null;
-    maxRunWallTimeMs: number | null;
-  };
-  scheduling: {
-    totalScheduleEvents: number;
-    totalBatchTelemetryEvents: number;
-    scheduledCallCount: number;
-    batchedScheduleCount: number;
-    parallelScheduledBatchCount: number;
-    parallelExecutedBatchCount: number;
-    parallelEligibleCallCount: number;
-    decisionCounts: Record<string, number>;
-    executionModeCounts: Record<string, number>;
-    blockerReasonCounts: Record<string, number>;
-  };
-  savings: {
-    totalEstimatedParallelSavingsMs: number;
-    averageEstimatedParallelSavingsPerParallelBatchMs: number | null;
-    totalBatchWallTimeMs: number;
-    totalSerialDurationEstimateMs: number;
-  };
-  tools: {
-    totalObservedToolCalls: number;
-    toolStatusCounts: Record<string, number>;
-    mostUsedTools: Array<{
-      toolName: string;
-      count: number;
-    }>;
-    slowestToolsByAverageDuration: Array<{
-      toolName: string;
-      count: number;
-      averageDurationMs: number;
-      maxDurationMs: number;
-    }>;
-  };
-  runs: RuntimeHarnessScorecardRunSummary[];
-};
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

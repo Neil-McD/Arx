@@ -22,22 +22,6 @@ export type CommunityResourceEvidenceRef = `resource:${string}`;
 export type CommunityAiFeedEvidenceRef = `ai_feed:${string}`;
 export type CommunitySourceTraceEvidenceRef = `trace:${string}`;
 
-export type CommunityAiFeedLineageEnvelope = {
-  actor: {
-    type: "personal_agent" | "community_agent";
-    agent_key: string | null;
-  };
-  authority:
-    | { type: "community"; community_id: string }
-    | { type: "user"; user_id: string };
-  recorded_by: { type: "user"; user_id: string } | null;
-  credit: { type: "agent"; agent_key: string } | null;
-  attribution_mode: "autonomous" | "on_behalf_of" | "unattributed";
-  origin: "community_ai_feed";
-  evidence: { ref: CommunityAiFeedEvidenceRef };
-  profile_projection: "none";
-};
-
 export type CommunityResourceLineageEnvelope = {
   authority: { type: "community"; community_id: string };
   recorded_by: { type: "user"; user_id: string } | null;
