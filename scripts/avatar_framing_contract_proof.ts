@@ -31,7 +31,6 @@ const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const communityFunnelMemberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
-const communityFunnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const baseCss = [
@@ -84,11 +83,6 @@ assert.match(
   "funnel member proof must use the canonical member avatar stack",
 );
 assert.match(
-  communityFunnelEditor,
-  /<WebCommunityFunnelRenderer/,
-  "the funnel preview must reuse the canonical funnel renderer",
-);
-assert.match(
   communityPresenceFacepile,
   /<MemberAvatarStack/,
   "community presence must use the canonical member avatar stack",
@@ -99,7 +93,7 @@ assert.match(
   "the canonical member avatar stack must own avatar presentation",
 );
 assert.doesNotMatch(
-  `${communityFunnelEditor}\n${communityFunnelMemberProof}`,
+  communityFunnelMemberProof,
   /imageClassName="community-funnel-face-image"/,
   "funnel member proof must not replace canonical avatar image geometry",
 );

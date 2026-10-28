@@ -1,7 +1,5 @@
 import type {
   CommunityFunnelConfig,
-  CommunityFunnelContentV2,
-  CommunityFunnelSlot,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
 import {
@@ -11,7 +9,6 @@ import {
 } from "../../../../shared/communityFunnelUi";
 import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
-import "./WebPublicCommunityFunnel.css";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
@@ -41,12 +38,6 @@ export type PublicCommunityFunnelCommunityLike = {
 type WebPublicCommunityFunnelProps = {
   publicCommunity: PublicCommunityFunnelCommunityLike | null;
   publicRouteSlug?: string;
-  isPreviewMode?: boolean;
-  previewExitPath?: string | null;
-  previewSlot?: CommunityFunnelSlot;
-  previewDocument?: CommunityFunnelContentV2 | null;
-  previewVslUrl?: string | null;
-  previewDocumentError?: string | null;
   selectedPublicCommunityPlan: PublicPlanSummary | null;
   isLoadingPublicCommunity: boolean;
   canEnterCommunity: boolean;
@@ -75,11 +66,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const {
     publicCommunity,
     publicRouteSlug,
-    isPreviewMode = false,
-    previewDocument = null,
-    previewSlot = "default",
-    previewVslUrl = null,
-    previewDocumentError = null,
     selectedPublicCommunityPlan,
     isLoadingPublicCommunity,
     canEnterCommunity,
@@ -123,7 +109,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   });
   const primaryActionLabel = primaryAction.label;
   const isPrimaryActionDisabled =
-    isPreviewMode ||
     !publicCommunity ||
     checkoutStatus === "loading" ||
     isJoiningPublicCommunity ||
@@ -148,7 +133,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     cancelPendingRequestLabel: isCancellingPendingRequest ? "Cancelling…" : "Cancel request",
     isCancelPendingRequestDisabled: isCancellingPendingRequest,
     onCancelPendingRequest,
-    isPreviewMode,
   };
   if (isLoadingPublicCommunity && !publicCommunity) {
     return (
@@ -166,23 +150,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     communityName,
     oneLiner: publicCommunity?.one_liner,
     about: publicCommunity?.about,
-    funnel: isPreviewMode
-      ? previewSlot === "default"
-        ? {
-            ...funnel,
-            active_slot: "default",
-            published_content_v2: null,
-            published_vsl_url: null,
-          }
-        : previewDocument
-          ? {
-              ...funnel,
-              active_slot: previewSlot,
-              published_content_v2: previewDocument,
-              published_vsl_url: previewVslUrl,
-            }
-          : funnel
-      : funnel,
+    funnel,
   });
 
   const funnelSurface = (
@@ -197,28 +165,10 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       memberFaces={publicCommunity?.member_faces_preview ?? []}
       renderModel={renderModel}
       action={action}
-      alertMessages={!isLoadingPublicCommunity
-        ? [...funnelErrors, ...(previewDocumentError ? [previewDocumentError] : [])]
-        : []}
+      alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       bridge={props.bridge ?? null}
     />
   );
 
-  if (!isPreviewMode) return funnelSurface;
-
-  return (
-    <div className="funnel-preview-presentation">
-      <a
-        className="funnel-preview-back"
-        href={props.previewExitPath ?? "/discover"}
-        aria-label="Back to builder"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-        <span>Back to builder</span>
-      </a>
-      {funnelSurface}
-    </div>
-  );
+  return funnelSurface;
 }

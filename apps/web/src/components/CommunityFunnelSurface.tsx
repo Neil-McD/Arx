@@ -22,7 +22,6 @@ export type CommunityFunnelSurfaceAction = {
   cancelPendingRequestLabel?: string | null;
   isCancelPendingRequestDisabled?: boolean;
   onCancelPendingRequest?: (() => void) | null;
-  isPreviewMode: boolean;
 };
 
 function buildActivatedEmbedSrc(embed: ParsedEmbed): string {
@@ -206,9 +205,6 @@ export function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction 
               : `Your join request for ${action.communityName} was denied.`}
           </div>
         </div>
-      ) : null}
-      {action.isPreviewMode ? (
-        <div className="cfg-preview-note">Preview mode. Actions are disabled.</div>
       ) : null}
     </>
   );

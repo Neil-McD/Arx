@@ -102,7 +102,6 @@
 .cfg-sc-dismiss { position: absolute; top: 9px; right: 10px; border: 0; background: none; color: var(--text-ink-muted); font: inherit; font-size: 11.5px; cursor: pointer; }
 .cfg-sc-dismiss:hover { color: var(--text-ink-primary); }
 .cfg-sc-dismiss:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.cfg-preview-note { margin-top: 10px; color: var(--text-ink-muted); font-size: 11.5px; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .public-funnel-media-play { transition: none; }
