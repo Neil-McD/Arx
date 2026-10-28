@@ -26,7 +26,8 @@ npx @polynet/cli deploy
   folder, under `.agents/skills` and `.claude/skills`. Your agent asks about
   your community, shows you three directions live, and builds the one you
   pick. `polynet skills` adds or updates the skills in any site folder.
-- `polynet check` checks that the three blocks are placed, and the site's
+- `polynet check` checks that the site has a root `index.html` and places
+  the three blocks, and the site's
   accessibility basics (language, title, zoom, image alt text, named buttons
   and links). `deploy` runs it first and stops on errors.
 - Agent guides, `polynet.json`, dotfiles and `node_modules` are never uploaded.

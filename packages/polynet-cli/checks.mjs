@@ -141,6 +141,10 @@ export function checkSite(files) {
   const scripts = checked.filter((file) => /\.m?js$/i.test(file.path));
   const pages = checked.filter((file) => /\.html?$/i.test(file.path));
 
+  if (!files.some((file) => file.path === "/index.html")) {
+    problem("error", "/", "The site has no index.html at its root: it's the page everyone lands on. " +
+      "Add index.html to the folder you check and deploy (for a framework build, its output folder, like dist).");
+  }
   // The shell isn't checked: the edge adds /__polynet/ui.js to every page, and
   // ui.js shows <polynet-account> on any page that doesn't place one.
   for (const page of pages) checkPage(page.path, page.text, problem);

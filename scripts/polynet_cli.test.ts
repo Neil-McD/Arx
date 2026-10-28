@@ -191,6 +191,15 @@ test("a block named only in a JavaScript comment isn't placed; one in code besid
     '<script type="text/template"><a href=//x.test><polynet-chat></polynet-chat></a></script><polynet-channels></polynet-channels><polynet-members></polynet-members>'))).toEqual([]);
 });
 
+test("a site without a root index.html can't go live", () => {
+  const result = checkSite([{ path: "/home.html", text: GOOD }, { path: "/people/index.html", text: GOOD }]);
+  expect(result.errors.map((p: any) => p.message)).toEqual([
+    "The site has no index.html at its root: it's the page everyone lands on. " +
+    "Add index.html to the folder you check and deploy (for a framework build, its output folder, like dist).",
+  ]);
+  expect(checkSite([]).errors.map((p: any) => p.message).join("\n")).toContain("no index.html at its root");
+});
+
 test("site checks warn about what needs a person's judgment", () => {
   const warned = problems(GOOD.replace("<polynet-account>", '<label>Name <input></label><input id="q"><label for="q">Search</label><input type="email"><polynet-account>'), [
     { path: "/app.css", text: "button:focus { outline: none } .x { animation: spin 1s }" },
