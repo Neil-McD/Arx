@@ -22,7 +22,6 @@ const stripeCore = read("convex/stripeCore.ts");
 const creatorCommerce = read("convex/creatorCommerce.ts");
 const stripeCustomers = read("convex/stripeCustomers.ts");
 const toolCosts = read("convex/voiceProviderCostAccounting.ts");
-const workspaceCredits = read("convex/workspaceCredits.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const voice = read("convex/httpVoice.ts");
@@ -191,7 +190,7 @@ assert.doesNotMatch(
 );
 
 assert.match(toolCosts, /billingDisposition: "platform_absorbed"/);
-assert.match(toolCosts, /recordProviderCostInternal/);
+assert.match(toolCosts, /recordVoiceProviderCostInternal/);
 for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, voice]) {
   assert.doesNotMatch(runtimeSource, /reserveCreditsInternal|settleCreditsInternal/);
 }
@@ -208,27 +207,10 @@ assert.doesNotMatch(
 );
 assert.match(voice, /recordVoiceProviderCostBestEffort/);
 assert.doesNotMatch(crons, /auto.?recharge|collectWorkspaceUsageByCard|reconcileExpiredCreditReservations/i);
-for (const retiredEndpoint of [
-  "collectWorkspaceUsageByCardInternal",
-  "getWorkspaceCreditBalance",
-  "getWorkspaceBillingOverview",
-  "completeWorkspaceCreditTopupCheckoutSessionInternal",
-  "recordWorkspaceComputeChargeInternal",
-  "reserveCreditsInternal",
-  "settleCreditsInternal",
-  "retryPendingCreditSettlementsInternal",
-  "reconcileExpiredCreditReservationsInternal",
-]) {
-  assert.doesNotMatch(
-    workspaceCredits,
-    new RegExp(`export const ${retiredEndpoint}\\b`),
-    `${retiredEndpoint} must not remain a deployed Convex endpoint`,
-  );
-}
-assert.match(
-  workspaceCredits,
-  /export const getWorkspaceToolBalance = query\([\s\S]*workspace_tool_billing_retired/,
-  "the one cached-client balance endpoint must fail closed without reading financial state",
+assert.equal(
+  existsSync(new URL("../convex/workspaceCredits.ts", import.meta.url)),
+  false,
+  "the old Workspace credits module stays deleted (POL-24)",
 );
 
 // Public offer truth stays conceptual. Allowances, model versions, and cost controls are internal.

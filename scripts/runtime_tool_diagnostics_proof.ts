@@ -58,7 +58,7 @@ assert.match(
 );
 
 assert.match(voiceCostAccounting, /billingDisposition: "platform_absorbed"/);
-assert.match(voiceCostAccounting, /recordProviderCostInternal/);
+assert.match(voiceCostAccounting, /recordVoiceProviderCostInternal/);
 for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, httpVoice]) {
   assert.doesNotMatch(
     runtimeSource,

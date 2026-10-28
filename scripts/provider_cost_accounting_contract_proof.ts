@@ -14,25 +14,11 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
-function extractBetween(source: string, start: string, end: string): string {
-  const startIndex = source.indexOf(start);
-  assert.notEqual(startIndex, -1, `missing source start marker: ${start}`);
-  const endIndex = source.indexOf(end, startIndex + start.length);
-  assert.notEqual(endIndex, -1, `missing source end marker: ${end}`);
-  return source.slice(startIndex, endIndex);
-}
-
 const packageJson = read("package.json");
 const schema = read("convex/schema.ts");
-const workspaceCredits = read("convex/workspaceCredits.ts");
 const providerCostCore = read("convex/providerCostCore.ts");
 const billingSurface = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const voiceProviderCostAccounting = read("convex/voiceProviderCostAccounting.ts");
-const providerCostReconciliationDiagnostic = extractBetween(
-  workspaceCredits,
-  "export const getProviderCostReconciliationDiagnosticInternal = internalQuery",
-  "export const getWorkspaceAccountingReconciliationDiagnosticsForOperator = query",
-);
 
 assert.deepEqual(PROVIDER_COST_CATEGORIES, ["workspace", "web", "voice"]);
 assert.ok(PROVIDER_COST_COMPONENTS.includes("blaxel_active_runtime"));
@@ -95,116 +81,6 @@ assert.match(
   "credit ledger entries must be queryable by settled period for margin diagnostics",
 );
 assert.match(
-  workspaceCredits,
-  /export const recordProviderCostInternal = internalMutation/,
-  "workspace credits module must expose an internal provider cost recording mutation",
-);
-assert.match(
-  workspaceCredits,
-  /export const getWorkspaceProviderMarginDiagnosticInternal = internalQuery/,
-  "workspace credits module must expose an internal read-only provider margin diagnostic",
-);
-assert.match(
-  workspaceCredits,
-  /getWorkspaceProviderMarginDiagnosticInternal[\s\S]*by_status_settledAt[\s\S]*eq\("status", "succeeded"\)[\s\S]*gte\("settledAt", period\.periodStart\)[\s\S]*lt\("settledAt", period\.periodEnd\)/,
-  "provider margin diagnostic must use settled succeeded ledger rows for user usage",
-);
-assert.match(
-  workspaceCredits,
-  /getWorkspaceProviderMarginDiagnosticInternal[\s\S]*PAID_TOOL_LEDGER_TOOL_NAMES[\s\S]*paidToolNames\.has\(toolName\)/,
-  "provider margin diagnostic must limit user usage to canonical paid tool ledger names",
-);
-assert.match(
-  workspaceCredits,
-  /PROVIDER_COST_MARGIN_DIAGNOSTIC_LOOKBACK_MS = 24 \* 60 \* 60 \* 1000/,
-  "provider margin diagnostic must use a conservative month-boundary lookback",
-);
-assert.match(
-  workspaceCredits,
-  /providerCostPeriodStart = Math\.max\([\s\S]*period\.periodStart - PROVIDER_COST_MARGIN_DIAGNOSTIC_LOOKBACK_MS[\s\S]*by_component_period[\s\S]*gte\("periodStart", providerCostPeriodStart\)[\s\S]*lt\("periodStart", period\.periodEnd\)/,
-  "provider margin diagnostic must read a bounded lookback before allocating overlap",
-);
-assert.match(
-  workspaceCredits,
-  /function allocateProviderCostToDiagnosticPeriod[\s\S]*overlapStart[\s\S]*overlapEnd[\s\S]*overlapMs[\s\S]*rawVendorCostUsd \* \(overlapMs \/ \(rowPeriodEnd - rowPeriodStart\)\)/,
-  "provider margin diagnostic must allocate period-based provider costs by overlap",
-);
-assert.match(
-  workspaceCredits,
-  /billingDisposition !== "tracked_only" &&[\s\S]*billingDisposition !== "rolled_into_user_usage"[\s\S]*continue[\s\S]*billingDisposition === "tracked_only" \? overheadByComponent : mirrorByComponent[\s\S]*trackedOnlyRawVendorCostUsd \+= allocatedRawVendorCostUsd[\s\S]*rolledIntoUserUsageRawVendorCostUsd \+= allocatedRawVendorCostUsd/,
-  "provider margin diagnostic must separate tracked overhead from user-usage mirror rows",
-);
-assert.doesNotMatch(
-  workspaceCredits,
-  /v\.literal\("charged"\)/,
-  "workspace credits provider-cost APIs must not accept an ambiguous charged disposition",
-);
-assert.match(
-  workspaceCredits,
-  /const totalMarginRawVendorCostUsd = roundDiagnosticUsd\([\s\S]*roundedSettledRawVendorCostUsd \+ roundedTrackedOnlyRawVendorCostUsd[\s\S]*roundedSettledPolynetPriceUsd - totalMarginRawVendorCostUsd/,
-  "provider margin must use ledger raw cost plus tracked-only provider overhead",
-);
-assert.match(
-  workspaceCredits,
-  /const totalProviderExposureUsd = roundDiagnosticUsd\([\s\S]*roundedTrackedOnlyRawVendorCostUsd \+ roundedRolledIntoUserUsageRawVendorCostUsd[\s\S]*const uncollectedProviderExposureUsd = roundDiagnosticUsd\([\s\S]*Math\.max\([\s\S]*roundedRolledIntoUserUsageRawVendorCostUsd - roundedSettledRawVendorCostUsd/,
-  "provider exposure must show full tracked provider cost and uncollected provider exposure separately from collected margin",
-);
-assert.match(
-  workspaceCredits,
-  /providerExposure: \{[\s\S]*ledgerRawVendorCostUsd[\s\S]*trackedOnlyProviderCostUsd[\s\S]*rolledIntoUserUsageProviderCostUsd[\s\S]*totalProviderCostUsd[\s\S]*uncollectedProviderExposureUsd/,
-  "provider margin diagnostic must expose provider spend exposure as a first-class internal diagnostic",
-);
-assert.match(
-  workspaceCredits,
-  /reconciliation: \{[\s\S]*ledgerRawVendorCostUsd[\s\S]*rolledIntoUserUsageProviderCostUsd[\s\S]*mirrorDeltaUsd/,
-  "rolled-into-user-usage provider costs must remain reconciliation evidence",
-);
-assert.match(
-  workspaceCredits,
-  /export const getProviderCostReconciliationDiagnosticInternal = internalQuery/,
-  "workspace credits module must expose a read-only provider cost reconciliation diagnostic",
-);
-assert.doesNotMatch(
-  providerCostReconciliationDiagnostic,
-  /ctx\.db\.(insert|patch|delete|replace)|recordProviderCostEntry/,
-  "provider cost reconciliation diagnostic must remain read-only",
-);
-assert.match(
-  workspaceCredits,
-  /PROVIDER_COST_RECONCILIATION_DEFAULT_LEDGER_LIMIT = 250[\s\S]*PROVIDER_COST_RECONCILIATION_MAX_LEDGER_LIMIT = 1000[\s\S]*PROVIDER_COST_RECONCILIATION_DEFAULT_COMPUTE_LIMIT_PER_DEBIT_SOURCE = 100[\s\S]*PROVIDER_COST_RECONCILIATION_MAX_COMPUTE_LIMIT_PER_DEBIT_SOURCE = 250[\s\S]*PROVIDER_COST_RECONCILIATION_DEFAULT_SAMPLE_LIMIT = 25[\s\S]*PROVIDER_COST_RECONCILIATION_MAX_SAMPLE_LIMIT = 50/,
-  "provider cost reconciliation must use tight source-specific scan limits",
-);
-assert.match(
-  providerCostReconciliationDiagnostic,
-  /const ledgerLimit = clampProviderCostReconciliationLedgerLimit\(args\.ledgerLimit\)[\s\S]*const computeChargeLimitPerDebitSource = clampProviderCostReconciliationComputeLimitPerDebitSource\(/,
-  "provider cost reconciliation must not reuse the broad margin diagnostic limits",
-);
-assert.match(
-  providerCostReconciliationDiagnostic,
-  /PAID_TOOL_LEDGER_TOOL_NAMES[\s\S]*creditLedgerEntries[\s\S]*by_status_settledAt[\s\S]*expectedProviderCostKey = `credit_ledger:\$\{creditKey\}:provider_cost`[\s\S]*readProviderCostEntryByCostKey/,
-  "provider cost reconciliation must report settled paid ledger rows missing provider-cost mirrors",
-);
-assert.match(
-  providerCostReconciliationDiagnostic,
-  /WORKSPACE_COMPUTE_DEBIT_SOURCES[\s\S]*workspaceComputeCharges[\s\S]*by_debitSource_createdAt[\s\S]*expectedProviderCostKey = creditReservationKey[\s\S]*workspace_compute_charge:\$\{chargeKey\}:provider_cost[\s\S]*readProviderCostEntryByCostKey/,
-  "provider cost reconciliation must report workspace compute charges missing provider-cost mirrors",
-);
-assert.match(
-  providerCostReconciliationDiagnostic,
-  /missingProviderCostUsdByCostKey = new Map[\s\S]*recordMissingProviderCost[\s\S]*Math\.max\(existing, normalizedCostUsd\)[\s\S]*uniqueMissingProviderCostKeys/,
-  "provider cost reconciliation must dedupe missing provider cost by expected cost key",
-);
-assert.match(
-  providerCostReconciliationDiagnostic,
-  /scope: "user_usage_provider_cost_mirrors"[\s\S]*coverage: \{[\s\S]*creditLedgerEntries: true[\s\S]*workspaceComputeCharges: true[\s\S]*trackedOnlyStorageCosts: false[\s\S]*providerInvoiceRows: false[\s\S]*sourceBreakdownCanOverlap: true[\s\S]*canonicalMissingProviderCostUsd/,
-  "provider cost reconciliation must label scope and coverage so it is not mistaken for provider invoice truth",
-);
-assert.match(
-  workspaceCredits,
-  /grossProfitUsd[\s\S]*grossMarginBps[\s\S]*scanLimitReached[\s\S]*userUsageScanLimitReached[\s\S]*providerCostScanLimitReached/,
-  "provider margin diagnostic must report margin and explicit scan-limit state",
-);
-assert.match(
   providerCostCore,
   /quantity: roundProviderCostQuantity[\s\S]*rawVendorCostUsd: roundProviderCostUsd[\s\S]*ctx\.db\.insert\("providerCostEntries"/,
   "provider cost recording must preserve sub-cent provider cost precision",
@@ -231,7 +107,7 @@ assert.doesNotMatch(
 );
 assert.match(
   voiceProviderCostAccounting,
-  /recordProviderCostInternal[\s\S]*component: "voice_transcription"[\s\S]*billingDisposition: "platform_absorbed"[\s\S]*provider_cost_source: "voice_provider_cost_accounting"/,
+  /recordVoiceProviderCostInternal[\s\S]*recordProviderCostEntry[\s\S]*component: "voice_transcription"[\s\S]*billingDisposition: "platform_absorbed"[\s\S]*provider_cost_source: "voice_provider_cost_accounting"/,
   "voice provider cost must remain platform absorbed",
 );
 assert.match(

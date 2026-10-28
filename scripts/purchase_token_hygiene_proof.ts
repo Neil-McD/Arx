@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { buildTelemetryRouteLabel } from "../shared/routePrivacy.ts";
 
 function readText(path: string | URL): string {
@@ -47,7 +47,6 @@ const mainSource = readText(new URL("../apps/web/src/main.tsx", import.meta.url)
 const payFirstSource = readText(new URL("../shared/pay_first.ts", import.meta.url));
 const billingCoreSource = readText(new URL("../convex/billingCore.ts", import.meta.url));
 const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
-const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts", import.meta.url));
 const publicAppUrlSource = readText(new URL("../convex/publicAppUrl.ts", import.meta.url));
 
 assert.ok(
@@ -118,12 +117,8 @@ assert.ok(
 );
 
 assert.ok(
-  !workspaceCreditsSource.includes("export const startWorkspaceCreditTopupCheckout = action({"),
-  "workspace credit top-up checkout starter must stay deleted",
-);
-assert.ok(
-  !workspaceCreditsSource.includes("stripe.checkout.sessions.create({\n        mode: \"payment\""),
-  "workspace credit top-up deletion must remove the direct Stripe payment checkout creator",
+  !existsSync(new URL("../convex/workspaceCredits.ts", import.meta.url)),
+  "the workspace credit module, with its top-up checkout, stays deleted",
 );
 
 console.log("PASS: purchase token hygiene boundaries are enforced");

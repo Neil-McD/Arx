@@ -281,9 +281,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [legal/](legal/).
 - **Direction:** community free, agent paid (about $49 a month with an included
   budget), pending its spec. Today's code still sells the $79 founder plan.
-- **Going (Neil, Oct 27):** retired Workspace money tables (`workspaceCreditBalances`,
+- **Deleted Oct 28 (POL-24):** the `workspaceCredits` module. Voice transcription
+  records its platform-absorbed provider cost through
+  `voiceProviderCostAccounting.recordVoiceProviderCostInternal` into the shared
+  provider cost ledger (`providerCostCore`).
+- **Retiring tables (Neil, Oct 27):** `workspaceCreditBalances`,
   `workspaceComputeCharges`, `workspaceUsageCollections`, `creditLedgerEntries`,
-  `legacyProgramGrants`, `workspaceCredits` module); no writers found. Production
+  `legacyProgramGrants`; no writers. Still read directly by the operator
+  dashboard's credits section and the production release preflight's accounting
+  smoke. The 5 customers' unspent credits are recorded privately. Production
   backup first; Neil signs off on the data deletion.
 - **Deleted Oct 27:** `entitlements`.
 
