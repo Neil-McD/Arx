@@ -86,9 +86,11 @@ processing, or workspace preview generation.
 The current chat table stores only user-authored messages. The future substrate must model actors explicitly:
 
 - human
-- personal agent
 - community agent
 - system
+
+(Old rows may carry the retired `personal_agent` actor type; they read as the
+community agent acting for that member, `shared/communityAgentIdentity.ts`.)
 
 Agent participation still needs permission, provenance, and policy gates. This deletion does not mean agents can impersonate humans or publish ungoverned community truth.
 
@@ -113,8 +115,9 @@ Interactive handlers authenticate the caller before resolving a channel actor;
 actor resolution reuses the canonical community entitlement, blocking, and
 builder-access checks. A channel grant cannot replace those checks. Owner/admin
 oversight is explicit; moderator status alone grants no restricted-room access.
-Personal agents and official MCP use their authenticated user's participation
-identity, without channel-management authority. The community agent uses its
+The community agent acting for a member (`community_agent_for_member`) and
+official MCP use their authenticated user's participation identity, without
+channel-management authority. The community agent uses its
 own `community_agent` principal: its sponsor grants neither room membership nor
 manager authority. Duplicate grant rows fail closed rather than selecting one.
 
@@ -249,7 +252,7 @@ idempotency key and actor identity locate the attempt; the fingerprint rejects
 different payloads under that key. Editable/truncated summaries are not replay
 authority. Current access checks still apply on every request.
 
-Human, personal-agent, and community-agent sends share this contract. Historical
+Human and community-agent sends share this contract. Historical
 ordinary composer rows without a fingerprint fail closed on replay; no hash is
 guessed from potentially edited history. The existing server-generated founder
 welcome bootstrap retains its explicit once-per-community contract.
@@ -301,7 +304,7 @@ retry. General is immutable and cannot be renamed or archived.
 Every community/public interaction root belongs to one channel and every reply
 inherits its root's channel. Mention rows and `@everybody` broadcast ledgers
 derive that same source channel so attention and recipient fanout never infer
-channel identity by scanning interaction targets. Private member-agent dock
+channel identity by scanning interaction targets. Private Agent-page
 interactions are not channel activity and intentionally remain unchanneled. During rolling
 migration only, a missing channel on a legacy community/public interaction is
 read as General; that fallback ends after the backfill reaches zero drift.
@@ -342,9 +345,9 @@ The teaser itself is non-interactive and opens the authorized root-by-id thread;
 reactions, links, attachments, and other message actions remain fully available
 in that thread. Short text-only pins retain their natural height.
 
-The public community funnel's messages-today metadata aggregates all active
+The public join page's messages-today metadata aggregates all active
 all-member channels. It includes only live `community`/`public` rows plus the
-temporary unchanneled General legacy lane. Private dock, admin-only,
+temporary unchanneled General legacy lane. Private Agent-page, admin-only,
 hidden/deleted, and inactive-channel rows never contribute. An eventual All
 surface is a virtual authorized aggregation, not a stored channel and not
 duplicated interaction data.
@@ -411,7 +414,7 @@ consume them.
 
 ### `interactionMentions`
 
-Canonical mention records for people, personal agents, community agents, roles, and later groups.
+Canonical mention records for people, the community agent, roles, and later groups.
 
 Mentions drive notifications and access-sensitive rendering. They are not just markdown text.
 
@@ -511,7 +514,7 @@ Only a clean inventory may advance to the manager-authorized, dry-run-first
 mutation. Each community is applied one phase at a time: roots, replies,
 mentions, mention broadcasts, read cursors, then typing presence. Legacy
 community/public roots acquire General; replies and notification projections
-inherit their canonical source root channel. Private dock rows remain
+inherit their canonical source root channel. Private Agent-page rows remain
 unchanneled. Cursor or typing collisions —
 including two legacy rows with the same semantic key — leave every collided
 legacy row untouched instead of selecting a winner. Any invalid, projection
@@ -695,7 +698,7 @@ Rules:
 - URLs inside inline or fenced code never create media
 - native YouTube iframes mount near the viewport without autoplay; YouTube owns titles, branding, and playback controls. Mounted players survive scrolling and ordinary rerenders
 - players retain sandbox, referrer, fullscreen, and inline playback permissions, need at least 200 by 200 pixels, and do not depend on custom thumbnails, OpenGraph, oEmbed, or persisted preview state
-- authored links remain available when a provider refuses playback; PDF cards share the lazy reader described in `message-media-reading-v1.md`
+- authored links remain available when a provider refuses playback; PDF cards share the lazy reader described in `archive/message-media-reading-v1.md`
 - uploaded images, video, audio, and files remain canonical attachments and do not share the URL-derived media path
 - historical link embed rows are ignored by interaction and evidence read models pending a separate bounded data cleanup
 - workspace-reference embed compatibility remains unchanged until its protected migration substrate receives an explicit census and decision
@@ -703,7 +706,7 @@ Rules:
 
 Bounded chat formatting rules:
 
-- human, community-agent, and personal-agent messages use the same deterministic presentation path in feed roots, selected thread roots, replies, and visitor previews
+- human and community-agent messages use the same deterministic presentation path in feed roots, selected thread roots, replies, and visitor previews
 - the supported block grammar is paragraphs, deliberate line breaks, three compact heading levels, ordered and unordered lists with at most two nested levels, blockquotes, exact-line dividers, and fenced code
 - the supported inline grammar is bold, italic, strikethrough, inline code, safe labeled links, bare web links, email links, phone links, and canonical mention chips
 - labeled links fail closed to literal text unless their target is a valid HTTP, HTTPS, `mailto`, or normalized `tel` target; raw HTML is never interpreted
@@ -727,7 +730,7 @@ Canonical roots and replies are the only chat evidence identity used by memory r
 Published Resources use a parallel evidence boundary:
 
 - `resource:<communityResourceId>` is the stable evidence reference; directory paths and `resources://` URIs are moveable location projections
-- generic personal-agent, Concierge, and external-MCP tools expose only page rows in live modules, even when the caller is a community owner
+- generic community-agent (Agent page, Concierge) and external-MCP tools expose only page rows in live modules, even when the caller is a community owner
 - draft modules, source-inbox rows, ingestion state, and source linkage remain behind explicit builder tools
 - resource search combines a bounded recent-source scan with the permissioned resource archive, then revalidates canonical visibility before returning every result
 - retrieval logs record actor, surface, capability, and returned refs, but never copy the raw query
@@ -743,9 +746,9 @@ Rules:
 - `community_chat_search` returns bounded, authorized evidence summaries and stable refs
 - `community_chat_read` reads one stable ref and rechecks community access, status, visibility, and root readability
 - search/read return a deterministic lineage envelope containing actor, authority, credit, origin, root episode, reply target, and `source_only` profile projection
-- current direct-human evidence credits the human; current community-agent evidence credits the agent; personal-agent evidence never infers human credit from user authority
+- current direct-human evidence credits the human; current community-agent evidence credits the agent; agent evidence acting for a member (including old `personal_agent` rows) never infers human credit from user authority
 - the interaction root is the conversation episode; replies point to their targeted reply when present and otherwise to the root
-- personal-agent dock and community Concierge calls stay bound to the active community; external MCP calls select a community by slug and the server validates access
+- Agent-page and community Concierge calls stay bound to the active community; external MCP calls select a community by slug and the server validates access
 - every search/read appends a `communityEvidenceRetrievalLogs` row with actor, surface, capability, and returned refs
 - every readable interaction sync creates or updates one exact source trace; related root and reply traces share an episode scheduling key without collapsing identity
 - private, admin-only, hidden, deleted, missing, or parent-hidden evidence is excluded or redacted and fails closed at read time even if a derived index is stale

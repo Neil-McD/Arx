@@ -37,8 +37,10 @@ instead of creating a second product path.
 
 ## Irreducible Mental Model
 
-The community-owned agent is one durable community identity. It is separate
-from every member's personal agent and from autonomous cognition.
+The community-owned agent is one durable community identity. Members have no
+personal agent: the Agent page, @mention replies and a site's `/ask` all reach
+this same agent. Mention replies run in its own `community_agent` mode, separate
+from turns it runs inside one member's permissions (`shared/polynetAuthority.ts`).
 
 A conversation is one `communityInteractionRoots` row and its flat
 chronological `communityInteractionReplies`. `targetReplyId` preserves who a
@@ -261,7 +263,7 @@ for the founder-welcome and continuous-thread journey.
 | `CAC-C06` | A thread with at least three humans preserves speakers, chronology, source, and readable targets. | `IMPLEMENTED LOCALLY` | The bounded multi-party context compiler and focused tests exist locally. |
 | `CAC-C07` | Future, hidden, inaccessible, and revoked context is excluded; revoked requester access prevents response. | `IMPLEMENTED LOCALLY` | Per-turn readability and current-access checks have focused tests. |
 | `CAC-C08` | Overlap, recovery, replay, and provider ambiguity cannot double-spend or duplicate responses. | `IMPLEMENTED LOCALLY` | Attempt fencing, receipts, ambiguity handling, reply idempotency, and a serve lease longer than the maximum live Convex action have focused tests. Provider-started ambiguity never authorizes a second execution. |
-| `CAC-C09` | Desktop and mobile use the ordinary same-thread UI with agent identity and targets. | `IMPLEMENTED LOCALLY` | The shared thread drawer uses one reply-target type and keeps human, canonical personal-agent, and canonical community-agent roots replyable. System, malformed personal-agent, and noncanonical community-agent roots fail closed. A supplied reply target is persisted only after live, addressable, same-community, same-channel, and same-root validation; invalid targets cannot degrade into untargeted agent invocation, and idempotency binds the exact target. Focused backend and UI tests cover these boundaries. |
+| `CAC-C09` | Desktop and mobile use the ordinary same-thread UI with agent identity and targets. | `IMPLEMENTED LOCALLY` | The shared thread drawer uses one reply-target type and keeps human and canonical community-agent roots replyable. System roots and agent roots without the canonical community-agent key (including old rows from the retired personal agent) fail closed. A supplied reply target is persisted only after live, addressable, same-community, same-channel, and same-root validation; invalid targets cannot degrade into untargeted agent invocation, and idempotency binds the exact target. Focused backend and UI tests cover these boundaries. |
 | `CAC-C10` | A general thread comment or reply targeting a human creates no agent request solely because the agent previously participated. | `IMPLEMENTED LOCALLY` | Admission is limited to explicit mention, a reply targeting a live canonical-agent reply, or an untargeted reply under a canonical agent root. Focused negative tests cover prior participation, human targets, noncanonical agents, and hidden agent turns. |
 
 ### Completion Enhancements

@@ -22,6 +22,16 @@ Program position:
   The feasibility dependency, probe, and Pi-only parity files are deleted from
   canonical `main`; only historical evidence remains in this contract.
 
+Current state (Oct 28, 2026): the slice records below are history. Since they
+were written, the Funnel Composer surface was deleted with the funnel editor
+(POL-23; `community_funnel_builder` survives only as a stored receipt and
+evidence value), skills were deleted (POL-21), and the personal agent was
+retired: there is one agent per community. The only interactive invocation
+surface is the Agent page (`member_agent_dock` in
+`shared/runtimeInvocationSurface.ts`, a compatibility name), also used by a
+site's `/ask`. Wherever a later section says "Member", "Member Dock" or
+"Funnel Composer", read it as that history.
+
 ## 1. Purpose
 
 This contract defines the smallest canonical boundary for model-visible context
@@ -114,9 +124,10 @@ The dimensions are independent:
 10. Section IDs use canonical lower snake case and are unique within a bundle;
     compilation fails before provider execution if an ID is invalid or a base
     or extension section would duplicate an ID.
-11. The Member Dock's invocation-surface section owns its fixed personal-agent
-    identity. Hidden user name or soul settings do not enter prompt compilation,
-    and that identity does not enter the Funnel Composer runtime.
+11. The Agent page's invocation-surface section (`member_agent_dock`) owns the
+    agent's fixed identity: this community's agent in a private conversation
+    with the member, acting within the member's current permissions. Hidden
+    user name or soul settings do not enter prompt compilation.
 
 ## 5. Harness overlay sections
 
@@ -350,12 +361,14 @@ role framework:
 
 | Role/surface | Principal | Trigger | Required scope |
 | --- | --- | --- | --- |
-| Community Agent | authenticated member | user turn | one joined community |
-| Funnel Composer | authorized manager | user turn | one managed community and funnel slot |
+| Community Agent | authenticated member (Agent page or a site's `/ask`), within that member's permissions | user turn | one joined community |
 | Concierge | community-owned agent | authorized mention/request | one accessible community interaction root |
 | Steward | community-owned agent | claimed autonomous run | one live owner-funded community |
 
-External MCP remains a separate authenticated principal and protocol. It uses
+The Funnel Composer row was removed with the funnel editor (POL-23).
+
+External MCP remains a separate authenticated principal and protocol (builders
+only, `convex/httpMcp.ts`). It uses
 the same domain authority and executors but does not enter the native agent
 loop merely for architectural uniformity.
 

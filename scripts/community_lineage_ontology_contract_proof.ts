@@ -24,7 +24,7 @@ for (const required of [
   "## Canonical State Versus Projections",
   "## Governance",
   "### Scenario A: Direct Human Chat",
-  "### Scenario B: Personal Agent Or External Harness",
+  "### Scenario B: Agent Acting For A Member Or External Harness",
   "### Scenario C: Community Call",
   "## Deletions And Non-Goals",
   "## Proof Obligations",

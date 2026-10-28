@@ -1065,7 +1065,8 @@ assert.match(
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*exposed only inside an authenticated community surface[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*retained legacy per-community episodes are read-only recall artifacts[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*compatibility name for the Agent page[\s\S]*acts within that member's current permissions[\s\S]*one active conversation per member and community[\s\S]*global episodes, are read-only history[\s\S]*browser-supplied history is never authoritative[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  "the cognition contract must describe the one community agent's Agent-page surface, not the retired personal agent",
 );
 
 const canonicalContext = buildCommunityAgentConversationContext({

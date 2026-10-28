@@ -318,7 +318,7 @@ Its SHA-256 is
 `7c3238c4f01f98459d55b7740b77f7051324dffda0449fadc2aac003e6975674`.
 
 R41NB0W retirement completed on 2026-08-01 and is recorded in
-`docs/r41nb0w-operator-retirement-v1.md`. The exact-ID migration preserved the
+`docs/archive/r41nb0w-operator-retirement-v1.md`. The exact-ID migration preserved the
 user's identity and historical financial/audit records, its post-deletion
 inspection reached `retired`, and the temporary operator module was removed.
 
@@ -346,10 +346,8 @@ The retired onboarding activation table, community onboarding configuration fiel
 and their migration tooling were removed after a complete production scan found no
 stored rows or dedicated onboarding threads. Do not recreate that persistence layer.
 
-The temporary `requestOnboardingGuideKickoff` shim still routes cached clients into
-the canonical global member-agent channel. It must remain stateless: no activation
-record, onboarding skill, agent run, or dedicated thread. Retire the shim separately
-after the cached-client compatibility window is explicitly closed.
+The temporary `requestOnboardingGuideKickoff` shim has been retired with the other
+cached-client compatibility functions; do not restore it.
 
 ### Normal release
 
@@ -443,11 +441,11 @@ debit users.
 After every production release, verify the changed surface and at least these core flows:
 
 1. Auth/session bootstrap
-2. Founder community create/manage and funnel link
-3. Member Discover/funnel/gate/join
+2. Founder community create/manage and join-page link
+3. Member Discover/join page/gate/join
 4. Community navigation, post/chat, voice, and resources
-5. Personal-agent explicit community context and separate community-agent behavior when touched
-6. Official Polynet MCP authenticated community context when touched
+5. The community agent on the Agent page (explicit community context) and in @mention replies, when touched
+6. Official Polynet MCP (builders only) authenticated community context when touched
 7. Billing checkout, entitlement convergence, and builder payout readiness when touched
 
 If the release touched billing, check both:

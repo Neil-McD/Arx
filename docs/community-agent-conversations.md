@@ -32,7 +32,7 @@ deployment status. Automated checks do not substitute for live visual acceptance
   resolver is the entry point. No mixed-community history is copied or deleted.
 - Slice 1 initially blocked runtime admission; slice 3 below replaces that block.
   Creating an empty conversation spends nothing.
-- Existing global dock remains unchanged during this foundational slice.
+- The global dock was left unchanged in this slice; it has since been removed.
 
 ## Slice 2: conversation lifecycle
 
@@ -47,9 +47,9 @@ deployment status. Automated checks do not substitute for live visual acceptance
   can still return its existing receipt; it does not append another message.
 - Both generic archive entry points reject active scoped sessions. Use new
   conversation to close them. Historical records remain intact.
-- `listCommunityAgentConversations` reads the selected member/community index,
-  newest first, with Convex pagination capped at 50 entries per page. It never
-  adopts global or other-community history. Access is rechecked on every call.
+- `listCommunityAgentConversations` read the selected member/community index,
+  newest first, 50 entries per page, never adopting global or other-community
+  history. Nothing called it; it was deleted in Oct 2026 (POL-25).
 - Local tests exercise concurrent creation/rollover, scoped paginated history,
   closed-session writes, archive guards, revoked membership and corrupted links.
   These are executable local tests, not a live concurrent staging proof.
@@ -97,8 +97,8 @@ in slice 4; rendered acceptance and staging integration remain outstanding.
 - Global channel selection and mutable lens switching are removed from this
   component. Shared runtime thread lookup accepts only already-created scoped
   threads; generic creation of reserved thread keys remains forbidden.
-- Dock-specific CSS/component naming is retained until rendered acceptance,
-  particularly for mobile and both themes. No new chat engine is introduced.
+- The `WebCommunityAgentDock` component and CSS names were kept; there is no
+  floating dock. No new chat engine is introduced.
 - Mac lock prevented rendered verification. This candidate needs layout,
   navigation, voice, attachment, Resources approval and live staging checks.
 
@@ -114,7 +114,8 @@ and divider. A labeled icon button retains New conversation, with clearance for
 the shell DM control. The page has no secondary header subtitle. It uses a shared 800px maximum conversation/
 composer column. Empty and ongoing conversations both retain the bottom composer,
 with slightly increased vertical padding. Pending proposals keep their normal
-scrollable layout. Existing theme tokens and legacy mobile/dock presentation remain.
+scrollable layout. Existing theme tokens remain; the Agent page keeps the older
+`WebCommunityAgentDock` component name.
 
 Recovered resource proposals use pending-only presentation: a server-confirmed
 applied or rejected proposal disappears from the active recovery area. Historical

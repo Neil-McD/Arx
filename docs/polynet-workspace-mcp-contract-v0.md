@@ -7,16 +7,21 @@ five-tool Polynet repository.
 ## First principle
 
 The official Polynet MCP is a provider surface: an external agent harness can
-operate the Polynet platform under the authenticated member's current
-community authority.
+operate the Polynet platform under the authenticated user's current
+community authority. It is for builders only: every tool call is refused with
+`builder_only` unless the caller owns or administers some community, and any
+community the call targets must be one the caller owns or administers
+(`mcpBuilderGate` in `convex/httpMcp.ts`). Members use their community's site
+and agent.
 
 Polynet does not consume, connect, mount, proxy, or execute third-party MCP
 servers. The official provider is a one-way boundary over Polynet-owned data
 and capabilities.
 
-The MCP transport is not a second platform implementation. Native personal
-agents, the community-owned agent, and external MCP all project the same tool
-definitions and execute through the same canonical executor and domain owners.
+The MCP transport is not a second platform implementation. The community
+agent (Agent page, @mentions, a site's `/ask`), community sites and external MCP
+all project the same tool definitions and execute through the same canonical
+executor and domain owners.
 
 ## Canonical Five-Tool Surface
 
@@ -51,7 +56,7 @@ MCP is a direct projection of that source through
 
 ## Repository
 
-The authenticated personal agent and external MCP begin at:
+External MCP begins at:
 
 ```text
 /
@@ -90,8 +95,8 @@ and search results include the row's channel id and slug, and all reads and
 writes revalidate that the selected interaction belongs to it. A duplicate or
 malformed General identity fails closed. During the bounded rolling migration
 only, General may preserve the legacy null-channel read lane; custom channels
-never inherit that compatibility. Private member-agent dock history is outside
-the channel repository.
+never inherit that compatibility. Private Agent-page conversation history is
+outside the channel repository.
 
 ## Authority
 
@@ -104,6 +109,10 @@ There are two human authority lanes:
   currently has resource-management authority.
 - `member`: every other currently entitled community relation, including
   moderators and members.
+
+Through the MCP only the builder lane gets past the entrance (see First
+principle); the member lane below applies to the same executor when the
+community agent acts for a member or a community site calls it.
 
 Both lanes can list, read, and search the member repository. Both can write
 participation to an exact returned `channels/<slug>/` path. Only the builder lane
@@ -145,7 +154,15 @@ approval capability below does not make the queue writable.
 `capabilities/`. Current operations are:
 
 - member: `community.memory.record_outcome`
-- human self (`personal_agent` / `external_mcp`): `community.form.submit`, version 1.
+- human participation (not the autonomous community agent):
+  `community.interaction.react`, `community.channel.mark_read`
+- a member's own site only (`community_app`): `community.presence.heartbeat`,
+  `community.typing.set`
+- human builder through external MCP only: `community.site.deploy` (see
+  [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md))
+- human self (`community_agent_for_member` / `external_mcp` / `community_app`):
+  `community.form.submit`, version 1. Forms are being removed with member
+  workflows ([system-map.md](system-map.md), area 9).
   Discover pending assignments at `/communities/<slug>/members/me/forms/` (12 per
   indexed page; actor/community/visit-scoped cursors). Read the exact returned
   `<request-id>.json` for immutable questions/version, answers and revision.
@@ -162,7 +179,7 @@ approval capability below does not make the queue writable.
   acknowledgment says submitted, never completed. Canonical context and linked
   transition evidence establish subsequent progress. No draft, authoring,
   human-approval, actor selector or advancement override is exposed.
-  Community agents and funnel-builder projections cannot discover or execute it.
+  The autonomous community agent (`community_agent`) cannot discover or execute it.
   Reservation, answer freeze, scheduling and receipt completion share one
   transaction. Exact replay after progress moves returns the original receipt;
   changed payload conflicts and a new key cannot resubmit frozen answers.
@@ -173,8 +190,8 @@ approval capability below does not make the queue writable.
 Builder decisions (`community.workflow.approve_milestone`,
 `community.admission.approve` and `community.admission.deny`) are discoverable
 and executable only through the official external MCP (`external_mcp`), where the
-founder operates the harness directly. The native personal agent cannot discover
-or execute them: it reads member-authored evidence and has no per-call human
+founder operates the harness directly. The native community agent cannot discover
+or execute them, even on an owner's Agent page: it reads member-authored evidence and has no per-call human
 confirmation, so a prompt in that evidence must not be able to grant access or
 advance a member. Mutation validators also reject any other principal.
 
@@ -192,8 +209,8 @@ advance a member. Mutation validators also reject any other principal.
   and receipt completion commit together. Same-envelope retries return the
   historical approved acknowledgment without moving the member twice; changed
   payload conflicts and a new key cannot reuse a stale observation.
-  Member self, community-agent and special funnel-builder projections do not
-  expose the approval observation/capability. There is no force-move flag, AI goal
+  Member self and community-agent projections do not expose the approval
+  observation/capability. There is no force-move flag, AI goal
   verdict, actor selector, bulk decision or external authoring. First-party approval
   compatibility, including its separate zero-action policy, remains unchanged.
   An external approval acts on behalf of the authenticated founder; it does not
@@ -418,8 +435,9 @@ navigation, current authority, search/read, real chat write/read/replay,
 retired AI Feed absence, inaccessible-community denial, and—when the actor has
 builder authority—a staged changeset plus an expected `operation_not_found`
 response to an agent terminal-decision call. The changeset remains pending
-product review; this probe neither applies nor rejects it. Run it once with a
-builder identity and once with an
-ordinary member identity. Preserve a separate successful control read of the
+product review; this probe neither applies nor rejects it. Run it with a
+builder identity. (The script still supports a member-lane run from before the
+MCP became builder-only; a member identity is now refused with `builder_only`
+at the entrance.) Preserve a separate successful control read of the
 denied community so the certificate proves isolation from a real object rather
 than only missing-path behavior.

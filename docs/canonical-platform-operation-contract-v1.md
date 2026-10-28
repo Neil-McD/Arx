@@ -14,8 +14,8 @@ polynet_write
 polynet_call
 ```
 
-The native personal harness, community-owned Concierge, and official external
-MCP project these same definitions from
+The community agent (Agent page and Concierge mention replies), community sites
+and the official external MCP project these same definitions from
 [`shared/polynetCanonicalToolContract.ts`](../shared/polynetCanonicalToolContract.ts)
 and execute them through
 [`convex/polynetCanonicalExecutor.ts`](../convex/polynetCanonicalExecutor.ts).
@@ -46,8 +46,9 @@ public tool catalog.
 
 ## Repository
 
-The personal harness and external MCP can list `/`, which contains
-`communities/` and `users/`. An authorized community contains identity,
+External MCP can list `/`, which contains `communities/` and `users/`. The
+community agent's conversations with a member (Agent page, a site's `/ask`) are
+mounted to that conversation's community. An authorized community contains identity,
 members, resources, channels, accepted memory, and versioned
 capabilities. Owner/admin authority additionally reveals `builder/`.
 
@@ -63,14 +64,15 @@ reference it resolves, is authorized again when used.
 
 The executor derives authority for every call:
 
-- personal agent and external MCP: current authenticated human relation;
+- the community agent acting for a member and external MCP: current
+  authenticated human relation (the MCP admits builders only, `convex/httpMcp.ts`);
 - owner/admin with current resource-management permission: builder lane;
 - moderator/member: member lane;
 - community-owned agent: fixed member lane within its mounted community;
 - community front end: the signed-in member's current relation, forced to the
   member lane and mounted to its community (see Community front ends below);
 - builder decisions that grant access or advance members (admission and
-  milestone approval): official external MCP only, never the native personal agent;
+  milestone approval): official external MCP only, never the native community agent;
 - missing or revoked entitlement: no access.
 
 Member and builder lanes can participate in chat. Builder-only
@@ -97,8 +99,8 @@ idempotent for crash recovery.
 
 ## Public-surface deletion rule
 
-The official MCP, personal harness, and community agent must each expose
-exactly the canonical five. Names such as `polynet_workspace_*`,
+The official MCP and the community agent (Agent page, mentions, sites) must each
+expose exactly the canonical five. Names such as `polynet_workspace_*`,
 `community_resources_*`, `community_memory_*`, and specialized builder
 tool names may remain only as private migration substrate while first-party
 callers are removed. They are not public tools and are deletion candidates
@@ -295,7 +297,7 @@ The community agent (Agent page): the edge forwards `POST /__polynet/agent` (`{ 
 message_key }`) to `/runtime/app/agent` and `GET /__polynet/agent/messages`
 to `/runtime/app/agent_messages`, with the edge secret and session. A turn
 runs Studio's runtime harness on the member's own conversation for this
-community (the one Studio's agent dock shows), streamed as server-sent events.
+community (the one Studio's Agent page shows), streamed as server-sent events.
 The page sends only text: the thread, community, model and funding are fixed
 server-side, and the community's AI allowance pays as in Studio. Because the
 front end has no Convex identity, the turn runs on a context

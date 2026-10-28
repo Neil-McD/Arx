@@ -2,7 +2,7 @@
 
 ## Goal
 
-Define one simple, durable URL grammar for Polynet so future work on communities, users, apps, and public funnels does not improvise route structure.
+Define one simple, durable URL grammar for Polynet so future work on communities, users, apps, and public join pages does not improvise route structure.
 
 The web route-access boundary implements this contract through one canonical
 projection after authentication bootstrap.
@@ -35,9 +35,10 @@ Current canonical/pathname routes include:
 - `/c/:slug`
 - `/c/:slug/chat`
 - `/c/:slug/resources`
+- `/c/:slug/events`
 - `/c/:slug/settings`
 - `/c/:slug/agent`
-- `/c/:slug/funnel`
+- `/c/:slug/workflows` (going with member workflows)
 - `/c/:slug/analytics`
 - `/checkout/success`
 - `/claim`
@@ -87,7 +88,9 @@ They require an authenticated session. Direct signed-out navigation returns to
 `/`; merely encountering `/onboarding` must not initiate authentication.
 
 The retired `/settings/partner` and `/settings/partners` paths are compatibility
-aliases that resolve to `/settings/billing`; they are not page identities.
+aliases that resolve to `/settings/billing`; the retired `/settings/agent`,
+`/settings/integrations` and `/settings/skills` paths resolve to
+`/settings/account`. None of them is a page identity.
 
 These should represent actual page identity.
 
@@ -99,11 +102,12 @@ Use explicit namespaces.
 
 - `/c/:slug`
 
-This is the public community home / funnel.
+This is the public join page. It is generated from community settings; there is
+no funnel editor.
 
-`/c/:slug/preview` reuses the funnel renderer but is an authenticated
-owner/manager capability, not a second public funnel. Unauthorized preview
-requests resolve to `/c/:slug`.
+The retired draft-preview URL `/c/:slug/preview` resolves to `/c/:slug`. The
+retired editor URLs `/c/:slug/funnel` and `/c/:slug/settings/funnel` redirect to
+the community's settings.
 
 ### Users
 
@@ -138,22 +142,22 @@ So the contract direction is:
 
 Public object pages and internal operating views should not be the same route with hidden app state.
 
-For communities, the public funnel and internal community operating surface should eventually be distinct.
+For communities, the public join page and the internal community operating surface are distinct.
 
 Preferred direction:
 
-- `/c/:slug` = public funnel
+- `/c/:slug` = public join page
 - `/c/:slug/chat`
 - `/c/:slug/resources`
+- `/c/:slug/events`
 - `/c/:slug/settings`
 - `/c/:slug/agent`
-- `/c/:slug/funnel`
 - `/c/:slug/analytics`
 
 This keeps object identity stable while making the active view explicit.
 Every internal community route requires both authentication and current
 community access. The browser holds while access is verified and fails closed
-to the public funnel.
+to the public join page.
 
 ## Legacy Workspace Compatibility
 
@@ -172,9 +176,7 @@ Legacy entry is auth-aware:
 
 New code must not generate a `/workspace*` URL. The browser exposes no Workspace
 page type, route builder, or navigation controller. Inbound classification is
-the sole retained browser compatibility seam. The MCP `workspace_context` wire
-term remains intact because it is protocol compatibility substrate, not product
-navigation.
+the sole retained browser compatibility seam.
 
 Transactional emails, digests, and reminders follow the same rule. If a
 community-specific URL cannot be constructed, they fall back to `/discover`,
@@ -193,7 +195,7 @@ These are not entity homes and should not be overloaded into other route familie
 
 1. `pathname` should own page identity.
 2. `hash` should not own major page/view navigation.
-3. Public funnel and internal operating views should not share one route with hidden app-state differences.
+3. The public join page and internal operating views should not share one route with hidden app-state differences.
 4. Entity namespaces should remain explicit.
 5. Do not add new public entity classes without defining their namespace first.
 6. Standard and `/m` shell variants must share the same access decision.
