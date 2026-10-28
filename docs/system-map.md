@@ -67,9 +67,17 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [community-member-arrival-v1.md](community-member-arrival-v1.md),
   [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),
   [url-routing-contract-v1.md](url-routing-contract-v1.md).
-- **Going (Neil, Oct 27):** the funnel editor and AI composer (`communityFunnel`,
-  `communityFunnelValidators`, `communityFunnels` table, Studio funnel editor).
-  Community sites are the front door; only a plain join and checkout page stays.
+- **Deleted Oct 28 (POL-23):** the funnel editor, drafts and publishing, the AI
+  funnel builder (the `community_funnel_builder` invocation surface; the value
+  stays in stored receipts and evidence only), draft previews, the external
+  website link, and the hero-media editor. The join page is plain (it never
+  rendered custom content or intro media on the default page). `communityFunnel`
+  keeps only four stand-ins for the cached production web
+  (`getCommunityFunnelConfig`, `getCommunityFunnelDraftPreview`,
+  `setCommunityExternalFunnelUrl`, `setCommunityExternalFunnelActive`); delete
+  them after the next production release. `communityFunnels` (validated by
+  `communityFunnelValidators`) has no live reader; it holds 6 unpublished drafts
+  and 4 unused intro-video links, dropped with Neil's OK.
 - **Hand-run:** `communityMaintenance` (purges orphaned user artifacts).
 - **Retiring tables:** `communityOnboardingSessions` (no writers),
   `communityOnboardingConfigs`. Deleted Oct 27: `communityFeatured`,

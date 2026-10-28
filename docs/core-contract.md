@@ -134,7 +134,7 @@ and data are proven gone, following the two-release pattern in
 | AI feed tables | Feature retired; retirement module still present |
 | `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |
 | Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityInteractionLegacyChatLinks`) | **Still written:** `communityChat.createThreadUserMessage` and the legacy bridge. Duplicate substrate; prove callers and migrate first |
-| `communityFunnels` and the funnel editor | Neil decided Oct 27: delete; a plain join and checkout page stays |
+| `communityFunnels` and the funnel editor | Code deleted Oct 28 (POL-23); a plain join page stays. The table has no live reader (6 unpublished drafts, 4 unused intro-video links): drop with Neil's OK |
 | Integrations and skills tables | Code deleted Oct 28 (POL-21, POL-22, incl. GitHub and Google Drive import); tables dropped next release with Neil's OK |
 
 ## Open risks

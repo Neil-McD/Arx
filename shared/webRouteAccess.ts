@@ -23,7 +23,6 @@ export type WebRouteAccessRequirement =
   | "account_setup"
   | "authenticated"
   | "community"
-  | "community_preview"
   | "operator"
   | "legacy_entry";
 
@@ -54,9 +53,6 @@ export function classifyWebRouteAccessRequirement(params: {
   activePage: AppPage;
   pathname: string;
 }): WebRouteAccessRequirement {
-  if (params.publicRoute.kind === "community_funnel_preview") {
-    return "community_preview";
-  }
   if (params.publicRoute.kind !== "app") {
     return "public";
   }
@@ -80,7 +76,6 @@ export function shouldHydrateWebRouteAccountSetup(params: {
     requirement === "account_setup" ||
     requirement === "authenticated" ||
     requirement === "community" ||
-    requirement === "community_preview" ||
     requirement === "operator"
   );
 }
@@ -92,16 +87,11 @@ export function resolveWebRouteAccessProjection(params: {
   authState: WebRouteAuthState;
   communitySlug?: string | null;
   communityAccessState?: WebRouteScopedAccessState;
-  communityPreviewAccessState?: WebRouteScopedAccessState;
   operatorAccessState?: WebRouteScopedAccessState;
   accountSetupAccessState?: WebRouteScopedAccessState;
 }): WebRouteAccessProjection {
   const requirement = classifyWebRouteAccessRequirement(params);
-  const communitySlug = String(
-    params.publicRoute.kind === "community_funnel_preview"
-      ? params.publicRoute.slug
-      : params.communitySlug ?? "",
-  ).trim();
+  const communitySlug = String(params.communitySlug ?? "").trim();
 
   if (requirement === "public") {
     return { kind: "render_public", requirement };
@@ -126,8 +116,7 @@ export function resolveWebRouteAccessProjection(params: {
 
   if (params.authState === "signed_out") {
     if (
-      (requirement === "community" ||
-        requirement === "community_preview") &&
+      requirement === "community" &&
       communitySlug
     ) {
       return {
@@ -152,22 +141,6 @@ export function resolveWebRouteAccessProjection(params: {
   }
   if (accountSetupAccessState === "denied") {
     return { kind: "redirect_account_setup", requirement };
-  }
-
-  if (requirement === "community_preview") {
-    const accessState =
-      params.communityPreviewAccessState ?? "resolving";
-    if (accessState === "allowed") {
-      return { kind: "render_authenticated", requirement };
-    }
-    if (accessState === "denied" && communitySlug) {
-      return {
-        kind: "redirect_community_funnel",
-        requirement,
-        communitySlug,
-      };
-    }
-    return { kind: "hold", requirement };
   }
 
   if (requirement === "community") {

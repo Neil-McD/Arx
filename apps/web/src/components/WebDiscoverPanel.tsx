@@ -2,7 +2,6 @@ import type { ComponentProps } from "react";
 
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
-import { externalFunnelHost } from "../../../../shared/communityExternalFunnel";
 
 type WebDiscoverPanelProps = {
   isLoadingDiscover: boolean;
@@ -36,7 +35,6 @@ function buildDiscoverCommunityCardProps(args: {
     bannerFocusY: community.banner_focus_y,
     bannerZoom: community.banner_zoom,
     priceLabel: args.formatPlanPrice(community.active_plan),
-    websiteHost: externalFunnelHost(community.external_funnel_url),
     clickable: true,
     ariaLabel: `Open ${community.name}`,
     onActivate: () => args.onActivateCommunity(community),

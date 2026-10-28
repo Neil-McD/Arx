@@ -104,11 +104,6 @@ for (const [publicRoute, activePage, pathname] of [
 for (const [publicRoute, activePage, pathname] of [
   [{ kind: "app" }, "onboarding", "/onboarding"],
   [{ kind: "app" }, "community", "/c/polynet/chat"],
-  [
-    { kind: "community_funnel_preview", slug: "polynet" },
-    "landing",
-    "/c/polynet/preview",
-  ],
   [{ kind: "app" }, "operator", "/operator/platform"],
 ] satisfies Array<[PublicRoute, AppPage, string]>) {
   assert.equal(
@@ -239,44 +234,6 @@ for (const publicRoute of [
   );
 }
 
-const previewRoute: PublicRoute = {
-  kind: "community_funnel_preview",
-  slug: "polynet",
-};
-assert.deepEqual(project({ publicRoute: previewRoute }), {
-  kind: "redirect_community_funnel",
-  requirement: "community_preview",
-  communitySlug: "polynet",
-});
-assert.deepEqual(
-  project({
-    publicRoute: previewRoute,
-    authState: "signed_in",
-    communityPreviewAccessState: "resolving",
-  }),
-  { kind: "hold", requirement: "community_preview" },
-);
-assert.deepEqual(
-  project({
-    publicRoute: previewRoute,
-    authState: "signed_in",
-    communityPreviewAccessState: "denied",
-  }),
-  {
-    kind: "redirect_community_funnel",
-    requirement: "community_preview",
-    communitySlug: "polynet",
-  },
-);
-assert.deepEqual(
-  project({
-    publicRoute: previewRoute,
-    authState: "signed_in",
-    communityPreviewAccessState: "allowed",
-  }),
-  { kind: "render_authenticated", requirement: "community_preview" },
-);
-
 assert.deepEqual(
   project({
     activePage: "operator",
@@ -322,7 +279,6 @@ assert.deepEqual(project({ pathname: "/workspace", authState: "signed_in" }), {
 const boundary = read(
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
 );
-const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorIdentity = read(
   "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
@@ -434,7 +390,6 @@ assert.match(
   "route admission must share one finite deadline",
 );
 for (const [name, source, code] of [
-  ["funnel preview", funnelGateway, "community_funnel_draft_preview_timeout"],
   ["operator access", operatorGateway, "operator_access_resolution_timeout"],
   ["member entry", memberEntryGateway, "member_entry_destination_timeout"],
 ] as const) {
@@ -496,5 +451,5 @@ assert.match(
 );
 
 console.log(
-  "web_route_access_boundary_contract_proof: canonical public, authenticated, community, preview, operator, and mobile route matrix ok",
+  "web_route_access_boundary_contract_proof: canonical public, authenticated, community, operator, and mobile route matrix ok",
 );

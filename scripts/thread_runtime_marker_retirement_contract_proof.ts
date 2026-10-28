@@ -18,7 +18,6 @@ for (const path of [
   "shared/webTurnRunnerCore.ts",
   "shared/useWebTurnRunnerController.ts",
   "apps/web/src/components/WebMemberAgentDock.tsx",
-  "apps/web/src/components/WebCommunityFunnelEditor.tsx",
 ]) {
   assert.doesNotMatch(
     read(path),

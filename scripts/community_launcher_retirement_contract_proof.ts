@@ -36,7 +36,6 @@ const createController = read("shared/useCommunityCreateController.ts");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const agent = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const resources = read("apps/web/src/components/CommunityResourcesPanel.tsx");
-const funnel = read("apps/web/src/components/WebCommunityFunnelSection.tsx");
 const protectedResources = read("convex/communityResources.ts");
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
 const retiredRuntimePaths = [
@@ -141,7 +140,6 @@ assert.equal(
 assert.match(settings, /WebCommunitySettingsSection/, "community settings must remain available");
 assert.match(agent, /Community Agent/, "Community Agent instructions must remain available");
 assert.match(resources, /CommunityResourcesPanel/, "community resources must remain available");
-assert.match(funnel, /WebCommunityFunnelEditor/, "community funnel configuration must remain available");
 
 assert.match(
   protectedResources,

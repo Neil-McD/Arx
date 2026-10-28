@@ -9,16 +9,10 @@ import {
   type OperatorTab,
   type SettingsPage,
 } from "./appShellNavigation";
-import type { CommunityFunnelSlot } from "./communityTypes";
 
 export type PublicRoute =
   | { kind: "app" }
   | { kind: "community_funnel"; slug: string }
-  | {
-      kind: "community_funnel_preview";
-      slug: string;
-      slot: CommunityFunnelSlot;
-    }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
 
@@ -68,7 +62,6 @@ export type WebDestination =
   | { kind: "operator"; tab: OperatorTab }
   | { kind: "global_settings"; page: SettingsPage; index: boolean }
   | { kind: "community_funnel"; slug: string }
-  | { kind: "community_funnel_preview"; slug: string }
   | { kind: "community_home"; slug: string }
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
   | { kind: "community_resources"; slug: string; moduleId: string | null }
@@ -245,16 +238,6 @@ export function buildCommunityHomePath(
   return `/c/${encodeURIComponent(slug)}/home`;
 }
 
-
-export function buildCommunityFunnelPreviewPath(
-  communitySlug: string | null | undefined,
-  slot: "default" | "custom_1" | "custom_2" = "default",
-): string | null {
-  const slug = String(communitySlug ?? "").trim();
-  if (!slug) return null;
-  const path = `/c/${encodeURIComponent(slug)}/preview?slot=${encodeURIComponent(slot)}`;
-  return path;
-}
 
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
@@ -603,8 +586,6 @@ function derivePublicWebDestination(
   switch (route.kind) {
     case "community_funnel":
       return { kind: "community_funnel", slug: route.slug };
-    case "community_funnel_preview":
-      return { kind: "community_funnel_preview", slug: route.slug };
     case "checkout_success":
       return { kind: "checkout_success", sessionId: route.sessionId };
     case "claim":
@@ -664,7 +645,6 @@ export function webDestinationHasCommunityNavSelection(
 ): boolean {
   switch (destination.kind) {
     case "community_funnel":
-    case "community_funnel_preview":
     case "community_chat":
     case "community_resources":
     case "community_events":

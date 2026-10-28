@@ -10,10 +10,6 @@ const renderer = read("apps/web/src/components/WebCommunityFunnelRenderer.tsx");
 const rendererCss = read("apps/web/src/components/WebCommunityFunnelRenderer.css");
 const memberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
 const memberProofCss = read("apps/web/src/components/CommunityFunnelMemberProof.css");
-const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
-const previewController = read(
-  "apps/web/src/controllers/useWebCommunityFunnelDraftPreviewController.ts",
-);
 const renderProjection = read("shared/communityFunnelUi.ts");
 
 assert.match(
@@ -94,16 +90,6 @@ assert.doesNotMatch(
   /UserAvatar|\.map\(\(face/,
   "public member proof must not recreate member avatar holders",
 );
-assert.match(
-  editor,
-  /<WebCommunityFunnelRenderer[\s\S]*memberFaces=\{hydratedPreviewCommunity\.member_faces_preview[\s\S]*renderModel=\{previewRenderModel\}/,
-  "builder preview and public lander must share the same canonical renderer",
-);
-assert.doesNotMatch(
-  editor,
-  /CommunityFunnelPreview|MemberAvatarStack|buildCommunityFunnelMemberProofView/,
-  "builder preview must not retain or rebuild a parallel renderer",
-);
 assert.doesNotMatch(
   `${rendererCss}\n${memberProofCss}`,
   /\.community-funnel-member-(?:faces|face|more|proof-row)\b/,
@@ -134,21 +120,16 @@ assert.match(
   /--community-funnel-rail:\s*980px[\s\S]*community-funnel-hero[\s\S]*var\(--community-funnel-rail\)[\s\S]*community-funnel-vsl[\s\S]*var\(--community-funnel-rail\)[\s\S]*community-funnel-pillars[\s\S]*var\(--community-funnel-rail\)/,
   "hero, VSL, and pillars must share one canonical content rail",
 );
-assert.match(
-  previewController,
-  /funnel_draft_preview_retry[\s\S]*forceRefresh:\s*true[\s\S]*funnel_draft_preview_query_retry[\s\S]*forceRefresh:\s*true/,
-  "the owner preview must retry both initial and query-time session verification once through the canonical auth refresh lock",
-);
 assert.doesNotMatch(rendererCss, /#d66a8a|accent-gold|pink/i, "retired Polynet-pink tokens must not leak into the funnel");
 assert.match(
   renderProjection,
   /input\.funnel\?\.active_slot !== "default" && published\?\.version === 2/,
   "custom content must require an explicit active custom slot and published V2 snapshot",
 );
-assert.match(
+assert.doesNotMatch(
   publicRoute,
-  /isPreviewMode \|\|[\s\S]*isPrimaryActionDisabled/,
-  "preview must preserve the real renderer while disabling admission side effects",
+  /isPreviewMode|previewDocument|funnel-preview-presentation/,
+  "the join page has no draft preview mode",
 );
 
 console.log("community funnel renderer contract proof passed");

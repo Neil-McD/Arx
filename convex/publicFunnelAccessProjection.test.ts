@@ -55,16 +55,7 @@ describe("public community admission projection", () => {
     });
   });
 
-  test("preview and malformed values fail closed", () => {
-    expect(derivePublicCommunityAdmissionProjection({
-      access: {
-        is_owner: true,
-        can_enter_community: true,
-        join_request_status: "pending",
-      },
-      isPreviewMode: true,
-      nowMs: NOW_MS,
-    }).joinRequestStatus).toBeNull();
+  test("malformed values fail closed", () => {
     expect(derivePublicCommunityAdmissionProjection({
       access: {
         is_owner: false,

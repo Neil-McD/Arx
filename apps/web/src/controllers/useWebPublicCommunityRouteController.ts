@@ -35,26 +35,15 @@ export function useWebPublicCommunityRouteController<
   loadPublicCommunity: (slug: string, opts?: { recordVisit?: boolean }) => Promise<void> | void;
   refreshPendingPublicCommunityAccess: (slug: string) => Promise<void>;
 }) {
-  const publicFunnelSlug =
-    params.publicRoute.kind === "community_funnel" || params.publicRoute.kind === "community_funnel_preview"
-      ? params.publicRoute.slug
-      : null;
-  const isPublicFunnelPreviewRoute = params.publicRoute.kind === "community_funnel_preview";
-  const publicFunnelPreviewSlot = params.publicRoute.kind === "community_funnel_preview"
-    ? params.publicRoute.slot
-    : "default";
+  const publicFunnelSlug = params.publicRoute.kind === "community_funnel" ? params.publicRoute.slug : null;
   const checkoutSuccessSessionId = params.publicRoute.kind === "checkout_success" ? params.publicRoute.sessionId : null;
   const claimTokenParam = params.publicRoute.kind === "claim" ? params.publicRoute.token : null;
-  const isPublicCommunityFunnel =
-    params.publicRoute.kind === "community_funnel" || params.publicRoute.kind === "community_funnel_preview";
+  const isPublicCommunityFunnel = params.publicRoute.kind === "community_funnel";
 
-  /* One render path: /c/:slug and its /preview both load the LIVE public
-     data. Preview differs only in that the owner is forced into the visitor
-     lens (can_enter false → visitor CTA) and Join is disabled downstream. */
   useEffect(() => {
     if (!publicFunnelSlug) return;
-    void params.loadPublicCommunity(publicFunnelSlug, { recordVisit: !isPublicFunnelPreviewRoute });
-  }, [params.sessionDependency, publicFunnelSlug, params.loadPublicCommunity, isPublicFunnelPreviewRoute]);
+    void params.loadPublicCommunity(publicFunnelSlug, { recordVisit: true });
+  }, [params.sessionDependency, publicFunnelSlug, params.loadPublicCommunity]);
 
   const resolvedPublicCommunity = params.publicCommunity;
   const selectedPublicCommunityPlan =
@@ -70,15 +59,11 @@ export function useWebPublicCommunityRouteController<
   const canJoinForFree = publicFunnelAction === "join";
   const canJoinWithApproval = publicFunnelAction === "request_access";
   const canJoinWithCheckout = publicFunnelAction === "checkout";
-  /* Preview forces the visitor lens even for the owner: ignore their own
-     entitlement so the CTA reads as a visitor's (Join/Request/Checkout),
-     never "Enter community". */
   const admission = derivePublicCommunityAdmissionProjection({
     access: params.publicCommunityAccess,
-    isPreviewMode: isPublicFunnelPreviewRoute,
   });
   useEffect(() => {
-    if (!publicFunnelSlug || isPublicFunnelPreviewRoute || !params.isSignedIn || !admission.approvalPending) return;
+    if (!publicFunnelSlug || !params.isSignedIn || !admission.approvalPending) return;
     let active = true;
     let inFlight = false;
     const refresh = async () => {
@@ -100,7 +85,7 @@ export function useWebPublicCommunityRouteController<
       window.removeEventListener("focus", onResume);
       document.removeEventListener("visibilitychange", onResume);
     };
-  }, [publicFunnelSlug, isPublicFunnelPreviewRoute, params.isSignedIn,
+  }, [publicFunnelSlug, params.isSignedIn,
     admission.approvalPending, params.refreshPendingPublicCommunityAccess]);
   const canEnterPublicCommunity = admission.canEnterCommunity;
   const approvalPending = admission.approvalPending;
@@ -113,8 +98,6 @@ export function useWebPublicCommunityRouteController<
       }).format(admission.approvalReapplyAtMs);
   return {
     publicFunnelSlug,
-    isPublicFunnelPreviewRoute,
-    publicFunnelPreviewSlot,
     checkoutSuccessSessionId,
     claimTokenParam,
     isPublicCommunityFunnel,

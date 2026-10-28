@@ -25,8 +25,8 @@ assert.match(
 );
 assert.match(
   resolution,
-  /invocationSurface === "member_agent_dock" \|\|[\s\S]*invocationSurface === "community_funnel_builder"[\s\S]*persistedConversationHistory = \{[\s\S]*expectedUserMessageKey/,
-  "Member and Funnel must share the same persisted-history seed",
+  /usesPersistedConversation = invocationSurface === "member_agent_dock"[\s\S]*persistedConversationHistory = \{[\s\S]*expectedUserMessageKey/,
+  "member agent turns seed from persisted history",
 );
 assert.equal(
   (handlers.match(/persistedConversationHistory,/g) ?? []).length,

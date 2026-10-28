@@ -6,7 +6,6 @@ import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
-import type { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
@@ -47,7 +46,6 @@ export type WebCommunitySecondaryPanelsProps = {
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
-  funnel: ComponentProps<typeof WebCommunityFunnelSection>;
   workflows: ComponentProps<typeof WebCommunityWorkflowsSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resources: ComponentProps<typeof CommunityResourcesPanel>;
@@ -81,18 +79,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
   const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection> = {
     ...props.settings,
     aiAgentProps: props.aiAgent,
-    externalWebsite: {
-      isLoading: props.funnel.isLoadingCommunityFunnel || !props.funnel.isCommunityFunnelReady,
-      error: props.funnel.communityFunnelError,
-      controls: {
-        communityId: props.funnel.editorProps.previewCommunity.id,
-        communitySlug: props.funnel.editorProps.previewCommunity.slug ?? "",
-        session: props.funnel.editorProps.session,
-        ensureSession: props.funnel.editorProps.ensureSession,
-        config: props.funnel.editorProps.communityFunnelConfig,
-        hydrate: props.funnel.editorProps.hydrateCommunityFunnelEditor,
-      },
-    },
     actions: {
       ...props.settings.actions,
       openCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(true),

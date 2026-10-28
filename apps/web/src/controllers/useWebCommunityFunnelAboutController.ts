@@ -6,7 +6,7 @@ import {
 
 import {
   saveCloudCommunityAbout,
-} from "../../../../shared/cloudCommunityFunnelGateway";
+} from "../../../../shared/cloudCommunityAboutGateway";
 import type { AuthSession } from "../auth";
 import type { WebCommunityRecord } from "../webAppContracts";
 

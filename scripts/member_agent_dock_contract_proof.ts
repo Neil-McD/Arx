@@ -952,7 +952,7 @@ assert.equal(
 );
 assert.match(
   runtimeHandlers,
-  /invocationSurface === "member_agent_dock" \|\|[\s\S]*invocationSurface === "community_funnel_builder"[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,
+  /invocationSurface === "member_agent_dock" \? invocationSurface : null[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,
   "member turns must reuse the canonical idempotent community inference receipt lifecycle",
 );
 assert.match(

@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildCommunityFunnelThreadKey,
-  isCommunityFunnelThreadKeyForCommunity,
-  resolveCommunityFunnelThreadSlotForCommunity,
-  resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
-  restrictToolNamesForInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
 import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket";
@@ -18,108 +13,18 @@ const promptBudget = {
   maxNoProgressSteps: 2,
 };
 
-describe("community funnel runtime surface", () => {
-  it("binds each custom funnel to one canonical community thread", () => {
-    const threadKey = buildCommunityFunnelThreadKey("community-1");
-    expect(threadKey).toBe("community-funnel:community-1");
-    expect(
-      buildCommunityFunnelThreadKey("community-1", "custom_2"),
-    ).toBe("community-funnel:community-1:custom_2");
-    expect(
-      resolveCommunityFunnelThreadSlotForCommunity(
-        "community-funnel:community-1:custom_2",
-        "community-1",
-      ),
-    ).toBe("custom_2");
-    expect(
-      isCommunityFunnelThreadKeyForCommunity(threadKey, "community-1"),
-    ).toBe(true);
-    expect(
-      isCommunityFunnelThreadKeyForCommunity(threadKey, "community-2"),
-    ).toBe(false);
-    expect(
-      isCommunityFunnelThreadKeyForCommunity(
-        "community-funnel:community-1:extra",
-        "community-1",
-      ),
-    ).toBe(false);
-    expect(
-      resolveRuntimeInvocationSurfaceForThread({
-        requestedSurface: "community_funnel_builder",
-        threadKey,
-      }),
-    ).toBeNull();
-    expect(
-      resolveRuntimeInvocationSurfaceForThread({
-        requestedSurface: "member_agent_dock",
-        threadKey,
-      }),
-    ).toBeNull();
-  });
-
-  it("exposes only discovery, read, and canonical call tools", () => {
-    expect(
-      restrictToolNamesForInvocationSurface({
-        invocationSurface: "community_funnel_builder",
-        toolNames: [
-          "polynet_list",
-          "polynet_read",
-          "polynet_search",
-          "polynet_write",
-          "polynet_call",
-        ],
-      }),
-    ).toEqual(["polynet_list", "polynet_read", "polynet_call"]);
-  });
-
-  it("uses founder-funded community inference without personal provider gates", () => {
-    expect(
-      resolveRuntimeInvocationFundingPolicy("community_funnel_builder"),
-    ).toBe("community_owner");
-    expect(resolveRuntimeInvocationFundingPolicy("member_agent_dock")).toBe(
-      "community_owner",
-    );
-  });
-
-  it("injects the funnel contract into the assembled runtime prompt", () => {
-    const bundle = buildPlatformHarnessRuntimePromptBundle({
-      loopBudget: promptBudget,
-      allowedToolNames: ["polynet_list", "polynet_read", "polynet_call"],
-      harnessName: "chat_tools",
-      runtimeTurnContext: buildRuntimeTurnContextPacket({}),
-      invocationSurface: "community_funnel_builder",
-      communityId: "community-1",
-      communityName: "Proof Community",
-      communitySlug: "proof-community",
-    });
-
-    expect(
-      bundle.sections.find((section) => section.id === "invocation_surface"),
-    ).toMatchObject({ rendered: true, layer: "scoped", owner: "runtime" });
-    expect(bundle.text).toContain("bounded community funnel composer");
-    expect(bundle.text).toContain("Never invent an audience, offer, price");
-    expect(bundle.text).toContain(
-      "exactly three concise benefit pillars",
-    );
-    expect(bundle.text).toContain(
-      "Polynet owns the page structure",
-    );
-    expect(bundle.text).toContain(
-      "Never propose custom HTML, CSS, JavaScript",
-    );
-    expect(bundle.text).not.toContain("reference images only as inspiration");
-    expect(bundle.text).toContain("Never publish, change pricing, change access policy");
-    expect(bundle.sections.some((section) => section.id === "current_surface")).toBe(false);
-    expect(
-      bundle.sections.some((section) => section.id === "member_identity_context"),
-    ).toBe(false);
-  });
-
+describe("runtime invocation surfaces", () => {
   it("rejects retired and missing invocation surfaces", () => {
     expect(
       resolveRuntimeInvocationSurfaceForThread({
         requestedSurface: "workspace",
         threadKey: "workspace:legacy",
+      }),
+    ).toBeNull();
+    expect(
+      resolveRuntimeInvocationSurfaceForThread({
+        requestedSurface: "community_funnel_builder",
+        threadKey: "community-funnel:community-1",
       }),
     ).toBeNull();
     expect(

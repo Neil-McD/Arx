@@ -206,8 +206,7 @@ for file in \
   shared/cloudMemberAgentGateway.ts \
   shared/webTurnRunnerCore.ts \
   shared/useWebTurnRunnerController.ts \
-  apps/web/src/components/WebMemberAgentDock.tsx \
-  apps/web/src/components/WebCommunityFunnelEditor.tsx; do
+  apps/web/src/components/WebMemberAgentDock.tsx; do
   forbid_match_in_file "$file" '\bruntimeEngine\b|\bruntime_engine\b' \
     "$file no longer transports the constant native runtime marker"
 done

@@ -10,7 +10,6 @@ import type {
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
 import type { WebPublicCommunityRecord } from "../webAppContracts";
-import { readCommunityExternalFunnelUrl } from "../../../../shared/communityExternalFunnel";
 
 type PublicCommunityUiActions = {
   setPublicCommunity: Dispatch<
@@ -30,10 +29,8 @@ type PublicCommunityUiActions = {
 export function resolveDiscoverCommunityDestination(
   community: DiscoverCommunitySnapshot,
   knownCommunityId: string | null,
-): { kind: "joined"; communityId: string } | { kind: "external"; url: string } | { kind: "native" } {
-  if (knownCommunityId) return { kind: "joined", communityId: knownCommunityId };
-  const url = readCommunityExternalFunnelUrl(community.external_funnel_url);
-  return url ? { kind: "external", url } : { kind: "native" };
+): { kind: "joined"; communityId: string } | { kind: "native" } {
+  return knownCommunityId ? { kind: "joined", communityId: knownCommunityId } : { kind: "native" };
 }
 
 export function useWebDiscoverActivationController(params: {
@@ -76,11 +73,6 @@ export function useWebDiscoverActivationController(params: {
           communityId: destination.communityId,
           communitySlug: slug,
         });
-        return;
-      }
-
-      if (destination.kind === "external") {
-        window.open(destination.url, "_blank", "noopener,noreferrer");
         return;
       }
 
