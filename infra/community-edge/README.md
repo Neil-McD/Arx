@@ -33,7 +33,7 @@ one edge Worker in front of every community front end.
 <slug>--me<suffix>.<sites domain> (the site's private twin: the member's own pages)
                          ├─ found through the site's route (no KV entry of its own); unknown site → 404
                          ├─ /__polynet/* as on the site (its own sign-in, session cookie, API, blocks, shell),
-                         │  plus /__polynet/blocks/personal.js, settings.js, messages.js and /__polynet/me/*
+                         │  plus /__polynet/blocks/personal.js, settings.js, messages.js, join.js and /__polynet/me/*
                          │                    → /runtime/app/me/* (private session only)
                          ├─ /communities, /messages[/<conversation>|/new], /settings, /join → the site's frame, stripped (below)
                          ├─ other GET/HEAD    → 302 to the same path on the site (never for a script)
@@ -164,6 +164,28 @@ member's own conversations (and, there, whether the other person is typing).
 Never content, names or ids: on a new version the page re-reads through
 `/__polynet/me/messages*`. The site's own watch token, which site code holds,
 gets `private_session_required`.
+
+Join (`/join`, `blocks/join.ts`), twin only, same-origin only. It is the one
+personal page that works signed out: its read shows the community's pitch and
+its gate to anyone; every action needs the twin's session (which the twin's
+sign-in also mints for someone who isn't a member yet, for Join only). The
+backend projects the gate with Studio's funnel functions
+(`shared/communityJoinPolicy.ts`, `shared/communityFunnelUi.ts`, so the words
+are Studio's) and runs Studio's cores (`convex/communityAppJoin.ts`):
+
+| Edge | Backend | What |
+| --- | --- | --- |
+| `GET /__polynet/me/join` | `/runtime/app/me/join` | the pitch, the gate (`join`, `request_access`, `checkout`), the plans and, with a session, where they stand (`member`, `pending`, `denied`, `blocked`, `visitor`); a refused session reads as signed out and is cleared |
+| `POST /__polynet/me/join` (≤ 1 KB) | `/runtime/app/me/join/request` | Studio's join (`joinPublicCommunityInternal`): joins an open community, asks to join one with approval |
+| `POST /__polynet/me/join/cancel` (≤ 1 KB) | `/runtime/app/me/join/cancel` | withdraws a pending request |
+| `POST /__polynet/me/join/checkout` (≤ 1 KB) | `/runtime/app/me/join/checkout` | Studio's checkout (`startCommunityJoinCheckoutCore`), returning only to this twin's `/join`; the edge hands the page only a `https://checkout.stripe.com/` address |
+| `POST /__polynet/me/join/finish` (≤ 1 KB) | `/runtime/app/me/join/finish` | back from Stripe: Studio's finalization and claim, so membership comes only from the webhook's record, never the redirect |
+
+Once they're a member the page sends them into the site through the site's own
+sign-in (`/__polynet/auth/start?return=/chat`, silent for someone signed in to
+Polynet). `session().join_url` is the twin's `/join` (Polynet's `/c/<slug>`
+where a site has no twin), so the shell's Join and the blocks' "New here? Join"
+open it; a non-member's sign-in on the site lands there too.
 
 ### Standard pages (the site's frame)
 

@@ -23,6 +23,8 @@ import {
 } from "../shared/communityAppSession";
 import type { PolynetCanonicalToolName } from "../shared/polynetCanonicalToolContract";
 import { SITE_DM_TEXT_MAX_CHARS } from "../shared/directMessageSiteShape";
+import { startCommunityJoinCheckoutCore } from "./communityCommerce";
+import { twinCheckoutReturnUrls } from "./communityAppJoin";
 
 export const COMMUNITY_APP_RUNTIME_PATH = "/runtime/app";
 export const COMMUNITY_APP_UPLOAD_PATH = "/runtime/app/upload";
@@ -59,6 +61,14 @@ export const COMMUNITY_APP_MY_MESSAGE_MUTE_PATH = "/runtime/app/me/messages/mute
 export const COMMUNITY_APP_MY_MESSAGE_TYPING_PATH = "/runtime/app/me/messages/typing";
 export const COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH = "/runtime/app/me/messages/block";
 const MESSAGE_SEND_MAX_BYTES = 24 * 1024;
+// Join, on a site's private twin: the page's read (signed out too), joining or
+// asking to, withdrawing a request, a paid plan's checkout, and finishing it.
+export const COMMUNITY_APP_MY_JOIN_PATH = "/runtime/app/me/join";
+export const COMMUNITY_APP_MY_JOIN_REQUEST_PATH = "/runtime/app/me/join/request";
+export const COMMUNITY_APP_MY_JOIN_CANCEL_PATH = "/runtime/app/me/join/cancel";
+export const COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH = "/runtime/app/me/join/checkout";
+export const COMMUNITY_APP_MY_JOIN_FINISH_PATH = "/runtime/app/me/join/finish";
+const CHECKOUT_SESSION_ID_PATTERN = /^chk_[a-f0-9]{32}$/;
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -227,6 +237,30 @@ async function runMessages(run: () => Promise<unknown>): Promise<{ ok: true; val
     const known = Object.keys(MESSAGE_REFUSALS).find((code) => text === code || text.includes(code));
     if (known) return reply(MESSAGE_REFUSALS[known].status, { ok: false, code: MESSAGE_REFUSALS[known].code });
     return reply(500, { ok: false, code: "messages_unavailable", message: "That didn't work. Try again." });
+  }
+}
+
+// The refusals Studio's join, checkout and claim cores give, by code, for the
+// twin's Join page to explain in Studio's words. Anything else is a plain failure.
+const JOIN_REFUSALS: Record<string, { status: number; code: string }> = {
+  account_setup_required: { status: 409, code: "account_setup_required" },
+  community_user_blocked: { status: 403, code: "community_user_blocked" },
+  community_archived: { status: 404, code: "community_unavailable" },
+  community_not_found: { status: 404, code: "community_unavailable" },
+  community_temporarily_unavailable: { status: 409, code: "community_temporarily_unavailable" },
+  paid_plan_required: { status: 409, code: "paid_plan_required" },
+  community_checkout_unavailable: { status: 409, code: "community_checkout_unavailable" },
+};
+async function runJoin<T>(run: () => Promise<T>): Promise<{ ok: true; value: T } | Response> {
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    const data = (error as { data?: unknown } | null)?.data;
+    const text = typeof (data as { code?: unknown } | null)?.code === "string"
+      ? String((data as { code: string }).code) : String((error as { message?: unknown } | null)?.message ?? "");
+    const known = Object.keys(JOIN_REFUSALS).find((code) => text === code || text.includes(code));
+    if (known) return reply(JOIN_REFUSALS[known].status, { ok: false, code: JOIN_REFUSALS[known].code });
+    return reply(500, { ok: false, code: "join_unavailable", message: "That didn't work. Try again." });
   }
 }
 
@@ -546,7 +580,12 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       const account = await ctx.runQuery(internal.communityApps.getCommunityAppAccountInternal, {
         userId: session.userId as any, currentCommunityId: session.communityId as any,
       });
-      if (!account) return reply(401, { ok: false, code: "community_app_session_invalid", message: "Sign in to this community." });
+      if (!account) {
+        // A twin session may belong to someone joining (Join signs them in
+        // first); it stays. A site session is only ever a member's: it ends.
+        if (session.kind === "private") return reply(403, { ok: false, code: "not_a_member", message: "Join this community first." });
+        return reply(401, { ok: false, code: "community_app_session_invalid", message: "Sign in to this community." });
+      }
       return reply(200, { ok: true, account });
     }),
   });
@@ -951,6 +990,121 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
         return reply(200, { ok: true, signout_ticket: await signCommunityAppSignoutTicket(secret, revoked.userId, revoked.communityId, Date.now()) });
       }
       return reply(200, { ok: true });
+    }),
+  });
+
+  registerJoinRoutes(args);
+}
+
+// The join page as the twin reads it: the public projection, and where this
+// session's user stands when there is one. Only a private twin's origin answers.
+async function readJoin(ctx: any, origin: string, session: AppSession | null): Promise<Record<string, unknown> | null> {
+  return (await ctx.runQuery(internal.communityAppJoin.getCommunityAppJoinInternal, {
+    origin, ...(session ? { userId: session.userId as any, communityId: session.communityId as any } : {}),
+  })) as Record<string, unknown> | null;
+}
+
+// Join on a site's private twin. Reading works signed out; every action needs a
+// session minted on the twin (a site's own session, which the site's code
+// holds, is refused), and each runs Studio's own core.
+function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
+  const joinReply = async (ctx: any, req: Request, session: AppSession, extra: Record<string, unknown>) => {
+    const join = await readJoin(ctx, normalizeCommunityAppOrigin(req.headers.get("origin") ?? "") ?? "", session);
+    if (!join) return reply(404, { ok: false, code: "community_unavailable" });
+    return reply(200, { ok: true, ...extra, signed_in: true, ...join });
+  };
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_JOIN_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
+      const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "");
+      if (!origin) return reply(400, { ok: false, code: "invalid_request" });
+      let session: AppSession | null = null;
+      if (req.headers.get("authorization")) {
+        const resolved = await requirePrivateAppSession(ctx, req);
+        if (resolved instanceof Response) return resolved;
+        session = resolved;
+      }
+      const join = await readJoin(ctx, origin, session);
+      if (!join) return reply(404, { ok: false, code: "community_unavailable" });
+      return reply(200, { ok: true, signed_in: Boolean(session), ...join });
+    }),
+  });
+
+  // Join (an open community) or ask to (approval): Studio's join decides which.
+  args.http.route({
+    path: COMMUNITY_APP_MY_JOIN_REQUEST_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const done = await runJoin(() => ctx.runMutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, {
+        userId: session.userId as any, communityId: session.communityId as any,
+      }) as Promise<{ outcome: string }>);
+      if (done instanceof Response) return done;
+      return await joinReply(ctx, req, session, { outcome: done.value.outcome });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_JOIN_CANCEL_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const done = await runJoin(() => ctx.runMutation(internal.communityAppJoin.cancelCommunityAppJoinRequestInternal, {
+        userId: session.userId as any, communityId: session.communityId as any,
+      }));
+      if (done instanceof Response) return done;
+      return await joinReply(ctx, req, session, {});
+    }),
+  });
+
+  // A paid plan: Studio's checkout, returning only to this twin's own /join.
+  args.http.route({
+    path: COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const period = body?.billing_period;
+      if (period !== "monthly" && period !== "annual") return reply(400, { ok: false, code: "invalid_request" });
+      const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "") ?? "";
+      const own = await ctx.runQuery(internal.communityAppJoin.isCommunityPrivateOriginInternal, {
+        communityId: session.communityId as any, origin,
+      });
+      const urls = own ? twinCheckoutReturnUrls(origin) : null;
+      if (!urls) return reply(403, { ok: false, code: "private_session_required" });
+      const join = (await readJoin(ctx, origin, session)) as { community: { slug: string }; viewer: { state: string } | null } | null;
+      if (!join) return reply(404, { ok: false, code: "community_unavailable" });
+      if (join.viewer?.state === "member") return reply(409, { ok: false, code: "already_member" });
+      const started = await runJoin(() => startCommunityJoinCheckoutCore(ctx, {
+        communitySlug: join.community.slug, billingPeriod: period, successUrl: urls.successUrl, cancelUrl: urls.cancelUrl,
+        authSubject: session.authSubject, trustedUserId: session.userId,
+      }));
+      if (started instanceof Response) return started;
+      return reply(200, { ok: true, checkout_url: started.value.checkout_url, session_id: started.value.session_id });
+    }),
+  });
+
+  // Back from Stripe: membership only once the provider's verified webhook says so.
+  args.http.route({
+    path: COMMUNITY_APP_MY_JOIN_FINISH_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateAppSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const sessionId = typeof body?.session_id === "string" && CHECKOUT_SESSION_ID_PATTERN.test(body.session_id) ? body.session_id : null;
+      if (!sessionId) return reply(400, { ok: false, code: "invalid_request" });
+      const done = await runJoin(() => ctx.runMutation(internal.communityAppJoin.finishCommunityAppCheckoutInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, sessionId,
+      }) as Promise<{ status: string }>);
+      if (done instanceof Response) return done;
+      return await joinReply(ctx, req, session, { status: done.value.status });
     }),
   });
 }

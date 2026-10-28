@@ -6,16 +6,17 @@
 // every script removed, so only Polynet's code runs beside it, and this block
 // keeps its data in its shadow root, where the frame's CSS reaches only
 // ::part(). Its data comes from /__polynet/me/*, which answers only the twin's
-// own session. Settings and Messages are their own modules (blocks/settings.ts,
-// blocks/messages.ts), each loaded only on its page. Kept as text (a String.raw literal: no backticks or template
+// own session (Join's read also answers signed out). Settings, Messages and
+// Join are their own modules (blocks/settings.ts, blocks/messages.ts,
+// blocks/join.ts), each loaded only on its page. Kept as text (a String.raw literal: no backticks or template
 // placeholders inside) so the edge serves exactly what is reviewed.
 export const PERSONAL_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-personal page="communities|messages|settings|join">.
 // Only on a site's private twin, inside <polynet-page>. Style it with ::part():
 // communities, community, community-avatar, community-name, community-role,
 // community-here, community-elsewhere, empty, soon, signin, retry, and the
-// settings and messages pages' parts (see /__polynet/blocks/settings.js and
-// /__polynet/blocks/messages.js).
+// settings, messages and join pages' parts (see /__polynet/blocks/settings.js,
+// /__polynet/blocks/messages.js and /__polynet/blocks/join.js).
 import { BASE_STYLE, h, styled, avatar } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + [
@@ -67,6 +68,7 @@ class PolynetPersonal extends HTMLElement {
     if (page === "communities") return this.loadCommunities();
     if (page === "settings") return this.loadModule("settings", "Couldn't load your settings.", (module, generation) => module.mountSettings(this, generation));
     if (page === "messages") return this.loadModule("messages", "Couldn't load your messages.", (module, generation) => module.mountMessages(this, generation));
+    if (page === "join") return this.loadModule("join", "Couldn't load this page.", (module, generation) => module.mountJoin(this, generation));
     // The rest are built next; until then a quiet note in the site's own frame.
     this.show("soon", [h("div", { class: "state", part: "soon" }, [h("p", { class: "muted", text: "This page is coming soon." })])]);
   }

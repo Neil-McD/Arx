@@ -55,7 +55,7 @@ export const PERSONAL_PAGES = [
   { path: "/communities", name: "communities", title: "Your communities", ready: true, signIn: true, below: [] },
   { path: "/messages", name: "messages", title: "Messages", ready: true, signIn: true, below: [["conversation", CONVERSATION_SEGMENT]] },
   { path: "/settings", name: "settings", title: "Settings", ready: true, signIn: true, below: [] },
-  { path: "/join", name: "join", title: "Join", ready: false, signIn: false, below: [] },
+  { path: "/join", name: "join", title: "Join", ready: true, signIn: false, below: [] },
 ];
 
 // Which personal page a path is (exactly, or an address under it, with or
@@ -335,6 +335,15 @@ export function checkSite(files) {
     const tags = (names) => names.map((name) => `<${name}>`).join(" and ");
     problem("error", page.path, `${page.path.slice(1)} is this site's own ${standard.page.title} page (${standard.page.path}), so it must place ${tags(standard.page.blocks)}. ` +
       `Add ${missing.map((name) => `<${name}></${name}>`).join(" ")}, or delete the file: Polynet then shows its ${standard.page.title} page inside frame.html.`);
+  }
+
+  // A member's own pages live on the private twin, where only Polynet's code
+  // runs; a site's file at one of those addresses hides it there.
+  for (const page of pages) {
+    const personal = personalPage(servedPath(page.path) ?? "");
+    if (!personal) continue;
+    problem("warning", page.path, `${page.path.slice(1)} sits at ${personal.path}, a member's own page (${personal.title}). ` +
+      "Polynet serves it on this site's private twin, in your frame; delete this file so the address goes there.");
   }
 
   const allCss = css.map((file) => file.text).join("\n") + pages.map((file) => file.text).join("\n");

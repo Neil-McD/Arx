@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { derivePublicCommunityAdmissionProjection } from "../apps/web/src/communityJoinPolicy";
+import { derivePublicCommunityAdmissionProjection } from "../shared/communityJoinPolicy";
 
 const NOW_MS = Date.parse("2026-08-09T12:00:00.000Z");
 

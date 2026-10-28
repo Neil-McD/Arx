@@ -29,9 +29,13 @@ every standard page into it.**
    `<polynet-page>` renders is in `polynet-build-site`). Never reach inside
    a block.
 5. **Nothing personal is built by a site:** no direct messages, settings,
-   "your communities" or private member data. The shell
-   (`<polynet-account>`, added to every page) carries those; place it in the
-   frame. Admin and billing stay in Studio (`session.studio_url`).
+   "your communities", join flow or private member data. Polynet serves those
+   pages (`/messages`, `/settings`, `/communities`, `/join`) on the site's
+   private twin, in your frame with its scripts removed, and the site's own
+   addresses send members there. The shell (`<polynet-account>`, added to
+   every page) links them; place it in the frame. Never ship a file at those
+   paths (`check` warns). Admin and billing stay in Studio
+   (`session.studio_url`).
 6. Community data comes only through the blocks and the SDK
    (`/__polynet/sdk.js`). No passwords, tokens or keys in the site, ever.
    Polynet text renders through `textContent` or `polynet.markdown()`,
