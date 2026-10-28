@@ -262,18 +262,24 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   site is its own world (Oct 28): it ships a frame (`/frame.html`, its header,
   nav and footer around one `<polynet-page>`), and the edge serves that frame
   at Polynet's standard pages (`/chat`, `/people[/<handle>]`,
-  `/events[/<event>]`, `/learn[/<course>[/<lesson>]]`, `/knowledge`, `/ask`)
-  unless the site has its own file there; `<polynet-page>` fills it with
-  Polynet's blocks (`<polynet-channels>`, `<polynet-chat>`,
+  `/events[/<event>]`, `/learn[/<course>[/<lesson>]]`, `/knowledge`, `/ask`,
+  `/discover`) unless the site has its own file there; `<polynet-page>` fills
+  it with Polynet's blocks (`<polynet-channels>`, `<polynet-chat>`,
   `<polynet-members>`, `<polynet-events>`, `<polynet-learn>`,
-  `<polynet-knowledge>`, `<polynet-ask>`, served from `blocks/`) over the
-  SDK's events, resources, memory and private agent conversation. The route table is `STANDARD_PAGES` in
+  `<polynet-knowledge>`, `<polynet-ask>`, `<polynet-discover>`, served from
+  `blocks/`) over the SDK's events, resources, memory and private agent
+  conversation. `/discover` is public: the edge's `/__polynet/discover`
+  (cached a minute) reads `communityPublic.listSiteDiscoverCommunitiesInternal`
+  (published, active, operational; the list Studio's Discover uses) through
+  `/runtime/community_edge/discover`, and links each card to that
+  community's own site, else its Studio page. Blocks style themselves with
+  adopted stylesheets, so a site's `style-src 'self'` CSP doesn't break them. The route table is `STANDARD_PAGES` in
   `packages/polynet-cli/checks.mjs`, whose site checks fail `polynet check`,
   CLI and MCP deploys without the frame, or when a site's own standard page
   lacks its blocks. Sites style them only through tokens, `::part()`, slots
   and the page's `.pn-page-*` classes. Spec:
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
-- **Code:** `httpCommunityApps`, `communityApps`, `httpCommunitySites`,
+- **Code:** `httpCommunityApps`, `communityApps`, `communityPublic` (Discover's list), `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
   `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, SDK `sdk.ts`, shell
   `ui.ts`, blocks `blocks/` including `page.ts`, guide `llms.ts`); `packages/polynet-cli` (`@polynet/cli`: create, check,

@@ -10,7 +10,7 @@ export const ASK_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Your own starter questions (each button asks its text):
 //   <polynet-ask><div slot="starters"><button>When's the next run?</button></div></polynet-ask>
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, PROSE_STYLE, h, avatar, timeLabel, signInGate } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, PROSE_STYLE, h, styled, avatar, timeLabel, signInGate } from "/__polynet/blocks/kit.js";
 
 // A question's own key, kept across a retry.
 function newKey() {
@@ -100,7 +100,7 @@ class PolynetAsk extends HTMLElement {
       h("slot", { name: "header" }), this.privacy, this.log, this.starters, this.form, this.announce,
     ]);
     this.state = h("div", { class: "state", part: "state" });
-    this.root.replaceChildren(h("style", { text: STYLE }), this.frame, this.state);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.frame, this.state);
     // The site's own starter buttons (slot="starters") ask their text too.
     this.addEventListener("click", (event) => {
       const button = event.target instanceof Element ? event.target.closest("button") : null;

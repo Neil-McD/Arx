@@ -53,7 +53,8 @@ any page without one. It grows into the rails:
   **Message** button.
 - **Your communities.** Listed in the menu; each opens that community's site,
   or its Studio page when it has none.
-- **Discover, account settings, billing, community admin.** Open Studio, which
+- **Discover** (since 3a-3) is the site's own `/discover`, inside its frame.
+- **Account settings, billing, community admin.** Open Studio, which
   shows a **"← Back to {community}"** bar when it was opened from a site
   (`?from=` validated against the community's registered site origins).
 
@@ -81,6 +82,17 @@ any page without one. It grows into the rails:
 - **`<polynet-ask>`**: the member's private conversation with the community
   agent, streaming, with starter questions while it's empty.
 
+### And Discover (Polynet's /discover carries it; public)
+
+- **`<polynet-discover>`**: every published community (never unlisted;
+  active and operational only) as a card in the site's style, with a
+  search by name or one-liner. Each opens that community's own site when it
+  has one, else its Studio page (`/c/<slug>`), in the same tab; this
+  community is marked. Signed in or not. Data: the edge's
+  `GET /__polynet/discover` (public cards only, cached 60s) over the
+  backend's `/runtime/community_edge/discover` (edge secret).
+  `limit="n"` previews the first few anywhere.
+
 ### Recommended (the guide asks for it)
 
 - **`<polynet-online>`**: a compact "who's here now" strip.
@@ -107,7 +119,8 @@ standard page into it.**
   must place the same blocks (`checkSite`). Client-side routes can't override
   a standard page: only a file at that path does.
 - **Community pages** use blocks the site's code can already see (chat,
-  members, events, courses, knowledge, ask). **Personal pages**
+  members, events, courses, knowledge, ask), and so does **Discover**,
+  which is public data only. **Personal pages**
   (Messages, Settings, Your communities, Join) and **admin** (Manage) come
   later inside a private isolated window on a separate origin, so site code
   never reads a member's DMs, other communities or settings; until then they
@@ -126,7 +139,7 @@ shell's menu ("In this club") and the checks.
 | `/events`, `/events/<event>` | events; that event's page (`<id>~<start ms>`, from its ref) | 3a-2 (now) |
 | `/learn`, `/learn/<course>`, `/learn/<course>/<lesson>` | courses; a course's lessons; a lesson (Polynet's `<name>~<id>` path segments) | 3a-2 (now) |
 | `/knowledge`, `/ask` | the community's memory; the member's private agent conversation | 3a-2 (now) |
-| `/discover` | communities to join | 3a, isolated window |
+| `/discover` | every published community, public; the shell's "Discover communities" | 3a-3 (now) |
 | `/messages`, `/settings`, `/communities`, `/join` | personal pages | 3a, isolated window |
 | `/manage` | community admin | after the isolated window |
 

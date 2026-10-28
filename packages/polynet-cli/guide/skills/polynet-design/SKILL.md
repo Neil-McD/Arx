@@ -10,16 +10,25 @@ people. The site should feel like stepping into that world. Aim for the site
 members screenshot and send to friends. If it could be any community's site,
 it isn't done.
 
-There is no template. Every site starts from its own concept. What every
-site shares is Polynet's blocks: `<polynet-channels>`, `<polynet-chat>`,
-`<polynet-members>`, `<polynet-events>`, `<polynet-learn>`,
-`<polynet-knowledge>` and `<polynet-ask>` (on every site's `/chat`,
-`/people`, `/events`, `/learn`, `/knowledge` and `/ask`, inside the site's
-own frame, so design the frame for pages of talk, people, dates, lessons
-and answers alike) and the
-`<polynet-account>` shell. They behave the same everywhere so members always
-know how to talk and find each other; how they look is your job. A
-direction isn't done until they look like they were made for it.
+There is no template. Every site starts from its own world, and the world
+has three layers:
+
+- **The frame** (`frame.html`): the world's chrome, its header, navigation
+  and footer. Polynet shows every standard page inside it: `/chat`,
+  `/people`, `/events`, `/learn`, `/knowledge`, `/ask` and `/discover`.
+  Design it for pages of talk, people, dates, lessons, answers and other
+  communities alike.
+- **The feel of each standard page:** Polynet's blocks
+  (`<polynet-channels>`, `<polynet-chat>`, `<polynet-members>`,
+  `<polynet-events>`, `<polynet-learn>`, `<polynet-knowledge>`,
+  `<polynet-ask>`, `<polynet-discover>`) and the `<polynet-account>`
+  shell behave the same on every site, so members always know how to talk
+  and find each other. How they look is your job: tokens, `::part()`,
+  slots and the page classes.
+- **Extras**: custom views (a route log, a tide chart) built with the SDK,
+  linking into the standard pages.
+
+A direction isn't done until the blocks look like they were made for it.
 
 ## 1. Discover the world
 
@@ -51,10 +60,12 @@ For each, decide:
 - **Color**: the palette in hex, and where the drama comes from.
 - **Signature**: the one thing people remember.
 - **Voice**: the headline and two lines of copy, in the community's words.
-- **The room**: where the conversation lives in this world and what it's
-  called ("the boathouse noticeboard", "the night log"), and how the blocks
-  take on the look: tokens, two or three `::part()` moves, and the words in
-  their slots.
+- **The frame**: the world's chrome (what the header and footer are in
+  this world: a tide clock, a station ident) and the nav's names for the
+  standard pages ("the boathouse noticeboard" for `/chat`, "the night log"
+  for `/events`).
+- **The pages' feel**: how the blocks take on the look: tokens, two or
+  three `::part()` moves per page, and the words in their slots.
 
 Build each as one static page showing the home view with real copy:
 `concepts/a.html`, `concepts/b.html`, `concepts/c.html`. Each places
@@ -70,11 +81,15 @@ and tell them in a line why it won.
 
 ## 3. Build the chosen direction
 
-- Delete the concept pages. Build the real site from the chosen direction.
+- Delete the concept pages. Build the real site from the chosen direction:
+  `frame.html` first (the chrome, its nav linking every standard page),
+  then the front door, then each standard page's feel.
 - Write each page's structure in HTML, by hand. A page is a composition, not
   a loop. JavaScript fills live data into it (recipes in `polynet-sdk`).
-- Give the blocks the room the concept named, with real space
-  (`polynet-build-site` shows where they usually go).
+- Walk every standard page in the frame and give it a feel of its own
+  within the world: the calendar as this world's noticeboard, lessons as
+  its manual, Discover as its window onto other crews
+  (`polynet-build-site` has recipes).
 - Set the look as a few CSS variables (color, type, space, radius), map
   them onto the `--polynet-*` tokens, then compose with them.
 - Design every state in the concept's voice: loading, empty, error, signed
@@ -86,15 +101,18 @@ and tell them in a line why it won.
 
 ## 4. Look at it, twice
 
-Screenshot it at 390px and 1440px wide (with a browser tool, or ask the
-founder for screenshots). Each pass, ask:
+Screenshot the front door and every standard page at 390px and 1440px
+wide, signed out and signed in (with a browser tool, or ask the founder for
+screenshots). The blocks render only on Polynet, so look at the deployed
+site (`--staging` for a community on staging). Each pass, ask:
 
 - Does it feel like the three words and the chosen idea? With the name
   covered, would a member still recognize their community?
-- Do the blocks feel native? Signed in, the chat, channels, members and an
-  open profile should look like part of this world (its type, color,
-  edges and words), not a stock widget on a designed page. If they look
-  default, push the tokens and `::part()` styling further.
+- Do the blocks feel native? Signed in, the chat, members, an open
+  profile, an event, a lesson, the memory, Ask and Discover should look
+  like part of this world (its type, color, edges and words), not a stock
+  widget in a designed frame. If one looks default, push the tokens and
+  `::part()` styling further on that page.
 - Where is it timid? Make the hierarchy louder: bigger type, stronger
   contrast, more space, one bolder move.
 - Where is it noisy? Remove whatever doesn't serve the idea.

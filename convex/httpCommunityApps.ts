@@ -30,6 +30,7 @@ export const COMMUNITY_APP_HANDOFF_PATH = "/runtime/auth_bridge_community_handof
 export const COMMUNITY_EDGE_EXCHANGE_PATH = "/runtime/community_edge/session_exchange";
 export const COMMUNITY_EDGE_REVOKE_PATH = "/runtime/community_edge/session_revoke";
 export const COMMUNITY_EDGE_PUBLIC_PATH = "/runtime/community_edge/public";
+export const COMMUNITY_EDGE_DISCOVER_PATH = "/runtime/community_edge/discover";
 export const COMMUNITY_APP_ACCOUNT_PATH = "/runtime/app/account";
 
 function readEnv(name: string): string {
@@ -408,6 +409,24 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       const community = await ctx.runQuery(internal.communityApps.getCommunityPublicIdentityByOriginInternal, { origin });
       if (!community) return reply(404, { ok: false, code: "community_unavailable" });
       return reply(200, { ok: true, community });
+    }),
+  });
+
+  // Discover on every community site, signed in or not: published communities'
+  // public cards. The edge caches it; it names its sites domain so each card
+  // can link to that community's own site.
+  args.http.route({
+    path: COMMUNITY_EDGE_DISCOVER_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
+      const body = await readJsonObject(req, 1024);
+      if (!body) return reply(400, { ok: false, code: "invalid_request" });
+      const communities = await ctx.runQuery(internal.communityPublic.listSiteDiscoverCommunitiesInternal, {
+        sitesDomain: typeof body.sites_domain === "string" ? body.sites_domain : undefined,
+        hostSuffix: typeof body.host_suffix === "string" ? body.host_suffix : undefined,
+      });
+      return reply(200, { ok: true, communities });
     }),
   });
 

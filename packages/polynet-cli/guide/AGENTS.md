@@ -3,79 +3,106 @@
 This folder is the website of one community on Polynet, live at
 `https://<slug>.polynet.page` (the slug is in `polynet.json`).
 
-Polynet runs accounts, members, payments, posts, events, courses, memory and
-the community's AI agent. This site is the community's world made visible:
-static HTML, CSS and JavaScript, with Polynet's blocks for the social core
-and the Polynet SDK (`/__polynet/sdk.js`) for anything else.
+Polynet runs the hard parts: accounts, members, payments, posts, events,
+courses, memory and the community's AI agent. The site is the community's
+world made visible. **You draw the world once, as a frame; Polynet fills
+every standard page into it.**
 
 ## Non-negotiables
 
-1. **Every site has a frame**: `frame.html` at the root, the site's own
-   header, navigation and footer around exactly one
-   `<polynet-page></polynet-page>` (paths in it start with `/`). `check`
-   and `deploy` fail without it. Polynet's standard pages exist on every
-   site inside that frame: `/chat` (`<polynet-channels>` and
-   `<polynet-chat>`), `/people` (`<polynet-members>`; `/people/<handle>`
-   opens that profile), `/events` (`<polynet-events>`; `/events/<event>`
-   is one event), `/learn` (`<polynet-learn>`: courses, then
-   `/learn/<course>/<lesson>`), `/knowledge` (`<polynet-knowledge>`) and
-   `/ask` (`<polynet-ask>`, the member's private conversation with the
-   agent). Link to them from the site's navigation. A site may ship its
-   own `chat.html`, `events.html` (and so on) instead; it must then place
-   the same blocks. The blocks are how members find each other on
-   every Polynet site, so never rebuild them, hide them or replace them.
-2. **The shell is automatic.** Polynet adds `/__polynet/ui.js` to every page
-   and `<polynet-account>` (account, communities, Discover, messages,
-   settings; "Sign in" when signed out) where a page has none. Place it into
-   the design yourself; never hide or rebuild it, or add a second "Sign in".
-3. **The blocks and the shell are Polynet's; their look is yours.** Style
-   them only through the `--polynet-*` tokens, `::part()` and slots (your
-   own words for headers, empty and signed-out states). No reaching inside.
-4. **Direct messages are never built by the site.** The shell and profiles
-   open them in Polynet. Admin, settings and billing stay in Polynet
-   Studio: link `session.studio_url`.
-5. Community data comes only through the blocks and the SDK. No passwords,
-   tokens or keys in the site, ever. Polynet text renders through
-   `textContent` or `polynet.markdown()`, never `innerHTML`.
-6. `AGENTS.md`, `CLAUDE.md`, `polynet.json` and dotfolders are never uploaded.
+1. **Two files at the root.** `index.html` (the front door) and
+   `frame.html`: the world's header, navigation and footer around exactly
+   one `<polynet-page></polynet-page>`. Every path in the frame starts
+   with `/` (it is shown at `/people/sam` and `/learn/a~k1/b~k2` too).
+   `check` and `deploy` fail without them.
+2. **The standard pages exist automatically**, inside your frame, from the
+   first deploy (the table below). Link them from the frame's navigation.
+3. **A custom standard page uses its blocks.** Ship your own `events.html`
+   (or `people/index.html`, `discover.html`, ...) only for a different
+   composition; it must place that page's block(s). Never rebuild, hide or
+   replace a block.
+4. **Style only through the rails:** the `--polynet-*` tokens, `::part()`,
+   slots, and the page classes (`.pn-page-header`, `.pn-page-heading`,
+   `.pn-page-body`, `.pn-page-<name>`, `polynet-page[page=<name>]`). Never
+   reach inside a block.
+5. **Nothing personal is built by a site:** no direct messages, settings,
+   "your communities" or private member data. The shell
+   (`<polynet-account>`, added to every page) carries those; place it in the
+   frame. Admin and billing stay in Studio (`session.studio_url`).
+6. Community data comes only through the blocks and the SDK
+   (`/__polynet/sdk.js`). No passwords, tokens or keys in the site, ever.
+   Polynet text renders through `textContent` or `polynet.markdown()`,
+   never `innerHTML`.
+7. `AGENTS.md`, `CLAUDE.md`, `polynet.json` and dotfolders are never uploaded.
 
-## The creative brief
+## The world model
 
-There is no template. Start from the community: ask about its world, show
-the founder three directions live, build the one they choose, and make it
-unmistakably theirs. Already have a full brief from the founder? Don't ask
-again: start. Can't deploy concepts for them to pick? Build the strongest
-direction and tell them in a line why it won. Invent the room the blocks live in (a boathouse
-noticeboard, a night-shift radio log, a studio wall) and design around
-them, so the chat feels like that community's place to talk, not a widget
-dropped on a page. Custom views (a route log, a leaderboard, a reading
-list) are welcome beside the blocks, built with the SDK.
+There is no template. Start from the community and invent its world: a
+boathouse at 5:40 am, a night-shift radio room, a chalk-dusted bouldering
+cave. Then build three things from it:
+
+- **The frame is the world's chrome.** Header, navigation and footer as
+  that place would have them: a tide clock, a station ident, a route-grade
+  ribbon. The nav names the standard pages in the world's words ("The
+  river" for `/chat`, "Runs" for `/events`, "The almanac" for
+  `/knowledge`).
+- **Each standard page gets its own feel,** set with tokens and parts:
+  how the calendar reads here, what a lesson looks like, what the agent's
+  answers sit on. Same blocks on every site; never the same look.
+- **Custom views are extras** (a route log, a leaderboard, a tide chart),
+  built with the SDK. They link into the standard pages; they never stand
+  in for them.
+
+Ask the founder about the world once; if their brief already answers it,
+start. Show three directions live and build the one they pick; if you
+can't deploy concepts for them, build the strongest and say in a line why
+it won.
+
+## The standard pages
+
+| Path | What it shows | Block | Parts worth styling | Slots |
+| --- | --- | --- | --- | --- |
+| `/chat` | channels beside the live conversation (`?channel=<slug>`) | `<polynet-channels>` + `<polynet-chat>` | `channel-current`, `message-author`, `day-divider`, `composer-box` | channels: `header`; chat: `header`, `empty`, `signed-out`, `read-only` |
+| `/people`, `/people/<handle>` | members, online first; that member's profile open | `<polynet-members>` | `member`, `presence-dot`, `role-badge` | `header`, `empty`, `signed-out` |
+| `/events`, `/events/<event>` | the calendar by month; one event (.ics, link) | `<polynet-events>` | `month-title`, `event-date`, `event-title`, `add-to-calendar` | `empty`, `signed-out` |
+| `/learn`, `/learn/<course>[/<lesson>]` | courses, a course's lessons, the reader | `<polynet-learn>` | `course`, `lesson-number`, `lesson-body`, `pager` | `empty`, `signed-out` |
+| `/knowledge` | the community's memory, searchable | `<polynet-knowledge>` | `memory-title`, `memory-type`, `memory-text` | `header`, `intro`, `empty`, `signed-out` |
+| `/ask` | the member's private conversation with the agent | `<polynet-ask>` | `message-agent`, `starter`, `box` | `header`, `privacy`, `starters`, `signed-out` |
+| `/discover` | every published community, searchable; public | `<polynet-discover>` | `community`, `community-name`, `community-here` | `header`, `intro`, `empty` |
+
+Inside `<polynet-page>` in the frame, `<h1 slot="events-heading">Runs</h1>`
+renames a page (`<name>-heading`), and
+`<p data-block="polynet-events" slot="empty">…</p>` gives a block your
+words. Signed out, every block but Discover shows a sign-in and join prompt
+and nothing inside. The full list of parts and slots is in llms.txt.
+
+## Preview loop
+
+Blocks and the shell render only on Polynet, which serves `/__polynet/*`
+to the site. On a local static server the tags stay empty (slot text shows
+unstyled): expected, not a bug. So deploy to see them; a community on
+Polynet's staging deploys with `--staging` to
+`https://<slug>-staging.polynet.page`. After each meaningful change, open
+the home page and every standard page at 390 and 1440 px wide, signed out
+and signed in, and fix what reads as a stock widget.
 
 ## Skills
 
 Read the one that fits before you start. They're in `.agents/skills/` (the
 same files are in `.claude/skills/` for Claude Code):
 
-- `polynet-build-site`: the flow, where the blocks go, a complete example.
+- `polynet-build-site`: the flow, the frame, a complete example.
 - `polynet-design`: discover the world, three directions, build, critique.
 - `polynet-sdk`: community data and actions for custom views.
 - `polynet-accessibility`: the final pass, and what the checks block.
 - `polynet-deploy-verify`: ship it and prove it works.
 
 Reference: `https://polynet.page/llms.txt` (also at
-`https://<slug>.polynet.page/__polynet/llms.txt` once the site is deployed;
-on Polynet's staging, `https://staging.polynet.page/llms.txt`).
-
-## Seeing the blocks
-
-The blocks and the shell render only on Polynet, which serves
-`/__polynet/*` to the site. On a local static server the tags stay empty
-(your slot text shows unstyled): that's expected, not a bug. Deploy and look
-at the live site; a community on Polynet's staging deploys with `--staging`
-to `https://<slug>-staging.polynet.page`.
+`https://<slug>.polynet.page/__polynet/llms.txt` once deployed; on
+Polynet's staging, `https://staging.polynet.page/llms.txt`).
 
 ## Commands
 
-    npx @polynet/cli check     # index.html, frame.html, accessibility basics
+    npx @polynet/cli check     # index.html, frame.html, standard pages, accessibility basics
     npx @polynet/cli deploy    # check, then live in seconds (add --staging for staging)
     npx @polynet/cli skills    # update these skills

@@ -27,20 +27,23 @@ description: Put a Polynet community site live and prove it works (checks, deplo
 
 Use a browser tool if you have one. Hard-refresh after each deploy.
 
-- **Signed out:** the public face looks finished; "Sign in" and "Join" work;
+- **Signed out:** the front door looks finished; "Sign in" and "Join" work;
+  each standard page shows the frame with a designed sign-in prompt, and
+  `/discover` lists communities (each card opens that community's site);
   no console errors.
 - **Signed in** (the founder signs in; never type their password): every
   page shows real data or a designed empty state; the shell is visible
   everywhere and its menu works by keyboard; "Manage" shows for owners and
-  admins; `/chat`, `/people`, `/events`, `/learn`, `/knowledge` and
-  `/ask` show inside the site's frame, and the channels, chat, members,
-  events (open one; Add to calendar downloads), courses (a lesson's
-  Previous and Next), memories and the private Ask work and look native
-  to the design; a member's name opens their profile; the agent answers.
+  admins; `/chat`, `/people`, `/events`, `/learn`, `/knowledge`, `/ask`
+  and `/discover` show inside the site's frame, its nav marks the current
+  page, and the channels, chat, members, events (open one; Add to calendar
+  downloads), courses (a lesson's Previous and Next), memories, the
+  private Ask and Discover's search work and look native to the design; a
+  member's name opens their profile; the agent answers.
 - **Posting is public:** ask the founder before posting a test message in a
   community with members, and delete it after.
-- **Phone (390px) and desktop (1440px):** screenshot both and compare them to
-  the chosen direction.
+- **Phone (390px) and desktop (1440px):** screenshot the front door and
+  every standard page at both and compare them to the chosen direction.
 - **Keyboard only:** tab through the main flows.
 
 No browser tool? Send the founder the URL with a short list of what to
@@ -61,7 +64,11 @@ couldn't.
 - **`fetch()` gets 404:** only real files are served to scripts; navigating
   to any path serves `index.html`, except the standard pages and the
   addresses under them (`/people/<handle>`, `/events/<event>`,
-  `/learn/<course>/<lesson>`), which show `frame.html` unless the site has
-  its own file there.
+  `/learn/<course>/<lesson>`, `/discover`), which show `frame.html` unless
+  the site has its own file there.
+- **A standard page shows "isn't on this site yet":** the site has no
+  `frame.html` (or it isn't HTML). Add it and deploy.
+- **Blocks are empty locally:** they render only on Polynet. Deploy
+  (`--staging` on staging) and look there.
 - **"Must be the community's owner or an admin":** `npx @polynet/cli logout`,
   then deploy again as the right account.

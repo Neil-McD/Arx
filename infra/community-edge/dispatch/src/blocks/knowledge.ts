@@ -8,7 +8,7 @@
 export const KNOWLEDGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-knowledge>. ui.js loads it on pages that place the tag.
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, PROSE_STYLE, h, signInGate } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, PROSE_STYLE, h, styled, signInGate } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   ":host { display: block; }",
@@ -70,7 +70,7 @@ class PolynetKnowledge extends HTMLElement {
       h("slot", { name: "header" }), this.intro, this.form, this.results, this.status,
     ]);
     this.state = h("div", { class: "state", part: "state" });
-    this.root.replaceChildren(h("style", { text: STYLE }), this.frame, this.state);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.frame, this.state);
   }
 
   connectedCallback() {

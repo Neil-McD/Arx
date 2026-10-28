@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityLike,
@@ -53,6 +53,7 @@ import {
   listSharedChannelReadableRows,
 } from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
+import { siteHostname } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
 import {
   requireCommunityBuilderAccess,
@@ -501,20 +502,8 @@ export const listPublicDiscoverCommunities = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 60)));
-    const published = (await ctx.db
-      .query("communities")
-      .withIndex("by_visibility_updatedAt", (q) => q.eq("visibility", "published"))
-      .order("desc")
-      .take(200)) as CommunityLike[];
-
-    const communities = (await Promise.all(
-      published.map(async (community) => {
-        if (!communityIsActive(community)) return null;
-        const builderAccess = await resolveCommunityBuilderAccess({
-          ctx,
-          community,
-        });
-        if (!builderAccess.operational) return null;
+    const communities = await Promise.all(
+      (await listDiscoverableCommunities(ctx, limit)).map(async (community) => {
         const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
         const branding = await resolveCommunityBrandingFields(ctx, community);
         const entryPolicy = resolveCommunityEntryPolicy(community);
@@ -541,12 +530,62 @@ export const listPublicDiscoverCommunities = query({
           active_plan: pickPreferredActivePlan(mappedPlans),
         };
       }),
-    )).filter((community) => community !== null).slice(0, limit);
+    );
 
     return {
       ok: true,
       communities,
     };
+  },
+});
+
+// The communities Discover lists, newest activity first: published, active and
+// operational only (never unlisted). Studio's Discover and every community
+// site's /discover read this one list.
+async function listDiscoverableCommunities(ctx: QueryCtx, limit: number): Promise<CommunityLike[]> {
+  const published = (await ctx.db
+    .query("communities")
+    .withIndex("by_visibility_updatedAt", (q) => q.eq("visibility", "published"))
+    .order("desc")
+    .take(200)) as CommunityLike[];
+  const listed = await Promise.all(published.map(async (community) => {
+    if (community.visibility !== "published" || !communityIsActive(community)) return null;
+    const builderAccess = await resolveCommunityBuilderAccess({ ctx, community });
+    return builderAccess.operational ? community : null;
+  }));
+  return listed.filter((community): community is CommunityLike => community !== null).slice(0, limit);
+}
+
+// Discover on a community site (the edge's /__polynet/discover, signed in or
+// not): the same list, with only what a public card shows. site_url is the
+// community's own site on this environment's sites domain, when it has one
+// (its origin is registered to it); otherwise the card links to Studio.
+export const listSiteDiscoverCommunitiesInternal = internalQuery({
+  args: { sitesDomain: v.optional(v.string()), hostSuffix: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const domain = String(args.sitesDomain ?? "").trim().toLowerCase();
+    const suffix = String(args.hostSuffix ?? "").trim().toLowerCase();
+    // The same shapes the deploy accepts; anything else means no site links.
+    const sitesOk = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(domain)
+      && (suffix === "" || /^-[a-z0-9-]{1,20}$/.test(suffix));
+    const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+    return await Promise.all((await listDiscoverableCommunities(ctx, 100)).map(async (community) => {
+      const slug = String(community.slug ?? "");
+      const branding = await resolveCommunityBrandingFields(ctx, community);
+      const host = sitesOk ? siteHostname(slug, domain, suffix) : null;
+      const origin = host ? `https://${host}` : null;
+      const registered = origin
+        ? await ctx.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", origin)).first()
+        : null;
+      return {
+        slug,
+        name: text(community.name, 120) ?? slug,
+        one_liner: text(community.oneLiner, 300),
+        avatar_url: branding.avatar_url,
+        member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
+        site_url: registered && String(registered.communityId) === String(community._id) ? origin : null,
+      };
+    }));
   },
 });
 

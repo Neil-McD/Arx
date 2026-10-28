@@ -11,7 +11,7 @@ export const CHAT_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-chat>. ui.js loads it on pages that place the tag.
 import polynet from "/__polynet/sdk.js";
 import {
-  BASE_STYLE, h, avatar, authorName, clockTime, fullTime, timeLabel, fileSize, typingText,
+  BASE_STYLE, h, styled, avatar, authorName, clockTime, fullTime, timeLabel, fileSize, typingText,
   feedItems, reconcile, channelFromUrl, pickChannel, readChannels,
   readMembers, memberHref, openProfile, plainClick, hasMention, linkMentions,
 } from "/__polynet/blocks/kit.js";
@@ -231,7 +231,7 @@ class PolynetChat extends HTMLElement {
     this.frame = h("div", { class: "chat", part: "chat", onkeydown: (event) => {
       if (event.key === "Escape" && this.threadRef) { event.preventDefault(); this.closeThread(true); }
     } }, [this.main, this.threadPanel]);
-    this.root.replaceChildren(h("style", { text: STYLE }), this.frame);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.frame);
     // Images and late layout keep a reader at the bottom when they were there.
     this.resizer = new ResizeObserver(() => { if (this.pinned && this.status === "ready") this.feed.scrollTop = this.feed.scrollHeight; });
     this.resizer.observe(this.list);

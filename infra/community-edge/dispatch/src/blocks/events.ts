@@ -14,7 +14,7 @@ export const EVENTS_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 //   <polynet-events></polynet-events>            the calendar; on /events/<event>, that event
 //   <polynet-events limit="3"></polynet-events>  the next three and a link to /events (for a home page)
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, PROSE_STYLE, h, signInGate, pagePath, followLink } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, PROSE_STYLE, h, styled, signInGate, pagePath, followLink } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   ":host { display: block; }",
@@ -169,7 +169,7 @@ class PolynetEvents extends HTMLElement {
     this.onPop = () => { if (this.follows()) this.load({ moved: true }); };
     this.view = h("div", { class: "view", part: "events" });
     this.status = h("p", { class: "sr", role: "status" });
-    this.root.replaceChildren(h("style", { text: STYLE }), this.view, this.status);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.view, this.status);
   }
 
   connectedCallback() {

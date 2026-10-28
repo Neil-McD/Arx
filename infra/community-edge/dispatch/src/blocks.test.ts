@@ -18,6 +18,7 @@ import { EVENTS_SOURCE } from "./blocks/events";
 import { LEARN_SOURCE } from "./blocks/learn";
 import { KNOWLEDGE_SOURCE } from "./blocks/knowledge";
 import { ASK_SOURCE } from "./blocks/ask";
+import { DISCOVER_SOURCE } from "./blocks/discover";
 import { UI_CSS, UI_SOURCE } from "./ui";
 
 const SITE = "https://run-club.polynet.test";
@@ -168,6 +169,12 @@ export default {
     options.onDelta(reply);
     return reply;
   },
+  // Public: never asks whether anyone is signed in.
+  discover: async () => {
+    record("discover", []);
+    if (fake.failDiscover > 0) { fake.failDiscover -= 1; const error = new Error("Nope."); error.code = "discover_unavailable"; throw error; }
+    return fake.discover.map((c) => Object.assign({}, c));
+  },
   account: async () => fake.account || ({ member: {}, community: {}, links: { messages: "https://polynet.test/?dm=inbox" } }),
   signOut: async () => {},
 };
@@ -238,6 +245,8 @@ function fixture() {
     failRead: false,
     memories: [] as Array<{ title: string } & Record<string, unknown>>,
     agent: { history: [] as object[], reply: "", fail: 0, hold: false } as Record<string, unknown>,
+    discover: [] as Array<Record<string, unknown>>,
+    failDiscover: 0,
     calls: [] as unknown[],
   };
 }
@@ -257,7 +266,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await browser?.close(); });
 
-async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}, html = PAGE, path = "/", device: object = {}) {
+async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}, html = PAGE, path = "/", device: object = {}, headers: Record<string, string> = {}) {
   const fake = fixture();
   setup(fake);
   const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, ...device });
@@ -266,13 +275,13 @@ async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}
     "/__polynet/blocks/channels.js": CHANNELS_SOURCE, "/__polynet/blocks/chat.js": CHAT_SOURCE, "/__polynet/blocks/composer.js": COMPOSER_SOURCE,
     "/__polynet/blocks/members.js": MEMBERS_SOURCE, "/__polynet/blocks/profile.js": PROFILE_SOURCE, "/__polynet/ui.css": UI_CSS,
     "/__polynet/blocks/page.js": PAGE_SOURCE, "/__polynet/blocks/events.js": EVENTS_SOURCE, "/__polynet/blocks/learn.js": LEARN_SOURCE,
-    "/__polynet/blocks/knowledge.js": KNOWLEDGE_SOURCE, "/__polynet/blocks/ask.js": ASK_SOURCE,
+    "/__polynet/blocks/knowledge.js": KNOWLEDGE_SOURCE, "/__polynet/blocks/ask.js": ASK_SOURCE, "/__polynet/blocks/discover.js": DISCOVER_SOURCE,
   };
   await page.route(`${SITE}/**`, async (route) => {
     const url = new URL(route.request().url());
     const body = files[url.pathname];
     if (body !== undefined) return route.fulfill({ body, contentType: url.pathname.endsWith(".css") ? "text/css" : "text/javascript" });
-    return route.fulfill({ body: html, contentType: "text/html" });
+    return route.fulfill({ body: html, contentType: "text/html", headers });
   });
   await page.addInitScript((state) => {
     (window as any).fake = state;
@@ -1442,7 +1451,7 @@ test("<polynet-page> at an address with no page: a quiet not-found inside the fr
   expect(await host.locator("h1").textContent()).toBe("Page not found");
   const links = host.locator(".pn-page-missing nav[aria-label='Pages here'] a");
   expect(await links.evaluateAll((all) => all.map((a) => [a.textContent, a.getAttribute("href")]))).toEqual([["Home", "/"], ["Chat", "/chat"], ["People", "/people"],
-    ["Events", "/events"], ["Learn", "/learn"], ["Knowledge", "/knowledge"], ["Ask", "/ask"]]);
+    ["Events", "/events"], ["Learn", "/learn"], ["Knowledge", "/knowledge"], ["Ask", "/ask"], ["Discover", "/discover"]]);
   expect(await page.locator("polynet-chat, polynet-members").count()).toBe(0);
   await page.close();
 });
@@ -1464,6 +1473,8 @@ test("the account menu: In this club links to the site's own pages, marking the 
   const manage = shell.locator("[part=panel] a", { hasText: "Manage this community" });
   await expect.poll(() => manage.count()).toBe(1);
   expect(await manage.getAttribute("href")).toBe("https://polynet.test/c/run-club/settings/community");
+  // Discover isn't this club's page, but it is on this site: /discover, never Polynet's.
+  expect(await shell.locator("[part=panel] a", { hasText: "Discover communities" }).getAttribute("href")).toBe("/discover");
   // The keyboard reaches them: the first item is Chat.
   await page.keyboard.press("Escape");
   await shell.locator("[part=trigger]").press("ArrowDown");
@@ -1883,4 +1894,154 @@ test("ask: starters while the conversation is empty, the site's own too; signed 
   expect(await askOf(out).evaluate((el) => el.shadowRoot!.textContent)).not.toContain("long run");
   expect(await calls(out, "askAgent")).toEqual([]);
   await out.close();
+});
+
+const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+// Published communities as the edge lists them: this one, one with its own
+// site, one without (its card opens Polynet), and enough for a preview to cut.
+function communities(fake: ReturnType<typeof fixture>) {
+  const card = (slug: string, name: string, extra: object = {}) => ({
+    slug, name, one_liner: null, avatar_url: null, member_count: 0, url: `https://${slug}.polynet.page`, has_site: true, here: false, ...extra,
+  });
+  fake.discover = [
+    card("run-club", "Run Club", { one_liner: "Miles before breakfast.", member_count: 12, here: true }),
+    card("trail-crew", "Trail Crew", { one_liner: "Dirt, hills and the occasional bear.", member_count: 1, avatar_url: PIXEL }),
+    card("cafe-racers", "Café Racers", { one_liner: "Bikes, espresso, no lycra.", member_count: 2400, url: "https://polynet.test/c/cafe-racers", has_site: false }),
+    card("sunrise-climbers", "Sunrise Climbers", { one_liner: "Chalk up at dawn; trail talk welcome." }),
+  ];
+}
+const discoverOf = (page: Page) => page.locator("polynet-discover");
+
+test("discover: every published community as a card linking to its own site or Polynet, this one marked, with a search", async () => {
+  const page = await open(communities, frame(), "/discover");
+  await expect.poll(() => page.locator("polynet-page").getAttribute("page")).toBe("discover");
+  expect(await page.locator("polynet-page .pn-page-header h1").textContent()).toBe("Discover");
+  const discover = discoverOf(page);
+  await expect.poll(() => discover.getAttribute("state")).toBe("ready");
+  expect(await discover.locator("[part=discover]").getAttribute("aria-label")).toBe("Discover communities");
+  expect(await titles(discover.locator("[part=community-name]"))).toEqual(["Run Club", "Trail Crew", "Café Racers", "Sunrise Climbers"]);
+  const cards = discover.locator("a[part=community]");
+  // Same tab, straight to the community: its own site, or its page on Polynet.
+  expect(await cards.evaluateAll((all) => all.map((a) => [a.getAttribute("href"), a.getAttribute("target")]))).toEqual([
+    ["https://run-club.polynet.page", null], ["https://trail-crew.polynet.page", null],
+    ["https://polynet.test/c/cafe-racers", null], ["https://sunrise-climbers.polynet.page", null],
+  ]);
+  expect(await titles(discover.locator("[part=community-members]"))).toEqual(["12 members", "1 member", `${(2400).toLocaleString()} members`, "0 members"]);
+  expect(await discover.locator("[part=community-here]").textContent()).toBe("You're here");
+  expect(await cards.nth(0).locator("[part=community-here]").count()).toBe(1);
+  expect(await cards.nth(2).locator("[part=community-elsewhere]").textContent()).toBe("On Polynet");
+  expect(await cards.nth(1).locator("[part=community-elsewhere]").count()).toBe(0);
+  // A picture, else initials.
+  expect(await cards.nth(1).locator("img[part=avatar]").getAttribute("src")).toBe(PIXEL);
+  expect(await cards.nth(0).locator("[part=avatar]").textContent()).toBe("RC");
+
+  // Search: by name or one-liner, ignoring case and accents, names that start with it first.
+  const search = discover.locator("[part=search]");
+  await search.fill("cafe");
+  expect(await titles(discover.locator("[part=community-name]"))).toEqual(["Café Racers"]);
+  await search.fill("TRAIL");
+  expect(await titles(discover.locator("[part=community-name]"))).toEqual(["Trail Crew", "Sunrise Climbers"]);
+  expect(await discover.locator("[role=status]").textContent()).toBe("2 communities");
+  await search.fill("knitting");
+  expect(await discover.locator("[part=no-results]").textContent()).toBe("No communities match “knitting”.");
+  await search.fill("");
+  expect(await discover.locator("a[part=community]").count()).toBe(4);
+  // One read, with no session asked for.
+  expect((await calls(page, "discover")).length).toBe(1);
+  await page.close();
+});
+
+test("discover: signed out it works the same; a preview shows the first few and the way to the rest; empty and failure say so", async () => {
+  const out = await open((fake) => { communities(fake); fake.signedOut = true; fake.session = { signed_in: false, community: "run-club", join_url: "https://polynet.test/c/run-club" } as any; }, frame(), "/discover");
+  await expect.poll(() => discoverOf(out).getAttribute("state")).toBe("ready");
+  expect(await discoverOf(out).locator("a[part=community]").count()).toBe(4);
+  await out.close();
+
+  const home = await open(communities, `<!doctype html><html lang="en"><head><title>Run Club</title><script type="module" src="/__polynet/ui.js"></script></head>
+    <body><polynet-discover limit="2"><h2 slot="header">Neighbours</h2></polynet-discover></body></html>`, "/");
+  const preview = discoverOf(home);
+  await expect.poll(() => preview.getAttribute("state")).toBe("ready");
+  expect(await titles(preview.locator("[part=community-name]"))).toEqual(["Run Club", "Trail Crew"]);
+  expect(await preview.locator("[part=search]").isVisible()).toBe(false);
+  expect(await preview.locator("a[part=all]").getAttribute("href")).toBe("/discover");
+  expect(await preview.locator("h2[slot=header]").textContent()).toBe("Neighbours");
+  await home.close();
+
+  const empty = await open(() => {}, frame('<p data-block="polynet-discover" slot="empty">Just us out here.</p>'), "/discover");
+  await expect.poll(() => discoverOf(empty).getAttribute("state")).toBe("ready");
+  // The site's own words fill the empty slot.
+  expect(await discoverOf(empty).evaluate((el) => (el.shadowRoot!.querySelector("[part=empty] slot") as HTMLSlotElement).assignedNodes().map((n) => n.textContent).join(""))).toBe("Just us out here.");
+  await empty.close();
+
+  const failing = await open((fake) => { communities(fake); fake.failDiscover = 1; }, frame(), "/discover");
+  const block = discoverOf(failing);
+  await expect.poll(() => block.getAttribute("state")).toBe("error");
+  expect(await block.locator("[role=alert] p").textContent()).toBe("Couldn't load communities.");
+  await block.locator("[part=retry]").click();
+  await expect.poll(() => block.getAttribute("state")).toBe("ready");
+  expect(await block.locator("a[part=community]").count()).toBe(4);
+  await failing.close();
+});
+
+// A site whose Content-Security-Policy allows only its own stylesheets and
+// scripts: the blocks and the shell still style themselves (adopted sheets).
+test("blocks and the shell are styled under a strict style-src, with a <style> fallback where sheets can't be adopted", async () => {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Run Club</title>
+<link rel="stylesheet" href="/__polynet/ui.css"><script type="module" src="/__polynet/ui.js"></script></head>
+<body><header><polynet-account></polynet-account></header><main><polynet-page></polynet-page></main></body></html>`;
+  const csp = { "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' https: data:" };
+  const styledProbe = async (page: Page) => {
+    const members = page.locator("polynet-members");
+    await expect.poll(() => members.getAttribute("state")).toBe("ready");
+    await expect.poll(() => page.locator("polynet-account [part=trigger]").count()).toBe(1);
+    return {
+      search: await members.locator("[part=search]").evaluate((el) => [getComputedStyle(el).borderTopStyle, getComputedStyle(el).display]),
+      trigger: await page.locator("polynet-account [part=trigger]").evaluate((el) => getComputedStyle(el).borderTopLeftRadius),
+      styles: await page.evaluate(() => Array.from(document.querySelectorAll("*")).filter((el) => el.shadowRoot).map((el) => el.shadowRoot!.querySelectorAll("style").length)),
+    };
+  };
+  const strict = await open(() => {}, html, "/people", {}, csp);
+  const seen = await styledProbe(strict);
+  expect(seen.search).toEqual(["solid", "block"]);
+  expect(seen.trigger).toBe("999px");
+  expect(seen.styles.every((n) => n === 0)).toBe(true);
+  await strict.close();
+
+  // The same page with violations recorded from the start: none.
+  const watched = await browser.newPage();
+  const violations: string[] = [];
+  watched.on("console", (message) => { if (/Content Security Policy/i.test(message.text())) violations.push(message.text()); });
+  await watched.route(`${SITE}/**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const files: Record<string, string> = { "/__polynet/ui.js": UI_SOURCE, "/__polynet/ui.css": UI_CSS, "/__polynet/sdk.js": FAKE_SDK,
+      "/__polynet/blocks/kit.js": KIT_SOURCE, "/__polynet/blocks/page.js": PAGE_SOURCE, "/__polynet/blocks/discover.js": DISCOVER_SOURCE };
+    if (files[path] !== undefined) return route.fulfill({ body: files[path], contentType: path.endsWith(".css") ? "text/css" : "text/javascript" });
+    return route.fulfill({ body: html, contentType: "text/html", headers: csp });
+  });
+  const fake = fixture();
+  communities(fake);
+  await watched.addInitScript((state) => { (window as any).fake = state; }, fake);
+  await watched.goto(SITE + "/discover");
+  await expect.poll(() => discoverOf(watched).getAttribute("state")).toBe("ready");
+  expect(await discoverOf(watched).locator("ul[part=communities]").evaluate((el) => getComputedStyle(el).display)).toBe("grid");
+  expect(violations).toEqual([]);
+  await watched.close();
+
+  // A browser without adoptable sheets gets a <style> in each shadow root instead.
+  const legacy = await browser.newPage();
+  await legacy.addInitScript(() => { delete (ShadowRoot.prototype as any).adoptedStyleSheets; });
+  await legacy.route(`${SITE}/**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const files: Record<string, string> = { "/__polynet/ui.js": UI_SOURCE, "/__polynet/ui.css": UI_CSS, "/__polynet/sdk.js": FAKE_SDK,
+      "/__polynet/blocks/kit.js": KIT_SOURCE, "/__polynet/blocks/page.js": PAGE_SOURCE, "/__polynet/blocks/members.js": MEMBERS_SOURCE };
+    if (files[path] !== undefined) return route.fulfill({ body: files[path], contentType: path.endsWith(".css") ? "text/css" : "text/javascript" });
+    return route.fulfill({ body: html, contentType: "text/html" });
+  });
+  await legacy.addInitScript((state) => { (window as any).fake = state; }, fixture());
+  await legacy.goto(SITE + "/people");
+  const fallback = await styledProbe(legacy);
+  expect(fallback.search).toEqual(["solid", "block"]);
+  expect(fallback.trigger).toBe("999px");
+  expect(fallback.styles.every((n) => n === 1)).toBe(true);
+  await legacy.close();
 });

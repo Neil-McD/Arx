@@ -13,7 +13,7 @@ export const LEARN_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-learn>. ui.js loads it on pages that place the tag.
 //   <polynet-learn></polynet-learn>   the courses; on /learn/<course>[/<lesson>], that course or lesson
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, PROSE_STYLE, h, signInGate, pagePath, followLink } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, PROSE_STYLE, h, styled, signInGate, pagePath, followLink } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   ":host { display: block; }",
@@ -67,7 +67,7 @@ class PolynetLearn extends HTMLElement {
     this.folders = new Map();
     this.onPop = () => { if (pagePath(BASE) !== null) this.load({ moved: true }); };
     this.view = h("div", { class: "view", part: "learn" });
-    this.root.replaceChildren(h("style", { text: STYLE }), this.view);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.view);
   }
 
   connectedCallback() {

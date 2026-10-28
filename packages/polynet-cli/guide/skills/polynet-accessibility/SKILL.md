@@ -17,7 +17,7 @@ work for every member.
 |---|---|
 | No `frame.html`, or not exactly one `<polynet-page>` in it | Add `frame.html` at the root: the site's header, nav and footer around one `<polynet-page></polynet-page>` (`polynet-build-site`) |
 | `frame.html` uses relative paths | Start them from the root (`/styles.css`): the frame is shown at `/people/<handle>` too |
-| The site's own `chat.html`, `people/...`, `events.html`, `learn/...`, `knowledge.html` or `ask.html` lacks its blocks | Place them (`/chat`: `<polynet-channels>` and `<polynet-chat>`; `/people`: `<polynet-members>`; `/events`: `<polynet-events>`; `/learn`: `<polynet-learn>`; `/knowledge`: `<polynet-knowledge>`; `/ask`: `<polynet-ask>`), or delete the file to use Polynet's page; the blocks bring their own keyboard and screen-reader support |
+| The site's own `chat.html`, `people/...`, `events.html`, `learn/...`, `knowledge.html`, `ask.html` or `discover.html` lacks its blocks | Place them (`/chat`: `<polynet-channels>` and `<polynet-chat>`; `/people`: `<polynet-members>`; `/events`: `<polynet-events>`; `/learn`: `<polynet-learn>`; `/knowledge`: `<polynet-knowledge>`; `/ask`: `<polynet-ask>`; `/discover`: `<polynet-discover>`), or delete the file to use Polynet's page; the blocks bring their own keyboard and screen-reader support |
 | `<html>` has no `lang` | `<html lang="en">` (the site's language) |
 | No `<title>` | A title with the community's name; update it per view |
 | No viewport, or zoom blocked | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or `maximum-scale=1` |
@@ -36,7 +36,10 @@ unless you're sure.
   on Escape and return focus to their button.
 - **Structure:** one `<h1>` per view, headings in order; `<header>`, `<nav>`,
   `<main>`; links go somewhere, buttons do something; the current page has
-  `aria-current="page"`; toggles like reactions use `aria-pressed`.
+  `aria-current="page"` (on the standard pages `<polynet-page>` sets it on
+  the frame's nav link; style `nav a[aria-current=page]`); toggles like
+  reactions use `aria-pressed`. A `slot="<page>-heading"` you put in the
+  frame should be an `<h1>`: it is that page's heading.
 - **Single-page sites:** on each route change, set `document.title` and move
   focus to the view's `<h1>` (`tabindex="-1"`).
 - **Live content:** a feed is `role="log"` with a label (`aria-live="off"` if
@@ -51,7 +54,7 @@ unless you're sure.
 
 ## Test by hand
 
-1. Tab through the public page and one member page without the mouse.
+1. Tab through the front door and every standard page without the mouse.
 2. Open and close the shell menu and any drawer with the keyboard.
 3. Try 375px wide and 200% zoom.
 4. If you can, run axe or Lighthouse on the live site and fix what it finds.
