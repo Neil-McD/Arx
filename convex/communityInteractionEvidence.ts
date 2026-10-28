@@ -756,51 +756,6 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
   },
 });
 
-export const readCommunityInteractionEvidenceItemsInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-    refs: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
-    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
-    if (!community) throw new Error("community_not_found");
-    const rows = [];
-    for (const ref of args.refs.slice(0, 40)) {
-      const parsed = parseCommunityInteractionEvidenceRef(ref);
-      if (!parsed) continue;
-      try {
-        const { row, root, channel } = await loadReadableInteraction({
-          ctx,
-          communityId: args.communityId,
-          objectType: parsed.objectType,
-          objectId: parsed.objectId,
-        });
-        rows.push({ parsed, row, root, channel });
-      } catch {
-        // Stale derived indexes fail closed and are repaired by evidence sync.
-      }
-    }
-    const userIdCache = new Map<string, string | null>();
-    return await Promise.all(
-      rows.map(({ parsed, row, root, channel }) =>
-        mapEvidenceSearchItem({
-          ctx,
-          community,
-          objectType: parsed.objectType,
-          row,
-          root,
-          channel,
-          score: null,
-          source: "archive",
-          userIdCache,
-        }),
-      ),
-    );
-  },
-});
-
 export const searchCommunityInteractionEvidenceInternal = internalAction({
   args: {
     actorKind: v.optional(channelActorKindValidator),

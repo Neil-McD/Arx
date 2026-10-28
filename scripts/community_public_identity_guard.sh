@@ -88,9 +88,6 @@ require_multiline_match "$COMMUNITY_PUBLIC_FILE" \
 
 echo "[6/10] Ensuring membership and join-request admin payloads resolve public IDs..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdmin = query\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
-  "membership admin rows resolve public user IDs"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityJoinRequests = query\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
   "join-request rows resolve public user IDs"
 

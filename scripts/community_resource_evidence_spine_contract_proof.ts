@@ -55,8 +55,7 @@ assert.match(resources, /ref: buildCommunityResourceEvidenceRef\(resourceId\)/);
 assert.match(resources, /lineage: deriveCommunityResourceLineageEnvelope/);
 assert.match(resources, /recordedByUserId: row\.createdByUserId/);
 assert.match(resources, /const typedResourceId = parseCommunityResourceEvidenceRef\(ref\)/);
-assert.match(resources, /export const mapCommunityResourcesForToolInternal[\s\S]*scope: "member"/);
-assert.match(resources, /export const readCommunityResourcesForToolInternal[\s\S]*builder: false/);
+assert.doesNotMatch(resources, /export const (map|read)CommunityResourcesForToolInternal/);
 assert.match(resources, /buildCommunityResourceDirectoryReadPayload[\s\S]*source: null/);
 assert.doesNotMatch(resources, /export const searchCommunityResourceDirectoryInternal/);
 assert.match(
@@ -65,7 +64,7 @@ assert.match(
 );
 const memberReadBlock =
   resources.match(
-    /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*?\n\}\);\n\nexport const readCommunityResourcesForToolInternal/,
+    /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*?\n\}\);\n/,
   )?.[0] ?? "";
 assert.ok(memberReadBlock, "member resource read implementation should be present");
 assert.ok(
@@ -78,8 +77,7 @@ assert.match(evidence, /const RECENT_RESOURCE_SCAN_LIMIT = 80/);
 assert.match(evidence, /\.take\(RECENT_RESOURCE_SCAN_LIMIT\)/);
 assert.doesNotMatch(evidence, /\.take\(5000\)/);
 assert.match(evidence, /q\.eq\("communityId", args\.communityId\)/);
-assert.match(evidence, /readCommunityResourceEvidenceItemsInternal/);
-assert.match(evidence, /resolveCommunityResourceEvidenceSource/);
+assert.doesNotMatch(evidence, /export const readCommunityResourceEvidenceItemsInternal/);
 assert.match(evidence, /recordCommunityEvidenceRetrievalInternal/);
 assert.match(evidence, /const matches = recent\.matches/);
 assert.match(evidence, /strategy: "bounded_lexical"/);

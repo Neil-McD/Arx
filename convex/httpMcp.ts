@@ -135,12 +135,6 @@ function resolveRequestMcpServerUrl(req: Request): string | null {
   return origin ? `${origin}/runtime/mcp` : null;
 }
 
-function resolveMcpServerUrl(req: Request): string | null {
-  const configured = resolveConfiguredMcpResourceUrl();
-  if (!configured.ok) return null;
-  return configured.value ?? resolveRequestMcpServerUrl(req);
-}
-
 function buildProtectedResourceMetadataUrl(resourceServerUrl: string): string | null {
   try {
     const parsed = new URL(resourceServerUrl);
@@ -151,11 +145,6 @@ function buildProtectedResourceMetadataUrl(resourceServerUrl: string): string | 
   } catch {
     return null;
   }
-}
-
-function resolveProtectedResourceMetadataUrl(req: Request): string | null {
-  const resourceServerUrl = resolveMcpServerUrl(req);
-  return resourceServerUrl ? buildProtectedResourceMetadataUrl(resourceServerUrl) : null;
 }
 
 function resolveOAuthIssuer(): string {

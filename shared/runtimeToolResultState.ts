@@ -27,13 +27,6 @@ export type RuntimeToolResultTransition = {
   terminalSignal: RuntimeToolResultTerminalSignal | null;
 };
 
-export const INITIAL_RUNTIME_TOOL_RESULT_STATE: RuntimeToolResultState = {
-  lastToolSignature: null,
-  lastToolResultSignature: null,
-  consecutiveFailureCount: 0,
-  consecutiveNoProgressCount: 0,
-};
-
 export function buildRuntimeToolResultEnvelope<
   TToolName extends string,
 >(params: {
@@ -49,15 +42,6 @@ export function buildRuntimeToolResultEnvelope<
     error_message: params.toolResult.errorMessage,
     output: params.toolResult.outputText,
   };
-}
-
-export function buildRuntimeToolResultContent<
-  TToolName extends string,
->(params: {
-  toolName: TToolName;
-  toolResult: RuntimeKernelToolExecutionResult;
-}): string {
-  return JSON.stringify(buildRuntimeToolResultEnvelope(params));
 }
 
 export function buildRuntimeToolExecutionExceptionResult(

@@ -1,7 +1,6 @@
 import type {
   CommunityFunnelConfig,
   CommunityPublicFace,
-  UserProfile,
 } from "../../../shared/communityTypes";
 import type { NavSnapshotBase } from "../../../shared/navSnapshot";
 import type { CommunityVisualIdentity } from "../../../shared/communityVisualIdentity";
@@ -67,18 +66,6 @@ export type WebCommunityVoiceTranscriptTarget = {
 
 export type WebCommunityVoiceButtonOwner = "main" | "drawer";
 
-export type WebPersonalMemoryItem = {
-  id: string;
-  content: string;
-  scope: "global" | "workspace";
-  scope_id: string | null;
-  pinned: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
 export type WebNavSnapshot = NavSnapshotBase & {
   routePath: string;
 };
-
-export type WebUserProfilesById = Record<string, UserProfile>;

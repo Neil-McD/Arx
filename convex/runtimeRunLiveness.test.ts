@@ -108,14 +108,6 @@ test("terminal runs reject new public and internal events but replay existing ev
       nowMs: 3_000,
     }),
   ).rejects.toThrow("runtime_run_not_active");
-  await expect(
-    t.mutation(internalRefs.threads.appendCloudRuntimeRunEventInternal, {
-      ownerId: ids.ownerId,
-      ...eventArgs,
-      eventKey: `${ids.runId}:tool_call_started:3`,
-      nowMs: 3_000,
-    }),
-  ).rejects.toThrow("runtime_run_not_active");
 
   const replayed = await asOwner.mutation(
     apiRefs.threads.appendCloudRuntimeRunEvent,

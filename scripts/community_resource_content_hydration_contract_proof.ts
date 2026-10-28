@@ -70,11 +70,6 @@ assert.match(
   "single member-visible resource reads must hydrate split body content before slicing response text",
 );
 assert.match(
-  resources,
-  /async function buildBatchReadResourceResult[\s\S]*const row = await hydrateCommunityResourceBody\(args\.ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
-  "batch resource reads must hydrate split body content before applying context budgets",
-);
-assert.match(
   resourceEvidence,
   /export const searchRecentCommunityResourceEvidenceInternal = internalQuery\([\s\S]*const hydrated = await Promise\.all\([\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*scoreResource\(resource, tokens\)/,
   "bounded resource evidence search must hydrate split body content before scoring and excerpting",

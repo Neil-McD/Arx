@@ -1,11 +1,10 @@
 import { v } from "convex/values";
 import { resolveSelfCommunityMembershipContext } from "./communityMembershipContextCore";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import {
   buildResolvedCommunityCapabilityContext,
   normalizeCommunityCapabilitySlug,
-  type CommunityCapabilityContextErrorCode,
   type CommunityMembershipProjection,
   type ResolvedCommunityCapabilityContext,
 } from "../shared/communityCapabilityContextContract";
@@ -65,26 +64,6 @@ export type {
   CommunityMembershipProjection,
   ResolvedCommunityCapabilityContext,
 } from "../shared/communityCapabilityContextContract";
-
-function boundedString(value: unknown, maxLength: number): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed.slice(0, maxLength) : null;
-}
-
-export async function listAccessibleCommunityMemberships(
-  ctx: any,
-  authSubject: string,
-): Promise<CommunityMembershipProjection[]> {
-  const rows = (await ctx.runQuery(
-    api.communityAdmin.listCommunityMemberships as any,
-    {
-      authSubject,
-      selectMode: "full",
-    },
-  )) as CommunityMembershipProjection[];
-  return rows.filter((row) => boundedString(row.communities?.slug, 160));
-}
 
 const COMMUNITY_SEMANTIC_DIRECTORY_DEFAULT_LIMIT = 24;
 const COMMUNITY_SEMANTIC_DIRECTORY_MAX_LIMIT = 50;
@@ -436,26 +415,6 @@ export async function resolveCommunityCapabilityContextBySlug(args: {
   return await buildCommunityCapabilityContextForActor({
     ctx: args.ctx,
     authSubject: args.authSubject,
-    community,
-  });
-}
-
-export async function resolveCommunityCapabilityContextById(args: {
-  ctx: any;
-  authSubject: string;
-  userId?: any;
-  communityId: any;
-}) {
-  const community = (await args.ctx.db.get(
-    args.communityId,
-  )) as CommunityLike | null;
-  if (!community) {
-    return { ok: false as const, code: "community_not_accessible" as const };
-  }
-  return await buildCommunityCapabilityContextForActor({
-    ctx: args.ctx,
-    authSubject: args.authSubject,
-    userId: args.userId,
     community,
   });
 }

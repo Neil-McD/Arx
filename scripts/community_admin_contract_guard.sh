@@ -137,6 +137,10 @@ require_block_no_match() {
   local end_pattern="$3"
   local forbidden_pattern="$4"
   local description="$5"
+  if ! grep -Eq -- "$start_pattern" "$file"; then
+    echo "FAIL: block start not found for: $description" >&2
+    exit 1
+  fi
   if ! awk -v start="$start_pattern" -v end="$end_pattern" '
     $0 ~ start { in_block = 1 }
     in_block { print }
@@ -162,23 +166,11 @@ require_no_match "$ADMIN_GATEWAY_FILE" \
 
 echo "[2/12] Ensuring admin/member analytics queries accept authSubject..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdmin = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "listCommunityMembershipsAdmin accepts authSubject"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdminPage = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*paginationOpts: paginationOptsValidator,' \
-  "listCommunityMembershipsAdminPage accepts authSubject and pagination options"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "countCommunityMemberships accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const syncCommunityMembershipCount = mutation\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),' \
   "syncCommunityMembershipCount accepts authSubject"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipCreatedAtRows = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "listCommunityMembershipCreatedAtRows accepts authSubject"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityRevenueSeries = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "listCommunityRevenueSeries accepts authSubject"
 
 echo "[3/12] Ensuring manager access centralizes membership-row reads..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
@@ -218,18 +210,9 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   "syncCommunityMembershipCount reconciles durable cache from canonical rows"
 require_block_no_match "$COMMUNITY_ADMIN_FILE" \
   'export const syncCommunityMembershipCount = mutation' \
-  'export const listCommunityMembershipCreatedAtRows = query' \
+  'export const listPendingAdmissionRequestsInternal = internalQuery' \
   'readCommunityActiveMemberCount\(community\)[\s\S]*?return activeMemberCount' \
   "syncCommunityMembershipCount must not return stale cached count"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdminPage = query\([\s\S]*?withIndex\("by_community_createdAt", \(q\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)[\s\S]*?\.paginate\(\{' \
-  "listCommunityMembershipsAdminPage paginates membership rows by community creation order"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdminPage = query\([\s\S]*?rawPage\.page\.filter\([\s\S]*?communityMembershipRowIsActive\(row\)' \
-  "listCommunityMembershipsAdminPage keeps legacy rows release-safe through the canonical active predicate"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdmin = query\([\s\S]*?withIndex\("by_community_createdAt"[\s\S]*?\.take\(scanLimit\)' \
-  "legacy listCommunityMembershipsAdmin is bounded by take"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\([\s\S]*?resolveCommunityAdminMembersContext\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,\s*communityId: args\.communityId,' \
   "countCommunityMemberships uses entitled community context"
@@ -239,9 +222,6 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\([\s\S]*?!communityMembershipRowIsActive\(row\)' \
   "countCommunityMemberships keeps legacy rows release-safe through the canonical active predicate"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipCreatedAtRows = query\([\s\S]*?listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "listCommunityMembershipCreatedAtRows delegates through manager helper"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityJoinRequests = query\([\s\S]*?withIndex\("by_community_status_createdAt", \(q: any\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)\.eq\("status", status\)[\s\S]*?\.order\("desc"\)[\s\S]*?\.take\(limit\)' \
   "listCommunityJoinRequests reads join requests by community status creation order"
@@ -356,14 +336,8 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   "admin membership rows resolve public user IDs"
 
 echo "[6/12] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityRevenueSeries = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "listCommunityRevenueSeries resolves authenticated subject"
 
 echo "[7/12] Ensuring analytics queries still require manager access..."
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityRevenueSeries = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
-  "listCommunityRevenueSeries requires manager access"
 
 echo "[8/12] Ensuring the canonical auth + funding contract doc exists..."
 if [[ ! -f "docs/auth-money-access-matrix.md" ]]; then
@@ -403,16 +377,9 @@ require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
 require_no_match "$WEB_MEMBER_DIALOG_FILE" \
   'Payment history|Historical payments unavailable|No payment history' \
   "member settings dialog does not expose unbacked payment-history placeholder text"
-require_block_no_match "$COMMUNITY_ADMIN_FILE" \
-  '^async function mapCommunityOwnerAdminMemberRow' \
-  '^async function mapCommunityAdminMembershipRow' \
-  'price_point_id|billing_period|amount_base_units|currency_decimals|communitySubscriptions|pricePoint' \
-  "owner roster row has no billing/detail fields"
-require_block_no_match "$COMMUNITY_ADMIN_FILE" \
-  '^async function mapCommunityAdminMembershipRow' \
-  '^async function endCommunitySubscriptionsForMembership' \
-  'price_point_id|billing_period|amount_base_units|currency_decimals|communitySubscriptions|pricePoint' \
-  "member roster rows do not hydrate billing detail"
+require_no_match "$COMMUNITY_ADMIN_FILE" \
+  'async function mapCommunity(OwnerAdminMember|AdminMembership)Row' \
+  "admin roster row mappers stay deleted; billing detail loads only through getCommunityMemberBillingHistory"
 require_no_match "$MEMBERSHIP_GATEWAY_FILE" \
   'price_point_id|billing_period|amount_base_units|currency_decimals|CommunityBillingPeriod' \
   "membership admin gateway row type excludes billing detail"

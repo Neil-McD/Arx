@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext";
@@ -146,40 +146,6 @@ export type GuestInferenceIssue = {
   fullMessage: string;
   shortMessage: string;
 };
-
-export function buildGuestInferenceIssue(reason: GuestInferenceIssueReason): GuestInferenceIssue {
-  if (reason === "rate_limited") {
-    return {
-      reason,
-      cta: "sign_in",
-      fullMessage:
-        "Preview is busy right now. Sign in to unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network.",
-      shortMessage:
-        "Preview is busy right now. Sign in to continue.",
-    };
-  }
-  return {
-    reason,
-    cta: "sign_in",
-    fullMessage:
-      "Preview is unavailable right now. Sign in to unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network.",
-    shortMessage:
-      "Preview is unavailable right now. Sign in to continue.",
-  };
-}
-
-export function normalizeGuestInferenceError(message: string): string {
-  const raw = (message ?? "").trim();
-  if (!raw) return "Failed to run model.";
-  const lower = raw.toLowerCase();
-  if (
-    lower.includes("no endpoints found matching your data policy") ||
-    (lower.includes("free model publication") && lower.includes("privacy"))
-  ) {
-    return "Preview is unavailable because the OpenRouter key blocks free models. Enable Free model publication in OpenRouter privacy settings, or map preview models to non-free models.";
-  }
-  return raw;
-}
 
 export function buildPublicTurnMessages<ThreadMessageT extends PublicTurnThreadMessage>(params: {
   messages: ThreadMessageT[];

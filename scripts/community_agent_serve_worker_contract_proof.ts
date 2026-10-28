@@ -9,7 +9,6 @@ const serveContract = readFileSync(join(root, "shared/communityAgentServeContrac
 const threadContext = readFileSync(join(root, "shared/communityAgentThreadContext.ts"), "utf8");
 const conciergeTools = readFileSync(join(root, "shared/communityAgentConciergeTools.ts"), "utf8");
 const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
-const boundary = readFileSync(join(root, "shared/communityAgentRuntimeBoundary.ts"), "utf8");
 const servePrompt = readFileSync(join(root, "shared/communityAgentServePrompt.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -148,7 +147,6 @@ assert.match(
 );
 assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
 assert.doesNotMatch(worker, /query\("communityAgentConfigs"/);
-assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "member_repository"/);
 assert.match(
   servePrompt,
   /buildCommunityAgentIdentityPrompt\(\{[\s\S]*surface: "member_concierge"/,

@@ -17,9 +17,6 @@ import {
   type CommunityLensAuthority,
 } from "../shared/communityLensAuthority";
 import {
-  DEFAULT_ACTIVE_MODEL_ID,
-} from "../shared/modelCatalog";
-import {
   asRuntimeMessages,
   normalizeMaxTokens,
 } from "./httpRuntimeSupport";
@@ -120,16 +117,6 @@ export type RuntimeTurnResolution = {
   memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
   communityInferenceAdmission: CommunityInferenceFundingAdmission | null;
 };
-
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // ignore
-  }
-  return "";
-}
 
 function stripSystemMessages(
   messages: Array<{ role: "user" | "assistant" | "system"; content: string }>,

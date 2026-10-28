@@ -133,11 +133,6 @@ assert.match(
 );
 assert.match(
   gateway,
-  /client\.query\("communityAgentConcierge:getMyLatestCommunityAgentServeIssue" as any[\s\S]*authSubject[\s\S]*communityId: params\.communityId/,
-  "gateway should fetch the requester-scoped serve issue",
-);
-assert.match(
-  gateway,
   /watchQuery\([\s\S]*api as any\)\.communityAgentConcierge\.getMyLatestCommunityAgentServeIssue[\s\S]*authSubject: params\.liveClient\.authSubject[\s\S]*communityId: params\.communityId/,
   "gateway should subscribe to requester-scoped serve issue updates",
 );

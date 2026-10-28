@@ -40,7 +40,6 @@ for (const exportName of [
   "readCommunityResourceBuilderResource",
   "getCommunityResourceBuilderChangesetStatus",
   "listPendingCommunityResourceBuilderChangesets",
-  "approveCommunityResourceBuilderChangeset",
   "rejectCommunityResourceBuilderChangeset",
   "applyCommunityResourceBuilderChangeset",
 ] as const) {
@@ -72,10 +71,10 @@ assert.match(
   /stageCommunityResourceBuilderChangesetCore[\s\S]*await requireCommunityManager[\s\S]*stageCommunityResourceBuilderChangesetInternal = internalMutation/,
   "internal changeset staging must remain owner/admin/manager gated",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /approveCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
-  "changeset approval must be owner/admin/manager gated",
+  /export const approveCommunityResourceBuilderChangeset\b/,
+  "a separate approve step stays deleted: Apply accepts staged changesets directly",
 );
 assert.match(
   resources,
@@ -374,11 +373,6 @@ assert.match(
   resources,
   /operation\.op === "delete_category"[\s\S]*deleteCategoryFromChangesetOperation[\s\S]*requireChangesetEmptyModuleRef[\s\S]*maybeDeleteStorageAsset[\s\S]*ctx\.db\.delete/,
   "delete_category should delete only empty categories and clean banner storage",
-);
-assert.match(
-  resources,
-  /approveCommunityResourceBuilderChangeset[\s\S]*changeset\.status !== "staged"[\s\S]*status: "approved"[\s\S]*approvedByUserId: userId/,
-  "approval should be an explicit server-side state transition",
 );
 assert.match(
   resources,

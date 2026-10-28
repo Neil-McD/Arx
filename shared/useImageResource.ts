@@ -178,11 +178,6 @@ function loadBrowserImage(
   });
 }
 
-export function getReadyImageResource(value: string | null | undefined): ImageResource | null {
-  const url = normalizeImageResourceUrl(value);
-  return url ? imageResourceCache.getReady(url) : null;
-}
-
 export function ensureImageResource(
   value: string | null | undefined,
   options?: { fetchPriority?: ImageFetchPriority },

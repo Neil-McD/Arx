@@ -28,28 +28,6 @@ export function formatPlanPrice(plan: PublicPlanSummaryLike): string {
   return `${value.toFixed(0)} ${currency}${suffix}`;
 }
 
-export function formatSubscriptionPrice(args: {
-  amountBaseUnits: number | string | null | undefined;
-  currency: string | null | undefined;
-  currencyDecimals: number | null | undefined;
-  billingPeriod: CommunityBillingPeriod | null | undefined;
-}): string {
-  const raw = String(args.amountBaseUnits ?? "").trim();
-  const amount = Number(raw);
-  const decimals = Number(args.currencyDecimals ?? 2);
-  const value = Number.isFinite(amount) ? amount / Math.pow(10, decimals) : 0;
-  const currency = String(args.currency ?? "").toUpperCase();
-  const period = String(args.billingPeriod ?? "").trim().toLowerCase();
-  const suffix = period === "annual" ? "/year" : period === "monthly" ? "/month" : "";
-  if (!raw || !Number.isFinite(amount)) {
-    if (period === "monthly") return "monthly";
-    if (period === "annual") return "annual";
-    return "paid";
-  }
-  if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
-  return `${value.toFixed(0)} ${currency}${suffix}`;
-}
-
 function normalizeStripeConnectAction(
   value: string | null | undefined,
 ): StripeConnectReturnAction | null {

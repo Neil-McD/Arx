@@ -287,22 +287,6 @@ function contextMetadata(context: ResolvedCommunityAgentFilesystemContext) {
   };
 }
 
-function directoryEntry(args: {
-  type: "directory" | "file";
-  name: string;
-  path: string;
-  summary?: string;
-  updatedAt?: number;
-}) {
-  return {
-    type: args.type,
-    name: args.name,
-    path: args.path,
-    summary: args.summary ?? null,
-    updated_at: typeof args.updatedAt === "number" ? toIsoString(args.updatedAt) : null,
-  };
-}
-
 function mapDigest(row: DigestRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -415,14 +399,6 @@ async function latestNodes(ctx: any, communityId: any, limit: number): Promise<N
   return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
 }
 
-async function latestEdges(ctx: any, communityId: any, limit: number): Promise<EdgeRow[]> {
-  const rows = (await ctx.db
-    .query("communityIntelligenceEdges" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(Math.max(100, limit * 4))) as EdgeRow[];
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
-}
-
 async function readExpectedRow<T extends { communityId?: any }>(
   ctx: any,
   communityId: any,
@@ -460,123 +436,6 @@ async function compilerDigestsForContext(
   }
   return [digest];
 }
-
-export const listCommunityAgentFilesystemInternal = internalQuery({
-  args: {
-    context: communityAgentFilesystemContextValidator,
-    path: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const context = await resolveFilesystemContext(ctx, args.context);
-    const path = normalizePath(args.path);
-    const limit = boundedLimit(args.limit);
-
-    if (path === "/") {
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: [
-          directoryEntry({ type: "directory", name: "compiler", path: "/compiler" }),
-          directoryEntry({ type: "directory", name: "directory", path: "/directory" }),
-        ],
-      };
-    }
-
-    if (path === "/compiler") {
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: [
-          directoryEntry({ type: "file", name: "window", path: "/compiler/window" }),
-          directoryEntry({ type: "directory", name: "digests", path: "/compiler/digests" }),
-        ],
-      };
-    }
-
-    if (path === "/directory") {
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: [
-          directoryEntry({ type: "directory", name: "nodes", path: "/directory/nodes" }),
-          directoryEntry({ type: "directory", name: "edges", path: "/directory/edges" }),
-          directoryEntry({ type: "directory", name: "change-requests", path: "/directory/change-requests" }),
-        ],
-      };
-    }
-
-    if (path === "/compiler/digests") {
-      const rows = await compilerDigestsForContext(ctx, context, limit);
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: rows.map((row) =>
-          directoryEntry({
-            type: "file",
-            name: normalizeIdValue(row._id),
-            path: `/compiler/digests/${normalizeIdValue(row._id)}`,
-            summary: row.summary,
-            updatedAt: row.updatedAt,
-          }),
-        ),
-      };
-    }
-
-    if (path === "/directory/nodes") {
-      const rows = await latestNodes(ctx, context.communityId, limit);
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: rows.map((row) =>
-          directoryEntry({
-            type: "file",
-            name: normalizeIdValue(row._id),
-            path: `/directory/nodes/${normalizeIdValue(row._id)}`,
-            summary: `${row.type}: ${row.title}`,
-            updatedAt: row.updatedAt,
-          }),
-        ),
-      };
-    }
-
-    if (path === "/directory/edges") {
-      const rows = await latestEdges(ctx, context.communityId, limit);
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: rows.map((row) =>
-          directoryEntry({
-            type: "file",
-            name: normalizeIdValue(row._id),
-            path: `/directory/edges/${normalizeIdValue(row._id)}`,
-            summary: `${row.type}: ${normalizeIdValue(row.fromNodeId)}`,
-            updatedAt: row.updatedAt,
-          }),
-        ),
-      };
-    }
-
-    if (path === "/directory/change-requests") {
-      const rows = await latestChangeRequests(ctx, context.communityId, limit);
-      return {
-        ...contextMetadata(context),
-        path,
-        entries: rows.map((row) =>
-          directoryEntry({
-            type: "file",
-            name: normalizeIdValue(row._id),
-            path: `/directory/change-requests/${normalizeIdValue(row._id)}`,
-            summary: `${row.status}: ${row.operation}`,
-            updatedAt: row.updatedAt,
-          }),
-        ),
-      };
-    }
-
-    throw new Error("community_agent_filesystem_path_not_listable");
-  },
-});
 
 export const readCommunityAgentFilesystemInternal = internalQuery({
   args: {

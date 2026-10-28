@@ -36,11 +36,6 @@ assert.match(
   "shared profile list must use display fallback projection",
 );
 assert.match(
-  communityAdmin,
-  /resolveCommunityMemberIdentity[\s\S]*resolveUserProfileDisplayProjection/,
-  "community members must use display fallback projection",
-);
-assert.match(
   communityChat,
   /resolveCommunityTypingPresence/,
   "community typing must use its canonical presence owner",

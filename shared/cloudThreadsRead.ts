@@ -35,15 +35,6 @@ type ConvexRuntimeRunRow = {
   lastEventSeq?: number | null;
 };
 
-type ConvexRuntimeRunEventRow = {
-  _id?: string | null;
-  runId?: string | null;
-  seq?: number | null;
-  eventType?: string | null;
-  payload?: unknown;
-  createdAt?: number | null;
-};
-
 export type CloudMessageTransportRow = {
   id: string;
   thread_id: string;
@@ -143,23 +134,6 @@ function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): CloudRuntimeRunTransp
   };
 }
 
-function mapConvexRuntimeRunEventRow(
-  row: ConvexRuntimeRunEventRow,
-): CloudRuntimeRunEventTransportRow | null {
-  const id = String(row._id ?? "").trim();
-  const runId = String(row.runId ?? "").trim();
-  const eventType = String(row.eventType ?? "").trim();
-  if (!id || !runId || !eventType) return null;
-  return {
-    id,
-    run_id: runId,
-    seq: Math.max(0, Math.floor(toFiniteNumber(row.seq, 0))),
-    event_type: eventType,
-    payload: row.payload ?? null,
-    created_at: toIsoStringFromMs(row.createdAt),
-  };
-}
-
 export async function listConvexCloudNewestThreadMessagesByThreadKey(params: {
   session: AuthSessionLike;
   threadKey: string;
@@ -208,30 +182,4 @@ export async function getConvexCloudRuntimeRunByRunId(params: {
   })) as ConvexRuntimeRunRow | null;
   if (!row) return null;
   return mapConvexRuntimeRunRow(row);
-}
-
-export async function listConvexCloudRuntimeRunEvents(params: {
-  session: AuthSessionLike;
-  runId: string;
-  threadId?: string;
-  afterSeq?: number;
-  limit?: number;
-}): Promise<CloudRuntimeRunEventTransportRow[] | null> {
-  const bootstrapped = await bootstrapConvexOwnerId(params.session);
-  if (!bootstrapped) return null;
-  const { client, authSubject } = bootstrapped;
-  const runId = String(params.runId ?? "").trim();
-  if (!runId) return [];
-  const rows = (await client.query("threads:listCloudRuntimeRunEvents" as any, {
-    authSubject,
-    runId,
-    ...(typeof params.threadId === "string" && params.threadId.trim() ? { threadId: params.threadId } : null),
-    ...(typeof params.afterSeq === "number" && Number.isFinite(params.afterSeq)
-      ? { afterSeq: Math.max(0, Math.floor(params.afterSeq)) }
-      : null),
-    limit: Math.max(1, Math.min(500, Math.floor(params.limit ?? 200))),
-  })) as ConvexRuntimeRunEventRow[];
-  return (rows ?? [])
-    .map((row) => mapConvexRuntimeRunEventRow(row))
-    .filter((row): row is CloudRuntimeRunEventTransportRow => Boolean(row));
 }

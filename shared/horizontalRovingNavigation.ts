@@ -1,8 +1,4 @@
-export type HorizontalRovingNavigationKey =
-  | "ArrowLeft"
-  | "ArrowRight"
-  | "Home"
-  | "End";
+
 
 export function resolveHorizontalRovingIndex({
   key,

@@ -57,10 +57,6 @@ export function requireConvexUrl(): string {
   return convexUrl;
 }
 
-export function hasConvexUrl(): boolean {
-  return Boolean(readConvexUrl());
-}
-
 export function createConvexClientForUrl(convexUrl: string): ConvexHttpClient {
   return new ConvexHttpClient(convexUrl);
 }

@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ensureAuthenticatedActor } from "./authActor";
 
@@ -74,29 +74,3 @@ export const updateMyEmailPreferences = mutation({
   },
 });
 
-export const getEmailPreferencesByUserIdInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    const row = await getEmailPreferencesRowByUserId(ctx, args.userId);
-    return row
-      ? {
-          weeklyDigestEnabled: row.weeklyDigestEnabled !== false,
-          eventReminderEnabled: Boolean(row.eventReminderEnabled),
-          founderAdminEmailsEnabled: Boolean(row.founderAdminEmailsEnabled),
-        }
-      : { ...DEFAULT_EMAIL_PREFERENCES };
-  },
-});
-
-export const ensureEmailPreferencesForUserInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const row = await ensureEmailPreferencesRow(ctx, args.userId, args.nowMs ?? Date.now());
-    return toPublicPreferences(row);
-  },
-});

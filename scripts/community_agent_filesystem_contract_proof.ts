@@ -19,7 +19,6 @@ assert.match(
   /compilerDigestId[\s\S]*compilerDigestVersionKey[\s\S]*digest\.agentHandoffState !== "running"[\s\S]*digest\.agentClaimId[\s\S]*community_agent_filesystem_digest_claim_mismatch[\s\S]*community_agent_filesystem_digest_claim_required/,
   "writes must remain inside the exact leased digest",
 );
-assert.match(filesystem, /export const listCommunityAgentFilesystemInternal = internalQuery/);
 assert.match(filesystem, /export const readCommunityAgentFilesystemInternal = internalQuery/);
 assert.match(filesystem, /export const searchCommunityAgentFilesystemInternal = internalQuery/);
 assert.match(filesystem, /export const writeCommunityAgentFilesystemInternal = internalMutation/);

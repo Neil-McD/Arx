@@ -1,4 +1,4 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -10,7 +10,6 @@ import {
   buildCommunitySourceTraceRevision,
   drainIneligiblePendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
-  type SourceTraceRow,
 } from "./communityCompilerEvidenceCore";
 import {
   buildCommunityMemoryDigestVersionKey,
@@ -332,26 +331,3 @@ async function runCommunityCompilerDigestPassCore(
     return mapDigestRow(row);
 }
 
-export const listCommunityCompilerDigests = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const limit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 20)));
-    const rows = (await ctx.db
-      .query("communityCompilerDigests" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .take(limit)) as CompilerDigestRow[];
-    return rows.map(mapDigestRow);
-  },
-});

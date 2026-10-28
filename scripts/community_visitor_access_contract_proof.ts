@@ -19,49 +19,11 @@ function sliceExport(source: string, name: string): string {
   return source.slice(start, end === -1 ? source.length : start + 1 + end);
 }
 
-const accessQuery = sliceExport(communityPublic, "resolvePublicCommunityAccessBySlug");
-
-assert.match(
-  accessQuery,
-  /query\(\{[\s\S]*communitySlug: v\.string\(\)/,
-  "public access resolution must be a public query keyed by slug only — no identity args",
-);
 assert.doesNotMatch(
-  accessQuery,
-  /authSubject: v\.|userId: v\./,
-  "public access resolution must not accept caller-supplied identity — identity comes from ctx.auth alone",
+  communityPublic,
+  /export const resolvePublicCommunityAccessBySlug\b/,
+  "the unused visitor access query stays deleted; visitors enter through the public funnel projection",
 );
-assert.match(
-  accessQuery,
-  /try \{[\s\S]*findAuthenticatedActorState\(\{ ctx, authSubject: null \}\)[\s\S]*\} catch \{[\s\S]*userId = null/,
-  "anonymous callers must resolve through the canonical identity path and fall back to userId null — one path, no fork",
-);
-assert.match(
-  accessQuery,
-  /if \(userId\) \{[\s\S]*communityMemberships[\s\S]*by_community_user/,
-  "membership lookup must only run for identified callers",
-);
-assert.match(
-  accessQuery,
-  /resolveCommunityAccessBundle\(\{/,
-  "the visitor state must come from the same access bundle members use — relation decides, no parallel ladder",
-);
-assert.match(
-  accessQuery,
-  /if \(!access\.relation\) return \{ ok: false as const \}/,
-  "null relation (blocked callers only) must be absent, not teased",
-);
-assert.match(
-  accessQuery,
-  /user_id: userId \? access\.user_id : null/,
-  "anonymous callers must get user_id null, never a stringified null",
-);
-assert.doesNotMatch(
-  accessQuery,
-  /communityMessages|requireCommunityChatAccess/,
-  "the access query must not read chat content — visitor content flows through the public funnel projection only",
-);
-
 
 assert.match(
   communityCore,

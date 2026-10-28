@@ -17,7 +17,6 @@ import {
   communityEvidenceSurfaceValidator,
   resolveTrustedCommunityEvidenceUserId,
 } from "./communityEvidenceAudit";
-import { resolveCommunityResourceEvidenceSource } from "./communityResourceEvidenceCore";
 import {
   buildCommunityResourceDirectoryFields,
 } from "../shared/communityResourceDirectory";
@@ -218,43 +217,6 @@ export const searchRecentCommunityResourceEvidenceInternal = internalQuery({
   },
 });
 
-export const readCommunityResourceEvidenceItemsInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-    refs: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
-    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
-    if (!community) throw new Error("community_not_found");
-    const items = [];
-    for (const ref of args.refs.slice(0, 40)) {
-      const resourceId = parseCommunityResourceEvidenceRef(ref);
-      if (!resourceId) continue;
-      const resolved = await resolveCommunityResourceEvidenceSource({
-        ctx,
-        communityId: args.communityId,
-        resourceId,
-      });
-      if (!resolved) continue;
-      const resource =
-        (await hydrateCommunityResourceBody(ctx, resolved.resource)) ?? resolved.resource;
-      items.push(
-        await mapResourceEvidenceItem({
-          ctx,
-          community,
-          resource,
-          module: resolved.module,
-          score: null,
-          source: "archive",
-        }),
-      );
-    }
-    return items;
-  },
-});
-
 export const searchCommunityResourceEvidenceInternal = internalAction({
   args: {
     userId: v.optional(v.id("users")),
@@ -355,48 +317,3 @@ export const readCommunityResourceEvidenceForToolInternal = internalAction({
   },
 });
 
-export const readCommunityResourcesEvidenceForToolInternal = internalAction({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    refs: v.array(v.string()),
-    maxChars: v.optional(v.number()),
-    perResourceChars: v.optional(v.number()),
-    surface: communityEvidenceSurfaceValidator,
-  },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const userId = await resolveTrustedCommunityEvidenceUserId({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject,
-    });
-    const payload = (await ctx.runQuery(
-      (internal as any).communityResources.readCommunityResourcesForToolInternal,
-      {
-        userId,
-        communityId: args.communityId,
-        refs: args.refs,
-        maxChars: args.maxChars,
-        perResourceChars: args.perResourceChars,
-      },
-    )) as Record<string, any>;
-    const resultRefs = Array.isArray(payload?.resources)
-      ? payload.resources
-          .filter((row: any) => row?.ok === true)
-          .map((row: any) => String(row?.resource?.ref ?? "").trim())
-          .filter((ref: string) => Boolean(parseCommunityResourceEvidenceRef(ref)))
-      : [];
-    const retrievalId: any = await ctx.runMutation(
-      (internal as any).communityEvidenceAudit.recordCommunityEvidenceRetrievalInternal,
-      {
-        communityId: args.communityId,
-        userId,
-        surface: args.surface,
-        capability: "community_resources_read",
-        resultRefs,
-      },
-    );
-    return { ...payload, retrieval_id: normalizeIdValue(retrievalId) };
-  },
-});

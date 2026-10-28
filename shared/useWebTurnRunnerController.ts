@@ -18,7 +18,6 @@ import {
 } from "./cloudThreadsGateway";
 import {
   getConvexCloudRuntimeRunByRunId,
-  listConvexCloudRuntimeRunEvents,
 } from "./cloudThreadsRead";
 import {
   getNextSmoothStreamingText,

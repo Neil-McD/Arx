@@ -1,14 +1,11 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v, type ObjectType } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity, COMMUNITY_CONVERSATION_PREFIX } from "../shared/communityConversationIdentity";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
   applyRuntimeHarnessTelemetryEvent,
-  buildRuntimeHarnessScorecard,
-  buildRuntimeHarnessTelemetrySummaryFromEvents,
   createEmptyRuntimeHarnessTelemetrySummary,
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
@@ -18,13 +15,11 @@ import {
 } from "../shared/runtimeWorkingStateLedger";
 import {
   requireCommunityChatAccess,
-  requireCommunityManager,
 } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   MEMBER_AGENT_GLOBAL_SCOPE_KEY,
-  buildGlobalMemberAgentEpisodeThreadKey,
   isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
@@ -469,26 +464,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-async function hydrateRuntimeEventPayload(ctx: any, payload: unknown): Promise<unknown> {
-  const payloadRecord = asRecord(payload);
-  if (!payloadRecord) return payload;
-  const detailsRecord = asRecord(payloadRecord.details);
-  const computerUseRecord = asRecord(detailsRecord?.computer_use);
-  const frameStorageId = String(computerUseRecord?.frame_storage_id ?? "").trim();
-  if (!frameStorageId) return payload;
-  const frameUrl = await ctx.storage.getUrl(frameStorageId as any);
-  return {
-    ...payloadRecord,
-    details: {
-      ...detailsRecord,
-      computer_use: {
-        ...computerUseRecord,
-        frame_url: frameUrl ?? null,
-      },
-    },
-  };
-}
-
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
 }
@@ -630,68 +605,6 @@ function assertRuntimeRunMatchesRequestedCommunityLens(args: {
       throw new Error("runtime_run_community_context_version_conflict");
     }
   }
-}
-
-function buildThreadContextResponse(row: ThreadLike, fallbackContextVersion: number): {
-  thread_id: string;
-  community_id: string | null;
-  context_version: number;
-  updated_at: string;
-} {
-  return {
-    thread_id: String(row._id),
-    community_id: row.communityId ?? null,
-    context_version: Number.isFinite(Number(row.contextVersion ?? fallbackContextVersion))
-      ? Number(row.contextVersion ?? fallbackContextVersion)
-      : fallbackContextVersion,
-    updated_at: new Date(row.updatedAt).toISOString(),
-  };
-}
-
-async function setCloudThreadContextForOwnedThread(args: {
-  ctx: any;
-  ownerId: any;
-  existing: ThreadLike;
-  expectedContextVersion: number;
-  communityId?: string | null;
-  updateCommunityId?: boolean;
-  nowMs: number;
-}): Promise<{
-  thread_id: string;
-  community_id: string | null;
-  context_version: number;
-  updated_at: string;
-} | null> {
-  const existing = args.existing;
-  const boundCommunity = communityConversationScope(existing);
-  if (boundCommunity && (args.updateCommunityId ?? true) && args.communityId !== boundCommunity) {
-    throw new Error("community_conversation_scope_immutable");
-  }
-  if (typeof existing.archivedAt === "number") return null;
-
-  const currentContextVersion = normalizeContextVersion(existing.contextVersion);
-  const expectedContextVersion = Math.max(0, Math.floor(args.expectedContextVersion));
-  if (currentContextVersion !== expectedContextVersion) {
-    throw new Error("thread_context_version_conflict");
-  }
-
-  const nextContextVersion = currentContextVersion + 1;
-  const patch: Record<string, unknown> = {
-    contextVersion: nextContextVersion,
-    updatedAt: args.nowMs,
-  };
-  if (args.updateCommunityId ?? true) {
-    const nextCommunityId = await validateThreadCommunityLensAccess({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      userId: args.ownerId,
-    });
-    patch.communityId = nextCommunityId;
-  }
-  await args.ctx.db.patch(existing._id, patch);
-  const updated = (await args.ctx.db.get(existing._id)) as ThreadLike | null;
-  if (!updated) return null;
-  return buildThreadContextResponse(updated, nextContextVersion);
 }
 
 function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null {
@@ -1063,42 +976,6 @@ async function getRunningRuntimeRunByThread(args: {
     .first()) as RuntimeRunLike | null;
 }
 
-async function listRecentRuntimeRunsForScorecard(args: {
-  ctx: any;
-  ownerId: any;
-  limit: number;
-  includeInternalHidden: boolean;
-}): Promise<RuntimeRunLike[]> {
-  const out: RuntimeRunLike[] = [];
-  const pageSize = Math.max(50, Math.min(200, args.limit * 2));
-  let cursorStartedAt: number | null = null;
-  let scannedPages = 0;
-
-  while (out.length < args.limit && scannedPages < 10) {
-    const rows = (await args.ctx.db
-      .query("runtimeRuns")
-      .withIndex("by_owner_startedAt", (q: any) =>
-        cursorStartedAt === null
-          ? q.eq("ownerId", args.ownerId)
-          : q.eq("ownerId", args.ownerId).lt("startedAt", cursorStartedAt),
-      )
-      .order("desc")
-      .take(pageSize)) as RuntimeRunLike[];
-    if (rows.length === 0) break;
-    scannedPages += 1;
-    for (const row of rows) {
-      if (!args.includeInternalHidden && row.visibility === "internal_hidden") continue;
-      out.push(row);
-      if (out.length >= args.limit) break;
-    }
-    const nextCursor = rows[rows.length - 1]?.startedAt;
-    if (typeof nextCursor !== "number" || !Number.isFinite(nextCursor)) break;
-    cursorStartedAt = Math.floor(nextCursor);
-  }
-
-  return out.slice(0, args.limit);
-}
-
 function isRuntimeRunStale(args: {
   run: RuntimeRunLike;
   nowMs: number;
@@ -1285,7 +1162,6 @@ async function finalizeRuntimeRunRecord(args: {
   return updated;
 }
 
-
 function deriveTitleFromContent(contentJson: unknown): string | undefined {
   if (typeof contentJson === "string") {
     const text = contentJson.trim().replace(/\s+/g, " ");
@@ -1318,54 +1194,6 @@ function deriveAutoThreadTitlePatch(args: {
   return title ? { title } : {};
 }
 
-export const listCloudThreadsByOwner = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    includeArchived: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const includeArchived = Boolean(args.includeArchived);
-    const rows = await ctx.db
-      .query("threads")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
-    const filtered = rows.filter((row) => {
-      if (communityConversationScope(row)) return false;
-      if (!includeArchived && typeof row.archivedAt === "number") return false;
-      return true;
-    });
-    return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
-  },
-});
-
-export const getCloudThreadById = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-    includeArchived: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const row = (await ctx.db.get(args.threadId)) as ThreadLike | null;
-    if (!row) return null;
-    if (row.ownerId !== ownerId) return null;
-    if (!args.includeArchived && typeof row.archivedAt === "number") return null;
-    await requireCommunityConversationAccess(ctx, row);
-    return row;
-  },
-});
-
 const getCloudThreadByThreadKeyArgs = {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -1395,95 +1223,6 @@ export const getCloudThreadByThreadKey = query({
 export const getCloudThreadByThreadKeyForTrustedOwnerInternal = internalQuery({
   args: { ...getCloudThreadByThreadKeyArgs, trustedOwnerId: v.id("users") },
   handler: async (ctx, { trustedOwnerId, ...args }) => await getCloudThreadByThreadKeyHandler(ctx, args, trustedOwnerId),
-});
-
-export const getCloudThreadContext = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const row = (await ctx.db.get(args.threadId)) as ThreadLike | null;
-    if (!row) return null;
-    if (row.ownerId !== ownerId) return null;
-    if (typeof row.archivedAt === "number") return null;
-    await requireCommunityConversationAccess(ctx, row);
-    return buildThreadContextResponse(row, 0);
-  },
-});
-
-export const setCloudThreadContext = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-    expectedContextVersion: v.number(),
-    communityId: v.optional(v.union(v.string(), v.null())),
-    updateCommunityId: v.optional(v.boolean()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    return await setCloudThreadContextForOwnedThread({
-      ctx,
-      ownerId,
-      existing,
-      expectedContextVersion: args.expectedContextVersion,
-      communityId: args.communityId,
-      updateCommunityId: args.updateCommunityId,
-      nowMs,
-    });
-  },
-});
-
-export const setCloudThreadContextByThreadKey = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadKey: v.string(),
-    expectedContextVersion: v.number(),
-    communityId: v.optional(v.union(v.string(), v.null())),
-    updateCommunityId: v.optional(v.boolean()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const existing = await getCloudThreadByThreadKeyInternal({
-      ctx,
-      ownerId,
-      threadKey: normalizeThreadKey(args.threadKey),
-    });
-    if (!existing) return null;
-    return await setCloudThreadContextForOwnedThread({
-      ctx,
-      ownerId,
-      existing,
-      expectedContextVersion: args.expectedContextVersion,
-      communityId: args.communityId,
-      updateCommunityId: args.updateCommunityId,
-      nowMs: args.nowMs ?? Date.now(),
-    });
-  },
 });
 
 export const ensureCloudThread = mutation({
@@ -1634,28 +1373,6 @@ async function requireWritableClaimedImageAttachmentThread(args: {
   throw new Error("member_agent_attachment_thread_required");
 }
 
-async function prepareActiveGlobalMemberAgentThread(args: {
-  ctx: any;
-  thread: ThreadLike;
-  episodeOrdinal: number;
-  nowMs: number;
-}): Promise<ThreadLike> {
-  const threadKey = String(args.thread.threadKey ?? "").trim();
-  if (
-    threadKey !== buildGlobalMemberAgentEpisodeThreadKey(args.episodeOrdinal) ||
-    !isGlobalMemberAgentEpisodeThreadKey(threadKey)
-  ) {
-    throw new Error("member_agent_thread_context_mismatch");
-  }
-  const patch: Record<string, unknown> = {};
-  if (args.thread.modelId !== DEFAULT_ACTIVE_MODEL_ID) patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
-  if (typeof args.thread.archivedAt === "number") patch.archivedAt = undefined;
-  if (Object.keys(patch).length === 0) return args.thread;
-  patch.updatedAt = args.nowMs;
-  await args.ctx.db.patch(args.thread._id, patch);
-  return ((await args.ctx.db.get(args.thread._id)) as ThreadLike | null) ?? args.thread;
-}
-
 function buildMemberAgentChannelResponse(args: {
   channel: MemberAgentChannelLike;
   episode: MemberAgentEpisodeLike;
@@ -1736,145 +1453,6 @@ export const startNewCommunityAgentConversation = mutation({
     await ctx.db.patch(previous._id, { status: "closed", closedAt: now, updatedAt: now });
     await ctx.db.patch(channel._id, { activeEpisodeId: episodeId, nextOrdinal: ordinal + 1, updatedAt: now });
     return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channel._id))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
-  },
-});
-
-export const listCommunityAgentConversations = query({
-  args: { communityId: v.id("communities"), paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({ ctx });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: ownerId });
-    const channel = await ctx.db.query("memberAgentChannels")
-      .withIndex("by_owner_scope_community", q => q.eq("ownerId", ownerId).eq("scopeKey", "community").eq("communityId", args.communityId)).unique();
-    if (!channel) return { page: [], isDone: true, continueCursor: "" };
-    const result = await ctx.db.query("memberAgentEpisodes").withIndex("by_channel_ordinal", q => q.eq("channelId", channel._id)).order("desc")
-      .paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(50, args.paginationOpts.numItems)) });
-    const page = await Promise.all(result.page.map(async episode => {
-      const thread = await requireOwnedCloudThread({ ctx, ownerId, threadId: episode.threadId });
-      if (communityConversationScope(thread) !== args.communityId) throw new Error("community_conversation_scope_mismatch");
-      return { ...buildMemberAgentChannelResponse({ channel, episode, thread, communityId: args.communityId }), status: episode.status, title: thread.title ?? null, started_at: episode.startedAt };
-    }));
-    return { ...result, page };
-  },
-});
-
-async function preventActiveCommunityConversationArchive(ctx: any, thread: ThreadLike) {
-  if (!communityConversationScope(thread)) return;
-  const episode = await ctx.db.query("memberAgentEpisodes").withIndex("by_thread", (q: any) => q.eq("threadId", thread._id)).unique();
-  if (episode?.status === "active") throw new Error("community_conversation_start_new_instead");
-}
-
-export const updateCloudThread = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-    title: v.optional(v.string()),
-    titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
-    modelId: v.optional(v.string()),
-    lastSeq: v.optional(v.number()),
-    archivedAt: v.optional(v.union(v.number(), v.null())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    const patch: Record<string, unknown> = {
-      updatedAt: nowMs,
-    };
-    if (typeof args.title === "string") {
-      patch.title = normalizeThreadTitle(args.title) ?? null;
-    }
-    if (args.titleSource) patch.titleSource = args.titleSource;
-    if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
-    if (typeof args.lastSeq === "number" && Number.isFinite(args.lastSeq)) {
-      patch.lastSeq = Math.max(0, Math.floor(args.lastSeq));
-    }
-    if (args.archivedAt === null) {
-      patch.archivedAt = undefined;
-    } else if (typeof args.archivedAt === "number" && Number.isFinite(args.archivedAt)) {
-      await preventActiveCommunityConversationArchive(ctx, existing);
-      patch.archivedAt = Math.floor(args.archivedAt);
-    }
-    await ctx.db.patch(existing._id, patch);
-    const updated = (await ctx.db.get(existing._id)) as ThreadLike | null;
-    if (!updated) throw new Error("thread_not_found");
-    return updated;
-  },
-});
-
-export const archiveCloudThread = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    await preventActiveCommunityConversationArchive(ctx, existing);
-    await ctx.db.patch(existing._id, {
-      archivedAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { ok: true };
-  },
-});
-
-export const listCloudThreadMessages = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-    afterSeq: v.optional(v.number()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    const safeLimit = Math.max(1, Math.min(2000, Math.floor(args.limit ?? 1000)));
-    const afterSeq =
-      typeof args.afterSeq === "number" && Number.isFinite(args.afterSeq) ? Math.floor(args.afterSeq) : null;
-    const rows = await ctx.db
-      .query("cloudMessages")
-      .withIndex("by_thread_seq", (q) =>
-        afterSeq === null ? q.eq("threadId", args.threadId) : q.eq("threadId", args.threadId).gt("seq", afterSeq),
-      )
-      .take(safeLimit);
-    const sorted = rows.sort((a, b) => a.seq - b.seq);
-    return await Promise.all(
-      sorted.map(async (row) => ({
-        ...row,
-        contentJson: await mapCloudMessageContentJsonForRead(ctx, row.contentJson),
-      })),
-    );
   },
 });
 
@@ -2182,32 +1760,6 @@ export const readMemberConversationForToolInternal = internalQuery({
       character_count: transcript.characterCount,
       history_truncated:
         hasMessagesOutsideTailWindow || visibleWindowMessageCount > transcript.messages.length,
-    };
-  },
-});
-
-export const generateCloudThreadAttachmentUploadUrl = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    if (isClaimedImageAttachmentThread(thread)) {
-      throw new Error("member_agent_attachment_upload_ticket_required");
-    }
-    return {
-      uploadUrl: await ctx.storage.generateUploadUrl(),
     };
   },
 });
@@ -2818,128 +2370,6 @@ export const getCloudRuntimeRunByOwnerRunId = query({
   },
 });
 
-export const listCloudRuntimeRunsByOwner = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const safeLimit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 200)));
-    const rows = (await ctx.db
-      .query("runtimeRuns")
-      .withIndex("by_owner_startedAt", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
-      .take(safeLimit)) as RuntimeRunLike[];
-    return rows;
-  },
-});
-
-export const getCloudRuntimeHarnessScorecard = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    limit: v.optional(v.number()),
-    includeInternalHidden: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const safeLimit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
-    const includeInternalHidden = args.includeInternalHidden === true;
-    const runs = await listRecentRuntimeRunsForScorecard({
-      ctx,
-      ownerId,
-      limit: safeLimit,
-      includeInternalHidden,
-    });
-
-    return buildRuntimeHarnessScorecard({
-      runs: runs.map((run) => ({
-        run: {
-          runId: run.runId,
-          status: run.status,
-          visibility: run.visibility,
-          startedAt: run.startedAt,
-          finishedAt: run.finishedAt,
-        },
-        telemetrySummary: run.runtimeHarnessTelemetrySummary,
-      })),
-      nowMs: Date.now(),
-    });
-  },
-});
-
-export const backfillCloudRuntimeHarnessTelemetrySummaries = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    limit: v.optional(v.number()),
-    includeInternalHidden: v.optional(v.boolean()),
-    force: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const safeLimit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const includeInternalHidden = args.includeInternalHidden === true;
-    const force = args.force === true;
-    const runs = await listRecentRuntimeRunsForScorecard({
-      ctx,
-      ownerId,
-      limit: safeLimit,
-      includeInternalHidden,
-    });
-
-    let updatedRunCount = 0;
-    let skippedRunCount = 0;
-
-    for (const run of runs) {
-      const hasExistingSummary =
-        run.runtimeHarnessTelemetrySummary &&
-        typeof run.runtimeHarnessTelemetrySummary === "object" &&
-        !Array.isArray(run.runtimeHarnessTelemetrySummary);
-      if (hasExistingSummary && !force) {
-        skippedRunCount += 1;
-        continue;
-      }
-      const events = (await ctx.db
-        .query("runtimeRunEvents")
-        .withIndex("by_owner_run_seq", (q: any) =>
-          q.eq("ownerId", ownerId).eq("runId", run.runId),
-        )
-        .collect()) as RuntimeRunEventLike[];
-      const telemetrySummary = buildRuntimeHarnessTelemetrySummaryFromEvents(
-        events.map((event) => ({
-          eventType: event.eventType,
-          payload: event.payload,
-        })),
-      );
-      await ctx.db.patch(run._id, {
-        runtimeHarnessTelemetrySummary: telemetrySummary,
-      });
-      updatedRunCount += 1;
-    }
-
-    return {
-      scannedRunCount: runs.length,
-      updatedRunCount,
-      skippedRunCount,
-    };
-  },
-});
-
 export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   args: {
     ownerId: v.id("users"),
@@ -2952,26 +2382,6 @@ export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
       ownerId: args.ownerId,
       runId,
     });
-  },
-});
-
-
-export const listStaleRunningRuntimeRunsInternal = internalQuery({
-  args: {
-    nowMs: v.optional(v.number()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const safeLimit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const staleBeforeMs = Math.max(0, nowMs - RUNTIME_RUN_STALE_AFTER_MS);
-    const rows = (await ctx.db
-      .query("runtimeRuns")
-      .withIndex("by_status_updatedAt", (q: any) =>
-        q.eq("status", "running").lt("updatedAt", staleBeforeMs),
-      )
-      .take(safeLimit)) as RuntimeRunLike[];
-    return rows.filter((run) => isRuntimeRunStale({ run, nowMs }));
   },
 });
 
@@ -3345,83 +2755,6 @@ export const appendCloudRuntimeRunEventForTrustedOwnerInternal = internalMutatio
   handler: async (ctx, { trustedOwnerId, ...args }) => await appendCloudRuntimeRunEventHandler(ctx, args, trustedOwnerId),
 });
 
-export const appendCloudRuntimeRunEventInternal = internalMutation({
-  args: {
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-    runId: v.string(),
-    eventType: v.string(),
-    eventKey: v.optional(v.string()),
-    payload: v.any(),
-    createdAt: v.optional(v.number()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId: args.ownerId,
-      threadId: args.threadId,
-    });
-    const runId = normalizeRunId(args.runId);
-    const run = await getRuntimeRunByOwnerRunId({
-      ctx,
-      ownerId: args.ownerId,
-      runId,
-    });
-    if (!run) throw new Error("runtime_run_not_found");
-    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
-
-    const eventType = String(args.eventType ?? "").trim();
-    if (!eventType) throw new Error("runtime_event_type_required");
-    const eventKey = String(args.eventKey ?? "").trim() || undefined;
-    if (eventKey) {
-      const existing = (await ctx.db
-        .query("runtimeRunEvents")
-        .withIndex("by_owner_run_eventKey", (q: any) =>
-          q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
-        )
-        .first()) as RuntimeRunEventLike | null;
-      if (existing) return existing;
-    }
-    if (run.status !== "running") throw new Error("runtime_run_not_active");
-
-    const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
-    const createdAt =
-      typeof args.createdAt === "number" && Number.isFinite(args.createdAt)
-        ? Math.floor(args.createdAt)
-        : nowMs;
-    const persistedPayload = projectRuntimeCommunityContextEventPayload({
-      eventType,
-      payload: args.payload,
-      communityScopeId: run.communityId,
-    });
-    const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
-      summary: run.runtimeHarnessTelemetrySummary,
-      eventType,
-      payload: persistedPayload,
-    });
-    const id = await ctx.db.insert("runtimeRunEvents", {
-      ownerId: args.ownerId,
-      threadId: thread._id,
-      runId,
-      seq,
-      eventType,
-      eventKey,
-      payload: persistedPayload,
-      createdAt,
-    });
-    await ctx.db.patch(run._id, {
-      lastEventSeq: seq,
-      runtimeHarnessTelemetrySummary,
-      updatedAt: nowMs,
-    });
-    const created = (await ctx.db.get(id)) as RuntimeRunEventLike | null;
-    if (!created) throw new Error("runtime_event_create_failed");
-    return created;
-  },
-});
-
 export const recordRuntimeProviderContextAttestationInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -3657,234 +2990,6 @@ export const setCloudRuntimeRunContextSnapshotInternal = internalMutation({
   },
 });
 
-export const appendCloudRuntimeRunPendingSteeringInternal = internalMutation({
-  args: {
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-    runId: v.string(),
-    text: v.string(),
-    messageKey: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const text = String(args.text ?? "").trim();
-    if (!text) return null;
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId: args.ownerId,
-      threadId: args.threadId,
-    });
-    const runId = normalizeRunId(args.runId);
-    const run = await getRuntimeRunByOwnerRunId({
-      ctx,
-      ownerId: args.ownerId,
-      runId,
-    });
-    if (!run) return null;
-    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
-    if (run.status !== "running") return run;
-    const existing = Array.isArray(run.pendingUserSteering)
-      ? run.pendingUserSteering
-      : [];
-    const pendingUserSteering = [
-      ...existing,
-      {
-        text,
-        receivedAt: nowMs,
-        messageKey: String(args.messageKey ?? "").trim() || undefined,
-      },
-    ].slice(-8);
-    await ctx.db.patch(run._id, {
-      pendingUserSteering,
-      updatedAt: nowMs,
-    });
-    return (await ctx.db.get(run._id)) as RuntimeRunLike | null;
-  },
-});
-
-export const getActiveRuntimeTurnStateInternal = internalQuery({
-  args: {
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-  },
-  handler: async (ctx, args) => {
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId: args.ownerId,
-      threadId: args.threadId,
-    });
-    const run = await getRunningRuntimeRunByThread({
-      ctx,
-      threadId: thread._id,
-    });
-    if (!run || run.ownerId !== args.ownerId) return null;
-    return {
-      runId: run.runId,
-      threadId: String(run.threadId),
-      status: run.status,
-      reason: run.reason ?? null,
-      errorCode: run.errorCode ?? null,
-      errorMessage: run.errorMessage ?? null,
-      pendingUserSteering: Array.isArray(run.pendingUserSteering)
-        ? run.pendingUserSteering.slice(-8)
-        : [],
-      stopRequestedAt: run.stopRequestedAt ?? null,
-      stopReason: run.stopReason ?? null,
-      activeContextSnapshot: run.activeContextSnapshot ?? null,
-      activeContextSnapshotUpdatedAt: run.activeContextSnapshotUpdatedAt ?? null,
-      startedAt: run.startedAt,
-      updatedAt: run.updatedAt,
-    };
-  },
-});
-
-export const reconcileOrphanedCloudRuntimeRunInternal = internalMutation({
-  args: {
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-    runId: v.string(),
-    providerSandboxId: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId: args.ownerId,
-      threadId: args.threadId,
-    });
-    const runId = normalizeRunId(args.runId);
-    const run = await getRuntimeRunByOwnerRunId({
-      ctx,
-      ownerId: args.ownerId,
-      runId,
-    });
-    if (!run) return null;
-    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
-    if (run.status !== "running") return run;
-
-    const eventKey = `sandbox_orphan_reconciled:${String(args.providerSandboxId ?? "").trim()}`;
-    const existingEvent = (await ctx.db
-      .query("runtimeRunEvents")
-      .withIndex("by_owner_run_eventKey", (q: any) =>
-        q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
-      )
-      .first()) as RuntimeRunEventLike | null;
-    if (!existingEvent) {
-      const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
-      await ctx.db.insert("runtimeRunEvents", {
-        ownerId: args.ownerId,
-        threadId: thread._id,
-        runId,
-        seq,
-        eventType: "sandbox_orphan_reconciled",
-        eventKey,
-        payload: {
-          run_id: runId,
-          sandbox_id: String(args.providerSandboxId ?? "").trim() || null,
-          reason: "sandbox_orphan_reconciled",
-        },
-        createdAt: nowMs,
-      });
-      await ctx.db.patch(run._id, {
-        lastEventSeq: seq,
-        updatedAt: nowMs,
-      });
-      const refreshedRun = (await ctx.db.get(run._id)) as RuntimeRunLike | null;
-      if (refreshedRun) {
-        return await finalizeRuntimeRunRecord({
-          ctx,
-          ownerId: args.ownerId,
-          thread,
-          run: refreshedRun,
-          status: "error",
-          reason: "sandbox_orphan_reconciled",
-          errorCode: "sandbox_orphan_reconciled",
-          errorMessage: "Workspace sandbox was reconciled after runtime cleanup was missed.",
-          nowMs,
-          finishedAt: nowMs,
-        });
-      }
-    }
-
-    return await finalizeRuntimeRunRecord({
-      ctx,
-      ownerId: args.ownerId,
-      thread,
-      run,
-      status: "error",
-      reason: "sandbox_orphan_reconciled",
-      errorCode: "sandbox_orphan_reconciled",
-      errorMessage: "Workspace sandbox was reconciled after runtime cleanup was missed.",
-      nowMs,
-      finishedAt: nowMs,
-    });
-  },
-});
-
-export const finalizeStaleCloudRuntimeRunInternal = internalMutation({
-  args: {
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-    runId: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId: args.ownerId,
-      threadId: args.threadId,
-    });
-    const runId = normalizeRunId(args.runId);
-    const run = await getRuntimeRunByOwnerRunId({
-      ctx,
-      ownerId: args.ownerId,
-      runId,
-    });
-    if (!run) {
-      return {
-        finalized: false,
-        status: "missing",
-        stale: false,
-      };
-    }
-    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
-    if (run.status !== "running") {
-      return {
-        finalized: false,
-        status: run.status,
-        stale: false,
-      };
-    }
-    if (!isRuntimeRunStale({ run, nowMs })) {
-      return {
-        finalized: false,
-        status: "running",
-        stale: false,
-      };
-    }
-    const updated = await finalizeRuntimeRunRecord({
-      ctx,
-      ownerId: args.ownerId,
-      thread,
-      run,
-      status: "error",
-      reason: "stale_runtime_workspace_run_reconciled",
-      errorCode: "stale_runtime_workspace_run_reconciled",
-      errorMessage: "Runtime workspace run stopped heartbeating and was reconciled by the stale-run cleanup wall.",
-      nowMs,
-      finishedAt: nowMs,
-    });
-    return {
-      finalized: true,
-      status: updated.status,
-      stale: true,
-    };
-  },
-});
-
 export const touchCloudRuntimeRunHeartbeatInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -3912,38 +3017,6 @@ export const touchCloudRuntimeRunHeartbeatInternal = internalMutation({
       updatedAt: nowMs,
     });
     return await ctx.db.get(run._id);
-  },
-});
-
-
-export const getCloudRunningRuntimeRunByThreadKey = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadKey: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const threadKey = String(args.threadKey ?? "").trim();
-    if (!threadKey) throw new Error("thread_key_required");
-    const thread = await getCloudThreadByThreadKeyInternal({
-      ctx,
-      ownerId,
-      threadKey,
-    });
-    if (!thread) return null;
-    const run = await getRunningRuntimeRunByThread({
-      ctx,
-      threadId: thread._id,
-    });
-    if (!run) return null;
-    if (isRuntimeRunStale({ run, nowMs: Date.now() })) return null;
-    if (run.visibility === "internal_hidden") return null;
-    return run;
   },
 });
 
@@ -4069,48 +3142,3 @@ export const cancelCloudRuntimeRunByThreadKeyInternal = internalMutation({
   },
 });
 
-export const listCloudRuntimeRunEvents = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    runId: v.string(),
-    threadId: v.optional(v.id("threads")),
-    afterSeq: v.optional(v.number()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const runId = normalizeRunId(args.runId);
-    if (args.threadId) {
-      await requireOwnedCloudThread({
-        ctx,
-        ownerId,
-        threadId: args.threadId,
-      });
-    }
-
-    const safeLimit = Math.max(1, Math.min(2000, Math.floor(args.limit ?? 1000)));
-    const afterSeq =
-      typeof args.afterSeq === "number" && Number.isFinite(args.afterSeq) ? Math.floor(args.afterSeq) : null;
-    const rows = await ctx.db
-      .query("runtimeRunEvents")
-      .withIndex("by_owner_run_seq", (q: any) =>
-        afterSeq === null ? q.eq("ownerId", ownerId).eq("runId", runId) : q.eq("ownerId", ownerId).eq("runId", runId).gt("seq", afterSeq),
-      )
-      .take(safeLimit);
-    const out = rows.sort((a: RuntimeRunEventLike, b: RuntimeRunEventLike) => a.seq - b.seq);
-    const filtered = !args.threadId
-      ? out
-      : out.filter((row: RuntimeRunEventLike) => row.threadId === args.threadId);
-    return await Promise.all(
-      filtered.map(async (row: RuntimeRunEventLike) => ({
-        ...row,
-        payload: await hydrateRuntimeEventPayload(ctx, row.payload),
-      })),
-    );
-  },
-});

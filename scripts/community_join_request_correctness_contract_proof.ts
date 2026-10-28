@@ -92,11 +92,6 @@ assert.match(membershipLifecycle, /getUniqueCommunityMembershipByPair\([\s\S]*?c
 assert.doesNotMatch(communityPublic, /status: "canceled"|status: "approved"/,
   "public admission must not persist terminal request statuses");
 assert.match(
-  communityPublic,
-  /getMyJoinRequestBySlug = query\([\s\S]*?communityUserIsBlocked\([\s\S]*?return null;[\s\S]*?getCurrentCommunityJoinRequestByPair/,
-  "the cached join-request lookup must hide stale request state from blocked users",
-);
-assert.match(
   memberOntology,
   /async function confirmMemberInterviewFactsHandler\([\s\S]*?requireCommunityUserNotBlocked\([\s\S]*?loadActiveMembership[\s\S]*?hasPendingJoinRequest/,
   "a block must supersede both membership and pending-request authority for interview facts",

@@ -130,8 +130,8 @@ assert.match(
   "member retrieval should fail closed after source evidence is revoked or materially superseded",
 );
 assert.ok(
-  (directory.match(/canViewerReadNodeWithCurrentEvidence/g) ?? []).length >= 7,
-  "current evidence readability should protect memory search, read, workflow, directory, graph, and edge surfaces",
+  (directory.match(/canViewerReadNodeWithCurrentEvidence/g) ?? []).length >= 6,
+  "current evidence readability should protect memory search, overview, node, and edge surfaces",
 );
 assert.match(
   directory,

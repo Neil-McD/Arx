@@ -34,10 +34,6 @@ export function getCommunityPublishReadinessMissingFields(
   return missing;
 }
 
-export function isCommunityPublishReady(input: CommunityPublishReadinessInput): boolean {
-  return getCommunityPublishReadinessMissingFields(input).length === 0;
-}
-
 export function getCommunityPublishReadinessBlockingFields(input: {
   currentVisibility?: string | null;
   nextVisibility?: string | null;

@@ -1,4 +1,4 @@
-import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   communitySubscriptionStatusGrantsAccess,

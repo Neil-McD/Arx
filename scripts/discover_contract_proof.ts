@@ -63,7 +63,7 @@ function main() {
   const listDiscover = extractSection(
     communityPublic,
     "export const listPublicDiscoverCommunities = query({",
-    "export const getMyJoinRequestBySlug = query({",
+    "export const joinPublicCommunityBySlug = mutation({",
     "public Discover community listing",
   );
   assert.match(

@@ -1,9 +1,4 @@
-export const COMMUNITY_CHAT_EVIDENCE_SEARCH_TOOL_NAME = "community_chat_search" as const;
-export const COMMUNITY_CHAT_EVIDENCE_READ_TOOL_NAME = "community_chat_read" as const;
-export const COMMUNITY_AI_FEED_EVIDENCE_SEARCH_TOOL_NAME =
-  "community_ai_feed_search" as const;
-export const COMMUNITY_AI_FEED_EVIDENCE_READ_TOOL_NAME =
-  "community_ai_feed_read" as const;
+
 
 export const COMMUNITY_EVIDENCE_SURFACES = [
   "member_agent_dock",
@@ -230,49 +225,6 @@ export function parseCommunityEvidenceRef(raw: unknown): ParsedCommunityEvidence
 }
 
 /**
- * Publishing an AI Feed post is an explicit community-authorized promotion.
- * The persisted agent key is the only admissible agent identity or credit;
- * the moderator who records the post is accountable but is not its author.
- */
-export function deriveCommunityAiFeedLineageEnvelope(args: {
-  communityId: string;
-  postId: string;
-  agentKind?: "personal_agent" | "community_agent" | null;
-  agentKey?: string | null;
-  recordedByUserId?: string | null;
-}): CommunityAiFeedLineageEnvelope {
-  const communityId = String(args.communityId ?? "").trim();
-  if (!communityId) throw new Error("community_ai_feed_lineage_community_id_required");
-  const agentKey = String(args.agentKey ?? "").trim() || null;
-  const recordedByUserId = String(args.recordedByUserId ?? "").trim() || null;
-  const agentKind =
-    args.agentKind === "personal_agent"
-      ? "personal_agent"
-      : "community_agent";
-  const personalAuthority =
-    agentKind === "personal_agent" && recordedByUserId
-      ? ({ type: "user", user_id: recordedByUserId } as const)
-      : null;
-  return {
-    actor: { type: agentKind, agent_key: agentKey },
-    authority:
-      personalAuthority ?? { type: "community", community_id: communityId },
-    recorded_by: recordedByUserId
-      ? { type: "user", user_id: recordedByUserId }
-      : null,
-    credit: agentKey ? { type: "agent", agent_key: agentKey } : null,
-    attribution_mode: agentKey
-      ? agentKind === "personal_agent"
-        ? "on_behalf_of"
-        : "autonomous"
-      : "unattributed",
-    origin: "community_ai_feed",
-    evidence: { ref: buildCommunityAiFeedEvidenceRef(args.postId) },
-    profile_projection: "none",
-  };
-}
-
-/**
  * Resource publication proves community authority, not authorship. The
  * persisted creator is retained only as the accountable recorder; automated
  * and changeset-backed creation means it must never imply human credit.
@@ -415,12 +367,4 @@ export function communityInteractionVisibilityIsEvidenceReadable(
   raw: unknown,
 ): raw is "community" | "public" {
   return raw === "community" || raw === "public";
-}
-
-export function isCommunityEvidenceSurface(
-  raw: unknown,
-): raw is CommunityEvidenceSurface {
-  return (COMMUNITY_EVIDENCE_SURFACES as readonly string[]).includes(
-    String(raw ?? ""),
-  );
 }

@@ -5,7 +5,6 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityMessageReactionLike,
-  normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityModerator,
   resolvePublicUserId,
@@ -200,40 +199,6 @@ async function mapCommunityMessageReactionRow(
     emoji: row.emoji,
     created_at: toIsoString(row.createdAt),
   };
-}
-
-function normalizeResearchText(raw: unknown, maxLen: number): string {
-  const value = String(raw ?? "").trim();
-  if (!value) return "";
-  return value.slice(0, maxLen);
-}
-
-function tokenizeResearchQuery(raw: string): string[] {
-  const tokens = raw
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2);
-  const deduped: string[] = [];
-  const seen = new Set<string>();
-  for (const token of tokens) {
-    if (seen.has(token)) continue;
-    seen.add(token);
-    deduped.push(token);
-    if (deduped.length >= 16) break;
-  }
-  return deduped;
-}
-
-function scoreResearchSnippet(snippet: string, tokens: string[]): number {
-  const normalizedSnippet = snippet.toLowerCase();
-  if (tokens.length === 0) return 0.5;
-  let matches = 0;
-  for (const token of tokens) {
-    if (normalizedSnippet.includes(token)) matches += 1;
-  }
-  if (matches <= 0) return 0;
-  return Number((matches / tokens.length).toFixed(4));
 }
 
 export function extractMessageText(contentJson: unknown): string {

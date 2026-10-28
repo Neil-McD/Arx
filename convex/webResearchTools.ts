@@ -16,10 +16,6 @@ import {
   normalizeWebResearchUrl,
 } from "../shared/webResearchUrlPolicy.ts";
 
-function collapseWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
 function formatNormalizedResults(query: string, results: NormalizedSearchResult[], backendLabels: string[]): string {
   if (results.length === 0) return `Query: ${query}\nNo results found.`;
   const backendLabel = backendLabels.length > 0 ? `\nBackends: ${backendLabels.join(", ")}` : "";

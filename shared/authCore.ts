@@ -2,9 +2,6 @@ import {
   probeConvexAuthenticatedActorSessionDetailed,
   type ConvexAuthenticatedSessionProbeResult,
 } from "./convexAuthSessionProbe";
-import { readConvexRuntimeUrl } from "./convexRuntime";
-import { isStandaloneWebApp } from "./browserRuntimeMode";
-import { VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS } from "./voiceCapture";
 import { APP_ADMISSION_TIMEOUT_MS } from "./asyncDeadline";
 
 export type AuthUser = {
@@ -107,71 +104,6 @@ export async function readAuthError(response: Response): Promise<string> {
   return `Cloud error (${response.status})`;
 }
 
-async function readVoiceTranscriptionRequestError(
-  response: Response,
-): Promise<VoiceTranscriptionRequestError> {
-  try {
-    const json = (await response.clone().json()) as {
-      code?: unknown;
-      error?: unknown;
-      message?: unknown;
-    };
-    const message =
-      readString(json.message) ??
-      readString(json.error) ??
-      `Cloud error (${response.status})`;
-    return new VoiceTranscriptionRequestError({
-      message,
-      status: response.status,
-      code: readString(json.code) ?? readString(json.error),
-    });
-  } catch {
-    return new VoiceTranscriptionRequestError({
-      message: await readAuthError(response),
-      status: response.status,
-    });
-  }
-}
-
-function isAbortLikeError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { name?: unknown; message?: unknown };
-  const name = typeof record.name === "string" ? record.name.toLowerCase() : "";
-  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
-  return name === "aborterror" || message.includes("aborted");
-}
-
-async function fetchVoiceTranscription(
-  url: string,
-  init: RequestInit,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => {
-    controller.abort();
-  }, VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (isAbortLikeError(error)) {
-      throw new VoiceTranscriptionRequestError({
-        message: "Voice upload timed out. Try a shorter clip.",
-        status: 0,
-        code: "voice_upload_timeout",
-      });
-    }
-    throw new VoiceTranscriptionRequestError({
-      message: "Voice upload failed. Check your connection and try again.",
-      status: 0,
-      code: "voice_upload_failed",
-    });
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
 export function decodeAuthJwtPayload(token: string): unknown | null {
   try {
     const parts = token.split(".");
@@ -198,15 +130,6 @@ const AUTH_GATEWAY_BEGIN_PATH = "/api/auth/google/start";
 const AUTH_GATEWAY_SESSION_PATH = "/api/auth/session";
 const AUTH_GATEWAY_REFRESH_PATH = "/api/auth/refresh";
 const AUTH_GATEWAY_LOGOUT_PATH = "/api/auth/logout";
-
-function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function buildConvexRuntimeUrl(baseUrl: string, routePath: string): string {
-  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
-  return `${trimTrailingSlashes(baseUrl)}${route}`;
-}
 
 function buildSameOriginAuthUrl(routePath: string): string {
   const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
@@ -473,22 +396,6 @@ function coerceAuthBridgeBootstrapTrace(payload: unknown): AuthBridgeBootstrapTr
   };
 }
 
-function buildAuthHeaders(params: {
-  apiKey?: string | null;
-  accessToken?: string | null;
-  includeJsonContentType?: boolean;
-}): Headers {
-  const headers = new Headers();
-  if (params.includeJsonContentType !== false) headers.set("Content-Type", "application/json");
-  const apiKey = readString(params.apiKey);
-  if (apiKey) {
-    headers.set("apikey", apiKey);
-  }
-  const bearerToken = readString(params.accessToken) ?? (apiKey && isLikelyAuthJwt(apiKey) ? apiKey : null);
-  if (bearerToken) headers.set("Authorization", `Bearer ${bearerToken}`);
-  return headers;
-}
-
 export type BeginOAuthSignInUrlResult =
   | { ok: true; authUrl: string }
   | { ok: false; error: string };
@@ -545,56 +452,6 @@ function ensureResultFromRefreshFailure(
     return { status: "terminal_failure", reason: refresh.reason };
   }
   return { status: "transient_failure", reason: refresh.reason };
-}
-
-export async function transcribeVoice(params: {
-  session: { access_token: string };
-  audioBase64: string;
-  mimeType: string;
-  language?: string | null;
-  surface: string;
-  preferPrimary?: boolean;
-  durationMs?: number | null;
-}): Promise<string> {
-  const accessToken = readString(params.session?.access_token);
-  if (!accessToken) throw new Error("Sign in to use voice input.");
-  const convexUrl = readConvexRuntimeUrl();
-  if (!convexUrl) throw new Error("Voice transcription is unavailable: missing Convex URL.");
-
-  const response = await fetchVoiceTranscription(
-    buildConvexRuntimeUrl(convexUrl, "/runtime/voice_transcribe"),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        audio_base64: params.audioBase64,
-        mime_type: params.mimeType,
-        language: params.language ?? undefined,
-        surface: params.surface,
-        prefer_primary: params.preferPrimary ?? false,
-        duration_ms:
-          typeof params.durationMs === "number" && Number.isFinite(params.durationMs)
-            ? Math.max(0, Math.round(params.durationMs))
-            : undefined,
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw await readVoiceTranscriptionRequestError(response);
-  }
-  let payload: unknown = null;
-  try {
-    payload = (await response.json()) as unknown;
-  } catch {
-    payload = null;
-  }
-  if (!payload) throw new Error("Transcription failed.");
-  const payloadRecord = asObject(payload);
-  const text = readString(payloadRecord?.text);
-  return text ?? "";
 }
 
 function includesJwtFailureText(value: string): boolean {
@@ -675,23 +532,6 @@ export async function ensureAuthSessionForRequestResult(
   return ensureResultFromRefreshFailure(refreshed);
 }
 
-export async function ensureAuthSessionForAuthenticatedSend(params: {
-  session: AuthSession;
-  sessionRef?: AuthSessionRef;
-  refreshLocked: () => Promise<AuthSession | null>;
-}): Promise<AuthSession | null> {
-  const ensured = await ensureAuthSessionForAuthenticatedSendResult({
-    session: params.session,
-    sessionRef: params.sessionRef,
-    refreshLockedResult: async () => {
-      const refreshed = await params.refreshLocked();
-      if (!refreshed) return { status: "terminal_failure", reason: "refresh_failed" } as const;
-      return { status: "refreshed", session: refreshed } as const;
-    },
-  });
-  return ensured.status === "ready" ? ensured.session : null;
-}
-
 export async function ensureAuthSessionForAuthenticatedSendResult(params: {
   session: AuthSession;
   sessionRef?: AuthSessionRef;
@@ -767,10 +607,6 @@ export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResu
     },
   });
   return result ?? { status: "transient_failure", reason: "auth_gateway_unavailable" };
-}
-
-export async function fetchAuthUser(token: string): Promise<AuthUser | null> {
-  return decodeAuthUserFromIdentityToken(token);
 }
 
 async function isAuthSessionAcceptedForRuntime(

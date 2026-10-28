@@ -376,8 +376,8 @@ assert.equal(actionLedger.body.includes("private resource body"), false);
 const threads = readFileSync(new URL("../convex/threads.ts", import.meta.url), "utf8");
 assert.equal(
   (threads.match(/projectRuntimeCommunityContextEventPayload\(/g) ?? []).length,
-  2,
-  "both runtime event append mutations must project payloads",
+  1,
+  "the runtime event append path must project payloads",
 );
 assert.match(
   threads,

@@ -11,7 +11,6 @@ import {
   memberFactVisibleToLens,
   normalizeMemberFactBody,
   type MemberFactActorType,
-  type MemberFactConsentState,
   type MemberFactKind,
   type MemberFactLike,
   type MemberFactProvenance,
@@ -210,33 +209,6 @@ export async function insertMissingBridgeSocialLinkFacts(ctx: any, args: {
     missing,
     inserted: missing.length,
   };
-}
-
-export async function transitionMemberFactConsent(ctx: any, args: {
-  factId: any;
-  to: MemberFactConsentState;
-  actorType: MemberFactActorType;
-  actorUserId: any;
-  nowMs: number;
-}): Promise<void> {
-  const fact = await ctx.db.get(args.factId);
-  if (!fact) throw new Error("member_fact_not_found");
-  if (fact.contextKind === "workflow") throw new Error("member_fact_consent_forbidden");
-  /* Only the subject member consents about themselves. */
-  if (args.actorType === "member" && String(fact.userId) !== String(args.actorUserId)) {
-    throw new Error("member_fact_consent_forbidden");
-  }
-  if (
-    !canTransitionMemberFactConsent({
-      from: fact.consentState,
-      to: args.to,
-      actorType: args.actorType,
-    })
-  ) {
-    throw new Error("member_fact_consent_transition_invalid");
-  }
-  await ctx.db.patch(args.factId, { consentState: args.to, updatedAt: args.nowMs });
-  await recomputeMemberSpine(ctx, fact.userId, args.nowMs);
 }
 
 export async function recomputeMemberSpine(ctx: any, userId: any, nowMs: number): Promise<void> {

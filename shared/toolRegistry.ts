@@ -234,43 +234,6 @@ const MEMBER_CONVERSATION_READ_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const EMPTY_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {},
-};
-
-const COMMUNITY_WRITE_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["post_type", "title", "body", "evidence"],
-  properties: {
-    post_type: {
-      type: "string",
-      enum: ["observation", "recommendation", "action"],
-    },
-    title: {
-      type: "string",
-      maxLength: 180,
-    },
-    body: {
-      type: "string",
-      minLength: 1,
-      maxLength: 12000,
-    },
-    evidence: {
-      type: "array",
-      minItems: 1,
-      maxItems: 4,
-      items: {
-        type: "string",
-        minLength: 1,
-        maxLength: 180,
-      },
-    },
-  },
-};
-
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   search_product_docs: {
     name: "search_product_docs",
@@ -693,26 +656,6 @@ function normalizeString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizePositiveInteger(
-  value: unknown,
-  fieldName: string,
-  maxValue: number,
-): number | null {
-  if (value === undefined || value === null || value === "") return null;
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isFinite(parsed))
-    throw new Error(`${fieldName} must be a number.`);
-  const integer = Math.floor(parsed);
-  if (integer < 1)
-    throw new Error(`${fieldName} must be greater than or equal to 1.`);
-  return Math.min(integer, maxValue);
 }
 
 function normalizeBoundedInteger(

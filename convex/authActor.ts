@@ -542,32 +542,6 @@ export async function previewAuthenticatedActorResolutionBySubject(args: {
   return toAuthContinuityResolutionPreview(authSubject, state);
 }
 
-export async function previewAuthenticatedActorResolution(args: {
-  ctx: any;
-  authSubject?: string | null;
-  userId?: any;
-  email?: string | null;
-  emailVerified?: boolean | null;
-  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-}): Promise<AuthContinuityResolutionPreview> {
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  return await previewAuthenticatedActorResolutionBySubject({
-    ctx: args.ctx,
-    authSubject,
-    userId: args.userId,
-    email: args.email ?? null,
-    emailVerified: args.emailVerified ?? false,
-    emailVerificationSource: args.emailVerificationSource ?? null,
-    displayName: args.displayName ?? null,
-    avatarUrl: args.avatarUrl ?? null,
-  });
-}
-
 export async function ensureAuthenticatedActorDetailed(args: {
   ctx: any;
   authSubject?: string | null;

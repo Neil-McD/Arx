@@ -163,6 +163,9 @@ every change must respect:
 - The release gate runs every unit test (`npm run test:unit`) and every
   `check:*` script (`npm run check:all`); a check file that nothing runs fails
   the gate. Fix or delete a failing check; never leave one unrun.
+- Every Convex module and every registered Convex function needs a caller.
+  `no_orphan_modules_proof` and `no_uncalled_functions_proof` fail on new dead
+  ones; hand-run tools are named in their exception lists with a reason.
 - A change is done when the release gate passes, the behavior is verified on
   staging, docs match, and nothing in §3 lost coverage.
 

@@ -985,22 +985,6 @@ export async function listCommunityMembershipRowsForManager(args: {
   return { community, rows: canonicalRows.rows };
 }
 
-export function mapCommunityPricingRow(row: CommunityPricePointLike) {
-  const billingPeriodRaw = String(row.billingPeriod ?? "").trim().toLowerCase();
-  return {
-    price_point_id: String(row._id),
-    community_id: String(row.communityId),
-    billing_period: billingPeriodRaw === "annual" ? "annual" : "monthly",
-    name: row.name,
-    description: row.description ?? null,
-    amount_base_units: Math.max(0, Math.floor(row.amountBaseUnits)),
-    currency: row.currency,
-    currency_decimals: Math.max(0, Math.floor(row.currencyDecimals)),
-    active: Boolean(row.isCurrent) && !row.archivedAt,
-    updated_at: toIsoString(row.updatedAt),
-  };
-}
-
 export async function mapCommunityMemberSettingsRow(
   ctx: any,
   row: CommunityMemberSettingsLike,

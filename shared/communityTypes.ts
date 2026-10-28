@@ -18,11 +18,6 @@ export type CommunityPublicFace = {
 
 export type CommunityPresenceFace = CommunityPublicFace;
 
-export type CommunityMemberProof = {
-  member_count?: number | null;
-  member_faces_preview?: CommunityPublicFace[] | null;
-};
-
 export type CommunityPresenceSummary = {
   member_count?: number | null;
   admin_count?: number | null;
@@ -77,13 +72,6 @@ export type CommunityCustomFunnelSlot = "custom_1" | "custom_2";
 
 export type CommunityFunnelSlot = "default" | CommunityCustomFunnelSlot;
 
-export type CommunityFunnelActivationTarget =
-  | { slot: "default" }
-  | {
-      slot: CommunityCustomFunnelSlot;
-      expectedPublishedDraftRevision: number;
-    };
-
 export type CommunityFunnelPillarV2 = {
   title: string;
   body: string;
@@ -124,16 +112,6 @@ export type CommunityFunnelVariantConfig = {
   published_content_v2: CommunityFunnelContentV2 | null;
   published_draft_revision: number;
   published_at: number | null;
-};
-
-export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
-  external_funnel_url: string | null;
-  external_funnel_active: boolean;
-  settings_revision: number;
-  custom_funnels: Record<
-    CommunityCustomFunnelSlot,
-    CommunityFunnelVariantConfig | null
-  >;
 };
 
 export type DiscoverCommunitySnapshot = {
@@ -284,17 +262,6 @@ export type DirectMessageTypingPresenceBundle = {
   total_count: number;
 };
 
-export type CommunityChatMessage<TAttachment = unknown> = {
-  id: string;
-  community_id: string;
-  sender_id: string;
-  body: string;
-  attachments?: TAttachment[];
-  reply_to_id: string | null;
-  created_at: string;
-  seq: number;
-};
-
 export type CommunityActivityEventType =
   | "member_joined"
   | "resource_added"
@@ -322,14 +289,6 @@ export type CommunityActivityEvent = {
 export type ChatLightboxImage = {
   url: string;
   name: string;
-};
-
-export type MessageReaction = {
-  id: string;
-  message_id: string;
-  user_id: string;
-  emoji: string;
-  created_at: string;
 };
 
 export type CommunityTypingPresenceUser = {
@@ -397,25 +356,6 @@ export type CommunityAiFeedReactionCounts = {
   low_signal: number;
 };
 
-export type CommunityAiFeedPost = {
-  id: string;
-  community_id: string;
-  author_type: "agent";
-  author_user_id: string | null;
-  agent_key: string | null;
-  author_label: string;
-  post_type: CommunityAiFeedPostType;
-  title: string | null;
-  body: string;
-  evidence: string[];
-  score: number;
-  reaction_counts: CommunityAiFeedReactionCounts;
-  viewer_reaction: CommunityAiFeedReactionType | null;
-  created_at: string;
-  updated_at: string;
-  pending?: boolean;
-};
-
 export type CommunityRecentContextItem = {
   source_type: "chat" | "ai_feed" | "resource";
   source_id: string;
@@ -427,40 +367,6 @@ export type CommunityRecentContextItem = {
   url?: string | null;
   post_type?: "observation" | "recommendation" | "action" | null;
   resource_type?: string | null;
-};
-
-export type CommunityRecentContextReadModelV1 = {
-  community_id: string;
-  identity: {
-    community_id: string;
-    name: string | null;
-    slug: string | null;
-    one_liner: string | null;
-    about: string | null;
-  };
-  retrieved_at: string;
-  query: string;
-  source_window: {
-    chat_messages_considered: number;
-    ai_feed_items_considered: number;
-    resources_considered: number;
-  };
-  source_counts: {
-    chat: number;
-    ai_feed: number;
-    resource: number;
-  };
-  recent_context: CommunityRecentContextItem[];
-  diagnostics: {
-    version: 1;
-    fallback_used: boolean;
-    retrieval_version: string;
-    retrieval_latency_ms: number;
-    retrieved_items_used: number;
-    chat_fetch_ok: boolean;
-    ai_feed_fetch_ok: boolean;
-    resource_fetch_ok: boolean;
-  };
 };
 
 export type CommunityAnalyticsSummary = {

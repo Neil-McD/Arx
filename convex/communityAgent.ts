@@ -8,7 +8,6 @@ import {
 import {
   type CommunityAgentConfigLike,
   getCommunityAndMembership,
-  requireCommunityChatAccess,
   requireCommunityManager,
   resolveCommunityAccessBundle,
   resolveUserIdForAuthenticatedRequest,
@@ -189,33 +188,6 @@ export const saveCommunityAgentConfig = mutation({
   },
 });
 
-export const getActiveCommunityAgentSystemPrompt = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
-    if (!config) return null;
-    return {
-      community_system_prompt: config.systemPrompt,
-      system_prompt: config.systemPrompt,
-    };
-  },
-});
-
 export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
   args: {
     userId: v.optional(v.id("users")),
@@ -236,26 +208,3 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
   },
 });
 
-export const getActiveCommunityAgentLanding = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
-    if (!config) return null;
-    return mapCommunityAgentConfigRow(config);
-  },
-});
