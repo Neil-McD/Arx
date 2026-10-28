@@ -117,9 +117,10 @@ test("the targeted community comes from the path or the call target", () => {
   expect(mcpTargetCommunitySlug({ path: "/users/me" })).toBeNull();
 });
 
-// A page that passes the site checks: language, title, zoomable viewport.
+// A page that passes the site checks: language, title, zoomable viewport, Polynet's blocks.
 const PAGE = '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Run club</title>' +
-  '<script type="module" src="/__polynet/ui.js"></script><polynet-account></polynet-account></html>';
+  '<script type="module" src="/__polynet/ui.js"></script><polynet-account></polynet-account>' +
+  "<polynet-channels></polynet-channels><polynet-chat></polynet-chat><polynet-members></polynet-members></html>";
 
 const deploy = (files: Record<string, unknown>, key = "deploy-1") => ({
   target: "/communities/run-club/capabilities/community.site.deploy.json", operation: "community.site.deploy",
@@ -168,6 +169,7 @@ test("site deploys through the MCP are bounded static sites", async () => {
   expect(failed.content[0].text).toContain("site_checks_failed");
   expect(failed.content[0].text).toContain("viewport");
   expect(failed.content[0].text).toContain("lang");
+  expect(failed.content[0].text).toContain("No page has <polynet-chat>");
   expect(calls).toEqual([]);
   // A member's agent can't deploy: the MCP is builder-only.
   expect((await f.call("member", "polynet_call", deploy({ "/index.html": { content: "x" } }, "k6"))).content[0].text).toContain("builder_only");

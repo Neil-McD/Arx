@@ -1,9 +1,15 @@
 ---
 name: polynet-sdk
-description: Read and write a Polynet community's data from its site with the Polynet SDK (session and sign-in, channels, unread and mentions, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, safe markdown). Use whenever site code needs community data or a member action.
+description: Build custom views beside Polynet's blocks with the Polynet SDK (session and sign-in, the blocks' URL and events, channels, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, safe markdown). Use whenever site code needs community data or a member action beyond what the blocks show.
 ---
 
 # The Polynet SDK
+
+Every site places Polynet's blocks for the social core: `<polynet-channels>`,
+`<polynet-chat>` and `<polynet-members>` (required; `polynet-build-site`).
+The SDK is for everything around them: the public face, events, courses,
+knowledge, the agent, and custom views like a route log or a "who's here
+now" strip. Custom views go beside the blocks, never instead of them.
 
 The full reference is served by every site:
 `https://<slug>.polynet.page/__polynet/llms.txt`. Read it before using a
@@ -39,68 +45,32 @@ if (!session.signed_in) {
 - `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show
   owners and admins a link to `session.studio_url`.
 
-## Channels, chat and members: the blocks
+## Working with the blocks from code
 
-The standard way to show channels, the conversation and the people is
-Polynet's blocks. Place the tags; `ui.js` (on every page) loads each one only
-where it's used:
-
-```html
-<polynet-channels></polynet-channels>
-<polynet-chat><span slot="empty">Nothing logged yet. First one out?</span></polynet-chat>
-<polynet-members></polynet-members>
-```
+Styling and placement are in `polynet-build-site`; this is how your own code
+talks to them.
 
 - The channel lives in the URL: `?channel=<slug>` (none: General). Picking
   one in `<polynet-channels>` updates the URL and fires `polynet:channel`
-  (`detail: { slug }`) on `document`; `<polynet-chat>` follows. Link to
-  `?channel=<slug>` or dispatch the event from your own navigation.
+  (`detail: { slug }`) on `document`; `<polynet-chat>` follows, and your
+  views can too. Switch from your own navigation by linking to
+  `?channel=<slug>` or dispatching the event:
+  `document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }))`.
   `channel="<slug>"` pins a chat to one channel.
-- The chat scrolls inside itself: give it a height
-  (`polynet-chat { height: calc(100dvh - 160px) }`).
-- The chat is the whole conversation, composer included: members write and
-  reply (Enter sends, Shift+Enter is a new line; on touch, Send sends), tag
-  people and the community agent with `@`, attach files (button, paste,
-  drag and drop), react, and edit or delete their own messages. Sends show
-  at once and a failed one returns to the box with Retry. Where the member
-  can't post, a quiet note replaces the box. Don't build your own chat
-  composer; a custom one with `post()` (below) is still allowed beside it.
-- `<polynet-members>` is everyone here: online first with a presence dot,
-  role badges for owners, admins and moderators, a search box (name or
-  handle), live as people come and go, 200 at a time in big communities.
-  It grows with its content; give it a scrolling column if it should scroll
-  on its own (`max-height` plus `overflow-y: auto`).
-- Profiles: a member in `<polynet-members>`, a chat author and an @-tag in a
-  post all open that member's profile over the page (side sheet, or bottom
-  sheet on phones): picture, name, @handle, role, online, bio, links and a
-  Message button (opens their messages in Polynet; hidden on your own).
-  The URL carries `?member=<handle>` while it is open: link to it to open a
-  profile, and Back closes it. From your own code:
+- The chat fires `polynet:read` (`{ slug }`) when it marks a channel read.
+- Profiles: a member in `<polynet-members>`, a chat author and an @-tag all
+  open Polynet's profile panel (with Message). Open one from your own view
+  (a name in your route log) with
   `document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }))`
-  (or `{ ref }` from `members()`). Don't build your own profile view.
-- They take the page's font and color and read the shell's tokens
-  (`--polynet-accent`, `--polynet-on-accent`, `--polynet-text`,
-  `--polynet-muted`, `--polynet-border`, `--polynet-surface`,
-  `--polynet-radius`). Set `--polynet-surface` on dark sites.
-- Restyle pieces with `::part()` (`channel`, `channel-current`,
-  `unread-dot`, `mention-badge`, `message`, `message-author`, `message-body`,
-  `message-agent`, `message-pending`, `reaction`, `replies`, `day-divider`,
-  `new-divider`, `thread-panel`, `typing`, `composer`, `composer-input`,
-  `composer-send`, `mention-list`, `mention-option`, `attachment-chip`,
-  `message-actions`, `message-action`, `edit-input`, `mention`; members:
-  `search`, `member`, `member-online`, `avatar`, `presence-dot`,
-  `member-name`, `member-handle`, `role-badge`, `section-online`,
-  `section-everyone`; the panel, `polynet-profile::part(panel)`, `name`,
-  `bio`, `link`, `message`, …; the full list is in llms.txt). Slots:
-  `header`, `empty`, `signed-out`, `read-only`.
+  (or `{ ref }` from `members()`), or link to `?member=<handle>`. Don't
+  build your own profile view.
 - `state="loading|ready|signed-out|error"` on each tag lets your layout
   react, e.g. `polynet-chat[state=signed-out]`.
 
-Signed out, the chat and the members show a sign-in and join prompt, never
-posts or names. Build custom views with the SDK (below) beside the blocks,
-not instead of them.
+## A custom feed in your own markup
 
-## A live feed in your own markup
+The chat already is the community's feed. Build one only for a different
+view of the same posts (a highlights wall, a route log), beside the chat.
 
 ```html
 <ol id="feed" role="log" aria-label="Club feed" aria-live="off"></ol>

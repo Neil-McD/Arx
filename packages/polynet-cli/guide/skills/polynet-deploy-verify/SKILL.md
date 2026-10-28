@@ -32,7 +32,8 @@ Use a browser tool if you have one. Hard-refresh after each deploy.
 - **Signed in** (the founder signs in; never type their password): every
   page shows real data or a designed empty state; the shell is visible
   everywhere and its menu works by keyboard; "Manage" shows for owners and
-  admins; the feed is live; the agent answers.
+  admins; the channels, chat and members work and look native to the
+  design; a member's name opens their profile; the agent answers.
 - **Posting is public:** ask the founder before posting a test message in a
   community with members, and delete it after.
 - **Phone (390px) and desktop (1440px):** screenshot both and compare them to

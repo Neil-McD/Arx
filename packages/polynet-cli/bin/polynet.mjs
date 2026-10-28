@@ -217,7 +217,7 @@ async function runChecks(files) {
   for (const line of formatProblems(result)) console.log(line);
   if (result.errors.length) {
     console.log(`\n${result.errors.length} problem${result.errors.length === 1 ? "" : "s"} to fix before the site can go live.` +
-      " The polynet-accessibility skill explains each one.");
+      " The polynet-build-site and polynet-accessibility skills explain them.");
     return false;
   }
   return true;
@@ -288,7 +288,8 @@ try {
       "      Set up a folder for your AI agent to design and build the site in:",
       "      AGENTS.md, CLAUDE.md and Polynet's skills. No template.",
       "  polynet check [folder]",
-      "      Check the site's accessibility basics. Errors block deploys.",
+      "      Check the site: Polynet's blocks (channels, chat, members) and accessibility",
+      "      basics. Errors block deploys.",
       "  polynet deploy [folder] [--community <slug>]",
       "      Check, then put the folder (default: this one) live at https://<slug>.polynet.page.",
       "      You must be the community's owner or an admin. The community is saved in",

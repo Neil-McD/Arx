@@ -10,7 +10,12 @@ people. The site should feel like stepping into that world. Aim for the site
 members screenshot and send to friends. If it could be any community's site,
 it isn't done.
 
-There is no template. Every site starts from its own concept.
+There is no template. Every site starts from its own concept. What every
+site shares is Polynet's blocks: `<polynet-channels>`, `<polynet-chat>` and
+`<polynet-members>` (required; deploys fail without them) and the
+`<polynet-account>` shell. They behave the same everywhere so members always
+know how to talk and find each other; how they look is your job. A
+direction isn't done until they look like they were made for it.
 
 ## 1. Discover the world
 
@@ -41,20 +46,29 @@ For each, decide:
 - **Color**: the palette in hex, and where the drama comes from.
 - **Signature**: the one thing people remember.
 - **Voice**: the headline and two lines of copy, in the community's words.
+- **The room**: where the conversation lives in this world and what it's
+  called ("the boathouse noticeboard", "the night log"), and how the blocks
+  take on the look: tokens, two or three `::part()` moves, and the words in
+  their slots.
 
 Build each as one static page showing the home view with real copy:
 `concepts/a.html`, `concepts/b.html`, `concepts/c.html`. Each places
-`<polynet-account>` where that design wants it, styled to match.
-Deploy, then send the founder the three links, each with its name and idea.
-They pick one, or mix ("b's type with a's color").
+`<polynet-account>` where that design wants it, and the real
+`<polynet-channels>`, `<polynet-chat>` and `<polynet-members>`, themed for
+that direction: never gray boxes or screenshots standing in for them. The
+founder signs in to see them live (signed out, they show the direction's
+own sign-in words). Deploy, then send the founder the three links, each
+with its name and idea. They pick one, or mix ("b's type with a's color").
 
 ## 3. Build the chosen direction
 
 - Delete the concept pages. Build the real site from the chosen direction.
 - Write each page's structure in HTML, by hand. A page is a composition, not
   a loop. JavaScript fills live data into it (recipes in `polynet-sdk`).
-- Set the look as a few CSS variables (color, type, space, radius), then
-  compose with them.
+- Give the blocks the room the concept named, with real space
+  (`polynet-build-site` shows where they usually go).
+- Set the look as a few CSS variables (color, type, space, radius), map
+  them onto the `--polynet-*` tokens, then compose with them.
 - Design every state in the concept's voice: loading, empty, error, signed
   out. "No runs on the calendar yet. The river's still there." beats a gray
   box that says "No events".
@@ -69,6 +83,10 @@ founder for screenshots). Each pass, ask:
 
 - Does it feel like the three words and the chosen idea? With the name
   covered, would a member still recognize their community?
+- Do the blocks feel native? Signed in, the chat, channels, members and an
+  open profile should look like part of this world (its type, color,
+  edges and words), not a stock widget on a designed page. If they look
+  default, push the tokens and `::part()` styling further.
 - Where is it timid? Make the hierarchy louder: bigger type, stronger
   contrast, more space, one bolder move.
 - Where is it noisy? Remove whatever doesn't serve the idea.
@@ -93,9 +111,12 @@ Fix, deploy, look again. At least two passes.
   Transitions API), all inside
   `@media (prefers-reduced-motion: no-preference)`.
 - **The community's own photos** beat any illustration. Ask for them.
-- **The shell belongs to the design:** style `<polynet-account>` with its
-  CSS variables (`--polynet-accent`, `--polynet-surface`, `--polynet-text`,
-  `--polynet-radius`, `--polynet-font`); it takes the page's font by default.
+- **The blocks and the shell belong to the design:** they take the page's
+  font and read the `--polynet-*` tokens (`accent`, `on-accent`, `text`,
+  `muted`, `border`, `surface`, `radius`). `::part()` does the rest: author
+  names set like the headline face, day dividers as the concept's
+  timestamps, a composer with the site's edges. `polynet-build-site` has
+  recipes; llms.txt lists every part.
 
 ## The bar
 

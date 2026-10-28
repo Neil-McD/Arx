@@ -20,6 +20,10 @@ one edge Worker in front of every community front end.
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 
+Every site must place `<polynet-channels>`, `<polynet-chat>` and
+`<polynet-members>`: `packages/polynet-cli/checks.mjs` fails `polynet check`,
+CLI deploys and MCP deploys without them (a tag in any page, or the name in
+a script for framework builds). The shell needs no check: the edge injects it.
 A page to try the blocks on a staging site: `dispatch/examples/blocks-demo/`
 (deploy it with the CLI like any site).
 
@@ -116,6 +120,6 @@ updating live, the community agent streaming, and only `/__polynet/sdk.js` and
 
 ## Not yet
 
-- Publish `@polynet/cli` 0.3.0 (production by default, `--staging` for staging; npm account `polynet` needs 2FA on).
+- Publish `@polynet/cli` 0.4.0 (production by default, `--staging` for staging; npm account `polynet` needs 2FA on).
 - Founders' own domains (Cloudflare for SaaS custom hostnames, `*/*` route).
 - `polynet.page` on the Public Suffix List (after renewing the domain: the list needs two years left).

@@ -9,7 +9,23 @@ You are building the website of one community that runs on Polynet. Polynet
 hosts everything hard: accounts, members, permissions, payments, posts,
 events, courses, memory and the community's AI agent. Your site is the look
 and the experience. It is a static site (HTML, CSS, JavaScript) served on the
-community's own domain, and it talks to Polynet only through the SDK below.
+community's own domain. Polynet's blocks bring the social core; the SDK
+below brings everything else.
+
+## Rails, not templates (read first)
+
+- Every site places three Polynet blocks, on any page:
+  <polynet-channels>, <polynet-chat> and <polynet-members>. Deploys fail
+  without them. They are the channels, the whole conversation (composer,
+  threads, reactions, attachments, @-tags) and the people (each opens a
+  profile with Message). Never rebuild, hide or replace them.
+- The shell (<polynet-account>) is automatic: Polynet adds it to every page.
+  Place it into your design yourself.
+- Polynet owns how the blocks behave; your site owns how they look, through
+  the --polynet-* tokens, ::part() and slots only (see Blocks, below).
+- Direct messages, admin, settings and billing are never built by a site.
+- Then design freely: invent the community's world, give the blocks a room
+  in it, and add custom views with the SDK beside them.
 
 ## Workflow (start here)
 
@@ -17,7 +33,8 @@ community's own domain, and it talks to Polynet only through the SDK below.
    (.../c/<slug>). The person deploying must be its owner or an admin.
 2. Design first (the next section): learn the community's world, show the
    founder three directions, build the one they choose.
-3. Build the site in a folder with an index.html, and test it live. The SDK
+3. Build the site in a folder with an index.html, with the three blocks
+   placed, and test it live. The SDK
    is served by the site's own address, so it only works once deployed.
    From the folder:
 
@@ -44,13 +61,15 @@ community's site, it isn't done.
    world, layout idea and voice. Make one feel risky. Give each a name, a
    one-sentence idea, typefaces, a palette, a signature move and real copy.
    Build each as one static page (concepts/a.html, b.html, c.html, each
-   with the shell), deploy, and let the founder pick or mix.
+   with the shell and the real blocks themed for that direction, never
+   placeholders), deploy, and let the founder pick or mix.
 3. Build the chosen one. Write each page's structure in HTML by hand and fill
    it with live data from JavaScript. Design the loading, empty, error and
    signed-out states in the concept's voice. Real words everywhere, never
    test data. Delete the concept pages.
 4. Look at it at 390px and 1440px wide, twice: where is it timid (make the
-   hierarchy louder), where is it noisy (remove), what is misaligned. Fix,
+   hierarchy louder), where is it noisy (remove), what is misaligned, and
+   do the blocks feel native to the concept or like stock widgets. Fix,
    deploy, look again.
 
 Craft: typefaces with character (Google Fonts or Fontshare) used at
@@ -152,10 +171,10 @@ community only: { member { name, handle, avatar_url }, community { slug,
 name, role, studio_url }, links { communities, discover, settings, messages } }.
 The member's other communities are never readable from a site.
 
-## Blocks: channels, chat and members
+## Blocks: channels, chat and members (required)
 
-Polynet's blocks are the standard way to show a community's channels,
-conversation and people. Polynet owns how they behave (data, permissions,
+Every site places all three (deploys fail without them). They are the one
+way a community's channels, conversation and people appear on a site. Polynet owns how they behave (data, permissions,
 live updates, keyboard, screen readers); your site owns how they look. Place
 the tags; ui.js (on every page) loads each block only on pages that have it:
 
@@ -192,8 +211,7 @@ the tags; ui.js (on every page) loads each block only on pages that have it:
     (on hover or focus with a mouse; behind "•••" on touch screens).
   - Others see them typing.
   Where the member can't post (or reply), the box is replaced by a quiet
-  note. Your site needs no composer of its own for chat; a custom one built
-  with the SDK (post(), below) is still possible beside the blocks.
+  note. Your site needs no composer of its own for chat.
   Authors' names and pictures, and @-tags of members in posts, open that
   member's profile.
 - <polynet-members>: everyone in the community. Who's online comes first,
@@ -303,8 +321,13 @@ Example, in your design's own layout:
       <polynet-members><h2 slot="header">The crew</h2></polynet-members>
     </section>
 
-Build your own views with the SDK (below) beside the blocks when the design
-wants more.
+Where they usually go: a "room" (a page or section named in the
+community's words) with channels beside the chat, and the people as a
+column there or on their own page. On phones, one column:
+polynet-channels::part(list) { grid-auto-flow: column; overflow-x: auto }
+turns the channels into a scrolling row above the chat. Custom views (a
+route log, this week's sessions) are built with the SDK below, beside the
+blocks, never instead of them.
 
 ## Errors
 
@@ -467,9 +490,11 @@ or an admin) and saves the community in polynet.json, so later deploys are just
 "npx @polynet/cli deploy".
 
 Every deploy checks the site first ("npx @polynet/cli check" runs the same
-checks alone). These stop a deploy until fixed: a page without
-<html lang>, a <title> or a viewport that allows zooming; an <img> without
-alt; a button or link with no text or aria-label. Warnings (unlabelled
+checks alone). These stop a deploy until fixed: no page (or, for a
+framework build, no script) places <polynet-channels>, <polynet-chat> or
+<polynet-members>; a page without <html lang>, a <title> or a viewport that
+allows zooming; an <img> without alt; a button or link with no text or
+aria-label. Warnings (unlabelled
 fields, removed focus outlines, animation without prefers-reduced-motion,
 innerHTML, positive tabindex) are printed but don't stop it.
 
@@ -503,30 +528,35 @@ community.site.deploy with input.files as "/path" -> { content, encoding }
 files and 5 MB. The same checks run there (site_checks_failed lists what to
 fix). The result has the live url.
 
-## Example: a minimal live feed
+## Example: a minimal site
 
-This shows behavior only. The markup and the look are yours to design.
+This shows structure only. The markup, the words and the look are yours.
 
-    <ul id="feed"></ul>
-    <form id="say"><input id="text"><button>Post</button></form>
-    <script type="module">
-      import polynet from "/__polynet/sdk.js";
-      const s = await polynet.session();
-      if (!s.signed_in) { polynet.signIn(); }
-      const general = (await polynet.channels()).find((c) => c.isGeneral);
-      async function render() {
-        const posts = await polynet.feed(general.slug);
-        document.getElementById("feed").replaceChildren(...posts.map((p) => {
-          const li = document.createElement("li");
-          li.append((p.actor.display_name ?? "Member") + ": ", polynet.markdown(p.text));
-          return li;
-        }));
-      }
-      await polynet.watch(general.slug, render); // renders now, then on every change
-      document.getElementById("say").onsubmit = async (e) => {
-        e.preventDefault();
-        await polynet.post(general.slug, document.getElementById("text").value);
-        document.getElementById("text").value = "";
-      };
-    </script>
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Dawn Patrol Run Club</title>
+      <script type="module" src="/__polynet/ui.js"></script>
+      <style>
+        :root { --polynet-accent: #f97316; --polynet-surface: #0b1020; }
+        .room { display: grid; grid-template-columns: 200px 1fr 240px; gap: 24px; }
+        .room polynet-chat { height: calc(100dvh - 120px); }
+        @media (max-width: 760px) { .room { grid-template-columns: minmax(0, 1fr); } }
+      </style>
+    </head>
+    <body>
+      <header><h1>Dawn Patrol</h1><polynet-account></polynet-account></header>
+      <main class="room">
+        <polynet-channels></polynet-channels>
+        <polynet-chat><p slot="empty">No miles logged yet. The river's still there.</p></polynet-chat>
+        <polynet-members><h2 slot="header">The pack</h2></polynet-members>
+      </main>
+      <script type="module">
+        import polynet from "/__polynet/sdk.js";
+        const s = await polynet.session(); // the public face and custom views start here
+      </script>
+    </body>
+    </html>
 `;

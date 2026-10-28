@@ -1,6 +1,8 @@
 // The checks a community site passes before it goes live, shared by
 // `polynet check`, `polynet deploy` and the MCP's community.site.deploy.
-// Errors block the deploy; warnings are printed. They read the files as text
+// Errors block the deploy; warnings are printed. Every site must place
+// Polynet's three blocks (channels, chat, members), so the social core is
+// there on every site whatever it looks like. They read the files as text
 // (no browser), so they catch what is certain from the source and leave the
 // rest to the polynet-accessibility skill. Plain JavaScript with no imports,
 // so it runs in Node and in Polynet's backend alike.
@@ -57,6 +59,21 @@ function checkPage(path, html, problem) {
   }
 }
 
+// The blocks every site places: what each is, and where it usually goes.
+const REQUIRED_BLOCKS = [
+  ["polynet-channels", "the channels members can read, with unread and @-mention badges", "beside the chat, where members pick a channel"],
+  ["polynet-chat", "the conversation, with its composer, threads, reactions and @-tags", "where members talk, and give it a height"],
+  ["polynet-members", "everyone in the community, online first, each opening their profile", "in a people page or section"],
+];
+
+// A block counts when a page has its tag, or when a script names it: a framework
+// build (Vite, React, Lit) creates it from a bundle, never from the HTML.
+function placesBlock(name, pages, scripts) {
+  const tag = new RegExp(`<${name}[\\s>/]|["'\`]${name}["'\`]`, "i");
+  const named = new RegExp(`(^|[^\\w-])${name}(?![\\w-])`);
+  return pages.some((file) => tag.test(file.text.replace(/<!--[\s\S]*?-->/g, ""))) || scripts.some((file) => named.test(file.text));
+}
+
 // files: [{ path: "/index.html", text }] (other files may be passed; they're ignored).
 export function checkSite(files) {
   const errors = [];
@@ -70,6 +87,12 @@ export function checkSite(files) {
   // The shell isn't checked: the edge adds /__polynet/ui.js to every page, and
   // ui.js shows <polynet-account> on any page that doesn't place one.
   for (const page of pages) checkPage(page.path, page.text, problem);
+  const placed = new Set(REQUIRED_BLOCKS.map(([name]) => name).filter((name) => placesBlock(name, pages, scripts)));
+  for (const [name, what, where] of REQUIRED_BLOCKS) {
+    if (placed.has(name)) continue;
+    problem("error", "/", `No page has <${name}>, and every site needs it: ${what}. ` +
+      `Add <${name}></${name}> ${where}. The polynet-build-site skill shows how.`);
+  }
 
   const allCss = css.map((file) => file.text).join("\n") + pages.map((file) => file.text).join("\n");
   for (const file of [...css, ...pages]) {
@@ -93,8 +116,9 @@ export function checkSite(files) {
   if (togglesHidden && /\bdisplay\s*:/i.test(allCss) && !/\[hidden\]/.test(allCss)) {
     problem("warning", "/", "Sections are shown and hidden with the hidden attribute, but a CSS display rule can override it. Add [hidden] { display: none !important; }.");
   }
-  // A public question to the agent is answered in that post's thread.
-  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript)) {
+  // A public question to the agent is answered in that post's thread, which
+  // <polynet-chat> shows; a custom feed has to read threads itself.
+  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript) && !placed.has("polynet-chat")) {
     problem("warning", "/", "Posts can ask the agent (post(..., { askAgent })) but the site never reads threads, so the agent's answers won't appear. Show replies with polynet.thread().");
   }
   return { errors, warnings };
