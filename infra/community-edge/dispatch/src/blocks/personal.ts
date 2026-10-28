@@ -6,15 +6,16 @@
 // every script removed, so only Polynet's code runs beside it, and this block
 // keeps its data in its shadow root, where the frame's CSS reaches only
 // ::part(). Its data comes from /__polynet/me/*, which answers only the twin's
-// own session. Settings is its own module (blocks/settings.ts), loaded only
-// on that page. Kept as text (a String.raw literal: no backticks or template
+// own session. Settings and Messages are their own modules (blocks/settings.ts,
+// blocks/messages.ts), each loaded only on its page. Kept as text (a String.raw literal: no backticks or template
 // placeholders inside) so the edge serves exactly what is reviewed.
 export const PERSONAL_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-personal page="communities|messages|settings|join">.
 // Only on a site's private twin, inside <polynet-page>. Style it with ::part():
 // communities, community, community-avatar, community-name, community-role,
 // community-here, community-elsewhere, empty, soon, signin, retry, and the
-// settings page's parts (see /__polynet/blocks/settings.js).
+// settings and messages pages' parts (see /__polynet/blocks/settings.js and
+// /__polynet/blocks/messages.js).
 import { BASE_STYLE, h, styled, avatar } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + [
@@ -46,6 +47,14 @@ class PolynetPersonal extends HTMLElement {
 
   disconnectedCallback() {
     this.generation += 1;
+    this.stop();
+  }
+
+  // A page module's live updates and timers end with the page (teardown is its own).
+  stop() {
+    const teardown = this.teardown;
+    this.teardown = null;
+    if (teardown) teardown();
   }
 
   show(status, children) {
@@ -56,7 +65,8 @@ class PolynetPersonal extends HTMLElement {
   load() {
     const page = this.getAttribute("page");
     if (page === "communities") return this.loadCommunities();
-    if (page === "settings") return this.loadSettings();
+    if (page === "settings") return this.loadModule("settings", "Couldn't load your settings.", (module, generation) => module.mountSettings(this, generation));
+    if (page === "messages") return this.loadModule("messages", "Couldn't load your messages.", (module, generation) => module.mountMessages(this, generation));
     // The rest are built next; until then a quiet note in the site's own frame.
     this.show("soon", [h("div", { class: "state", part: "soon" }, [h("p", { class: "muted", text: "This page is coming soon." })])]);
   }
@@ -90,23 +100,25 @@ class PolynetPersonal extends HTMLElement {
       communities.map((community) => this.card(community)))]);
   }
 
-  async loadSettings() {
+  // A page with its own module (settings, messages): loaded on that page only.
+  async loadModule(name, failure, mount) {
+    this.stop();
     const generation = ++this.generation;
     this.show("loading", [h("p", { class: "muted", role: "status", text: "Loading…" })]);
-    let settings = null;
+    let module = null;
     try {
-      settings = await import("/__polynet/blocks/settings.js");
+      module = await import("/__polynet/blocks/" + name + ".js");
     } catch (error) {
-      settings = null;
+      module = null;
     }
     if (generation !== this.generation) return;
-    if (!settings) {
+    if (!module) {
       return this.show("error", [h("div", { class: "state", role: "alert" }, [
-        h("p", { text: "Couldn't load your settings." }),
-        h("button", { class: "quiet", part: "retry", type: "button", onclick: () => this.loadSettings(), text: "Try again" }),
+        h("p", { text: failure }),
+        h("button", { class: "quiet", part: "retry", type: "button", onclick: () => this.load(), text: "Try again" }),
       ])]);
     }
-    return settings.mountSettings(this, generation);
+    return mount(module, generation);
   }
 
   // Signed out here (the session ended): the same hop as the site's sign-in.

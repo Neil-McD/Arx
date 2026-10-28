@@ -1489,7 +1489,7 @@ test("the account menu: In this club links to the site's own pages, marking the 
   await home.close();
 });
 
-test("the account menu: Your communities and Settings open the site's private twin, where the site's code never runs", async () => {
+test("the account menu: Messages, Your communities and Settings open the site's private twin, where the site's code never runs", async () => {
   const twin = "https://run-club--me.polynet.test";
   const page = await open((fake) => {
     (fake.session as any).site_origin = SITE;
@@ -1503,10 +1503,29 @@ test("the account menu: Your communities and Settings open the site's private tw
   await expect.poll(() => mine.count()).toBe(1);
   expect(await mine.getAttribute("href")).toBe(`${twin}/communities`);
   expect(await shell.locator("[part=panel] a", { hasText: "Settings" }).getAttribute("href")).toBe(`${twin}/settings`);
-  // On the site, the club's pages stay relative; Messages is still Polynet's for now.
+  expect(await shell.locator("[part=panel] a", { hasText: "Messages" }).getAttribute("href")).toBe(`${twin}/messages`);
+  // On the site, the club's pages stay relative.
   expect(await shell.locator("[part=group] a", { hasText: "Chat" }).getAttribute("href")).toBe("/chat");
-  expect(await shell.locator("[part=panel] a", { hasText: "Messages" }).getAttribute("href")).toBe("https://polynet.test/?dm=inbox");
   await page.close();
+});
+
+test("a profile's Message opens the conversation on the site's private twin, in the same tab", async () => {
+  const twin = "https://run-club--me.polynet.test";
+  const onSite = await open((fake) => { crowd(fake); (fake.session as any).private_origin = twin; }, MEMBERS_PAGE);
+  await onSite.locator("polynet-members").locator("[part~=member][data-key='user:sam']").click();
+  const message = panel(onSite).locator("[part=message]");
+  await expect.poll(() => message.count()).toBe(1);
+  expect([await message.getAttribute("href"), await message.getAttribute("target")]).toEqual([`${twin}/messages/new?to=sam`, null]);
+  // No "opens Polynet" note: it stays in the site's world.
+  expect(await panel(onSite).locator("[part=message-note]").count()).toBe(0);
+  await onSite.close();
+  // On the twin itself (its own origin is the private one): the same page, by path.
+  const onTwin = await open((fake) => { crowd(fake); (fake.session as any).private_origin = "https://run-club.polynet.test"; }, MEMBERS_PAGE);
+  await onTwin.locator("polynet-members").locator("[part~=member][data-key='user:sam']").click();
+  const there = panel(onTwin).locator("[part=message]");
+  await expect.poll(() => there.count()).toBe(1);
+  expect(await there.getAttribute("href")).toBe("/messages/new?to=sam");
+  await onTwin.close();
 });
 
 test("the account menu: Sign out on the site goes through its private twin's sign-out, and nowhere else", async () => {

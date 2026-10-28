@@ -194,10 +194,10 @@ keep it visible on every page and at every width. Signed out it shows "Join"
 those on polynet-account itself, with a matching --polynet-surface; signed
 in, the member's avatar opens their account menu: "In this club" (the
 site's own standard pages, the current one marked), "Manage this
-community" for owners and admins (Studio), Messages (Polynet, for now),
-"Your communities" and Settings (the member's own pages, on the site's
-private twin), and "Discover communities" (this site's own /discover).
-Don't rebuild these yourself.
+community" for owners and admins (Studio), Messages, "Your communities"
+and Settings (the member's own pages, on the site's private twin), and
+"Discover communities" (this site's own /discover). Don't rebuild these
+yourself.
 
 Polynet adds /__polynet/ui.js and /__polynet/ui.css to every HTML page it
 serves (the script only where the page doesn't load it already), so the
@@ -276,8 +276,8 @@ navigation, footer, fonts and colors as every other page, with exactly one
   every script, event handler and javascript: link from the frame there,
   keeps its markup, classes, stylesheets, inline styles and fonts, and points
   its links back at the site. A script may add to the chrome; if it draws it,
-  those pages get an empty header (polynet check warns). Link /communities
-  from the frame if you like: Polynet sends it to the twin.
+  those pages get an empty header (polynet check warns). Link /messages or
+  /communities from the frame if you like: Polynet sends them to the twin.
 - Polynet sets each standard page's <title> to "<Page> · <community
   name>" (Chat · Port Wren Lantern Guild; also at /people/<handle> and the
   other addresses under a page). The frame's own <title> shows only where
@@ -327,9 +327,12 @@ navigation, footer, fonts and colors as every other page, with exactly one
   <polynet-discover>). Only a file counts; a
   client-side route can't replace a standard page. Your own events.html
   doesn't cover /events/<event>: those still show in the frame.
-- Your communities and Settings are the member's own pages on the site's
-  private twin, where the site's code never runs; Messages and joining open
-  in Polynet for now and move there next.
+- Messages (/messages, each conversation at /messages/<id>), Your
+  communities and Settings are the member's own pages on the site's private
+  twin, where the site's code never runs: the inbox, conversations, typing,
+  read state and attachments live there, in your frame. There is no
+  direct-message API for site code, by design. Joining opens in Polynet for
+  now and moves there next.
 
 ## Blocks: channels, chat and members
 
@@ -388,8 +391,9 @@ Profiles: clicking a member anywhere (<polynet-members>, a chat author, an
 @-tag) opens their profile over the page: a side sheet on wide screens, a
 bottom sheet on phones. It shows their picture, name, @handle, role here,
 whether they're online, their bio and links (YouTube, X, Instagram), and a
-Message button (it opens the member's messages in Polynet; never on their
-own profile). Esc, the close button or a click outside closes it, and focus
+Message button (it opens their conversation with the member, or starts one,
+on the member's own Messages page on the site's private twin, in the same
+tab; never on their own profile). Esc, the close button or a click outside closes it, and focus
 goes back where it was. While it is open the URL carries ?member=<handle>,
 so a profile can be linked (link to ?member=sam) and Back closes it. Open
 one from your own code:

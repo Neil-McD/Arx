@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
@@ -21,6 +21,7 @@ import {
   TYPING_PRESENCE_LEASE_DURATION_MS,
 } from "../shared/typingPresenceContract";
 import { nextDirectMessageReadSeq } from "./directMessageReadCore";
+import { SITE_DM_PAGE_SIZE, siteDirectConversation, siteDirectMessage } from "../shared/directMessageSiteShape";
 
 type UserRow = {
   _id: any;
@@ -665,6 +666,7 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
       id: String(row._id),
       participant_type: "agent" as const,
       user_id: null,
+      handle: null,
       display_name: row.agentKind ?? "AI agent",
       avatar_url: null,
       avatar_focus_x: 0.5,
@@ -688,6 +690,8 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
     id: String(row._id),
     participant_type: "user" as const,
     user_id: row.userId ? await resolvePublicUserId(ctx, row.userId) : null,
+    // A conversation's people know each other's public handle (their profile shows it).
+    handle: String(user?.normalizedHandle ?? user?.handle ?? "").trim().replace(/^@+/, "") || null,
     display_name: profile.display_name ?? user?.displayName ?? null,
     avatar_url: profile.avatar_url ?? null,
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
@@ -1273,6 +1277,44 @@ export const listNetworkPeopleForViewer = query({
   },
 });
 
+// Studio's DM functions below are thin wrappers: each resolves its signed-in
+// user, then runs a helper that takes the viewer as already known. A community
+// site's private twin (the ...ForTrustedUserInternal functions at the end)
+// runs the very same helpers for the member its private session names, so
+// every check, rate limit, block and refusal is Studio's.
+
+export async function listMyDirectConversationsForUser(ctx: any, viewerUserId: any, limit?: number) {
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit ?? 30)));
+  const participants = (await ctx.db
+    .query("dmParticipants" as any)
+    .withIndex("by_user_status_lastActivityAt", (q: any) =>
+      q.eq("userId", viewerUserId).eq("status", "active"),
+    )
+    .order("desc")
+    .take(safeLimit)) as DirectMessageParticipantLike[];
+  const conversationRows: Array<{
+    conversation: DirectMessageConversationLike;
+    sortAt: number;
+  }> = [];
+  for (const participant of participants) {
+    const conversation = (await ctx.db.get(participant.conversationId)) as DirectMessageConversationLike | null;
+    if (!conversation) continue;
+    conversationRows.push({
+      conversation,
+      sortAt:
+        typeof participant.lastActivityAt === "number" && Number.isFinite(participant.lastActivityAt)
+          ? participant.lastActivityAt
+          : conversation.updatedAt,
+    });
+  }
+  conversationRows.sort((left, right) => right.sortAt - left.sortAt);
+  return await Promise.all(
+    conversationRows.map((row) =>
+      mapDirectConversation(ctx, row.conversation, { viewerUserId }),
+    ),
+  );
+}
+
 export const listMyDirectConversations = query({
   args: {
     authSubject: v.optional(v.string()),
@@ -1283,35 +1325,7 @@ export const listMyDirectConversations = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const safeLimit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 30)));
-    const participants = (await ctx.db
-      .query("dmParticipants" as any)
-      .withIndex("by_user_status_lastActivityAt", (q: any) =>
-        q.eq("userId", viewerUserId).eq("status", "active"),
-      )
-      .order("desc")
-      .take(safeLimit)) as DirectMessageParticipantLike[];
-    const conversationRows: Array<{
-      conversation: DirectMessageConversationLike;
-      sortAt: number;
-    }> = [];
-    for (const participant of participants) {
-      const conversation = (await ctx.db.get(participant.conversationId)) as DirectMessageConversationLike | null;
-      if (!conversation) continue;
-      conversationRows.push({
-        conversation,
-        sortAt:
-          typeof participant.lastActivityAt === "number" && Number.isFinite(participant.lastActivityAt)
-            ? participant.lastActivityAt
-            : conversation.updatedAt,
-      });
-    }
-    conversationRows.sort((left, right) => right.sortAt - left.sortAt);
-    return await Promise.all(
-      conversationRows.map((row) =>
-        mapDirectConversation(ctx, row.conversation, { viewerUserId }),
-      ),
-    );
+    return await listMyDirectConversationsForUser(ctx, viewerUserId, args.limit);
   },
 });
 
@@ -1358,6 +1372,34 @@ export const listDirectMessagePeerPresenceForViewer = query({
   },
 });
 
+async function markDirectConversationReadForUser(
+  ctx: any,
+  viewerUserId: any,
+  args: { conversationId: any; throughSeq?: number },
+) {
+  const { conversation, participant } = await requireActiveUserParticipant({
+    ctx,
+    conversationId: args.conversationId,
+    userId: viewerUserId,
+  });
+  const lastSeq = Math.max(0, Math.floor(conversation.lastSeq ?? 0));
+  const currentLastReadSeq = Math.max(0, Math.floor(participant.lastReadSeq ?? 0));
+  const requestedThroughSeq =
+    typeof args.throughSeq === "undefined" ? lastSeq : args.throughSeq;
+  const nextLastReadSeq = nextDirectMessageReadSeq(
+    currentLastReadSeq,
+    requestedThroughSeq,
+    lastSeq,
+  );
+  if (nextLastReadSeq > currentLastReadSeq) {
+    await ctx.db.patch(participant._id, {
+      lastReadSeq: nextLastReadSeq,
+      updatedAt: Date.now(),
+    });
+  }
+  return await mapDirectConversation(ctx, conversation, { viewerUserId });
+}
+
 export const markDirectConversationRead = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -1371,29 +1413,25 @@ export const markDirectConversationRead = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation, participant } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-    const lastSeq = Math.max(0, Math.floor(conversation.lastSeq ?? 0));
-    const currentLastReadSeq = Math.max(0, Math.floor(participant.lastReadSeq ?? 0));
-    const requestedThroughSeq =
-      typeof args.throughSeq === "undefined" ? lastSeq : args.throughSeq;
-    const nextLastReadSeq = nextDirectMessageReadSeq(
-      currentLastReadSeq,
-      requestedThroughSeq,
-      lastSeq,
-    );
-    if (nextLastReadSeq > currentLastReadSeq) {
-      await ctx.db.patch(participant._id, {
-        lastReadSeq: nextLastReadSeq,
-        updatedAt: Date.now(),
-      });
-    }
-    return await mapDirectConversation(ctx, conversation, { viewerUserId });
+    return await markDirectConversationReadForUser(ctx, viewerUserId, args);
   },
 });
+
+async function setDirectConversationMutedForUser(ctx: any, viewerUserId: any, conversationId: any, muted: boolean) {
+  const { conversation, participant } = await requireActiveUserParticipant({
+    ctx,
+    conversationId,
+    userId: viewerUserId,
+  });
+  const nowMs = Date.now();
+  await ctx.db.patch(participant._id, {
+    mutedAt: muted ? nowMs : undefined,
+    updatedAt: nowMs,
+  });
+  const refreshed = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
+  if (!refreshed) throw new Error("dm_conversation_not_found");
+  return await mapDirectConversation(ctx, refreshed, { viewerUserId });
+}
 
 export const setDirectConversationMuted = mutation({
   args: {
@@ -1406,21 +1444,48 @@ export const setDirectConversationMuted = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation, participant } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-    const nowMs = Date.now();
-    await ctx.db.patch(participant._id, {
-      mutedAt: args.muted ? nowMs : undefined,
-      updatedAt: nowMs,
-    });
-    const refreshed = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
-    if (!refreshed) throw new Error("dm_conversation_not_found");
-    return await mapDirectConversation(ctx, refreshed, { viewerUserId });
+    return await setDirectConversationMutedForUser(ctx, viewerUserId, args.conversationId, args.muted);
   },
 });
+
+async function setDirectTypingForUser(ctx: any, viewerUserId: any, conversationId: any) {
+  const { conversation } = await requireActiveUserParticipant({
+    ctx,
+    conversationId,
+    userId: viewerUserId,
+  });
+  await requireDirectConversationSendAccess({
+    ctx,
+    conversation,
+    viewerUserId,
+  });
+
+  const nowMs = Date.now();
+  const displayUntil = nowMs + TYPING_PRESENCE_LEASE_DURATION_MS;
+  const existing = (await ctx.db
+    .query("dmTypingPresence" as any)
+    .withIndex("by_conversation_user", (q: any) =>
+      q.eq("conversationId", conversationId).eq("userId", viewerUserId),
+    )
+    .unique()) as DirectMessageTypingPresenceLike | null;
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      displayUntil,
+      updatedAt: nowMs,
+    });
+    return { ok: true, display_until_ms: displayUntil };
+  }
+
+  await ctx.db.insert("dmTypingPresence" as any, {
+    conversationId,
+    userId: viewerUserId,
+    displayUntil,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return { ok: true, display_until_ms: displayUntil };
+}
 
 export const setDirectTyping = mutation({
   args: {
@@ -1432,44 +1497,29 @@ export const setDirectTyping = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-    await requireDirectConversationSendAccess({
-      ctx,
-      conversation,
-      viewerUserId,
-    });
-
-    const nowMs = Date.now();
-    const displayUntil = nowMs + TYPING_PRESENCE_LEASE_DURATION_MS;
-    const existing = (await ctx.db
-      .query("dmTypingPresence" as any)
-      .withIndex("by_conversation_user", (q: any) =>
-        q.eq("conversationId", args.conversationId).eq("userId", viewerUserId),
-      )
-      .unique()) as DirectMessageTypingPresenceLike | null;
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        displayUntil,
-        updatedAt: nowMs,
-      });
-      return { ok: true, display_until_ms: displayUntil };
-    }
-
-    await ctx.db.insert("dmTypingPresence" as any, {
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-      displayUntil,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { ok: true, display_until_ms: displayUntil };
+    return await setDirectTypingForUser(ctx, viewerUserId, args.conversationId);
   },
 });
+
+async function clearDirectTypingForUser(ctx: any, viewerUserId: any, conversationId: any) {
+  await requireActiveUserParticipant({
+    ctx,
+    conversationId,
+    userId: viewerUserId,
+  });
+
+  const existing = (await ctx.db
+    .query("dmTypingPresence" as any)
+    .withIndex("by_conversation_user", (q: any) =>
+      q.eq("conversationId", conversationId).eq("userId", viewerUserId),
+    )
+    .unique()) as DirectMessageTypingPresenceLike | null;
+
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+  return { ok: true };
+}
 
 export const clearDirectTyping = mutation({
   args: {
@@ -1481,25 +1531,51 @@ export const clearDirectTyping = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-
-    const existing = (await ctx.db
-      .query("dmTypingPresence" as any)
-      .withIndex("by_conversation_user", (q: any) =>
-        q.eq("conversationId", args.conversationId).eq("userId", viewerUserId),
-      )
-      .unique()) as DirectMessageTypingPresenceLike | null;
-
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-    return { ok: true };
+    return await clearDirectTypingForUser(ctx, viewerUserId, args.conversationId);
   },
 });
+
+async function listDirectTypingForUser(ctx: any, viewerUserId: any, conversationId: any) {
+  const { conversation } = await requireActiveUserParticipant({
+    ctx,
+    conversationId,
+    userId: viewerUserId,
+  });
+
+  const nowMs = Date.now();
+  const rows = (await ctx.db
+    .query("dmTypingPresence" as any)
+    .withIndex("by_conversation_displayUntil", (q: any) =>
+      q.eq("conversationId", conversationId).gt("displayUntil", nowMs),
+    )
+    .order("desc")
+    .take(DIRECT_MESSAGE_TYPING_PRESENCE_SCAN_LIMIT)) as DirectMessageTypingPresenceLike[];
+  const activeRows = rows.filter(
+    (row) => normalizeIdValue(row.userId) !== normalizeIdValue(viewerUserId),
+  );
+  const authorizationResults = await Promise.all(
+    activeRows.map(async (row) => ({
+      row,
+      authorized: await directTypingCandidateRemainsAuthorized({
+        ctx,
+        conversation,
+        userId: row.userId,
+      }),
+    })),
+  );
+  const authorizedRows = authorizationResults
+    .filter(({ authorized }) => authorized)
+    .map(({ row }) => row);
+  const users = await Promise.all(
+    authorizedRows
+      .slice(0, DIRECT_MESSAGE_TYPING_PRESENCE_VISIBLE_LIMIT)
+      .map((row) => mapDirectTypingPresence(ctx, row)),
+  );
+  return {
+    users,
+    total_count: authorizedRows.length,
+  };
+}
 
 export const listDirectTyping = query({
   args: {
@@ -1511,47 +1587,37 @@ export const listDirectTyping = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("dmTypingPresence" as any)
-      .withIndex("by_conversation_displayUntil", (q: any) =>
-        q.eq("conversationId", args.conversationId).gt("displayUntil", nowMs),
-      )
-      .order("desc")
-      .take(DIRECT_MESSAGE_TYPING_PRESENCE_SCAN_LIMIT)) as DirectMessageTypingPresenceLike[];
-    const activeRows = rows.filter(
-      (row) => normalizeIdValue(row.userId) !== normalizeIdValue(viewerUserId),
-    );
-    const authorizationResults = await Promise.all(
-      activeRows.map(async (row) => ({
-        row,
-        authorized: await directTypingCandidateRemainsAuthorized({
-          ctx,
-          conversation,
-          userId: row.userId,
-        }),
-      })),
-    );
-    const authorizedRows = authorizationResults
-      .filter(({ authorized }) => authorized)
-      .map(({ row }) => row);
-    const users = await Promise.all(
-      authorizedRows
-        .slice(0, DIRECT_MESSAGE_TYPING_PRESENCE_VISIBLE_LIMIT)
-        .map((row) => mapDirectTypingPresence(ctx, row)),
-    );
-    return {
-      users,
-      total_count: authorizedRows.length,
-    };
+    return await listDirectTypingForUser(ctx, viewerUserId, args.conversationId);
   },
 });
+
+async function listDirectMessagesForUser(
+  ctx: any,
+  viewerUserId: any,
+  args: { conversationId: any; beforeSeq?: number | null; limit?: number },
+) {
+  await requireActiveUserParticipant({
+    ctx,
+    conversationId: args.conversationId,
+    userId: viewerUserId,
+  });
+  // Active participants can read existing DM history; current relationship is rechecked before each send.
+  const safeLimit = Math.max(1, Math.min(MAX_DM_MESSAGE_ROWS, Math.floor(args.limit ?? 100)));
+  const beforeSeq =
+    typeof args.beforeSeq === "number" && Number.isFinite(args.beforeSeq)
+      ? Math.max(0, Math.floor(args.beforeSeq))
+      : null;
+  const rows = (await ctx.db
+    .query("dmMessages" as any)
+    .withIndex("by_conversation_seq", (q: any) =>
+      beforeSeq === null
+        ? q.eq("conversationId", args.conversationId)
+        : q.eq("conversationId", args.conversationId).lt("seq", beforeSeq),
+    )
+    .order("desc")
+    .take(safeLimit)) as DirectMessageLike[];
+  return await Promise.all(rows.reverse().map((row) => mapDirectMessage(ctx, row)));
+}
 
 export const listDirectMessages = query({
   args: {
@@ -1565,29 +1631,25 @@ export const listDirectMessages = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-    // Active participants can read existing DM history; current relationship is rechecked before each send.
-    const safeLimit = Math.max(1, Math.min(MAX_DM_MESSAGE_ROWS, Math.floor(args.limit ?? 100)));
-    const beforeSeq =
-      typeof args.beforeSeq === "number" && Number.isFinite(args.beforeSeq)
-        ? Math.max(0, Math.floor(args.beforeSeq))
-        : null;
-    const rows = (await ctx.db
-      .query("dmMessages" as any)
-      .withIndex("by_conversation_seq", (q: any) =>
-        beforeSeq === null
-          ? q.eq("conversationId", args.conversationId)
-          : q.eq("conversationId", args.conversationId).lt("seq", beforeSeq),
-      )
-      .order("desc")
-      .take(safeLimit)) as DirectMessageLike[];
-    return await Promise.all(rows.reverse().map((row) => mapDirectMessage(ctx, row)));
+    return await listDirectMessagesForUser(ctx, viewerUserId, args);
   },
 });
+
+async function generateDirectMessageAttachmentUploadUrlForConversation(ctx: any, viewerUserId: any, conversationId: any) {
+  const { conversation } = await requireActiveUserParticipant({
+    ctx,
+    conversationId,
+    userId: viewerUserId,
+  });
+  await requireDirectConversationSendAccess({
+    ctx,
+    conversation,
+    viewerUserId,
+  });
+  return {
+    uploadUrl: await ctx.storage.generateUploadUrl(),
+  };
+}
 
 export const generateDirectMessageAttachmentUploadUrl = mutation({
   args: {
@@ -1599,21 +1661,55 @@ export const generateDirectMessageAttachmentUploadUrl = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-    await requireDirectConversationSendAccess({
-      ctx,
-      conversation,
-      viewerUserId,
-    });
-    return {
-      uploadUrl: await ctx.storage.generateUploadUrl(),
-    };
+    return await generateDirectMessageAttachmentUploadUrlForConversation(ctx, viewerUserId, args.conversationId);
   },
 });
+
+async function sendDirectMessageForUser(
+  ctx: any,
+  viewerUserId: any,
+  args: { conversationId: any; text: string; attachments?: unknown; clientMessageId?: string | null },
+) {
+  const { conversation, participant } = await requireActiveUserParticipant({
+    ctx,
+    conversationId: args.conversationId,
+    userId: viewerUserId,
+  });
+  await requireDirectConversationSendAccess({
+    ctx,
+    conversation,
+    viewerUserId,
+  });
+  await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
+
+  const message = await appendDirectMessageFromUser({
+    ctx,
+    conversation,
+    senderUserId: viewerUserId,
+    senderParticipantId: participant._id,
+    text: args.text,
+    attachments: args.attachments,
+    clientMessageId: args.clientMessageId ?? null,
+  });
+  const viewerUserKey = normalizeIdValue(viewerUserId);
+  const peerParticipant = (await listConversationParticipants(ctx, conversation._id)).find(
+    (row) =>
+      row.status === "active" &&
+      row.participantType === "user" &&
+      normalizeIdValue(row.userId) &&
+      normalizeIdValue(row.userId) !== viewerUserKey,
+  );
+  if (peerParticipant?.userId) {
+    await scheduleDirectMessageEmailNotification({
+      ctx,
+      conversationId: conversation._id,
+      messageSeq: message.seq,
+      recipientUserId: peerParticipant.userId,
+      senderUserId: viewerUserId,
+    });
+  }
+  return await mapDirectMessage(ctx, message);
+}
 
 export const sendDirectMessage = mutation({
   args: {
@@ -1628,47 +1724,88 @@ export const sendDirectMessage = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation, participant } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: args.conversationId,
-      userId: viewerUserId,
-    });
-    await requireDirectConversationSendAccess({
-      ctx,
-      conversation,
-      viewerUserId,
-    });
-    await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
-
-    const message = await appendDirectMessageFromUser({
-      ctx,
-      conversation,
-      senderUserId: viewerUserId,
-      senderParticipantId: participant._id,
-      text: args.text,
-      attachments: args.attachments,
-      clientMessageId: args.clientMessageId ?? null,
-    });
-    const viewerUserKey = normalizeIdValue(viewerUserId);
-    const peerParticipant = (await listConversationParticipants(ctx, conversation._id)).find(
-      (row) =>
-        row.status === "active" &&
-        row.participantType === "user" &&
-        normalizeIdValue(row.userId) &&
-        normalizeIdValue(row.userId) !== viewerUserKey,
-    );
-    if (peerParticipant?.userId) {
-      await scheduleDirectMessageEmailNotification({
-        ctx,
-        conversationId: conversation._id,
-        messageSeq: message.seq,
-        recipientUserId: peerParticipant.userId,
-        senderUserId: viewerUserId,
-      });
-    }
-    return await mapDirectMessage(ctx, message);
+    return await sendDirectMessageForUser(ctx, viewerUserId, args);
   },
 });
+
+async function sendDirectMessageToTargetForUser(
+  ctx: any,
+  viewerUserId: any,
+  targetUser: UserRow,
+  args: { communityId?: any | null; text: string; attachments?: unknown; clientMessageId?: string | null },
+) {
+  const contextCommunityId = await requireDirectMessageRelationshipAccess({
+    ctx,
+    viewerUserId,
+    targetUserId: targetUser._id,
+    preferredCommunityId: args.communityId ?? null,
+    requiredCommunityId: null,
+  });
+
+  await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
+
+  const nowMs = Date.now();
+  let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
+  const isNewConversation = !conversation;
+  if (!conversation) {
+    await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "conversation" });
+    const conversationId = await ctx.db.insert("dmConversations" as any, {
+      kind: DIRECT_CONVERSATION_KIND,
+      canonicalKey: buildDirectConversationCanonicalKey(viewerUserId, targetUser._id),
+      createdByUserId: viewerUserId,
+      createdFromCommunityId: contextCommunityId,
+      lastSeq: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    conversation = (await ctx.db.get(conversationId)) as DirectMessageConversationLike | null;
+  }
+  if (!conversation) throw new Error("dm_conversation_create_failed");
+
+  await ensureUserParticipant({
+    ctx,
+    conversationId: conversation._id,
+    userId: viewerUserId,
+    nowMs,
+    touchActivity: true,
+  });
+  await ensureUserParticipant({
+    ctx,
+    conversationId: conversation._id,
+    userId: targetUser._id,
+    nowMs,
+    touchActivity: isNewConversation,
+    fallbackActivityAt: conversation.updatedAt,
+  });
+
+  const { participant } = await requireActiveUserParticipant({
+    ctx,
+    conversationId: conversation._id,
+    userId: viewerUserId,
+  });
+  const message = await appendDirectMessageFromUser({
+    ctx,
+    conversation,
+    senderUserId: viewerUserId,
+    senderParticipantId: participant._id,
+    text: args.text,
+    attachments: args.attachments,
+    clientMessageId: args.clientMessageId ?? null,
+  });
+  await scheduleDirectMessageEmailNotification({
+    ctx,
+    conversationId: conversation._id,
+    messageSeq: message.seq,
+    recipientUserId: targetUser._id,
+    senderUserId: viewerUserId,
+  });
+  const refreshedConversation = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
+  if (!refreshedConversation) throw new Error("dm_conversation_not_found");
+  return {
+    conversation: await mapDirectConversation(ctx, refreshedConversation, { viewerUserId }),
+    message: await mapDirectMessage(ctx, message),
+  };
+}
 
 export const sendDirectMessageToUser = mutation({
   args: {
@@ -1689,79 +1826,29 @@ export const sendDirectMessageToUser = mutation({
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
       throw new Error("dm_target_self");
     }
-    const contextCommunityId = await requireDirectMessageRelationshipAccess({
-      ctx,
-      viewerUserId,
-      targetUserId: targetUser._id,
-      preferredCommunityId: args.communityId ?? null,
-      requiredCommunityId: null,
-    });
-
-    await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
-
-    const nowMs = Date.now();
-    let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
-    const isNewConversation = !conversation;
-    if (!conversation) {
-      await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "conversation" });
-      const conversationId = await ctx.db.insert("dmConversations" as any, {
-        kind: DIRECT_CONVERSATION_KIND,
-        canonicalKey: buildDirectConversationCanonicalKey(viewerUserId, targetUser._id),
-        createdByUserId: viewerUserId,
-        createdFromCommunityId: contextCommunityId,
-        lastSeq: 0,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      conversation = (await ctx.db.get(conversationId)) as DirectMessageConversationLike | null;
-    }
-    if (!conversation) throw new Error("dm_conversation_create_failed");
-
-    await ensureUserParticipant({
-      ctx,
-      conversationId: conversation._id,
-      userId: viewerUserId,
-      nowMs,
-      touchActivity: true,
-    });
-    await ensureUserParticipant({
-      ctx,
-      conversationId: conversation._id,
-      userId: targetUser._id,
-      nowMs,
-      touchActivity: isNewConversation,
-      fallbackActivityAt: conversation.updatedAt,
-    });
-
-    const { participant } = await requireActiveUserParticipant({
-      ctx,
-      conversationId: conversation._id,
-      userId: viewerUserId,
-    });
-    const message = await appendDirectMessageFromUser({
-      ctx,
-      conversation,
-      senderUserId: viewerUserId,
-      senderParticipantId: participant._id,
-      text: args.text,
-      attachments: args.attachments,
-      clientMessageId: args.clientMessageId ?? null,
-    });
-    await scheduleDirectMessageEmailNotification({
-      ctx,
-      conversationId: conversation._id,
-      messageSeq: message.seq,
-      recipientUserId: targetUser._id,
-      senderUserId: viewerUserId,
-    });
-    const refreshedConversation = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
-    if (!refreshedConversation) throw new Error("dm_conversation_not_found");
-    return {
-      conversation: await mapDirectConversation(ctx, refreshedConversation, { viewerUserId }),
-      message: await mapDirectMessage(ctx, message),
-    };
+    return await sendDirectMessageToTargetForUser(ctx, viewerUserId, targetUser, args);
   },
 });
+
+async function setDirectMessageBlockForUser(ctx: any, viewerUserId: any, targetUser: UserRow, blocked: boolean) {
+  const existing = await findDirectMessageBlockRow(ctx, viewerUserId, targetUser._id);
+  if (!blocked) {
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+    return { ok: true, blocked: false };
+  }
+  const nowMs = Date.now();
+  if (!existing) {
+    await ctx.db.insert("dmBlocks" as any, {
+      blockerUserId: viewerUserId,
+      blockedUserId: targetUser._id,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  }
+  return { ok: true, blocked: true };
+}
 
 export const blockDirectMessageUser = mutation({
   args: {
@@ -1778,17 +1865,7 @@ export const blockDirectMessageUser = mutation({
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
       throw new Error("dm_target_self");
     }
-    const nowMs = Date.now();
-    const existing = await findDirectMessageBlockRow(ctx, viewerUserId, targetUser._id);
-    if (!existing) {
-      await ctx.db.insert("dmBlocks" as any, {
-        blockerUserId: viewerUserId,
-        blockedUserId: targetUser._id,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-    }
-    return { ok: true, blocked: true };
+    return await setDirectMessageBlockForUser(ctx, viewerUserId, targetUser, true);
   },
 });
 
@@ -1804,13 +1881,27 @@ export const unblockDirectMessageUser = mutation({
     });
     const targetUser = await findUserByPublicId(ctx, args.targetUserId);
     if (!targetUser) throw new Error("dm_target_not_found");
-    const existing = await findDirectMessageBlockRow(ctx, viewerUserId, targetUser._id);
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-    return { ok: true, blocked: false };
+    return await setDirectMessageBlockForUser(ctx, viewerUserId, targetUser, false);
   },
 });
+
+async function generateDirectMessageAttachmentUploadUrlForTarget(
+  ctx: any,
+  viewerUserId: any,
+  targetUser: UserRow,
+  communityId: any | null,
+) {
+  await requireDirectMessageRelationshipAccess({
+    ctx,
+    viewerUserId,
+    targetUserId: targetUser._id,
+    preferredCommunityId: communityId,
+    requiredCommunityId: null,
+  });
+  return {
+    uploadUrl: await ctx.storage.generateUploadUrl(),
+  };
+}
 
 export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
   args: {
@@ -1828,15 +1919,225 @@ export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
       throw new Error("dm_target_self");
     }
-    await requireDirectMessageRelationshipAccess({
-      ctx,
-      viewerUserId,
-      targetUserId: targetUser._id,
-      preferredCommunityId: args.communityId ?? null,
-      requiredCommunityId: null,
+    return await generateDirectMessageAttachmentUploadUrlForTarget(ctx, viewerUserId, targetUser, args.communityId ?? null);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Messages on a community site's private twin. The caller (httpCommunityApps)
+// has already checked a private session of a member of that community; these
+// run Studio's helpers above for that member. The twin addresses a
+// conversation by its id and a person by their handle, and gets back only the
+// site shapes (shared/directMessageSiteShape.ts): no user ids, no storage ids.
+
+const SITE_DM_UPLOAD_MAX_AGE_MS = 60 * 60 * 1000;
+
+function siteConversationId(ctx: any, raw: string): any {
+  const id = ctx.db.normalizeId("dmConversations", String(raw ?? ""));
+  if (!id) throw new Error("dm_conversation_not_found");
+  return id;
+}
+
+async function siteTargetByHandle(ctx: any, viewerUserId: any, handle: string): Promise<UserRow> {
+  const target = await findUserByNormalizedHandle(ctx, handle);
+  if (!target) throw new Error("dm_target_not_found");
+  if (normalizeIdValue(target._id) === normalizeIdValue(viewerUserId)) throw new Error("dm_target_self");
+  return target;
+}
+
+// Only files the member uploaded just now (upload URLs last an hour), never an
+// existing file; their size and type as storage recorded them, not as claimed.
+async function siteFreshAttachments(ctx: any, raw: Array<{ storage_id: string; name: string; type: "image" | "file" }>) {
+  const nowMs = Date.now();
+  const out: Array<Record<string, unknown>> = [];
+  for (const item of raw) {
+    const storageId = ctx.db.system.normalizeId("_storage", item.storage_id);
+    const file = storageId ? await ctx.db.system.get(storageId) : null;
+    if (!file || nowMs - Number(file._creationTime) > SITE_DM_UPLOAD_MAX_AGE_MS) throw new Error("dm_attachment_storage_required");
+    out.push({
+      storageId: String(storageId), name: item.name, type: item.type,
+      mime: typeof file.contentType === "string" ? file.contentType : null, size: Number(file.size) || 0,
     });
+  }
+  return out;
+}
+
+const siteAttachmentInput = v.array(v.object({
+  storage_id: v.string(), name: v.string(), type: v.union(v.literal("image"), v.literal("file")),
+}));
+
+export const listSiteDirectConversationsForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const rows = await listMyDirectConversationsForUser(ctx, args.userId, 50);
+    return rows.map((row) => siteDirectConversation(row, viewer));
+  },
+});
+
+// One conversation and its newest page of messages (or the page before beforeSeq).
+export const readSiteDirectConversationForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users"), conversationId: v.string(), beforeSeq: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const conversationId = siteConversationId(ctx, args.conversationId);
+    const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: args.userId });
+    const rows = await listDirectMessagesForUser(ctx, args.userId, {
+      conversationId, beforeSeq: args.beforeSeq ?? null, limit: SITE_DM_PAGE_SIZE + 1,
+    });
+    const viewer = await resolvePublicUserId(ctx, args.userId);
     return {
-      uploadUrl: await ctx.storage.generateUploadUrl(),
+      conversation: siteDirectConversation(await mapDirectConversation(ctx, conversation, { viewerUserId: args.userId }), viewer),
+      messages: rows.slice(-SITE_DM_PAGE_SIZE).map((row) => siteDirectMessage(row, viewer)),
+      has_more: rows.length > SITE_DM_PAGE_SIZE,
     };
   },
 });
+
+// "Message @handle": their conversation with the member if there is one;
+// otherwise who they are, once Studio's rules say the member may message them
+// (a shared community, no block either way; a block refuses exactly as a
+// missing shared community does). Nothing is created until the first send.
+export const startSiteDirectConversationForTrustedUserInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), handle: v.string() },
+  handler: async (ctx, args) => {
+    const target = await siteTargetByHandle(ctx, args.userId, args.handle);
+    const existing = await findDirectConversationByUsers(ctx, args.userId, target._id);
+    if (existing) {
+      const mine = (await ctx.db
+        .query("dmParticipants" as any)
+        .withIndex("by_conversation_user", (q: any) => q.eq("conversationId", existing._id).eq("userId", args.userId))
+        .first()) as DirectMessageParticipantLike | null;
+      if (mine?.status === "active") return { conversation_id: String(existing._id), peer: null };
+    }
+    await requireDirectMessageRelationshipAccess({
+      ctx, viewerUserId: args.userId, targetUserId: target._id, preferredCommunityId: args.communityId, requiredCommunityId: null,
+    });
+    const profile = await resolveUserProfileDisplayProjectionForUser(ctx, target);
+    return {
+      conversation_id: null,
+      peer: {
+        name: profile.display_name ?? target.displayName ?? null,
+        handle: String(target.normalizedHandle ?? target.handle ?? "").replace(/^@+/, "") || null,
+        avatar_url: profile.avatar_url ?? null,
+      },
+    };
+  },
+});
+
+// A message into a conversation, or (by handle) the first one to a person,
+// which Studio's send creates the conversation for, from this community.
+export const sendSiteDirectMessageForTrustedUserInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    conversationId: v.optional(v.string()),
+    handle: v.optional(v.string()),
+    text: v.string(),
+    attachments: siteAttachmentInput,
+    clientMessageId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const attachments = await siteFreshAttachments(ctx, args.attachments);
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const send = { text: args.text, attachments, clientMessageId: args.clientMessageId ?? null };
+    if (args.conversationId !== undefined) {
+      const conversationId = siteConversationId(ctx, args.conversationId);
+      const message = await sendDirectMessageForUser(ctx, args.userId, { conversationId, ...send });
+      return { conversation_id: String(conversationId), message: siteDirectMessage(message, viewer) };
+    }
+    const target = await siteTargetByHandle(ctx, args.userId, String(args.handle ?? ""));
+    const sent = await sendDirectMessageToTargetForUser(ctx, args.userId, target, { communityId: args.communityId, ...send });
+    return { conversation_id: sent.conversation.id, message: siteDirectMessage(sent.message, viewer) };
+  },
+});
+
+// Step 1 of Studio's attachment flow: where the browser sends the file.
+export const generateSiteDirectMessageUploadUrlForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), conversationId: v.optional(v.string()), handle: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.conversationId !== undefined) {
+      return await generateDirectMessageAttachmentUploadUrlForConversation(ctx, args.userId, siteConversationId(ctx, args.conversationId));
+    }
+    const target = await siteTargetByHandle(ctx, args.userId, String(args.handle ?? ""));
+    return await generateDirectMessageAttachmentUploadUrlForTarget(ctx, args.userId, target, args.communityId);
+  },
+});
+
+export const markSiteDirectConversationReadForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), conversationId: v.string(), throughSeq: v.number() },
+  handler: async (ctx, args) => {
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const row = await markDirectConversationReadForUser(ctx, args.userId, {
+      conversationId: siteConversationId(ctx, args.conversationId), throughSeq: args.throughSeq,
+    });
+    return siteDirectConversation(row, viewer);
+  },
+});
+
+export const setSiteDirectConversationMutedForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), conversationId: v.string(), muted: v.boolean() },
+  handler: async (ctx, args) => {
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const row = await setDirectConversationMutedForUser(ctx, args.userId, siteConversationId(ctx, args.conversationId), args.muted);
+    return siteDirectConversation(row, viewer);
+  },
+});
+
+export const setSiteDirectTypingForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), conversationId: v.string(), typing: v.boolean() },
+  handler: async (ctx, args) => {
+    const conversationId = siteConversationId(ctx, args.conversationId);
+    if (args.typing) await setDirectTypingForUser(ctx, args.userId, conversationId);
+    else await clearDirectTypingForUser(ctx, args.userId, conversationId);
+    return { typing: args.typing };
+  },
+});
+
+// Block or unblock the other person in one of the member's conversations
+// (Studio blocks by person; the twin names the conversation, never an id).
+export const setSiteDirectMessageBlockForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), conversationId: v.string(), blocked: v.boolean() },
+  handler: async (ctx, args) => {
+    const conversationId = siteConversationId(ctx, args.conversationId);
+    const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: args.userId });
+    const viewerKey = normalizeIdValue(args.userId);
+    const peer = (await listConversationParticipants(ctx, conversationId)).find((row) =>
+      row.participantType === "user" && normalizeIdValue(row.userId) && normalizeIdValue(row.userId) !== viewerKey);
+    const target = peer?.userId ? ((await ctx.db.get(peer.userId)) as UserRow | null) : null;
+    if (!target) throw new Error("dm_target_not_found");
+    await setDirectMessageBlockForUser(ctx, args.userId, target, args.blocked);
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    return siteDirectConversation(await mapDirectConversation(ctx, conversation, { viewerUserId: args.userId }), viewer);
+  },
+});
+
+// The live signal for the twin's Messages page (communityLive:watchMessages):
+// a version that changes whenever the member's inbox (no conversation) or one
+// of their conversations changes, and, for a conversation, whether the other
+// person is typing. Never a message, a name or an id: the page re-reads
+// through its private routes when the version moves.
+const SITE_DM_INBOX_WATCH_ROWS = 50;
+export async function readDirectMessageLiveSignalForUser(ctx: any, viewerUserId: any, rawConversationId: string | null) {
+  if (rawConversationId === null) {
+    // Every message, read, mute or new conversation touches the member's own participant rows.
+    const rows = (await ctx.db
+      .query("dmParticipants" as any)
+      .withIndex("by_user_status_lastActivityAt", (q: any) => q.eq("userId", viewerUserId).eq("status", "active"))
+      .order("desc")
+      .take(SITE_DM_INBOX_WATCH_ROWS)) as DirectMessageParticipantLike[];
+    return { version: `${rows.length}:${rows.reduce((latest, row) => Math.max(latest, Number(row.updatedAt) || 0), 0)}`, typing: null };
+  }
+  const conversationId = siteConversationId(ctx, rawConversationId);
+  const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: viewerUserId });
+  // New messages move lastSeq; reads and mutes move a participant row.
+  const participants = await listConversationParticipants(ctx, conversationId);
+  const version = [conversation.lastSeq, conversation.updatedAt, ...participants.map((row) => `${row.lastReadSeq}.${row.updatedAt}`)].join(":");
+  const typing = await listDirectTypingForUser(ctx, viewerUserId, conversationId);
+  const nowMs = Date.now();
+  const until = typing.users.reduce((latest: number, user: { display_until_ms: number }) => Math.max(latest, user.display_until_ms), 0);
+  return {
+    version,
+    // The absolute deadline changes on every renewal, so a steady typist's renewals reach the page.
+    typing: typing.total_count > 0 ? { lease_until: until, expires_in_ms: Math.max(0, until - nowMs) } : null,
+  };
+}

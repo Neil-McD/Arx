@@ -7,6 +7,8 @@ import { POLYNET_PRESENCE_DOCUMENT_PATH, parseCommunityChannelSemanticPath } fro
 import { requireCommunityChatAccess } from "./communityCore";
 import { resolveAuthorizedCommunityPresenceWindow } from "./communityPresenceCore";
 import { resolveCommunityTypingPresence } from "./communityTypingPresenceCore";
+import { communityAppMemberRole } from "./communityApps";
+import { readDirectMessageLiveSignalForUser } from "./directMessages";
 
 // Live updates for community front ends. A front end subscribes to `watch` for
 // a channel path with its watch-only token and gets back a version that changes
@@ -94,5 +96,40 @@ export const watch = query({
       version: Math.max(channel.updatedAt, latestRoot?.updatedAt ?? 0, latestReply?.updatedAt ?? 0),
       typing,
     };
+  },
+});
+
+// Live updates for the member's Messages page on a site's private twin. Only a
+// watch token derived from a private session (minted on a private twin origin
+// that is still one) gets an answer, and only while the member is still in the
+// community the session belongs to: a site's own session, whose token the
+// site's code holds, is refused. No conversation: a version for the member's
+// inbox. A conversation: its version, while the member takes part in it, and
+// whether the other person is typing. Never content, names or ids: the page
+// re-reads through its private routes when the version moves.
+const messagesUnavailable = { ok: false as const, code: "watch_unavailable" as const };
+
+export const watchMessages = query({
+  args: { token: v.string(), conversation: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (!isCommunityAppWatchToken(args.token)) return { ok: false as const, code: "session_invalid" as const };
+    const watchTokenHash = await hashCommunityAppSessionToken(args.token);
+    const session = await ctx.db
+      .query("communityAppSessions")
+      .withIndex("by_watchTokenHash", (q) => q.eq("watchTokenHash", watchTokenHash))
+      .first();
+    if (!session || session.expiresAt <= Date.now()) return { ok: false as const, code: "session_invalid" as const };
+    const domain = await ctx.db.get(session.domainId);
+    if (!domain || domain.communityId !== session.communityId) return { ok: false as const, code: "session_invalid" as const };
+    if (session.kind !== "private" || domain.kind !== "private") return { ok: false as const, code: "private_session_required" as const };
+    const community = await ctx.db.get(session.communityId);
+    if (!(await communityAppMemberRole(ctx, community, session.userId))) return messagesUnavailable;
+    try {
+      const signal = await readDirectMessageLiveSignalForUser(ctx, session.userId, args.conversation ?? null);
+      return { ok: true as const, version: signal.version, typing: signal.typing };
+    } catch {
+      // Not the member's conversation (or no such one): nothing to say about it.
+      return messagesUnavailable;
+    }
   },
 });

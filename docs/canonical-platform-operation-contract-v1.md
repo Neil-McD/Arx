@@ -369,7 +369,12 @@ site's (`communityDomains.kind = "private"`), and its read
 (`/runtime/app/me/settings`, `handle`, `profile`, `avatar_upload`, `avatar`,
 `notifications`, `leave`), which also require current membership and call the
 same cores as Studio's settings (profile write, handle check, avatar upload
-URL, email preferences, community member settings, leave). Signing out on
+URL, email preferences, community member settings, leave), and the member's
+direct messages there (`/runtime/app/me/messages`, `messages/conversation`,
+`start`, `send`, `upload`, `read`, `mute`, `typing`, `block`), which run the
+helpers Studio's DM functions run; their live signal
+(`communityLive:watchMessages`) answers only a private session's watch token,
+with versions only. Signing out on
 either origin returns a short-lived ticket (`session_revoke` →
 `signout_ticket`) that ends the other origin's session for the same member in
 the same browser only.

@@ -2,7 +2,7 @@
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to this community's own pages ("In
 // this club": the standard pages, on this site), their account, their
-// communities and settings (on the site's private twin), Discover and messages. It also loads Polynet's
+// messages, communities and settings (on the site's private twin), and Discover. It also loads Polynet's
 // blocks (/__polynet/blocks/<name>.js) on pages that place them, and opens the
 // profile panel for ?member= links and "polynet:profile". Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
@@ -258,15 +258,19 @@ class PolynetAccount extends HTMLElement {
       const links = account.links || {};
       const everyday = [];
       if ((here.role === "owner" || here.role === "admin") && here.studio_url) everyday.push([here.studio_url, "Manage this community"]);
-      // Your communities is a page of the site's private twin (the member's own
-      // pages, where the site's code never runs); Polynet's list where there's none.
+      // Messages, Your communities and Settings are pages of the site's private
+      // twin (the member's own pages, where the site's code never runs);
+      // Polynet's own where there's none.
+      const onTwin = Boolean(session.private_origin) && location.origin === session.private_origin;
+      const messages = session.private_origin ? session.private_origin + "/messages" : links.messages;
+      const onMessages = onTwin && (location.pathname === "/messages" || location.pathname.indexOf("/messages/") === 0);
       const mine = session.private_origin ? session.private_origin + "/communities" : links.communities;
       const onMine = Boolean(session.private_origin) && location.origin === session.private_origin && location.pathname === "/communities";
       // Settings too (Polynet's own settings where there's no twin).
       const settings = session.private_origin ? session.private_origin + "/settings" : links.settings;
       const onSettings = Boolean(session.private_origin) && location.origin === session.private_origin && location.pathname === "/settings";
       // Discover is a page of this site too (/discover, in its frame), so it never leaves.
-      everyday.push([links.messages, "Messages"], [mine, "Your communities", onMine], [sitePath(session, "/discover"), "Discover communities"], [settings, "Settings", onSettings]);
+      everyday.push([messages, "Messages", onMessages], [mine, "Your communities", onMine], [sitePath(session, "/discover"), "Discover communities"], [settings, "Settings", onSettings]);
       for (const [href, label, here] of everyday) {
         if (href) children.push(h("a", { class: "item", href: href, part: "item", "aria-current": here || href === current ? "page" : null }, [h("span", { class: "label", text: label })]));
       }
