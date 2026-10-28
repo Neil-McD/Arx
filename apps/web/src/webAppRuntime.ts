@@ -64,38 +64,3 @@ const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX =
   "source_integration_oauth_finalize:";
 const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
 
-export function buildSourceIntegrationOAuthFinalizeSessionGuardKey(
-  state: string,
-  finalizeToken: string,
-): string {
-  return `${SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX}${state}:${finalizeToken}`;
-}
-
-export function claimSourceIntegrationOAuthFinalizeSessionGuard(
-  key: string,
-): boolean {
-  try {
-    const existing = Number(window.sessionStorage.getItem(key) ?? "");
-    const now = Date.now();
-    if (
-      Number.isFinite(existing)
-      && existing > now - SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS
-    ) {
-      return false;
-    }
-    window.sessionStorage.setItem(key, String(now));
-    return true;
-  } catch {
-    return true;
-  }
-}
-
-export function clearSourceIntegrationOAuthFinalizeSessionGuard(
-  key: string,
-): void {
-  try {
-    window.sessionStorage.removeItem(key);
-  } catch {
-    // The backend finalizer is idempotent even when storage is unavailable.
-  }
-}

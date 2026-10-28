@@ -4,7 +4,6 @@ import { httpRouter } from "convex/server";
 import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
-import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
 import { registerCommunitySiteRoutes } from "./httpCommunitySites";
 import { registerEmailRoutes } from "./httpEmail";
@@ -253,11 +252,6 @@ registerRuntimeAuthBridgeRoutes({
   jsonResponse,
   optionsResponse,
   parseOptionalString,
-});
-
-registerCommunitySourceIntegrationRoutes({
-  http,
-  httpAction,
 });
 
 registerRuntimeBillingRoutes({

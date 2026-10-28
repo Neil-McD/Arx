@@ -303,25 +303,27 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `distributionAttributionDeliveries`.
 - **Contracts:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md).
 
-### 15. Integrations and skills — Going (Neil, Oct 27)
+### 15. Integrations and skills — Deleted (Neil, Oct 27)
 
 - **Deleted Oct 28 (POL-21):** community integrations (Composio, the HubSpot
   pilot, `communityIntegrationConnections` code, integration reads in the agent's
   tools, the integration receipt in paid tools, the callback page) and all skill
   code. `communityIntegrationActions` is a stub answering "not verified" for the
   cached production web's callback page; delete it next release.
-- **Code still here:** `httpCommunitySourceIntegrations` and the GitHub and Google
-  Drive source import inside `communityResources` (next slice).
+- **Deleted Oct 28 (POL-22):** GitHub and Google Drive source import (OAuth,
+  listing, import and fetch in `communityResources`, the `httpCommunitySourceIntegrations`
+  callback routes, the web gateway calls). Sources imported that way keep their
+  text and are labelled by provider, but are never fetched again; a claimed one
+  fails closed with `community_source_provider_retired`.
 - **Tables (retiring; dropped next release after a production backup, with
   Neil's OK):** `communityIntegrationConnections`, `skillPackages`,
   `skillPackageRevisions`, `userPlatformSkillInstalls`, `communitySkillAttachments`.
-  Still in use until the next slice: `userSourceIntegrationConnections`,
-  `userSourceIntegrationAuthStates`.
+  Also `userSourceIntegrationConnections` and `userSourceIntegrationAuthStates`
+  (encrypted OAuth tokens: delete with the backup, Neil's sign-off).
 - **Retiring tables:** `userProviderConnections`, `userProviderAuthStates`,
   `userProviderDeviceAuthStates` (own-account payment, deleted Oct 27 in POL-10;
   they hold encrypted keys, deleted with Neil's sign-off).
-- **Going (Neil, Oct 27):** GitHub and Google Drive source import (next slice).
-  Deleted Oct 27: `providerConnectionProbes`.
+- Deleted Oct 27: `providerConnectionProbes`.
 
 ### 16. Voice — Keep
 
