@@ -199,12 +199,16 @@ export function readChannels(polynet, fresh) {
 }
 
 // Members, read once for every block on the page; fresh re-reads them (who's
-// online changed) and the others see that read too.
+// online changed) and the others see that read too. fresh as a number re-reads
+// only a read that started more than that many milliseconds ago.
 let membersRead = null;
+let membersReadAt = 0;
 export function readMembers(polynet, fresh) {
-  if (fresh || !membersRead) {
+  const stale = fresh === true || (typeof fresh === "number" && Date.now() - membersReadAt > fresh);
+  if (stale || !membersRead) {
     const promise = polynet.members();
     membersRead = promise;
+    membersReadAt = Date.now();
     promise.catch(function () { if (membersRead === promise) membersRead = null; });
   }
   return membersRead;

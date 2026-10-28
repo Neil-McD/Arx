@@ -1000,6 +1000,30 @@ test("members: live when who's online changes, and large communities render a pa
   await big.close();
 });
 
+test("members placed after another block read the members show who's online now, not that older read", async () => {
+  const page = await open(crowd);
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  // The composer reads the members for tagging; then Sam comes online.
+  await chat.locator("[part=footer] [part=composer-input]").focus();
+  await expect.poll(() => calls(page, "members")).toHaveLength(1);
+  await page.evaluate(() => { (window as any).fake.members.find((m: any) => m.handle === "sam").online = true; });
+  await page.waitForTimeout(1100);
+  await page.evaluate(() => document.body.append(document.createElement("polynet-members")));
+  const members = page.locator("polynet-members");
+  await expect.poll(() => members.getAttribute("state")).toBe("ready");
+  expect(await members.locator("[part~=section-online] [part=member-name]").allTextContents()).toEqual(["Olu Ade", "Sam Rivera", "Ana Ito", "Me"]);
+  expect(await calls(page, "members")).toHaveLength(2);
+  await page.close();
+});
+
+test("members mounted together share one read", async () => {
+  const page = await open(crowd, MEMBERS_PAGE.replace("</body>", "<polynet-members></polynet-members></body>"));
+  await expect.poll(() => page.locator("polynet-members[state=ready]").count()).toBe(2);
+  expect(await calls(page, "members")).toHaveLength(1);
+  await page.close();
+});
+
 test("members signed out: no names, no members read, a way in", async () => {
   const page = await open((fake) => { crowd(fake); fake.session = { signed_in: false, community: "run-club", community_name: "Run Club", join_url: "https://polynet.test/c/run-club" } as any; }, MEMBERS_PAGE);
   const members = page.locator("polynet-members");

@@ -39,6 +39,9 @@ const STYLE = BASE_STYLE + "\n" + [
 // Large communities render a page at a time, the next as the list scrolls.
 const PAGE = 200;
 const REFRESH_MS = 1500;
+// Mounting reuses another block's members read only this recent: presence in
+// an older one may be stale, and the watch's first call is skipped below.
+const MOUNT_FRESH_MS = 1000;
 const RANK = { owner: 0, admin: 1, moderator: 2 };
 const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 let counter = 0;
@@ -121,7 +124,7 @@ class PolynetMembers extends HTMLElement {
       if (generation !== this.generation) return;
       if (!session.signed_in) { this.signedOut(session); return; }
       this.me = session.member || null;
-      const list = await readMembers(polynet, fresh);
+      const list = await readMembers(polynet, fresh ? true : MOUNT_FRESH_MS);
       if (generation !== this.generation) return;
       this.list = list.map((member) => Object.assign({}, member)).sort(byRoleThenName);
       if (this.status === "ready") this.renderList();
@@ -143,7 +146,8 @@ class PolynetMembers extends HTMLElement {
     this.show("signed-out");
   }
 
-  // Who's online changes: re-read (debounced). The first call is the state just read.
+  // Who's online changes: re-read (debounced). The first call is the state just
+  // read (load never reuses an older one on mount).
   async watchOnline() {
     if (this.watching) return;
     this.watching = true;
