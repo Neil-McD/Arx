@@ -1,3 +1,4 @@
+import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -26,17 +27,22 @@ async function findReceipt(ctx: any, args: {
   toolName: "polynet_write" | "polynet_call";
   idempotencyKey: string;
 }) {
-  return await ctx.db
+  const lookup = (principalKind: string) => ctx.db
     .query("polynetCanonicalOperationReceipts" as any)
     .withIndex("by_scope_key", (q: any) =>
       q
         .eq("communityId", args.communityId)
         .eq("userId", args.userId)
-        .eq("principalKind", args.principalKind)
+        .eq("principalKind", principalKind)
         .eq("toolName", args.toolName)
         .eq("idempotencyKey", args.idempotencyKey),
     )
     .first();
+  const receipt = await lookup(args.principalKind);
+  // Receipts written before the rename carry the retired name; a retry across the
+  // deploy must still find them instead of running the write again.
+  if (receipt || args.principalKind !== "community_agent_for_member") return receipt;
+  return await lookup(RETIRED_PERSONAL_AGENT_ACTOR_TYPE);
 }
 
 export const reserveCanonicalOperationReceiptInternal = internalMutation({

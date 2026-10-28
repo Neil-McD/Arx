@@ -187,6 +187,33 @@ test("completed receipts from before lease fields existed remain replayable", as
   });
 });
 
+test("a write completed under the retired personal_agent name is not repeated after the rename", async () => {
+  const t = convexTest(schema, modules);
+  const args = receiptArgs(await createScope(t));
+  await t.run(async (ctx) => {
+    await ctx.db.insert("polynetCanonicalOperationReceipts", {
+      ...args,
+      principalKind: "personal_agent",
+      status: "completed",
+      result: { posted: "before-deploy" },
+      createdAt: 1_760_000_000_000,
+      updatedAt: 1_760_000_000_000,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).polynetCanonicalReceipts
+        .reserveCanonicalOperationReceiptInternal,
+      args,
+    ),
+  ).resolves.toMatchObject({
+    ok: true,
+    status: "completed",
+    result: { posted: "before-deploy" },
+  });
+});
+
 test("failed attempts are retryable and only the current attempt owns settlement", async () => {
   const t = convexTest(schema, modules);
   const args = receiptArgs(await createScope(t));
