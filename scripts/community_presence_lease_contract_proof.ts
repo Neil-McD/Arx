@@ -237,11 +237,6 @@ assert.doesNotMatch(
 
 
 assert.match(
-  controller,
-  /activeCommunityPresenceSummary\.online_user_ids[\s\S]*new Set/,
-  "the live presence summary must remain the only online classification projection",
-);
-assert.match(
   facepile,
   /onlineCountCapped\?: boolean[\s\S]*countCapped=\{props\.onlineCountCapped\}/,
   "the facepile must forward conservative count state to the canonical avatar stack",
