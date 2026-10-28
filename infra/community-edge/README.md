@@ -25,8 +25,81 @@ one edge Worker in front of every community front end.
                          │                      share); any other name is 404
                          ├─ /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]],
                          │  /knowledge, /ask, /discover (GET/HEAD) → the standard pages (below)
+                         ├─ /communities, /messages, /settings, /join (GET/HEAD) → 302 to the private twin
+                         │                      (unless the site has its own file there)
+                         ├─ /__polynet/me/*, /__polynet/blocks/personal.js → 404 (personal: the twin's only)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
+
+<slug>--me<suffix>.<sites domain> (the site's private twin: the member's own pages)
+                         ├─ found through the site's route (no KV entry of its own); unknown site → 404
+                         ├─ /__polynet/* as on the site (its own sign-in, session cookie, API, blocks, shell),
+                         │  plus /__polynet/blocks/personal.js and /__polynet/me/communities
+                         │                    → /runtime/app/me/communities (private session only)
+                         ├─ /communities, /messages, /settings, /join → the site's frame, stripped (below)
+                         ├─ other GET/HEAD    → 302 to the same path on the site (never for a script)
+                         └─ anything else     → 404
 ```
+
+### The private twin (members' own pages)
+
+Each site `<slug><suffix>.<sites domain>` has a twin one label over,
+`<slug>--me<suffix>.<sites domain>` (`sunrise-climbing-club--me-staging.polynet.page`),
+covered by the same wildcard routes and certificate. The mapping is
+`privateTwinHost` / `siteHostOfTwin` in `packages/polynet-cli/checks.mjs`, the one
+helper the edge, the backend and the CLI use. Community slugs may contain `--`,
+so the ending is reserved instead: no site name ends in `--me` (or `-staging`),
+so no site address is ever another community's twin.
+
+On a personal page (`PERSONAL_PAGES` in `checks.mjs`) the edge:
+
+1. With no session cookie yet (and a page that needs one: not `/join`), 302s
+   to `/__polynet/auth/start?return=<page>`: the same Polynet hop as the site,
+   to the twin's own callback, so a member signed in to Polynet passes through
+   silently and gets the twin's own `__Host-polynet_session`. The backend
+   records that session as `kind: "private"` (the twin's origin is registered
+   with `kind: "private"`). A session the backend later refuses shows the
+   page's own Sign in (no loop).
+2. Fetches the site's `/frame` (plain fetch, no Polynet cookies) and strips
+   it with HTMLRewriter (`twin.ts`): removes `script`, `noscript`, `iframe`,
+   `frame(set)`, `object`, `embed`, `applet`, `base`, `portal`,
+   `fencedframe`, `xmp`, `noembed`, `noframes`, `plaintext`,
+   `meta[http-equiv]`, SVG `set`/`animate*`/`discard`, comments, and every
+   `<link>` but stylesheet, icons and preconnect/dns-prefetch; unwraps
+   `<form>` (fields stay as markup); drops every `on*` attribute and `srcdoc`,
+   `action`, `formaction` (and the other `form*`), `ping`, `nonce`,
+   `background`, `codebase`, `archive`, `classid`, `longdesc`, `manifest`, and
+   `name` on images (document clobbering). URLs in `href`, `xlink:href`,
+   `src`, `poster`, `cite`, `data`, `srcset`, `imagesrcset` are decoded and
+   parsed as a browser would: only http(s) survive (and `mailto:`/`tel:` on
+   links); links to the site go to the site's origin, links to a personal
+   page and `/__polynet/*` stay on the twin, other origins stay as they are.
+   Markup, classes, `<style>` blocks, `style` attributes, stylesheets and
+   fonts stay, so it looks like the site. `<title>` is "<Page> · <community>".
+3. Adds the shell (`ui.css`, `ui.js`) as on every page. `<polynet-page>`
+   renders the page heading and `<polynet-personal page="<name>">`, which
+   keeps the member's data in its shadow root.
+4. Serves it with `Content-Security-Policy: default-src 'none'; script-src 'self';
+   style-src 'self' <site> https://fonts.googleapis.com <sha256 of each inline
+   style> ['unsafe-hashes' when style attributes exist]; font-src <site>
+   https://fonts.gstatic.com data:; img-src 'self' data: <site> <storage>;
+   media-src <site>; connect-src 'self'; form-action 'self'; frame-ancestors
+   'none'; base-uri 'none'; object-src 'none'`, plus `X-Frame-Options: DENY`,
+   `Referrer-Policy: same-origin`, `Cache-Control: no-store`,
+   `Cross-Origin-Opener-Policy: same-origin`. Every twin response also has
+   `Cross-Origin-Resource-Policy: same-origin`, `Origin-Agent-Cluster: ?1` and
+   `nosniff`.
+
+No frame, or none it can draw (no HTMLRewriter, over 1 MB): Polynet's plain
+page with a "Back to <community>" bar, under the same policy. Never the
+unstripped frame.
+
+`GET /__polynet/me/communities` (twin only, same-origin only) returns `{ ok,
+communities: [{ slug, name, role, avatar_url, url, has_site, here }] }`: every
+community the member owns or is entitled to (as Studio lists them), each linking
+to its own site on this sites domain, else to `<POLYNET_AUTH_URL>/c/<slug>`;
+avatars only from Polynet's storage (`POLYNET_LIVE_URL`'s origin). The backend
+answers only a private-kind session (`private_session_required` otherwise);
+the site's `/__polynet/account` still never names other communities.
 
 ### Standard pages (the site's frame)
 
@@ -87,8 +160,10 @@ site ships a file there too.
 deploys without a root `index.html`, without `/frame.html` holding exactly
 one `<polynet-page>`, when the frame uses relative paths, and when the site's
 own version of a standard page lacks that page's blocks (a tag in the page, or
-the name in a script for framework builds; not in a comment). The shell needs
-no check: the edge injects it.
+the name in a script for framework builds; not in a comment). It warns when the
+frame runs its own scripts and has an empty `<header>` or `<nav>` (the chrome
+is probably drawn by a script, which the twin removes). The shell needs no
+check: the edge injects it.
 A site to try the blocks and the frame on staging: `dispatch/examples/blocks-demo/`
 (deploy it with the CLI like any site; its standard pages come from its `frame.html`).
 
@@ -166,7 +241,14 @@ cd my-site && node <repo>/packages/polynet-cli/bin/polynet.mjs deploy --communit
 
 The backend (`convex/httpCommunitySites.ts`) checks builder authority, gets a
 Cloudflare upload pass for only the changed files, publishes `site-<slug>`, maps
-`<slug>.polynet.page` and registers the origin. It needs `CLOUDFLARE_API_TOKEN`
+`<slug>.polynet.page` and registers the origin and its private twin's
+(`kind: "private"`). Sites deployed before twins existed get theirs with a one-off
+backfill, a page at a time until `isDone`:
+
+```bash
+npx convex run communitySites:registerSitePrivateTwinsInternal '{"sitesDomain":"polynet.page","hostSuffix":"-staging"}'
+# then again with '"cursor":"<continueCursor>"' while isDone is false; '"dryRun":true' lists without writing
+``` It needs `CLOUDFLARE_API_TOKEN`
 (Workers Scripts Edit + Workers KV Storage Edit), `CLOUDFLARE_ACCOUNT_ID`,
 `POLYNET_SITES_NAMESPACE`, `POLYNET_SITES_ROUTES_KV_ID` and `POLYNET_SITES_DOMAIN`.
 

@@ -14,12 +14,14 @@ import {
   COMMUNITY_EDGE_REVOKE_PATH,
   COMMUNITY_APP_UPLOAD_PATH,
   COMMUNITY_APP_FILE_PATH,
+  COMMUNITY_APP_MY_COMMUNITIES_PATH,
 } from "./httpCommunityApps";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { COMMUNITY_APP_SESSION_TTL_MS, deriveCommunityAppWatchToken, hashCommunityAppSessionToken } from "../shared/communityAppSession";
 
 const modules = import.meta.glob([
   "./communityApps.ts",
+  "./communitySites.ts",
   "./communityLive.ts",
   "./communityAttachmentUploads.ts",
   "./communityAttachmentDownloads.ts",
@@ -731,4 +733,64 @@ test("a front end reads a fellow member's profile: only what Studio shows anothe
   await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
   expect(await read(owner, "apps-member.json")).toMatchObject({ ok: false, code: "semantic_not_found" });
   expect(await read(member, "apps-owner.json")).toMatchObject({ ok: false });
+});
+
+test("a site's private twin: its sessions are private, and only they read the member's communities", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://studio.example.com");
+  const f = await fixture();
+  const site = "https://apps-community-staging.polynet.page";
+  const twin = "https://apps-community--me-staging.polynet.page";
+  // A deploy registers both origins; the twin's is private.
+  expect(await f.t.mutation(internal.communitySites.recordCommunitySiteDeployInternal, {
+    communityId: f.ids.communityId, userId: f.ids.ownerId, hostname: "apps-community-staging.polynet.page",
+    sitesDomain: "polynet.page", hostSuffix: "-staging", fileCount: 1, totalBytes: 1,
+  })).toEqual({ origin: site, privateOrigin: twin });
+  await f.t.run(async (c) => {
+    await c.db.insert("communityMemberships", {
+      communityId: f.ids.otherCommunityId, userId: f.ids.memberId, role: "admin", accessSource: "free_grant", active: true,
+      activationSequence: 1, activatedAt: 1, createdAt: 2, updatedAt: 2,
+    });
+    // Another community the member has left, and one that's archived: never listed.
+    const gone = await c.db.insert("communities", {
+      ownerId: f.ids.ownerId, slug: "apps-gone", name: "Gone", visibility: "unlisted", inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open", activeMemberCount: 1, lifecycleStatus: "archived", lifecycleGeneration: 1, createdAt: 1, updatedAt: 1,
+    } as any);
+    await c.db.insert("communityMemberships", {
+      communityId: gone, userId: f.ids.memberId, role: "member", accessSource: "free_grant", active: true,
+      activationSequence: 1, activatedAt: 1, createdAt: 3, updatedAt: 3,
+    });
+  });
+  const signInAt = async (origin: string) => {
+    const issued = await f.handoff("apps-member", { origin });
+    expect(issued).toMatchObject({ status: 200, body: { ok: true } });
+    const exchanged = await f.exchange(issued.body.code, { origin });
+    expect(exchanged).toMatchObject({ status: 200, body: { ok: true } });
+    return exchanged.body.token as string;
+  };
+  const siteToken = await signInAt(site);
+  const twinToken = await signInAt(twin);
+  expect((await f.sessions()).map((row) => row.kind).sort()).toEqual(["private", "site"]);
+  const mine = (token: string, origin: string, body: unknown = { sites_domain: "polynet.page", host_suffix: "-staging" }, secret = EDGE_SECRET) =>
+    f.post(COMMUNITY_APP_MY_COMMUNITIES_PATH, { origin, "x-polynet-edge-secret": secret, authorization: `Bearer ${token}` }, body);
+  // The site's own session never reads them, whatever its page asks; nor does the twin's session from the site's origin.
+  expect(await mine(siteToken, site)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+  expect(await mine(twinToken, site)).toMatchObject({ status: 401 });
+  expect(await mine(siteToken, twin)).toMatchObject({ status: 401 });
+  expect((await mine(twinToken, twin, {}, "wrong")).status).toBe(401);
+  // Oldest membership first, as Studio lists them.
+  expect(await mine(twinToken, twin)).toEqual({ status: 200, body: { ok: true, communities: [
+    { slug: "apps-other", name: "apps-other", role: "admin", avatar_url: null, site_url: null },
+    { slug: "apps-community", name: "apps-community", role: "member", avatar_url: null, site_url: site },
+  ] } });
+  // The twin's session works for everything the site's does.
+  expect((await f.call(twinToken, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } }, twin)).body).toMatchObject({ ok: true });
+  // The site's account endpoint still never names the member's other communities, on either origin.
+  const account = await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: site, "x-polynet-edge-secret": EDGE_SECRET, authorization: `Bearer ${siteToken}` }, {});
+  expect(JSON.stringify(account)).not.toContain("apps-other");
+  // A twin origin that stops being private stops reading personal data, even with a session minted as private.
+  await f.t.run(async (c) => {
+    const row = await c.db.query("communityDomains").withIndex("by_origin", (q) => q.eq("origin", twin)).first();
+    await c.db.patch(row!._id, { kind: "site" });
+  });
+  expect(await mine(twinToken, twin)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
 });

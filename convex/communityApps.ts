@@ -1,6 +1,13 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { requireCommunityChatAccess } from "./communityCore";
+import {
+  normalizeCommunityRoleForOutput,
+  pickMostRelevantCommunityMembership,
+  requireCommunityChatAccess,
+  resolveCommunityBrandingFields,
+  resolveCommunityMembershipEntitlementState,
+} from "./communityCore";
+import { registeredSiteOrigin } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -125,6 +132,53 @@ export const getCommunityAppAccountInternal = internalQuery({
   },
 });
 
+// "Your communities", only for a session minted on a private twin (the caller,
+// httpCommunityApps, enforces that; a site's code never reaches this): every
+// community the member owns or is entitled to, as Studio's own list counts
+// them, oldest first. Each with its site on this environment's sites domain,
+// when it has one.
+const MEMBER_COMMUNITIES_MAX = 200;
+export const listCommunityAppMemberCommunitiesInternal = internalQuery({
+  args: { userId: v.id("users"), sitesDomain: v.optional(v.string()), hostSuffix: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const domain = String(args.sitesDomain ?? "").trim().toLowerCase();
+    const suffix = String(args.hostSuffix ?? "").trim().toLowerCase();
+    const picked: Array<{ community: any; role: string; since: number }> = [];
+    const seen = new Set<string>();
+    const owned = await ctx.db.query("communities").withIndex("by_owner", (q) => q.eq("ownerId", args.userId)).take(MEMBER_COMMUNITIES_MAX);
+    for (const community of owned) {
+      if (!communityIsActive(community as any)) continue;
+      seen.add(String(community._id));
+      picked.push({ community, role: "owner", since: community.createdAt });
+    }
+    const rows = await ctx.db.query("communityMemberships").withIndex("by_user", (q) => q.eq("userId", args.userId)).take(MEMBER_COMMUNITIES_MAX * 2);
+    const byCommunity = new Map<string, any[]>();
+    for (const row of rows) byCommunity.set(String(row.communityId), [...(byCommunity.get(String(row.communityId)) ?? []), row]);
+    for (const [communityId, memberships] of byCommunity) {
+      if (seen.has(communityId) || picked.length >= MEMBER_COMMUNITIES_MAX) continue;
+      const membership = pickMostRelevantCommunityMembership(memberships as any);
+      const community = membership ? await ctx.db.get(membership.communityId) : null;
+      if (!membership || !community || !communityIsActive(community as any)) continue;
+      const entitlement = await resolveCommunityMembershipEntitlementState({ ctx, community: community as any, membership, userId: args.userId });
+      if (!entitlement.isEntitled) continue;
+      seen.add(communityId);
+      picked.push({ community, role: normalizeCommunityRoleForOutput(membership.role) || "member", since: membership.createdAt });
+    }
+    picked.sort((a, b) => a.since - b.since);
+    return await Promise.all(picked.map(async ({ community, role }) => {
+      const slug = String(community.slug ?? "");
+      const branding = await resolveCommunityBrandingFields(ctx, community as any);
+      return {
+        slug,
+        name: String(community.name ?? "").trim().slice(0, 120) || slug,
+        role,
+        avatar_url: branding.avatar_url,
+        site_url: await registeredSiteOrigin(ctx, community, domain, suffix),
+      };
+    }));
+  },
+});
+
 export const removeCommunityDomainInternal = internalMutation({
   args: { origin: v.string() },
   handler: async (ctx, args) => {
@@ -212,11 +266,14 @@ export const consumeCommunityAppHandoffInternal = internalMutation({
       .take(MAX_ROWS_PRUNED);
     for (const row of expired) await ctx.db.delete(row._id);
     const expiresAt = nowMs + COMMUNITY_APP_SESSION_TTL_MS;
+    // The session's kind is its origin's, fixed now: only a private twin's
+    // session ever reaches personal endpoints.
+    const kind = domain.kind === "private" ? "private" as const : "site" as const;
     await ctx.db.insert("communityAppSessions", {
       tokenHash: args.tokenHash, watchTokenHash: args.watchTokenHash, domainId: domain._id,
-      communityId: domain.communityId, userId: handoff.userId, expiresAt,
+      communityId: domain.communityId, userId: handoff.userId, expiresAt, kind,
     });
-    return { ok: true as const, expiresAt };
+    return { ok: true as const, expiresAt, kind };
   },
 });
 
@@ -245,6 +302,8 @@ export const resolveCommunityAppSessionInternal = internalQuery({
     const user = await ctx.db.get(session.userId);
     const authSubject = typeof user?.authSubject === "string" ? user.authSubject : "";
     if (!authSubject) return { ok: false as const };
-    return { ok: true as const, userId: String(session.userId), authSubject, communityId: String(session.communityId) };
+    // Private only when minted as private on an origin that is still a private twin.
+    const kind = session.kind === "private" && domain.kind === "private" ? "private" as const : "site" as const;
+    return { ok: true as const, userId: String(session.userId), authSubject, communityId: String(session.communityId), kind };
   },
 });

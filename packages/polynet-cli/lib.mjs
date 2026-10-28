@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
-import { isCheckedFile } from "./checks.mjs";
+import { isCheckedFile, privateTwinHost } from "./checks.mjs";
 
 // Production by default. Polynet's own staging (sites at <slug>-staging.polynet.page)
 // is reached with --staging, or "staging": true in polynet.json.
@@ -18,6 +18,15 @@ export function apiUrlFor({ env = {}, staging = false } = {}) {
 
 export function siteAddress(community, staging = false) {
   return `https://${community}${staging ? "-staging" : ""}.polynet.page`;
+}
+
+// The site's private twin, where members' own pages are (their communities,
+// messages, settings): the same frame, none of the site's scripts. Null for a
+// slug that can't have a site.
+export function privateAddress(community, staging = false) {
+  const suffix = staging ? "-staging" : "";
+  const twin = privateTwinHost(`${community}${suffix}.polynet.page`, "polynet.page", suffix);
+  return twin ? `https://${twin}` : null;
 }
 export const CALLBACK_PORT = 51789;
 export const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`;

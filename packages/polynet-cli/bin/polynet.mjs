@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   CALLBACK_PORT, REDIRECT_URI, apiUrlFor, buildManifest, collectFiles, formatBytes, installGuide, isDirectory, pkce,
-  readCheckedFiles, siteAddress, siteConfigPaths, uploadBuckets,
+  privateAddress, readCheckedFiles, siteAddress, siteConfigPaths, uploadBuckets,
 } from "../lib.mjs";
 import { checkSite, formatProblems } from "../checks.mjs";
 
@@ -271,6 +271,9 @@ async function deploy(args) {
     await writeFile(paths.save, JSON.stringify({ ...config, ...saved, community, ...(staging ? { staging: true } : {}) }, null, 2) + "\n");
   }
   console.log(`✓ Live: ${published.url}`);
+  // Its private twin: members' own pages, in this site's frame with none of its scripts.
+  const mine = published.url === siteAddress(community, staging) ? privateAddress(community, staging) : null;
+  if (mine) console.log(`  Members' own pages (their communities, messages, settings): ${mine}`);
 }
 
 const [command, ...rest] = process.argv.slice(2);

@@ -2,7 +2,7 @@
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to this community's own pages ("In
 // this club": the standard pages, on this site), their account, their
-// communities, Discover, messages and settings. It also loads Polynet's
+// communities (on the site's private twin), Discover, messages and settings. It also loads Polynet's
 // blocks (/__polynet/blocks/<name>.js) on pages that place them, and opens the
 // profile panel for ?member= links and "polynet:profile". Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
@@ -101,6 +101,12 @@ function avatar(url, name) {
 // The standard pages, on every site (the site's own address); network ones
 // (Discover) aren't this club's, so "In this club" leaves them out.
 const PAGES = __POLYNET_PAGE_ROUTES__;
+// On the site's private twin (the member's own pages), the club's pages are
+// the site's: links lead back there. On the site they stay relative.
+function sitePath(session, path) {
+  const site = session && session.site_origin;
+  return site && site !== location.origin ? site + path : path;
+}
 function currentPage() {
   const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, "") : location.pathname;
   const page = PAGES.find((page) => path === page.path || (page.below.length > 0 && path.indexOf(page.path + "/") === 0));
@@ -221,7 +227,7 @@ class PolynetAccount extends HTMLElement {
     const current = currentPage();
     children.push(h("div", { class: "group", role: "group", part: "group", "aria-labelledby": this.panelId + "-here" }, [
       h("p", { class: "group-title", id: this.panelId + "-here", text: "In this club" }),
-      ...PAGES.filter((page) => !page.network).map((page) => h("a", { class: "item", href: page.path, part: "item", "aria-current": page.path === current ? "page" : null }, [
+      ...PAGES.filter((page) => !page.network).map((page) => h("a", { class: "item", href: sitePath(session, page.path), part: "item", "aria-current": page.path === current ? "page" : null }, [
         h("span", { class: "label", text: page.title }),
       ])),
     ]));
@@ -239,10 +245,14 @@ class PolynetAccount extends HTMLElement {
       const links = account.links || {};
       const everyday = [];
       if ((here.role === "owner" || here.role === "admin") && here.studio_url) everyday.push([here.studio_url, "Manage this community"]);
+      // Your communities is a page of the site's private twin (the member's own
+      // pages, where the site's code never runs); Polynet's list where there's none.
+      const mine = session.private_origin ? session.private_origin + "/communities" : links.communities;
+      const onMine = Boolean(session.private_origin) && location.origin === session.private_origin && location.pathname === "/communities";
       // Discover is a page of this site too (/discover, in its frame), so it never leaves.
-      everyday.push([links.messages, "Messages"], [links.communities, "Your communities"], ["/discover", "Discover communities"], [links.settings, "Settings"]);
-      for (const [href, label] of everyday) {
-        if (href) children.push(h("a", { class: "item", href: href, part: "item", "aria-current": href === current ? "page" : null }, [h("span", { class: "label", text: label })]));
+      everyday.push([links.messages, "Messages"], [mine, "Your communities", onMine], [sitePath(session, "/discover"), "Discover communities"], [links.settings, "Settings"]);
+      for (const [href, label, here] of everyday) {
+        if (href) children.push(h("a", { class: "item", href: href, part: "item", "aria-current": here || href === current ? "page" : null }, [h("span", { class: "label", text: label })]));
       }
     }
     children.push(h("hr", { class: "sep" }));
@@ -308,7 +318,7 @@ else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELA
 const BLOCKS = {
   "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page",
   "polynet-events": "events", "polynet-learn": "learn", "polynet-knowledge": "knowledge", "polynet-ask": "ask",
-  "polynet-discover": "discover",
+  "polynet-discover": "discover", "polynet-personal": "personal",
 };
 const pendingBlocks = new Set(Object.keys(BLOCKS));
 let blockCheck = false;
@@ -362,7 +372,7 @@ if (memberInUrl()) withProfiles((module) => module.followUrl());
 export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defined), polynet-chat:not(:defined),\n" +
   "polynet-members:not(:defined), polynet-profile:not(:defined), polynet-page:not(:defined),\n" +
   "polynet-events:not(:defined), polynet-learn:not(:defined), polynet-knowledge:not(:defined), polynet-ask:not(:defined),\n" +
-  "polynet-discover:not(:defined) { visibility: hidden; }\n" +
+  "polynet-discover:not(:defined), polynet-personal:not(:defined) { visibility: hidden; }\n" +
   [
     ":where(polynet-page) { display: block; }",
     ":where(polynet-page .pn-page-heading) { margin: 0 0 .75em; }",
@@ -371,6 +381,7 @@ export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defi
     ":where(polynet-page .pn-page-chat > polynet-chat[state=signed-out]) { height: auto; }",
     // A reading measure for the pages of words.
     ":where(polynet-page .pn-page-events, polynet-page .pn-page-learn, polynet-page .pn-page-knowledge, polynet-page .pn-page-ask) { max-width: 46rem; }",
+    ":where(polynet-page .pn-page-messages, polynet-page .pn-page-settings, polynet-page .pn-page-join) { max-width: 46rem; }",
     // The private conversation scrolls inside, its box always in reach, like the chat.
     ":where(polynet-page .pn-page-ask > polynet-ask) { height: max(24rem, calc(100vh - 12rem)); height: max(24rem, calc(100dvh - 12rem)); }",
     ":where(polynet-page .pn-page-ask > polynet-ask[state=signed-out]) { height: auto; }",

@@ -8,13 +8,20 @@
 // ::part() rules reach the blocks inside. Kept as text (a String.raw literal: no
 // backticks or template placeholders inside) so the edge serves exactly what is
 // reviewed; the route table is filled in from the one the edge routes by.
-import { STANDARD_PAGES } from "../../../../../packages/polynet-cli/checks.mjs";
+import { PERSONAL_PAGES, STANDARD_PAGES } from "../../../../../packages/polynet-cli/checks.mjs";
 
 // What the block needs of each standard page, as JSON (no functions, no URLs):
 // below is each level's pattern as regex source.
 export const PAGE_ROUTES_JSON = JSON.stringify(STANDARD_PAGES.map((page) => ({
   path: page.path, name: page.name, title: page.title, blocks: page.blocks, members: Boolean(page.members), network: Boolean(page.network),
   below: page.below.map(([, pattern]) => pattern.source),
+})));
+
+// The member's own pages, which the edge serves only on the site's private
+// twin: each is one <polynet-personal page="<name>"> (its data stays in that
+// block's shadow root, out of the frame's reach).
+export const PERSONAL_ROUTES_JSON = JSON.stringify(PERSONAL_PAGES.map((page) => ({
+  path: page.path, name: page.name, title: page.title, blocks: ["polynet-personal"], members: false, network: false, personal: true, below: [],
 })));
 
 export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
@@ -32,12 +39,16 @@ export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // .pn-page-knowledge, .pn-page-ask, .pn-page-discover, .pn-page-missing,
 // .pn-page-links, and the page attribute:
 // polynet-page[page=chat|people|events|learn|knowledge|ask|discover|not-found].
+// The member's own pages (on the site's private twin, where the frame's
+// scripts never run) are .pn-page-communities, .pn-page-messages,
+// .pn-page-settings and .pn-page-join (communities-heading and so on).
 // The blocks read the rest of the address themselves (/events/<event>,
 // /learn/<course>/<lesson>).
 import { h } from "/__polynet/blocks/kit.js";
 
 const PAGES = __POLYNET_PAGE_ROUTES__;
 for (const page of PAGES) page.below = page.below.map((source) => new RegExp(source));
+const PERSONAL = __POLYNET_PERSONAL_ROUTES__;
 
 // Which page this address is: { page, handle } or null (the edge's standardPage).
 function route(pathname) {
@@ -49,10 +60,11 @@ function route(pathname) {
     if (below.length > page.below.length || !below.every((segment, i) => page.below[i].test(segment))) continue;
     return { page: page, handle: page.members ? below[0].toLowerCase() : null };
   }
+  for (const page of PERSONAL) if (path === page.path) return { page: page, handle: null };
   return null;
 }
 
-const HEADINGS = new Set(PAGES.map((page) => page.name + "-heading").concat(["not-found-heading"]));
+const HEADINGS = new Set(PAGES.concat(PERSONAL).map((page) => page.name + "-heading").concat(["not-found-heading"]));
 
 class PolynetPage extends HTMLElement {
   connectedCallback() {
@@ -88,6 +100,7 @@ class PolynetPage extends HTMLElement {
   body(page, forBlocks) {
     const blocks = page.blocks.map((tag) => {
       const block = document.createElement(tag);
+      if (page.personal) block.setAttribute("page", page.name);
       for (const child of forBlocks) if (child.getAttribute("data-block") === tag) block.append(child);
       return block;
     });
@@ -126,4 +139,4 @@ class PolynetPage extends HTMLElement {
 }
 
 if (!customElements.get("polynet-page")) customElements.define("polynet-page", PolynetPage);
-`.replace("__POLYNET_PAGE_ROUTES__", PAGE_ROUTES_JSON);
+`.replace("__POLYNET_PAGE_ROUTES__", PAGE_ROUTES_JSON).replace("__POLYNET_PERSONAL_ROUTES__", PERSONAL_ROUTES_JSON);

@@ -14,7 +14,9 @@ every standard page into it.**
    `frame.html`: the world's header, navigation and footer around exactly
    one `<polynet-page></polynet-page>`. Every path in the frame starts
    with `/` (it is shown at `/people/sam` and `/learn/a~k1/b~k2` too).
-   `check` and `deploy` fail without them.
+   `check` and `deploy` fail without them. Draw the frame's chrome in HTML
+   and CSS, not with a script: members' own pages (Your communities,
+   Messages, Settings) show the frame with every script removed.
 2. **The standard pages exist automatically**, inside your frame, from the
    first deploy (the table below). Link them from the frame's navigation.
 3. **A custom standard page uses its blocks.** Ship your own `events.html`

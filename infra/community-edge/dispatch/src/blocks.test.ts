@@ -1475,6 +1475,8 @@ test("the account menu: In this club links to the site's own pages, marking the 
   expect(await manage.getAttribute("href")).toBe("https://polynet.test/c/run-club/settings/community");
   // Discover isn't this club's page, but it is on this site: /discover, never Polynet's.
   expect(await shell.locator("[part=panel] a", { hasText: "Discover communities" }).getAttribute("href")).toBe("/discover");
+  // Off the sites domain (no private twin), Your communities is Polynet's list.
+  expect(await shell.locator("[part=panel] a", { hasText: "Your communities" }).getAttribute("href")).toBe("https://polynet.test/");
   // The keyboard reaches them: the first item is Chat.
   await page.keyboard.press("Escape");
   await shell.locator("[part=trigger]").press("ArrowDown");
@@ -1485,6 +1487,26 @@ test("the account menu: In this club links to the site's own pages, marking the 
   await home.locator("polynet-account [part=trigger]").click();
   expect(await home.locator("polynet-account [part=group] [aria-current]").count()).toBe(0);
   await home.close();
+});
+
+test("the account menu: Your communities opens the site's private twin, where the site's code never runs", async () => {
+  const twin = "https://run-club--me.polynet.test";
+  const page = await open((fake) => {
+    (fake.session as any).site_origin = SITE;
+    (fake.session as any).private_origin = twin;
+    (fake as any).account = { member: { name: "Me" }, community: { role: "member" },
+      links: { messages: "https://polynet.test/?dm=inbox", communities: "https://polynet.test/", settings: "https://polynet.test/settings/profile" } };
+  }, frame(), "/chat");
+  const shell = page.locator("polynet-account");
+  await shell.locator("[part=trigger]").click();
+  const mine = shell.locator("[part=panel] a", { hasText: "Your communities" });
+  await expect.poll(() => mine.count()).toBe(1);
+  expect(await mine.getAttribute("href")).toBe(`${twin}/communities`);
+  // On the site, the club's pages stay relative; everything else in the menu is as it was.
+  expect(await shell.locator("[part=group] a", { hasText: "Chat" }).getAttribute("href")).toBe("/chat");
+  expect(await shell.locator("[part=panel] a", { hasText: "Messages" }).getAttribute("href")).toBe("https://polynet.test/?dm=inbox");
+  expect(await shell.locator("[part=panel] a", { hasText: "Settings" }).getAttribute("href")).toBe("https://polynet.test/settings/profile");
+  await page.close();
 });
 
 // The calendar, around now: one under way, two coming (one next month), one

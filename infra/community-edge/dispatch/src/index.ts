@@ -9,7 +9,14 @@
 //   /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]], /knowledge, /ask, /discover
 //                      Polynet's standard pages: the site's own file if it has one,
 //                      else the site's frame (/frame.html), which <polynet-page> fills
-//   everything else    the community's own front end (a user Worker with static assets)
+//   /communities, /messages, /settings, /join
+//                      the member's own pages: never on the site. They live on its
+//                      private twin, <slug>--me<suffix>.<sites domain> (twin.ts),
+//                      which draws the site's frame with every script removed, so
+//                      only Polynet's code runs there. The site sends them there.
+//   /__polynet/me/*    personal data, on the twin only, for its own session
+//   everything else    the community's own front end (a user Worker with static assets);
+//                      on the twin, a redirect to the site
 //
 // The member session lives only in an HttpOnly cookie on the community's domain.
 // Front-end code never sees a token. Production reaches user Workers through a
@@ -30,8 +37,15 @@ import { LEARN_SOURCE } from "./blocks/learn";
 import { KNOWLEDGE_SOURCE } from "./blocks/knowledge";
 import { ASK_SOURCE } from "./blocks/ask";
 import { DISCOVER_SOURCE } from "./blocks/discover";
-// The one route table for the standard pages, shared with the site checks.
-import { standardPage, type StandardPage } from "../../../../packages/polynet-cli/checks.mjs";
+import { PERSONAL_SOURCE } from "./blocks/personal";
+import {
+  plainStyleHash, plainTwinPage, stripFrame, twinPageHeaders, twinPolicy, withTwinHeaders, type StripRewriterClass,
+} from "./twin";
+// The one route table for the standard and personal pages and the one site <-> twin
+// host mapping, shared with the site checks, the backend and the CLI.
+import {
+  personalPage, privateTwinHost, siteHostOfTwin, standardPage, type PersonalPage, type StandardPage,
+} from "../../../../packages/polynet-cli/checks.mjs";
 // The live-updates client, served from this domain so no community site loads a third-party script.
 import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
 
@@ -41,6 +55,8 @@ const BLOCKS: Record<string, string> = {
   page: PAGE_SOURCE, events: EVENTS_SOURCE, learn: LEARN_SOURCE, knowledge: KNOWLEDGE_SOURCE, ask: ASK_SOURCE,
   discover: DISCOVER_SOURCE,
 };
+// Blocks that only the private twin serves: they read the member's own data.
+const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
@@ -81,6 +97,27 @@ export interface Env {
 }
 
 type Route = { script: string; community: string };
+
+// Where a request landed: the community's site, or its private twin. Both know
+// each other's origin (privateOrigin is null where there's no twin, as off the
+// sites domain in local dev).
+type Place = { twin: boolean; siteOrigin: string; privateOrigin: string | null };
+
+function sitesOf(env: Env): { domain: string; suffix: string } | null {
+  const domain = (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase();
+  return domain ? { domain, suffix: (env.POLYNET_SITES_HOST_SUFFIX ?? "").toLowerCase() } : null;
+}
+
+// The twin's host for a site host, or the site's host for a twin host.
+export function twinHostFor(siteHost: string, env: Env): string | null {
+  const sites = sitesOf(env);
+  return sites ? privateTwinHost(siteHost.toLowerCase(), sites.domain, sites.suffix) : null;
+}
+
+export function siteHostForTwin(host: string, env: Env): string | null {
+  const sites = sitesOf(env);
+  return sites ? siteHostOfTwin(host.toLowerCase(), sites.domain, sites.suffix) : null;
+}
 
 const API_PREFIX = "/__polynet/api";
 const AUTH_PREFIX = "/__polynet/auth/";
@@ -162,9 +199,12 @@ export async function deriveWatchToken(sessionToken: string): Promise<string> {
 // cookies with their requests. The member endpoints answer only this site's own
 // pages: a sibling can't post, ask the agent, upload or sign out as the member.
 const MEMBER_PATHS = new Set([`${AUTH_PREFIX}session`, `${AUTH_PREFIX}logout`, "/__polynet/account", API_PREFIX, AGENT_PATH, AGENT_MESSAGES_PATH, UPLOAD_PATH]);
+// The member's own data: only the private twin answers it, only to its own pages.
+const PERSONAL_API_PREFIX = "/__polynet/me/";
+const MY_COMMUNITIES_PATH = "/__polynet/me/communities";
 
 function isMemberEndpoint(pathname: string): boolean {
-  return MEMBER_PATHS.has(pathname) || pathname.startsWith(`${API_PREFIX}/`) || pathname.startsWith(FILES_PREFIX);
+  return MEMBER_PATHS.has(pathname) || pathname.startsWith(`${API_PREFIX}/`) || pathname.startsWith(FILES_PREFIX) || pathname.startsWith(PERSONAL_API_PREFIX);
 }
 
 export function fromThisSite(request: Request, url: URL): boolean {
@@ -332,7 +372,10 @@ function backend(env: Env, path: string, body: Record<string, unknown>, origin: 
   });
 }
 
-async function handleAuth(request: Request, url: URL, route: Route, env: Env): Promise<Response> {
+// The same sign-in on the site and on its private twin: each origin gets its
+// own host-only session through the same Polynet hop (silent for a member
+// already signed in to Polynet). The backend records which kind each is.
+async function handleAuth(request: Request, url: URL, route: Route, place: Place, env: Env): Promise<Response> {
   const action = url.pathname.slice(AUTH_PREFIX.length);
 
   if (action === "start" && request.method === "GET") {
@@ -382,9 +425,12 @@ async function handleAuth(request: Request, url: URL, route: Route, env: Env): P
     // owners and admins manage the community in Studio's community settings.
     const joinUrl = new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
     const studioUrl = new URL(`/c/${encodeURIComponent(route.community)}/settings/community`, env.POLYNET_AUTH_URL).toString();
-    const identity = await publicIdentity(env, url.origin);
+    const identity = await publicIdentity(env, place.siteOrigin);
     const base = {
       community: route.community,
+      // The site and its private twin (the member's own pages), for links between them.
+      site_origin: place.siteOrigin,
+      private_origin: place.privateOrigin,
       community_name: identity?.name ?? null,
       community_one_liner: identity?.one_liner ?? null,
       community_about: identity?.about ?? null,
@@ -508,78 +554,193 @@ async function proxyAgent(request: Request, url: URL, env: Env): Promise<Respons
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+// Your communities, for the twin's own page: read server-side with the twin's
+// session (the backend refuses any other kind), and only these fields leave
+// the edge. Each links to that community's own site on this sites domain, else
+// to its page on Polynet; avatars only from Polynet's storage (the page's
+// policy allows no other image host).
+const ROLES = new Set(["owner", "admin", "moderator", "member"]);
+async function proxyMyCommunities(request: Request, url: URL, route: Route, env: Env): Promise<Response> {
+  if (request.method !== "GET") return json(405, { ok: false, code: "method_not_allowed" });
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!token || !TOKEN_PATTERN.test(token)) return json(401, { ok: false, code: "sign_in_required" });
+  const sites = sitesOf(env);
+  const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/me/communities`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, Authorization: `Bearer ${token}`,
+      "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+    },
+    body: JSON.stringify({ sites_domain: sites?.domain ?? "", host_suffix: sites?.suffix ?? "" }),
+  });
+  const body = (await upstream.json().catch(() => null)) as { ok?: boolean; code?: string; communities?: unknown } | null;
+  if (upstream.status === 401) return json(401, { ok: false, code: "sign_in_required" }, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
+  if (!upstream.ok || !body?.ok || !Array.isArray(body.communities)) {
+    return json(upstream.ok ? 502 : upstream.status, { ok: false, code: typeof body?.code === "string" ? body.code : "communities_unavailable" });
+  }
+  const storage = storageOrigin(env);
+  const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+  const communities = body.communities.flatMap((raw) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const slug = typeof row.slug === "string" && SLUG_PATTERN.test(row.slug) ? row.slug : null;
+    if (!slug) return [];
+    const site = sites && row.site_url === `https://${slug}${sites.suffix}.${sites.domain}` ? row.site_url : null;
+    const avatar = typeof row.avatar_url === "string" && storage && row.avatar_url.startsWith(`${storage}/api/storage/`) ? row.avatar_url : null;
+    return [{
+      slug, name: text(row.name, 120) ?? slug, role: typeof row.role === "string" && ROLES.has(row.role) ? row.role : "member",
+      avatar_url: avatar, url: site ?? new URL(`/c/${encodeURIComponent(slug)}`, env.POLYNET_AUTH_URL).toString(),
+      has_site: Boolean(site), here: slug === route.community,
+    }];
+  });
+  return json(200, { ok: true, communities });
+}
+
+// Where Polynet's files (avatars) are served from: the deployment's storage.
+function storageOrigin(env: Env): string | null {
+  try {
+    return new URL(env.POLYNET_LIVE_URL).origin;
+  } catch {
+    return null;
+  }
+}
+
+function polynetAsset(body: string, type: string, maxAge: number): Response {
+  return new Response(body, {
+    headers: { "Content-Type": `${type}; charset=utf-8`, "Cache-Control": `public, max-age=${maxAge}`, "X-Content-Type-Options": "nosniff" },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const frontDoorResponse = frontDoor(url, env);
     if (frontDoorResponse) return frontDoorResponse;
-    const route = await resolveRoute(url.hostname, env);
-    if (!route) return noSiteYet(url, env);
-    if (isMemberEndpoint(url.pathname) && !fromThisSite(request, url)) {
-      return json(403, { ok: false, code: "cross_site_request", message: "Call this from the community's own site." });
-    }
-    if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, env);
-    // The builder kit: the SDK every front end imports, its live client, and its doc.
-    if (url.pathname === "/__polynet/live.js") {
-      return new Response(LIVE_CLIENT, {
-        headers: {
-          "Content-Type": "text/javascript; charset=utf-8",
-          "Cache-Control": "public, max-age=86400",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
-    }
-    if (url.pathname === "/__polynet/sdk.js" || url.pathname === "/__polynet/llms.txt") {
-      const sdk = url.pathname.endsWith(".js");
-      return new Response(sdk ? SDK_SOURCE : LLMS_TXT, {
-        headers: {
-          "Content-Type": sdk ? "text/javascript; charset=utf-8" : "text/plain; charset=utf-8",
-          "Cache-Control": "public, max-age=300",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
-    }
-    if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
-    if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);
-    if (url.pathname.startsWith(BLOCKS_PREFIX)) {
-      const name = /^([a-z]+)\.js$/.exec(url.pathname.slice(BLOCKS_PREFIX.length))?.[1];
-      if (!name || !Object.hasOwn(BLOCKS, name)) {
-        return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
-      }
-      return new Response(BLOCKS[name], {
-        headers: {
-          "Content-Type": "text/javascript; charset=utf-8",
-          "Cache-Control": "public, max-age=300",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
-    }
-    if (url.pathname === "/__polynet/ui.js" || url.pathname === "/__polynet/ui.css") {
-      const css = url.pathname.endsWith(".css");
-      return new Response(css ? UI_CSS : UI_SOURCE, {
-        headers: {
-          "Content-Type": css ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8",
-          "Cache-Control": "public, max-age=300",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
-    }
-    if (url.pathname === API_PREFIX || url.pathname.startsWith(`${API_PREFIX}/`)) {
-      return await proxyApi(request, url, env);
-    }
-    if (url.pathname === AGENT_PATH || url.pathname === AGENT_MESSAGES_PATH) {
-      return await proxyAgent(request, url, env);
-    }
-    if (url.pathname === UPLOAD_PATH || url.pathname.startsWith(FILES_PREFIX)) {
-      return await proxyFile(request, url, env);
-    }
-    const worker = userWorker(route.script, env);
-    if (!worker) return new Response("Community front end unavailable", { status: 503 });
-    const standard = request.method === "GET" || request.method === "HEAD" ? standardPage(url.pathname) : null;
-    if (standard) return await serveStandardPage(request, url, standard, worker, env);
-    return sitePage(await worker.fetch(withoutPolynetCookies(request)));
+    // A private twin is found through its site's route: it never has one of its own.
+    const twinOf = siteHostForTwin(url.hostname, env);
+    const route = await resolveRoute(twinOf ?? url.hostname, env);
+    if (!route) return twinOf ? new Response("Community not found", { status: 404 }) : noSiteYet(url, env);
+    const twinHost = twinOf ? null : twinHostFor(url.hostname, env);
+    const place: Place = twinOf
+      ? { twin: true, siteOrigin: `${url.protocol}//${twinOf}`, privateOrigin: url.origin }
+      : { twin: false, siteOrigin: url.origin, privateOrigin: twinHost ? `${url.protocol}//${twinHost}` : null };
+    const response = await serve(request, url, route, place, env);
+    return place.twin ? withTwinHeaders(response) : response;
   },
 };
+
+async function serve(request: Request, url: URL, route: Route, place: Place, env: Env): Promise<Response> {
+  // The member's own data never answers on the site, whoever asks.
+  if (!place.twin && (url.pathname.startsWith(PERSONAL_API_PREFIX) || url.pathname.startsWith(`${BLOCKS_PREFIX}personal`))) {
+    return json(404, { ok: false, code: "not_found" });
+  }
+  if (isMemberEndpoint(url.pathname) && !fromThisSite(request, url)) {
+    return json(403, { ok: false, code: "cross_site_request", message: "Call this from the community's own site." });
+  }
+  if (url.pathname.startsWith(AUTH_PREFIX)) return await handleAuth(request, url, route, place, env);
+  // The builder kit: the SDK every front end imports, its live client, and its doc.
+  if (url.pathname === "/__polynet/live.js") return polynetAsset(LIVE_CLIENT, "text/javascript", 86400);
+  if (url.pathname === "/__polynet/sdk.js") return polynetAsset(SDK_SOURCE, "text/javascript", 300);
+  if (url.pathname === "/__polynet/llms.txt") return polynetAsset(LLMS_TXT, "text/plain", 300);
+  if (url.pathname === MY_COMMUNITIES_PATH) return await proxyMyCommunities(request, url, route, env);
+  if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
+  if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
+  if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);
+  if (url.pathname.startsWith(BLOCKS_PREFIX)) {
+    const name = /^([a-z]+)\.js$/.exec(url.pathname.slice(BLOCKS_PREFIX.length))?.[1];
+    const source = name && Object.hasOwn(BLOCKS, name) ? BLOCKS[name] : name && place.twin && Object.hasOwn(TWIN_BLOCKS, name) ? TWIN_BLOCKS[name] : null;
+    if (!source) {
+      return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+    }
+    return polynetAsset(source, "text/javascript", 300);
+  }
+  if (url.pathname === "/__polynet/ui.js") return polynetAsset(UI_SOURCE, "text/javascript", 300);
+  if (url.pathname === "/__polynet/ui.css") return polynetAsset(UI_CSS, "text/css", 300);
+  if (url.pathname === API_PREFIX || url.pathname.startsWith(`${API_PREFIX}/`)) {
+    return await proxyApi(request, url, env);
+  }
+  if (url.pathname === AGENT_PATH || url.pathname === AGENT_MESSAGES_PATH) {
+    return await proxyAgent(request, url, env);
+  }
+  if (url.pathname === UPLOAD_PATH || url.pathname.startsWith(FILES_PREFIX)) {
+    return await proxyFile(request, url, env);
+  }
+  const worker = userWorker(route.script, env);
+  if (!worker) return new Response("Community front end unavailable", { status: 503 });
+  const read = request.method === "GET" || request.method === "HEAD";
+  const personal = read ? personalPage(url.pathname) : null;
+  if (place.twin) return await serveTwin(request, url, personal, route, place, worker, env);
+  // A personal page asked for on the site: on its twin (unless the site has its own file there).
+  if (personal && place.privateOrigin) {
+    const own = await worker.fetch(siteRequest(request, url.pathname + url.search, NAVIGATION_HEADERS));
+    if (own.status !== 404) return sitePage(own);
+    await own.body?.cancel();
+    return new Response(null, { status: 302, headers: { Location: `${place.privateOrigin}${url.pathname}${url.search}`, "Cache-Control": "no-store" } });
+  }
+  const standard = read ? standardPage(url.pathname) : null;
+  if (standard) return await serveStandardPage(request, url, standard, worker, env);
+  return sitePage(await worker.fetch(withoutPolynetCookies(request)));
+}
+
+// The private twin serves only Polynet's paths (above) and the member's own
+// pages; anything else is the site's, so it goes there. Never a script: the
+// twin's policy runs only its own.
+const SCRIPT_DESTINATIONS = new Set(["script", "worker", "sharedworker", "serviceworker", "audioworklet", "paintworklet"]);
+async function serveTwin(
+  request: Request, url: URL, personal: PersonalPage | null, route: Route, place: Place, worker: Fetcher, env: Env,
+): Promise<Response> {
+  const read = request.method === "GET" || request.method === "HEAD";
+  if (!personal) {
+    if (!read || SCRIPT_DESTINATIONS.has(request.headers.get("sec-fetch-dest") ?? "")) return new Response("Not found", { status: 404 });
+    return new Response(null, { status: 302, headers: { Location: `${place.siteOrigin}${url.pathname}${url.search}`, "Cache-Control": "no-store" } });
+  }
+  if (url.pathname !== personal.path) {
+    return new Response(null, { status: 307, headers: { Location: personal.path + url.search, "Cache-Control": "no-store" } });
+  }
+  // A member's page with no session here yet: the same silent hop the site uses.
+  // (A session the backend later refuses shows the page's own sign-in instead, so this never loops.)
+  const token = readCookie(request, SESSION_COOKIE);
+  if (personal.signIn && (!token || !TOKEN_PATTERN.test(token))) {
+    const start = `${AUTH_PREFIX}start?return=${encodeURIComponent(url.pathname + url.search)}`;
+    return new Response(null, { status: 302, headers: { Location: start, "Cache-Control": "no-store" } });
+  }
+  return await serveTwinPage(request, personal, route, place, worker, env);
+}
+
+const MAX_FRAME_BYTES = 1024 * 1024;
+
+// A personal page: the site's frame with every script removed, Polynet's shell
+// added, under a policy that runs only the twin's own scripts. No frame (or
+// none the edge can draw): Polynet's plain page, which works the same.
+async function serveTwinPage(
+  request: Request, page: PersonalPage, route: Route, place: Place, worker: Fetcher, env: Env,
+): Promise<Response> {
+  const name = publicIdentity(env, place.siteOrigin).then((identity) => identity?.name ?? null);
+  const frameRequest = siteRequest(new Request(`${place.siteOrigin}${page.path}`, request), "/frame", [...NAVIGATION_HEADERS, ...CONDITIONAL_HEADERS]);
+  const frame = await worker.fetch(new Request(frameRequest, { method: "GET" }));
+  const communityName = await name;
+  const title = communityName ? `${page.title} · ${communityName}` : page.title;
+  const Rewriter = typeof HTMLRewriter === "undefined" ? undefined : (HTMLRewriter as unknown as StripRewriterClass);
+  const storage = storageOrigin(env);
+  let html: string | null = null;
+  let policy = "";
+  if (frame.ok && (frame.headers.get("content-type") ?? "").includes("text/html") && Rewriter) {
+    const text = await frame.text();
+    if (text.length <= MAX_FRAME_BYTES) {
+      const stripped = await stripFrame(new Response(text, { headers: { "Content-Type": "text/html; charset=utf-8" } }), Rewriter, {
+        siteOrigin: place.siteOrigin, twinOrigin: place.privateOrigin ?? "", title,
+      });
+      html = await withShell(new Response(stripped.html, { headers: { "Content-Type": "text/html; charset=utf-8" } }), Rewriter as never).text();
+      policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: stripped.styleHashes, attributeHashes: stripped.attributeHashes });
+    }
+  } else {
+    await frame.body?.cancel();
+  }
+  if (html === null) {
+    html = plainTwinPage({ title, communityName, siteOrigin: place.siteOrigin });
+    policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: [await plainStyleHash()] });
+  }
+  return new Response(request.method === "HEAD" ? null : html, { status: 200, headers: twinPageHeaders(policy) });
+}
 
 // Every page the site serves reaches the member the same way: no Polynet
 // cookies set by it, untransformed, with the shell.

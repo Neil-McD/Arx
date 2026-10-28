@@ -359,5 +359,10 @@ adds `/__polynet/ui.js` to every HTML page that doesn't load it, and `ui.js`
 mounts a fixed top-right `<polynet-account>` on a page that has none shortly
 after load. The shell's account data (`/__polynet/account`) is readable by any
 script on the site, so it covers the current community only (member name,
-handle, avatar, role here) and links out to Polynet for the member's other
-communities; it never lists them.
+handle, avatar, role here) and never lists the member's other communities.
+Those are on the site's private twin (`<slug>--me<suffix>.<sites domain>`,
+`/communities`), where the edge strips every script from the site's frame and
+only Polynet's code runs; the deploy registers the twin's origin beside the
+site's (`communityDomains.kind = "private"`), and its read
+(`/runtime/app/me/communities`) answers only a session minted there
+(`communityAppSessions.kind = "private"`).

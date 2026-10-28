@@ -121,10 +121,10 @@ standard page into it.**
 - **Community pages** use blocks the site's code can already see (chat,
   members, events, courses, knowledge, ask), and so does **Discover**,
   which is public data only. **Personal pages**
-  (Messages, Settings, Your communities, Join) and **admin** (Manage) come
-  later inside a private isolated window on a separate origin, so site code
-  never reads a member's DMs, other communities or settings; until then they
-  keep their current Studio links.
+  (Messages, Settings, Your communities, Join) live on the site's **private
+  twin** (below), so site code never reads a member's DMs, other communities
+  or settings. **Admin** (Manage) comes after them; until then it keeps its
+  Studio link.
 - **The two allowed hops** off the site: Polynet's sign-in page and Stripe's
   checkout. Everything else stays on the site.
 
@@ -140,11 +140,54 @@ shell's menu ("In this club") and the checks.
 | `/learn`, `/learn/<course>`, `/learn/<course>/<lesson>` | courses; a course's lessons; a lesson (Polynet's `<name>~<id>` path segments) | 3a-2 (now) |
 | `/knowledge`, `/ask` | the community's memory; the member's private agent conversation | 3a-2 (now) |
 | `/discover` | every published community, public; the shell's "Discover communities" | 3a-3 (now) |
-| `/messages`, `/settings`, `/communities`, `/join` | personal pages | 3a, isolated window |
-| `/manage` | community admin | after the isolated window |
+| `/communities` | Your communities: every community the member is in, each linking to its own site (else Studio) | 3b-1 (now), private twin |
+| `/messages`, `/settings`, `/join` | personal pages ("coming soon" in the twin's frame until built) | 3b, private twin |
+| `/manage` | community admin | after the personal pages |
 
 Until `/manage` exists, "Manage this community" opens Studio's community
 settings (`/c/<slug>/settings/community`), not the public join page.
+
+## The private twin (Oct 28)
+
+Approved by Neil (decision recorded Oct 28), replacing "an isolated frame
+inside the site": personal pages are **top-level pages on their own origin**,
+the site's private twin, not a frame embedded in the site. A cross-site frame
+loses its cookies in Safari (and in every browser once `polynet.page` joins
+the Public Suffix List); a top-level page on its own origin keeps a normal
+first-party cookie everywhere.
+
+- **The address.** Each site `<slug><suffix>.<sites domain>` has a twin one
+  DNS label over: `<slug>--me<suffix>.<sites domain>`
+  (`sunrise-climbing-club--me-staging.polynet.page`), inside the existing
+  wildcard routes and certificate. Community slugs may contain `--`, so the
+  ending is reserved: no site name ends in `--me` (as none ends in
+  `-staging`), so a site address is never another community's twin. One
+  helper maps site and twin both ways (`privateTwinHost` / `siteHostOfTwin`
+  in `packages/polynet-cli/checks.mjs`), used by the edge, the backend and
+  the CLI.
+- **It looks like the site.** The edge fetches the site's `frame.html`
+  server-side and strips everything executable (scripts, event handlers,
+  `javascript:`/`data:` URLs, frames, objects, `<base>`, refreshes, forms),
+  keeping the markup, classes, stylesheets, inline styles and fonts. Links to
+  the site go back to the site's origin; links to personal pages stay on the
+  twin. So the frame's chrome must be HTML and CSS: `checkSite` warns when it
+  looks script-drawn.
+- **Only Polynet's code runs there.** The twin serves its own `ui.js`,
+  blocks and `<polynet-personal>`; its policy is `script-src 'self'` (no
+  inline), styles only from the twin, the site, Google Fonts and the frame's
+  own inline styles by hash, `frame-ancestors 'none'`, `form-action 'self'`,
+  `base-uri 'none'`, `object-src 'none'`, `no-store`. The member's data
+  renders in shadow roots, which the site's CSS reaches only through
+  `::part()`.
+- **Its own session.** The twin signs in through the same `/__polynet/auth/*`
+  hop as the site (silent for a member already signed in to Polynet) and gets
+  its own host-only `__Host-` cookie. Its origin is registered beside the
+  site's at every deploy (and by a backfill for older sites) as `private`; a
+  session minted there is recorded as `kind: "private"`. Every personal
+  endpoint requires a private session, and the site answers them 404.
+  Everything the site's endpoints do works on both.
+- **Not yet:** Messages, Settings and Join are "coming soon" placeholders in
+  the twin's frame; the menu's Messages and Settings still open Studio.
 
 ## Private messages stay private
 
@@ -155,15 +198,14 @@ other communities. So:
 
 - **No DM API for site code.** The SDK and `/__polynet/api` never expose
   conversations or messages.
-- **The Messages drawer is a Polynet-rendered frame on a separate origin**
-  (one per community, under the sites domain), themed with the site's
-  tokens, so the site's scripts can't read it. Its session is minted
-  server-side by the edge, never handed to page script, and its API answers
-  only same-origin calls (the existing `fromThisSite` rule).
-- **Risk to prove first in slice 3:** once `polynet.page` is on the Public
-  Suffix List, that frame is cross-site, and Safari may block its cookie.
-  Fallback: Messages opens as a full Polynet page on that origin with the
-  "back to community" bar. Same privacy, one extra navigation.
+- **Messages is a page on the site's private twin** (above): the site's own
+  frame with none of its scripts, so the site's code can't read it. Its
+  session is minted server-side by the edge, never handed to page script,
+  and its API answers only same-origin calls (the existing `fromThisSite`
+  rule) from private sessions.
+- **The Safari risk is settled by design:** a top-level page on its own
+  origin keeps a first-party cookie in every browser, before and after
+  `polynet.page` joins the Public Suffix List.
 
 ## What the backend adds (slice 1)
 
@@ -177,7 +219,7 @@ All through the same five verbs every actor uses, so MCP agents get them too.
 | @-mentions | mention rows, broadcasts, emails | `mentions` on post write, validated as members of this community |
 | Profiles | `profiles` + privacy filter | `members/<handle>` read returns the filtered profile and `avatar_url` |
 | Live | `communityLive:watch` (channel changed) | the same watch also carries typists and presence changes |
-| DMs | `directMessages` | nothing for site code; the isolated Messages frame only |
+| DMs | `directMessages` | nothing for site code; Messages on the private twin only |
 
 Presence and typing are members-only and scoped to this community; leaving
 the community deletes them (existing `deleteCommunityPresenceForUser`).
@@ -203,8 +245,9 @@ the community deletes them (existing `deleteCommunityPresenceForUser`).
 2. **Required blocks**: `<polynet-channels>`, `<polynet-chat>` (with mentions,
    typing, threads, reactions, attachments) and `<polynet-members>`; the
    theming contract; `checkSite` enforcement; guide and skills rewritten.
-3. **Shell rails**: the profile drawer, the isolated Messages frame (cookie
-   proof first), the communities list, and Studio's back bar.
+3. **Shell rails**: the profile drawer, the private twin (3b-1: the stripped
+   frame, its session and Your communities; then Messages, Settings and Join
+   on it), and Studio's back bar.
 4. **Recommended blocks**: online, knowledge, events, courses, ask.
 5. **Proof**: a fresh agent builds Sunrise Climbing Club from the guide alone,
    twice, with different design directions. Every block is present and both

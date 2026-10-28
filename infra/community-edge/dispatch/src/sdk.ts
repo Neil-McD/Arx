@@ -24,7 +24,9 @@ let current = null;
 let communityInfo = null;
 
 // Who is here: { signed_in, community, community_name, community_one_liner,
-// community_about, member_count, member, join_url, studio_url, live }.
+// community_about, member_count, member, join_url, studio_url, site_origin,
+// private_origin, live }. private_origin: the site's private twin, where the
+// member's own pages are (/communities); link there, never fetch from it.
 // The community fields are public; member is { name, handle, avatar_url, role }
 // when signed in, else null.
 async function session(options) {
