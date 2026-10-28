@@ -1524,7 +1524,7 @@ test("events: under way and upcoming by month in the event's zone and the member
   expect(await past.getAttribute("open")).toBeNull();
   expect(await past.locator("[part=past-summary]").textContent()).toBe("Past events (1)");
   expect(await titles(past.locator("[part~=event-title]"))).toEqual(["Hill repeats"]);
-  expect((await calls(page, "events")).map((c: any) => c[1]).sort()).toEqual(["from", "now"]);
+  expect((await calls(page, "events")).map((c: any) => c[1]).sort()).toEqual(["from", "from", "now"]);
   await page.close();
 
   // In New York there's no second clock.
@@ -1582,6 +1582,22 @@ test("an event opens at its own address: when, where, the description, an .ics f
   expect(await eventsOf(gone).locator("[part=back]").getAttribute("href")).toBe("/events");
   expect((await calls(gone, "event")).map((c: any) => c[1])).toEqual(["event:k9:1700000000000"]);
   await gone.close();
+});
+
+test("events: in a busy community the one under way and the recent past still show", async () => {
+  const page = await open((fake) => {
+    calendar(fake);
+    const busy = Array.from({ length: 270 }, (_, i) => {
+      const start = new Date(Date.now() - 89 * DAYS + i * 6 * HOUR);
+      return { ...fake.events[1], ref: `event:b${i}:${start.getTime()}`, path: `/x/b${i}.md`, title: "Busy " + i, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + HOUR).toISOString() };
+    });
+    fake.events = fake.events.concat(busy);
+  }, frame(), "/events");
+  const events = eventsOf(page);
+  await expect.poll(() => events.getAttribute("state")).toBe("ready");
+  expect(await events.locator("[part~=event-now]").count()).toBe(1);
+  expect(await events.locator("[part~=event-now]").textContent()).toContain("Sunrise loop");
+  await page.close();
 });
 
 test("events: a saved link to a cancelled event says so, with nothing to join or add", async () => {

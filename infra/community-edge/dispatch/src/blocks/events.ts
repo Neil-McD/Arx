@@ -53,6 +53,9 @@ const EVENT_REF = /^event:([A-Za-z0-9_-]{1,180}):([0-9]{1,16})$/;
 const PAGE = 50;
 // Past events: the last PAST_DAYS, read PAST_PAGES pages at most.
 const PAST_DAYS = 90;
+const RECENT_PAST_DAYS = 14;
+// Long enough for multi-day events that are still going.
+const ONGOING_DAYS = 3;
 const PAST_PAGES = 5;
 // An event with no end time lasts an hour (as in Polynet).
 const DEFAULT_MS = 60 * 60 * 1000;
@@ -225,15 +228,19 @@ class PolynetEvents extends HTMLElement {
   async list(generation, moved) {
     const limit = this.limit();
     const now = Date.now();
-    const [upcoming, recent] = await Promise.all([
+    // What's under way gets its own short read, so a crowded past can never
+    // hide it; the past read falls back to recent weeks if it hits its cap.
+    const [upcoming, current, recent] = await Promise.all([
       polynet.events({ limit: limit ? Math.min(PAGE, limit) : PAGE }),
-      this.readRecent(now, limit ? DAY_MS : PAST_DAYS * DAY_MS, limit ? 1 : PAST_PAGES),
+      this.readRecent(now, ONGOING_DAYS * DAY_MS, 2),
+      limit ? Promise.resolve({ entries: [], complete: true }) : this.readRecent(now, PAST_DAYS * DAY_MS, PAST_PAGES),
     ]);
+    const past = limit || recent.complete ? recent : await this.readRecent(now, RECENT_PAST_DAYS * DAY_MS, PAST_PAGES);
     if (generation !== this.generation) return;
     const known = (list) => list.filter((event) => addressOf(event.ref));
-    const started = known(recent).filter((event) => startOf(event).getTime() < now);
-    this.now = started.filter((event) => endOf(event).getTime() > now);
-    this.past = limit ? [] : started.filter((event) => endOf(event).getTime() <= now).reverse();
+    const started = (list) => known(list).filter((event) => startOf(event).getTime() < now);
+    this.now = started(current.entries).filter((event) => endOf(event).getTime() > now);
+    this.past = limit ? [] : started(past.entries).filter((event) => endOf(event).getTime() <= now).reverse();
     // One starting just as the reads ran can be in both.
     const under = new Set(this.now.map((event) => event.ref));
     this.upcoming = known(upcoming).filter((event) => !under.has(event.ref));
@@ -242,6 +249,8 @@ class PolynetEvents extends HTMLElement {
     this.renderList(moved);
   }
 
+  // Events from now - window up to now; complete is false when the page cap
+  // stopped the read before it reached now.
   async readRecent(now, window, pages) {
     let entries = [];
     let cursor = null;
@@ -249,9 +258,9 @@ class PolynetEvents extends HTMLElement {
       const list = await polynet.events(cursor ? { limit: PAGE, cursor: cursor } : { limit: PAGE, from: now - window });
       entries = entries.concat(list);
       cursor = list.cursor;
-      if (!cursor || list.some((event) => startOf(event).getTime() >= now)) break;
+      if (!cursor || list.some((event) => startOf(event).getTime() >= now)) return { entries: entries, complete: true };
     }
-    return entries;
+    return { entries: entries, complete: false };
   }
 
   async more(button) {
