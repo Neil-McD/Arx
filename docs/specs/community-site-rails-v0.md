@@ -1,8 +1,9 @@
 # Community site rails (v0 spec)
 
-Status: direction approved by Neil on 2026-10-28 ("rails, not templates";
-Messages live inside the site; the account menu, channels, chat and members
-are required). This spec is for his review before slice 1 starts.
+Status: approved by Neil on 2026-10-28 ("rails, not templates"; Messages
+live inside the site; the account menu, channels, chat and members are
+required). Build on staging until the whole model works there; production
+comes after. Slice 1 (the site API) is next.
 
 ## Why
 
