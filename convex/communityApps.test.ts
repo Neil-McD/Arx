@@ -542,7 +542,7 @@ test("the shell shows the member's account: who they are, their role here, and l
   const account = await f.post(COMMUNITY_APP_ACCOUNT_PATH, { origin: ORIGIN, "x-polynet-edge-secret": EDGE_SECRET, authorization: `Bearer ${token}` }, {});
   expect(account).toEqual({ status: 200, body: { ok: true, account: {
     member: { name: "apps-member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png" },
-    community: { slug: "apps-community", name: "apps-community", role: "member", studio_url: "https://studio.example.com/c/apps-community" },
+    community: { slug: "apps-community", name: "apps-community", role: "member", studio_url: "https://studio.example.com/c/apps-community/settings/community" },
     links: {
       communities: "https://studio.example.com/", discover: "https://studio.example.com/discover",
       settings: "https://studio.example.com/settings/profile", messages: "https://studio.example.com/?dm=inbox",

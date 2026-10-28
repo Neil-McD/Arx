@@ -1,11 +1,44 @@
 // The checks a community site passes before it goes live, shared by
 // `polynet check`, `polynet deploy` and the MCP's community.site.deploy.
-// Errors block the deploy; warnings are printed. Every site must place
-// Polynet's three blocks (channels, chat, members), so the social core is
-// there on every site whatever it looks like. They read the files as text
-// (no browser), so they catch what is certain from the source and leave the
-// rest to the polynet-accessibility skill. Plain JavaScript with no imports,
-// so it runs in Node and in Polynet's backend alike.
+// Errors block the deploy; warnings are printed. Every site has a frame
+// (/frame.html: its header, navigation and footer around one <polynet-page>),
+// so Polynet's standard pages (/chat, /people) appear inside the site's own
+// world on every site; a site that ships its own version of one must place
+// that page's blocks. They read the files as text (no browser), so they catch
+// what is certain from the source and leave the rest to the
+// polynet-accessibility skill. Plain JavaScript with no imports, so it runs in
+// Node, in Polynet's backend and in the community edge alike.
+
+// The standard community pages every site has from its first deploy: the edge
+// serves the site's frame at each path the site doesn't serve itself, and
+// <polynet-page> fills it with these blocks. The one route table: the edge,
+// <polynet-page>, the shell's menu and these checks all read it. Later slices
+// add /events, /learn, /knowledge, /ask, /discover, /messages, /settings,
+// /manage, /communities and /join.
+export const STANDARD_PAGES = [
+  { path: "/chat", name: "chat", title: "Chat", blocks: ["polynet-channels", "polynet-chat"] },
+  // members: /people/<handle> is the same page with that member's profile open.
+  { path: "/people", name: "people", title: "People", blocks: ["polynet-members"], members: true },
+];
+// A handle as Polynet makes them (any case: the profile lowercases it). No dots,
+// so a site's own file under /people/ (photo.jpg) is never taken for a member.
+export const MEMBER_HANDLE = /^[A-Za-z0-9_-]{1,32}$/;
+
+// Which standard page a path is: { page, handle, slash } or null. slash: it
+// ended in "/" (the edge sends /chat/ to /chat when it serves the frame).
+export function standardPage(pathname) {
+  const path = String(pathname || "");
+  const slash = path.length > 1 && path.endsWith("/");
+  const bare = slash ? path.slice(0, -1) : path;
+  for (const page of STANDARD_PAGES) {
+    if (bare === page.path) return { page, handle: null, slash };
+    if (page.members && bare.startsWith(page.path + "/")) {
+      const handle = bare.slice(page.path.length + 1);
+      if (MEMBER_HANDLE.test(handle)) return { page, handle, slash };
+    }
+  }
+  return null;
+}
 
 const TEXT_FILE = /\.(html?|css|m?js)$/i;
 
@@ -59,12 +92,52 @@ function checkPage(path, html, problem) {
   }
 }
 
-// The blocks every site places: what each is, and where it usually goes.
-const REQUIRED_BLOCKS = [
-  ["polynet-channels", "the channels members can read, with unread and @-mention badges", "beside the chat, where members pick a channel"],
-  ["polynet-chat", "the conversation, with its composer, threads, reactions and @-tags", "where members talk, and give it a height"],
-  ["polynet-members", "everyone in the community, online first, each opening their profile", "in a people page or section"],
-];
+// The frame and every standard page's own version are judged on their markup
+// alone: no comments, no script bodies (a tag in a string isn't on the page).
+function markupOnly(html) {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/(<script\b[^>]*>)[\s\S]*?(<\/script\s*>)/gi, "$1$2");
+}
+
+// The frame is shown at /chat, /people and /people/<handle>, so a relative
+// path in it ("styles.css") points somewhere else on all but the first.
+const URL_TAG = /<(a|link|script|img|source|iframe|video|audio)\b[^>]*>/gi;
+const FRAME_PATHS = STANDARD_PAGES.flatMap((page) => (page.members ? [page.path, `${page.path}/<handle>`] : [page.path])).join(", ");
+const FROM_ROOT = /^(\/|#|\?|[a-z][a-z0-9+.-]*:|$)/i;
+function checkFrame(files, problem) {
+  const frame = files.find((file) => file.path === "/frame.html");
+  if (!frame) {
+    problem("error", "/", "The site has no frame.html at its root. Polynet shows its standard pages (" +
+      STANDARD_PAGES.map((page) => page.path).join(", ") + ") inside it, so they look like the rest of the site: " +
+      "frame.html is your header, navigation and footer with one <polynet-page></polynet-page> where the page goes. " +
+      "Add it beside index.html (for a framework build, to its output folder, like dist).");
+    return;
+  }
+  const markup = markupOnly(frame.text);
+  const count = (markup.match(/<polynet-page[\s>/]/gi) ?? []).length;
+  if (count === 0) {
+    problem("error", frame.path, "frame.html has no <polynet-page></polynet-page>. Put exactly one where each page's content goes (usually inside <main>).");
+  } else if (count > 1) {
+    problem("error", frame.path, `frame.html has ${count} <polynet-page> tags. Keep exactly one, where each page's content goes.`);
+  }
+  const relative = new Set();
+  for (const m of markup.matchAll(URL_TAG)) {
+    for (const name of ["href", "src"]) {
+      const value = attr(m[0], name)?.trim();
+      if (value && !FROM_ROOT.test(value)) relative.add(value);
+    }
+  }
+  if (relative.size) {
+    const list = [...relative].slice(0, 3);
+    problem("error", frame.path, `frame.html uses ${relative.size === 1 ? "a relative path" : "relative paths"} (${list.join(", ")}${relative.size > 3 ? ", …" : ""}). ` +
+      `The frame is shown at ${FRAME_PATHS}, where those point somewhere else. ` +
+      `Start them from the site's root: /${list[0].replace(/^(\.{1,2}\/)+/, "")}.`);
+  }
+}
+
+// Where a page file is served: /chat.html and /chat/index.html are /chat.
+function servedPath(path) {
+  return /\.html$/i.test(path) ? path.replace(/\/index\.html$/i, "/").replace(/\.html$/i, "") : null;
+}
 
 // JavaScript without its comments, so a commented-out block doesn't count.
 // Strings, template literals and regex literals are kept whole ("https://…"
@@ -148,11 +221,17 @@ export function checkSite(files) {
   // The shell isn't checked: the edge adds /__polynet/ui.js to every page, and
   // ui.js shows <polynet-account> on any page that doesn't place one.
   for (const page of pages) checkPage(page.path, page.text, problem);
-  const placed = new Set(REQUIRED_BLOCKS.map(([name]) => name).filter((name) => placesBlock(name, pages, scripts)));
-  for (const [name, what, where] of REQUIRED_BLOCKS) {
-    if (placed.has(name)) continue;
-    problem("error", "/", `No page has <${name}>, and every site needs it: ${what}. ` +
-      `Add <${name}></${name}> ${where}. The polynet-build-site skill shows how.`);
+  checkFrame(pages, problem);
+  // A site's own version of a standard page wins over Polynet's, so it must
+  // carry the same blocks (a framework build may create them from a script).
+  for (const page of pages) {
+    const standard = standardPage(servedPath(page.path) ?? "");
+    if (!standard) continue;
+    const missing = standard.page.blocks.filter((name) => !placesBlock(name, [page], scripts));
+    if (!missing.length) continue;
+    const tags = (names) => names.map((name) => `<${name}>`).join(" and ");
+    problem("error", page.path, `${page.path.slice(1)} is this site's own ${standard.page.title} page (${standard.page.path}), so it must place ${tags(standard.page.blocks)}. ` +
+      `Add ${missing.map((name) => `<${name}></${name}>`).join(" ")}, or delete the file: Polynet then shows its ${standard.page.title} page inside frame.html.`);
   }
 
   const allCss = css.map((file) => file.text).join("\n") + pages.map((file) => file.text).join("\n");
@@ -179,7 +258,7 @@ export function checkSite(files) {
   }
   // A public question to the agent is answered in that post's thread, which
   // <polynet-chat> shows; a custom feed has to read threads itself.
-  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript) && !placed.has("polynet-chat")) {
+  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript) && !placesBlock("polynet-chat", pages, scripts)) {
     problem("warning", "/", "Posts can ask the agent (post(..., { askAgent })) but the site never reads threads, so the agent's answers won't appear. Show replies with polynet.thread().");
   }
   return { errors, warnings };

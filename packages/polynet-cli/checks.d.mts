@@ -4,3 +4,7 @@ export type SiteCheckResult = { errors: SiteProblem[]; warnings: SiteProblem[] }
 export function isCheckedFile(path: string): boolean;
 export function checkSite(files: Array<{ path: string; text: string }>): SiteCheckResult;
 export function formatProblems(result: SiteCheckResult): string[];
+export type StandardPage = { path: string; name: string; title: string; blocks: string[]; members?: boolean };
+export const STANDARD_PAGES: StandardPage[];
+export const MEMBER_HANDLE: RegExp;
+export function standardPage(pathname: string): { page: StandardPage; handle: string | null; slash: boolean } | null;

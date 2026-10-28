@@ -14,11 +14,17 @@ below brings everything else.
 
 ## Rails, not templates (read first)
 
-- Every site places three Polynet blocks, on any page:
-  <polynet-channels>, <polynet-chat> and <polynet-members>. Deploys fail
-  without them. They are the channels, the whole conversation (composer,
+- Every site has a frame: /frame.html, the site's own header, navigation
+  and footer around one <polynet-page></polynet-page>. Deploys fail
+  without it. Polynet's standard pages exist on every site from the first
+  deploy, inside that frame: /chat (channels and chat) and /people (the
+  members; /people/<handle> opens one profile). Link to them in your
+  navigation. See "The frame and the standard pages", below.
+- The blocks on those pages: <polynet-channels>, <polynet-chat> and
+  <polynet-members>, the channels, the whole conversation (composer,
   threads, reactions, attachments, @-tags) and the people (each opens a
-  profile with Message). Never rebuild, hide or replace them.
+  profile with Message). Place them on your own pages too if you like.
+  Never rebuild, hide or replace them.
 - The shell (<polynet-account>) is automatic: Polynet adds it to every page.
   Place it into your design yourself.
 - Polynet owns how the blocks behave; your site owns how they look, through
@@ -33,8 +39,8 @@ below brings everything else.
    (.../c/<slug>). The person deploying must be its owner or an admin.
 2. Design first (the next section): learn the community's world, show the
    founder three directions, build the one they choose.
-3. Build the site in a folder with an index.html, with the three blocks
-   placed, and test it live. The SDK, the shell and the blocks are served
+3. Build the site in a folder with an index.html and a frame.html, and
+   test it live. The SDK, the shell and the blocks are served
    by the site's own address, so they only work once deployed: on a local
    static server the tags stay empty (slot text shows unstyled), which is
    expected. From the folder:
@@ -152,8 +158,9 @@ keep it visible on every page and at every width. Signed out it shows "Join"
 (a link in --polynet-text) and "Sign in" (--polynet-accent, its text
 --polynet-on-accent); on a header darker or lighter than the page, set
 those on polynet-account itself, with a matching --polynet-surface; signed in, the member's avatar opens their account menu (with
-"Manage this community" for owners and admins, and "Your communities", which
-opens Polynet). Don't rebuild these yourself.
+"In this club" with the site's own Chat and People pages, "Manage this
+community" for owners and admins, and "Your communities", which opens
+Polynet). Don't rebuild these yourself.
 
 Polynet adds the ui.js script to every page that doesn't load it, and if a
 page has no <polynet-account> shortly after it loads, ui.js puts one in the
@@ -179,9 +186,60 @@ community only: { member { name, handle, avatar_url }, community { slug,
 name, role, studio_url }, links { communities, discover, settings, messages } }.
 The member's other communities are never readable from a site.
 
-## Blocks: channels, chat and members (required)
+## The frame and the standard pages
 
-Every site places all three (deploys fail without them). They are the one
+Polynet's standard pages exist on every site: /chat (channels beside the
+chat) and /people (the members; /people/<handle> is the same page with that
+member's profile open, and closing it returns to /people). They appear
+inside the site's frame, /frame.html at the site's root: the same header,
+navigation, footer, fonts and colors as every other page, with exactly one
+<polynet-page></polynet-page> where the page goes:
+
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Dawn Patrol</title>
+      <link rel="stylesheet" href="/styles.css">
+    </head>
+    <body>
+      <header><a href="/">Dawn Patrol</a>
+        <nav><a href="/chat">The river</a> <a href="/people">The pack</a></nav>
+        <polynet-account></polynet-account></header>
+      <main><polynet-page></polynet-page></main>
+    </body>
+    </html>
+
+- Start every link and file path in the frame from the root (/styles.css,
+  not styles.css): it is shown at /chat and /people/<handle> alike. Deploys
+  fail on relative paths there.
+- <polynet-page> renders into the page itself (no shadow DOM), so your CSS
+  lays it out. Default: a heading, then channels beside the chat (one
+  column on phones, the chat given a height) or the members. Restyle with
+  .pn-page-header, .pn-page-heading, .pn-page-body, .pn-page-chat,
+  .pn-page-people, .pn-page-missing, .pn-page-links and
+  polynet-page[page=chat|people|not-found]; the blocks inside keep their
+  ::part()s.
+- Your words: <h1 slot="chat-heading">The river</h1> (also
+  slot="people-heading", slot="not-found-heading") inside <polynet-page>
+  replaces that page's heading; <polynet-page no-heading> drops them all;
+  <p data-block="polynet-chat" slot="empty">No miles yet.</p> goes into
+  that block as its slot.
+- The frame's own nav links to the current page get aria-current="page":
+  style them with nav a[aria-current=page].
+- Want your own /chat or /people? Ship chat.html (or chat/index.html,
+  people/index.html, people/<handle>.html): the site's file wins over
+  Polynet's, and must place that page's blocks (/chat: <polynet-channels>
+  and <polynet-chat>; /people: <polynet-members>). Only a file counts; a
+  client-side route can't replace a standard page.
+- Messages, settings, your communities and joining open in Polynet for now;
+  they move into the site in a later release.
+
+## Blocks: channels, chat and members
+
+They are on Polynet's /chat and /people pages on every site, and you can
+place them on your own pages too. They are the one
 way a community's channels, conversation and people appear on a site. Polynet owns how they behave (data, permissions,
 live updates, keyboard, screen readers); your site owns how they look. Place
 the tags; ui.js (on every page) loads each block only on pages that have it:
@@ -505,10 +563,12 @@ or an admin) and saves the community in polynet.json, so later deploys are just
 remembers it.
 
 Every deploy checks the site first ("npx @polynet/cli check" runs the same
-checks alone). These stop a deploy until fixed: no index.html at the
-site's root; no page (or, for a framework build, no script, not counting
-comments) places <polynet-channels>, <polynet-chat> or
-<polynet-members>; a page without <html lang>, a <title> or a viewport that
+checks alone). These stop a deploy until fixed: no index.html or
+frame.html at the site's root; a frame.html without exactly one
+<polynet-page>, or with relative paths; a site's own /chat or /people page
+(chat.html, people/index.html, ...) that doesn't place that page's blocks
+(for a framework build, a script naming them counts, not in a comment); a
+page without <html lang>, a <title> or a viewport that
 allows zooming; an <img> without alt; a button or link with no text or
 aria-label. Warnings (unlabelled
 fields, removed focus outlines, animation without prefers-reduced-motion,
@@ -517,7 +577,8 @@ innerHTML, positive tabindex) are printed but don't stop it.
 Only changed files upload. The site is live at
 https://<community-slug>.polynet.page within a minute. Opening or refreshing
 any path in the browser serves index.html, so client-side routes (/events)
-work; a script's fetch() of a path that isn't a file gets 404. No server code
+work, except the standard pages (/chat, /people, /people/<handle>), which
+show frame.html unless the site has a file there; a script's fetch() of a path that isn't a file gets 404. No server code
 runs: everything dynamic comes from the SDK.
 
 Using a bundler (Vite, Rollup, esbuild): the SDK and shell are served by the
@@ -540,13 +601,14 @@ folder. AGENTS.md, CLAUDE.md, polynet.json and dotfolders are never uploaded.
 If your agent can't run commands (for example claude.ai or ChatGPT with the
 Polynet MCP connected), it can deploy through the MCP instead: polynet_call
 community.site.deploy with input.files as "/path" -> { content, encoding }
-("utf8", or "base64" for images and fonts), including /index.html, up to 200
+("utf8", or "base64" for images and fonts), including /index.html and /frame.html, up to 200
 files and 5 MB. The same checks run there (site_checks_failed lists what to
 fix). The result has the live url.
 
 ## Example: a minimal site
 
 This shows structure only. The markup, the words and the look are yours.
+It is index.html; with the frame.html above beside it, it deploys.
 
     <!doctype html>
     <html lang="en">

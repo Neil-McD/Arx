@@ -16,8 +16,19 @@ concept, and the blocks live inside that concept.
 
 ## What every site has
 
-- **The blocks (required: `check` and `deploy` fail without them).**
-  `<polynet-channels>`, `<polynet-chat>` and `<polynet-members>`. The chat
+- **A frame (required: `check` and `deploy` fail without it).**
+  `frame.html` at the root: the site's header, navigation and footer
+  around exactly one `<polynet-page></polynet-page>`, every path starting
+  with `/`. Polynet's standard pages appear in it on every site: `/chat`
+  (channels and chat) and `/people` (members; `/people/<handle>` opens that
+  profile). Put them in the site's navigation, named in the community's
+  words. Restyle the page with `.pn-page-*` classes and the blocks'
+  `::part()`s; `<h1 slot="chat-heading">` (or `people-heading`) inside
+  `<polynet-page>` replaces its heading (llms.txt lists the rest).
+- **The blocks.** `<polynet-channels>`, `<polynet-chat>` and
+  `<polynet-members>`, on `/chat` and `/people` and anywhere else the
+  design wants them. A site's own `chat.html` or `people/index.html`
+  replaces Polynet's page and must place the same blocks. The chat
   is the whole conversation: feed, composer, threads, reactions,
   attachments, typing, @-tags for members and the agent, editing and
   deleting. Members, chat authors and @-tags open Polynet's profile panel
@@ -56,7 +67,8 @@ for a new one.
 
 ## Where the blocks go
 
-Name the places in the community's own words:
+`/chat` and `/people` always exist (in the frame). Beyond them, name the
+places in the community's own words:
 
 - **The room** (a page or a section, e.g. "The Boathouse", "Base Camp"):
   `<polynet-channels>` beside `<polynet-chat>`. This is where members
@@ -74,7 +86,9 @@ across pages, so a link to `/room.html?channel=routes` opens that channel.
 
 ## A complete minimal site
 
-One page; split it into several when the design wants.
+`index.html` below, plus `frame.html`: the same `<head>` and header, with
+`<main><polynet-page></polynet-page></main>` as its only content. Split it
+into more pages when the design wants.
 
 ```html
 <!doctype html>

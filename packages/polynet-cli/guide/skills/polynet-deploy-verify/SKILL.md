@@ -17,7 +17,7 @@ description: Put a Polynet community site live and prove it works (checks, deplo
 - No terminal (claude.ai or ChatGPT with the Polynet connector)? Deploy with
   the MCP: `polynet_call`, operation `community.site.deploy`, `input.files`
   as `"/path" -> { content, encoding }` (`utf8`, or `base64` for images and
-  fonts), including `/index.html`; up to 200 files and 5 MB. The same checks
+  fonts), including `/index.html` and `/frame.html`; up to 200 files and 5 MB. The same checks
   run there.
 - Concept pages deploy the same way and are live at
   `https://<slug>.polynet.page/concepts/a.html`. Delete them once the founder
@@ -32,8 +32,8 @@ Use a browser tool if you have one. Hard-refresh after each deploy.
 - **Signed in** (the founder signs in; never type their password): every
   page shows real data or a designed empty state; the shell is visible
   everywhere and its menu works by keyboard; "Manage" shows for owners and
-  admins; the channels, chat and members work and look native to the
-  design; a member's name opens their profile; the agent answers.
+  admins; `/chat` and `/people` show inside the site's frame, and the
+  channels, chat and members work and look native to the design; a member's name opens their profile; the agent answers.
 - **Posting is public:** ask the founder before posting a test message in a
   community with members, and delete it after.
 - **Phone (390px) and desktop (1440px):** screenshot both and compare them to
@@ -56,6 +56,7 @@ couldn't.
   account isn't a member.
 - **Old version:** hard refresh (the SDK and shell cache for a few minutes).
 - **`fetch()` gets 404:** only real files are served to scripts; navigating
-  to any path serves `index.html`.
+  to any path serves `index.html`, except `/chat` and `/people`, which show
+  `frame.html` unless the site has its own file there.
 - **"Must be the community's owner or an admin":** `npx @polynet/cli logout`,
   then deploy again as the right account.

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blocks demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap">
+  <script type="module" src="/__polynet/ui.js"></script>
+  <!-- The frame: the same header as every other page, and one <polynet-page> where
+       Polynet puts its standard pages (/chat, /people, /people/<handle>).
+       Every path starts from the root: this file is shown at /people/<handle> too. -->
+  <style>
+    :root {
+      --polynet-accent: #c2410c;
+      --polynet-on-accent: #fff;
+      --polynet-surface: #fbfaf7;
+      --polynet-text: #1c1917;
+      --polynet-radius: 10px;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.5 "Instrument Sans", system-ui, sans-serif; background: #fbfaf7; color: #1c1917; }
+    header { display: flex; align-items: center; gap: 24px; padding: 16px clamp(16px, 4vw, 40px); border-bottom: 1px solid #e7e5e4; }
+    header .name { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; text-decoration: none; color: inherit; }
+    header nav { display: flex; gap: 16px; flex: 1; }
+    header nav a { color: inherit; text-underline-offset: 4px; }
+    header nav a[aria-current=page] { color: #c2410c; font-weight: 600; }
+    main { padding: 24px clamp(16px, 4vw, 40px); }
+    /* Polynet's page layout, restyled: the heading in the site's voice. */
+    polynet-page .pn-page-heading { margin: 0 0 16px; font-size: 28px; letter-spacing: -0.02em; }
+    polynet-page[page=people] .pn-page-body { max-width: 560px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="name" href="/" id="name">Community</a>
+    <nav aria-label="Pages"><a href="/chat">Chat</a><a href="/people">People</a></nav>
+    <polynet-account></polynet-account>
+  </header>
+  <main>
+    <polynet-page>
+      <p data-block="polynet-chat" slot="empty">Nothing here yet. The first word is yours.</p>
+    </polynet-page>
+  </main>
+  <script type="module">
+    import polynet from "/__polynet/sdk.js";
+    const session = await polynet.session();
+    if (session.community_name) document.getElementById("name").textContent = session.community_name;
+  </script>
+</body>
+</html>

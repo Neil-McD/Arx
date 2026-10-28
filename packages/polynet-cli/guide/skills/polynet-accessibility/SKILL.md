@@ -15,7 +15,9 @@ work for every member.
 
 | Error | Fix |
 |---|---|
-| No page has `<polynet-channels>`, `<polynet-chat>` or `<polynet-members>` | Place the block (`polynet-build-site` shows where); the blocks bring their own keyboard and screen-reader support |
+| No `frame.html`, or not exactly one `<polynet-page>` in it | Add `frame.html` at the root: the site's header, nav and footer around one `<polynet-page></polynet-page>` (`polynet-build-site`) |
+| `frame.html` uses relative paths | Start them from the root (`/styles.css`): the frame is shown at `/people/<handle>` too |
+| The site's own `chat.html` or `people/...` lacks its blocks | Place them (`/chat`: `<polynet-channels>` and `<polynet-chat>`; `/people`: `<polynet-members>`), or delete the file to use Polynet's page; the blocks bring their own keyboard and screen-reader support |
 | `<html>` has no `lang` | `<html lang="en">` (the site's language) |
 | No `<title>` | A title with the community's name; update it per view |
 | No viewport, or zoom blocked | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or `maximum-scale=1` |

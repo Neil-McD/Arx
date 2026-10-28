@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ./LICENSE-MIT)
 // The Polynet shell, served at /__polynet/ui.js on every community site:
-// <polynet-account>, the member's way to their account, their
+// <polynet-account>, the member's way to this community's own pages ("In
+// this club": the standard pages, on this site), their account, their
 // communities, Discover, messages and settings. It also loads Polynet's
 // blocks (/__polynet/blocks/<name>.js) on pages that place them, and opens the
 // profile panel for ?member= links and "polynet:profile". Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
 // CSS custom properties. Kept as text (a String.raw literal: no backticks or
-// template placeholders inside) so the edge serves exactly what is reviewed.
+// template placeholders inside) so the edge serves exactly what is reviewed;
+// the standard pages are filled in from the one route table the edge routes by.
+import { PAGE_ROUTES_JSON } from "./blocks/page";
+
 export const UI_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet shell: <polynet-account>. Usage:
 //   <script type="module" src="/__polynet/ui.js"></script>   (Polynet adds this to every page)
@@ -46,6 +50,8 @@ const STYLE = [
   ".item:hover { background: var(--pa-hover); }",
   ".item .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
   ".sep { height: 1px; background: var(--pa-border); margin: 6px 0; border: 0; }",
+  ".group-title { margin: 6px 8px 2px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pa-muted); }",
+  ".item[aria-current=page] { font-weight: 650; box-shadow: inset 3px 0 0 var(--pa-accent); }",
   ".status { padding: 12px 8px; }",
   ".backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 2147482999; }",
   "@media (max-width: 520px) {",
@@ -77,6 +83,14 @@ function initials(name) {
 function avatar(url, name) {
   if (url) return h("img", { class: "avatar", src: url, alt: "" });
   return h("span", { class: "avatar", "aria-hidden": "true", text: initials(name) });
+}
+
+// The community's standard pages, on every site (the site's own address).
+const PAGES = __POLYNET_PAGE_ROUTES__;
+function currentPage() {
+  const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, "") : location.pathname;
+  const page = PAGES.find((page) => path === page.path || (page.members && path.indexOf(page.path + "/") === 0));
+  return page ? page.path : null;
 }
 
 let counter = 0;
@@ -189,6 +203,15 @@ class PolynetAccount extends HTMLElement {
         ]),
       ]),
     ];
+    // In this club: its pages, always on this site, the current one marked.
+    const current = currentPage();
+    children.push(h("div", { class: "group", role: "group", part: "group", "aria-labelledby": this.panelId + "-here" }, [
+      h("p", { class: "group-title", id: this.panelId + "-here", text: "In this club" }),
+      ...PAGES.map((page) => h("a", { class: "item", href: page.path, part: "item", "aria-current": page.path === current ? "page" : null }, [
+        h("span", { class: "label", text: page.title }),
+      ])),
+    ]));
+    children.push(h("hr", { class: "sep" }));
     if (this.state.loading) children.push(h("p", { class: "status muted", role: "status", text: "Loading…" }));
     if (this.state.error) {
       children.push(h("div", { class: "status", role: "alert" }, [
@@ -267,7 +290,7 @@ else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELA
 
 // Polynet's blocks load only on pages that place them, now or later (a
 // single-page app may render <polynet-chat> after a route change).
-const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members" };
+const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page" };
 const pendingBlocks = new Set(Object.keys(BLOCKS));
 let blockCheck = false;
 function loadBlocks() {
@@ -308,12 +331,26 @@ document.addEventListener("polynet:profile", (event) => {
 const memberInUrl = () => new URLSearchParams(location.search).has("member");
 window.addEventListener("popstate", () => { if (memberInUrl()) withProfiles((module) => module.followUrl()); });
 if (memberInUrl()) withProfiles((module) => module.followUrl());
-`;
+`.replace("__POLYNET_PAGE_ROUTES__", PAGE_ROUTES_JSON);
 
 // Served at /__polynet/ui.css, which the edge links at the top of every page:
 // until a block's script defines it, its tag hides, so a site's slot content
 // ("Quiet in here.") never flashes on screen before the block takes it in. A
 // stylesheet from the site's own domain, not an inline <style>, so a site's
-// Content-Security-Policy (style-src 'self') allows it.
+// Content-Security-Policy (style-src 'self') allows it. It also lays out
+// <polynet-page> (in the page's own DOM) by default: every rule is wrapped in
+// :where(), so any rule of the site's wins.
 export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defined), polynet-chat:not(:defined),\n" +
-  "polynet-members:not(:defined), polynet-profile:not(:defined) { visibility: hidden; }\n";
+  "polynet-members:not(:defined), polynet-profile:not(:defined), polynet-page:not(:defined) { visibility: hidden; }\n" +
+  [
+    ":where(polynet-page) { display: block; }",
+    ":where(polynet-page .pn-page-heading) { margin: 0 0 .75em; }",
+    ":where(polynet-page .pn-page-chat) { display: grid; grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr); gap: 1.5rem; align-items: start; }",
+    ":where(polynet-page .pn-page-chat > polynet-chat) { height: max(24rem, calc(100vh - 12rem)); height: max(24rem, calc(100dvh - 12rem)); }",
+    ":where(polynet-page .pn-page-chat > polynet-chat[state=signed-out]) { height: auto; }",
+    ":where(polynet-page .pn-page-links) { display: flex; flex-wrap: wrap; gap: .5em 1.25em; list-style: none; margin: 0; padding: 0; }",
+    "@media (max-width: 720px) {",
+    "  :where(polynet-page .pn-page-chat) { grid-template-columns: minmax(0, 1fr); gap: .75rem; }",
+    "  :where(polynet-page .pn-page-chat > polynet-chat) { height: max(20rem, calc(100vh - 14rem)); height: max(20rem, calc(100dvh - 14rem)); }",
+    "}",
+  ].join("\n") + "\n";

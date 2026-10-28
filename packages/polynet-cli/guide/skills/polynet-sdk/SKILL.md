@@ -5,8 +5,9 @@ description: Build custom views beside Polynet's blocks with the Polynet SDK (se
 
 # The Polynet SDK
 
-Every site places Polynet's blocks for the social core: `<polynet-channels>`,
-`<polynet-chat>` and `<polynet-members>` (required; `polynet-build-site`).
+Polynet's blocks carry the social core: `<polynet-channels>`,
+`<polynet-chat>` and `<polynet-members>` (on every site's `/chat` and
+`/people`, inside its frame; `polynet-build-site`).
 The SDK is for everything around them: the public face, events, courses,
 knowledge, the agent, and custom views like a route log or a "who's here
 now" strip. Custom views go beside the blocks, never instead of them.

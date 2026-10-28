@@ -16,18 +16,45 @@ one edge Worker in front of every community front end.
                          ├─ /__polynet/blocks/<name>.js → Polynet's blocks: channels (<polynet-channels>), chat (<polynet-chat>),
                          │                      members (<polynet-members>), composer (the chat's message boxes, imported
                          │                      by chat), profile (the profile panel: opened by blocks, ?member=<handle>
-                         │                      links and the "polynet:profile" event) and kit (what they share);
+                         │                      links and the "polynet:profile" event), page (<polynet-page>, the
+                         │                      standard page inside the site's frame) and kit (what they share);
                          │                      any other name is 404
+                         ├─ /chat, /people, /people/<handle> (GET/HEAD) → the standard pages (below)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 
-Every site must place `<polynet-channels>`, `<polynet-chat>` and
-`<polynet-members>`: `packages/polynet-cli/checks.mjs` fails `polynet check`,
-CLI deploys and MCP deploys without them (a tag in any page, or the name in
-a script for framework builds; not in a comment). The shell needs no check:
-the edge injects it.
-A page to try the blocks on a staging site: `dispatch/examples/blocks-demo/`
-(deploy it with the CLI like any site).
+### Standard pages (the site's frame)
+
+Every site has Polynet's standard pages, inside its own frame (`/frame.html`:
+the site's header, navigation and footer around one `<polynet-page>`). The
+route table is `STANDARD_PAGES` in `packages/polynet-cli/checks.mjs` (now
+`/chat` and `/people`, `/people/<handle>` with a handle of 1-32 of
+`A-Z a-z 0-9 _ -`). For a GET or HEAD there, in order:
+
+1. The edge asks the site for the path as a plain fetch (`Sec-Fetch-Mode` and
+   `Sec-Fetch-Dest` removed), so a single-page app's `index.html` fallback,
+   which Cloudflare gives only to navigations, doesn't count. Anything but 404
+   (the site's own `chat.html` or `people/index.html`, or Cloudflare's own
+   trailing-slash redirect) is the answer, with the shell as usual.
+2. 404 on a trailing-slash path (`/chat/`): 307 to the path without it.
+3. 404: the edge fetches `/frame` (where `auto-trailing-slash` serves
+   `frame.html`, never conditionally) and serves it with status 200, the
+   shell, `<title>` "<Page> · <community name>", and no `ETag`/`Last-Modified`.
+   `<polynet-page>` renders the page.
+4. No frame (not 2xx HTML): Polynet's own page saying the site needs its
+   frame, status 404, never blank.
+
+Other paths (`/people/a.b`, `/people/x/y`, `/chat/app.js`), other methods and
+`/__polynet/*` go where they always did.
+
+`packages/polynet-cli/checks.mjs` fails `polynet check`, CLI deploys and MCP
+deploys without a root `index.html`, without `/frame.html` holding exactly
+one `<polynet-page>`, when the frame uses relative paths, and when the site's
+own version of a standard page lacks that page's blocks (a tag in the page, or
+the name in a script for framework builds; not in a comment). The shell needs
+no check: the edge injects it.
+A site to try the blocks and the frame on staging: `dispatch/examples/blocks-demo/`
+(deploy it with the CLI like any site; `/chat` and `/people` come from its `frame.html`).
 
 ## Run locally
 

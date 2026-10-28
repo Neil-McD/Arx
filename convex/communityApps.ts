@@ -112,7 +112,8 @@ export const getCommunityAppAccountInternal = internalQuery({
         slug,
         name: String(community.name ?? "").trim() || slug,
         role,
-        studio_url: studio(`/c/${encodeURIComponent(slug)}`),
+        // Studio's community settings (/c/<slug> alone is the public join page).
+        studio_url: studio(`/c/${encodeURIComponent(slug)}/settings/community`),
       },
       links: {
         communities: studio("/"),

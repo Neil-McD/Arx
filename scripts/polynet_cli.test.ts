@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 // @ts-expect-error plain ES module without types
 import { apiUrlFor, buildManifest, collectFiles, hashFile, installGuide, mimeType, pkce, readCheckedFiles, siteAddress, siteConfigPaths, uploadBuckets } from "../packages/polynet-cli/lib.mjs";
-import { checkSite } from "../packages/polynet-cli/checks.mjs";
+import { checkSite, standardPage } from "../packages/polynet-cli/checks.mjs";
 
 function site() {
   const root = mkdtempSync(join(tmpdir(), "polynet-site-"));
@@ -106,8 +106,13 @@ test("the published package is exactly the command, its library and checks, READ
   ]);
 });
 
+const FRAME = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">' +
+  '<title>Run club</title><link rel="stylesheet" href="/styles.css"></head><body><header><a href="/">Run club</a> <a href="/chat#top">Talk</a>' +
+  '<img src="https://cdn.test/logo.png" alt="Run club"></header><main><polynet-page></polynet-page></main></body></html>';
+// The site's files: index.html, plus the frame unless a test passes its own.
 const problems = (html: string, extra: Array<{ path: string; text: string }> = []) => {
-  const result = checkSite([{ path: "/index.html", text: html }, ...extra]);
+  const frame = extra.some((file) => file.path === "/frame.html") ? [] : [{ path: "/frame.html", text: FRAME }];
+  const result = checkSite([{ path: "/index.html", text: html }, ...frame, ...extra]);
   return { errors: result.errors.map((p: any) => p.message).join("\n"), warnings: result.warnings.map((p: any) => p.message).join("\n") };
 };
 const BLOCKS = "<polynet-channels></polynet-channels><polynet-chat></polynet-chat><polynet-members></polynet-members>";
@@ -117,9 +122,10 @@ const GOOD = '<!doctype html><html lang="en"><head><meta name="viewport" content
 test("a page's files are read for the checks; others are skipped", async () => {
   const dir = mkdtempSync(join(tmpdir(), "polynet-check-"));
   writeFileSync(join(dir, "index.html"), GOOD);
+  writeFileSync(join(dir, "frame.html"), FRAME);
   writeFileSync(join(dir, "logo.png"), "png");
   const files = await readCheckedFiles(await collectFiles(dir));
-  expect(files.map((file: any) => file.path)).toEqual(["/index.html"]);
+  expect(files.map((file: any) => file.path)).toEqual(["/frame.html", "/index.html"]);
   expect(checkSite(files)).toEqual({ errors: [], warnings: [] });
 });
 
@@ -140,46 +146,84 @@ test("site checks block what is certain from the source", () => {
     .replace("<polynet-account></polynet-account>", "");
   expect(problems(bundled, [{ path: "/assets/index-abc.js", text: 'import "/__polynet/ui.js";' }])).toEqual({ errors: "", warnings: "" });
   // A fragment that isn't a page isn't held to page rules.
-  expect(checkSite([{ path: "/google123.html", text: "google-site-verification: google123.html" }, { path: "/index.html", text: GOOD }]).errors).toEqual([]);
+  expect(checkSite([{ path: "/google123.html", text: "google-site-verification: google123.html" }, { path: "/index.html", text: GOOD }, { path: "/frame.html", text: FRAME }]).errors).toEqual([]);
 });
 
-test("every site places Polynet's channels, chat and members blocks", () => {
-  // Each missing block is its own error, naming the tag to add.
-  const bare = problems(GOOD.replace(BLOCKS, ""));
-  for (const name of ["polynet-channels", "polynet-chat", "polynet-members"]) {
-    expect(bare.errors).toContain(`No page has <${name}>, and every site needs it`);
-    expect(bare.errors).toContain(`Add <${name}></${name}>`);
+test("the standard pages: one route table for the edge, <polynet-page> and these checks", () => {
+  expect(standardPage("/chat")).toMatchObject({ page: { path: "/chat", blocks: ["polynet-channels", "polynet-chat"] }, handle: null, slash: false });
+  expect(standardPage("/chat/")).toMatchObject({ page: { path: "/chat" }, slash: true });
+  expect(standardPage("/people")).toMatchObject({ page: { path: "/people", blocks: ["polynet-members"] }, handle: null });
+  expect(standardPage("/people/Sam_R-2/")).toMatchObject({ page: { path: "/people" }, handle: "Sam_R-2", slash: true });
+  for (const path of ["/", "/chats", "/Chat", "/chat/x", "/people/a.b", "/people/x/y", `/people/${"a".repeat(33)}`, "/people/%20", "/__polynet/ui.js", "/frame"]) {
+    expect(standardPage(path), path).toBeNull();
   }
-  expect(bare.errors.match(/No page has/g)).toHaveLength(3);
-  expect(problems(GOOD.replace("<polynet-members></polynet-members>", "")).errors).toBe(
-    "No page has <polynet-members>, and every site needs it: everyone in the community, online first, each opening their profile. " +
-    "Add <polynet-members></polynet-members> in a people page or section. The polynet-build-site skill shows how.");
-  // Any page counts: the room on one page, the people on another.
-  const room = GOOD.replace(BLOCKS, '<polynet-channels></polynet-channels><polynet-chat channel="routes"><p slot="empty">Quiet.</p></polynet-chat>');
-  expect(problems(room, [{ path: "/people/index.html", text: GOOD.replace(BLOCKS, "<polynet-members>\n</polynet-members>") }]).errors).toBe("");
+});
+
+test("every site has a frame: frame.html with exactly one <polynet-page>, linking from the site's root", () => {
+  // The blocks need not be placed anywhere: Polynet's /chat and /people carry them.
+  expect(problems(GOOD.replace(BLOCKS, ""))).toEqual({ errors: "", warnings: "" });
+  const none = checkSite([{ path: "/index.html", text: GOOD }]);
+  expect(none.errors).toEqual([{ path: "/", message:
+    "The site has no frame.html at its root. Polynet shows its standard pages (/chat, /people) inside it, so they look like the rest of the site: " +
+    "frame.html is your header, navigation and footer with one <polynet-page></polynet-page> where the page goes. " +
+    "Add it beside index.html (for a framework build, to its output folder, like dist)." }]);
+  // Not at the root, it isn't the frame.
+  expect(checkSite([{ path: "/index.html", text: GOOD }, { path: "/site/frame.html", text: FRAME }]).errors.map((p: any) => p.message).join("\n")).toContain("no frame.html");
+  const frame = (text: string) => problems(GOOD, [{ path: "/frame.html", text }]).errors;
+  expect(frame(FRAME.replace("<polynet-page></polynet-page>", ""))).toBe(
+    "frame.html has no <polynet-page></polynet-page>. Put exactly one where each page's content goes (usually inside <main>).");
+  // Commented out, or only in a script, it isn't placed.
+  expect(frame(FRAME.replace("<polynet-page></polynet-page>", '<!-- <polynet-page></polynet-page> --><script>document.body.append(document.createElement("polynet-page"))</script>')))
+    .toContain("has no <polynet-page>");
+  expect(frame(FRAME.replace("<polynet-page></polynet-page>", "<polynet-page></polynet-page><aside><polynet-page/></aside>"))).toBe(
+    "frame.html has 2 <polynet-page> tags. Keep exactly one, where each page's content goes.");
+  expect(frame(FRAME.replace("<polynet-page></polynet-page>", "<polynet-page class=x>\n</polynet-page>"))).toBe("");
+  // The frame is a page like any other.
+  expect(frame(FRAME.replace(' lang="en"', ""))).toContain("no language");
+  // It's shown at /chat, /people and /people/<handle>: a relative path breaks under /people/.
+  expect(frame(FRAME.replace('href="/styles.css"', 'href="styles.css"').replace('href="/chat#top"', 'href="./people.html"').replace('<img src="https://cdn.test/logo.png"', '<img src="../img/logo.png"'))).toBe(
+    "frame.html uses relative paths (styles.css, ./people.html, ../img/logo.png). " +
+    "The frame is shown at /chat, /people, /people/<handle>, where those point somewhere else. Start them from the site's root: /styles.css.");
+  expect(frame(FRAME.replace('href="/chat#top"', 'href="#main"').replace("</main>", '</main><a href="mailto:hi@run.club">Mail</a><a href="?x=1">Again</a>'))).toBe("");
+});
+
+test("a site's own version of a standard page must place that page's blocks", () => {
+  const page = (path: string, body: string) => ({ path, text: GOOD.replace(BLOCKS, body) });
+  const errors = (...files: Array<{ path: string; text: string }>) => checkSite([{ path: "/index.html", text: GOOD }, { path: "/frame.html", text: FRAME }, ...files]).errors;
+  expect(errors(page("/chat.html", "<polynet-chat></polynet-chat>"))).toEqual([{ path: "/chat.html", message:
+    "chat.html is this site's own Chat page (/chat), so it must place <polynet-channels> and <polynet-chat>. " +
+    "Add <polynet-channels></polynet-channels>, or delete the file: Polynet then shows its Chat page inside frame.html." }]);
+  expect(errors(page("/chat/index.html", "<h1>Talk</h1>"))[0].message).toContain("Add <polynet-channels></polynet-channels> <polynet-chat></polynet-chat>,");
+  expect(errors(page("/people.html", ""))[0].message).toContain("people.html is this site's own People page (/people), so it must place <polynet-members>.");
+  expect(errors(page("/people/index.html", ""), page("/people/sam.html", "<polynet-members></polynet-members>"), page("/people/ana/index.html", ""))
+    .map((p: any) => p.path)).toEqual(["/people/index.html", "/people/ana/index.html"]);
+  // With the blocks, any version is the site's to design; other pages need none.
+  expect(errors(
+    page("/chat.html", '<polynet-channels></polynet-channels><polynet-chat channel="routes"><p slot="empty">Quiet.</p></polynet-chat>'),
+    page("/people/index.html", "<polynet-members>\n</polynet-members>"),
+    page("/about.html", "<h1>About</h1>"), page("/people/photos.htm", ""), page("/chats.html", ""),
+  )).toEqual([]);
   // A framework build creates them from its bundle: the names in a script count.
-  const shell = GOOD.replace(BLOCKS, '<div id="app"></div>');
-  const bundle = 'const r=document.createElement("polynet-chat");x.innerHTML;jsx("polynet-channels",{});html`<polynet-members slot=a>`';
-  expect(problems(shell, [{ path: "/assets/index-abc.js", text: bundle }]).errors).toBe("");
-  expect(problems(shell.replace('<div id="app"></div>', '<script type="module">document.body.append(document.createElement("polynet-chat"))</script>' +
-    "<polynet-channels></polynet-channels><polynet-members></polynet-members>")).errors).toBe("");
+  const shell = page("/chat/index.html", '<div id="app"></div>');
+  expect(errors(shell, { path: "/assets/index-abc.js", text: 'jsx("polynet-channels",{});document.createElement("polynet-chat")' })).toEqual([]);
   // Styling or mentioning a block isn't placing it; neither is a commented-out tag or a longer name.
-  const styledOnly = shell.replace("</head>", "<style>polynet-chat { height: 70vh }</style></head>")
-    .replace('<div id="app"></div>', "<!-- <polynet-chat></polynet-chat> --><polynet-chat-room></polynet-chat-room><polynet-channels></polynet-channels><polynet-members></polynet-members>");
-  expect(problems(styledOnly, [{ path: "/app.css", text: "polynet-chat::part(message) { color: red }" }, { path: "/x.js", text: 'el.tagName === "polynet-chat-room"' }]).errors)
-    .toContain("No page has <polynet-chat>");
+  const styledOnly = page("/chat.html", "<style>polynet-chat { height: 70vh }</style><!-- <polynet-chat></polynet-chat> --><polynet-chat-room></polynet-chat-room><polynet-channels></polynet-channels>");
+  expect(errors(styledOnly, { path: "/app.css", text: "polynet-chat::part(message) { color: red }" }, { path: "/x.js", text: 'el.tagName === "polynet-chat-room"' })
+    .map((p: any) => p.message).join("\n")).toContain("Add <polynet-chat></polynet-chat>, or delete the file");
 });
 
 test("a block named only in a JavaScript comment isn't placed; one in code beside URLs and regexes is", () => {
   const shell = GOOD.replace(BLOCKS, '<div id="app"></div>');
+  // The site's own /chat and /people, built by a framework: which blocks are still missing.
   const missing = (extra: Array<{ path: string; text: string }>, html = shell) =>
-    (problems(html, extra).errors.match(/No page has <polynet-[a-z]+>/g) ?? []).sort();
+    (checkSite([{ path: "/index.html", text: GOOD }, { path: "/frame.html", text: FRAME }, { path: "/chat.html", text: html },
+      { path: "/people.html", text: html }, ...extra]).errors.map((p: any) => p.message).join("\n").match(/Add (<polynet-[a-z]+><\/polynet-[a-z]+> ?)+/g) ?? []).sort();
   // Line and block comments, in a bundle, a module and an inline script.
   expect(missing([
     { path: "/assets/app.js", text: '// TODO: document.createElement("polynet-chat")\nmount();' },
     { path: "/lib/people.mjs", text: '/* customElements: "polynet-members"\n   placed later */ export {};' },
   ], shell.replace('<div id="app"></div>', '<script type="module">// <polynet-channels></polynet-channels>\n/* "polynet-chat" */ go();</script>'))).toEqual([
-    "No page has <polynet-channels>", "No page has <polynet-chat>", "No page has <polynet-members>",
+    "Add <polynet-channels></polynet-channels> <polynet-chat></polynet-chat>", "Add <polynet-members></polynet-members>",
   ]);
   // Strings with // in them, regex literals with /* in them, and a comment beside real code.
   const bundle = 'const u="https://polynet.page//x",r=/[/*]/g,s=/https?:\\/\\//;\n' +
@@ -192,7 +236,7 @@ test("a block named only in a JavaScript comment isn't placed; one in code besid
 });
 
 test("a site without a root index.html can't go live", () => {
-  const result = checkSite([{ path: "/home.html", text: GOOD }, { path: "/people/index.html", text: GOOD }]);
+  const result = checkSite([{ path: "/home.html", text: GOOD }, { path: "/people/index.html", text: GOOD }, { path: "/frame.html", text: FRAME }]);
   expect(result.errors.map((p: any) => p.message)).toEqual([
     "The site has no index.html at its root: it's the page everyone lands on. " +
     "Add index.html to the folder you check and deploy (for a framework build, its output folder, like dist).",
