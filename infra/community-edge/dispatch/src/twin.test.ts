@@ -147,7 +147,7 @@ const OWL = `owl${"2".repeat(29)}`;
 const NEWBIE = `new${"3".repeat(29)}`;
 const dm = {
   conversations: [] as any[], messages: {} as Record<string, any[]>, calls: [] as Array<[string, any]>, failSend: null as string | null,
-  holdNextSend: null as Promise<void> | null, held: 0,
+  holdNextSend: null as Promise<void> | null, held: 0, pageSize: 50, failRead: false,
 };
 function resetMessages() {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -168,6 +168,8 @@ function resetMessages() {
   dm.failSend = null;
   dm.holdNextSend = null;
   dm.held = 0;
+  dm.pageSize = 50;
+  dm.failRead = false;
 }
 function messagesBackend(path: string, body: Record<string, any>): Response {
   dm.calls.push([path, body]);
@@ -178,7 +180,10 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
       return Response.json({ ok: true, conversations: dm.conversations });
     case "/runtime/app/me/messages/conversation": {
       const row = find(body.conversation_id);
-      return row ? Response.json({ ok: true, conversation: row, messages: dm.messages[row.id], has_more: false }) : refuse("dm_conversation_not_found", 404);
+      if (!row) return refuse("dm_conversation_not_found", 404);
+      const all = dm.messages[row.id].filter((message) => body.before_seq === undefined || message.seq < body.before_seq);
+      const page = all.slice(-dm.pageSize);
+      return Response.json({ ok: true, conversation: row, messages: page, has_more: all.length > page.length });
     }
     case "/runtime/app/me/messages/start":
       if (body.handle === "sam") return Response.json({ ok: true, conversation_id: SAM, peer: null });
@@ -206,6 +211,7 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
     case "/runtime/app/me/messages/upload":
       return Response.json({ ok: true, upload_url: `${STORAGE}/api/storage/upload?token=dm` });
     case "/runtime/app/me/messages/read": {
+      if (dm.failRead) { dm.failRead = false; return refuse("dm_unavailable", 503); }
       const row = find(body.conversation_id);
       Object.assign(row, { read_seq: Math.max(row.read_seq, body.through_seq), unread_count: 0 });
       return Response.json({ ok: true, conversation: row });
@@ -686,6 +692,49 @@ test("Messages: re-reading the same thread mid-send doesn't strand the send", as
     release();
     await expect.poll(() => personal.locator("[part~=message-pending]").count()).toBe(0);
     await expect.poll(() => personal.locator("[part~=message-mine]").last().textContent()).toContain("Running late");
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: after more than a page arrives, the thread restarts at the newest page and pages back without a gap", async () => {
+  resetMessages();
+  dm.pageSize = 3;
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    const seqs = () => personal.locator("[part~=message][data-seq]").evaluateAll((nodes) => nodes.map((node) => Number(node.getAttribute("data-seq"))));
+    await expect.poll(seqs).toEqual([1, 2]);
+    // Five arrive while the tab is away: more than a page.
+    const row = dm.conversations[0];
+    for (let index = 0; index < 5; index += 1) {
+      row.last_seq += 1;
+      dm.messages[SAM].push({ id: `away${row.last_seq}`, seq: row.last_seq, from_me: false, text: `Away ${row.last_seq}`, attachments: [], created_at: new Date().toISOString(), client_message_id: null });
+    }
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(seqs).toEqual([5, 6, 7]);
+    await personal.locator("[part=older]").click();
+    await expect.poll(seqs).toEqual([2, 3, 4, 5, 6, 7]);
+    await personal.locator("[part=older]").click();
+    await expect.poll(seqs).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Messages: a read receipt that fails is sent again on the next refresh", async () => {
+  resetMessages();
+  dm.failRead = true;
+  const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => dmCalls("read").length).toBe(1);
+    expect(dm.conversations[0].read_seq).toBe(0);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => dmCalls("read").length).toBe(2);
+    expect(dmCalls("read")[1]).toEqual({ conversation_id: SAM, through_seq: 2 });
+    await expect.poll(() => dm.conversations[0].read_seq).toBe(2);
+    expect(await personal.locator("[part=thread-header] h2").textContent()).toBe("Sam Rivera");
   } finally {
     await browser.close();
   }

@@ -471,10 +471,14 @@ class Messages {
     }
     const fresh = res.body.messages || [];
     const oldest = fresh.length ? fresh[0].seq : Infinity;
-    const earlier = first ? [] : this.messages.filter((message) => message.seq < oldest);
+    const newestShown = this.messages.length ? this.messages[this.messages.length - 1].seq : 0;
+    // More arrived than one page holds: the newest page no longer meets what's
+    // shown, so start again from it and let "earlier" page back through the rest.
+    const gap = !first && newestShown > 0 && oldest !== Infinity && oldest > newestShown + 1;
+    const earlier = first || gap ? [] : this.messages.filter((message) => message.seq < oldest);
     this.conversation = res.body.conversation;
     this.messages = earlier.concat(fresh);
-    if (first) this.hasMore = res.body.has_more === true;
+    if (first || gap) this.hasMore = res.body.has_more === true;
     else if (!earlier.length) this.hasMore = res.body.has_more === true;
     // A pending send the server now holds is the server's message.
     const keys = new Set(this.messages.map((message) => message.client_message_id).filter(Boolean));
@@ -500,9 +504,16 @@ class Messages {
     if (!conversation || !conversation.id || document.visibilityState !== "visible") return;
     const last = this.messages.length ? this.messages[this.messages.length - 1].seq : 0;
     if (last <= conversation.read_seq || last <= this.readSent) return;
+    const before = this.readSent;
     this.readSent = last;
     const res = await call("/__polynet/me/messages/read", { conversation_id: conversation.id, through_seq: last });
-    if (!this.current() || !ok(res) || !res.body.conversation || !this.conversation || this.conversation.id !== conversation.id) return;
+    if (!this.current()) return;
+    // Not acknowledged: the next refresh tries again.
+    if (!ok(res) || !res.body.conversation) {
+      if (this.readSent === last) this.readSent = before;
+      return;
+    }
+    if (!this.conversation || this.conversation.id !== conversation.id) return;
     this.conversation = Object.assign({}, this.conversation, res.body.conversation);
     this.updateInboxRow(this.conversation);
   }
