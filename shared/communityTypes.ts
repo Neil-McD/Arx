@@ -102,18 +102,6 @@ export type CommunityFunnelConfig = {
   published_content_v2: CommunityFunnelContentV2 | null;
 };
 
-export type CommunityFunnelVariantConfig = {
-  slot: CommunityCustomFunnelSlot;
-  draft_vsl_url: string | null;
-  draft_content_v2: CommunityFunnelContentV2 | null;
-  draft_revision: number;
-  draft_updated_at: number | null;
-  published_vsl_url: string | null;
-  published_content_v2: CommunityFunnelContentV2 | null;
-  published_draft_revision: number;
-  published_at: number | null;
-};
-
 export type DiscoverCommunitySnapshot = {
   id?: string | null;
   slug: string;
@@ -345,28 +333,6 @@ export type CommunityAgentConfig<TLanding = unknown> = {
   community_system_prompt?: string;
   system_prompt: string;
   updated_at: string;
-};
-
-export type CommunityAiFeedPostType = "observation" | "recommendation" | "action";
-
-export type CommunityAiFeedReactionType = "good" | "low_signal";
-
-export type CommunityAiFeedReactionCounts = {
-  good: number;
-  low_signal: number;
-};
-
-export type CommunityRecentContextItem = {
-  source_type: "chat" | "ai_feed" | "resource";
-  source_id: string;
-  title: string | null;
-  snippet: string;
-  created_at: string;
-  score: number | null;
-  author_label?: string | null;
-  url?: string | null;
-  post_type?: "observation" | "recommendation" | "action" | null;
-  resource_type?: string | null;
 };
 
 export type CommunityAnalyticsSummary = {

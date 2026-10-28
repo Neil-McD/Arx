@@ -797,14 +797,6 @@ function workflowOrientation(context: any) {
   return JSON.parse(line.slice(line.indexOf(": ") + 2));
 }
 
-function contextSnapshot(context: any) {
-  const bundle = buildCommunityAgentServePromptBundle(context);
-  return JSON.stringify({
-    version: 2, sha256: "a".repeat(64), messages: bundle.messages,
-    prompt_sections: bundle.systemPromptBundle.sections,
-  });
-}
-
 test("workflow context uses read-only defaults, preserves completion, and allows absent current workflow", async () => {
   const t = convexTest(schema, modules);
   const f = await workflowServeFixture(t);

@@ -8,11 +8,7 @@ type WebMobileBottomRailProps = {
 export function WebMobileBottomRail({
   communityShell,
 }: WebMobileBottomRailProps) {
-  if (
-    !communityShell.showMobileShell ||
-    communityShell.forceMobileCommunityRoot
-  )
-    return null;
+  if (!communityShell.showMobileShell) return null;
 
   const activeRoot = communityShell.mobileRootPage;
   const hasCommunityRail = communityShell.showMobileGlobalShell;

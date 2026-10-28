@@ -36,7 +36,6 @@
 .community-forms-page > .workflow-secondary-button { align-self: flex-start; }
 .community-forms-page textarea:focus-visible, .community-forms-page select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
 .community-forms-page button:disabled { opacity: .4; cursor: not-allowed; }
-.workflow-pipeline-header { justify-content: space-between; }
 /* The shell can constrain Forms even on a large monitor (for example with DMs
    open). Match the existing compact layout to its actual workspace width. */
 @container workflow-sections (max-width: 760px) {

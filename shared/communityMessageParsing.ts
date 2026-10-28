@@ -11,12 +11,6 @@ export type CommunityMessageAttachment = {
   truncated?: boolean | null;
 };
 
-export type ReplyPrefix = {
-  sender: string;
-  preview: string;
-  rest: string;
-};
-
 function createAttachmentId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
     return globalThis.crypto.randomUUID();

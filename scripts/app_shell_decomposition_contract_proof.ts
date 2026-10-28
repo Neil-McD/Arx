@@ -158,7 +158,6 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/buildWebAuthShellProjection.ts",
   "apps/web/src/controllers/useWebAuthErrorToastLifecycle.ts",
   "apps/web/src/controllers/useWebCommunityDirectoryState.ts",
-  "apps/web/src/controllers/useWebCommunityFunnelAboutController.ts",
   "apps/web/src/controllers/useWebCommunityNavigationActions.ts",
   "apps/web/src/controllers/useWebCommunityProfileHydrationController.ts",
   "apps/web/src/controllers/useWebCommunityTabAccessGuard.ts",

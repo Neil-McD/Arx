@@ -172,7 +172,6 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     openCommunityTab,
     openCommunityHome,
     openCommunityChat,
-    openCommunityBySlug,
     openJoinedCommunityBySlug,
   };
 }

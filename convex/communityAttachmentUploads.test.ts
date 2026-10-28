@@ -222,7 +222,7 @@ test("a reservation cannot reuse an already-owned storage object", async () => {
 });
 
 test("pending upload count is bounded and expiry releases rows and bytes", async () => {
-  const { t, f, prepare, upload, resolve } = await setup();
+  const { t, prepare, upload, resolve } = await setup();
   const a = await upload();
   for (let i = 1; i < 8; i++) await prepare();
   await expect(prepare()).rejects.toThrow("pending_limit");

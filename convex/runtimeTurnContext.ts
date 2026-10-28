@@ -3,7 +3,6 @@ import {
   buildRuntimeRecentToolAttemptsFromEvents,
   buildRuntimeTurnContextPacket,
   type RuntimeRecentToolAttemptPrompt,
-  type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
 import type { RuntimeContextRunEvent } from "../shared/runtimeContextFragments";
@@ -19,23 +18,6 @@ type RuntimeStopContext = NonNullable<RuntimeTurnContextPacket["runtimeStop"]>;
 export type LoadedRuntimeTurnContext = {
   packet: RuntimeTurnContextPacket;
   threadWorkingState: ThreadWorkingStatePrompt | null;
-};
-
-export type ActiveRuntimeTurnState = {
-  runId: string;
-  threadId: string;
-  status: "running";
-  pendingUserSteering: Array<{
-    text: string;
-    receivedAt: number;
-    messageKey?: string;
-  }>;
-  stopRequestedAt: number | null;
-  stopReason: string | null;
-  activeContextSnapshot: RuntimeTurnContextSnapshotV1 | null;
-  activeContextSnapshotUpdatedAt: number | null;
-  startedAt: number;
-  updatedAt: number;
 };
 
 async function loadWorkingStateForRun(params: {

@@ -138,15 +138,6 @@ export function isAbortError(error: unknown): boolean {
   return false;
 }
 
-export type GuestInferenceIssueReason = "rate_limited" | "misconfigured" | "unavailable";
-
-export type GuestInferenceIssue = {
-  reason: GuestInferenceIssueReason;
-  cta: "sign_in";
-  fullMessage: string;
-  shortMessage: string;
-};
-
 export function buildPublicTurnMessages<ThreadMessageT extends PublicTurnThreadMessage>(params: {
   messages: ThreadMessageT[];
   systemPrompt?: string | null;

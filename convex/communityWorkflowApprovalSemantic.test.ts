@@ -8,7 +8,6 @@ import type { CommunityMemberWorkflowAutomation } from "../shared/communityMembe
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { completeCanonicalOperationReceiptInternal } from "./polynetCanonicalReceipts";
-import { readWorkflowApprovalObservation } from "./communityWorkflowCompletionCore";
 const modules = import.meta.glob(["./*.ts", "./_generated/**/*.*s"]);
 const joinHandler = internal.communityMemberWorkflows.handleFirstMemberJoinInternal;
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });

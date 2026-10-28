@@ -50,7 +50,6 @@ export type WebCommunityShellProps = {
   showMobileGlobalShell: boolean;
   mobileOverlay: MobileOverlay;
   mobileRootPage: MobileRootPage;
-  forceMobileCommunityRoot: boolean;
   setMobileOverlay: (value: MobileOverlay) => void;
   onSelectMobileRootPage: (page: MobileRootPage) => void;
   activeCommunity: CommunityLike | null;
@@ -93,7 +92,6 @@ export type WebCommunityShellProps = {
   canViewActiveCommunityAnalytics: boolean;
   isLoadingCommunityAccess: boolean;
   /* Visitor lens: tabs render locked instead of hidden. */
-  lockedCommunityNavTabs?: Partial<Record<CommunityTab, boolean>> | null;
   onSelectCommunityTab: (tab: CommunityTab) => void;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;

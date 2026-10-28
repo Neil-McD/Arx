@@ -44,23 +44,6 @@ export function getInitials(id: string): string {
   return id.slice(0, 2).toUpperCase();
 }
 
-export type CommunitySenderMetaMessage = {
-  sender_id: string;
-  created_at: string;
-  reply_to_id?: string | null;
-};
-
-export function formatDateSeparator(date: Date): string {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-  if (msgDate.getTime() === today.getTime()) return "Today";
-  if (msgDate.getTime() === yesterday.getTime()) return "Yesterday";
-  return date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-}
-
 export function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8"): void {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -103,14 +86,3 @@ export async function tryCopyTextToClipboard(text: string): Promise<boolean> {
 export async function copyTextToClipboard(text: string): Promise<void> {
   await tryCopyTextToClipboard(text);
 }
-
-export type ToolLabelDetails = {
-  toolName: string;
-  command: string;
-  path?: string;
-  pattern?: string;
-  srcPath?: string;
-  destPath?: string;
-  label?: string;
-  query?: string;
-};

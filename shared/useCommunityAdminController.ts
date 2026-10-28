@@ -48,7 +48,6 @@ type UseCommunityAdminControllerArgs<
 
   getProfileSaveSession: () => SessionT | null;
   profileSaveFailureMessage: string;
-  profileSaveUnauthenticatedErrorMessage: string | null;
   onProfileSaveUnauthenticated?: () => void;
   applyLoadedProfileToLocal?: (profile: UserProfileDetailT) => void;
   profileIsActive?: boolean;
@@ -169,8 +168,8 @@ export function useCommunityAdminController<
     const current = argsRef.current;
     const candidate = current.getProfileSaveSession();
     const accountId = resolveCanonicalProfileUserId(candidate);
-    const unauthenticatedMessage = current.profileSaveUnauthenticatedErrorMessage
-      ?? "Your session could not be verified. Your edits are preserved. Try saving again, or sign in again.";
+    const unauthenticatedMessage =
+      "Your session could not be verified. Your edits are preserved. Try saving again, or sign in again.";
     if (!accountId || accountId !== profileAccountRef.current) {
       current.setProfileSaveError(unauthenticatedMessage);
       current.onProfileSaveUnauthenticated?.();

@@ -260,7 +260,6 @@ async function normalizeCommunityAgentMessageContent(args: {
   role: "user" | "assistant" | "system";
   contentJson: unknown;
 }): Promise<unknown> {
-  const threadKey = String(args.thread.threadKey ?? "").trim();
   if (args.role !== "user" || !isClaimedImageAttachmentThread(args.thread)) {
     return args.contentJson;
   }

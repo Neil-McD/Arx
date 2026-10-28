@@ -13,7 +13,6 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const ALLOWED = new Map<string, string>([
   ["convex/schema.ts", "old chat posts, replies and receipts keep the stored value until the table-drop rewrite; AI feed posts until those tables drop"],
   ["shared/communityAgentIdentity.ts", "RETIRED_PERSONAL_AGENT_ACTOR_TYPE: the one name for the stored value"],
-  ["shared/communityEvidenceContract.ts", "AI feed lineage; goes with the AI feed tables"],
   ["convex/communityAiFeedEvidenceCore.ts", "AI feed lineage; goes with the AI feed tables"],
 ]);
 

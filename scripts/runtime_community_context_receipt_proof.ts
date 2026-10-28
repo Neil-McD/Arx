@@ -39,8 +39,6 @@ const expectedTools = [
   "community_memory_read",
   "community_chat_search",
   "community_chat_read",
-  "community_ai_feed_search",
-  "community_ai_feed_read",
   "community_resources_map",
   "community_resources_list",
   "community_resources_read",

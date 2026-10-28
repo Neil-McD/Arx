@@ -17,7 +17,6 @@ export function useWebMobileShellController(params: {
   selectedActiveCommunitySlug: string | null;
   mobileRootPage: MobileRootPage;
   canViewMembers: boolean;
-  forceCommunityRoot: boolean;
   mobileOverlay: MobileOverlay | null;
   showMobileShell: boolean;
   showMobileSettingsShell: boolean;
@@ -38,10 +37,10 @@ export function useWebMobileShellController(params: {
   openCommunityCreateFlow: () => void;
 }) {
   useEffect(() => {
-    if (params.showMobileShell && params.isCommunityAgentPage && !params.forceCommunityRoot) {
+    if (params.showMobileShell && params.isCommunityAgentPage) {
       params.setMobileRootPage("agent");
     }
-  }, [params.showMobileShell, params.isCommunityAgentPage, params.forceCommunityRoot, params.setMobileRootPage]);
+  }, [params.showMobileShell, params.isCommunityAgentPage, params.setMobileRootPage]);
 
   const openMobileCommunitySurface = useCallback(() => {
     const nextCommunitySlug = String(
@@ -74,11 +73,6 @@ export function useWebMobileShellController(params: {
 
   const handleSelectMobileRootPage = useCallback(
     (nextRootPage: MobileRootPage) => {
-      if (params.forceCommunityRoot) {
-        prepareMobileGlobalNavigation();
-        return;
-      }
-
       if (params.isThreadPageOpen) params.closeThreadPage();
 
       if (nextRootPage === "messages") {
@@ -103,7 +97,6 @@ export function useWebMobileShellController(params: {
       params.canOpenDirectMessages,
       params.closeDirectMessages,
       params.closeThreadPage,
-      params.forceCommunityRoot,
       params.isThreadPageOpen,
       params.openDirectMessages,
       params.setMobileOverlay,
@@ -159,13 +152,6 @@ export function useWebMobileShellController(params: {
 
   useEffect(() => {
     if (!params.showMobileShell) return;
-    if (params.forceCommunityRoot) {
-      if (params.isDirectMessagesOpen) params.closeDirectMessages();
-      if (params.mobileRootPage !== "community") {
-        params.setMobileRootPage("community");
-      }
-      return;
-    }
     if (params.isDirectMessagesOpen && params.canOpenDirectMessages) {
       if (params.mobileOverlay) params.setMobileOverlay(null);
       if (params.mobileRootPage !== "messages") {
@@ -179,7 +165,6 @@ export function useWebMobileShellController(params: {
   }, [
     params.canOpenDirectMessages,
     params.closeDirectMessages,
-    params.forceCommunityRoot,
     params.isDirectMessagesOpen,
     params.mobileOverlay,
     params.mobileRootPage,

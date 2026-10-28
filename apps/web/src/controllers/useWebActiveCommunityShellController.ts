@@ -302,16 +302,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     activeCommunityPresenceSummary?.online_faces,
   ]);
 
-  const funnelPreviewAdminCount = communitySocialSummary.adminCount;
-  const funnelPreviewOnlineCount = communitySocialSummary.onlineCount;
-  const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
-
-  const activeCommunityOnlineUserIds = useMemo(() => {
-    if (!activeCommunityPresenceSummary) return null;
-    const ids = activeCommunityPresenceSummary.online_user_ids;
-    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => Boolean(id)) : []);
-  }, [activeCommunityPresenceSummary]);
-
   return {
     activeCommunityAccess,
     isLoadingCommunityAccess,
@@ -321,11 +311,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     isLoadingActiveCommunityPresence,
     communitySocialSummary,
     reloadActiveCommunityAccess,
-    communityAccessCapabilities,
-    communityNavVisibility,
-    communityActionGuards,
     isActiveCommunityOwner,
-    isActiveCommunityAdmin,
     communitySettingsLayer,
     canManageCommunitySettings,
     canViewActiveCommunityPolynet,
@@ -338,9 +324,5 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     canManageMembersActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
     canViewActiveCommunityAnalytics,
-    funnelPreviewAdminCount,
-    funnelPreviewOnlineCount,
-    funnelPreviewOnlineFaces,
-    activeCommunityOnlineUserIds,
   };
 }

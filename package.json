@@ -258,7 +258,6 @@
   },
   "dependencies": {
     "convex": "^1.42.1",
-    "fflate": "^0.8.3",
     "highlight.js": "^11.11.1",
     "katex": "0.18.2",
     "lucide-react": "^0.577.0",
@@ -275,7 +274,6 @@
     "@edge-runtime/vm": "^5.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^6.0.3",
     "convex-test": "^0.0.54",
     "playwright": "^1.58.2",
     "tsx": "^4.22.4",

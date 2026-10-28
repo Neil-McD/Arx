@@ -7,11 +7,6 @@ export type MemoryUsedItem = {
   updated_at: string;
 };
 
-export type MemorySuggestion = {
-  content: string;
-  pinned: boolean;
-};
-
 export type HistoryUsedItem = {
   thread_id: string;
   message_id: string;

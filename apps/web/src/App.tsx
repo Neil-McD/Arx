@@ -56,7 +56,6 @@ import { useWebCommunityTabAccessGuard } from "./controllers/useWebCommunityTabA
 import { useWebMobileChromeReadingModeLifecycle } from "./controllers/useWebMobileChromeReadingModeLifecycle";
 import { useWebPublicFunnelEntryController } from "./controllers/useWebPublicFunnelEntryController";
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
-import { useWebCommunityFunnelAboutController } from "./controllers/useWebCommunityFunnelAboutController";
 import { useWebPendingAuthIntentController } from "./controllers/useWebPendingAuthIntentController";
 import { useWebCommunityNavigationActions } from "./controllers/useWebCommunityNavigationActions";
 import { useWebJoinedCommunityEntryAction } from "./controllers/useWebJoinedCommunityEntryAction";
@@ -308,7 +307,6 @@ export default function App() {
     profile: profileUi,
     cloudProfile,
     setCloudProfile,
-    accountSetupStatus,
     effectiveAccountSetupStatus,
     isAccountSetupResolved,
     isProfileSetupCompleteForPublicActions,
@@ -346,7 +344,6 @@ export default function App() {
     setPendingPurchasesSuccess,
     accountCommerceStatus,
     setAccountCommerceStatus,
-    isLoadingAccountCommerce,
     setIsLoadingAccountCommerce,
     accountCommerceError,
     setAccountCommerceError,
@@ -633,7 +630,6 @@ export default function App() {
       setIndex: setCommunityChatLightboxIndex,
       onClose: closeCommunityChatLightbox,
     },
-    handleStartReply,
     handleSendCommunityMessage,
     setMessageInputFromTextarea: setCommunityMessageInputFromTextarea,
   } = communityChat;
@@ -656,10 +652,8 @@ export default function App() {
     eventsError: communityEventsError,
     eventsVisibleMonthIso: communityEventsVisibleMonthIso,
     setEventsVisibleMonthIso: setCommunityEventsVisibleMonthIso,
-    eventsVisibleRange: communityEventsVisibleRange,
     eventsCacheKey: communityEventsCacheKey,
     resetContentState: resetCommunityContentState,
-    loadCommunityResourceModules,
     loadCommunityResources,
     openNewModuleModal,
     handleEditModule,
@@ -674,7 +668,6 @@ export default function App() {
     handleCreateBlankPageDraft,
     resourceModuleModalProps,
     resourceModuleDeleteModalProps,
-    loadCommunityEvents,
     reloadActiveEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
@@ -722,11 +715,7 @@ export default function App() {
     isLoadingCommunityAccess,
     communityAccessLoadError,
     retryActiveCommunityAccess,
-    communityAccessCapabilities,
-    communityNavVisibility,
-    communityActionGuards,
     isActiveCommunityOwner,
-    isActiveCommunityAdmin,
     communitySettingsLayer,
     canManageCommunitySettings,
     canViewActiveCommunityPolynet,
@@ -740,9 +729,6 @@ export default function App() {
     canReviewJoinRequestsActiveCommunity,
     canViewActiveCommunityAnalytics,
     communitySocialSummary,
-    funnelPreviewAdminCount,
-    funnelPreviewOnlineCount,
-    activeCommunityOnlineUserIds,
     activeCommunityPresenceSummary,
     isLoadingActiveCommunityPresence,
     reloadActiveCommunityAccess,
@@ -828,34 +814,23 @@ export default function App() {
     setIsSettingsBannerDragOver,
     isSettingsAvatarDragOver,
     setIsSettingsAvatarDragOver,
-    communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
     isCommunitySettingsDirty,
-    setCommunitySettingsDirty,
     markCommunitySettingsDirty,
     isLoadingCommunitySettings,
     isCommunitySettingsReady,
     communitySettingsConflict,
-    hasCommunitySettingsChangesExceptAbout,
   } = communitySettingsUi;
   const communityAgentConfigUi = communityAdministration.agentConfigUi;
   const {
     isLoadingCommunityAgentConfig,
-    setIsLoadingCommunityAgentConfig,
     communityAgentConfigError,
-    setCommunityAgentConfigError,
-    communityAgentConfigLoadedCommunityIdRef,
-    communityAgentConfigLanding,
-    setCommunityAgentConfigLanding,
     communityAgentConfigCommunitySystemPrompt,
     setCommunityAgentConfigCommunitySystemPrompt,
     isSavingCommunityAgentConfig,
-    setIsSavingCommunityAgentConfig,
     communityAgentConfigSaveError,
-    setCommunityAgentConfigSaveError,
     communityAgentConfigDirtyRef,
     markCommunityAgentConfigDirty,
-    hydrateCommunityAgentEditor,
     handleResetCommunityAgentConfig,
   } = communityAgentConfigUi;
   const communityAdminUi = communityAdministration.adminUi;
@@ -863,11 +838,8 @@ export default function App() {
     communityMemberMuted,
     setCommunityMemberMuted,
     isLoadingCommunityMemberSettings,
-    setIsLoadingCommunityMemberSettings,
     communityMemberSettingsError,
-    setCommunityMemberSettingsError,
     isLeavingCommunity,
-    setIsLeavingCommunity,
   } = communityAdminUi;
 
   const shellPublicRoute: PublicRoute = publicRoute;
@@ -878,7 +850,6 @@ export default function App() {
     openCommunityTab,
     openCommunityHome,
     openCommunityChat,
-    openCommunityBySlug,
   } = useWebCommunityRouteController<CommunityRecord>({
     activePage,
     activeView,
@@ -948,7 +919,6 @@ export default function App() {
     reloadCommunityAccess: reloadActiveCommunityAccess,
     getProfileSaveSession: () => sessionRef.current ?? session,
     profileSaveFailureMessage: "Failed to save profile.",
-    profileSaveUnauthenticatedErrorMessage: null,
     onProfileSaveUnauthenticated: () => {
       requireSignIn();
     },
@@ -1007,7 +977,6 @@ export default function App() {
   });
   const {
     loadMemberBillingHistory: loadCommunityMemberBillingHistory,
-    reloadDirectory: reloadActiveCommunityDirectoryMembers,
     setMemberRole: handleSetCommunityContextMemberRole,
     removeMember: handleRemoveCommunityContextMember,
     banMember: handleBanCommunityContextMember,
@@ -1102,11 +1071,10 @@ export default function App() {
   });
 
   const { appToast, showAppToastMessage } = useWebToastController();
-  const { visibleAuthError: previewSidebarAuthError } =
-    useWebAuthErrorToastLifecycle({
-      authError,
-      showToast: showAppToastMessage,
-    });
+  useWebAuthErrorToastLifecycle({
+    authError,
+    showToast: showAppToastMessage,
+  });
   resetWebSessionStateRef.current = () => {
     setCommunityChannelSlug(null);
     return resetWebSessionStateAfterSignOut({
@@ -1684,7 +1652,6 @@ export default function App() {
   }, [activeCommunity]);
 
   const {
-    communityVoiceUiState,
     communityAgentVoiceIntent,
     communityAgentVoiceUiState,
     handleVoiceInputClick,
@@ -1837,7 +1804,6 @@ export default function App() {
     handleTopbarBackFromSettings,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackToCommunity,
-    handleOpenLandingCommunity,
     handleOpenDiscover,
   } = useWebShellActionController({
     activePage,
@@ -1863,7 +1829,6 @@ export default function App() {
       selectedActiveCommunitySlug,
       mobileRootPage,
       canViewMembers: hasSelectedCommunity && canViewMembersActiveCommunity,
-      forceCommunityRoot: false,
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
@@ -1922,22 +1887,6 @@ export default function App() {
         return true;
       },
     });
-
-  const {
-    isDirty: isCommunityFunnelAboutDirty,
-    reset: handleResetCommunityFunnelAbout,
-    save: handleSaveCommunityFunnelAbout,
-  } = useWebCommunityFunnelAboutController({
-    activeCommunity,
-    about: communitySettingsAbout,
-    hasOtherSettingsDirty: hasCommunitySettingsChangesExceptAbout,
-    setSettingsDirty: setCommunitySettingsDirty,
-    ensureSession: ensureUsableAuthSession,
-    setAbout: setCommunitySettingsAbout,
-    setError: setCommunitySettingsError,
-    setIsSaving: setIsSavingCommunitySettings,
-    setCommunities,
-  });
 
   const communityContextJoinRequests = useMemo(
     () =>
@@ -2187,7 +2136,6 @@ export default function App() {
       resourceModuleDeleteModalProps,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
-      typingPresence: communityTypingUsers,
       onCommunityTypingSignal: signalCommunityTyping,
       onCommunityTypingClear: clearCommunityTyping,
       profilesByUserId: savedProfilesByUserId,
@@ -2225,7 +2173,6 @@ export default function App() {
       truncateReplyPreview,
       renderTextWithLinks,
       onOpenCommunityChatLightbox: openCommunityChatLightbox,
-      onStartReply: handleStartReply,
       voiceButtonProps: {
         state: mainCommunityVoiceButtonState,
         title: activeCommunityVoiceButtonOwner === "drawer"
@@ -2742,7 +2689,6 @@ export default function App() {
     mobileShellMode,
     mobileRootPage,
     mobileThreadPageOpen,
-    forceMobileCommunityRoot: false,
     showMobileSettingsIndex,
     activePage,
     destination: webDestination,
@@ -2805,7 +2751,6 @@ export default function App() {
     canViewActiveCommunityAnalytics,
     isLoadingCommunityAccess:
       isAuthRecoveringSignedInAppShell || isLoadingCommunityAccess,
-    lockedCommunityNavTabs: null,
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,

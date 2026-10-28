@@ -54,7 +54,7 @@ assert.doesNotMatch(
 const socialSummarySlice = sliceBetween(
   shellController,
   "const communitySocialSummary",
-  "const funnelPreviewAdminCount",
+  "\n  return {\n    activeCommunityAccess,",
 );
 assert.match(
   socialSummarySlice,
@@ -65,11 +65,6 @@ assert.doesNotMatch(
   socialSummarySlice,
   /communityMembers|filter\(\(member\)/,
   "social proof must not derive admin/member counts from the hydrated roster",
-);
-assert.match(
-  shellController,
-  /const funnelPreviewAdminCount = communitySocialSummary\.adminCount;[\s\S]*const funnelPreviewOnlineCount = communitySocialSummary\.onlineCount;[\s\S]*const funnelPreviewOnlineFaces = communitySocialSummary\.onlineFaces;/,
-  "legacy Funnel preview props must project from the shared social summary",
 );
 
 assert.match(
