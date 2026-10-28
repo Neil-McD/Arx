@@ -158,16 +158,14 @@ assert.match(
   "the same personal agent must remain available without a community lens",
 );
 
-const funnelBundle = buildPlatformHarnessRuntimePromptBundle({
-  ...params,
-  invocationSurface: "community_funnel_builder",
-  memberAgentSurfaceContext: null,
-});
-assert.match(funnelBundle.text, /bounded community funnel composer/);
-assert.doesNotMatch(
-  funnelBundle.text,
-  /Polynet Intelligence|authenticated member's personal agent|You do not belong to any community/,
-  "the member's personal identity must not leak into the funnel composer",
+assert.throws(
+  () => buildPlatformHarnessRuntimePromptBundle({
+    ...params,
+    invocationSurface: "community_funnel_builder" as never,
+    memberAgentSurfaceContext: null,
+  }),
+  /invalid_runtime_invocation_surface/,
+  "the retired funnel composer surface cannot build a prompt",
 );
 
 console.log("runtime_prompt_bundle_proof: ok");

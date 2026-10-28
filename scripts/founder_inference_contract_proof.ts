@@ -326,7 +326,7 @@ assert.doesNotMatch(memberTurnHandlers, /claimMemberAgentFundingSession/);
 assert.match(memberTurnHandlers, /claimCommunityFundingSession/);
 assert.match(
   memberTurnHandlers,
-  /invocationSurface === "member_agent_dock" \|\|[\s\S]*invocationSurface === "community_funnel_builder"[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`/,
+  /invocationSurface === "member_agent_dock" \? invocationSurface : null[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`/,
 );
 assert.match(
   memberTurnHandlers,
