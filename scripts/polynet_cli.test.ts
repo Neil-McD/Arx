@@ -110,8 +110,9 @@ const problems = (html: string, extra: Array<{ path: string; text: string }> = [
   const result = checkSite([{ path: "/index.html", text: html }, ...extra]);
   return { errors: result.errors.map((p: any) => p.message).join("\n"), warnings: result.warnings.map((p: any) => p.message).join("\n") };
 };
+const BLOCKS = "<polynet-channels></polynet-channels><polynet-chat></polynet-chat><polynet-members></polynet-members>";
 const GOOD = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">' +
-  '<title>Run club</title><script type="module" src="/__polynet/ui.js"></script></head><body><polynet-account></polynet-account></body></html>';
+  `<title>Run club</title><script type="module" src="/__polynet/ui.js"></script></head><body><polynet-account></polynet-account>${BLOCKS}</body></html>`;
 
 test("a page's files are read for the checks; others are skipped", async () => {
   const dir = mkdtempSync(join(tmpdir(), "polynet-check-"));
@@ -142,6 +143,63 @@ test("site checks block what is certain from the source", () => {
   expect(checkSite([{ path: "/google123.html", text: "google-site-verification: google123.html" }, { path: "/index.html", text: GOOD }]).errors).toEqual([]);
 });
 
+test("every site places Polynet's channels, chat and members blocks", () => {
+  // Each missing block is its own error, naming the tag to add.
+  const bare = problems(GOOD.replace(BLOCKS, ""));
+  for (const name of ["polynet-channels", "polynet-chat", "polynet-members"]) {
+    expect(bare.errors).toContain(`No page has <${name}>, and every site needs it`);
+    expect(bare.errors).toContain(`Add <${name}></${name}>`);
+  }
+  expect(bare.errors.match(/No page has/g)).toHaveLength(3);
+  expect(problems(GOOD.replace("<polynet-members></polynet-members>", "")).errors).toBe(
+    "No page has <polynet-members>, and every site needs it: everyone in the community, online first, each opening their profile. " +
+    "Add <polynet-members></polynet-members> in a people page or section. The polynet-build-site skill shows how.");
+  // Any page counts: the room on one page, the people on another.
+  const room = GOOD.replace(BLOCKS, '<polynet-channels></polynet-channels><polynet-chat channel="routes"><p slot="empty">Quiet.</p></polynet-chat>');
+  expect(problems(room, [{ path: "/people/index.html", text: GOOD.replace(BLOCKS, "<polynet-members>\n</polynet-members>") }]).errors).toBe("");
+  // A framework build creates them from its bundle: the names in a script count.
+  const shell = GOOD.replace(BLOCKS, '<div id="app"></div>');
+  const bundle = 'const r=document.createElement("polynet-chat");x.innerHTML;jsx("polynet-channels",{});html`<polynet-members slot=a>`';
+  expect(problems(shell, [{ path: "/assets/index-abc.js", text: bundle }]).errors).toBe("");
+  expect(problems(shell.replace('<div id="app"></div>', '<script type="module">document.body.append(document.createElement("polynet-chat"))</script>' +
+    "<polynet-channels></polynet-channels><polynet-members></polynet-members>")).errors).toBe("");
+  // Styling or mentioning a block isn't placing it; neither is a commented-out tag or a longer name.
+  const styledOnly = shell.replace("</head>", "<style>polynet-chat { height: 70vh }</style></head>")
+    .replace('<div id="app"></div>', "<!-- <polynet-chat></polynet-chat> --><polynet-chat-room></polynet-chat-room><polynet-channels></polynet-channels><polynet-members></polynet-members>");
+  expect(problems(styledOnly, [{ path: "/app.css", text: "polynet-chat::part(message) { color: red }" }, { path: "/x.js", text: 'el.tagName === "polynet-chat-room"' }]).errors)
+    .toContain("No page has <polynet-chat>");
+});
+
+test("a block named only in a JavaScript comment isn't placed; one in code beside URLs and regexes is", () => {
+  const shell = GOOD.replace(BLOCKS, '<div id="app"></div>');
+  const missing = (extra: Array<{ path: string; text: string }>, html = shell) =>
+    (problems(html, extra).errors.match(/No page has <polynet-[a-z]+>/g) ?? []).sort();
+  // Line and block comments, in a bundle, a module and an inline script.
+  expect(missing([
+    { path: "/assets/app.js", text: '// TODO: document.createElement("polynet-chat")\nmount();' },
+    { path: "/lib/people.mjs", text: '/* customElements: "polynet-members"\n   placed later */ export {};' },
+  ], shell.replace('<div id="app"></div>', '<script type="module">// <polynet-channels></polynet-channels>\n/* "polynet-chat" */ go();</script>'))).toEqual([
+    "No page has <polynet-channels>", "No page has <polynet-chat>", "No page has <polynet-members>",
+  ]);
+  // Strings with // in them, regex literals with /* in them, and a comment beside real code.
+  const bundle = 'const u="https://polynet.page//x",r=/[/*]/g,s=/https?:\\/\\//;\n' +
+    'h(`<polynet-members>`);/* chat */ document.createElement("polynet-chat"); // done\n' +
+    "x = a / b / c; jsx('polynet-channels', {});";
+  expect(missing([{ path: "/assets/index-abc.js", text: bundle }])).toEqual([]);
+  // Non-JavaScript scripts (a template, JSON) aren't treated as code.
+  expect(missing([], shell.replace('<div id="app"></div>',
+    '<script type="text/template"><a href=//x.test><polynet-chat></polynet-chat></a></script><polynet-channels></polynet-channels><polynet-members></polynet-members>'))).toEqual([]);
+});
+
+test("a site without a root index.html can't go live", () => {
+  const result = checkSite([{ path: "/home.html", text: GOOD }, { path: "/people/index.html", text: GOOD }]);
+  expect(result.errors.map((p: any) => p.message)).toEqual([
+    "The site has no index.html at its root: it's the page everyone lands on. " +
+    "Add index.html to the folder you check and deploy (for a framework build, its output folder, like dist).",
+  ]);
+  expect(checkSite([]).errors.map((p: any) => p.message).join("\n")).toContain("no index.html at its root");
+});
+
 test("site checks warn about what needs a person's judgment", () => {
   const warned = problems(GOOD.replace("<polynet-account>", '<label>Name <input></label><input id="q"><label for="q">Search</label><input type="email"><polynet-account>'), [
     { path: "/app.css", text: "button:focus { outline: none } .x { animation: spin 1s }" },
@@ -165,6 +223,9 @@ test("site checks warn when hidden sections can show and when the agent's public
   const fixed = [toggled[0], { path: "/app.js", text: 'members.hidden = false; await polynet.post(s, t, { askAgent: true }); await polynet.thread(s, p.ref);' },
     { path: "/styles.css", text: "[hidden] { display: none !important; } .members { display: grid; }" }];
   expect(checkSite(fixed).warnings).toEqual([]);
+  // <polynet-chat> shows threads, so asking the agent from a custom composer beside it is fine.
+  const withChat = [page("<polynet-chat></polynet-chat>"), { path: "/app.js", text: "await polynet.post(s, t, { askAgent: true });" }];
+  expect(checkSite(withChat).warnings.map((w: { message: string }) => w.message).join("\n")).not.toContain("polynet.thread()");
 });
 
 test("skills install into both agent folders without overwriting the founder's guides", async () => {

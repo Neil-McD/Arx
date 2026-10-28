@@ -347,7 +347,10 @@ hashes, sizes), not the contents.
 
 Both paths first run the site checks in `packages/polynet-cli/checks.mjs`
 (the same module `polynet check` uses). Errors stop the deploy
-(`site_checks_failed` on the MCP): a page without
+(`site_checks_failed` on the MCP): a site without a root `index.html`; a
+site where no page (or script, for framework builds; JavaScript comments
+don't count) places `<polynet-channels>`, `<polynet-chat>` and
+`<polynet-members>`, Polynet's required blocks; a page without
 `<html lang>`, a `<title>` or a zoomable viewport, an `<img>` without `alt`, a
 button or link without a name. Warnings come back with the result. The checks
 are a guardrail for agents, not a security boundary: the CLI runs them

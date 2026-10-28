@@ -258,11 +258,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** each community's own vibe-coded site on `<slug>.polynet.page`:
   sign-in with Polynet, the member experience through the SDK (chat with
   unread, mentions, typing and who's online; member profiles; events, courses,
-  memory, the agent), the shared `<polynet-account>` shell, deploys.
+  memory, the agent), the shared `<polynet-account>` shell, deploys. Every
+  site must place Polynet's blocks `<polynet-channels>`, `<polynet-chat>` and
+  `<polynet-members>` (served by the edge from `blocks/`): the shared site
+  checks (`packages/polynet-cli/checks.mjs`) fail `polynet check`, CLI and
+  MCP deploys without them. Sites style them only through tokens, `::part()`
+  and slots.
 - **Code:** `httpCommunityApps`, `communityApps`, `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
   `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, SDK `sdk.ts`, shell
-  `ui.ts`, guide `llms.ts`); `packages/polynet-cli` (`@polynet/cli`: create, check,
+  `ui.ts`, blocks `blocks/`, guide `llms.ts`); `packages/polynet-cli` (`@polynet/cli`: create, check,
   skills, deploy).
 - **Reached by:** the edge only (`/runtime/app*`, `/runtime/community_edge/*`,
   edge secret); `/runtime/sites/deploy/*` from the CLI and MCP.

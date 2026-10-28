@@ -9,7 +9,23 @@ You are building the website of one community that runs on Polynet. Polynet
 hosts everything hard: accounts, members, permissions, payments, posts,
 events, courses, memory and the community's AI agent. Your site is the look
 and the experience. It is a static site (HTML, CSS, JavaScript) served on the
-community's own domain, and it talks to Polynet only through the SDK below.
+community's own domain. Polynet's blocks bring the social core; the SDK
+below brings everything else.
+
+## Rails, not templates (read first)
+
+- Every site places three Polynet blocks, on any page:
+  <polynet-channels>, <polynet-chat> and <polynet-members>. Deploys fail
+  without them. They are the channels, the whole conversation (composer,
+  threads, reactions, attachments, @-tags) and the people (each opens a
+  profile with Message). Never rebuild, hide or replace them.
+- The shell (<polynet-account>) is automatic: Polynet adds it to every page.
+  Place it into your design yourself.
+- Polynet owns how the blocks behave; your site owns how they look, through
+  the --polynet-* tokens, ::part() and slots only (see Blocks, below).
+- Direct messages, admin, settings and billing are never built by a site.
+- Then design freely: invent the community's world, give the blocks a room
+  in it, and add custom views with the SDK beside them.
 
 ## Workflow (start here)
 
@@ -17,13 +33,17 @@ community's own domain, and it talks to Polynet only through the SDK below.
    (.../c/<slug>). The person deploying must be its owner or an admin.
 2. Design first (the next section): learn the community's world, show the
    founder three directions, build the one they choose.
-3. Build the site in a folder with an index.html, and test it live. The SDK
-   is served by the site's own address, so it only works once deployed.
-   From the folder:
+3. Build the site in a folder with an index.html, with the three blocks
+   placed, and test it live. The SDK, the shell and the blocks are served
+   by the site's own address, so they only work once deployed: on a local
+   static server the tags stay empty (slot text shows unstyled), which is
+   expected. From the folder:
 
        npx @polynet/cli deploy --community <slug>
 
-   Then open https://<slug>.polynet.page. A deploy takes seconds: change,
+   Then open https://<slug>.polynet.page. A community on Polynet's staging
+   deploys with --staging, to https://<slug>-staging.polynet.page (this
+   guide is then at https://staging.polynet.page/llms.txt). A deploy takes seconds: change,
    deploy, refresh, repeat. The first deploy opens a browser to sign in with
    Polynet; later deploys reuse it.
 4. Signed out, the site shows its public face. Sign in on the site to see
@@ -35,7 +55,8 @@ There is no template: every site starts from its community's own world. Aim
 for the site members screenshot and send to friends. If it could be any
 community's site, it isn't done.
 
-1. Discover. Ask the founder once: who the members are and what brings them
+1. Discover. Ask the founder once (if their brief already says, don't ask:
+   start): who the members are and what brings them
    together; where and when it happens and what that looks and feels like;
    three words for the feeling and one thing it should feel like (a brand, a
    magazine, a place); any logo, photos, colors or phrases to use. Collect
@@ -44,13 +65,17 @@ community's site, it isn't done.
    world, layout idea and voice. Make one feel risky. Give each a name, a
    one-sentence idea, typefaces, a palette, a signature move and real copy.
    Build each as one static page (concepts/a.html, b.html, c.html, each
-   with the shell), deploy, and let the founder pick or mix.
+   with the shell and the real blocks themed for that direction, never
+   placeholders), deploy, and let the founder pick or mix. If you can't
+   deploy concepts for them to pick, build the strongest and tell them in a
+   line why it won.
 3. Build the chosen one. Write each page's structure in HTML by hand and fill
    it with live data from JavaScript. Design the loading, empty, error and
    signed-out states in the concept's voice. Real words everywhere, never
    test data. Delete the concept pages.
 4. Look at it at 390px and 1440px wide, twice: where is it timid (make the
-   hierarchy louder), where is it noisy (remove), what is misaligned. Fix,
+   hierarchy louder), where is it noisy (remove), what is misaligned, and
+   do the blocks feel native to the concept or like stock widgets. Fix,
    deploy, look again.
 
 Craft: typefaces with character (Google Fonts or Fontshare) used at
@@ -124,7 +149,9 @@ reach their account, their communities, Discover, messages and settings:
 
 Put it where your design wants it (usually the top-right of the header) and
 keep it visible on every page and at every width. Signed out it shows "Join"
-and "Sign in"; signed in, the member's avatar opens their account menu (with
+(a link in --polynet-text) and "Sign in" (--polynet-accent, its text
+--polynet-on-accent); on a header darker or lighter than the page, set
+those on polynet-account itself, with a matching --polynet-surface; signed in, the member's avatar opens their account menu (with
 "Manage this community" for owners and admins, and "Your communities", which
 opens Polynet). Don't rebuild these yourself.
 
@@ -152,6 +179,168 @@ community only: { member { name, handle, avatar_url }, community { slug,
 name, role, studio_url }, links { communities, discover, settings, messages } }.
 The member's other communities are never readable from a site.
 
+## Blocks: channels, chat and members (required)
+
+Every site places all three (deploys fail without them). They are the one
+way a community's channels, conversation and people appear on a site. Polynet owns how they behave (data, permissions,
+live updates, keyboard, screen readers); your site owns how they look. Place
+the tags; ui.js (on every page) loads each block only on pages that have it:
+
+    <polynet-channels></polynet-channels>
+    <polynet-chat></polynet-chat>
+    <polynet-members></polynet-members>
+
+- <polynet-channels>: the channels the member can read, as a nav of links,
+  with an unread dot and an "@" badge where someone mentioned them. Arrow
+  keys move between channels; Enter opens one.
+- <polynet-chat>: the current channel's conversation, live, and the box to
+  join it. The feed: posts grouped by author, day dividers, a "New" divider
+  at what the member hadn't read, older posts as they scroll up, markdown,
+  images and files, reactions, typing ("Sam is typing…") and threads ("3
+  replies" opens the thread beside the feed, or over it when the block is
+  narrow; Esc closes it). It marks the channel read when the member reaches
+  the bottom. Signed out (or not a member) it shows a sign-in and join
+  prompt, never posts. Give it a height (it scrolls inside):
+  polynet-chat { height: 70vh } is the default; set your own, e.g.
+  height: 100% inside a sized layout. channel="<slug>" pins it to one
+  channel instead of following the page.
+  What members can do in it, with nothing for you to build:
+  - Write in the message box under the feed, and reply in the box under a
+    thread. Enter sends and Shift+Enter starts a new line (on touch screens
+    Enter is a new line and Send sends). A message shows at once while it
+    sends; if it fails, it goes back in the box with Retry, and a retry
+    never posts twice. Drafts stay with their channel and thread.
+  - Tag people: "@" suggests members (online first, by name or handle) and
+    the community agent; arrows and Enter or Tab pick. A tagged member is
+    notified; tagging the agent asks it, and it answers in the thread.
+  - Attach files: the + button, paste, or drag and drop (up to 8 per
+    message; images up to 25 MB, video and audio 50 MB, other files 5 MB).
+  - React with common emoji, reply, and edit or delete their own messages
+    (on hover or focus with a mouse; behind "•••" on touch screens).
+  - Others see them typing.
+  Where the member can't post (or reply), the box is replaced by a quiet
+  note. Your site needs no composer of its own for chat.
+  Authors' names and pictures, and @-tags of members in posts, open that
+  member's profile.
+- <polynet-members>: everyone in the community. Who's online comes first,
+  each with a presence dot, then everyone else; owners, admins and
+  moderators lead each group and carry a role badge. A search box filters
+  by name or handle. It stays live as people come and go, and a large
+  community renders 200 at a time, more as the list scrolls. Selecting a
+  member opens their profile. Signed out (or not a member) it shows a
+  sign-in and join prompt, never a name. It grows with its content: put it
+  in a sized, scrolling column if you want it to scroll on its own.
+
+Profiles: clicking a member anywhere (<polynet-members>, a chat author, an
+@-tag) opens their profile over the page: a side sheet on wide screens, a
+bottom sheet on phones. It shows their picture, name, @handle, role here,
+whether they're online, their bio and links (YouTube, X, Instagram), and a
+Message button (it opens the member's messages in Polynet; never on their
+own profile). Esc, the close button or a click outside closes it, and focus
+goes back where it was. While it is open the URL carries ?member=<handle>,
+so a profile can be linked (link to ?member=sam) and Back closes it. Open
+one from your own code:
+
+    document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }));
+
+(or detail { ref } with a member's ref from members() or online()). Signed out, the
+panel asks the visitor to sign in and shows nothing about the member.
+
+Which channel: the URL says, ?channel=<slug> (no parameter: the General
+channel). Selecting a channel in <polynet-channels> updates the URL and
+fires "polynet:channel" on document with detail { slug }; <polynet-chat>
+follows it, and so can your own code. To switch channels from your own
+navigation, link to ?channel=<slug>, or dispatch the event yourself:
+
+    document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }));
+
+When the chat marks a channel read it fires "polynet:read" with { slug }.
+Each block reflects its state on the tag as state="loading" | "ready" |
+"signed-out" | "error" (the chat also "unavailable"), for your layout:
+polynet-chat[state=signed-out] { ... }. The profile panel is
+<polynet-profile>, added to the page when one first opens, with
+state="loading" | "ready" | "missing" | "signed-out" | "error".
+
+Theme: the blocks use the page's font and inherit its text color. They read
+the same tokens as the shell; set them once on :root:
+
+    :root {
+      --polynet-accent: #c2410c;   /* unread dot, "@" badge, agent name, "New", presence dot, focus */
+      --polynet-on-accent: #fff;
+      --polynet-text: #1c1917;     /* default: the page's color */
+      --polynet-muted: #78716c;    /* times, dividers' labels (default: text at 62%) */
+      --polynet-border: #e7e5e4;   /* hairlines (default: text at 14%) */
+      --polynet-surface: #fbfaf7;  /* behind the profile panel, the narrow thread and "New messages" (set it on dark sites) */
+      --polynet-radius: 10px;
+    }
+
+Restyle any piece with ::part():
+- polynet-channels: nav, list, channel (each link; also channel-current,
+  channel-unread, channel-mentioned), channel-hash, channel-name,
+  unread-dot, mention-badge, status, retry.
+- polynet-chat: chat, header, title, feed, history, messages, message (also
+  message-grouped, message-agent, message-mine), avatar (avatar-agent),
+  message-author, message-time, message-body, message-edited, attachments,
+  attachment (attachment-image, attachment-video, attachment-file),
+  reactions, reaction (reaction-mine), replies, day-divider, new-divider,
+  empty, typing, jump, state, gate, gate-text, sign-in, join, retry,
+  thread-panel, thread-header, thread-close, thread-messages,
+  thread-divider, thread-typing.
+  Sending: message-pending, message-failed, message-status ("Not sent").
+  The member's controls on a message: message-actions, message-action
+  (message-action-reply, message-action-edit, message-action-delete),
+  reaction-add, reaction-picker, reaction-option, message-more (touch),
+  editor, edit-input, edit-save, edit-cancel, edit-error, delete-confirm,
+  delete-confirm-yes, delete-confirm-no, message-error.
+  The boxes (under the feed in footer, under a thread in thread-footer):
+  composer, composer-box, composer-input, composer-attach, composer-send,
+  composer-error, composer-retry, composer-note, attachment-chips,
+  attachment-chip, attachment-thumb, attachment-remove, mention-list,
+  mention-option (mention-agent), mention-online.
+  A member tagged in a post: mention.
+- polynet-members: members, search, list, section (also section-online,
+  section-everyone), section-title, member (each one; also member-online,
+  member-you), avatar, presence-dot, member-name, member-handle, role-badge
+  (also role-owner, role-admin, role-moderator), more, empty, no-results,
+  state, gate, gate-text, sign-in, join, retry.
+- polynet-profile (the panel): panel, close, avatar, presence-dot, name,
+  handle, role-badge, online, you, bio, links, link, message,
+  message-note, state, retry, gate, gate-text, sign-in, join.
+
+Slots, for your own words:
+- polynet-channels: slot="header".
+- polynet-chat: slot="header" (replaces the "#channel" title),
+  slot="empty" (a channel with no posts), slot="signed-out",
+  slot="read-only" (the note where the member can't post or reply).
+- polynet-members: slot="header", slot="empty" (a community with no members
+  yet; a search with no match has its own line), slot="signed-out".
+slot="signed-out" replaces only the sign-in line: Polynet's "Sign in" button
+and "New here? Join" link stay under it, so don't add your own.
+
+Example, in your design's own layout:
+
+    <style>
+      .talk { display: grid; grid-template-columns: 220px 1fr 240px; gap: 32px; }
+      .talk polynet-chat { height: calc(100dvh - 160px); }
+      .talk polynet-members { max-height: calc(100dvh - 160px); overflow-y: auto; }
+      polynet-chat::part(message-author) { text-transform: uppercase; letter-spacing: .06em; }
+      polynet-members::part(role-badge) { border-color: var(--polynet-accent); }
+      @media (max-width: 960px) { .talk { grid-template-columns: minmax(0, 1fr); } }
+    </style>
+    <section class="talk">
+      <polynet-channels></polynet-channels>
+      <polynet-chat><span slot="empty">Nothing logged yet. First one out?</span></polynet-chat>
+      <polynet-members><h2 slot="header">The crew</h2></polynet-members>
+    </section>
+
+Where they usually go: a "room" (a page or section named in the
+community's words) with channels beside the chat, and the people as a
+column there or on their own page. On phones, one column:
+polynet-channels::part(list) { grid-auto-flow: column; overflow-x: auto }
+turns the channels into a scrolling row above the chat. Custom views (a
+route log, this week's sessions) are built with the SDK below, beside the
+blocks, never instead of them.
+
 ## Errors
 
 Failed calls throw PolynetError with .code, .message and .status. Codes:
@@ -164,15 +353,21 @@ Failed calls throw PolynetError with .code, .message and .status. Codes:
 
 ## Chat
 
-- channels() -> [{ slug, name, path, isGeneral, canPost, unread, mentioned }].
-  Use the one with isGeneral as the default. Hide the composer when canPost is
-  false. unread: posts the member hasn't seen; mentioned: someone @mentioned
+- channels() -> [{ slug, name, path, isGeneral, canPost, canReply, unread,
+  mentioned, seenThroughAt }] (seenThroughAt: when the member last read it,
+  ms, or null). Use the one with isGeneral as the default. In your own
+  composer, hide posting when canPost is false and replying when canReply
+  is. unread: posts the member hasn't seen; mentioned: someone @mentioned
   them there. markRead(channelSlug, throughAt?) clears both, up to now or up
   to throughAt (the newest post they saw, or a time); call it when the member
   is looking at the channel.
-- feed(channelSlug, { limit }) -> the newest posts (default 50), oldest first
-  (chat order; reverse() for newest-first). Older history isn't pageable yet.
-- thread(channelSlug, post.ref) -> the post, then its replies, oldest first.
+- feed(channelSlug, { limit, cursor }) -> the newest posts (default and at
+  most 50), oldest first (chat order; reverse() for newest-first). The list
+  has .cursor: pass it back (feed(slug, { cursor: posts.cursor })) for the
+  page before; null means you reached the start of the channel.
+- thread(channelSlug, post.ref) -> the post, then its replies, oldest first:
+  the whole thread (the SDK follows the server's pages, up to 2,000 replies).
+  The list has .complete: false only when a thread is longer than that.
 
 Each post or reply has:
   ref                 // "interaction:root:<id>" or "interaction:reply:<id>"
@@ -193,16 +388,19 @@ Each post or reply has:
 
 Writing:
 - post(channelSlug, text, { replyTo: post.ref, files: [File], askAgent: true,
-  mentions: [member] }) posts, or replies when replyTo is set. Returns { ref,
-  path, ... }. mentions notifies members (from members()); the text must
-  contain each one's "@" + member.handle.
+  mentions: [member], key }) posts, or replies when replyTo is set. Returns
+  { ref, path, ... }. mentions notifies members (from members()); the text
+  must contain each one's "@" + member.handle.
   askAgent asks the community agent to answer in the channel; Polynet puts
-  "@<community name> " in front of the text, which is how agent mentions read
-  everywhere. Editing that post later doesn't ask the agent again; keep the
-  The agent answers as a reply in that post's thread: a site that asks it in
-  public must show threads (reply_count, thread()), or the answer never
-  appears.
-  prefix in the edit box.
+  "@<community name> " in front of the text (unless it is already there),
+  which is how agent mentions read everywhere. The agent answers as a reply
+  in that post's thread: a site that asks it in public must show threads
+  (reply_count, thread()), or the answer never appears. Editing that post
+  later doesn't ask the agent again; keep the prefix in the edit box.
+  key (optional, 8-100 of A-Z a-z 0-9 _ -): your own idempotency key. Retry
+  a failed post with the same key, text and files and it never posts twice
+  (files already uploaded aren't sent again); make a new key for new
+  content.
 - edit(post, text) when post.can_edit; remove(post) when post.by_me.
 - react(ref, emoji, on) adds (on: true) or removes (on: false) the member's
   reaction on a post or reply. Returns { reacted, reaction_summary }.
@@ -248,7 +446,8 @@ own rather than avatar_url (which is the member's).
   bio, links { youtube, x, instagram } } (links null when unset): what any
   member sees of a fellow member in Polynet.
 - online() -> { online_count, online_count_capped, members: [{ ref, name,
-  handle, avatar_url }] }: who is here now (online_count_capped: "at least").
+  handle, avatar_url }] }: who is here now, the signed-in member included
+  (online_count_capped: "at least").
   watchOnline(onChange): onChange() runs now and whenever that changes; call
   online() then. Returns stop().
 - A signed-in member with the page open and visible counts as online: the SDK
@@ -301,12 +500,17 @@ The site is a folder of static files with an index.html. From that folder:
 
 The first run opens the browser to sign in with Polynet (the community's owner
 or an admin) and saves the community in polynet.json, so later deploys are just
-"npx @polynet/cli deploy".
+"npx @polynet/cli deploy". Add --staging for a community on Polynet's staging
+(sites at https://<community-slug>-staging.polynet.page); polynet.json
+remembers it.
 
 Every deploy checks the site first ("npx @polynet/cli check" runs the same
-checks alone). These stop a deploy until fixed: a page without
-<html lang>, a <title> or a viewport that allows zooming; an <img> without
-alt; a button or link with no text or aria-label. Warnings (unlabelled
+checks alone). These stop a deploy until fixed: no index.html at the
+site's root; no page (or, for a framework build, no script, not counting
+comments) places <polynet-channels>, <polynet-chat> or
+<polynet-members>; a page without <html lang>, a <title> or a viewport that
+allows zooming; an <img> without alt; a button or link with no text or
+aria-label. Warnings (unlabelled
 fields, removed focus outlines, animation without prefers-reduced-motion,
 innerHTML, positive tabindex) are printed but don't stop it.
 
@@ -340,30 +544,35 @@ community.site.deploy with input.files as "/path" -> { content, encoding }
 files and 5 MB. The same checks run there (site_checks_failed lists what to
 fix). The result has the live url.
 
-## Example: a minimal live feed
+## Example: a minimal site
 
-This shows behavior only. The markup and the look are yours to design.
+This shows structure only. The markup, the words and the look are yours.
 
-    <ul id="feed"></ul>
-    <form id="say"><input id="text"><button>Post</button></form>
-    <script type="module">
-      import polynet from "/__polynet/sdk.js";
-      const s = await polynet.session();
-      if (!s.signed_in) { polynet.signIn(); }
-      const general = (await polynet.channels()).find((c) => c.isGeneral);
-      async function render() {
-        const posts = await polynet.feed(general.slug);
-        document.getElementById("feed").replaceChildren(...posts.map((p) => {
-          const li = document.createElement("li");
-          li.append((p.actor.display_name ?? "Member") + ": ", polynet.markdown(p.text));
-          return li;
-        }));
-      }
-      await polynet.watch(general.slug, render); // renders now, then on every change
-      document.getElementById("say").onsubmit = async (e) => {
-        e.preventDefault();
-        await polynet.post(general.slug, document.getElementById("text").value);
-        document.getElementById("text").value = "";
-      };
-    </script>
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Dawn Patrol Run Club</title>
+      <script type="module" src="/__polynet/ui.js"></script>
+      <style>
+        :root { --polynet-accent: #f97316; --polynet-surface: #0b1020; }
+        .room { display: grid; grid-template-columns: 200px 1fr 240px; gap: 24px; }
+        .room polynet-chat { height: calc(100dvh - 120px); }
+        @media (max-width: 760px) { .room { grid-template-columns: minmax(0, 1fr); } }
+      </style>
+    </head>
+    <body>
+      <header><h1>Dawn Patrol</h1><polynet-account></polynet-account></header>
+      <main class="room">
+        <polynet-channels></polynet-channels>
+        <polynet-chat><p slot="empty">No miles logged yet. The river's still there.</p></polynet-chat>
+        <polynet-members><h2 slot="header">The pack</h2></polynet-members>
+      </main>
+      <script type="module">
+        import polynet from "/__polynet/sdk.js";
+        const s = await polynet.session(); // the public face and custom views start here
+      </script>
+    </body>
+    </html>
 `;

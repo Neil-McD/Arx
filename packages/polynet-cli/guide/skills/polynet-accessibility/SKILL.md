@@ -15,6 +15,7 @@ work for every member.
 
 | Error | Fix |
 |---|---|
+| No page has `<polynet-channels>`, `<polynet-chat>` or `<polynet-members>` | Place the block (`polynet-build-site` shows where); the blocks bring their own keyboard and screen-reader support |
 | `<html>` has no `lang` | `<html lang="en">` (the site's language) |
 | No `<title>` | A title with the community's name; update it per view |
 | No viewport, or zoom blocked | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or `maximum-scale=1` |

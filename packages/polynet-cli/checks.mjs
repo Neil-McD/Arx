@@ -1,6 +1,8 @@
 // The checks a community site passes before it goes live, shared by
 // `polynet check`, `polynet deploy` and the MCP's community.site.deploy.
-// Errors block the deploy; warnings are printed. They read the files as text
+// Errors block the deploy; warnings are printed. Every site must place
+// Polynet's three blocks (channels, chat, members), so the social core is
+// there on every site whatever it looks like. They read the files as text
 // (no browser), so they catch what is certain from the source and leave the
 // rest to the polynet-accessibility skill. Plain JavaScript with no imports,
 // so it runs in Node and in Polynet's backend alike.
@@ -57,6 +59,78 @@ function checkPage(path, html, problem) {
   }
 }
 
+// The blocks every site places: what each is, and where it usually goes.
+const REQUIRED_BLOCKS = [
+  ["polynet-channels", "the channels members can read, with unread and @-mention badges", "beside the chat, where members pick a channel"],
+  ["polynet-chat", "the conversation, with its composer, threads, reactions and @-tags", "where members talk, and give it a height"],
+  ["polynet-members", "everyone in the community, online first, each opening their profile", "in a people page or section"],
+];
+
+// JavaScript without its comments, so a commented-out block doesn't count.
+// Strings, template literals and regex literals are kept whole ("https://…"
+// and /[/*]/ aren't comments). A slash is read as a regex where one can start
+// (after an operator, a bracket or a keyword like return). Unusual syntax may
+// be misread; then a block can go uncounted and the check asks for it.
+const REGEX_AFTER = /(^|[(,=:[!&|?{};+\-*%<>~^]|\b(return|typeof|case|do|else|in|of|void|yield|await|delete|throw|new))$/;
+function stripScriptComments(code) {
+  const out = [];
+  let tail = ""; // the last few characters kept, to tell a regex from a division
+  const keep = (text) => { out.push(text); tail = (tail + text).slice(-12); };
+  let i = 0;
+  while (i < code.length) {
+    const char = code[i];
+    const next = code[i + 1];
+    if (char === "/" && next === "/") {
+      while (i < code.length && code[i] !== "\n") i += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? code.length : end + 2;
+      keep(" ");
+      continue;
+    }
+    let end = i + 1;
+    if (char === '"' || char === "'" || char === "`") {
+      let j = i + 1;
+      while (j < code.length && code[j] !== char && (char === "`" || code[j] !== "\n")) j += code[j] === "\\" ? 2 : 1;
+      end = j + 1;
+    } else if (char === "/" && REGEX_AFTER.test(tail.trimEnd())) {
+      let inClass = false;
+      for (let j = i + 1; j < code.length && code[j] !== "\n"; j += 1) {
+        if (code[j] === "\\") j += 1;
+        else if (code[j] === "[") inClass = true;
+        else if (code[j] === "]") inClass = false;
+        else if (code[j] === "/" && !inClass) { end = j + 1; break; }
+      }
+    } else if (char === "\\") {
+      end = i + 2;
+    } else {
+      // Plain code up to the next character that could start something.
+      while (end < code.length && !"/\"'`\\".includes(code[end])) end += 1;
+    }
+    keep(code.slice(i, end));
+    i = end;
+  }
+  return out.join("");
+}
+
+// A page's markup without HTML comments, and its inline scripts without
+// JavaScript comments.
+const SCRIPT_TYPE = /^(|module|(text|application)\/(java|ecma)script)$/i;
+function pageSource(html) {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/(<script\b[^>]*>)([\s\S]*?)(<\/script\s*>)/gi, (whole, open, code, close) =>
+    SCRIPT_TYPE.test((attr(open, "type") ?? "").trim()) ? open + stripScriptComments(code) + close : whole);
+}
+
+// A block counts when a page has its tag, or when a script names it: a framework
+// build (Vite, React, Lit) creates it from a bundle, never from the HTML.
+function placesBlock(name, pages, scripts) {
+  const tag = new RegExp(`<${name}[\\s>/]|["'\`]${name}["'\`]`, "i");
+  const named = new RegExp(`(^|[^\\w-])${name}(?![\\w-])`);
+  return pages.some((file) => tag.test(pageSource(file.text))) || scripts.some((file) => named.test(stripScriptComments(file.text)));
+}
+
 // files: [{ path: "/index.html", text }] (other files may be passed; they're ignored).
 export function checkSite(files) {
   const errors = [];
@@ -67,9 +141,19 @@ export function checkSite(files) {
   const scripts = checked.filter((file) => /\.m?js$/i.test(file.path));
   const pages = checked.filter((file) => /\.html?$/i.test(file.path));
 
+  if (!files.some((file) => file.path === "/index.html")) {
+    problem("error", "/", "The site has no index.html at its root: it's the page everyone lands on. " +
+      "Add index.html to the folder you check and deploy (for a framework build, its output folder, like dist).");
+  }
   // The shell isn't checked: the edge adds /__polynet/ui.js to every page, and
   // ui.js shows <polynet-account> on any page that doesn't place one.
   for (const page of pages) checkPage(page.path, page.text, problem);
+  const placed = new Set(REQUIRED_BLOCKS.map(([name]) => name).filter((name) => placesBlock(name, pages, scripts)));
+  for (const [name, what, where] of REQUIRED_BLOCKS) {
+    if (placed.has(name)) continue;
+    problem("error", "/", `No page has <${name}>, and every site needs it: ${what}. ` +
+      `Add <${name}></${name}> ${where}. The polynet-build-site skill shows how.`);
+  }
 
   const allCss = css.map((file) => file.text).join("\n") + pages.map((file) => file.text).join("\n");
   for (const file of [...css, ...pages]) {
@@ -93,8 +177,9 @@ export function checkSite(files) {
   if (togglesHidden && /\bdisplay\s*:/i.test(allCss) && !/\[hidden\]/.test(allCss)) {
     problem("warning", "/", "Sections are shown and hidden with the hidden attribute, but a CSS display rule can override it. Add [hidden] { display: none !important; }.");
   }
-  // A public question to the agent is answered in that post's thread.
-  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript)) {
+  // A public question to the agent is answered in that post's thread, which
+  // <polynet-chat> shows; a custom feed has to read threads itself.
+  if (/askAgent\s*:/.test(allScript) && !/\.thread\s*\(/.test(allScript) && !placed.has("polynet-chat")) {
     problem("warning", "/", "Posts can ask the agent (post(..., { askAgent })) but the site never reads threads, so the agent's answers won't appear. Show replies with polynet.thread().");
   }
   return { errors, warnings };

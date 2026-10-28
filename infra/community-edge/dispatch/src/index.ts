@@ -2,6 +2,8 @@
 //
 //   /__polynet/auth/*  "Sign in with Polynet" for this community's own domain
 //   /__polynet/api     same-origin proxy to the Polynet backend, as the signed-in member
+//   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat> and its composer,
+//                      <polynet-members>, the profile panel), loaded by ui.js
 //   everything else    the community's own front end (a user Worker with static assets)
 //
 // The member session lives only in an HttpOnly cookie on the community's domain.
@@ -10,9 +12,21 @@
 
 import { SDK_SOURCE } from "./sdk";
 import { LLMS_TXT } from "./llms";
-import { UI_SOURCE } from "./ui";
+import { UI_CSS, UI_SOURCE } from "./ui";
+import { KIT_SOURCE } from "./blocks/kit";
+import { CHANNELS_SOURCE } from "./blocks/channels";
+import { CHAT_SOURCE } from "./blocks/chat";
+import { COMPOSER_SOURCE } from "./blocks/composer";
+import { MEMBERS_SOURCE } from "./blocks/members";
+import { PROFILE_SOURCE } from "./blocks/profile";
 // The live-updates client, served from this domain so no community site loads a third-party script.
 import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js";
+
+// Polynet's blocks, each its own module at /__polynet/blocks/<name>.js (ui.js loads them).
+const BLOCKS: Record<string, string> = {
+  kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE, composer: COMPOSER_SOURCE, members: MEMBERS_SOURCE, profile: PROFILE_SOURCE,
+};
+const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
 
@@ -20,7 +34,11 @@ type Fetcher = { fetch(request: Request): Promise<Response> };
 
 // Cloudflare's streaming HTML rewriter (a Workers global), as far as the edge uses it.
 type RewriterText = { before(content: string, options?: { html?: boolean }): unknown; append(content: string, options?: { html?: boolean }): unknown };
-type RewriterElement = { getAttribute(name: string): string | null; onEndTag(handler: (tag: RewriterText) => void): void };
+type RewriterElement = {
+  getAttribute(name: string): string | null;
+  prepend(content: string, options?: { html?: boolean }): unknown;
+  onEndTag(handler: (tag: RewriterText) => void): void;
+};
 interface Rewriter {
   on(selector: string, handlers: { element(element: RewriterElement): void }): Rewriter;
   onDocument(handlers: { end(end: RewriterText): void }): Rewriter;
@@ -438,10 +456,24 @@ export default {
       });
     }
     if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
-    if (url.pathname === "/__polynet/ui.js") {
-      return new Response(UI_SOURCE, {
+    if (url.pathname.startsWith(BLOCKS_PREFIX)) {
+      const name = /^([a-z]+)\.js$/.exec(url.pathname.slice(BLOCKS_PREFIX.length))?.[1];
+      if (!name || !Object.hasOwn(BLOCKS, name)) {
+        return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      return new Response(BLOCKS[name], {
         headers: {
           "Content-Type": "text/javascript; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+    if (url.pathname === "/__polynet/ui.js" || url.pathname === "/__polynet/ui.css") {
+      const css = url.pathname.endsWith(".css");
+      return new Response(css ? UI_CSS : UI_SOURCE, {
+        headers: {
+          "Content-Type": css ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8",
           "Cache-Control": "public, max-age=300",
           "X-Content-Type-Options": "nosniff",
         },
@@ -541,23 +573,36 @@ function untransformed(response: Response): Response {
 
 const SHELL_SRC = /^\/__polynet\/ui\.js(\?.*)?$/;
 const SHELL_TAG = '<script type="module" src="/__polynet/ui.js"></script>';
+const SHELL_STYLE_TAG = '<link rel="stylesheet" href="/__polynet/ui.css">';
 
 // Every page carries the Polynet shell, including one whose bundler moved the
 // ui.js import into its own script (a second load is free: modules run once).
-// ui.js then puts <polynet-account> in the corner if the page has none.
+// ui.js then puts <polynet-account> in the corner if the page has none. Its
+// stylesheet goes first in <head> (or <body>), before anything renders, so a
+// block's slot content stays hidden until the block is defined.
 export function withShell(response: Response, Rewriter = typeof HTMLRewriter === "undefined" ? undefined : HTMLRewriter): Response {
   if (!Rewriter || !response.body || !(response.headers.get("content-type") ?? "").includes("text/html")) return response;
   let present = false;
   let added = false;
+  let styled = false;
   const add = (at: RewriterText, where: "before" | "append") => {
     if (present || added) return;
     added = true;
     at[where](SHELL_TAG, { html: true });
   };
+  const style = (at: RewriterElement) => {
+    if (styled) return;
+    styled = true;
+    at.prepend(SHELL_STYLE_TAG, { html: true });
+  };
   return new Rewriter()
     .on("script[src]", { element(element) { if (SHELL_SRC.test(element.getAttribute("src") ?? "")) present = true; } })
-    .on("body", { element(element) { element.onEndTag((end) => add(end, "before")); } })
-    // A page with no </body> gets it at the very end, which browsers still read as the body.
-    .onDocument({ end(end) { add(end, "append"); } })
+    .on("head", { element: style })
+    .on("body", { element(element) { style(element); element.onEndTag((end) => add(end, "before")); } })
+    // A page with no </body> gets them at the very end, which browsers still read as the body.
+    .onDocument({ end(end) {
+      if (!styled) { styled = true; end.append(SHELL_STYLE_TAG, { html: true }); }
+      add(end, "append");
+    } })
     .transform(response);
 }

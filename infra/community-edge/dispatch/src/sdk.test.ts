@@ -80,20 +80,98 @@ test("feed returns posts oldest first; errors surface as PolynetError", async ()
   await expect(polynet.feed("missing")).rejects.toMatchObject({ name: "PolynetError", code: "semantic_not_found" });
 });
 
+test("feed reads past a page of only replies instead of returning no posts", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (!input.cursor) return ok({ entries: [{ ref: "interaction:reply:9", object_type: "reply" }], next_cursor: "c1", truncated: true });
+      return ok({ entries: [{ ref: "interaction:root:1", object_type: "root" }], next_cursor: null, truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const posts = await polynet.feed("general", { limit: 1 });
+  expect(posts.map((entry: any) => entry.ref)).toEqual(["interaction:root:1"]);
+  expect(posts.cursor).toBeNull();
+  expect(calls.filter((call) => call.body?.tool === "polynet_list" && String(call.body.input.path).includes("/channels/"))).toHaveLength(2);
+});
+
+test("feed pages back through history with the list's cursor", async () => {
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (!input.cursor) return ok({ entries: [{ ref: "interaction:root:2", object_type: "root" }], next_cursor: "1700", truncated: true });
+      return ok({ entries: [{ ref: "interaction:root:1", object_type: "root" }], next_cursor: null, truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const newest = await polynet.feed("general", { limit: 20 });
+  expect(newest.map((entry: any) => entry.ref)).toEqual(["interaction:root:2"]);
+  expect(newest.cursor).toBe("1700");
+  const older = await polynet.feed("general", { cursor: newest.cursor });
+  expect(older.map((entry: any) => entry.ref)).toEqual(["interaction:root:1"]);
+  expect(older.cursor).toBeNull();
+  const inputs = calls.filter((call) => call.body?.tool === "polynet_list").map((call) => call.body.input);
+  expect(inputs.slice(-2)).toEqual([
+    { path: "/communities/run-club/channels/general/", limit: 20 },
+    { path: "/communities/run-club/channels/general/", limit: 50, cursor: "1700" },
+  ]);
+});
+
+test("thread reads the whole thread, following the server's pages; past the cap it says it isn't complete", async () => {
+  const reply = (n: number) => ({ type: "interaction", ref: "interaction:reply:" + n, object_type: "reply", text: "r" + n });
+  let endless = false;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { input } = JSON.parse(String(init.body));
+      if (endless) return ok({ entries: [reply(Number(input.cursor || 0) + 1)], next_cursor: String(Number(input.cursor || 0) + 1), truncated: true });
+      // As the executor lists a thread: the post and 100 replies, then the rest after the cursor.
+      if (!input.cursor) {
+        return ok({ entries: [{ type: "interaction", ref: "interaction:root:p", object_type: "root", text: "post" }, ...Array.from({ length: 100 }, (_, i) => reply(i + 1))],
+          next_cursor: "1700000000100", truncated: true });
+      }
+      return ok({ entries: [reply(101), reply(102)], next_cursor: null, truncated: false });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const whole = await polynet.thread("general", "interaction:root:p");
+  expect(whole).toHaveLength(103);
+  expect(whole[0].ref).toBe("interaction:root:p");
+  expect(whole.at(-1).ref).toBe("interaction:reply:102");
+  expect(whole.complete).toBe(true);
+  const inputs = calls.filter((call) => call.body?.tool === "polynet_list").map((call) => call.body.input).slice(-2);
+  expect(inputs).toEqual([
+    { path: "/communities/run-club/channels/general/interaction:root:p/" },
+    { path: "/communities/run-club/channels/general/interaction:root:p/", cursor: "1700000000100" },
+  ]);
+
+  endless = true;
+  const before = calls.length;
+  const capped = await polynet.thread("general", "interaction:root:p");
+  expect(calls.length - before).toBe(20);
+  expect(capped).toHaveLength(20);
+  expect(capped.complete).toBe(false);
+});
+
 test("channels follows every page of the listing", async () => {
   const calls = stubFetch({
     "/__polynet/auth/session": signedIn,
     "/__polynet/api": (_url, init) => {
       const { input } = JSON.parse(String(init.body));
-      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true, unread: true, mentioned: true }], truncated: true, next_cursor: "page2" });
-      return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false } }], truncated: false });
+      if (!input.cursor) return ok({ entries: [{ type: "channel", slug: "general", name: "General", is_general: true, unread: true, mentioned: true, seen_through_at: 1700 }], truncated: true, next_cursor: "page2" });
+      return ok({ entries: [{ type: "channel", slug: "crew", name: "Crew", capabilities: { canPost: false, canReply: false } }], truncated: false });
     },
   });
   const polynet = await loadSdk();
   await polynet.session();
   expect(await polynet.channels()).toEqual([
-    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, unread: true, mentioned: true },
-    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, unread: false, mentioned: false },
+    { slug: "general", name: "General", path: undefined, isGeneral: true, canPost: true, canReply: true, unread: true, mentioned: true, seenThroughAt: 1700 },
+    { slug: "crew", name: "Crew", path: undefined, isGeneral: false, canPost: false, canReply: false, unread: false, mentioned: false, seenThroughAt: null },
   ]);
   const channelCalls = calls.filter((call) => call.body?.input?.path === "/communities/run-club/channels/");
   expect(channelCalls.map((call) => call.body.input.cursor)).toEqual([undefined, "page2"]);
@@ -306,6 +384,136 @@ test("post mentions members by ref, alongside an agent mention", async () => {
   await polynet.post("general", "@sam @ava see you at 6", { mentions: [{ ref: "user:sam1", handle: "sam" }, "user:ava2"], askAgent: true });
   const write = calls.find((call) => call.body?.tool === "polynet_write")!.body.input;
   expect(write.content.mentions).toEqual([{ userId: "sam1" }, { userId: "ava2" }, { agentKey: "community_agent" }]);
+});
+
+test("a post retried with its own key reuses the key and never uploads a file twice", async () => {
+  let failWrites = 1;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/upload": (_url, init) => {
+      const name = decodeURIComponent((init.headers as Record<string, string>)["x-polynet-file-name"]);
+      return Response.json({ ok: true, attachment: { attachmentId: "att-" + name } });
+    },
+    "/__polynet/api": (_url, init) => {
+      const { tool } = JSON.parse(String(init.body));
+      if (tool === "polynet_write" && failWrites-- > 0) return Response.json({ ok: false, code: "community_chat_write_failed" });
+      return ok({ ref: "interaction:root:new" });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" });
+  const options = { files: [photo], key: "retry-key-1" };
+  await expect(polynet.post("general", "Look", options)).rejects.toMatchObject({ code: "community_chat_write_failed" });
+  expect(await polynet.post("general", "Look", options)).toMatchObject({ ref: "interaction:root:new" });
+  expect(calls.filter((call) => call.url === "/__polynet/upload")).toHaveLength(1);
+  const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
+  expect(writes.map((input) => input.idempotency_key)).toEqual(["retry-key-1", "retry-key-1"]);
+  expect(writes[1].content.attachments).toEqual([{ attachmentId: "att-photo.png" }]);
+  // A different key uploads again; a malformed one is refused before anything is sent.
+  await polynet.post("general", "Look", { files: [photo], key: "another-key" });
+  expect(calls.filter((call) => call.url === "/__polynet/upload")).toHaveLength(2);
+  await expect(polynet.post("general", "x", { key: "bad key!" })).rejects.toMatchObject({ code: "invalid_tool_args" });
+});
+
+test("one File in two posts keeps each post's upload, so retrying the first never re-uploads", async () => {
+  let failFirst = 1;
+  let n = 0;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/upload": () => Response.json({ ok: true, attachment: { attachmentId: "att-" + ++n } }),
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (tool === "polynet_write" && input.idempotency_key === "first-key-1" && failFirst-- > 0) return Response.json({ ok: false, code: "community_chat_write_failed" });
+      return ok({ ref: "interaction:root:new" });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+  await expect(polynet.post("general", "One", { files: [photo], key: "first-key-1" })).rejects.toMatchObject({ code: "community_chat_write_failed" });
+  await polynet.post("general", "Two", { files: [photo], key: "second-key-1" });
+  await polynet.post("general", "One", { files: [photo], key: "first-key-1" });
+  const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => [call.body.input.idempotency_key, call.body.input.content.attachments]);
+  expect(writes).toEqual([
+    ["first-key-1", [{ attachmentId: "att-1" }]],
+    ["second-key-1", [{ attachmentId: "att-2" }]],
+    ["first-key-1", [{ attachmentId: "att-1" }]],
+  ]);
+});
+
+test("a message over the server's 8,000-character limit is refused before anything is uploaded or sent", async () => {
+  const calls = stubFetch({ "/__polynet/auth/session": signedIn, "/__polynet/api": () => ok({ ref: "interaction:root:new" }) });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+  await expect(polynet.post("general", "x".repeat(8001), { files: [photo] })).rejects.toMatchObject({ code: "message_too_long" });
+  expect(calls.filter((call) => call.url === "/__polynet/upload" || call.body?.tool === "polynet_write")).toHaveLength(0);
+  await polynet.post("general", "x".repeat(8000));
+  expect(calls.filter((call) => call.body?.tool === "polynet_write")).toHaveLength(1);
+});
+
+test("a retry uploads again a file whose upload the server has let lapse, if no write has claimed it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    let uploads = 0;
+    const calls = stubFetch({
+      "/__polynet/auth/session": signedIn,
+      "/__polynet/upload": (_url, init) => {
+        const name = decodeURIComponent((init.headers as Record<string, string>)["x-polynet-file-name"]);
+        // The second file fails the first time, so no write goes out.
+        if (name === "notes.pdf" && uploads++ === 0) return Response.json({ ok: false, code: "upload_failed" }, { status: 500 });
+        return Response.json({ ok: true, attachment: { attachmentId: "att-" + name + "-" + Date.now() } });
+      },
+      "/__polynet/api": () => ok({ ref: "interaction:root:new" }),
+    });
+    const polynet = await loadSdk();
+    await polynet.session();
+    const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+    const notes = new File([new Uint8Array([2])], "notes.pdf", { type: "application/pdf" });
+    const options = { files: [photo, notes], key: "lapsed-key-1" };
+    await expect(polynet.post("general", "Look", options)).rejects.toMatchObject({ code: "upload_failed" });
+    vi.setSystemTime(Date.now() + 26 * 60_000);
+    await polynet.post("general", "Look", options);
+    const uploaded = calls.filter((call) => call.url === "/__polynet/upload");
+    expect(uploaded).toHaveLength(4);
+    const [write] = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
+    expect(write.idempotency_key).toBe("lapsed-key-1");
+    expect(write.content.attachments.map((a: any) => a.attachmentId)).toEqual([`att-photo.png-${Date.now()}`, `att-notes.pdf-${Date.now()}`]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a post whose uploads lapsed before it claimed them uploads once more under a new key, which later retries keep", async () => {
+  const writeResults = [
+    Response.json({ ok: false, code: "community_chat_write_failed", message: "Server Error\nUncaught Error: community_attachment_claim_invalid" }),
+    Response.json({ ok: false, code: "community_chat_write_failed", message: "Try again." }),
+  ];
+  let uploads = 0;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/upload": () => Response.json({ ok: true, attachment: { attachmentId: "att-" + ++uploads } }),
+    "/__polynet/api": (_url, init) => {
+      const { tool } = JSON.parse(String(init.body));
+      if (tool === "polynet_write") return writeResults.shift() ?? ok({ ref: "interaction:root:new" });
+      return ok({});
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+  const options = { files: [photo], key: "claimed-key-1" };
+  await expect(polynet.post("general", "Look", options)).rejects.toMatchObject({ code: "community_chat_write_failed", message: "Try again." });
+  expect(await polynet.post("general", "Look", options)).toMatchObject({ ref: "interaction:root:new" });
+  const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
+  const [first, second, third] = writes.map((input) => input.idempotency_key);
+  expect(writes).toHaveLength(3);
+  expect(first).toBe("claimed-key-1");
+  expect(second).toMatch(/^[a-f0-9]{32}$/);
+  expect(third).toBe(second);
+  expect(writes.map((input) => input.content.attachments)).toEqual([[{ attachmentId: "att-1" }], [{ attachmentId: "att-2" }], [{ attachmentId: "att-2" }]]);
+  expect(calls.filter((call) => call.url === "/__polynet/upload")).toHaveLength(2);
 });
 
 test("watch passes who's typing, says when posts changed, and drops a typist nobody renewed", async () => {

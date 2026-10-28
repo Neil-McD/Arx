@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ./LICENSE-MIT)
 // The Polynet shell, served at /__polynet/ui.js on every community site:
 // <polynet-account>, the member's way to their account, their
-// communities, Discover, messages and settings. Its structure, keyboard
+// communities, Discover, messages and settings. It also loads Polynet's
+// blocks (/__polynet/blocks/<name>.js) on pages that place them, and opens the
+// profile panel for ?member= links and "polynet:profile". Its structure, keyboard
 // behavior and accessibility are Polynet's; its look follows the site through
 // CSS custom properties. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
@@ -262,4 +264,56 @@ function ensureShell() {
 const FALLBACK_DELAY_MS = 1500;
 if (document.readyState === "complete") setTimeout(ensureShell, FALLBACK_DELAY_MS);
 else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELAY_MS), { once: true });
+
+// Polynet's blocks load only on pages that place them, now or later (a
+// single-page app may render <polynet-chat> after a route change).
+const BLOCKS = { "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members" };
+const pendingBlocks = new Set(Object.keys(BLOCKS));
+let blockCheck = false;
+function loadBlocks() {
+  blockCheck = false;
+  for (const tag of Array.from(pendingBlocks)) {
+    if (!document.querySelector(tag)) continue;
+    pendingBlocks.delete(tag);
+    import("/__polynet/blocks/" + BLOCKS[tag] + ".js").catch(() => pendingBlocks.add(tag));
+  }
+  if (!pendingBlocks.size) blockObserver.disconnect();
+}
+const blockObserver = new MutationObserver(() => {
+  if (!blockCheck) { blockCheck = true; queueMicrotask(loadBlocks); }
+});
+blockObserver.observe(document.documentElement, { childList: true, subtree: true });
+loadBlocks();
+
+// Profiles open over any page: from Polynet's blocks, from a ?member=<handle>
+// link (Back closes it), or from the site's own code:
+//   document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }));
+// The panel (/__polynet/blocks/profile.js) loads the first time one opens.
+let profiles = null;
+function withProfiles(run) {
+  if (!profiles) profiles = import("/__polynet/blocks/profile.js");
+  profiles.then(run, () => { profiles = null; });
+}
+// Where focus was, inside blocks too, so closing the panel can put it back.
+function focused() {
+  let node = document.activeElement;
+  while (node && node.shadowRoot && node.shadowRoot.activeElement) node = node.shadowRoot.activeElement;
+  return node && node !== document.body ? node : null;
+}
+document.addEventListener("polynet:profile", (event) => {
+  const detail = (event && event.detail) || {};
+  const opener = focused();
+  withProfiles((module) => module.openProfile({ handle: detail.handle, ref: detail.ref }, opener));
+});
+const memberInUrl = () => new URLSearchParams(location.search).has("member");
+window.addEventListener("popstate", () => { if (memberInUrl()) withProfiles((module) => module.followUrl()); });
+if (memberInUrl()) withProfiles((module) => module.followUrl());
 `;
+
+// Served at /__polynet/ui.css, which the edge links at the top of every page:
+// until a block's script defines it, its tag hides, so a site's slot content
+// ("Quiet in here.") never flashes on screen before the block takes it in. A
+// stylesheet from the site's own domain, not an inline <style>, so a site's
+// Content-Security-Policy (style-src 'self') allows it.
+export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defined), polynet-chat:not(:defined),\n" +
+  "polynet-members:not(:defined), polynet-profile:not(:defined) { visibility: hidden; }\n";

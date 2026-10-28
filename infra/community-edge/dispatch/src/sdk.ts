@@ -149,7 +149,9 @@ async function channels() {
       return {
         slug: entry.slug, name: entry.name, path: entry.path, isGeneral: entry.is_general === true,
         canPost: !entry.capabilities || entry.capabilities.canPost !== false,
+        canReply: !entry.capabilities || entry.capabilities.canReply !== false,
         unread: entry.unread === true, mentioned: entry.mentioned === true,
+        seenThroughAt: typeof entry.seen_through_at === "number" ? entry.seen_through_at : null,
       };
     });
 }
@@ -166,17 +168,50 @@ async function markRead(channel, throughAt) {
   return call("community.channel.mark_read", input);
 }
 
-// Posts in a channel, oldest first. Each has ref, path, snippet, actor, reactions,
-// reacted_by_me, by_me, reply_count, attachments, created_at.
+// Posts in a channel, newest page, oldest first. Each has ref, path, snippet, actor,
+// reactions, reacted_by_me, by_me, reply_count, attachments, created_at. The list's
+// cursor fetches the page before it (feed(channel, { cursor: posts.cursor })); null
+// at the start of the channel.
+// The channel lists posts and replies together, newest first, so a page can
+// hold only replies: read on (up to FEED_PAGES pages) until there are posts or
+// the channel's start. An empty list with a cursor means "not read that far",
+// never "no posts".
+const FEED_PAGES = 10;
 async function feed(channel, options) {
-  const value = await list(channelPath(channel), { limit: (options && options.limit) || 50 });
-  return (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize);
+  options = options || {};
+  const limit = options.limit || 50;
+  let cursor = options.cursor || null;
+  let posts = [];
+  for (let page = 0; page < FEED_PAGES; page += 1) {
+    const value = await list(channelPath(channel), cursor ? { limit: limit, cursor: cursor } : { limit: limit });
+    posts = (value.entries || []).filter(function (entry) { return entry.object_type === "root"; }).reverse().map(normalize).concat(posts);
+    cursor = value.next_cursor || null;
+    if (posts.length || !cursor) break;
+  }
+  posts.cursor = cursor;
+  return posts;
 }
 
-// A post and its replies, oldest first.
+// A post and its replies, oldest first: the whole thread. The server lists a
+// thread a page of replies at a time (the post first, then 100 replies per
+// page); this follows the pages, up to THREAD_PAGES of them. In a thread longer
+// than that the list holds the post and its first replies and
+// list.complete is false; otherwise it is true.
+const THREAD_PAGES = 20;
 async function thread(channel, postRef) {
-  const value = await list(channelPath(channel) + postRef + "/");
-  return (value.entries || []).map(normalize);
+  const path = channelPath(channel) + postRef + "/";
+  let entries = [];
+  let cursor = null;
+  let complete = false;
+  for (let page = 0; page < THREAD_PAGES; page += 1) {
+    const value = await list(path, cursor ? { cursor: cursor } : {});
+    entries = entries.concat(value.entries || []);
+    if (!value.next_cursor) { complete = true; break; }
+    cursor = value.next_cursor;
+  }
+  const posts = entries.map(normalize);
+  posts.complete = complete;
+  return posts;
 }
 
 async function upload(file, options) {
@@ -195,18 +230,68 @@ async function upload(file, options) {
   return { attachmentId: body.attachment.attachmentId };
 }
 
+// Files already uploaded under a key, so a retry with that key doesn't send
+// them twice: file -> { key, attachmentId, at }. The server holds an upload the
+// post hasn't claimed for 30 minutes (communityAttachmentUploads.ts), so one
+// older than UPLOAD_REUSE_MS is uploaded again, unless a write with its key
+// has already gone out: the server's receipt for that key names those uploads.
+const UPLOAD_REUSE_MS = 25 * 60 * 1000;
+// File -> (key -> upload): one File can go out in posts with different keys,
+// and each key's receipt names its own uploads.
+const uploaded = new WeakMap();
+// The server's limit; anything longer would be cut short silently.
+const MAX_TEXT_CHARS = 8000;
+function checkLength(text) {
+  if (text.length > MAX_TEXT_CHARS) {
+    throw new PolynetError("message_too_long", "A message can be up to " + MAX_TEXT_CHARS.toLocaleString("en-US") + " characters; this one has " + text.length.toLocaleString("en-US") + ".");
+  }
+}
+const keysSent = new Set();
+// A key whose uploads lapsed before its post claimed them can never post: the
+// key that replaced it.
+const keysReplaced = new Map();
+
+function attachmentClaimFailed(error) {
+  return !!error && error.code === "community_chat_write_failed"
+    && /community_attachment_(claim_invalid|already_claimed)/.test(String(error.message || ""));
+}
+
+async function uploadAll(files, channel, key, replyTo) {
+  const attachments = [];
+  for (const file of files) {
+    const byKey = file && typeof file === "object" ? uploaded.get(file) : null;
+    const done = byKey && byKey.get(key);
+    if (done && (keysSent.has(key) || Date.now() - done.at < UPLOAD_REUSE_MS)) {
+      attachments.push({ attachmentId: done.attachmentId });
+      continue;
+    }
+    const attachment = await upload(file, { channel: channel, key: key, replyTo: replyTo });
+    if (file && typeof file === "object") {
+      if (!uploaded.has(file)) uploaded.set(file, new Map());
+      uploaded.get(file).set(key, { attachmentId: attachment.attachmentId, at: Date.now() });
+    }
+    attachments.push(attachment);
+  }
+  return attachments;
+}
+
 // Post to a channel, or reply when replyTo is a post ref. files: File[] to attach.
 // askAgent: true asks the community agent, which replies in the channel.
 // mentions: members (from members(), or their refs) to notify; the text must
-// contain each one's @handle.
+// contain each one's @handle. key: your own idempotency key (8-100 of A-Z a-z
+// 0-9 _ -): retrying a failed post with the same key, text and files never
+// posts it twice.
 async function post(channel, text, options) {
   options = options || {};
-  const key = newKey();
-  const attachments = [];
-  for (const file of options.files || []) {
-    attachments.push(await upload(file, { channel: channel, key: key, replyTo: options.replyTo }));
+  if (options.key !== undefined && !/^[A-Za-z0-9_-]{8,100}$/.test(String(options.key))) {
+    throw new PolynetError("invalid_tool_args", "key is 8-100 letters, digits, _ or -.");
   }
+  let key = options.key ? String(options.key) : newKey();
+  while (keysReplaced.has(key)) key = keysReplaced.get(key);
+  const files = options.files || [];
   let body = String(text || "").trim();
+  checkLength(body);
+  let attachments = await uploadAll(files, channel, key, options.replyTo);
   const mentions = (options.mentions || []).map(function (member) {
     return { userId: String((member && member.ref) || member).replace("user:", "") };
   });
@@ -215,11 +300,30 @@ async function post(channel, text, options) {
     if (body.toLowerCase().indexOf(("@" + name).toLowerCase()) === -1) body = "@" + name + " " + body;
     mentions.push({ agentKey: "community_agent" });
   }
+  checkLength(body);
   const content = { text: body };
   if (options.replyTo) content.root_id = rootIdOf(options.replyTo);
   if (attachments.length) content.attachments = attachments;
   if (mentions.length) content.mentions = mentions;
-  const result = await write({ path: channelPath(channel), mode: options.replyTo ? "append" : "create", content: content, idempotency_key: key });
+  const send = function () {
+    keysSent.add(key);
+    return write({ path: channelPath(channel), mode: options.replyTo ? "append" : "create", content: content, idempotency_key: key });
+  };
+  let result;
+  try {
+    result = await send();
+  } catch (error) {
+    if (!attachments.length || !attachmentClaimFailed(error)) throw error;
+    // The uploads lapsed before the post claimed them, so nothing posted under
+    // this key, and its receipt ties the key to them. Upload again, once,
+    // under a new key, and send later retries of the old key there too.
+    const fresh = newKey();
+    keysReplaced.set(key, fresh);
+    key = fresh;
+    attachments = await uploadAll(files, channel, key, options.replyTo);
+    content.attachments = attachments;
+    result = await send();
+  }
   typing(channel, false, { thread: options.replyTo });
   return result;
 }
@@ -242,7 +346,10 @@ function typing(channel, on, options) {
 }
 
 // Edit or delete your own post or reply (entry from feed/thread, or its path).
-const edit = function (entry, text) { return write({ path: entry.path || entry, mode: "update", content: { text: text } }); };
+const edit = function (entry, text) {
+  checkLength(String(text || "").trim());
+  return write({ path: entry.path || entry, mode: "update", content: { text: text } });
+};
 const remove = function (entry) { return write({ path: entry.path || entry, mode: "delete", content: {} }); };
 
 // Set your reaction on a post or reply: on true adds it, false removes it.

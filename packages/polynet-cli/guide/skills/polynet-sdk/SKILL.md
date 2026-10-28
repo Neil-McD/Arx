@@ -1,12 +1,19 @@
 ---
 name: polynet-sdk
-description: Read and write a Polynet community's data from its site with the Polynet SDK (session and sign-in, channels, unread and mentions, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, safe markdown). Use whenever site code needs community data or a member action.
+description: Build custom views beside Polynet's blocks with the Polynet SDK (session and sign-in, the blocks' URL and events, channels, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, safe markdown). Use whenever site code needs community data or a member action beyond what the blocks show.
 ---
 
 # The Polynet SDK
 
-The full reference is served by every site:
-`https://<slug>.polynet.page/__polynet/llms.txt`. Read it before using a
+Every site places Polynet's blocks for the social core: `<polynet-channels>`,
+`<polynet-chat>` and `<polynet-members>` (required; `polynet-build-site`).
+The SDK is for everything around them: the public face, events, courses,
+knowledge, the agent, and custom views like a route log or a "who's here
+now" strip. Custom views go beside the blocks, never instead of them.
+
+The full reference: `https://polynet.page/llms.txt`, also served by every
+deployed site at `https://<slug>.polynet.page/__polynet/llms.txt` (staging:
+`https://staging.polynet.page/llms.txt`). Read it before using a
 method for the first time; it is the source of truth for names and fields.
 
 The SDK brings data and behavior, never a look. These recipes fill markup you
@@ -19,7 +26,9 @@ import polynet from "/__polynet/sdk.js";
 const session = await polynet.session(); // always first
 ```
 
-It only works on the live site (`<slug>.polynet.page`): deploy to try things.
+It only works on the live site (`<slug>.polynet.page`, or
+`<slug>-staging.polynet.page` with `deploy --staging`): deploy to try things.
+On a local server the import fails and the blocks stay empty.
 
 ## Signed out, signed in
 
@@ -39,7 +48,32 @@ if (!session.signed_in) {
 - `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show
   owners and admins a link to `session.studio_url`.
 
-## A live feed in your own markup
+## Working with the blocks from code
+
+Styling and placement are in `polynet-build-site`; this is how your own code
+talks to them.
+
+- The channel lives in the URL: `?channel=<slug>` (none: General). Picking
+  one in `<polynet-channels>` updates the URL and fires `polynet:channel`
+  (`detail: { slug }`) on `document`; `<polynet-chat>` follows, and your
+  views can too. Switch from your own navigation by linking to
+  `?channel=<slug>` or dispatching the event:
+  `document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }))`.
+  `channel="<slug>"` pins a chat to one channel.
+- The chat fires `polynet:read` (`{ slug }`) when it marks a channel read.
+- Profiles: a member in `<polynet-members>`, a chat author and an @-tag all
+  open Polynet's profile panel (with Message). Open one from your own view
+  (a name in your route log) with
+  `document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }))`
+  (or `{ ref }` from `members()` or `online()`), or link to `?member=<handle>`. Don't
+  build your own profile view.
+- `state="loading|ready|signed-out|error"` on each tag lets your layout
+  react, e.g. `polynet-chat[state=signed-out]`.
+
+## A custom feed in your own markup
+
+The chat already is the community's feed. Build one only for a different
+view of the same posts (a highlights wall, a route log), beside the chat.
 
 ```html
 <ol id="feed" role="log" aria-label="Club feed" aria-live="off"></ol>
@@ -84,13 +118,16 @@ await polynet.react(p.ref, "🔥", !p.reacted_by_me.includes("🔥")); // toggle
 const replies = await polynet.thread(general.slug, p.ref);       // the post, then its replies
 ```
 
-Hide the composer when `channel.canPost` is false. `edit(p, text)` when
-`p.can_edit`; `remove(p)` when `p.by_me`. Attachments: `polynet.fileUrl(file)`.
+In a custom composer (the chat block already has one), hide posting when
+`channel.canPost` is false and replying when `channel.canReply` is; pass
+your own `key` to `post()` and reuse it to retry a failed send without
+posting twice. `edit(p, text)` when `p.can_edit`; `remove(p)` when
+`p.by_me`. Attachments: `polynet.fileUrl(file)`.
 
 ## Unread, mentions, typing, who's online
 
 ```js
-const channels = await polynet.channels();      // each has unread and mentioned: show a dot
+const channels = await polynet.channels();      // each has unread, mentioned and seenThroughAt
 await polynet.markRead(general.slug);           // the member is looking at it now
 
 // Mention a member: their @handle in the text, and the member in mentions.
@@ -133,7 +170,8 @@ words can take a few seconds while the agent uses tools.
 | Events | `events({ limit })`; show times in the event's `timezone` |
 | Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` |
 | What the community knows | `knowledge(query?)` |
-| Members | `members()`, `profile(member)`, `online()` |
+| Members | `members()`, `profile(member)`, `online()` (includes the signed-in member) |
+| Older posts | `feed(slug, { cursor: posts.cursor })`; `cursor` is null at the start |
 
 ## Using a bundler
 

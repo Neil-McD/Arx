@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blocks demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap">
+  <script type="module" src="/__polynet/ui.js"></script>
+  <style>
+    /* The site's look: Polynet's blocks read these tokens and the page's font. */
+    :root {
+      --polynet-accent: #c2410c;
+      --polynet-on-accent: #fff;
+      --polynet-surface: #fbfaf7;
+      --polynet-text: #1c1917;
+      --polynet-radius: 10px;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.5 "Instrument Sans", system-ui, sans-serif; background: #fbfaf7; color: #1c1917; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 4vw, 40px); border-bottom: 1px solid #e7e5e4; }
+    h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+    main { display: grid; grid-template-columns: 220px minmax(0, 1fr) 240px; gap: 32px; padding: 24px clamp(16px, 4vw, 40px); }
+    polynet-chat { height: calc(100dvh - 140px); }
+    polynet-members { max-height: calc(100dvh - 140px); overflow-y: auto; }
+    @media (max-width: 1080px) { main { grid-template-columns: 220px minmax(0, 1fr); } polynet-members { grid-column: 1 / -1; max-height: none; } }
+    @media (max-width: 720px) {
+      main { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+      polynet-channels::part(list) { display: flex; overflow-x: auto; gap: 4px; }
+      polynet-chat { height: calc(100dvh - 200px); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="name">Community</h1>
+    <polynet-account></polynet-account>
+  </header>
+  <main>
+    <polynet-channels></polynet-channels>
+    <polynet-chat>
+      <span slot="empty">Nothing here yet. The first word is yours.</span>
+    </polynet-chat>
+    <polynet-members></polynet-members>
+  </main>
+  <script type="module">
+    import polynet from "/__polynet/sdk.js";
+    const session = await polynet.session();
+    if (session.community_name) document.getElementById("name").textContent = session.community_name;
+  </script>
+</body>
+</html>
