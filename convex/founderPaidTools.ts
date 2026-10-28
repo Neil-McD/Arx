@@ -26,17 +26,12 @@ import {
   reserveOperatorGrantUsage,
   settleOperatorGrantUsageReservation,
 } from "./operatorGrantUsageCore";
-import { integrationReceiptIntentValidator, validIntegrationReceiptIntent,
-  type IntegrationReceiptIntent } from "./communityIntegrationReceiptIntent";
-import { requireCommunityChatAccess } from "./communityCore";
-import { HUBSPOT_CONTACT_READ_SCOPE } from "./hubspotPilotContract";
-import { integrationVerificationPilot, admittedIntegrationPilot } from "./integrationVerificationPilot";
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const internalRefs = internal as any;
 
-type MonetaryToolReceiptRow = {
+export type FounderPaidToolReceiptRow = {
   _id: any;
   receiptKey: string;
   sourceRunId: string;
@@ -67,61 +62,15 @@ type MonetaryToolReceiptRow = {
   updatedAt: number;
 };
 
-type IncludedToolReceiptRow = Pick<MonetaryToolReceiptRow,
-  "_id" | "receiptKey" | "sourceRunId" | "toolCallId" | "communityId" | "actorUserId" |
-  "status" | "claimToken" | "leaseExpiresAt" | "providerStartedAt" | "outcomeCode" |
-  "failureCode" | "authorizedAt" | "settledAt" | "failedAt" | "createdAt" | "updatedAt"
-> & {
-  fundingMode: "platform_included_allowance";
-  pilotId: string; pilotExpiresAt: number; reservedOperations: 1;
-  costEvidence: "unknown";
-  integrationIntent: IntegrationReceiptIntent;
-  toolName: "integration"; action: "verify_scopes";
-};
-export type FounderPaidToolReceiptRow = MonetaryToolReceiptRow | IncludedToolReceiptRow;
 
-function pilotAllows(args: {communityId: unknown; actorUserId: unknown; integrationIntent: IntegrationReceiptIntent; nowMs: number}, pilot = integrationVerificationPilot()) {
-  return args.integrationIntent.tool === "HUBSPOT_LIST_GRANTED_SCOPES"
-    ? admittedIntegrationPilot({...args, authConfigId: args.integrationIntent.authConfigId}, pilot) : null;
-}
-
-async function finalizeIncluded(ctx: any, receipt: IncludedToolReceiptRow,
-  outcome: "success" | "failed" | "unknown", nowMs: number) {
-  if (receipt.status !== "authorized") return {ok: true, status: receipt.status, costEvidence: "unknown" as const, replayed: true};
-  const status = outcome === "success" ? "settled" : outcome === "unknown" ? "indeterminate" : "failed";
-  await ctx.db.patch(receipt._id, {status, outcomeCode: outcome, updatedAt: nowMs,
-    ...(status === "settled" ? {settledAt: nowMs} : {failedAt: nowMs})});
-  return {ok: true, status, costEvidence: "unknown" as const};
-}
-
-const toolNameValidator = v.union(v.literal("web_research"), v.literal("web_crawl"), v.literal("integration"));
+const toolNameValidator = v.union(v.literal("web_research"), v.literal("web_crawl"));
 const actionValidator = v.union(
   v.literal("search"),
   v.literal("open_page"),
   v.literal("find_in_page"),
   v.literal("crawl"),
-  v.literal("read_contact"),
-  v.literal("verify_scopes"),
 );
 
-async function integrationReceiptAccessAllowed(ctx: any, args: {
-  communityId: any; actorUserId: any; integrationIntent: IntegrationReceiptIntent; nowMs: number;
-}): Promise<boolean> {
-  try {
-    await requireCommunityChatAccess({ctx, communityId: args.communityId, userId: args.actorUserId});
-    const [community, binding] = await Promise.all([
-      ctx.db.get(args.communityId), ctx.db.get(args.integrationIntent.bindingId),
-    ]);
-    const i = args.integrationIntent;
-    if (!community?.integrationReadPilotEnabled || !binding || binding.communityId !== args.communityId ||
-      binding.ownerUserId !== args.actorUserId || binding.provider !== "composio" || binding.toolkit !== "hubspot" ||
-      binding.connectedAccountId !== i.connectedAccountId || binding.providerUserId !== i.providerUserId ||
-      binding.authConfigId !== i.authConfigId || binding.generation !== i.generation || binding.revokePending) return false;
-    return i.tool === "HUBSPOT_READ_CONTACT"
-      ? binding.status === "active" && binding.scopes.includes(HUBSPOT_CONTACT_READ_SCOPE)
-      : binding.status === "pending" && binding.callbackClaimed === true && binding.expiresAt > args.nowMs;
-  } catch { return false; }
-}
 
 function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
@@ -154,7 +103,7 @@ export async function getUniqueFounderPaidToolReceiptByKey(
 }
 
 function receiptIntentMatches(args: {
-  receipt: MonetaryToolReceiptRow;
+  receipt: FounderPaidToolReceiptRow;
   sourceRunId: string;
   toolCallId: string;
   communityId: unknown;
@@ -175,7 +124,7 @@ function receiptIntentMatches(args: {
 function fundingAuthorityMatches(args: {
   admission: CommunityInferenceFundingAdmission;
   receipt: Pick<
-    MonetaryToolReceiptRow,
+    FounderPaidToolReceiptRow,
     "fundingMode" | "payerUserId" | "founderSubscriptionId"
   >;
 }): boolean {
@@ -195,7 +144,7 @@ function fundingAuthorityMatches(args: {
 
 async function settleReceiptReservation(args: {
   ctx: any;
-  receipt: MonetaryToolReceiptRow;
+  receipt: FounderPaidToolReceiptRow;
   settledCostMicros: number;
   nowMs: number;
 }): Promise<void> {
@@ -245,10 +194,6 @@ async function finalizeExpiredReceipt(args: {
   nowMs: number;
 }): Promise<void> {
   const providerStarted = args.receipt.providerStartedAt !== undefined;
-  if (args.receipt.fundingMode === "platform_included_allowance") {
-    await finalizeIncluded(args.ctx, args.receipt, providerStarted ? "unknown" : "failed", args.nowMs);
-    return;
-  }
   await settleReceiptReservation({
     ctx: args.ctx,
     receipt: args.receipt,
@@ -275,7 +220,6 @@ export const claimFounderPaidToolReceiptInternal = internalMutation({
     actorUserId: v.id("users"),
     toolName: toolNameValidator,
     action: actionValidator,
-    integrationIntent: v.optional(integrationReceiptIntentValidator),
     claimToken: v.string(),
     nowMs: v.number(),
   },
@@ -297,43 +241,12 @@ export const claimFounderPaidToolReceiptInternal = internalMutation({
       "founder_paid_tool_claim_token_invalid",
       128,
     );
-    if (args.toolName === "integration" ? !validIntegrationReceiptIntent(args.integrationIntent, args.action, sourceRunId, toolCallId)
-      : args.integrationIntent !== undefined || founderPaidToolActionForTool({...args, toolName: args.toolName}) !== args.action) {
+    if (founderPaidToolActionForTool({...args, toolName: args.toolName}) !== args.action) {
       throw new Error("founder_paid_tool_action_invalid");
     }
-
-    if (args.toolName === "integration") {
-      if (!await integrationReceiptAccessAllowed(ctx, {...args, integrationIntent: args.integrationIntent!}))
-        return {ok: false, errorCode: "integration_access_denied"};
-      const pilot = pilotAllows({...args, integrationIntent: args.integrationIntent!});
-      if (!pilot || args.action !== "verify_scopes")
-        return {ok: false, errorCode: "integration_funding_policy_unavailable"};
-      if (await getUniqueFounderPaidToolReceiptByKey(ctx, receiptKey))
-        return {ok: false, errorCode: "founder_paid_tool_receipt_conflict"};
-      // Convex serializes this indexed range read with insertion: one total slot
-      // per pilot, across every attempt and terminal outcome. Never replenished.
-      if (await ctx.db.query("communityPaidToolReceipts").withIndex("by_pilot", (q: any) => q.eq("pilotId", pilot.id)).first())
-        return {ok: false, errorCode: "integration_pilot_exhausted"};
-      const leaseExpiresAt = Math.min(pilot.expiresAt, args.nowMs + RECEIPT_LEASE_MS);
-      const receiptId = await ctx.db.insert("communityPaidToolReceipts", {
-        receiptKey, sourceRunId, toolCallId, communityId: args.communityId, actorUserId: args.actorUserId,
-        fundingMode: "platform_included_allowance", pilotId: pilot.id, pilotExpiresAt: pilot.expiresAt,
-        reservedOperations: 1, costEvidence: "unknown", integrationIntent: args.integrationIntent!,
-        toolName: "integration", action: "verify_scopes", status: "authorized", claimToken,
-        leaseExpiresAt, authorizedAt: args.nowMs, createdAt: args.nowMs, updatedAt: args.nowMs,
-      });
-      await ctx.scheduler.runAfter(Math.max(0, leaseExpiresAt - args.nowMs),
-        internalRefs.founderPaidTools.expireFounderPaidToolReceiptInternal,
-        {receiptKey, claimToken, nowMs: leaseExpiresAt});
-      return {ok: true, receiptId, fundingMode: "platform_included_allowance", reservedOperations: 1};
-    }
-    if (args.action === "read_contact" || args.action === "verify_scopes")
-      throw new Error("founder_paid_tool_action_invalid");
 
     const existing = await getUniqueFounderPaidToolReceiptByKey(ctx, receiptKey);
     if (existing) {
-      if (existing.fundingMode === "platform_included_allowance")
-        return {ok: false, errorCode: "founder_paid_tool_receipt_conflict"};
       if (!receiptIntentMatches({
         receipt: existing,
         sourceRunId,
@@ -479,16 +392,6 @@ export const markFounderPaidToolProviderStartedInternal = internalMutation({
       await finalizeExpiredReceipt({ ctx, receipt, nowMs: args.nowMs });
       return { ok: false, errorCode: "founder_paid_tool_receipt_expired" };
     }
-    if (receipt.fundingMode === "platform_included_allowance") {
-      const pilot = pilotAllows({...receipt, nowMs: args.nowMs});
-      if (!pilot || pilot.id !== receipt.pilotId || pilot.expiresAt !== receipt.pilotExpiresAt ||
-        !await integrationReceiptAccessAllowed(ctx, {...receipt, nowMs: args.nowMs})) {
-        await finalizeIncluded(ctx, receipt, "failed", args.nowMs);
-        return {ok: false, errorCode: "integration_access_denied"};
-      }
-      await ctx.db.patch(receipt._id, {providerStartedAt: args.nowMs, updatedAt: args.nowMs});
-      return {ok: true, dispatchAuthorized: true};
-    }
     const admission = await resolveCommunityInferenceFundingAdmission(
       ctx,
       receipt.communityId,
@@ -538,8 +441,6 @@ export const settleFounderPaidToolReceiptInternal = internalMutation({
     if (!receipt || receipt.claimToken !== args.claimToken) {
       return { ok: false, errorCode: "founder_paid_tool_receipt_claim_invalid" };
     }
-    if (receipt.fundingMode === "platform_included_allowance")
-      return {ok: false, errorCode: "integration_monetary_settlement_forbidden"};
     if (receipt.status === "settled" || receipt.status === "indeterminate") {
       return {
         ok: true,
@@ -631,8 +532,6 @@ export const finalizeFounderPaidToolFailureInternal = internalMutation({
     if (!receipt || receipt.claimToken !== args.claimToken) {
       return { ok: false, errorCode: "founder_paid_tool_receipt_claim_invalid" };
     }
-    if (receipt.fundingMode === "platform_included_allowance")
-      return finalizeIncluded(ctx, receipt, receipt.providerStartedAt !== undefined ? "unknown" : "failed", args.nowMs);
     if (receipt.status === "failed" || receipt.status === "indeterminate") {
       return {
         ok: true,
@@ -661,25 +560,6 @@ export const finalizeFounderPaidToolFailureInternal = internalMutation({
       updatedAt: args.nowMs,
     });
     return { ok: true, status, settledCostMicros };
-  },
-});
-
-// Records operation outcome only. It neither activates a connection nor asserts
-// a monetary cost; activation still requires the existing identity/scope checks.
-export const finalizeIntegrationVerificationReceiptInternal = internalMutation({
-  args: {receiptKey: v.string(), claimToken: v.string(),
-    outcome: v.union(v.literal("success"), v.literal("failed"), v.literal("unknown")), nowMs: v.number()},
-  handler: async (ctx, args) => {
-    const receipt = await getUniqueFounderPaidToolReceiptByKey(ctx, args.receiptKey);
-    if (!receipt || receipt.claimToken !== args.claimToken || receipt.fundingMode !== "platform_included_allowance")
-      return {ok: false, errorCode: "founder_paid_tool_receipt_claim_invalid"};
-    if (receipt.status === "authorized" && receipt.leaseExpiresAt <= args.nowMs) {
-      await finalizeExpiredReceipt({ctx, receipt, nowMs: args.nowMs});
-      return {ok: false, errorCode: "founder_paid_tool_receipt_expired"};
-    }
-    if (args.outcome === "success" && receipt.providerStartedAt === undefined)
-      return {ok: false, errorCode: "founder_paid_tool_provider_not_started"};
-    return finalizeIncluded(ctx, receipt, args.outcome, args.nowMs);
   },
 });
 

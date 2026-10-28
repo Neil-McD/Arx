@@ -43,9 +43,7 @@ not track status. Update the system map instead of adding status ledgers.
   [schema-data-migration-discipline.md](schema-data-migration-discipline.md)
 - **Being removed with their code:** [community-forms-v1.md](community-forms-v1.md),
   [community-member-workflows-foundation-v1.md](community-member-workflows-foundation-v1.md),
-  [contracts/community-funnel-v2-authority-kernel.md](contracts/community-funnel-v2-authority-kernel.md),
-  [composio-member-read-pilot-plan.md](composio-member-read-pilot-plan.md),
-  [skill-harness-contract.md](skill-harness-contract.md)
+  [contracts/community-funnel-v2-authority-kernel.md](contracts/community-funnel-v2-authority-kernel.md)
 
 ## Release
 

@@ -1,5 +1,6 @@
 import { getFunctionName } from "convex/server";
 import { internal } from "./_generated/api";
+import { buildCommunityResourceRuntimeLaneState } from "../shared/communityResourceLane";
 
 // A member's personal agent, run from a community front end. The front end has
 // no Convex identity: the member was authenticated by its session. Studio's
@@ -26,7 +27,7 @@ const REDIRECTS: Record<string, Redirect> = {
   "threads:ensureCloudRuntimeRunStarted": ownerTwin(internal.threads.ensureCloudRuntimeRunStartedForTrustedOwnerInternal),
   "threads:appendCloudRuntimeRunEvent": ownerTwin(internal.threads.appendCloudRuntimeRunEventForTrustedOwnerInternal),
   "threads:finishCloudRuntimeRun": ownerTwin(internal.threads.finishCloudRuntimeRunForTrustedOwnerInternal),
-  "runtimeSkillResolution:resolveRuntimeSkillSelectionInternal": userTwin(internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal),
+  "runtimeCommunityResourceLane:resolveRuntimeCommunityResourceLaneInternal": userTwin(internal.runtimeCommunityResourceLane.resolveRuntimeCommunityResourceLaneInternal),
   "memberOntology:confirmMemberInterviewFacts": userTwin(internal.memberOntology.confirmMemberInterviewFactsForTrustedUserInternal),
   "communityInteractions:createCommunityInteractionComposerMessage":
     userTwin(internal.communityInteractions.createCommunityInteractionComposerMessageForTrustedUserInternal),
@@ -60,7 +61,13 @@ function memberLanePromptContext(result: any) {
   return { ...result, community_lens_authority: { ...rest, ...Object.fromEntries(denied.map((key) => [key, false])) } };
 }
 
+// Member lane for resources: no resources architect on a front end.
+function memberLaneResourceLane(result: any) {
+  return result?.lane === "builder" ? buildCommunityResourceRuntimeLaneState("member") : result;
+}
+
 const RESULT_FILTERS: Record<string, (result: any) => any> = {
+  "runtimeCommunityResourceLane:resolveRuntimeCommunityResourceLaneInternal": memberLaneResourceLane,
   "communityCapabilityContext:resolveCommunityCapabilityContextInternal": memberLaneCapabilityContext,
   "communityCapabilityContext:resolveCommunityCapabilityContextForTrustedActorInternal": memberLaneCapabilityContext,
   "communityAgent:resolveRuntimeCommunityPromptContextInternal": memberLanePromptContext,

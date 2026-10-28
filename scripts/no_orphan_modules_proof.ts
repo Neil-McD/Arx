@@ -22,11 +22,7 @@ const ALLOWED = new Map([
   ["communityChannelBackfill", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityAiFeedRetirement", "data retirement job; removed with the AI feed tables"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
-  ["communitySkillAttachments", "skills and harness: being removed (Neil, Oct 27)"],
-  ["harnessMounts", "skills and harness: being removed (Neil, Oct 27)"],
-  ["harnessSkills", "skills and harness: being removed (Neil, Oct 27)"],
-  ["skillPackages", "skills and harness: being removed (Neil, Oct 27)"],
-  ["userPlatformSkills", "skills and harness: being removed (Neil, Oct 27)"],
+  ["communityIntegrationActions", "stub for the cached production web's HubSpot callback page; delete next release (POL-21)"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })

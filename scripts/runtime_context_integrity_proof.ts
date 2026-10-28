@@ -303,6 +303,36 @@ assert.ok(missingV2ManifestProjection.failures.includes(
   "prompt_section_not_accounted_for:platform_doctrine",
 ));
 
+// Version 3 receipts (skills removed): the resources architect section replaces
+// the four skill sections, and a v3 receipt without it fails.
+const v3SectionIds = [
+  ...v2SectionIds.filter((id) => !id.endsWith("_skill_overlay") && id !== "ambiguous_skill_mentions"),
+  "resources_architect",
+];
+const v3RenderedIds = v3SectionIds.filter((id) => !["community_system_prompt", "resources_architect"].includes(id));
+const v3EventsFor = (sectionIds: string[]) => v2Events.map((event) => {
+  if (event.eventType === "runtime_prompt_bundle_resolved") {
+    return { ...event, payload: { ...event.payload, version: 3,
+      sections: sectionIds.map((id) => ({ id, rendered: v3RenderedIds.includes(id) })) } };
+  }
+  if (event.eventType === "runtime_context_manifest_resolved") {
+    return { ...event, payload: { ...event.payload, manifest: {
+      ...(event.payload as any).manifest,
+      prompts: v3RenderedIds.map((id) => ({ id })),
+      summary: { ...(event.payload as any).manifest.summary, promptCount: v3RenderedIds.length },
+    } } };
+  }
+  return event;
+});
+const v3Verdict = await buildRuntimeContextIntegrityCheck({ run, events: v3EventsFor(v3SectionIds) });
+assert.equal(v3Verdict.ok, true, JSON.stringify(v3Verdict.failures));
+const v3MissingArchitect = await buildRuntimeContextIntegrityCheck({
+  run,
+  events: v3EventsFor(v3SectionIds.filter((id) => id !== "resources_architect")),
+});
+assert.equal(v3MissingArchitect.ok, false);
+assert.ok(v3MissingArchitect.failures.includes("missing_prompt_section:resources_architect"));
+
 const handlerSource = readFileSync("convex/runtimeTurnHandlers.ts", "utf8");
 assert.match(
   handlerSource,

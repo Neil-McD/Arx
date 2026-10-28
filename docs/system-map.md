@@ -200,8 +200,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   payment (`chatgptAuth`, `httpChatgpt`, `chatgptResponsesTransport`,
   `providerConnections`), the funding gate queries (`gates`), and the unused model
   registry route (`httpContext`, `modelRegistry`).
-- **Going (Neil, Oct 27):** skills and harness: `harnessMounts`, `harnessSkills`,
-  personal skills, and the skill path in `runtimeSkillResolution`.
+- **Deleted Oct 28 (POL-21, Neil):** skills and the skill harness (skill packages,
+  community skill attachments, platform and personal skills, `harnessMounts`,
+  `harnessSkills`, `runtimeSkillResolution`, `platformSkillRuntime`). What stays:
+  `runtimeCommunityResourceLane` resolves each turn's resource lane (fails closed
+  without community entry; a community site always gets the member lane), and
+  `runtimeHarnessComposition` adds the resources architect instructions
+  (`shared/communityResourcesArchitect.ts`) to builder-lane turns only.
 
 ### 9. Proactive agent — Keep, growing
 
@@ -300,22 +305,22 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 15. Integrations and skills — Going (Neil, Oct 27)
 
-- **Code:** `communityIntegration*`, `httpCommunitySourceIntegrations` (GitHub and Google Drive callbacks),
-  `composioConnectionAdapter`, `hubspotPilotContract`, `integrationVerificationPilot`,
-  `skillCore`, `skillPackages`, `userPlatformSkills`, `platformSkillRuntime`,
-  `communitySkillAttachments`.
-- **Tables:** `userSourceIntegrationConnections`,
-  `userSourceIntegrationAuthStates`, `communityIntegrationConnections`,
-  `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`,
-  `communitySkillAttachments`.
-- **Contracts:** [skill-harness-contract.md](skill-harness-contract.md).
+- **Deleted Oct 28 (POL-21):** community integrations (Composio, the HubSpot
+  pilot, `communityIntegrationConnections` code, integration reads in the agent's
+  tools, the integration receipt in paid tools, the callback page) and all skill
+  code. `communityIntegrationActions` is a stub answering "not verified" for the
+  cached production web's callback page; delete it next release.
+- **Code still here:** `httpCommunitySourceIntegrations` and the GitHub and Google
+  Drive source import inside `communityResources` (next slice).
+- **Tables (retiring; dropped next release after a production backup, with
+  Neil's OK):** `communityIntegrationConnections`, `skillPackages`,
+  `skillPackageRevisions`, `userPlatformSkillInstalls`, `communitySkillAttachments`.
+  Still in use until the next slice: `userSourceIntegrationConnections`,
+  `userSourceIntegrationAuthStates`.
 - **Retiring tables:** `userProviderConnections`, `userProviderAuthStates`,
   `userProviderDeviceAuthStates` (own-account payment, deleted Oct 27 in POL-10;
   they hold encrypted keys, deleted with Neil's sign-off).
-- **Going (Neil, Oct 27):** everything else in this area, including the Studio
-  integrations page.
-  Production still calls `communityIntegrationActions:verifyConnection` and the
-  funnel operations, so the web and backend removals ship in one release.
+- **Going (Neil, Oct 27):** GitHub and Google Drive source import (next slice).
   Deleted Oct 27: `providerConnectionProbes`.
 
 ### 16. Voice — Keep

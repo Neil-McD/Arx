@@ -131,7 +131,7 @@ for (const path of [
   "convex/communityResources.ts",
   "convex/communityEvents.ts",
   "convex/communityAgent.ts",
-  "convex/runtimeSkillResolution.ts",
+  "convex/runtimeCommunityResourceLane.ts",
 ]) {
   const source = read(path);
   assert.doesNotMatch(
