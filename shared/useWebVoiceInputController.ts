@@ -83,8 +83,8 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   chatInputRef?: MutableRefObject<HTMLTextAreaElement | null>;
   appendDirectMessageTranscript?: (transcript: string) => void;
   focusDirectMessageInput?: () => void;
-  appendMemberAgentTranscript?: (transcript: string) => void;
-  focusMemberAgentInput?: () => void;
+  appendCommunityAgentTranscript?: (transcript: string) => void;
+  focusCommunityAgentInput?: () => void;
 };
 
 function getBrowserSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
@@ -247,9 +247,9 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       return;
     }
     if (surface === "member_agent") {
-      args.appendMemberAgentTranscript?.(transcript);
+      args.appendCommunityAgentTranscript?.(transcript);
       window.setTimeout(() => {
-        args.focusMemberAgentInput?.();
+        args.focusCommunityAgentInput?.();
       }, 0);
       return;
     }
@@ -446,18 +446,18 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
 
   const communityVoiceIntent = resolveVoiceInputIntent("community");
   const directMessageVoiceIntent = resolveVoiceInputIntent("direct_message");
-  const memberAgentVoiceIntent = resolveVoiceInputIntent("member_agent");
+  const communityAgentVoiceIntent = resolveVoiceInputIntent("member_agent");
   const communityVoiceUiState = resolveVoiceUiState("community");
   const directMessageVoiceUiState = resolveVoiceUiState("direct_message");
-  const memberAgentVoiceUiState = resolveVoiceUiState("member_agent");
+  const communityAgentVoiceUiState = resolveVoiceUiState("member_agent");
 
   return {
     communityVoiceIntent,
     directMessageVoiceIntent,
-    memberAgentVoiceIntent,
+    communityAgentVoiceIntent,
     communityVoiceUiState,
     directMessageVoiceUiState,
-    memberAgentVoiceUiState,
+    communityAgentVoiceUiState,
     handleVoiceInputClick,
     finishVoiceInputForSubmit,
     cancelVoiceInput,

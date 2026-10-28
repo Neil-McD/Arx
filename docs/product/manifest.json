@@ -39,9 +39,9 @@
       "status": "alpha-current",
       "source": "docs/product/primitives/agent.md",
       "search": {
-        "aliases": ["personal agent", "community agent", "member agent"],
+        "aliases": ["personal agent", "community agent", "community agent"],
         "keywords": ["agent identity", "community context", "member authority", "builder authority"],
-        "queries": ["how does community context work", "personal agent versus community agent", "what can the member agent do"],
+        "queries": ["how does community context work", "personal agent versus community agent", "what can the community agent do"],
         "relatedSlugs": ["primitives/community-lens", "primitives/polynet-mcp"],
         "boost": 1.1
       }
@@ -57,7 +57,7 @@
       "source": "docs/product/primitives/community-lens.md",
       "search": {
         "aliases": ["community lens", "active community context", "server validated community"],
-        "keywords": ["community context", "validated context", "subsequent turns", "member agent"],
+        "keywords": ["community context", "validated context", "subsequent turns", "community agent"],
         "queries": ["community context for agent", "how does community context work", "server validated community context"],
         "relatedSlugs": ["primitives/agent", "reference/context-model"],
         "boost": 1.2

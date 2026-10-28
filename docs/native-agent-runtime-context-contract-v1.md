@@ -350,7 +350,7 @@ role framework:
 
 | Role/surface | Principal | Trigger | Required scope |
 | --- | --- | --- | --- |
-| Member Agent | authenticated member | user turn | one joined community |
+| Community Agent | authenticated member | user turn | one joined community |
 | Funnel Composer | authorized manager | user turn | one managed community and funnel slot |
 | Concierge | community-owned agent | authorized mention/request | one accessible community interaction root |
 | Steward | community-owned agent | claimed autonomous run | one live owner-funded community |
@@ -652,7 +652,7 @@ Release evidence:
    `63a414bab3963c04db3b41256cb2c1689029b36f`; the canonical GitHub Release
    Gate, Vercel deployment, production accounting smoke, and Convex production
    deployment passed.
-2. The first live Member Agent canary exposed one real compatibility defect:
+2. The first live Community Agent canary exposed one real compatibility defect:
    provider-context attestation persistence still required the retired
    per-community thread key while the canonical private agent uses
    `member-agent:global:episode:*` and binds community scope per run. The narrow
@@ -692,7 +692,7 @@ Release evidence:
    It found zero legacy, unknown, non-Blaxel, or Daytona-hinted resource
    pointers. The three remaining volume pointers and two remaining sandbox
    pointers are explicitly Blaxel-owned migration records.
-9. The authenticated Member Agent production canary run
+9. The authenticated Community Agent production canary run
    `member_agent_dock:f2bd459f-0f29-4691-8c48-2f083ce503d9` finished `ok` under
    community `jh7ayd0xt55nens0nhegyz6phx852shk`. It persisted a valid
    provider-context attestation, completed all 16 `polynet_list`/`polynet_read`
@@ -718,7 +718,7 @@ Slice 5A extinguishes active ingress without deleting historical persistence:
    runtime-turn, or Codex-worker endpoint appeared in the latest 10,000
    production log records.
 3. The browser runner now requires one explicit canonical surface, explicit
-   Polynet engine selection, and governed agent tools. Only Member Agent and
+   Polynet engine selection, and governed agent tools. Only Community Agent and
    Funnel Composer are first-party callers.
 4. Missing, unknown, retired, or thread-mismatched surfaces fail with
    `invalid_invocation_surface`. Explicit Codex or unknown engines fail with
@@ -805,7 +805,7 @@ Slice 5C local acceptance:
    complete repository behavior suite, dependency interlock, and
    zero-vulnerability root and web audits.
 4. The stale community-lens proof now reads its canonical owner,
-   `WebMemberAgentDock`, instead of the decomposed `App.tsx` shell.
+   `WebCommunityAgentDock`, instead of the decomposed `App.tsx` shell.
 5. No schema migration or historical record deletion is introduced.
 
 Slice 5D is released and production-proven. It removes the legacy general
@@ -849,7 +849,7 @@ Slice 5D acceptance:
 4. The exact merged SHA passes the canonical GitHub Release Gate, production
    web reports that SHA, and matching Convex functions are deployed.
 5. Production proves the retired function and route surface is absent while an
-   authenticated Member Agent can still inspect every authorized community
+   authenticated Community Agent can still inspect every authorized community
    surface with one auditable community scope.
 
 Human product direction remains explicit: there is no standalone general
@@ -897,7 +897,7 @@ Release A is a no-writer compatibility release:
    `creditLedgerEntries`; their project identifiers are immutable accounting
    evidence strings.
 5. Release through GitHub `main`, deploy Convex intentionally, prove the
-   retired writer surface is absent, and pass an authenticated Member Agent
+   retired writer surface is absent, and pass an authenticated Community Agent
    community-inspection canary before deleting production data.
 
 Production cleanup gate:
@@ -1086,7 +1086,7 @@ Implemented shape:
    funding, rate-limit, and conflict mappings. Steward separately preserves a
    failed pre-provider funding claim's bounded error code. These failures
    produce no provider-result observation or provider request.
-11. Member Agent text is not clipped by the browser composer or message
+11. Community Agent text is not clipped by the browser composer or message
     persistence path before the canonical runtime input budget evaluates the
     complete provider projection. Attachment count, type, and byte limits stay
     independently bounded.
@@ -1238,7 +1238,7 @@ Slice 7B production evidence:
    `f5324d7df4ca6f445a8f89fd9882e43a12a5fa6c` passed the exact-main GitHub
    Release Gate, was reported by production web as both its build and Sentry
    release, and was deployed intentionally to production Convex.
-2. One normal Member Agent browser turn in the selected Polynet community at
+2. One normal Community Agent browser turn in the selected Polynet community at
    2026-08-15T14:21:36Z completed with a substantive summary of chat,
    resources, events, and members. Its
    `runtime_persisted_history_selected` event selected three messages across
@@ -1442,7 +1442,7 @@ Slice 8 entry evidence on 2026-08-16:
     Pi had not earned adoption; the following value-gate evidence records why it
     was rejected.
 15. The exact merged Slice 8 parity state at `1438f6128349289adf39aad60c6c247ad1e5586f`
-    was subsequently deployed to production Convex. A normal Member Agent
+    was subsequently deployed to production Convex. A normal Community Agent
     community-inspection run completed `ok`, executed ten successful
     `polynet_list`/`polynet_read` calls, passed context-integrity checks with no
     failures or warnings, fit the reviewed model budget, and settled its
@@ -1504,7 +1504,7 @@ built.
 
 Order:
 
-1. Member Agent.
+1. Community Agent.
 2. Funnel Composer.
 3. Concierge.
 4. Steward.
@@ -1667,7 +1667,7 @@ requires its own evidence layer.
 
 This architecture program is 100% only when all of the following are true:
 
-1. The only native product roles are Member Agent, Funnel Composer, Concierge,
+1. The only native product roles are Community Agent, Funnel Composer, Concierge,
    and Steward, all using the single governed loop selected by Slice 8's
    evidence-backed gate.
 2. Polynet exclusively owns prompts, context projection, authority, tools,

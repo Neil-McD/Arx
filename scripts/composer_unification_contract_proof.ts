@@ -8,7 +8,7 @@ function read(relativePath: string): string {
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
-const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
+const communityAgentCss = read("apps/web/src/components/WebCommunityAgentDock.css");
 
 assert.match(
   baseCss,
@@ -77,7 +77,7 @@ assert.match(
 );
 assert.doesNotMatch(
   baseCss,
-  /member-agent-dock-launcher|member-agent-desktop-launcher-clearance/,
+  /community-agent-dock-launcher|community-agent-desktop-launcher-clearance/,
   "retired agent launcher must not reserve space beneath thread composers",
 );
 assert.match(
@@ -171,23 +171,23 @@ assert.match(
 );
 
 assert.doesNotMatch(
-  memberAgentCss,
-  /\.member-agent-dock textarea:focus-visible[\s\S]{0,100}var\(--member-agent-accent\)/,
+  communityAgentCss,
+  /\.community-agent-dock textarea:focus-visible[\s\S]{0,100}var\(--community-agent-accent\)/,
   "member-agent textarea must not receive a purple focus outline",
 );
 assert.match(
-  memberAgentCss,
-  /\.member-agent-dock textarea:focus-visible \{[\s\S]*outline: none;/,
+  communityAgentCss,
+  /\.community-agent-dock textarea:focus-visible \{[\s\S]*outline: none;/,
   "member-agent textarea should defer focus treatment to its shell",
 );
 assert.match(
-  memberAgentCss,
+  communityAgentCss,
   /\.community-agent-composer\.chat-input-bar \{ margin: 0; \}/,
   "member-agent composer only owns placement; the channel composer owns its material and shape",
 );
 assert.doesNotMatch(
-  memberAgentCss,
-  /\.member-agent-dock-composer:focus-within/,
+  communityAgentCss,
+  /\.community-agent-dock-composer:focus-within/,
   "member-agent composer shell should remain visually stable while focused",
 );
 

@@ -1,13 +1,13 @@
-.member-agent-dock {
-  --member-agent-accent: var(--accent-selection);
-  --member-agent-accent-soft: color-mix(
+.community-agent-dock {
+  --community-agent-accent: var(--accent-selection);
+  --community-agent-accent-soft: color-mix(
     in srgb,
-    var(--member-agent-accent) 16%,
+    var(--community-agent-accent) 16%,
     transparent
   );
-  --member-agent-accent-border: color-mix(
+  --community-agent-accent-border: color-mix(
     in srgb,
-    var(--member-agent-accent) 32%,
+    var(--community-agent-accent) 32%,
     transparent
   );
   position: fixed;
@@ -23,7 +23,7 @@
   overflow: hidden;
 }
 
-.member-agent-dock.community-agent-page {
+.community-agent-dock.community-agent-page {
   position: relative;
   inset: auto;
   width: 100%;
@@ -33,7 +33,7 @@
   pointer-events: auto;
 }
 
-.member-agent-dock.community-agent-page .member-agent-dock-panel {
+.community-agent-dock.community-agent-page .community-agent-dock-panel {
   width: 100%;
   height: 100%;
   max-height: none;
@@ -48,39 +48,39 @@
   padding-right: var(--web-topbar-right-action-safe-inset, 62px);
 }
 
-.community-agent-page .member-agent-dock-transcript {
+.community-agent-page .community-agent-dock-transcript {
   padding: 24px max(24px, calc((100% - 800px) / 2));
 }
 
-.community-agent-page .member-agent-dock-composer-shell {
+.community-agent-page .community-agent-dock-composer-shell {
   width: min(800px, calc(100% - 48px));
   margin: 0 auto 12px;
 }
 
 @media (max-width: 600px) {
-  .community-agent-page .member-agent-dock-transcript {
+  .community-agent-page .community-agent-dock-transcript {
     padding: 16px;
   }
-  .community-agent-page .member-agent-dock-composer-shell {
+  .community-agent-page .community-agent-dock-composer-shell {
     width: calc(100% - 32px);
     margin-bottom: 16px;
   }
 }
 
-.member-agent-dock.is-suppressed {
+.community-agent-dock.is-suppressed {
   display: none;
 }
 
-.member-agent-dock button:focus-visible {
+.community-agent-dock button:focus-visible {
   outline: 2px solid var(--composer-focus-ring, rgba(232, 232, 234, 0.44));
   outline-offset: 2px;
 }
 
-.member-agent-dock textarea:focus-visible {
+.community-agent-dock textarea:focus-visible {
   outline: none;
 }
 
-.member-agent-dock-panel {
+.community-agent-dock-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(460px, calc(100vw - 40px));
@@ -98,13 +98,13 @@
   transition: opacity 180ms ease, transform 180ms ease;
 }
 
-.member-agent-dock.is-open .member-agent-dock-panel {
+.community-agent-dock.is-open .community-agent-dock-panel {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
 }
 
-.member-agent-dock-header {
+.community-agent-dock-header {
   display: flex;
   min-height: 60px;
   align-items: center;
@@ -113,20 +113,20 @@
   border-bottom: 1px solid var(--stroke-muted);
 }
 
-.member-agent-dock-identity {
+.community-agent-dock-identity {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 10px;
 }
 
-.member-agent-dock-identity > span:last-child {
+.community-agent-dock-identity > span:last-child {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
 
-.member-agent-dock-identity strong {
+.community-agent-dock-identity strong {
   overflow: hidden;
   font-size: 13px;
   font-weight: 650;
@@ -135,36 +135,36 @@
   white-space: nowrap;
 }
 
-.member-agent-dock-identity small {
+.community-agent-dock-identity small {
   color: var(--text-ink-muted);
   font-size: 11px;
 }
 
-.member-agent-dock-avatar {
+.community-agent-dock-avatar {
   display: grid;
   width: 32px;
   height: 32px;
   flex: 0 0 32px;
   place-items: center;
   overflow: hidden;
-  color: var(--member-agent-accent);
-  background: var(--member-agent-accent-soft);
-  border: 1px solid var(--member-agent-accent-border);
+  color: var(--community-agent-accent);
+  background: var(--community-agent-accent-soft);
+  border: 1px solid var(--community-agent-accent-border);
   border-radius: 7px;
 }
 
-.member-agent-dock-avatar svg {
+.community-agent-dock-avatar svg {
   width: 16px;
   height: 16px;
 }
 
-.member-agent-dock-header-actions {
+.community-agent-dock-header-actions {
   display: flex;
   align-items: center;
   gap: 2px;
 }
 
-.member-agent-dock-header-actions > button {
+.community-agent-dock-header-actions > button {
   display: grid;
   width: 32px;
   height: 32px;
@@ -176,22 +176,22 @@
   cursor: pointer;
 }
 
-.member-agent-dock-header-actions > button:hover:not(:disabled) {
+.community-agent-dock-header-actions > button:hover:not(:disabled) {
   color: var(--icon-hover);
   background: var(--hover-overlay);
 }
 
-.member-agent-dock-header-actions > button:disabled {
+.community-agent-dock-header-actions > button:disabled {
   cursor: default;
   opacity: 0.38;
 }
 
-.member-agent-dock-header-actions > button svg {
+.community-agent-dock-header-actions > button svg {
   width: 17px;
   height: 17px;
 }
 
-.member-agent-dock-transcript {
+.community-agent-dock-transcript {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -199,7 +199,7 @@
   scrollbar-width: thin;
 }
 
-.member-agent-dock-empty {
+.community-agent-dock-empty {
   display: grid;
   min-height: 100%;
   place-content: center;
@@ -209,12 +209,12 @@
   text-align: center;
 }
 
-.member-agent-dock-empty svg {
+.community-agent-dock-empty svg {
   width: 22px;
   height: 22px;
 }
 
-.member-agent-dock-empty p {
+.community-agent-dock-empty p {
   max-width: 240px;
   margin: 0;
   color: var(--text-ink-secondary);
@@ -223,7 +223,7 @@
   line-height: 1.5;
 }
 
-.member-agent-dock-message {
+.community-agent-dock-message {
   width: fit-content;
   max-width: 88%;
   margin: 0 0 16px;
@@ -232,15 +232,15 @@
   overflow-wrap: anywhere;
 }
 
-.member-agent-dock-message > :first-child {
+.community-agent-dock-message > :first-child {
   margin-top: 0;
 }
 
-.member-agent-dock-message > :last-child {
+.community-agent-dock-message > :last-child {
   margin-bottom: 0;
 }
 
-.member-agent-dock-message.is-user {
+.community-agent-dock-message.is-user {
   max-width: 84%;
   margin-left: auto;
   padding: 9px 11px;
@@ -249,36 +249,36 @@
   border-radius: 8px 8px 2px 8px;
 }
 
-.member-agent-dock-message.is-user p {
+.community-agent-dock-message.is-user p {
   margin: 0;
 }
 
-.member-agent-dock-message.is-media-only {
+.community-agent-dock-message.is-media-only {
   padding: 0;
   background: transparent;
   border: 0;
 }
 
-.member-agent-dock-media-grid {
+.community-agent-dock-media-grid {
   width: min(280px, 72vw);
   margin-top: 8px;
 }
 
-.member-agent-dock-message.is-media-only .member-agent-dock-media-grid {
+.community-agent-dock-message.is-media-only .community-agent-dock-media-grid {
   margin-top: 0;
 }
 
-.member-agent-dock-message.is-pending {
+.community-agent-dock-message.is-pending {
   opacity: 0.72;
 }
 
-.member-agent-dock-message.is-assistant {
+.community-agent-dock-message.is-assistant {
   max-width: 100%;
   color: var(--text-ink-primary);
 }
 
-.member-agent-dock-reasoning,
-.member-agent-dock-tool {
+.community-agent-dock-reasoning,
+.community-agent-dock-tool {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -288,24 +288,24 @@
   line-height: 1.45;
 }
 
-.member-agent-dock-reasoning svg,
-.member-agent-dock-tool svg {
+.community-agent-dock-reasoning svg,
+.community-agent-dock-tool svg {
   width: 13px;
   height: 13px;
   flex: 0 0 13px;
   margin-top: 1px;
 }
 
-.member-agent-dock-reasoning svg,
+.community-agent-dock-reasoning svg,
 .is-spinning {
-  animation: member-agent-dock-spin 900ms linear infinite;
+  animation: community-agent-dock-spin 900ms linear infinite;
 }
 
-.member-agent-dock-tool svg {
-  color: var(--member-agent-accent);
+.community-agent-dock-tool svg {
+  color: var(--community-agent-accent);
 }
 
-.member-agent-dock-error {
+.community-agent-dock-error {
   margin: 12px 0 0;
   padding: 9px 10px;
   color: #e8b4c4;
@@ -315,59 +315,59 @@
   line-height: 1.45;
 }
 
-:root[data-theme="light"] .member-agent-dock-error {
+:root[data-theme="light"] .community-agent-dock-error {
   color: var(--accent-error);
   background: color-mix(in srgb, var(--accent-error) 10%, transparent);
   border-left-color: var(--accent-error);
 }
 
-.member-agent-dock-limit {
+.community-agent-dock-limit {
   display: grid;
   gap: 10px;
   margin: 12px 0 0;
   padding: 12px;
   color: var(--text-ink-secondary);
-  background: var(--member-agent-accent-soft);
-  border: 1px solid var(--member-agent-accent-border);
+  background: var(--community-agent-accent-soft);
+  border: 1px solid var(--community-agent-accent-border);
   border-radius: 10px;
   font-size: 13px;
   line-height: 1.5;
 }
 
-.member-agent-dock-limit p {
+.community-agent-dock-limit p {
   margin: 0;
 }
 
-.member-agent-dock-limit button {
+.community-agent-dock-limit button {
   justify-self: start;
   padding: 7px 12px;
   color: var(--text-ink-primary);
   background: transparent;
-  border: 1px solid var(--member-agent-accent);
+  border: 1px solid var(--community-agent-accent);
   border-radius: 8px;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
 
-.member-agent-dock-limit button:hover {
-  background: var(--member-agent-accent-soft);
+.community-agent-dock-limit button:hover {
+  background: var(--community-agent-accent-soft);
 }
 
-.member-agent-dock-composer-shell {
+.community-agent-dock-composer-shell {
   display: grid;
   gap: 8px;
   margin: 0 12px 12px;
 }
 
-.member-agent-dock-composer-attachments {
+.community-agent-dock-composer-attachments {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   padding: 0 3px;
 }
 
-.member-agent-dock-composer-image {
+.community-agent-dock-composer-image {
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
@@ -376,13 +376,13 @@
   border-radius: 10px;
 }
 
-.member-agent-dock-composer-image > img {
+.community-agent-dock-composer-image > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.member-agent-dock-composer-image > span {
+.community-agent-dock-composer-image > span {
   position: absolute;
   inset: 0;
   display: grid;
@@ -391,13 +391,13 @@
   background: rgba(10, 10, 12, 0.46);
 }
 
-.member-agent-dock-composer-image > span svg {
+.community-agent-dock-composer-image > span svg {
   width: 18px;
   height: 18px;
-  animation: member-agent-dock-spin 900ms linear infinite;
+  animation: community-agent-dock-spin 900ms linear infinite;
 }
 
-.member-agent-dock-composer-image > button {
+.community-agent-dock-composer-image > button {
   position: absolute;
   top: 4px;
   right: 4px;
@@ -412,30 +412,30 @@
   cursor: pointer;
 }
 
-.member-agent-dock-composer-image > button svg {
+.community-agent-dock-composer-image > button svg {
   width: 13px;
   height: 13px;
 }
 
-.member-agent-dock-file-input { display: none; }
+.community-agent-dock-file-input { display: none; }
 .community-agent-composer.chat-input-bar { margin: 0; }
 
-@keyframes member-agent-dock-spin {
+@keyframes community-agent-dock-spin {
   to { transform: rotate(360deg); }
 }
 
 @media (max-width: 700px) {
-  .member-agent-dock {
+  .community-agent-dock {
     right: 12px;
     bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
-  .member-agent-dock-panel {
+  .community-agent-dock-panel {
     width: calc(100vw - 24px);
     height: min(78svh, 680px);
   }
 
-  .member-agent-dock.mobile-root {
+  .community-agent-dock.mobile-root {
     top: calc(env(safe-area-inset-top, 0px) + var(--community-shell-inset));
     right: var(--community-shell-inset);
     bottom: calc(
@@ -448,7 +448,7 @@
     pointer-events: auto;
   }
 
-  .member-agent-dock.mobile-root .member-agent-dock-panel {
+  .community-agent-dock.mobile-root .community-agent-dock-panel {
     width: 100%;
     height: 100%;
     border: 1px solid var(--community-shell-stroke);
@@ -459,21 +459,21 @@
     transform: none;
   }
 
-  .member-agent-dock.mobile-root .member-agent-dock-header {
+  .community-agent-dock.mobile-root .community-agent-dock-header {
     padding-top: 10px;
   }
 
-  .member-agent-dock.mobile-root .member-agent-dock-header-actions > button {
+  .community-agent-dock.mobile-root .community-agent-dock-header-actions > button {
     width: 44px;
     height: 44px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .member-agent-dock-panel {
+  .community-agent-dock-panel {
     transition: none;
   }
-  .member-agent-dock-reasoning svg,
+  .community-agent-dock-reasoning svg,
   .is-spinning {
     animation: none;
   }

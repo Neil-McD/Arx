@@ -39,9 +39,9 @@ const routeState = read("shared/webAppRouteState.ts");
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const bottomRail = read("apps/web/src/components/WebMobileBottomRail.tsx");
 const presenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
-const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
-const memberAgentDockCss = read(
-  "apps/web/src/components/WebMemberAgentDock.css",
+const communityAgentDock = read("apps/web/src/components/WebCommunityAgentDock.tsx");
+const communityAgentDockCss = read(
+  "apps/web/src/components/WebCommunityAgentDock.css",
 );
 const directMessagesHost = read(
   "apps/web/src/components/WebDirectMessagesHost.tsx",
@@ -113,12 +113,12 @@ assert.match(
 );
 assert.match(
   app,
-  /memberAgentDockProps=\{\{[\s\S]*mobileShellActive: showMobileShell,[\s\S]*mobileRoot: showMobileShell && mobileRootPage === "agent"[\s\S]*directMessagesHostProps=\{\{[\s\S]*mobileRoot:[\s\S]*showMobileShell && mobileRootPage === "messages"/,
+  /communityAgentDockProps=\{\{[\s\S]*mobileShellActive: showMobileShell,[\s\S]*mobileRoot: showMobileShell && mobileRootPage === "agent"[\s\S]*directMessagesHostProps=\{\{[\s\S]*mobileRoot:[\s\S]*showMobileShell && mobileRootPage === "messages"/,
   "AI and Messages should reuse their existing surfaces as persistent mobile roots",
 );
 assert.match(
   appCompositionRoot,
-  /<WebMemberAgentDock[\s\S]*\{\.\.\.props\.memberAgentDockProps\}[\s\S]*<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/,
+  /<WebCommunityAgentDock[\s\S]*\{\.\.\.props\.communityAgentDockProps\}[\s\S]*<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/,
   "the composition root should mount both controlled persistent mobile-root surfaces",
 );
 assert.doesNotMatch(
@@ -400,15 +400,15 @@ assert.equal(
 );
 
 assert.match(
-  memberAgentDock,
+  communityAgentDock,
   /mobileShellActive\?: boolean;[\s\S]*mobileRoot\?: boolean;[\s\S]*Boolean\(props\.mobileShellActive && props\.mobileRoot\)[\s\S]*props\.mobileRoot \? " mobile-root"/,
   "the existing member-agent should support controlled mobile-root presentation",
 );
 // The floating dock and its close action are retired: the Agent page is a page.
-assert.doesNotMatch(memberAgentDock, /aria-label="Close"/, "the retired floating dock close action stays gone");
+assert.doesNotMatch(communityAgentDock, /aria-label="Close"/, "the retired floating dock close action stays gone");
 assert.match(
-  memberAgentDockCss,
-  /\.member-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*\.member-agent-dock\.mobile-root \.member-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: var\(--community-shell-radius\);/,
+  communityAgentDockCss,
+  /\.community-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*\.community-agent-dock\.mobile-root \.community-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: var\(--community-shell-radius\);/,
   "the member-agent root should fit the canonical framed surface beside the rail",
 );
 assert.match(

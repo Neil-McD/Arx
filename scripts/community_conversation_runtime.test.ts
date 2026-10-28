@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { normalizeMemberAgentSurfaceContext } from "../shared/memberAgentSurfaceContext";
+import { normalizeCommunityAgentSurfaceContext } from "../shared/communityAgentSurfaceContext";
 import { buildRuntimeInvocationSurfacePrompt, resolveRuntimeInvocationSurfaceForThread, resolveRuntimeInvocationFundingPolicy } from "../shared/runtimeInvocationSurface";
 import { buildCommunityConversationThreadKey } from "../shared/communityConversationIdentity";
 
 test("client input cannot assert the server-derived conversation identity", () => {
-  expect(normalizeMemberAgentSurfaceContext({ version: 1, kind: "community", community_slug: "test-community", section: "chat", community_conversation: true })).not.toHaveProperty("community_conversation");
+  expect(normalizeCommunityAgentSurfaceContext({ version: 1, kind: "community", community_slug: "test-community", section: "chat", community_conversation: true })).not.toHaveProperty("community_conversation");
 });
 
 test("scoped conversations reuse community funding without personal-agent identity", () => {

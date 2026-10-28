@@ -11,7 +11,7 @@ import {
   type RuntimeProviderContextAttestationV1,
 } from "../shared/runtimeProviderContextAttestation";
 import {
-  buildGlobalMemberAgentEpisodeThreadKey,
+  buildGlobalCommunityAgentEpisodeThreadKey,
 } from "../shared/runtimeInvocationSurface";
 
 const modules = import.meta.glob(["./threads.ts", "./_generated/**/*.*s"]);
@@ -161,7 +161,7 @@ test.each(["member_agent_dock"] as const)(
 test("the retired personal agent's global conversations cannot record new attestations", async () => {
   const { t, ids, attestation } = await createFixture("member_agent_dock");
   await t.run(async ctx => {
-    await ctx.db.patch(ids.threadId, { threadKey: buildGlobalMemberAgentEpisodeThreadKey(1) });
+    await ctx.db.patch(ids.threadId, { threadKey: buildGlobalCommunityAgentEpisodeThreadKey(1) });
   });
   await expect(t.mutation(internalRefs.threads.recordRuntimeProviderContextAttestationInternal, { ownerId: ids.userId, threadId: ids.threadId, runId: ids.runId, attestation, nowMs: 2000 })).resolves.toMatchObject({ ok: false });
 });

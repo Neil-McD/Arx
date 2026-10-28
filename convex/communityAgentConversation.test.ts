@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
-import { MEMBER_AGENT_GLOBAL_SCOPE_KEY, buildGlobalMemberAgentEpisodeThreadKey } from "../shared/runtimeInvocationSurface";
+import { COMMUNITY_AGENT_GLOBAL_SCOPE_KEY, buildGlobalCommunityAgentEpisodeThreadKey } from "../shared/runtimeInvocationSurface";
 const modules = import.meta.glob(["./threads.ts", "./_generated/**/*.*s"]);
 
 async function fixture() {
@@ -65,8 +65,8 @@ test("global conversation history is not adopted or modified", async () => {
   // A global conversation from the retired personal-agent era, as stored history.
   const old = await f.t.run(async ctx => {
     const owner = await ctx.db.query("users").withIndex("by_authSubject", q => q.eq("authSubject", "a")).unique();
-    const threadId = await ctx.db.insert("threads", { ownerId: owner!._id, threadKey: buildGlobalMemberAgentEpisodeThreadKey(1), titleSource: "auto", communityId: f.communities[0], contextVersion: 0, lastSeq: 0, createdAt: 1, updatedAt: 1 });
-    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId: owner!._id, scopeKey: MEMBER_AGENT_GLOBAL_SCOPE_KEY, nextOrdinal: 2, createdAt: 1, updatedAt: 1 });
+    const threadId = await ctx.db.insert("threads", { ownerId: owner!._id, threadKey: buildGlobalCommunityAgentEpisodeThreadKey(1), titleSource: "auto", communityId: f.communities[0], contextVersion: 0, lastSeq: 0, createdAt: 1, updatedAt: 1 });
+    const channelId = await ctx.db.insert("memberAgentChannels", { ownerId: owner!._id, scopeKey: COMMUNITY_AGENT_GLOBAL_SCOPE_KEY, nextOrdinal: 2, createdAt: 1, updatedAt: 1 });
     const episodeId = await ctx.db.insert("memberAgentEpisodes", { channelId, threadId, ordinal: 1, status: "active", startedAt: 1, createdAt: 1, updatedAt: 1 });
     await ctx.db.patch(channelId, { activeEpisodeId: episodeId });
     return { thread_id: String(threadId) };
@@ -125,5 +125,5 @@ test("runtime records use the bound community and running turns prevent rollover
   expect(run.communityId).toBe(communityId);
   await expect(f.a.mutation(api.threads.startNewCommunityAgentConversation, { communityId, expectedActiveEpisodeId: first.episode_id as any })).rejects.toThrow("community_conversation_turn_running");
   await f.t.run(ctx => ctx.db.patch(f.memberships[0], { active: false, revokedAt: Date.now() }));
-  await expect(f.t.query(internal.threads.listMemberAgentRuntimeMessagesInternal, { ownerId: run.ownerId, threadId: first.thread_id as any, expectedUserMessageKey: "runtime-user" })).rejects.toThrow();
+  await expect(f.t.query(internal.threads.listCommunityAgentRuntimeMessagesInternal, { ownerId: run.ownerId, threadId: first.thread_id as any, expectedUserMessageKey: "runtime-user" })).rejects.toThrow();
 });

@@ -13,10 +13,10 @@ export const PLATFORM_HOME_MEMBER_LIMITED_SURFACES = [
   "member_agent_dock",
   "community_agent_mention",
 ] as const;
-export const PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED =
+export const PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED =
   "platform_home_member_agent_limit_reached";
 // Client-facing code carried on the runtime turn error.
-export const COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE =
+export const COMMUNITY_AGENT_LIMIT_REACHED_CODE =
   "community_member_agent_limit_reached";
 
 // One member-facing explanation for every surface that hits the allowance.

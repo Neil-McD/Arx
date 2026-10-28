@@ -95,7 +95,7 @@ assert.deepEqual(
     ],
   }),
   expected,
-  "member agent must expose only the canonical Polynet verbs from the Polynet family",
+  "community agent must expose only the canonical Polynet verbs from the Polynet family",
 );
 
 for (const name of expected) {

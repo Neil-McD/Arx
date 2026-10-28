@@ -16,7 +16,7 @@ describe("resource changeset approval cards", () => {
     }
   });
   it("uses pending-only presentation for recovered proposals, not historical cards", () => {
-    const source = readFileSync(new URL("../apps/web/src/components/WebMemberAgentDock.tsx", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../apps/web/src/components/WebCommunityAgentDock.tsx", import.meta.url), "utf8");
     expect(source).toMatch(/cards=\{persistentResourceChangesetCards\}[\s\S]*?pendingOnly/);
   });
   it("extracts a staged changeset from the canonical polynet_write envelope", () => {

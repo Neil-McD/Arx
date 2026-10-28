@@ -321,8 +321,8 @@ assert.doesNotMatch(fundingRuntime, /modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/);
 assert.match(fundingRuntime, /markCommunityInferenceProviderStartedInternal/);
 assert.match(fundingRuntime, /settleCommunityInferenceReceiptInternal/);
 assert.doesNotMatch(fundingRuntime, /owner_api_key|userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/);
-assert.doesNotMatch(memberTurnHandlers, /beginMemberAgentFundingSession/);
-assert.doesNotMatch(memberTurnHandlers, /claimMemberAgentFundingSession/);
+assert.doesNotMatch(memberTurnHandlers, /beginCommunityAgentFundingSession/);
+assert.doesNotMatch(memberTurnHandlers, /claimCommunityAgentFundingSession/);
 assert.match(memberTurnHandlers, /claimCommunityFundingSession/);
 assert.match(
   memberTurnHandlers,
@@ -433,7 +433,7 @@ assert.match(activeLegal, /Builder for \$79 USD per month for each attached comm
 assert.match(activeLegal, /Polynet-hosted AI for a grandfathered community still requires one current Builder subscription/);
 assert.match(
   cognitionContract,
-  /The member agent under an authorized community lens, direct Concierge chat,[\s\S]*autonomous cognition, and AI-assisted setup generation are[\s\S]*community-founder-funded/,
+  /The community agent under an authorized community lens, direct Concierge chat,[\s\S]*autonomous cognition, and AI-assisted setup generation are[\s\S]*community-founder-funded/,
 );
 assert.match(billingContract, /\$79 USD monthly for Builder on each managed community/);
 assert.match(billingContract, /Visibility, membership, roles, paid-member commerce, Builder payment, AI allowance, and lifecycle remain separate canonical facts/);

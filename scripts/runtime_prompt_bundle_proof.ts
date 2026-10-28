@@ -34,7 +34,7 @@ const params = {
     can_read_live_resources: true,
     can_use_resource_builder: true,
   },
-  memberAgentSurfaceContext: {
+  communityAgentSurfaceContext: {
     version: 1,
     kind: "community",
     community_slug: "bundle-community",
@@ -72,7 +72,7 @@ assert.match(bundle.text, /on-demand retrieval, not a required read for unrelate
 assert.match(bundle.text, /Unavailable means the action's outcome cannot be verified/);
 const switchedCommunity = buildPlatformHarnessRuntimePromptBundle({
   ...params, communityId: "community_2", communityName: "Second", communitySlug: "second-community",
-  memberAgentSurfaceContext: { ...params.memberAgentSurfaceContext, community_slug: "second-community" },
+  communityAgentSurfaceContext: { ...params.communityAgentSurfaceContext, community_slug: "second-community" },
 });
 assert.match(switchedCommunity.text, /first list \/communities\/second-community\/members\//);
 assert.doesNotMatch(switchedCommunity.text, /first list \/communities\/bundle-community\/members\//);
@@ -145,7 +145,7 @@ const globalBundle = buildPlatformHarnessRuntimePromptBundle({
   communityAbout: null,
   communitySystemPrompt: null,
   communityLensAuthority: null,
-  memberAgentSurfaceContext: {
+  communityAgentSurfaceContext: {
     version: 1,
     kind: "discover",
     section: "communities",
@@ -162,7 +162,7 @@ assert.throws(
   () => buildPlatformHarnessRuntimePromptBundle({
     ...params,
     invocationSurface: "community_funnel_builder" as never,
-    memberAgentSurfaceContext: null,
+    communityAgentSurfaceContext: null,
   }),
   /invalid_runtime_invocation_surface/,
   "the retired funnel composer surface cannot build a prompt",

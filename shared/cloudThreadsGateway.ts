@@ -4,9 +4,9 @@ import { type ConvexClient } from "./convexAuthenticatedClient";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { bootstrapGatewayAuthContextIfAvailable } from "./cloudGateway";
 import {
-  MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
-  type MemberAgentImageAttachment,
-} from "./memberAgentAttachments";
+  COMMUNITY_AGENT_ATTACHMENT_UPLOAD_PATH,
+  type CommunityAgentImageAttachment,
+} from "./communityAgentAttachments";
 
 export type CloudThreadRecordInput = {
   threadId: string;
@@ -106,12 +106,12 @@ export async function addCloudThreadMessage(params: {
   });
 }
 
-export async function uploadCloudMemberAgentImageFile(params: {
+export async function uploadCloudCommunityAgentImageFile(params: {
   session: AuthSessionLike;
   threadId: string;
   messageId: string;
   file: File;
-}): Promise<MemberAgentImageAttachment> {
+}): Promise<CommunityAgentImageAttachment> {
   const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
   if (!bootstrapped) throw new Error("Failed to start image upload.");
   const { client, authSubject } = bootstrapped;
@@ -128,7 +128,7 @@ export async function uploadCloudMemberAgentImageFile(params: {
   if (!runtimeToken || !runtimeBaseUrl || !messageKey) {
     throw new Error("Failed to start image upload.");
   }
-  const response = await fetch(`${runtimeBaseUrl}${MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH}`, {
+  const response = await fetch(`${runtimeBaseUrl}${COMMUNITY_AGENT_ATTACHMENT_UPLOAD_PATH}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${runtimeToken}`,

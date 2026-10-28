@@ -241,8 +241,8 @@ const persistenceLifecycle = read(
 const publicBuilderLandingCss = read(
   "apps/web/src/components/polynetLanding/ConversionLanding.css",
 );
-const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
-const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const communityAgentCss = read("apps/web/src/components/WebCommunityAgentDock.css");
+const communityAgentComponent = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const directMessagesChrome = read(
@@ -571,7 +571,7 @@ assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);
 assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
 assert.doesNotMatch(
-  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${memberAgentCss}`,
+  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${communityAgentCss}`,
   /data-theme-family/,
   "theme family must not survive as a second styling authority",
 );
@@ -640,8 +640,8 @@ assert.match(
 );
 
 assert.match(
-  memberAgentCss,
-  /\.member-agent-dock-panel\s*\{[\s\S]*?background:\s*var\(--web-context-panel-surface\);[\s\S]*?border:\s*1px solid var\(--web-context-panel-border\);[\s\S]*?box-shadow:\s*var\(--web-context-panel-shadow\);/,
+  communityAgentCss,
+  /\.community-agent-dock-panel\s*\{[\s\S]*?background:\s*var\(--web-context-panel-surface\);[\s\S]*?border:\s*1px solid var\(--web-context-panel-border\);[\s\S]*?box-shadow:\s*var\(--web-context-panel-shadow\);/,
   "the open member-agent panel should use the same semantic context material as other utility panels",
 );
 
@@ -666,7 +666,7 @@ assert.match(
   "account setup identity media should use canonical border and card roles",
 );
 assert.doesNotMatch(
-  memberAgentCss,
+  communityAgentCss,
   /:root\[data-theme="dark"\]/,
   "Dark component preservation should come from canonical root defaults, not new component overrides",
 );
@@ -698,7 +698,7 @@ assert.doesNotMatch(
 [
   communityChat,
   directMessages,
-  memberAgentComponent,
+  communityAgentComponent,
 ].forEach((component) => {
   assert.match(
     component,
@@ -747,8 +747,8 @@ assert.match(
   "disabled send should retain the canonical action role beneath its legacy opacity",
 );
 assert.match(
-  memberAgentCss,
-  /\.member-agent-dock-error\s*\{[\s\S]*?color:\s*#e8b4c4;[\s\S]*?background:\s*rgba\(214,\s*106,\s*138,\s*0\.1\);[\s\S]*?border-left:\s*2px solid var\(--accent-gold\);/,
+  communityAgentCss,
+  /\.community-agent-dock-error\s*\{[\s\S]*?color:\s*#e8b4c4;[\s\S]*?background:\s*rgba\(214,\s*106,\s*138,\s*0\.1\);[\s\S]*?border-left:\s*2px solid var\(--accent-gold\);/,
   "existing dark-theme dock errors must retain their exact legacy treatment",
 );
 
@@ -768,8 +768,8 @@ assert.match(
   );
 });
 assert.match(
-  memberAgentCss,
-  /:root\[data-theme="light"\]\s*\.member-agent-dock-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);[\s\S]*?border-left-color:\s*var\(--accent-error\);/,
+  communityAgentCss,
+  /:root\[data-theme="light"\]\s*\.community-agent-dock-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);[\s\S]*?border-left-color:\s*var\(--accent-error\);/,
   "Light dock errors should use the functional error role",
 );
 

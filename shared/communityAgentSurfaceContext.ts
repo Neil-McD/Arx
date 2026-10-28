@@ -1,4 +1,4 @@
-export const MEMBER_AGENT_COMMUNITY_SECTIONS = [
+export const COMMUNITY_AGENT_COMMUNITY_SECTIONS = [
   "chat",
   "agent",
   "resources",
@@ -11,20 +11,20 @@ export const MEMBER_AGENT_COMMUNITY_SECTIONS = [
   "analytics",
 ] as const;
 
-export type MemberAgentCommunitySection =
-  (typeof MEMBER_AGENT_COMMUNITY_SECTIONS)[number];
+export type CommunityAgentCommunitySection =
+  (typeof COMMUNITY_AGENT_COMMUNITY_SECTIONS)[number];
 
-export const MEMBER_AGENT_PLATFORM_PAGES = [
+export const COMMUNITY_AGENT_PLATFORM_PAGES = [
   "settings",
   "docs",
   "operator",
   "workspace",
 ] as const;
 
-export type MemberAgentPlatformPage =
-  (typeof MEMBER_AGENT_PLATFORM_PAGES)[number];
+export type CommunityAgentPlatformPage =
+  (typeof COMMUNITY_AGENT_PLATFORM_PAGES)[number];
 
-export type MemberAgentSurfaceContextV1 =
+export type CommunityAgentSurfaceContextV1 =
   | {
       version: 1;
       kind: "discover";
@@ -36,17 +36,17 @@ export type MemberAgentSurfaceContextV1 =
       community_slug: string;
       /** Server-derived from the persisted thread; never accepted by normalization. */
       community_conversation?: true;
-      section: MemberAgentCommunitySection;
+      section: CommunityAgentCommunitySection;
     }
   | {
       version: 1;
       kind: "platform";
-      page: MemberAgentPlatformPage;
+      page: CommunityAgentPlatformPage;
       section: string | null;
     };
 
-const COMMUNITY_SECTION_SET = new Set<string>(MEMBER_AGENT_COMMUNITY_SECTIONS);
-const PLATFORM_PAGE_SET = new Set<string>(MEMBER_AGENT_PLATFORM_PAGES);
+const COMMUNITY_SECTION_SET = new Set<string>(COMMUNITY_AGENT_COMMUNITY_SECTIONS);
+const PLATFORM_PAGE_SET = new Set<string>(COMMUNITY_AGENT_PLATFORM_PAGES);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -65,9 +65,9 @@ function normalizeSection(value: unknown, maxLength = 80): string | null {
   return /^[a-z0-9_-]+$/.test(section) ? section : null;
 }
 
-export function normalizeMemberAgentSurfaceContext(
+export function normalizeCommunityAgentSurfaceContext(
   value: unknown,
-): MemberAgentSurfaceContextV1 | null {
+): CommunityAgentSurfaceContextV1 | null {
   const row = asRecord(value);
   if (!row || row.version !== 1) return null;
   const kind = String(row.kind ?? "").trim().toLowerCase();
@@ -82,7 +82,7 @@ export function normalizeMemberAgentSurfaceContext(
       version: 1,
       kind: "community",
       community_slug: communitySlug,
-      section: section as MemberAgentCommunitySection,
+      section: section as CommunityAgentCommunitySection,
     };
   }
   if (kind === "platform") {
@@ -94,7 +94,7 @@ export function normalizeMemberAgentSurfaceContext(
     return {
       version: 1,
       kind: "platform",
-      page: page as MemberAgentPlatformPage,
+      page: page as CommunityAgentPlatformPage,
       section,
     };
   }
@@ -109,8 +109,8 @@ function titleCase(value: string): string {
     .join(" ");
 }
 
-export function describeMemberAgentSurface(
-  surface: MemberAgentSurfaceContextV1,
+export function describeCommunityAgentSurface(
+  surface: CommunityAgentSurfaceContextV1,
   communityName?: string | null,
 ): string {
   if (surface.kind === "discover") return "Discover";
@@ -123,7 +123,7 @@ export function describeMemberAgentSurface(
     : titleCase(surface.page);
 }
 
-export type MemberAgentSurfacePresentation = {
+export type CommunityAgentSurfacePresentation = {
   surfaceLabel: string;
   title: string;
   composerLabel: string;
@@ -131,11 +131,11 @@ export type MemberAgentSurfacePresentation = {
   loadingLabel: string;
 };
 
-export function buildMemberAgentSurfacePresentation(
-  surface: MemberAgentSurfaceContextV1,
+export function buildCommunityAgentSurfacePresentation(
+  surface: CommunityAgentSurfaceContextV1,
   communityName?: string | null,
-): MemberAgentSurfacePresentation {
-  const surfaceLabel = describeMemberAgentSurface(surface, communityName);
+): CommunityAgentSurfacePresentation {
+  const surfaceLabel = describeCommunityAgentSurface(surface, communityName);
   return {
     surfaceLabel,
     title: "Polynet Intelligence",
@@ -147,8 +147,8 @@ export function buildMemberAgentSurfacePresentation(
   };
 }
 
-export function renderMemberAgentSurfaceContextForPrompt(
-  surface: MemberAgentSurfaceContextV1 | null | undefined,
+export function renderCommunityAgentSurfaceContextForPrompt(
+  surface: CommunityAgentSurfaceContextV1 | null | undefined,
   communityName?: string | null,
 ): string | null {
   if (!surface) return null;

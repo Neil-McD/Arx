@@ -225,7 +225,7 @@ test("channel-facing roots and replies acquire General while private dock rows r
       kind: "agent_signal",
       status: "live",
       visibilityScope: "private",
-      contentSummary: "Private member agent conversation",
+      contentSummary: "Private community agent conversation",
       replyCount: 0,
       reactionSummary: [],
       idempotencyKey: "private_member_agent:root:test",

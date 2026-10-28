@@ -664,7 +664,7 @@ assert.match(
 );
 assert.doesNotMatch(
   builderKnowledgeSetupBackend,
-  /communityResourceBuilderChangesets|polynet_write|memberAgent/,
+  /communityResourceBuilderChangesets|polynet_write|communityAgent/,
   "canonical onboarding generation must not retain the agent changeset detour",
 );
 assert.match(

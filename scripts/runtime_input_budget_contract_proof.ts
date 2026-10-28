@@ -46,11 +46,11 @@ assert.match(
 assert.doesNotMatch(providerContext, /ESTIMATED_CHARS_PER_TOKEN/);
 
 const memberConversationContext = read(
-  "shared/memberAgentConversationContext.ts",
+  "shared/communityAgentConversationContext.ts",
 );
 assert.doesNotMatch(
   memberConversationContext,
-  /MEMBER_AGENT_CONTEXT_MAX_CHARS|MEMBER_AGENT_CONTEXT_MAX_MESSAGE_CHARS|maxCharacters/,
+  /COMMUNITY_AGENT_CONTEXT_MAX_CHARS|COMMUNITY_AGENT_CONTEXT_MAX_MESSAGE_CHARS|maxCharacters/,
   "Member provider context must not apply a separate raw character budget before model-aware admission",
 );
 

@@ -235,7 +235,7 @@
     "check:founder-paid-tool-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/founder_paid_tool_accounting_contract_proof.ts && vitest run convex/founderPaidTools.test.ts",
     "check:monetization-irreducibility-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/monetization_irreducibility_contract_proof.ts",
     "check:builder-offer-surface-proof": "tsx scripts/builder_offer_surface_contract_proof.ts",
-    "check:member-agent-dock-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_agent_dock_contract_proof.ts",
+    "check:community-agent-dock-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_dock_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts && vitest run convex/communityAgentStewardPrompt.test.ts convex/communityAgentStewardContextSnapshot.test.ts",
     "generate:product-docs-index": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate_product_docs_index.ts",

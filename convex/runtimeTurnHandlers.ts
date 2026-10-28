@@ -17,8 +17,8 @@ import {
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import {
-  COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE,
-  PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED,
+  COMMUNITY_AGENT_LIMIT_REACHED_CODE,
+  PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED,
   formatPlatformHomeMemberLimitMessage,
   type CommunityInferenceSurface,
   type FounderProviderRequestUsage,
@@ -88,10 +88,10 @@ function resolveCommunityFundingClaimFailure(error: unknown): {
   message: string;
 } {
   const rawCode = error instanceof Error ? error.message : String(error ?? "");
-  if (rawCode === PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED) {
+  if (rawCode === PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED) {
     return {
       status: 429,
-      code: COMMUNITY_MEMBER_AGENT_LIMIT_REACHED_CODE,
+      code: COMMUNITY_AGENT_LIMIT_REACHED_CODE,
       message: formatPlatformHomeMemberLimitMessage(Date.now()),
     };
   }
@@ -395,7 +395,7 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
       invocationSurface,
-      memberAgentSurfaceContext,
+      communityAgentSurfaceContext,
       communityInferenceAdmission,
     } = resolved.value;
     const runId =
@@ -1002,7 +1002,7 @@ export async function handleRuntimeTurnRequest(args: {
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
-        member_agent_surface_context: memberAgentSurfaceContext,
+        member_agent_surface_context: communityAgentSurfaceContext,
       },
     });
     await appendRunEvent({
@@ -1031,7 +1031,7 @@ export async function handleRuntimeTurnRequest(args: {
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
-        member_agent_surface_context: memberAgentSurfaceContext,
+        member_agent_surface_context: communityAgentSurfaceContext,
       },
     });
     if (stream) {
@@ -1125,7 +1125,7 @@ export async function handleRuntimeTurnRequest(args: {
             threadWorkingState: ownedThread.workingState ?? null,
             allowedToolNames: polynetAllowedToolNamesForRun,
             invocationSurface,
-            memberAgentSurfaceContext,
+            communityAgentSurfaceContext,
             appendRunEvent: streamAppendRunEvent,
             refreshRuntimeContextSnapshot: async (
               phase: "started" | "active" = "active",
@@ -1493,7 +1493,7 @@ export async function handleRuntimeTurnRequest(args: {
         threadWorkingState: ownedThread.workingState ?? null,
         allowedToolNames: polynetAllowedToolNamesForRun,
         invocationSurface,
-        memberAgentSurfaceContext,
+        communityAgentSurfaceContext,
         appendRunEvent: async (event): Promise<void> => {
           await appendRunEvent(event);
           await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);

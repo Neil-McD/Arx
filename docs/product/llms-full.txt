@@ -2034,7 +2034,7 @@ Archive is a lifecycle action, not a billing status. It immediately freezes ordi
 
 Each `$79` monthly cycle includes up to `$20` in combined raw provider cost for hosted AI inference and paid web research or crawl tools in that community. Before a paid provider call begins, Polynet reserves a bounded worst-case amount and settles the actual or bounded evidenced cost afterward. Missing pricing, ambiguous cycle state, inactive payment, or exhausted allowance fails closed.
 
-The same funding kernel covers the member agent under a server-validated community lens, direct community-agent mentions, autonomous community cognition, and AI-assisted setup. Members never provide community inference credentials. Community BYOK and requester ChatGPT are retired as authority; historical rows remain audit or migration evidence only.
+The same funding kernel covers the community agent under a server-validated community lens, direct community-agent mentions, autonomous community cognition, and AI-assisted setup. Members never provide community inference credentials. Community BYOK and requester ChatGPT are retired as authority; historical rows remain audit or migration evidence only.
 
 The canonical operator grant derives only from one active `operatorRoles.owner` row. It creates no fake Stripe state and bypasses neither authorization, rate limits, usage receipts, nor provider-cost accounting.
 

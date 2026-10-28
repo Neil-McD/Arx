@@ -112,7 +112,7 @@ assert.match(
 );
 assert.match(
   issueQuery,
-  /issueCode === PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED\)[\s\S]*reason: "member_agent_limit_reached"[\s\S]*cta: "start_builder"[\s\S]*formatPlatformHomeMemberLimitMessage\(nowMs\)/,
+  /issueCode === PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED\)[\s\S]*reason: "member_agent_limit_reached"[\s\S]*cta: "start_builder"[\s\S]*formatPlatformHomeMemberLimitMessage\(nowMs\)/,
   "serve issue lookup should return the requester's own monthly allowance issue with the Builder action",
 );
 assert.doesNotMatch(

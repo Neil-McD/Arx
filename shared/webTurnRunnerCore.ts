@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface";
-import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext";
+import type { CommunityAgentSurfaceContextV1 } from "./communityAgentSurfaceContext";
 
 export type InferenceIssueModalState = {
   reason:
@@ -96,7 +96,7 @@ export type RunAgentTurnParams = {
   systemPrompt?: string | null;
   inferenceSource?: "free" | "user_key" | "chatgpt";
   invocationSurface: RuntimeInvocationSurface;
-  surfaceContext?: MemberAgentSurfaceContextV1 | null;
+  surfaceContext?: CommunityAgentSurfaceContextV1 | null;
   requestedFundingSource:
     | "demo_public"
     | "user_key"

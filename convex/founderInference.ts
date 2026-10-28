@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import {
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
-  PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED,
+  PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED,
   PLATFORM_HOME_MEMBER_LIMITED_SURFACES,
   PLATFORM_HOME_MEMBER_MONTHLY_AGENT_TURNS,
   utcMonthWindow,
@@ -323,7 +323,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       surface: args.surface,
       nowMs: args.nowMs,
     })) {
-      return { ok: false, errorCode: PLATFORM_HOME_MEMBER_AGENT_LIMIT_REACHED };
+      return { ok: false, errorCode: PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED };
     }
 
     // Operator-controlled, community-scoped canary; never client selected.

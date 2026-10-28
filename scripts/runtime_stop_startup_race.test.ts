@@ -7,7 +7,7 @@ describe("runtime Stop startup race", () => {
   it("does not expose Stop until the first durable runtime event is visible", () => {
     const root = path.resolve(import.meta.dirname, "..");
     const memberDock = fs.readFileSync(
-      path.join(root, "apps/web/src/components/WebMemberAgentDock.tsx"),
+      path.join(root, "apps/web/src/components/WebCommunityAgentDock.tsx"),
       "utf8",
     );
     expect(memberDock).toMatch(

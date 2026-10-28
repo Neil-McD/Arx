@@ -6,16 +6,16 @@ export type RuntimeInvocationSurface = "member_agent_dock";
 
 export type RuntimeInvocationFundingPolicy = "community_owner";
 
-export const MEMBER_AGENT_THREAD_KEY_PREFIX = "member-agent";
-export const MEMBER_AGENT_GLOBAL_SCOPE_KEY = "global";
+export const COMMUNITY_AGENT_THREAD_KEY_PREFIX = "member-agent";
+export const COMMUNITY_AGENT_GLOBAL_SCOPE_KEY = "global";
 
-const MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
+const COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
   "product_docs",
   "community_tools",
   "web_research",
 ]);
 
-const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
+const COMMUNITY_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
   "polynet_list",
   "polynet_read",
   "polynet_search",
@@ -52,58 +52,58 @@ export function resolveRuntimeInvocationSurfaceForThread(params: {
   if (!requestedSurface) return null;
   const threadKey = String(params.threadKey ?? "").trim();
   const threadSurface = threadKey.startsWith(COMMUNITY_CONVERSATION_PREFIX) ? "member_agent_dock" : threadKey.startsWith(
-    `${MEMBER_AGENT_THREAD_KEY_PREFIX}:`,
+    `${COMMUNITY_AGENT_THREAD_KEY_PREFIX}:`,
   )
     ? "member_agent_dock"
     : null;
   return requestedSurface === threadSurface ? requestedSurface : null;
 }
 
-export function buildMemberAgentThreadKey(communityId: string): string {
+export function buildCommunityAgentThreadKey(communityId: string): string {
   const normalizedCommunityId = String(communityId ?? "").trim();
   if (!normalizedCommunityId)
     throw new Error("member_agent_community_required");
-  return `${MEMBER_AGENT_THREAD_KEY_PREFIX}:${normalizedCommunityId}`.slice(
+  return `${COMMUNITY_AGENT_THREAD_KEY_PREFIX}:${normalizedCommunityId}`.slice(
     0,
     200,
   );
 }
 
-export function buildGlobalMemberAgentEpisodeThreadKey(
+export function buildGlobalCommunityAgentEpisodeThreadKey(
   ordinal: number,
 ): string {
   if (!Number.isSafeInteger(ordinal) || ordinal < 1) {
     throw new Error("member_agent_episode_ordinal_invalid");
   }
-  return `${MEMBER_AGENT_THREAD_KEY_PREFIX}:${MEMBER_AGENT_GLOBAL_SCOPE_KEY}:episode:${ordinal}`;
+  return `${COMMUNITY_AGENT_THREAD_KEY_PREFIX}:${COMMUNITY_AGENT_GLOBAL_SCOPE_KEY}:episode:${ordinal}`;
 }
 
-export function isGlobalMemberAgentEpisodeThreadKey(
+export function isGlobalCommunityAgentEpisodeThreadKey(
   threadKey: string,
 ): boolean {
   const normalizedThreadKey = String(threadKey ?? "").trim();
-  const prefix = `${MEMBER_AGENT_THREAD_KEY_PREFIX}:${MEMBER_AGENT_GLOBAL_SCOPE_KEY}:episode:`;
+  const prefix = `${COMMUNITY_AGENT_THREAD_KEY_PREFIX}:${COMMUNITY_AGENT_GLOBAL_SCOPE_KEY}:episode:`;
   return (
     normalizedThreadKey.startsWith(prefix) &&
     /^[1-9]\d*$/.test(normalizedThreadKey.slice(prefix.length))
   );
 }
 
-export function isReadOnlyLegacyMemberAgentThreadKey(
+export function isReadOnlyLegacyCommunityAgentThreadKey(
   threadKey: string,
 ): boolean {
   // Every member-agent conversation predates the one community agent: per-community
   // threads and the retired personal agent's global episodes are history only.
   const normalizedThreadKey = String(threadKey ?? "").trim();
-  return normalizedThreadKey.startsWith(`${MEMBER_AGENT_THREAD_KEY_PREFIX}:`);
+  return normalizedThreadKey.startsWith(`${COMMUNITY_AGENT_THREAD_KEY_PREFIX}:`);
 }
 
-export function isMemberAgentThreadKeyForCommunity(
+export function isCommunityAgentThreadKeyForCommunity(
   threadKey: string,
   communityId: string,
 ): boolean {
   const normalizedThreadKey = String(threadKey ?? "").trim();
-  const legacyKey = buildMemberAgentThreadKey(communityId);
+  const legacyKey = buildCommunityAgentThreadKey(communityId);
   if (normalizedThreadKey === legacyKey) return true;
   const episodeOrdinal = normalizedThreadKey.slice(
     `${legacyKey}:episode:`.length,
@@ -122,7 +122,7 @@ export function restrictCapabilityFamiliesForInvocationSurface(params: {
     throw new Error("invalid_runtime_invocation_surface");
   }
   return params.capabilityFamilies.filter((family) =>
-    MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET.has(family),
+    COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET.has(family),
   );
 }
 
@@ -134,7 +134,7 @@ export function restrictToolNamesForInvocationSurface(params: {
     throw new Error("invalid_runtime_invocation_surface");
   }
   return params.toolNames.filter((toolName) =>
-    MEMBER_AGENT_DOCK_TOOL_NAME_SET.has(toolName),
+    COMMUNITY_AGENT_DOCK_TOOL_NAME_SET.has(toolName),
   );
 }
 

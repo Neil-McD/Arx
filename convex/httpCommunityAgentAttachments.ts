@@ -1,12 +1,12 @@
 import { internal } from "./_generated/api";
 import type { PublicHttpAction } from "convex/server";
 import {
-  MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
-  MEMBER_AGENT_MAX_IMAGE_BYTES,
-  isAllowedMemberAgentImageMime,
-  normalizeMemberAgentImageMime,
-  normalizeMemberAgentImageName,
-} from "../shared/memberAgentAttachments";
+  COMMUNITY_AGENT_ATTACHMENT_UPLOAD_PATH,
+  COMMUNITY_AGENT_MAX_IMAGE_BYTES,
+  isAllowedCommunityAgentImageMime,
+  normalizeCommunityAgentImageMime,
+  normalizeCommunityAgentImageName,
+} from "../shared/communityAgentAttachments";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -34,7 +34,7 @@ type RequireAuthenticatedActor = (
   | { ok: false; response: Response }
 >;
 
-type RegisterMemberAgentAttachmentRoutesArgs = {
+type RegisterCommunityAgentAttachmentRoutesArgs = {
   http: HttpRouterLike;
   httpAction: HttpActionLike;
   jsonResponse: (req: Request, status: number, payload: unknown) => Response;
@@ -48,9 +48,9 @@ function readRequiredHeader(req: Request, name: string): string {
 
 function decodeFileName(raw: string): string {
   try {
-    return normalizeMemberAgentImageName(decodeURIComponent(raw));
+    return normalizeCommunityAgentImageName(decodeURIComponent(raw));
   } catch {
-    return normalizeMemberAgentImageName(raw);
+    return normalizeCommunityAgentImageName(raw);
   }
 }
 
@@ -79,7 +79,7 @@ function inferImageMime(bytes: Uint8Array): string | null {
 
 function uploadErrorResponse(
   req: Request,
-  jsonResponse: RegisterMemberAgentAttachmentRoutesArgs["jsonResponse"],
+  jsonResponse: RegisterCommunityAgentAttachmentRoutesArgs["jsonResponse"],
   error: unknown,
 ): Response {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -100,19 +100,19 @@ function uploadErrorResponse(
   return jsonResponse(req, 500, { ok: false, code: "member_agent_attachment_upload_failed" });
 }
 
-export function registerMemberAgentAttachmentRoutes(
-  args: RegisterMemberAgentAttachmentRoutesArgs,
+export function registerCommunityAgentAttachmentRoutes(
+  args: RegisterCommunityAgentAttachmentRoutesArgs,
 ): void {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
 
   http.route({
-    path: MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
+    path: COMMUNITY_AGENT_ATTACHMENT_UPLOAD_PATH,
     method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)),
   });
 
   http.route({
-    path: MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
+    path: COMMUNITY_AGENT_ATTACHMENT_UPLOAD_PATH,
     method: "POST",
     handler: httpAction(async (ctx, req) => {
       const auth = await requireAuthenticatedActor(ctx, req);
@@ -121,15 +121,15 @@ export function registerMemberAgentAttachmentRoutes(
       const threadId = readRequiredHeader(req, "x-polynet-thread-id");
       const messageKey = readRequiredHeader(req, "x-polynet-message-key");
       const fileName = decodeFileName(readRequiredHeader(req, "x-polynet-file-name"));
-      const mime = normalizeMemberAgentImageMime(req.headers.get("content-type"));
+      const mime = normalizeCommunityAgentImageMime(req.headers.get("content-type"));
       if (!threadId || !messageKey) {
         return jsonResponse(req, 400, { ok: false, code: "member_agent_attachment_request_invalid" });
       }
-      if (!isAllowedMemberAgentImageMime(mime)) {
+      if (!isAllowedCommunityAgentImageMime(mime)) {
         return jsonResponse(req, 415, { ok: false, code: "member_agent_attachment_type_not_supported" });
       }
       const contentLength = Number(req.headers.get("content-length"));
-      if (Number.isFinite(contentLength) && contentLength > MEMBER_AGENT_MAX_IMAGE_BYTES) {
+      if (Number.isFinite(contentLength) && contentLength > COMMUNITY_AGENT_MAX_IMAGE_BYTES) {
         return jsonResponse(req, 413, { ok: false, code: "member_agent_attachment_too_large" });
       }
 
@@ -138,7 +138,7 @@ export function registerMemberAgentAttachmentRoutes(
       let claimed = false;
       try {
         const prepared = (await ctx.runMutation(
-          (internal as any).threads.prepareCloudMemberAgentAttachmentUploadInternal,
+          (internal as any).threads.prepareCloudCommunityAgentAttachmentUploadInternal,
           {
             ownerId: auth.actor.dbUserId,
             threadId,
@@ -149,7 +149,7 @@ export function registerMemberAgentAttachmentRoutes(
         if (!ticketKey) throw new Error("member_agent_attachment_upload_ticket_missing");
 
         const body = new Uint8Array(await req.arrayBuffer());
-        if (body.byteLength <= 0 || body.byteLength > MEMBER_AGENT_MAX_IMAGE_BYTES) {
+        if (body.byteLength <= 0 || body.byteLength > COMMUNITY_AGENT_MAX_IMAGE_BYTES) {
           return jsonResponse(req, 413, { ok: false, code: "member_agent_attachment_too_large" });
         }
         if (inferImageMime(body) !== mime) {
@@ -158,7 +158,7 @@ export function registerMemberAgentAttachmentRoutes(
 
         storageId = await ctx.storage.store(new Blob([body], { type: mime }));
         const attachment = await ctx.runMutation(
-          (internal as any).threads.claimStoredCloudMemberAgentAttachmentInternal,
+          (internal as any).threads.claimStoredCloudCommunityAgentAttachmentInternal,
           {
             ownerId: auth.actor.dbUserId,
             threadId,
@@ -178,7 +178,7 @@ export function registerMemberAgentAttachmentRoutes(
         }
         if (!claimed && ticketKey) {
           await ctx
-            .runMutation((internal as any).threads.cancelCloudMemberAgentAttachmentUploadInternal, {
+            .runMutation((internal as any).threads.cancelCloudCommunityAgentAttachmentUploadInternal, {
               ownerId: auth.actor.dbUserId,
               ticketKey,
             })
