@@ -215,6 +215,18 @@ test("a frame whose header or nav a script draws is warned: members' own pages s
   expect(warnings(drawn.replace('<header id="top"></header>', '<header id="top"><a href="/">Run club</a></header>').replace("<nav> </nav>", ""))).toBe("");
 });
 
+test("a site's file at a member's own page (Messages, Settings, Your communities, Join) is warned: those live on the private twin", () => {
+  const page = (path: string) => ({ path, text: GOOD });
+  const warned = (...files: Array<{ path: string; text: string }>) => checkSite([{ path: "/index.html", text: GOOD }, { path: "/frame.html", text: FRAME }, ...files]).warnings
+    .filter((p: any) => /a member's own page/.test(p.message));
+  expect(warned(page("/messages.html"))).toEqual([{ path: "/messages.html", message:
+    "messages.html sits at /messages, a member's own page (Messages). Polynet serves it on this site's private twin, in your frame; delete this file so the address goes there." }]);
+  expect(warned(page("/settings/index.html"), page("/communities.html"), page("/join.html")).map((p: any) => p.path))
+    .toEqual(["/settings/index.html", "/communities.html", "/join.html"]);
+  // Pages near those names are the site's own.
+  expect(warned(page("/join-us.html"), page("/messages-board.html"), page("/about.html"))).toEqual([]);
+});
+
 test("a site's own version of a standard page must place that page's blocks", () => {
   const page = (path: string, body: string) => ({ path, text: GOOD.replace(BLOCKS, body) });
   const errors = (...files: Array<{ path: string; text: string }>) => checkSite([{ path: "/index.html", text: GOOD }, { path: "/frame.html", text: FRAME }, ...files]).errors;

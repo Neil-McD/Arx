@@ -337,6 +337,15 @@ export function checkSite(files) {
       `Add ${missing.map((name) => `<${name}></${name}>`).join(" ")}, or delete the file: Polynet then shows its ${standard.page.title} page inside frame.html.`);
   }
 
+  // A member's own pages live on the private twin, where only Polynet's code
+  // runs; a site's file at one of those addresses hides it there.
+  for (const page of pages) {
+    const personal = personalPage(servedPath(page.path) ?? "");
+    if (!personal) continue;
+    problem("warning", page.path, `${page.path.slice(1)} sits at ${personal.path}, a member's own page (${personal.title}). ` +
+      "Polynet serves it on this site's private twin, in your frame; delete this file so the address goes there.");
+  }
+
   const allCss = css.map((file) => file.text).join("\n") + pages.map((file) => file.text).join("\n");
   for (const file of [...css, ...pages]) {
     if (/outline\s*:\s*(none|0)\b/i.test(file.text) && !/:focus-visible/.test(allCss)) {
