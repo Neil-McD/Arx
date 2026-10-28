@@ -3058,6 +3058,7 @@ export default defineSchema({
         v.literal("carried_forward"),
         v.literal("excluded_by_visibility"),
         v.literal("excluded_self_authored"),
+        v.literal("agent_retries_exhausted"),
       ),
     ),
     compilerPendingSince: v.optional(v.number()),

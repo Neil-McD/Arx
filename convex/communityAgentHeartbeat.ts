@@ -251,6 +251,37 @@ export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
   },
 });
 
+// An exhausted digest's evidence leaves the compiler queue, or the compiler
+// would rebuild the same digest version and starve newer evidence. A material
+// update to a trace returns it to pending through the normal lifecycle.
+async function quarantineExhaustedDigestEvidence(
+  ctx: any,
+  communityId: any,
+  digestId: any,
+  items: unknown,
+  nowMs: number,
+): Promise<void> {
+  const traceIds = new Set<string>();
+  for (const item of Array.isArray(items) ? items : []) {
+    for (const traceId of Array.isArray(item?.sourceTraceIds) ? item.sourceTraceIds : []) {
+      traceIds.add(String(traceId));
+    }
+  }
+  for (const traceId of traceIds) {
+    const trace = await ctx.db.get(traceId as any);
+    if (!trace || normalizeIdValue(trace.communityId) !== normalizeIdValue(communityId)) continue;
+    if (trace.compilerState !== "pending") continue;
+    await ctx.db.patch(trace._id, {
+      compilerState: "agent_retries_exhausted" as const,
+      compilerPendingSince: undefined,
+      compilerContinuationReady: undefined,
+      compilerLastHandledAt: nowMs,
+      compilerLastDigestId: digestId,
+      updatedAt: nowMs,
+    });
+  }
+}
+
 export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -283,6 +314,9 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
     }
     const retryCount = Math.max(0, Number(digest.agentRetryCount ?? 0)) + (args.outcome === "retry" ? 1 : 0);
     const retriesExhausted = args.outcome === "retry" && retryCount >= COMMUNITY_AGENT_HANDOFF_MAX_RETRIES;
+    if (retriesExhausted) {
+      await quarantineExhaustedDigestEvidence(ctx, args.communityId, args.digestId, digest.items, nowMs);
+    }
     await ctx.db.patch(args.digestId, args.outcome === "handled"
       ? {
           agentHandoffState: "handled" as const,

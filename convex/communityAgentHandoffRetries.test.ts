@@ -13,6 +13,14 @@ const modules = import.meta.glob([
 ]);
 const internalRefs = internal as any;
 
+async function pendingTrace(ctx: any, communityId: any, summary: string) {
+  return await ctx.db.insert("communitySourceTraces", {
+    communityId, sourceType: "manual", summary, visibilityScope: "community", sourceVisibility: "community",
+    artifactIds: [], outcomeObservationIds: [], actorType: "system",
+    compilerState: "pending", compilerPendingSince: 2, createdAt: 2, updatedAt: 2,
+  });
+}
+
 async function runningDigest(t: ReturnType<typeof convexTest>, retries: number, attempts: number) {
   return await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", { authSubject: "handoff-owner", createdAt: 1, updatedAt: 1 });
@@ -20,16 +28,20 @@ async function runningDigest(t: ReturnType<typeof convexTest>, retries: number, 
       ownerId, slug: "handoff-retries", name: "Handoff retries", visibility: "unlisted",
       inferenceFundingPolicy: "managed_required", entryPolicy: "open", createdAt: 1, updatedAt: 1,
     });
+    const digestTraceId = await pendingTrace(ctx, communityId, "In the stuck digest");
+    const newerTraceId = await pendingTrace(ctx, communityId, "Newer evidence");
     const digestId = await ctx.db.insert("communityCompilerDigests", {
       communityId, dedupeKey: "handoff-retries", versionKey: "v1",
       agentHandoffState: "running", agentClaimId: "claim-1", agentClaimedAt: 10,
       agentAttemptCount: attempts, agentRetryCount: retries,
-      windowStartedAt: 0, windowEndedAt: 5, summary: "Stuck handoff", itemCount: 0, items: [],
+      windowStartedAt: 0, windowEndedAt: 5, summary: "Stuck handoff", itemCount: 1,
+      items: [{ category: "source_trace_signal", title: "Stuck item", summary: "Stuck item", priority: 1,
+        confidence: 0.5, sourceTypes: ["manual"], sourceIds: ["stuck"], sourceTraceIds: [digestTraceId] }],
       signalCounts: { chat: 0, aiFeed: 0, resources: 0, events: 0, sourceTraces: 0, outcomes: 0,
         newMembers: 0, activeMembers: 0, postingMembers: 0, aiFeedReactingMembers: 0 },
       createdByActorType: "compiler", createdAt: 5, updatedAt: 5,
     });
-    return { communityId, digestId };
+    return { communityId, digestId, digestTraceId, newerTraceId };
   });
 }
 
@@ -54,6 +66,10 @@ test("the fifth failed run stops retrying the digest", async () => {
   await expect(retry(t, ids)).resolves.toMatchObject({ state: "handled", terminal_reason: "retries_exhausted" });
   const digest = await t.run((ctx) => ctx.db.get(ids.digestId));
   expect(digest).toMatchObject({ agentHandoffState: "handled", agentTerminalReason: "retries_exhausted", agentRetryCount: 5 });
+  // Its evidence leaves the compiler queue so newer evidence is not starved.
+  const [quarantined, newer] = await t.run((ctx) => Promise.all([ctx.db.get(ids.digestTraceId), ctx.db.get(ids.newerTraceId)]));
+  expect(quarantined).toMatchObject({ compilerState: "agent_retries_exhausted", compilerLastDigestId: ids.digestId });
+  expect(newer).toMatchObject({ compilerState: "pending" });
 });
 
 test("the steward's output limit grows with the digest it must settle", () => {

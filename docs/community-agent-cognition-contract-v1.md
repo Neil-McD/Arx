@@ -1579,6 +1579,10 @@ Rules:
   `agentRetryCount`. The fifth failure marks it `handled` with
   `agentTerminalReason: "retries_exhausted"`, so a broken run cannot bill the
   community on every heartbeat. `agentAttemptCount` still counts every claim.
+  The exhausted digest's pending source traces move to
+  `compilerState: "agent_retries_exhausted"` so the compiler admits newer
+  evidence instead of rebuilding the same digest; a material update to a trace
+  returns it to `pending`.
 - The steward settles every item of the digest in one write, so its output
   limit grows with the digest: 2,000 tokens plus 450 per item, capped at 48,000.
   Reasoning counts against the same limit. A tool call cut off at the limit is
