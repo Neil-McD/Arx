@@ -74,19 +74,9 @@ for (const path of activeSources) {
   );
 }
 
-const compatibilityTombstonePaths = ["convex/harnessMounts.ts"] as const;
-const forbiddenTombstoneBehavior =
-  /\bctx\.(?:db|runAction|runMutation|runQuery|scheduler|storage|auth)\b|\bfetch\s*\(|\binternal\.|\bapi\.|mcpHttpClient|runtimeMcpManager|runtimeMountedToolExposure|appConnections|appToolSnapshots/;
-
-for (const path of compatibilityTombstonePaths) {
-  assert.equal(existsSync(join(root, path)), true, `${path} must exist`);
-  const source = read(path);
-  assert.doesNotMatch(
-    source,
-    forbiddenTombstoneBehavior,
-    `${path} must remain an inert cached-client compatibility tombstone`,
-  );
-}
+// The cached-client tombstone for third-party MCP mounts is gone: no
+// production web build calls harnessMounts any more (POL-21).
+assert.equal(existsSync(join(root, "convex/harnessMounts.ts")), false, "convex/harnessMounts.ts stays deleted");
 
 const http = read("convex/http.ts");
 assert.match(http, /registerRuntimeMcpRoutes/);
