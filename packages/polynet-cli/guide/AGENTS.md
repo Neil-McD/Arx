@@ -35,7 +35,9 @@ and the Polynet SDK (`/__polynet/sdk.js`) for anything else.
 
 There is no template. Start from the community: ask about its world, show
 the founder three directions live, build the one they choose, and make it
-unmistakably theirs. Invent the room the blocks live in (a boathouse
+unmistakably theirs. Already have a full brief from the founder? Don't ask
+again: start. Can't deploy concepts for them to pick? Build the strongest
+direction and tell them in a line why it won. Invent the room the blocks live in (a boathouse
 noticeboard, a night-shift radio log, a studio wall) and design around
 them, so the chat feels like that community's place to talk, not a widget
 dropped on a page. Custom views (a route log, a leaderboard, a reading
@@ -52,10 +54,20 @@ same files are in `.claude/skills/` for Claude Code):
 - `polynet-accessibility`: the final pass, and what the checks block.
 - `polynet-deploy-verify`: ship it and prove it works.
 
-Reference: `https://<slug>.polynet.page/__polynet/llms.txt`.
+Reference: `https://polynet.page/llms.txt` (also at
+`https://<slug>.polynet.page/__polynet/llms.txt` once the site is deployed;
+on Polynet's staging, `https://staging.polynet.page/llms.txt`).
+
+## Seeing the blocks
+
+The blocks and the shell render only on Polynet, which serves
+`/__polynet/*` to the site. On a local static server the tags stay empty
+(your slot text shows unstyled): that's expected, not a bug. Deploy and look
+at the live site; a community on Polynet's staging deploys with `--staging`
+to `https://<slug>-staging.polynet.page`.
 
 ## Commands
 
-    npx @polynet/cli check     # the blocks, and accessibility basics
-    npx @polynet/cli deploy    # check, then live in seconds
+    npx @polynet/cli check     # index.html, the blocks, accessibility basics
+    npx @polynet/cli deploy    # check, then live in seconds (add --staging for staging)
     npx @polynet/cli skills    # update these skills

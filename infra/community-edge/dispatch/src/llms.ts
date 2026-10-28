@@ -34,13 +34,16 @@ below brings everything else.
 2. Design first (the next section): learn the community's world, show the
    founder three directions, build the one they choose.
 3. Build the site in a folder with an index.html, with the three blocks
-   placed, and test it live. The SDK
-   is served by the site's own address, so it only works once deployed.
-   From the folder:
+   placed, and test it live. The SDK, the shell and the blocks are served
+   by the site's own address, so they only work once deployed: on a local
+   static server the tags stay empty (slot text shows unstyled), which is
+   expected. From the folder:
 
        npx @polynet/cli deploy --community <slug>
 
-   Then open https://<slug>.polynet.page. A deploy takes seconds: change,
+   Then open https://<slug>.polynet.page. A community on Polynet's staging
+   deploys with --staging, to https://<slug>-staging.polynet.page (this
+   guide is then at https://staging.polynet.page/llms.txt). A deploy takes seconds: change,
    deploy, refresh, repeat. The first deploy opens a browser to sign in with
    Polynet; later deploys reuse it.
 4. Signed out, the site shows its public face. Sign in on the site to see
@@ -52,7 +55,8 @@ There is no template: every site starts from its community's own world. Aim
 for the site members screenshot and send to friends. If it could be any
 community's site, it isn't done.
 
-1. Discover. Ask the founder once: who the members are and what brings them
+1. Discover. Ask the founder once (if their brief already says, don't ask:
+   start): who the members are and what brings them
    together; where and when it happens and what that looks and feels like;
    three words for the feeling and one thing it should feel like (a brand, a
    magazine, a place); any logo, photos, colors or phrases to use. Collect
@@ -62,7 +66,9 @@ community's site, it isn't done.
    one-sentence idea, typefaces, a palette, a signature move and real copy.
    Build each as one static page (concepts/a.html, b.html, c.html, each
    with the shell and the real blocks themed for that direction, never
-   placeholders), deploy, and let the founder pick or mix.
+   placeholders), deploy, and let the founder pick or mix. If you can't
+   deploy concepts for them to pick, build the strongest and tell them in a
+   line why it won.
 3. Build the chosen one. Write each page's structure in HTML by hand and fill
    it with live data from JavaScript. Design the loading, empty, error and
    signed-out states in the concept's voice. Real words everywhere, never
@@ -143,7 +149,9 @@ reach their account, their communities, Discover, messages and settings:
 
 Put it where your design wants it (usually the top-right of the header) and
 keep it visible on every page and at every width. Signed out it shows "Join"
-and "Sign in"; signed in, the member's avatar opens their account menu (with
+(a link in --polynet-text) and "Sign in" (--polynet-accent, its text
+--polynet-on-accent); on a header darker or lighter than the page, set
+those on polynet-account itself, with a matching --polynet-surface; signed in, the member's avatar opens their account menu (with
 "Manage this community" for owners and admins, and "Your communities", which
 opens Polynet). Don't rebuild these yourself.
 
@@ -235,7 +243,7 @@ one from your own code:
 
     document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }));
 
-(or detail { ref } with a member's ref from members()). Signed out, the
+(or detail { ref } with a member's ref from members() or online()). Signed out, the
 panel asks the visitor to sign in and shows nothing about the member.
 
 Which channel: the URL says, ?channel=<slug> (no parameter: the General
@@ -299,11 +307,15 @@ Restyle any piece with ::part():
   handle, role-badge, online, you, bio, links, link, message,
   message-note, state, retry, gate, gate-text, sign-in, join.
 
-Slots, for your own words: slot="header" (polynet-channels,
-polynet-members, and polynet-chat: replaces the chat's "#channel" title),
-slot="empty" (an empty channel; a community with no members yet),
-slot="signed-out" (the chat's and the members' sign-in line),
-slot="read-only" (the chat's note where the member can't post).
+Slots, for your own words:
+- polynet-channels: slot="header".
+- polynet-chat: slot="header" (replaces the "#channel" title),
+  slot="empty" (a channel with no posts), slot="signed-out",
+  slot="read-only" (the note where the member can't post or reply).
+- polynet-members: slot="header", slot="empty" (a community with no members
+  yet; a search with no match has its own line), slot="signed-out".
+slot="signed-out" replaces only the sign-in line: Polynet's "Sign in" button
+and "New here? Join" link stay under it, so don't add your own.
 
 Example, in your design's own layout:
 
@@ -434,7 +446,8 @@ own rather than avatar_url (which is the member's).
   bio, links { youtube, x, instagram } } (links null when unset): what any
   member sees of a fellow member in Polynet.
 - online() -> { online_count, online_count_capped, members: [{ ref, name,
-  handle, avatar_url }] }: who is here now (online_count_capped: "at least").
+  handle, avatar_url }] }: who is here now, the signed-in member included
+  (online_count_capped: "at least").
   watchOnline(onChange): onChange() runs now and whenever that changes; call
   online() then. Returns stop().
 - A signed-in member with the page open and visible counts as online: the SDK
@@ -487,11 +500,14 @@ The site is a folder of static files with an index.html. From that folder:
 
 The first run opens the browser to sign in with Polynet (the community's owner
 or an admin) and saves the community in polynet.json, so later deploys are just
-"npx @polynet/cli deploy".
+"npx @polynet/cli deploy". Add --staging for a community on Polynet's staging
+(sites at https://<community-slug>-staging.polynet.page); polynet.json
+remembers it.
 
 Every deploy checks the site first ("npx @polynet/cli check" runs the same
-checks alone). These stop a deploy until fixed: no page (or, for a
-framework build, no script) places <polynet-channels>, <polynet-chat> or
+checks alone). These stop a deploy until fixed: no index.html at the
+site's root; no page (or, for a framework build, no script, not counting
+comments) places <polynet-channels>, <polynet-chat> or
 <polynet-members>; a page without <html lang>, a <title> or a viewport that
 allows zooming; an <img> without alt; a button or link with no text or
 aria-label. Warnings (unlabelled

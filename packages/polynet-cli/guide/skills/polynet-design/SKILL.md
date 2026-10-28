@@ -20,7 +20,8 @@ direction isn't done until they look like they were made for it.
 ## 1. Discover the world
 
 Ask the founder once, in one message (skip what you already know, and read
-`session().community_about` and any site or socials they mention):
+`session().community_about` and any site or socials they mention). If their
+brief already answers these, don't ask: start.
 
 - Who are the members, and what brings them together?
 - Where and when does it happen? What does it look, sound and feel like?
@@ -59,6 +60,9 @@ that direction: never gray boxes or screenshots standing in for them. The
 founder signs in to see them live (signed out, they show the direction's
 own sign-in words). Deploy, then send the founder the three links, each
 with its name and idea. They pick one, or mix ("b's type with a's color").
+If you can't deploy concepts for them to pick (no deploy access yet, or
+they asked you to just build it), pick the strongest yourself, build it,
+and tell them in a line why it won.
 
 ## 3. Build the chosen direction
 

@@ -11,8 +11,9 @@ The SDK is for everything around them: the public face, events, courses,
 knowledge, the agent, and custom views like a route log or a "who's here
 now" strip. Custom views go beside the blocks, never instead of them.
 
-The full reference is served by every site:
-`https://<slug>.polynet.page/__polynet/llms.txt`. Read it before using a
+The full reference: `https://polynet.page/llms.txt`, also served by every
+deployed site at `https://<slug>.polynet.page/__polynet/llms.txt` (staging:
+`https://staging.polynet.page/llms.txt`). Read it before using a
 method for the first time; it is the source of truth for names and fields.
 
 The SDK brings data and behavior, never a look. These recipes fill markup you
@@ -25,7 +26,9 @@ import polynet from "/__polynet/sdk.js";
 const session = await polynet.session(); // always first
 ```
 
-It only works on the live site (`<slug>.polynet.page`): deploy to try things.
+It only works on the live site (`<slug>.polynet.page`, or
+`<slug>-staging.polynet.page` with `deploy --staging`): deploy to try things.
+On a local server the import fails and the blocks stay empty.
 
 ## Signed out, signed in
 
@@ -62,7 +65,7 @@ talks to them.
   open Polynet's profile panel (with Message). Open one from your own view
   (a name in your route log) with
   `document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }))`
-  (or `{ ref }` from `members()`), or link to `?member=<handle>`. Don't
+  (or `{ ref }` from `members()` or `online()`), or link to `?member=<handle>`. Don't
   build your own profile view.
 - `state="loading|ready|signed-out|error"` on each tag lets your layout
   react, e.g. `polynet-chat[state=signed-out]`.
@@ -167,7 +170,7 @@ words can take a few seconds while the agent uses tools.
 | Events | `events({ limit })`; show times in the event's `timezone` |
 | Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` |
 | What the community knows | `knowledge(query?)` |
-| Members | `members()`, `profile(member)`, `online()` |
+| Members | `members()`, `profile(member)`, `online()` (includes the signed-in member) |
 | Older posts | `feed(slug, { cursor: posts.cursor })`; `cursor` is null at the start |
 
 ## Using a bundler

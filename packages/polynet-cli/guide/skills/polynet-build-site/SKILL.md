@@ -37,13 +37,17 @@ concept, and the blocks live inside that concept.
 
 1. **Orient.** The slug is in `polynet.json` (or ask: it's in the founder's
    Polynet address, `.../c/<slug>`). Skim the reference:
-   `https://<slug>.polynet.page/__polynet/llms.txt`.
+   `https://polynet.page/llms.txt` (`https://staging.polynet.page/llms.txt`
+   for a community on Polynet's staging; once deployed, also
+   `https://<slug>.polynet.page/__polynet/llms.txt`).
 2. **Design first** with `polynet-design`: discover the community's world,
    show three directions live (blocks themed in each), build the one the
    founder picks.
 3. **Build** the pages by hand around the blocks; add custom views with
-   `polynet-sdk`. Deploy early and often: the blocks and the SDK only work
-   on the live site.
+   `polynet-sdk`. Deploy early and often: the blocks, the shell and the SDK
+   only work on Polynet. A local static server shows the tags empty (slot
+   text unstyled), which is expected. A community on Polynet's staging
+   deploys with `--staging` (`https://<slug>-staging.polynet.page`).
 4. **Finish** with `polynet-accessibility`, then ship and check it live with
    `polynet-deploy-verify`.
 
@@ -141,11 +145,28 @@ polynet-members::part(role-badge) { border-color: var(--polynet-accent); }
 polynet-profile::part(panel) { border-left: 6px solid var(--polynet-accent); }
 ```
 
-The full list of parts is in llms.txt. Slots carry the community's voice:
-`header` (channels, members; on the chat it replaces the "#channel" title),
-`empty`, `signed-out` (chat, members) and `read-only` (chat). Write every
-one in the concept's words. Style state with the `state` attribute:
-`polynet-chat[state=signed-out] { height: auto; }`.
+The full list of parts is in llms.txt. Slots carry the community's voice;
+write every one in the concept's words:
+
+| Block | Slots |
+| --- | --- |
+| `<polynet-channels>` | `header` |
+| `<polynet-chat>` | `header` (replaces the "#channel" title), `empty` (a channel with no posts), `signed-out`, `read-only` (the note where the member can't post or reply) |
+| `<polynet-members>` | `header`, `empty` (a community with no members yet; a search with no match has its own line), `signed-out` |
+
+`signed-out` replaces only the sign-in line. Polynet's "Sign in" button and
+"New here? Join" link stay under it, so don't add your own. Style state with
+the `state` attribute: `polynet-chat[state=signed-out] { height: auto; }`.
+
+The shell reads the same tokens. Signed out, its "Join" link is
+`--polynet-text` (default `CanvasText`, not the page's color) and "Sign in"
+is `--polynet-accent` with `--polynet-on-accent`. On a header darker or
+lighter than the page, set them on the shell itself, with a matching
+`--polynet-surface` for its menu:
+
+```css
+.top polynet-account { --polynet-text: #f6efe6; --polynet-surface: #1b1410; }
+```
 
 ## Layout and mobile
 
