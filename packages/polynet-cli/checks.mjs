@@ -3,8 +3,9 @@
 // Errors block the deploy; warnings are printed. Every site has a frame
 // (/frame.html: its header, navigation and footer around one <polynet-page>),
 // so Polynet's standard pages (/chat, /people, /events, /learn, /knowledge,
-// /ask) appear inside the site's own world on every site; a site that ships
-// its own version of one must place that page's blocks. They read the files as text (no browser), so they catch
+// /ask, /discover) appear inside the site's own world on every site; a site that
+// ships its own version of one must place that page's blocks. They read the
+// files as text (no browser), so they catch
 // what is certain from the source and leave the rest to the
 // polynet-accessibility skill. Plain JavaScript with no imports, so it runs in
 // Node, in Polynet's backend and in the community edge alike.
@@ -26,8 +27,9 @@ export const LEARN_SEGMENT = /^[a-z0-9-]{1,120}~[A-Za-z0-9_-]{1,180}$/;
 // <polynet-page> fills it with these blocks. The one route table: the edge,
 // <polynet-page>, the shell's menu ("In this club", in this order) and these
 // checks all read it. below: the addresses under the page, one pattern per
-// level (/learn/<course>/<lesson>: either depth). Later slices add /discover,
-// /messages, /settings, /manage, /communities and /join.
+// level (/learn/<course>/<lesson>: either depth). network: a Polynet-wide page,
+// not this club's own (the menu lists it apart from "In this club"). Later
+// slices add /messages, /settings, /manage, /communities and /join.
 export const STANDARD_PAGES = [
   { path: "/chat", name: "chat", title: "Chat", blocks: ["polynet-channels", "polynet-chat"], below: [] },
   // members: /people/<handle> is the same page with that member's profile open.
@@ -36,6 +38,8 @@ export const STANDARD_PAGES = [
   { path: "/learn", name: "learn", title: "Learn", blocks: ["polynet-learn"], below: [["course", LEARN_SEGMENT], ["lesson", LEARN_SEGMENT]] },
   { path: "/knowledge", name: "knowledge", title: "Knowledge", blocks: ["polynet-knowledge"], below: [] },
   { path: "/ask", name: "ask", title: "Ask", blocks: ["polynet-ask"], below: [] },
+  // Public: every published community, signed in or not, in this site's style.
+  { path: "/discover", name: "discover", title: "Discover", blocks: ["polynet-discover"], network: true, below: [] },
 ];
 
 // Which standard page a path is: { page, below, handle, slash } or null.

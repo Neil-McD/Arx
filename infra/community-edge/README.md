@@ -10,6 +10,8 @@ one edge Worker in front of every community front end.
                          ├─ /__polynet/api    → Polynet backend /runtime/app (server-side, edge secret + session cookie)
                          ├─ /__polynet/upload, /__polynet/files/<id> → /runtime/app/upload, /runtime/app/file
                          ├─ /__polynet/agent, /__polynet/agent/messages → /runtime/app/agent, /runtime/app/agent_messages (streamed)
+                         ├─ /__polynet/discover → published communities' public cards (GET, anyone, no session): the backend's
+                         │                      /runtime/community_edge/discover (edge secret), cached 60s per isolate
                          ├─ /__polynet/sdk.js, /__polynet/live.js, /__polynet/llms.txt → the builder kit (SDK, its live client, its doc)
                          ├─ /__polynet/ui.js  → the shell (<polynet-account>), injected into every page; loads blocks on demand
                          ├─ /__polynet/ui.css → linked first in every page: hides Polynet's tags until they're defined
@@ -19,9 +21,10 @@ one edge Worker in front of every community front end.
                          │                      links and the "polynet:profile" event), page (<polynet-page>, the
                          │                      standard page inside the site's frame), events (<polynet-events>),
                          │                      learn (<polynet-learn>), knowledge (<polynet-knowledge>), ask
-                         │                      (<polynet-ask>) and kit (what they share); any other name is 404
+                         │                      (<polynet-ask>), discover (<polynet-discover>) and kit (what they
+                         │                      share); any other name is 404
                          ├─ /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]],
-                         │  /knowledge, /ask (GET/HEAD) → the standard pages (below)
+                         │  /knowledge, /ask, /discover (GET/HEAD) → the standard pages (below)
                          └─ everything else   → that community's user Worker, without Polynet's cookies
 ```
 
@@ -40,6 +43,7 @@ the addresses under each page:
 | `/learn` | learn | `/<course>`, `/<course>/<lesson>`: Polynet's resource path segments, `<a-z 0-9 ->~<id>` (the id decides, so renamed courses keep their links) |
 | `/knowledge` | knowledge | none |
 | `/ask` | ask | none |
+| `/discover` | discover (public; `network`: listed apart from "In this club") | none |
 
 None of these patterns has a dot, so no file under them is taken for a page.
 For a GET or HEAD there, in order:
@@ -56,6 +60,22 @@ For a GET or HEAD there, in order:
    `<polynet-page>` renders the page.
 4. No frame (not 2xx HTML): Polynet's own page saying the site needs its
    frame, status 404, never blank.
+
+### Discover
+
+`GET /__polynet/discover` answers anyone (no session, no same-site rule: the
+data is public) with `{ ok, communities: [{ slug, name, one_liner,
+avatar_url, member_count, url, has_site, here }] }`, `Cache-Control: public,
+max-age=60`. The edge asks the backend (`POST
+/runtime/community_edge/discover`, edge secret, `{ sites_domain,
+host_suffix }`) at most once a minute per isolate; a failed read (502
+`discover_unavailable`) isn't cached. The backend lists published, active,
+operational communities only (`listSiteDiscoverCommunitiesInternal`, the
+same list as Studio's Discover) and gives `site_url` only when that
+community's own origin on this sites domain is registered to it. The edge
+passes on only the card fields, links a card to its site only when
+`site_url` is exactly `https://<slug><suffix>.<domain>`, and otherwise to
+`<POLYNET_AUTH_URL>/c/<slug>`.
 
 Other paths (`/people/a.b`, `/people/x/y`, `/chat/app.js`, `/events/123`,
 `/learn/intro`, `/ask/x`), other methods and `/__polynet/*` go where they

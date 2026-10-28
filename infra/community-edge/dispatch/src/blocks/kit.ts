@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT (see LICENSING.md and ../LICENSE-MIT)
 // The blocks kit, served at /__polynet/blocks/kit.js: what every Polynet block
-// shares (the token style, a DOM helper, avatars, time labels, the channel and
+// shares (the token style and how a shadow root takes it, a DOM helper, avatars, time labels, the channel and
 // member URL contracts, the feed's grouping and @-tag links, the sign-in
 // prompt, markdown's look, and moving between a standard page's addresses). It never calls
 // Polynet on import, so tests import it as is. Kept as text (a String.raw literal: no backticks or
@@ -53,6 +53,27 @@ export const PROSE_STYLE = [
   ".prose pre code { background: none; padding: 0; }",
   ".prose a { text-decoration: underline; text-decoration-color: var(--pn-accent); text-underline-offset: .18em; }",
 ].join("\n");
+
+// A block's styles for its shadow root, as a constructed stylesheet the root
+// adopts (one sheet per text, shared by every instance), not an inline <style>:
+// a site whose Content-Security-Policy allows only its own stylesheets
+// (style-src 'self') blocks <style> elements but not adopted sheets. Returns the
+// nodes to put first in the root: none, or a <style> where the browser can't
+// adopt sheets (that page then needs style-src 'unsafe-inline' for the blocks).
+const sheets = new Map();
+export function styled(root, text) {
+  if (!("adoptedStyleSheets" in root) || typeof CSSStyleSheet !== "function" || !("replaceSync" in CSSStyleSheet.prototype)) {
+    return [h("style", { text: text })];
+  }
+  let sheet = sheets.get(text);
+  if (!sheet) {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(text);
+    sheets.set(text, sheet);
+  }
+  if (root.adoptedStyleSheets.indexOf(sheet) === -1) root.adoptedStyleSheets = root.adoptedStyleSheets.concat([sheet]);
+  return [];
+}
 
 export function h(tag, attrs, children) {
   const node = document.createElement(tag);

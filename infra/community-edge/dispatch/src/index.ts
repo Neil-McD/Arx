@@ -2,10 +2,11 @@
 //
 //   /__polynet/auth/*  "Sign in with Polynet" for this community's own domain
 //   /__polynet/api     same-origin proxy to the Polynet backend, as the signed-in member
+//   /__polynet/discover published communities' public cards for <polynet-discover>, anyone, cached
 //   /__polynet/blocks/ Polynet's blocks (<polynet-channels>, <polynet-chat> and its composer,
 //                      <polynet-members>, the profile panel, <polynet-page>, <polynet-events>,
-//                      <polynet-learn>, <polynet-knowledge>, <polynet-ask>), loaded by ui.js
-//   /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]], /knowledge, /ask
+//                      <polynet-learn>, <polynet-knowledge>, <polynet-ask>, <polynet-discover>), loaded by ui.js
+//   /chat, /people[/<handle>], /events[/<event>], /learn[/<course>[/<lesson>]], /knowledge, /ask, /discover
 //                      Polynet's standard pages: the site's own file if it has one,
 //                      else the site's frame (/frame.html), which <polynet-page> fills
 //   everything else    the community's own front end (a user Worker with static assets)
@@ -28,6 +29,7 @@ import { EVENTS_SOURCE } from "./blocks/events";
 import { LEARN_SOURCE } from "./blocks/learn";
 import { KNOWLEDGE_SOURCE } from "./blocks/knowledge";
 import { ASK_SOURCE } from "./blocks/ask";
+import { DISCOVER_SOURCE } from "./blocks/discover";
 // The one route table for the standard pages, shared with the site checks.
 import { standardPage, type StandardPage } from "../../../../packages/polynet-cli/checks.mjs";
 // The live-updates client, served from this domain so no community site loads a third-party script.
@@ -37,6 +39,7 @@ import LIVE_CLIENT_BUNDLE from "../../node_modules/convex/dist/browser.bundle.js
 const BLOCKS: Record<string, string> = {
   kit: KIT_SOURCE, channels: CHANNELS_SOURCE, chat: CHAT_SOURCE, composer: COMPOSER_SOURCE, members: MEMBERS_SOURCE, profile: PROFILE_SOURCE,
   page: PAGE_SOURCE, events: EVENTS_SOURCE, learn: LEARN_SOURCE, knowledge: KNOWLEDGE_SOURCE, ask: ASK_SOURCE,
+  discover: DISCOVER_SOURCE,
 };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
@@ -248,10 +251,77 @@ async function publicIdentity(env: Env, origin: string): Promise<PublicIdentity 
   return identity;
 }
 
+// Discover: every published community's public card, the same for every site,
+// read from the backend at most once a minute per isolate. Only these fields
+// ever leave the edge, whatever the backend sends.
+const DISCOVER_PATH = "/__polynet/discover";
+const DISCOVER_CACHE_MS = 60_000;
+const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+type DiscoverCard = { slug: string; name: string; one_liner: string | null; avatar_url: string | null; member_count: number; site_url: string | null };
+let discoverCache: { cards: Promise<DiscoverCard[] | null>; until: number } | null = null;
+
+function discoverCard(raw: unknown): DiscoverCard | null {
+  const card = (raw ?? {}) as Record<string, unknown>;
+  const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+  const slug = typeof card.slug === "string" && SLUG_PATTERN.test(card.slug) ? card.slug : null;
+  if (!slug) return null;
+  return {
+    slug,
+    name: text(card.name, 120) ?? slug,
+    one_liner: text(card.one_liner, 300),
+    avatar_url: typeof card.avatar_url === "string" && /^https?:\/\//.test(card.avatar_url) ? card.avatar_url : null,
+    member_count: Math.max(0, Math.floor(Number(card.member_count) || 0)),
+    site_url: typeof card.site_url === "string" ? card.site_url : null,
+  };
+}
+
+async function readDiscover(env: Env, origin: string): Promise<DiscoverCard[] | null> {
+  try {
+    const res = await backend(env, "/runtime/community_edge/discover", {
+      sites_domain: (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase(), host_suffix: (env.POLYNET_SITES_HOST_SUFFIX ?? "").toLowerCase(),
+    }, origin);
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; communities?: unknown } | null;
+    if (!res.ok || !body?.ok || !Array.isArray(body.communities)) return null;
+    return body.communities.map(discoverCard).filter((card): card is DiscoverCard => card !== null);
+  } catch {
+    return null;
+  }
+}
+
+// Concurrent misses share one read; a failed read isn't kept, so the next visitor retries.
+function discoverCards(env: Env, origin: string): Promise<DiscoverCard[] | null> {
+  if (discoverCache && discoverCache.until > Date.now()) return discoverCache.cards;
+  const entry = { cards: readDiscover(env, origin), until: Date.now() + DISCOVER_CACHE_MS };
+  discoverCache = entry;
+  entry.cards.then((cards) => { if (!cards && discoverCache === entry) discoverCache = null; });
+  return entry.cards;
+}
+
+// Public, so no session and no same-site rule: each card links to that
+// community's own site on this sites domain (only the address the edge itself
+// would serve it at), else to its public page in Studio. here: this site's own.
+async function handleDiscover(request: Request, url: URL, route: Route, env: Env): Promise<Response> {
+  if (request.method !== "GET") return json(405, { ok: false, code: "method_not_allowed" });
+  const cards = await discoverCards(env, url.origin);
+  if (!cards) return json(502, { ok: false, code: "discover_unavailable", message: "Couldn't load communities. Try again." });
+  const domain = (env.POLYNET_SITES_DOMAIN ?? "").toLowerCase();
+  const suffix = (env.POLYNET_SITES_HOST_SUFFIX ?? "").toLowerCase();
+  const communities = cards.map((card) => {
+    const site = domain && card.site_url === `https://${card.slug}${suffix}.${domain}` ? card.site_url : null;
+    return {
+      slug: card.slug, name: card.name, one_liner: card.one_liner, avatar_url: card.avatar_url, member_count: card.member_count,
+      url: site ?? new URL(`/c/${encodeURIComponent(card.slug)}`, env.POLYNET_AUTH_URL).toString(),
+      has_site: Boolean(site), here: card.slug === route.community,
+    };
+  });
+  return json(200, { ok: true, communities }, { "Cache-Control": "public, max-age=60" });
+}
+
 // Tests start each case with empty per-isolate caches.
 export function resetEdgeCaches(): void {
   identityCache.clear();
   routeCache.clear();
+  discoverCache = null;
 }
 
 function backend(env: Env, path: string, body: Record<string, unknown>, origin: string): Promise<Response> {
@@ -470,6 +540,7 @@ export default {
       });
     }
     if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
+    if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);
     if (url.pathname.startsWith(BLOCKS_PREFIX)) {
       const name = /^([a-z]+)\.js$/.exec(url.pathname.slice(BLOCKS_PREFIX.length))?.[1];
       if (!name || !Object.hasOwn(BLOCKS, name)) {

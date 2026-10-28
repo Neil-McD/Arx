@@ -154,17 +154,19 @@ test("the standard pages: one route table for the edge, <polynet-page> and these
   expect(standardPage("/chat/")).toMatchObject({ page: { path: "/chat" }, slash: true });
   expect(standardPage("/people")).toMatchObject({ page: { path: "/people", blocks: ["polynet-members"] }, handle: null });
   expect(standardPage("/people/Sam_R-2/")).toMatchObject({ page: { path: "/people" }, handle: "Sam_R-2", slash: true });
-  // In the shell's menu in this order; each address under a page is that page.
-  expect(STANDARD_PAGES.map((page: any) => page.title)).toEqual(["Chat", "People", "Events", "Learn", "Knowledge", "Ask"]);
+  // In the shell's menu in this order (Discover apart: it's Polynet-wide); each address under a page is that page.
+  expect(STANDARD_PAGES.map((page: any) => page.title)).toEqual(["Chat", "People", "Events", "Learn", "Knowledge", "Ask", "Discover"]);
+  expect(STANDARD_PAGES.filter((page: any) => page.network).map((page: any) => page.path)).toEqual(["/discover"]);
   expect(standardPage("/events/k97abc_D-1~1793570400000")).toMatchObject({ page: { path: "/events", blocks: ["polynet-events"] }, below: ["k97abc_D-1~1793570400000"], handle: null });
   expect(standardPage("/learn")).toMatchObject({ page: { path: "/learn", blocks: ["polynet-learn"] }, below: [] });
   expect(standardPage("/learn/start-here~k1/")).toMatchObject({ page: { path: "/learn" }, below: ["start-here~k1"], slash: true });
   expect(standardPage("/learn/start-here~k1/first-steps~k2")).toMatchObject({ page: { path: "/learn" }, below: ["start-here~k1", "first-steps~k2"] });
   expect(standardPage("/knowledge")).toMatchObject({ page: { blocks: ["polynet-knowledge"] } });
   expect(standardPage("/ask")).toMatchObject({ page: { blocks: ["polynet-ask"] } });
+  expect(standardPage("/discover/")).toMatchObject({ page: { path: "/discover", blocks: ["polynet-discover"] }, slash: true });
   for (const path of ["/", "/chats", "/Chat", "/chat/x", "/people/a.b", "/people/x/y", `/people/${"a".repeat(33)}`, "/people/%20", "/__polynet/ui.js", "/frame",
     "/events/123", "/events/k1~", "/events/k1~12x", "/events/k.1~1", "/events/k1~1/x", "/learn/intro", "/learn/Intro~k1", "/learn/a~k1/b~k2/c~k3",
-    "/learn/a~k1/b.md", "/knowledge/x", "/ask/x", "/Ask"]) {
+    "/learn/a~k1/b.md", "/knowledge/x", "/ask/x", "/Ask", "/discover/trail-club", "/discovery"]) {
     expect(standardPage(path), path).toBeNull();
   }
 });
@@ -174,7 +176,7 @@ test("every site has a frame: frame.html with exactly one <polynet-page>, linkin
   expect(problems(GOOD.replace(BLOCKS, ""))).toEqual({ errors: "", warnings: "" });
   const none = checkSite([{ path: "/index.html", text: GOOD }]);
   expect(none.errors).toEqual([{ path: "/", message:
-    "The site has no frame.html at its root. Polynet shows its standard pages (/chat, /people, /events, /learn, /knowledge, /ask) inside it, so they look like the rest of the site: " +
+    "The site has no frame.html at its root. Polynet shows its standard pages (/chat, /people, /events, /learn, /knowledge, /ask, /discover) inside it, so they look like the rest of the site: " +
     "frame.html is your header, navigation and footer with one <polynet-page></polynet-page> where the page goes. " +
     "Add it beside index.html (for a framework build, to its output folder, like dist)." }]);
   // Not at the root, it isn't the frame.
@@ -193,7 +195,7 @@ test("every site has a frame: frame.html with exactly one <polynet-page>, linkin
   // It's shown at /chat, /people and /people/<handle>: a relative path breaks under /people/.
   expect(frame(FRAME.replace('href="/styles.css"', 'href="styles.css"').replace('href="/chat#top"', 'href="./people.html"').replace('<img src="https://cdn.test/logo.png"', '<img src="../img/logo.png"'))).toBe(
     "frame.html uses relative paths (styles.css, ./people.html, ../img/logo.png). " +
-    "The frame is shown at /chat, /people, /people/<handle>, /events, /events/<event>, /learn, /learn/<course>, /learn/<course>/<lesson>, /knowledge, /ask, " +
+    "The frame is shown at /chat, /people, /people/<handle>, /events, /events/<event>, /learn, /learn/<course>, /learn/<course>/<lesson>, /knowledge, /ask, /discover, " +
     "where those point somewhere else. Start them from the site's root: /styles.css.");
   expect(frame(FRAME.replace('href="/chat#top"', 'href="#main"').replace("</main>", '</main><a href="mailto:hi@run.club">Mail</a><a href="?x=1">Again</a>'))).toBe("");
 });
@@ -222,6 +224,10 @@ test("a site's own version of a standard page must place that page's blocks", ()
     page("/ask/index.html", "<polynet-ask></polynet-ask>")).map((p: any) => p.message)).toEqual([
     "events.html is this site's own Events page (/events), so it must place <polynet-events>. Add <polynet-events></polynet-events>, or delete the file: Polynet then shows its Events page inside frame.html.",
     "knowledge.html is this site's own Knowledge page (/knowledge), so it must place <polynet-knowledge>. Add <polynet-knowledge></polynet-knowledge>, or delete the file: Polynet then shows its Knowledge page inside frame.html.",
+  ]);
+  // And /discover, which is public.
+  expect(errors(page("/discover.html", "<h1>Neighbours</h1>"), page("/discover/index.html", '<polynet-discover limit="4"></polynet-discover>')).map((p: any) => p.message)).toEqual([
+    "discover.html is this site's own Discover page (/discover), so it must place <polynet-discover>. Add <polynet-discover></polynet-discover>, or delete the file: Polynet then shows its Discover page inside frame.html.",
   ]);
   // Styling or mentioning a block isn't placing it; neither is a commented-out tag or a longer name.
   const styledOnly = page("/chat.html", "<style>polynet-chat { height: 70vh }</style><!-- <polynet-chat></polynet-chat> --><polynet-chat-room></polynet-chat-room><polynet-channels></polynet-channels>");

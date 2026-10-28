@@ -373,7 +373,7 @@ test("every site gets the shell (ui.js) and the member's account, read with thei
 });
 
 test("every site serves Polynet's blocks as modules; ui.js loads them only where they're placed", async () => {
-  for (const name of ["kit", "channels", "chat", "composer", "members", "profile", "page", "events", "learn", "knowledge", "ask"]) {
+  for (const name of ["kit", "channels", "chat", "composer", "members", "profile", "page", "events", "learn", "knowledge", "ask", "discover"]) {
     const res = await edge.fetch(request(`/__polynet/blocks/${name}.js`, { headers: { "sec-fetch-site": "cross-site" } }), env());
     expect(res.status, name).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
@@ -390,7 +390,7 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
   expect(await (await edge.fetch(request("/__polynet/blocks/members.js"), env())).text()).toContain('customElements.define("polynet-members"');
   expect(await (await edge.fetch(request("/__polynet/blocks/profile.js"), env())).text()).toContain("export function openProfile");
   expect(await (await edge.fetch(request("/__polynet/blocks/page.js"), env())).text()).toContain('customElements.define("polynet-page"');
-  for (const name of ["events", "learn", "knowledge", "ask"]) {
+  for (const name of ["events", "learn", "knowledge", "ask", "discover"]) {
     expect(await (await edge.fetch(request(`/__polynet/blocks/${name}.js`), env())).text()).toContain(`customElements.define("polynet-${name}"`);
   }
   // Unknown blocks are Polynet's 404, never the site's own fallback page.
@@ -405,6 +405,7 @@ test("every site serves Polynet's blocks as modules; ui.js loads them only where
   const ui = await (await edge.fetch(request("/__polynet/ui.js"), env())).text();
   expect(ui).toContain('"polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page",');
   expect(ui).toContain('"polynet-events": "events", "polynet-learn": "learn", "polynet-knowledge": "knowledge", "polynet-ask": "ask",');
+  expect(ui).toContain('"polynet-discover": "discover",');
   expect(ui).toContain('import("/__polynet/blocks/profile.js")');
   expect(ui).toContain('import("/__polynet/blocks/" + BLOCKS[tag] + ".js")');
 });
@@ -441,7 +442,7 @@ test("standard pages: the site's frame is served at each standard page and the a
   const e = { ...env(), DEV_USER_WORKER: site };
   for (const [path, title] of [["/chat", "Chat"], ["/chat?channel=crew", "Chat"], ["/people", "People"], ["/people/sam", "People"], ["/people/Sam_R-2", "People"],
     ["/events", "Events"], ["/events/k97abc_D-1~1793570400000", "Events"], ["/learn", "Learn"], ["/learn/start-here~k1", "Learn"],
-    ["/learn/start-here~k1/first-steps~k2", "Learn"], ["/knowledge", "Knowledge"], ["/ask", "Ask"]]) {
+    ["/learn/start-here~k1/first-steps~k2", "Learn"], ["/knowledge", "Knowledge"], ["/ask", "Ask"], ["/discover", "Discover"]]) {
     site.seen.length = 0;
     const res = await edge.fetch(browse(path, { "if-none-match": '"frame-etag"', cookie: `theme=dark; __Host-polynet_session=${TOKEN}` }), e);
     expect(res.status, path).toBe(200);
@@ -520,7 +521,7 @@ test("standard pages never shadow Polynet's paths, the site's files, other metho
   for (const path of ["/people/a.b", "/people/x/y", `/people/${"a".repeat(33)}`, "/people/s%20m", "/people/@sam", "/people/photo.jpg", "/chat/app.js", "/chats", "/Chat", "/frame",
     // Not an event, course or lesson address: the site's own (a file, or its client-side routes).
     "/events/123", "/events/k1~x", "/events/k1~1/more", "/events/photo.jpg", "/learn/intro", "/learn/Intro~k1", "/learn/a~k1/b~k2/c~k3", "/learn/a~k1/notes.md",
-    "/knowledge/x", "/ask/anything", "/eventsx", "/Learn"]) {
+    "/knowledge/x", "/ask/anything", "/eventsx", "/Learn", "/discover/trail-club"]) {
     site.seen.length = 0;
     const res = await edge.fetch(browse(path), e);
     // Straight to the site, as the browser asked (a navigation keeps its index.html fallback).
@@ -534,6 +535,75 @@ test("standard pages never shadow Polynet's paths, the site's files, other metho
   expect((await edge.fetch(request("/__polynet/ui.js"), e)).status).toBe(200);
   expect((await edge.fetch(request("/__polynet/blocks/page.js"), e)).status).toBe(200);
   expect(site.seen).toEqual([]);
+});
+
+// Published communities as the backend lists them for Discover.
+const discoverBackend = (communities: unknown[]) => vi.fn(async (url: string) => {
+  if (url.endsWith("/runtime/community_edge/discover")) return Response.json({ ok: true, communities });
+  return Response.json({ ok: true, community: { slug: "apps-community", name: "Apps Club", one_liner: null, about: null, member_count: 3 } });
+});
+const discoverCalls = (backend: ReturnType<typeof discoverBackend>) =>
+  backend.mock.calls.filter(([url]) => String(url).endsWith("/runtime/community_edge/discover"));
+
+test("discover: anyone gets published communities' public cards, each linking to its own site on this domain or to Polynet", async () => {
+  resetEdgeCaches();
+  const backend = discoverBackend([
+    { slug: "apps-community", name: "Apps Club", one_liner: "We build.", avatar_url: "https://files.example.com/a.png", member_count: 3,
+      site_url: "https://apps-community-staging.polynet.page", owner_email: "never@example.com", about: "not on a card" },
+    { slug: "trail-club", name: "Trail Club", one_liner: null, avatar_url: "javascript:alert(1)", member_count: 12.7, site_url: null },
+    // A site address that isn't this edge's own for that community never becomes a link.
+    { slug: "sneaky", name: "Sneaky", one_liner: null, avatar_url: null, member_count: 1, site_url: "https://evil.example.com" },
+    { slug: "../admin", name: "Bad slug", site_url: null },
+    "not a card",
+  ]);
+  vi.stubGlobal("fetch", backend);
+  const e = { ...env(), POLYNET_SITES_DOMAIN: "polynet.page", POLYNET_SITES_HOST_SUFFIX: "-staging" };
+  // Signed out, from anywhere: it's public.
+  const res = await edge.fetch(request("/__polynet/discover", { headers: { "sec-fetch-site": "cross-site" } }), e);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("cache-control")).toBe("public, max-age=60");
+  expect(res.headers.get("set-cookie")).toBeNull();
+  expect(await res.json()).toEqual({ ok: true, communities: [
+    { slug: "apps-community", name: "Apps Club", one_liner: "We build.", avatar_url: "https://files.example.com/a.png", member_count: 3,
+      url: "https://apps-community-staging.polynet.page", has_site: true, here: true },
+    { slug: "trail-club", name: "Trail Club", one_liner: null, avatar_url: null, member_count: 12,
+      url: "https://polynet.example.com/c/trail-club", has_site: false, here: false },
+    { slug: "sneaky", name: "Sneaky", one_liner: null, avatar_url: null, member_count: 1,
+      url: "https://polynet.example.com/c/sneaky", has_site: false, here: false },
+  ] });
+  // The backend is asked with the edge secret and this edge's sites domain, never a member's session.
+  const [[url, init]] = discoverCalls(backend) as unknown as Array<[string, RequestInit]>;
+  expect(url).toBe("https://api.example.convex.site/runtime/community_edge/discover");
+  expect((init.headers as Record<string, string>)["x-polynet-edge-secret"]).toBe("edge-secret");
+  expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  expect(JSON.parse(String(init.body))).toEqual({ sites_domain: "polynet.page", host_suffix: "-staging" });
+  // Writes aren't a thing here.
+  expect((await edge.fetch(request("/__polynet/discover", { method: "POST", body: "{}" }), e)).status).toBe(405);
+});
+
+test("discover: read from the backend at most once a minute; a failed read isn't kept", async () => {
+  resetEdgeCaches();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const failing = vi.fn(async () => Response.json({ ok: false, code: "edge_unauthorized" }, { status: 401 }));
+    vi.stubGlobal("fetch", failing);
+    const down = await edge.fetch(request("/__polynet/discover"), env());
+    expect([down.status, await down.json()]).toEqual([502, { ok: false, code: "discover_unavailable", message: "Couldn't load communities. Try again." }]);
+    expect(down.headers.get("cache-control")).toBe("no-store");
+
+    const backend = discoverBackend([{ slug: "trail-club", name: "Trail Club", member_count: 2, site_url: null }]);
+    vi.stubGlobal("fetch", backend);
+    // No sites domain (local dev): every card links to Polynet.
+    const first = await (await edge.fetch(request("/__polynet/discover"), env())).json();
+    expect(first.communities[0]).toMatchObject({ url: "https://polynet.example.com/c/trail-club", has_site: false });
+    await Promise.all([1, 2, 3].map(() => edge.fetch(request("/__polynet/discover"), env())));
+    expect(discoverCalls(backend)).toHaveLength(1);
+    vi.setSystemTime(Date.now() + 61_000);
+    await edge.fetch(request("/__polynet/discover"), env());
+    expect(discoverCalls(backend)).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("polynet.page itself is the front door: a page and the builder guide", async () => {

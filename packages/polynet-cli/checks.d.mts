@@ -5,7 +5,7 @@ export function isCheckedFile(path: string): boolean;
 export function checkSite(files: Array<{ path: string; text: string }>): SiteCheckResult;
 export function formatProblems(result: SiteCheckResult): string[];
 export type StandardPage = {
-  path: string; name: string; title: string; blocks: string[]; members?: boolean;
+  path: string; name: string; title: string; blocks: string[]; members?: boolean; network?: boolean;
   below: Array<[name: string, pattern: RegExp]>;
 };
 export const STANDARD_PAGES: StandardPage[];

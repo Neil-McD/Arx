@@ -394,6 +394,17 @@ test("account() reads the member's Polynet account; signed out it throws sign_in
   await expect(polynet.account()).rejects.toMatchObject({ code: "sign_in_required" });
 });
 
+test("discover() lists published communities without a session; a failure is a PolynetError", async () => {
+  const card = { slug: "trail-club", name: "Trail Club", one_liner: null, avatar_url: null, member_count: 4, url: "https://trail-club.polynet.page", has_site: true, here: false };
+  const calls = stubFetch({ "/__polynet/discover": () => Response.json({ ok: true, communities: [card] }) });
+  const polynet = await loadSdk();
+  expect(await polynet.discover()).toEqual([card]);
+  // Signed out works: it never asks for the session.
+  expect(calls.map((call) => call.url)).toEqual(["/__polynet/discover"]);
+  stubFetch({ "/__polynet/discover": () => Response.json({ ok: false, code: "discover_unavailable" }, { status: 502 }) });
+  await expect(polynet.discover()).rejects.toMatchObject({ name: "PolynetError", code: "discover_unavailable", status: 502 });
+});
+
 test("members() lists the community's members, following pages", async () => {
   stubFetch({
     "/__polynet/auth/session": signedIn,

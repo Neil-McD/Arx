@@ -14,28 +14,56 @@ below brings everything else.
 
 ## Rails, not templates (read first)
 
-- Every site has a frame: /frame.html, the site's own header, navigation
-  and footer around one <polynet-page></polynet-page>. Deploys fail
-  without it. Polynet's standard pages exist on every site from the first
-  deploy, inside that frame: /chat (channels and chat), /people (the
-  members; /people/<handle> opens one profile), /events (the calendar;
-  /events/<event> is one event), /learn (courses and lessons), /knowledge
-  (the community's memory) and /ask (the member's private conversation
-  with the community agent). Link to them in your navigation. See "The
-  frame and the standard pages", below.
-- The blocks on those pages: <polynet-channels>, <polynet-chat> and
-  <polynet-members>, the channels, the whole conversation (composer,
-  threads, reactions, attachments, @-tags) and the people (each opens a
-  profile with Message); <polynet-events>, <polynet-learn>,
-  <polynet-knowledge> and <polynet-ask>. Place them on your own pages too
-  if you like. Never rebuild, hide or replace them.
-- The shell (<polynet-account>) is automatic: Polynet adds it to every page.
-  Place it into your design yourself.
-- Polynet owns how the blocks behave; your site owns how they look, through
-  the --polynet-* tokens, ::part() and slots only (see Blocks, below).
-- Direct messages, admin, settings and billing are never built by a site.
-- Then design freely: invent the community's world, give the blocks a room
-  in it, and add custom views with the SDK beside them.
+You draw the community's world once, as a frame; Polynet fills every
+standard page into it.
+
+Non-negotiables:
+- Two files at the site's root: index.html (the front door) and
+  frame.html (the world's header, navigation and footer around exactly one
+  <polynet-page></polynet-page>, every path in it starting with /).
+  Deploys fail without them.
+- The standard pages exist on every site from the first deploy, inside the
+  frame: /chat, /people, /events, /learn, /knowledge, /ask and /discover
+  (the table below). Link them from the frame's navigation.
+- A site's own file at a standard path (chat.html, events.html,
+  discover.html, ...) replaces Polynet's page and must place that page's
+  block(s). Never rebuild, hide or replace a block.
+- Style only through the --polynet-* tokens, ::part(), slots and the page
+  classes (.pn-page-*, polynet-page[page=...]). Never reach inside a block.
+- Nothing personal is built by a site: no direct messages, settings, "your
+  communities" or private member data. The shell (<polynet-account>,
+  added to every page) carries those; admin and billing stay in Studio.
+
+The world model:
+- Invent the community's world (a lantern workshop on a harbor quay, a
+  night-shift radio room, a seed library in a church hall).
+- The frame is the world's chrome: its header, nav and footer as that place
+  would have them, naming the standard pages in its words ("The workbench"
+  for /chat, "Lantern nights" for /events).
+- Each standard page gets its own feel through tokens and parts: how the
+  calendar reads, what a lesson looks like, what the agent's answers sit on.
+- Custom views (a parade map, a leaderboard) are extras built with the SDK;
+  they link into the standard pages, never stand in for them.
+
+| Path | What it shows | Block | Parts worth styling | Slots |
+| --- | --- | --- | --- | --- |
+| /chat | channels beside the live conversation | <polynet-channels> + <polynet-chat> | channel-current, message-author, day-divider, composer-box | channels: header; chat: header, empty, signed-out, read-only |
+| /people[/<handle>] | members, online first; a profile open | <polynet-members> | member, presence-dot, role-badge | header, empty, signed-out |
+| /events[/<event>] | the calendar; one event | <polynet-events> | month-title, event-date, event-title, add-to-calendar | empty, signed-out |
+| /learn[/<course>[/<lesson>]] | courses, lessons, the reader | <polynet-learn> | course, lesson-number, lesson-body, pager | empty, signed-out |
+| /knowledge | the community's memory, searchable | <polynet-knowledge> | memory-title, memory-type, memory-text | header, intro, empty, signed-out |
+| /ask | the member's private conversation with the agent | <polynet-ask> | message-agent, starter, box | header, privacy, starters, signed-out |
+| /discover | every published community, searchable (public) | <polynet-discover> | community, community-name, community-here | header, intro, empty |
+
+Preview loop: there is no local preview. Blocks, the shell and the SDK
+render only on Polynet (which serves /__polynet/*), so deploy to see them
+(--staging for a community on Polynet's staging), then check the front
+door and every standard page at 390 and 1440 px wide, signed out and
+signed in. Can't deploy? Build the strongest direction, keep the concept
+notes in your report, and list exactly what the founder should verify once
+it's live: every standard page at both widths, signed out and in; the
+blocks in the site's type, color and edges; every slot's words showing;
+one shell in the header; the current page marked in the nav.
 
 ## Workflow (start here)
 
@@ -70,7 +98,7 @@ community's site, it isn't done.
    together; where and when it happens and what that looks and feels like;
    three words for the feeling and one thing it should feel like (a brand, a
    magazine, a place); any logo, photos, colors or phrases to use. Collect
-   concrete nouns: "6:00 am, the river, coffee after".
+   concrete nouns: "Thursday nights, the net loft, tea from the urn".
 2. Explore three directions that differ in kind: different type, color
    world, layout idea and voice. Make one feel risky. Give each a name, a
    one-sentence idea, typefaces, a palette, a signature move and real copy.
@@ -91,14 +119,15 @@ community's site, it isn't done.
 Craft: typefaces with character (Google Fonts or Fontshare) used at
 conviction-level scale (headlines at clamp(48px, 9vw, 140px) are normal); a
 committed color world with one sharp accent; texture with meaning (a gradient
-that is the dawn, grain, duotone photos, huge numerals); layouts with one
-unapologetically huge element; purposeful motion inside
+that is lamplight on dark water, grain, duotone photos, huge numerals);
+layouts with one unapologetically huge element; purposeful motion inside
 prefers-reduced-motion: no-preference; the community's own photos. Example
-of the bar: Dawn Patrol Run Club, "the city before sunrise": a night-navy
-page warming into an orange dawn gradient, Barlow Condensed at 88px,
-"Early miles. Good people." over "Every weekday · 6:00 am · Riverside
-boathouse", and stats like "Coffee after: Always". Bold and accessible are
-the same craft; make it accessible as the final pass.
+of the bar (a made-up community): Port Wren Lantern Guild, "a harbor town
+at lighting-up time": a slate-blue page with pools of lantern amber,
+Fraunces at 96px, "Paper, wire and a little fire." over "Thursdays ·
+7:30 pm · The net loft, Quay Street", and stats like "Tea in the urn:
+Always". Bold and accessible are the same craft; make it accessible as the
+final pass.
 
 ## Load the SDK
 
@@ -113,8 +142,8 @@ Always await polynet.session() first: every other call builds on it.
 
 session() -> {
   signed_in,           // true when a member is signed in
-  community,           // the community's slug, e.g. "dawn-patrol"
-  community_name,      // public: its display name, e.g. "Dawn Patrol Run Club"
+  community,           // the community's slug, e.g. "port-wren-lanterns"
+  community_name,      // public: its display name, e.g. "Port Wren Lantern Guild"
   community_one_liner, // public: its one-line promise (or null)
   community_about,     // public: its longer description (or null)
   member_count,        // public: how many members it has
@@ -125,8 +154,8 @@ session() -> {
   live                 // used by watch(); ignore it
 }
 
-What works signed out: session() (with the public fields above) and
-community(). Everything else (channels, posts, events, courses, knowledge,
+What works signed out: session() (with the public fields above),
+community() and discover(). Everything else (channels, posts, events, courses, knowledge,
 the agent) needs a signed-in member and otherwise throws sign_in_required.
 
 - Signed out: show the community's public face from the public fields and a
@@ -161,13 +190,17 @@ Put it where your design wants it (usually the top-right of the header) and
 keep it visible on every page and at every width. Signed out it shows "Join"
 (a link in --polynet-text) and "Sign in" (--polynet-accent, its text
 --polynet-on-accent); on a header darker or lighter than the page, set
-those on polynet-account itself, with a matching --polynet-surface; signed in, the member's avatar opens their account menu (with
-"In this club" with the site's own Chat and People pages, "Manage this
-community" for owners and admins, and "Your communities", which opens
-Polynet). Don't rebuild these yourself.
+those on polynet-account itself, with a matching --polynet-surface; signed
+in, the member's avatar opens their account menu: "In this club" (the
+site's own standard pages, the current one marked), "Manage this
+community" for owners and admins (Studio), Messages, "Your communities"
+and Settings (Polynet, for now), and "Discover communities" (this site's
+own /discover). Don't rebuild these yourself.
 
-Polynet adds the ui.js script to every page that doesn't load it, and if a
-page has no <polynet-account> shortly after it loads, ui.js puts one in the
+Polynet adds /__polynet/ui.js and /__polynet/ui.css to every HTML page it
+serves (the script only where the page doesn't load it already), so the
+script tag above is optional and including it is harmless. If a page has
+no <polynet-account> shortly after it loads, ui.js puts one in the
 top-right corner. That fallback is a safety net, not a design: place the
 shell yourself.
 
@@ -193,7 +226,8 @@ The member's other communities are never readable from a site.
 ## The frame and the standard pages
 
 Polynet's standard pages exist on every site, in this order in the shell's
-"In this club" menu:
+"In this club" menu (Discover sits apart, under "Discover communities": it
+is every community, not this one):
 
 - /chat: channels beside the chat (?channel=<slug> picks one).
 - /people: the members; /people/<handle> is the same page with that
@@ -205,6 +239,8 @@ Polynet's standard pages exist on every site, in this order in the shell's
   Polynet path, like start-here~k17..., without .md).
 - /knowledge: <polynet-knowledge>, the community's memory.
 - /ask: <polynet-ask>, the member's private conversation with the agent.
+- /discover: <polynet-discover>, every published community on Polynet,
+  searchable, for anyone, signed in or not.
 
 They appear inside the site's frame, /frame.html at the site's root: the same header,
 navigation, footer, fonts and colors as every other page, with exactly one
@@ -215,13 +251,13 @@ navigation, footer, fonts and colors as every other page, with exactly one
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Dawn Patrol</title>
+      <title>Port Wren Lantern Guild</title>
       <link rel="stylesheet" href="/styles.css">
     </head>
     <body>
-      <header><a href="/">Dawn Patrol</a>
-        <nav><a href="/chat">The river</a> <a href="/people">The pack</a>
-          <a href="/events">Runs</a> <a href="/learn">Training</a></nav>
+      <header><a href="/">Port Wren</a>
+        <nav><a href="/chat">The workbench</a> <a href="/people">The guild</a>
+          <a href="/events">Lantern nights</a> <a href="/learn">Patterns</a></nav>
         <polynet-account></polynet-account></header>
       <main><polynet-page></polynet-page></main>
     </body>
@@ -231,20 +267,43 @@ navigation, footer, fonts and colors as every other page, with exactly one
   not styles.css): it is shown at /chat, /people/<handle> and
   /learn/<course>/<lesson> alike. Deploys
   fail on relative paths there.
+- Polynet sets each standard page's <title> to "<Page> · <community
+  name>" (Chat · Port Wren Lantern Guild; also at /people/<handle> and the
+  other addresses under a page). The frame's own <title> shows only where
+  Polynet can't read the community's name: make it that name. A site's own
+  file at a standard path keeps its own title.
 - <polynet-page> renders into the page itself (no shadow DOM), so your CSS
   lays it out. Default: a heading, then channels beside the chat (one
   column on phones, the chat given a height), the members, or the page's
   block at a reading width (the private conversation given a height).
+  At /chat, with a chat-heading and an empty slot in the frame, it becomes:
+
+      <polynet-page page="chat">
+        <div class="pn-page-header">
+          <h1>The workbench</h1>   (your slot="chat-heading" element, its slot removed)
+        </div>
+        <div class="pn-page-body pn-page-chat">
+          <polynet-channels></polynet-channels>
+          <polynet-chat><p data-block="polynet-chat" slot="empty">…</p></polynet-chat>
+        </div>
+      </polynet-page>
+
+  Without a chat-heading the heading is Polynet's <h1
+  class="pn-page-heading">Chat</h1>; .pn-page-heading is only ever on that
+  default, so style your own heading as .pn-page-header > h1 or by its own
+  class. Children meant for other pages are dropped.
   Restyle with .pn-page-header, .pn-page-heading, .pn-page-body,
   .pn-page-chat, .pn-page-people, .pn-page-events, .pn-page-learn,
-  .pn-page-knowledge, .pn-page-ask, .pn-page-missing, .pn-page-links and
-  polynet-page[page=chat|people|events|learn|knowledge|ask|not-found]; the
-  blocks inside keep their ::part()s.
-- Your words: <h1 slot="chat-heading">The river</h1> (also
+  .pn-page-knowledge, .pn-page-ask, .pn-page-discover, .pn-page-missing,
+  .pn-page-links and
+  polynet-page[page=chat|people|events|learn|knowledge|ask|discover|not-found];
+  the blocks inside keep their ::part()s.
+- Your words: <h1 slot="chat-heading">The workbench</h1> (also
   slot="people-heading", "events-heading", "learn-heading",
-  "knowledge-heading", "ask-heading", "not-found-heading") inside <polynet-page>
+  "knowledge-heading", "ask-heading", "discover-heading",
+  "not-found-heading") inside <polynet-page>
   replaces that page's heading; <polynet-page no-heading> drops them all;
-  <p data-block="polynet-chat" slot="empty">No miles yet.</p> goes into
+  <p data-block="polynet-chat" slot="empty">No lanterns lit yet.</p> goes into
   that block as its slot.
 - The frame's own nav links to the current page get aria-current="page":
   style them with nav a[aria-current=page].
@@ -253,11 +312,12 @@ navigation, footer, fonts and colors as every other page, with exactly one
   wins over Polynet's, and must place that page's blocks (/chat:
   <polynet-channels> and <polynet-chat>; /people: <polynet-members>;
   /events: <polynet-events>; /learn: <polynet-learn>; /knowledge:
-  <polynet-knowledge>; /ask: <polynet-ask>). Only a file counts; a
+  <polynet-knowledge>; /ask: <polynet-ask>; /discover:
+  <polynet-discover>). Only a file counts; a
   client-side route can't replace a standard page. Your own events.html
   doesn't cover /events/<event>: those still show in the frame.
 - Messages, settings, your communities and joining open in Polynet for now;
-  they move into the site in a later release.
+  they come later in a private window the site's code can't read.
 
 ## Blocks: channels, chat and members
 
@@ -333,7 +393,7 @@ fires "polynet:channel" on document with detail { slug }; <polynet-chat>
 follows it, and so can your own code. To switch channels from your own
 navigation, link to ?channel=<slug>, or dispatch the event yourself:
 
-    document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }));
+    document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "glasswork" } }));
 
 When the chat marks a channel read it fires "polynet:read" with { slug }.
 Each block reflects its state on the tag as state="loading" | "ready" |
@@ -407,10 +467,16 @@ Restyle any piece with ::part():
   message-agent), avatar (avatar-agent), message-author, message-time,
   message-body, thinking, starters, starter, composer, box, input, send,
   problem, state, gate, gate-text, sign-in, join, retry.
+- polynet-discover: discover, intro, search, list, communities,
+  community-item, community (each card, a link), community-avatar, avatar,
+  community-name, community-one-liner, community-meta, community-members,
+  community-here, community-elsewhere, all, no-results, empty, state, retry.
 
 Slots, for your own words:
 - polynet-channels: slot="header".
-- polynet-chat: slot="header" (replaces the "#channel" title),
+- polynet-chat: slot="header" (replaces the "#channel" title in every
+  channel, so the chat no longer names the open one: in a frame, rename
+  the page with chat-heading instead),
   slot="empty" (a channel with no posts), slot="signed-out",
   slot="read-only" (the note where the member can't post or reply).
 - polynet-members: slot="header", slot="empty" (a community with no members
@@ -420,8 +486,18 @@ Slots, for your own words:
 - polynet-knowledge: slot="header", slot="intro" (above the search),
   slot="empty", slot="signed-out".
 - polynet-ask: slot="header", slot="privacy" (the "only you can see this"
-  line), slot="starters" (your own buttons; each asks its text),
-  slot="signed-out".
+  line), slot="starters" (one element holding your own buttons, or each
+  button slotted; each asks its text, shown while the conversation is
+  empty; style them yourself, ::part(starter) is only Polynet's defaults),
+  slot="signed-out":
+
+      <polynet-ask><div slot="starters">
+        <button type="button">Which paper takes a candle best?</button>
+      </div></polynet-ask>
+
+- polynet-discover: slot="header", slot="intro" (above the search),
+  slot="empty" (no communities to show).
+A header slot takes any element (<h2>, <p>, a <div> of yours).
 slot="signed-out" replaces only the sign-in line: Polynet's "Sign in" button
 and "New here? Join" link stay under it, so don't add your own.
 
@@ -437,8 +513,8 @@ Example, in your design's own layout:
     </style>
     <section class="talk">
       <polynet-channels></polynet-channels>
-      <polynet-chat><span slot="empty">Nothing logged yet. First one out?</span></polynet-chat>
-      <polynet-members><h2 slot="header">The crew</h2></polynet-members>
+      <polynet-chat><span slot="empty">The bench is clear. First sketch?</span></polynet-chat>
+      <polynet-members><h2 slot="header">The guild</h2></polynet-members>
     </section>
 
 Where they usually go: a "room" (a page or section named in the
@@ -446,7 +522,7 @@ community's words) with channels beside the chat, and the people as a
 column there or on their own page. On phones, one column:
 polynet-channels::part(list) { grid-auto-flow: column; overflow-x: auto }
 turns the channels into a scrolling row above the chat. Custom views (a
-route log, this week's sessions) are built with the SDK below, beside the
+parade map, this week's lantern nights) are built with the SDK below, beside the
 blocks, never instead of them.
 
 ## Blocks: events, learn, knowledge and ask
@@ -480,6 +556,18 @@ conversation.
 Each reflects its state on the tag: state="loading" | "ready" | "signed-out"
 | "error" (events and learn also "missing", for an address that isn't there).
 They take the same tokens; their ::part()s and slots are listed above.
+
+## Block: discover
+
+<polynet-discover> is on Polynet's /discover page on every site, and
+anywhere you place it. It is public: signed in or not, it shows every
+published community on Polynet (never unlisted ones) as a card with its
+picture or initials, name, one-liner and member count, and a search by
+name or one-liner. Each card opens that community's own site when it has
+one, else its page on Polynet ("On Polynet" says so), in the same tab;
+this site's own community is marked "You're here". limit="4" shows the
+first four and a link to /discover (for a home page or a footer). The
+list is at most a minute old. state="loading" | "ready" | "error".
 
 ## Errors
 
@@ -561,8 +649,10 @@ Live updates:
   couple of seconds) and typing(slug, false) when they stop or clear the box.
   post() clears it. It fades on its own a few seconds after the last renewal.
 - Content-Security-Policy: scripts, styles and the SDK's connections come from
-  this domain ('self'), but avatar_url images come from Polynet's storage
-  host, so allow img-src 'self' https:.
+  this domain ('self'). The blocks and the shell style themselves with
+  adopted stylesheets, not inline <style>, so style-src 'self' is enough
+  for them (your own inline styles are your call). avatar_url images come
+  from Polynet's storage host, so allow img-src 'self' https:.
 
 Authors: actor.type "human" is a member. "community_agent" is the community's
 agent; when it has a display_name it acted for that member. Label it
@@ -605,6 +695,11 @@ own rather than avatar_url (which is the member's).
   the page is hidden. Nothing to call.
 - knowledge(query?) -> what the community knows: top memories, or a search.
   Each has title, type, grade, applies_when.
+- discover() -> every published community, signed in or not: [{ slug,
+  name, one_liner, avatar_url, member_count, url, has_site, here }]. url
+  is that community's own site (has_site) or its Polynet page; here marks
+  this site's own. What <polynet-discover> shows; use the block on
+  /discover rather than rebuilding it.
 
 ## The community agent
 
@@ -671,10 +766,10 @@ innerHTML, positive tabindex) are printed but don't stop it.
 
 Only changed files upload. The site is live at
 https://<community-slug>.polynet.page within a minute. Opening or refreshing
-any path in the browser serves index.html, so client-side routes (/runs)
+any path in the browser serves index.html, so client-side routes (/parade)
 work, except the standard pages and the addresses under them (/chat,
 /people/<handle>, /events/<event>, /learn/<course>/<lesson>, /knowledge,
-/ask), which show frame.html unless the site has a file there; a script's fetch() of a path that isn't a file gets 404. No server code
+/ask, /discover), which show frame.html unless the site has a file there; a script's fetch() of a path that isn't a file gets 404. No server code
 runs: everything dynamic comes from the SDK.
 
 Using a bundler (Vite, Rollup, esbuild): the SDK and shell are served by the
@@ -704,28 +799,29 @@ fix). The result has the live url.
 ## Example: a minimal site
 
 This shows structure only. The markup, the words and the look are yours.
-It is index.html; with the frame.html above beside it, it deploys.
+It is index.html (the front door; the room is any page of yours, beside
+Polynet's /chat); with the frame.html above beside it, it deploys.
 
     <!doctype html>
     <html lang="en">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Dawn Patrol Run Club</title>
+      <title>Port Wren Lantern Guild</title>
       <script type="module" src="/__polynet/ui.js"></script>
       <style>
-        :root { --polynet-accent: #f97316; --polynet-surface: #0b1020; }
+        :root { --polynet-accent: #f2a541; --polynet-surface: #131c28; }
         .room { display: grid; grid-template-columns: 200px 1fr 240px; gap: 24px; }
         .room polynet-chat { height: calc(100dvh - 120px); }
         @media (max-width: 760px) { .room { grid-template-columns: minmax(0, 1fr); } }
       </style>
     </head>
     <body>
-      <header><h1>Dawn Patrol</h1><polynet-account></polynet-account></header>
+      <header><h1>Port Wren</h1><polynet-account></polynet-account></header>
       <main class="room">
         <polynet-channels></polynet-channels>
-        <polynet-chat><p slot="empty">No miles logged yet. The river's still there.</p></polynet-chat>
-        <polynet-members><h2 slot="header">The pack</h2></polynet-members>
+        <polynet-chat><p slot="empty">The bench is clear. The quay's still dark.</p></polynet-chat>
+        <polynet-members><h2 slot="header">The guild</h2></polynet-members>
       </main>
       <script type="module">
         import polynet from "/__polynet/sdk.js";

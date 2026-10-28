@@ -7,7 +7,7 @@
 export const CHANNELS_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-channels>. ui.js loads it on pages that place the tag.
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, h, channelFromUrl, channelHref, selectChannel, pickChannel, readChannels } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, h, styled, channelFromUrl, channelHref, selectChannel, pickChannel, readChannels } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + [
   ":host { display: block; }",
@@ -194,7 +194,7 @@ class PolynetChannels extends HTMLElement {
 
   render() {
     const focused = this.root.activeElement && this.root.activeElement.getAttribute("data-slug");
-    const nodes = [h("style", { text: STYLE })];
+    const nodes = styled(this.root, STYLE);
     if (this.status === "ready") {
       nodes.push(h("nav", { part: "nav", "aria-label": "Channels", onkeydown: (event) => this.onKey(event) }, [
         h("slot", { name: "header" }),

@@ -2,7 +2,7 @@
 // <polynet-page>, served at /__polynet/blocks/page.js: the one placeholder in a
 // site's frame (/frame.html). The edge serves the frame at each standard page
 // the site doesn't serve itself (/chat, /people/<handle>, /events/<event>,
-// /learn/<course>/<lesson>, /knowledge, /ask, ...); this block
+// /learn/<course>/<lesson>, /knowledge, /ask, /discover); this block
 // reads the address and puts that page's blocks in place. It renders in the
 // page's own DOM (no shadow root), so the site's CSS lays it out and its
 // ::part() rules reach the blocks inside. Kept as text (a String.raw literal: no
@@ -13,7 +13,7 @@ import { STANDARD_PAGES } from "../../../../../packages/polynet-cli/checks.mjs";
 // What the block needs of each standard page, as JSON (no functions, no URLs):
 // below is each level's pattern as regex source.
 export const PAGE_ROUTES_JSON = JSON.stringify(STANDARD_PAGES.map((page) => ({
-  path: page.path, name: page.name, title: page.title, blocks: page.blocks, members: Boolean(page.members),
+  path: page.path, name: page.name, title: page.title, blocks: page.blocks, members: Boolean(page.members), network: Boolean(page.network),
   below: page.below.map(([, pattern]) => pattern.source),
 })));
 
@@ -22,15 +22,16 @@ export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // In the site's frame:
 //   <main><polynet-page></polynet-page></main>
 // Optional, inside it (each replaces Polynet's default for that page):
-//   <h1 slot="chat-heading">The wall</h1>   <h1 slot="people-heading">The crew</h1>
-//   (also events-heading, learn-heading, knowledge-heading, ask-heading)
-//   <h1 slot="not-found-heading">Off the map</h1>
-//   <p data-block="polynet-chat" slot="empty">Chalk's dry.</p>   (moved into that block, keeping its slot)
+//   <h1 slot="chat-heading">The workbench</h1>   <h1 slot="people-heading">The guild</h1>
+//   (also events-heading, learn-heading, knowledge-heading, ask-heading, discover-heading)
+//   <h1 slot="not-found-heading">Off the quay</h1>
+//   <p data-block="polynet-chat" slot="empty">The bench is clear.</p>   (moved into that block, keeping its slot)
 //   <polynet-page no-heading></polynet-page>                     (no headings at all)
 // Lay it out with classes: .pn-page-header, .pn-page-heading, .pn-page-body,
 // .pn-page-chat, .pn-page-people, .pn-page-events, .pn-page-learn,
-// .pn-page-knowledge, .pn-page-ask, .pn-page-missing, .pn-page-links, and the
-// page attribute: polynet-page[page=chat|people|events|learn|knowledge|ask|not-found].
+// .pn-page-knowledge, .pn-page-ask, .pn-page-discover, .pn-page-missing,
+// .pn-page-links, and the page attribute:
+// polynet-page[page=chat|people|events|learn|knowledge|ask|discover|not-found].
 // The blocks read the rest of the address themselves (/events/<event>,
 // /learn/<course>/<lesson>).
 import { h } from "/__polynet/blocks/kit.js";

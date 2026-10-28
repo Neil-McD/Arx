@@ -625,6 +625,18 @@ async function account() {
   return body.account;
 }
 
+// Every published community, signed in or not (what <polynet-discover> shows):
+// [{ slug, name, one_liner, avatar_url, member_count, url, has_site, here }].
+// url is that community's own site when it has one (has_site), else its page
+// on Polynet; here marks this site's own community. Public, so it never needs
+// a session; the list is at most a minute old.
+async function discover() {
+  const res = await fetch("/__polynet/discover", { credentials: "same-origin" });
+  const body = await res.json().catch(function () { return {}; });
+  if (!res.ok || !body.ok) throw new PolynetError(body.code || "discover_unavailable", body.message, res.status);
+  return body.communities;
+}
+
 // Markdown (post text, replies, agent answers, descriptions) as DOM nodes, built
 // with createElement and textContent, never innerHTML, so Polynet text can't
 // inject markup. Paragraphs, line breaks, headings (#..### as h3..h5), lists
@@ -726,7 +738,7 @@ const polynet = {
   markRead: markRead, typing: typing,
   events: events, event: event, resources: resources, readText: readText, knowledge: knowledge, members: members,
   profile: profile, online: online, watchOnline: watchOnline,
-  agentHistory: agentHistory, askAgent: askAgent, markdown: markdown,
+  agentHistory: agentHistory, askAgent: askAgent, markdown: markdown, discover: discover,
   door: { list: list, read: read, search: search, write: write, call: call },
 };
 

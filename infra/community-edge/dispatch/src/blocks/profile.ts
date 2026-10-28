@@ -8,7 +8,7 @@
 export const PROFILE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block part: the profile panel (<polynet-profile>). Blocks and ui.js open it.
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, h, avatar, roleLabel } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, h, styled, avatar, roleLabel } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + [
   ":host { display: contents; }",
@@ -123,7 +123,7 @@ class PolynetProfile extends HTMLElement {
       onclick: (event) => this.onBackdrop(event),
       onkeydown: (event) => this.onKey(event),
     }, [h("div", { class: "inner" }, [this.closeButton, this.content])]);
-    this.root.replaceChildren(h("style", { text: STYLE }), this.dialog);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.dialog);
   }
 
   disconnectedCallback() {

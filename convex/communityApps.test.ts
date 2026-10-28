@@ -10,6 +10,7 @@ import {
   COMMUNITY_EDGE_EXCHANGE_PATH,
   COMMUNITY_APP_ACCOUNT_PATH,
   COMMUNITY_EDGE_PUBLIC_PATH,
+  COMMUNITY_EDGE_DISCOVER_PATH,
   COMMUNITY_EDGE_REVOKE_PATH,
   COMMUNITY_APP_UPLOAD_PATH,
   COMMUNITY_APP_FILE_PATH,
@@ -526,6 +527,35 @@ test("a community's site shows its public identity to anyone, through the edge o
   } } });
   expect((await f.post(COMMUNITY_EDGE_PUBLIC_PATH, {}, { origin: ORIGIN })).status).toBe(401);
   expect(await f.post(COMMUNITY_EDGE_PUBLIC_PATH, edgeHeaders, { origin: "https://unknown.example.com" })).toMatchObject({ status: 404, body: { code: "community_unavailable" } });
+});
+
+test("Discover on a site lists published communities' public cards through the edge only, linking each to its own site", async () => {
+  const f = await fixture();
+  const site = "https://apps-community-staging.polynet.page";
+  await f.register(site);
+  // Another community's site address can't be claimed for apps-community's card.
+  await f.register("https://apps-other.polynet.page");
+  await f.t.run(async (c) => {
+    await c.db.patch(f.ids.communityId, { visibility: "published", oneLiner: "We build apps.", about: "Private-ish about.", updatedAt: 3 } as any);
+    await c.db.patch(f.ids.otherCommunityId, { visibility: "published", updatedAt: 2 } as any);
+    const base = { ownerId: f.ids.ownerId, inferenceFundingPolicy: "managed_required" as const, entryPolicy: "open" as const, activeMemberCount: 9, createdAt: 1, updatedAt: 1 };
+    await c.db.insert("communities", { ...base, slug: "apps-hidden", name: "Hidden", visibility: "unlisted" } as any);
+    await c.db.insert("communities", { ...base, slug: "apps-gone", name: "Gone", visibility: "published", lifecycleStatus: "archived", lifecycleGeneration: 1 } as any);
+  });
+  const edgeHeaders = { "x-polynet-edge-secret": EDGE_SECRET };
+  const listed = await f.post(COMMUNITY_EDGE_DISCOVER_PATH, edgeHeaders, { sites_domain: "polynet.page", host_suffix: "-staging" });
+  expect(listed).toEqual({ status: 200, body: { ok: true, communities: [
+    { slug: "apps-community", name: "apps-community", one_liner: "We build apps.", avatar_url: null, member_count: 2, site_url: site },
+    // Its registered address is production's, not this environment's: Studio, then.
+    { slug: "apps-other", name: "apps-other", one_liner: null, avatar_url: null, member_count: 2, site_url: null },
+  ] } });
+  // No sites domain (or a malformed one): every card links to Studio.
+  for (const body of [{}, { sites_domain: "polynet.page/../x", host_suffix: "-staging" }, { sites_domain: "polynet.page", host_suffix: "staging" }]) {
+    const res = await f.post(COMMUNITY_EDGE_DISCOVER_PATH, edgeHeaders, body);
+    expect(res.body.communities.map((c: any) => c.site_url)).toEqual([null, null]);
+  }
+  expect((await f.post(COMMUNITY_EDGE_DISCOVER_PATH, {}, {})).status).toBe(401);
+  expect((await f.post(COMMUNITY_EDGE_DISCOVER_PATH, { "x-polynet-edge-secret": "wrong" }, {})).status).toBe(401);
 });
 
 test("the shell shows the member's account: who they are, their role here, and links out, never their other communities", async () => {

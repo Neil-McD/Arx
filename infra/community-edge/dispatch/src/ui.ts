@@ -75,6 +75,19 @@ function h(tag, attrs, children) {
   return node;
 }
 
+// Styles as an adopted stylesheet, not an inline <style>, so a site's
+// Content-Security-Policy (style-src 'self') allows them; <style> only where a
+// browser can't adopt sheets. The blocks do the same (kit.js styled()).
+let sheet = null;
+function styled(root) {
+  if (!("adoptedStyleSheets" in root) || typeof CSSStyleSheet !== "function" || !("replaceSync" in CSSStyleSheet.prototype)) {
+    return [h("style", { text: STYLE })];
+  }
+  if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(STYLE); }
+  if (root.adoptedStyleSheets.indexOf(sheet) === -1) root.adoptedStyleSheets = root.adoptedStyleSheets.concat([sheet]);
+  return [];
+}
+
 function initials(name) {
   const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
   return ((parts[0] || "?")[0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
@@ -85,7 +98,8 @@ function avatar(url, name) {
   return h("span", { class: "avatar", "aria-hidden": "true", text: initials(name) });
 }
 
-// The community's standard pages, on every site (the site's own address).
+// The standard pages, on every site (the site's own address); network ones
+// (Discover) aren't this club's, so "In this club" leaves them out.
 const PAGES = __POLYNET_PAGE_ROUTES__;
 function currentPage() {
   const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, "") : location.pathname;
@@ -207,7 +221,7 @@ class PolynetAccount extends HTMLElement {
     const current = currentPage();
     children.push(h("div", { class: "group", role: "group", part: "group", "aria-labelledby": this.panelId + "-here" }, [
       h("p", { class: "group-title", id: this.panelId + "-here", text: "In this club" }),
-      ...PAGES.map((page) => h("a", { class: "item", href: page.path, part: "item", "aria-current": page.path === current ? "page" : null }, [
+      ...PAGES.filter((page) => !page.network).map((page) => h("a", { class: "item", href: page.path, part: "item", "aria-current": page.path === current ? "page" : null }, [
         h("span", { class: "label", text: page.title }),
       ])),
     ]));
@@ -225,9 +239,10 @@ class PolynetAccount extends HTMLElement {
       const links = account.links || {};
       const everyday = [];
       if ((here.role === "owner" || here.role === "admin") && here.studio_url) everyday.push([here.studio_url, "Manage this community"]);
-      everyday.push([links.messages, "Messages"], [links.communities, "Your communities"], [links.discover, "Discover communities"], [links.settings, "Settings"]);
+      // Discover is a page of this site too (/discover, in its frame), so it never leaves.
+      everyday.push([links.messages, "Messages"], [links.communities, "Your communities"], ["/discover", "Discover communities"], [links.settings, "Settings"]);
       for (const [href, label] of everyday) {
-        if (href) children.push(h("a", { class: "item", href: href, part: "item" }, [h("span", { class: "label", text: label })]));
+        if (href) children.push(h("a", { class: "item", href: href, part: "item", "aria-current": href === current ? "page" : null }, [h("span", { class: "label", text: label })]));
       }
     }
     children.push(h("hr", { class: "sep" }));
@@ -241,7 +256,7 @@ class PolynetAccount extends HTMLElement {
 
   render() {
     const session = this.state.session;
-    const nodes = [h("style", { text: STYLE })];
+    const nodes = styled(this.root);
     if (session && !session.signed_in) {
       nodes.push(this.renderSignedOut(session));
     } else if (session) {
@@ -293,6 +308,7 @@ else window.addEventListener("load", () => setTimeout(ensureShell, FALLBACK_DELA
 const BLOCKS = {
   "polynet-channels": "channels", "polynet-chat": "chat", "polynet-members": "members", "polynet-page": "page",
   "polynet-events": "events", "polynet-learn": "learn", "polynet-knowledge": "knowledge", "polynet-ask": "ask",
+  "polynet-discover": "discover",
 };
 const pendingBlocks = new Set(Object.keys(BLOCKS));
 let blockCheck = false;
@@ -345,7 +361,8 @@ if (memberInUrl()) withProfiles((module) => module.followUrl());
 // :where(), so any rule of the site's wins.
 export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defined), polynet-chat:not(:defined),\n" +
   "polynet-members:not(:defined), polynet-profile:not(:defined), polynet-page:not(:defined),\n" +
-  "polynet-events:not(:defined), polynet-learn:not(:defined), polynet-knowledge:not(:defined), polynet-ask:not(:defined) { visibility: hidden; }\n" +
+  "polynet-events:not(:defined), polynet-learn:not(:defined), polynet-knowledge:not(:defined), polynet-ask:not(:defined),\n" +
+  "polynet-discover:not(:defined) { visibility: hidden; }\n" +
   [
     ":where(polynet-page) { display: block; }",
     ":where(polynet-page .pn-page-heading) { margin: 0 0 .75em; }",

@@ -6,7 +6,7 @@
 export const MEMBERS_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-members>. ui.js loads it on pages that place the tag.
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, h, avatar, roleLabel, memberHref, openProfile, plainClick, readMembers } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, h, styled, avatar, roleLabel, memberHref, openProfile, plainClick, readMembers } from "/__polynet/blocks/kit.js";
 
 const STYLE = BASE_STYLE + "\n" + [
   ":host { display: block; }",
@@ -94,7 +94,7 @@ class PolynetMembers extends HTMLElement {
       h("slot", { name: "header" }), this.search, this.found, this.body,
     ]);
     this.state = h("div", { class: "state", part: "state" });
-    this.root.replaceChildren(h("style", { text: STYLE }), this.frame, this.state);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.frame, this.state);
   }
 
   connectedCallback() {

@@ -1,17 +1,18 @@
 ---
 name: polynet-sdk
-description: Build custom views beside Polynet's blocks with the Polynet SDK (session and sign-in, the blocks' URL and events, channels, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, safe markdown). Use whenever site code needs community data or a member action beyond what the blocks show.
+description: Build custom views beside Polynet's blocks with the Polynet SDK (session and sign-in, the blocks' URL and events, channels, posts, reactions, live updates, typing, who's online, events, courses, knowledge, members and profiles, the community agent, other communities for Discover, safe markdown). Use whenever site code needs community data or a member action beyond what the blocks show.
 ---
 
 # The Polynet SDK
 
-Polynet's blocks carry the community: `<polynet-channels>`,
-`<polynet-chat>`, `<polynet-members>`, `<polynet-events>`,
-`<polynet-learn>`, `<polynet-knowledge>` and `<polynet-ask>` (on every
-site's `/chat`, `/people`, `/events`, `/learn`, `/knowledge` and `/ask`,
-inside its frame; `polynet-build-site`). The SDK is for everything around
-them: the public face and custom views like a route log, a "this week"
-strip or a "who's here now" strip. Custom views go beside the blocks, never instead of them.
+Polynet's blocks carry the standard pages, inside the site's frame:
+`<polynet-channels>` and `<polynet-chat>` (`/chat`), `<polynet-members>`
+(`/people`), `<polynet-events>` (`/events`), `<polynet-learn>` (`/learn`),
+`<polynet-knowledge>` (`/knowledge`), `<polynet-ask>` (`/ask`) and
+`<polynet-discover>` (`/discover`); see `polynet-build-site`. The SDK is
+for everything around them: the front door and extras like a parade map, a
+"this week" strip or a "who's here now" strip. Extras link into the
+standard pages; they never replace them.
 
 The full reference: `https://polynet.page/llms.txt`, also served by every
 deployed site at `https://<slug>.polynet.page/__polynet/llms.txt` (staging:
@@ -43,8 +44,8 @@ if (!session.signed_in) {
 ```
 
 - Signed out, only `session()` (`community_name`, `community_one_liner`,
-  `community_about`, `member_count`, `join_url`) and `community()` work.
-  Everything else throws `sign_in_required`.
+  `community_about`, `member_count`, `join_url`), `community()` and
+  `discover()` work. Everything else throws `sign_in_required`.
 - Someone not yet a member comes back to `/?polynet=join`: show "Join"
   again, then "Sign in" once they've joined.
 - `session.member.role` is `owner`, `admin`, `moderator` or `member`. Show
@@ -60,12 +61,12 @@ talks to them.
   (`detail: { slug }`) on `document`; `<polynet-chat>` follows, and your
   views can too. Switch from your own navigation by linking to
   `?channel=<slug>` or dispatching the event:
-  `document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }))`.
+  `document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "glasswork" } }))`.
   `channel="<slug>"` pins a chat to one channel.
 - The chat fires `polynet:read` (`{ slug }`) when it marks a channel read.
 - Profiles: a member in `<polynet-members>`, a chat author and an @-tag all
   open Polynet's profile panel (with Message). Open one from your own view
-  (a name in your route log) with
+  (a name on your parade map) with
   `document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }))`
   (or `{ ref }` from `members()` or `online()`), or link to `?member=<handle>`. Don't
   build your own profile view.
@@ -75,7 +76,7 @@ talks to them.
 ## A custom feed in your own markup
 
 The chat already is the community's feed. Build one only for a different
-view of the same posts (a highlights wall, a route log), beside the chat.
+view of the same posts (a highlights wall, a lantern gallery), beside the chat.
 
 ```html
 <ol id="feed" role="log" aria-label="Club feed" aria-live="off"></ol>
@@ -172,6 +173,7 @@ words can take a few seconds while the agent uses tools.
 | Events | `events({ limit })` from now; `events({ from: date })` includes past ones; `events({ cursor: list.cursor })` the next page; `event(ref)` one. Show times in the event's `timezone`; link to `/events/<id>~<start ms>` (from `ref` `event:<id>:<start ms>`) for its page |
 | Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` (a long lesson is read whole); link to `/learn/<course segment>/<lesson segment>` (the last part of each `path`, without `.md`) |
 | What the community knows | `knowledge(query?)` |
+| Other communities (public) | `discover()`: `[{ slug, name, one_liner, avatar_url, member_count, url, has_site, here }]`; `url` is that community's own site, or its Polynet page when `has_site` is false; `here` is this one |
 | Members | `members()`, `profile(member)`, `online()` (includes the signed-in member) |
 | Older posts | `feed(slug, { cursor: posts.cursor })`; `cursor` is null at the start |
 
@@ -187,8 +189,8 @@ export default { build: { rollupOptions: { external: [/^\/__polynet\//] } } };
 
 Deploy the build folder (`npx @polynet/cli deploy dist`); `polynet.json`
 stays in the project folder, so a clean build doesn't lose it. Polynet adds
-`/__polynet/ui.js` to every page, so it's fine if the bundler moves it into
-its own script.
+`/__polynet/ui.js` and `/__polynet/ui.css` to every HTML page it serves, so
+it's fine if the bundler moves the script into its own (or drops it).
 
 ## Traps
 
@@ -200,8 +202,10 @@ its own script.
 - An agent post has `actor.type === "community_agent"`. With a
   `display_name`, it acted for that member: label it
   "<community> agent · for <name>" with your own agent mark.
-- Member avatars come from Polynet's storage host: a CSP needs
-  `img-src 'self' https:`.
+- A Content-Security-Policy works with the blocks and the shell: they
+  style themselves with adopted stylesheets, not inline `<style>`, so
+  `style-src 'self'` is fine for them. Member avatars come from Polynet's
+  storage host: allow `img-src 'self' https:`.
 - After Polynet updates the SDK, a hard refresh picks it up (it's cached for
   a few minutes).
 - Showing members' sections with the `hidden` attribute? Add

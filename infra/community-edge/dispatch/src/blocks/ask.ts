@@ -8,9 +8,9 @@
 export const ASK_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-ask>. ui.js loads it on pages that place the tag.
 // Your own starter questions (each button asks its text):
-//   <polynet-ask><div slot="starters"><button>When's the next run?</button></div></polynet-ask>
+//   <polynet-ask><div slot="starters"><button>When's the next lantern night?</button></div></polynet-ask>
 import polynet from "/__polynet/sdk.js";
-import { BASE_STYLE, PROSE_STYLE, h, avatar, timeLabel, signInGate } from "/__polynet/blocks/kit.js";
+import { BASE_STYLE, PROSE_STYLE, h, styled, avatar, timeLabel, signInGate } from "/__polynet/blocks/kit.js";
 
 // A question's own key, kept across a retry.
 function newKey() {
@@ -22,7 +22,8 @@ const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   // A conversation needs a height to scroll in; the site sets its own on the element.
   ":host { display: block; height: 70vh; min-height: 320px; }",
   ".ask { display: flex; flex-direction: column; height: 100%; min-height: 0; }",
-  ".privacy { margin: 0 0 .5em; color: var(--pn-muted); font-size: .875em; line-height: 1.45; }",
+  // Inset on every side, so a border or radius the site puts on the element never runs through it.
+  ".privacy { margin: 0; padding: .75em .875em .625em; color: var(--pn-muted); font-size: .875em; line-height: 1.45; }",
   ".log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: .25em 0 .75em; }",
   ".message { display: grid; grid-template-columns: 2em minmax(0, 1fr); column-gap: .75em; padding: .5em .25em; }",
   ".who { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5em; font-weight: 600; line-height: 1.35; }",
@@ -100,7 +101,7 @@ class PolynetAsk extends HTMLElement {
       h("slot", { name: "header" }), this.privacy, this.log, this.starters, this.form, this.announce,
     ]);
     this.state = h("div", { class: "state", part: "state" });
-    this.root.replaceChildren(h("style", { text: STYLE }), this.frame, this.state);
+    this.root.replaceChildren(...styled(this.root, STYLE), this.frame, this.state);
     // The site's own starter buttons (slot="starters") ask their text too.
     this.addEventListener("click", (event) => {
       const button = event.target instanceof Element ? event.target.closest("button") : null;
