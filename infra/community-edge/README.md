@@ -12,6 +12,7 @@ one edge Worker in front of every community front end.
                          ├─ /__polynet/agent, /__polynet/agent/messages → /runtime/app/agent, /runtime/app/agent_messages (streamed)
                          ├─ /__polynet/sdk.js, /__polynet/live.js, /__polynet/llms.txt → the builder kit (SDK, its live client, its doc)
                          ├─ /__polynet/ui.js  → the shell (<polynet-account>), injected into every page; loads blocks on demand
+                         ├─ /__polynet/ui.css → linked first in every page: hides Polynet's tags until they're defined
                          ├─ /__polynet/blocks/<name>.js → Polynet's blocks: channels (<polynet-channels>), chat (<polynet-chat>),
                          │                      members (<polynet-members>), composer (the chat's message boxes, imported
                          │                      by chat), profile (the profile panel: opened by blocks, ?member=<handle>

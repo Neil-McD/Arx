@@ -13,7 +13,7 @@ import { CHAT_SOURCE } from "./blocks/chat";
 import { COMPOSER_SOURCE } from "./blocks/composer";
 import { MEMBERS_SOURCE } from "./blocks/members";
 import { PROFILE_SOURCE } from "./blocks/profile";
-import { UI_SOURCE } from "./ui";
+import { UI_CSS, UI_SOURCE } from "./ui";
 
 const SITE = "https://run-club.polynet.test";
 
@@ -206,12 +206,12 @@ async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}
   const files: Record<string, string> = {
     "/__polynet/ui.js": UI_SOURCE, "/__polynet/sdk.js": FAKE_SDK, "/__polynet/blocks/kit.js": KIT_SOURCE,
     "/__polynet/blocks/channels.js": CHANNELS_SOURCE, "/__polynet/blocks/chat.js": CHAT_SOURCE, "/__polynet/blocks/composer.js": COMPOSER_SOURCE,
-    "/__polynet/blocks/members.js": MEMBERS_SOURCE, "/__polynet/blocks/profile.js": PROFILE_SOURCE,
+    "/__polynet/blocks/members.js": MEMBERS_SOURCE, "/__polynet/blocks/profile.js": PROFILE_SOURCE, "/__polynet/ui.css": UI_CSS,
   };
   await page.route(`${SITE}/**`, async (route) => {
     const url = new URL(route.request().url());
     const body = files[url.pathname];
-    if (body !== undefined) return route.fulfill({ body, contentType: "text/javascript" });
+    if (body !== undefined) return route.fulfill({ body, contentType: url.pathname.endsWith(".css") ? "text/css" : "text/javascript" });
     return route.fulfill({ body: html, contentType: "text/html" });
   });
   await page.addInitScript((state) => {
@@ -412,6 +412,19 @@ test("live: typing shows who, new posts append, and the channel is marked read a
   await expect.poll(() => chat.locator("[part~=message-body]").last().textContent()).toBe("On my way");
   expect(await chat.locator("[part=typing]").textContent()).toBe("");
   await expect.poll(() => calls(page, "markRead")).toHaveLength(2);
+  await page.close();
+});
+
+test("ui.css keeps a block's slot content hidden until the block is defined", async () => {
+  // The edge links ui.css first in <head>; ui.js is held back here so the blocks stay undefined.
+  const page = await open(() => {}, `<!doctype html><html lang="en"><head><link rel="stylesheet" href="/__polynet/ui.css"><title>x</title></head>
+    <body><polynet-chat><p slot="empty" id="quiet">Quiet in here.</p></polynet-chat><polynet-members><p slot="empty" id="nobody">Nobody yet.</p></polynet-members></body></html>`);
+  const visibility = (id: string) => page.evaluate((i) => getComputedStyle(document.getElementById(i)!).visibility, id);
+  expect(await visibility("quiet")).toBe("hidden");
+  expect(await visibility("nobody")).toBe("hidden");
+  await page.evaluate(() => customElements.define("polynet-chat", class extends HTMLElement {}));
+  expect(await visibility("quiet")).toBe("visible");
+  expect(await visibility("nobody")).toBe("hidden");
   await page.close();
 });
 

@@ -12,7 +12,7 @@
 
 import { SDK_SOURCE } from "./sdk";
 import { LLMS_TXT } from "./llms";
-import { UI_SOURCE } from "./ui";
+import { UI_CSS, UI_SOURCE } from "./ui";
 import { KIT_SOURCE } from "./blocks/kit";
 import { CHANNELS_SOURCE } from "./blocks/channels";
 import { CHAT_SOURCE } from "./blocks/chat";
@@ -34,7 +34,11 @@ type Fetcher = { fetch(request: Request): Promise<Response> };
 
 // Cloudflare's streaming HTML rewriter (a Workers global), as far as the edge uses it.
 type RewriterText = { before(content: string, options?: { html?: boolean }): unknown; append(content: string, options?: { html?: boolean }): unknown };
-type RewriterElement = { getAttribute(name: string): string | null; onEndTag(handler: (tag: RewriterText) => void): void };
+type RewriterElement = {
+  getAttribute(name: string): string | null;
+  prepend(content: string, options?: { html?: boolean }): unknown;
+  onEndTag(handler: (tag: RewriterText) => void): void;
+};
 interface Rewriter {
   on(selector: string, handlers: { element(element: RewriterElement): void }): Rewriter;
   onDocument(handlers: { end(end: RewriterText): void }): Rewriter;
@@ -465,10 +469,11 @@ export default {
         },
       });
     }
-    if (url.pathname === "/__polynet/ui.js") {
-      return new Response(UI_SOURCE, {
+    if (url.pathname === "/__polynet/ui.js" || url.pathname === "/__polynet/ui.css") {
+      const css = url.pathname.endsWith(".css");
+      return new Response(css ? UI_CSS : UI_SOURCE, {
         headers: {
-          "Content-Type": "text/javascript; charset=utf-8",
+          "Content-Type": css ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8",
           "Cache-Control": "public, max-age=300",
           "X-Content-Type-Options": "nosniff",
         },
@@ -568,23 +573,36 @@ function untransformed(response: Response): Response {
 
 const SHELL_SRC = /^\/__polynet\/ui\.js(\?.*)?$/;
 const SHELL_TAG = '<script type="module" src="/__polynet/ui.js"></script>';
+const SHELL_STYLE_TAG = '<link rel="stylesheet" href="/__polynet/ui.css">';
 
 // Every page carries the Polynet shell, including one whose bundler moved the
 // ui.js import into its own script (a second load is free: modules run once).
-// ui.js then puts <polynet-account> in the corner if the page has none.
+// ui.js then puts <polynet-account> in the corner if the page has none. Its
+// stylesheet goes first in <head> (or <body>), before anything renders, so a
+// block's slot content stays hidden until the block is defined.
 export function withShell(response: Response, Rewriter = typeof HTMLRewriter === "undefined" ? undefined : HTMLRewriter): Response {
   if (!Rewriter || !response.body || !(response.headers.get("content-type") ?? "").includes("text/html")) return response;
   let present = false;
   let added = false;
+  let styled = false;
   const add = (at: RewriterText, where: "before" | "append") => {
     if (present || added) return;
     added = true;
     at[where](SHELL_TAG, { html: true });
   };
+  const style = (at: RewriterElement) => {
+    if (styled) return;
+    styled = true;
+    at.prepend(SHELL_STYLE_TAG, { html: true });
+  };
   return new Rewriter()
     .on("script[src]", { element(element) { if (SHELL_SRC.test(element.getAttribute("src") ?? "")) present = true; } })
-    .on("body", { element(element) { element.onEndTag((end) => add(end, "before")); } })
-    // A page with no </body> gets it at the very end, which browsers still read as the body.
-    .onDocument({ end(end) { add(end, "append"); } })
+    .on("head", { element: style })
+    .on("body", { element(element) { style(element); element.onEndTag((end) => add(end, "before")); } })
+    // A page with no </body> gets them at the very end, which browsers still read as the body.
+    .onDocument({ end(end) {
+      if (!styled) { styled = true; end.append(SHELL_STYLE_TAG, { html: true }); }
+      add(end, "append");
+    } })
     .transform(response);
 }

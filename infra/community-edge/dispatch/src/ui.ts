@@ -309,3 +309,11 @@ const memberInUrl = () => new URLSearchParams(location.search).has("member");
 window.addEventListener("popstate", () => { if (memberInUrl()) withProfiles((module) => module.followUrl()); });
 if (memberInUrl()) withProfiles((module) => module.followUrl());
 `;
+
+// Served at /__polynet/ui.css, which the edge links at the top of every page:
+// until a block's script defines it, its tag hides, so a site's slot content
+// ("Quiet in here.") never flashes on screen before the block takes it in. A
+// stylesheet from the site's own domain, not an inline <style>, so a site's
+// Content-Security-Policy (style-src 'self') allows it.
+export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defined), polynet-chat:not(:defined),\n" +
+  "polynet-members:not(:defined), polynet-profile:not(:defined) { visibility: hidden; }\n";

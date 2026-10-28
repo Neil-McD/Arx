@@ -267,10 +267,12 @@ test("community pages are served untransformed, so Cloudflare injects no scripts
 // Stands in for Cloudflare's HTMLRewriter (absent outside Workers) over a whole document.
 class FakeRewriter {
   scripts?: (element: any) => void;
+  head?: (element: any) => void;
   body?: (element: any) => void;
   docEnd?: (end: any) => void;
   on(selector: string, handlers: { element(element: any): void }) {
     if (selector === "script[src]") this.scripts = handlers.element;
+    if (selector === "head") this.head = handlers.element;
     if (selector === "body") this.body = handlers.element;
     return this;
   }
@@ -278,9 +280,19 @@ class FakeRewriter {
   transform(response: Response) {
     const run = async () => {
       let html = await response.text();
+      // An element's prepend goes right after its start tag.
+      const opened = (name: string, extra: object = {}) => {
+        const start = new RegExp(`<${name}\\b[^>]*>`).exec(html);
+        if (!start) return null;
+        const at = start.index + start[0].length;
+        return { prepend: (content: string) => { html = html.slice(0, at) + content + html.slice(at); }, ...extra };
+      };
+      const head = opened("head");
+      if (head) this.head!(head);
       for (const m of html.matchAll(/<script\b[^>]*\bsrc="([^"]*)"/g)) this.scripts!({ getAttribute: () => m[1] });
       let endTag: ((tag: any) => void) | undefined;
-      if (/<body\b/.test(html)) this.body!({ onEndTag: (handler: (tag: any) => void) => { endTag = handler; } });
+      const body = opened("body", { onEndTag: (handler: (tag: any) => void) => { endTag = handler; } });
+      if (body) this.body!(body);
       if (endTag && html.includes("</body>")) {
         const at = html.lastIndexOf("</body>");
         endTag({ before: (content: string) => { html = html.slice(0, at) + content + html.slice(at); } });
@@ -294,17 +306,31 @@ class FakeRewriter {
 
 test("the edge adds the shell to every page that doesn't load it, and leaves everything else alone", async () => {
   const tag = '<script type="module" src="/__polynet/ui.js"></script>';
+  const link = '<link rel="stylesheet" href="/__polynet/ui.css">';
   const page = (html: string, type = "text/html; charset=utf-8") => withShell(new Response(html, { headers: { "content-type": type } }), FakeRewriter as any);
   // A bundled site: Vite moved the ui.js import into its own module.
   expect(await page('<html><body><script type="module" src="/assets/index-abc.js"></script></body></html>').text())
-    .toBe(`<html><body><script type="module" src="/assets/index-abc.js"></script>${tag}</body></html>`);
-  const already = `<html><head>${tag}</head><body><polynet-account></polynet-account></body></html>`;
-  expect(await page(already).text()).toBe(already);
+    .toBe(`<html><body>${link}<script type="module" src="/assets/index-abc.js"></script>${tag}</body></html>`);
+  // A page that loads ui.js itself still gets the stylesheet, first in <head>.
+  const already = `<html><head><meta charset="utf-8">${tag}</head><body><polynet-account></polynet-account></body></html>`;
+  expect(await page(already).text()).toBe(already.replace("<head>", `<head>${link}`));
   expect(await page('<html><body><script type="module" src="/__polynet/ui.js?v=2"></script></body></html>').text()).not.toContain(tag);
-  expect(await page("<!doctype html><title>Hi</title><p>No body tag").text()).toBe(`<!doctype html><title>Hi</title><p>No body tag${tag}`);
+  expect(await page("<!doctype html><title>Hi</title><p>No body tag").text()).toBe(`<!doctype html><title>Hi</title><p>No body tag${link}${tag}`);
   expect(await page("body { color: red }", "text/css").text()).toBe("body { color: red }");
   // Outside Workers there's no rewriter: the page passes through untouched.
   expect(await withShell(new Response("<html></html>", { headers: { "content-type": "text/html" } })).text()).toBe("<html></html>");
+});
+
+test("ui.css hides every Polynet tag until its script defines it, so slot content never flashes", async () => {
+  const res = await edge.fetch(request("/__polynet/ui.css", { headers: { "sec-fetch-site": "cross-site" } }), env());
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toBe("text/css; charset=utf-8");
+  expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+  const css = await res.text();
+  for (const tag of ["polynet-account", "polynet-channels", "polynet-chat", "polynet-members", "polynet-profile"]) {
+    expect(css).toContain(`${tag}:not(:defined)`);
+  }
+  expect(css).toContain("{ visibility: hidden; }");
 });
 
 test("ui.js puts a shell in the corner of a page that has none, and gives way to one the page places", async () => {
