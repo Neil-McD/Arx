@@ -751,12 +751,16 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     await expect.poll(() => personal.locator("[part=input]").count()).toBe(1);
     expect(await personal.locator("[part=block]").textContent()).toBe("Block");
     expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
-    // A draft survives the next change.
+    // A draft and an attached file survive the next change.
     await personal.locator("[part=input]").fill("Sorry about that");
+    await personal.locator("input[type=file]").setInputFiles({ name: "wall.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
+    await expect.poll(() => personal.locator("[part=chip]").getAttribute("data-state")).toBe("ready");
     dm.conversations[0].muted = false;
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await expect.poll(() => personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("false");
     expect(await personal.locator("[part=input]").inputValue()).toBe("Sorry about that");
+    expect(await personal.locator("[part=chip]").count()).toBe(1);
+    expect(await personal.locator("[part=attachments]").isVisible()).toBe(true);
   } finally {
     await browser.close();
   }

@@ -565,6 +565,8 @@ class Messages {
       this.grow();
       if (carried.focused) this.input.focus();
     }
+    // Files still attached stay visible (and removable) in a rebuilt composer.
+    this.renderChips();
     this.renderLog(true);
   }
 
@@ -849,7 +851,6 @@ class Messages {
     this.carryDraft = true;
     await this.openConversation(id);
     if (!this.current() || !this.view || this.view.id !== id) return;
-    if (this.chips) this.renderChips();
     this.loadInbox();
   }
 
