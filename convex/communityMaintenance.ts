@@ -9,7 +9,6 @@ import {
   type CommunityMessageReactionLike,
   type CommunityResourceLike,
   type CommunitySubscriptionLike,
-  normalizeIdValue,
 } from "./communityCore";
 import type { CommunityJoinRequestLike } from "./communityJoinRequestCore";
 
@@ -33,7 +32,6 @@ async function maintenanceUserExists(ctx: any, userId: any, cache: Map<string, b
   cache.set(key, exists);
   return exists;
 }
-
 
 export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
   args: {

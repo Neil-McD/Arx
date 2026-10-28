@@ -2,7 +2,7 @@
    Members approve facts, agents propose facts, admins transition nothing.
    Every read goes through readMemberFactsForLens (the shared predicate). */
 import { v, type ObjectType } from "convex/values";
-import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
@@ -16,20 +16,7 @@ import {
 } from "./communityJoinRequestCore";
 import {
   insertMemberFacts,
-  loadMemberAccountContext,
-  readMemberFactsForLens,
-  readMemberSpine,
-  transitionMemberFactConsent,
-  type MemberFactRow,
 } from "./memberOntologyCore";
-import { renderMemberContextMarkdown } from "../shared/memberContextMarkdown";
-import {
-  buildPolynetProfileFactBatchKey,
-  normalizePolynetProfileConfirmInput,
-} from "../shared/polynetProfileMcpContract";
-
-const MCP_PROFILE_FACT_LIMIT = 100;
-const MCP_PROFILE_MARKER_PREFIX = "external_mcp_profile:";
 
 const factDraftValidator = v.object({
   kind: v.string(),
@@ -38,36 +25,6 @@ const factDraftValidator = v.object({
   confidence: v.optional(v.number()),
   evidenceRef: v.optional(v.string()),
 });
-
-function mapFactForOutput(row: MemberFactRow) {
-  return {
-    id: String(row._id),
-    community_id: row.communityId ? String(row.communityId) : null,
-    kind: row.kind,
-    body: row.body,
-    provenance: row.provenance,
-    consent_state: row.consentState,
-    confidence: row.confidence,
-    created_at: row.createdAt,
-  };
-}
-
-function mapAccountForMcp(account: Awaited<ReturnType<typeof loadMemberAccountContext>>) {
-  return {
-    display_name: account.displayName,
-    handle: account.handle,
-    timezone: account.timezone,
-    social_links: account.socialLinks,
-    memberships: account.memberships.map((membership) => ({
-      community_name: membership.communityName,
-      role: membership.role,
-      access_source: membership.accessSource,
-    })),
-    owned_communities: account.ownedCommunities.map((community) => ({
-      name: community.name,
-    })),
-  };
-}
 
 /* External MCP self-profile bridge. The HTTP provider supplies the verified
    actor's database id; neither function accepts a user or community selector

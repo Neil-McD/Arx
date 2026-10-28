@@ -17,7 +17,6 @@ import {
   communityEvidenceSurfaceValidator,
   resolveTrustedCommunityEvidenceUserId,
 } from "./communityEvidenceAudit";
-import { resolveCommunityResourceEvidenceSource } from "./communityResourceEvidenceCore";
 import {
   buildCommunityResourceDirectoryFields,
 } from "../shared/communityResourceDirectory";

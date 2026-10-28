@@ -1,4 +1,4 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   communityResourceIsLiveModulePage,
@@ -2365,36 +2365,6 @@ async function resolveWriteActor(args: {
     actorType,
     actorUserId: args.userId,
     isManager,
-  };
-}
-
-async function resolveAdminTruthActor(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-}): Promise<{ actorType: "admin"; actorUserId: any; isManager: true }> {
-  await requireCommunityManager({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
-  return {
-    actorType: "admin",
-    actorUserId: args.userId,
-    isManager: true,
-  };
-}
-
-async function resolvePolicyDecisionActor(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-}): Promise<{
-  actorType: "admin";
-  actorUserId: any;
-  isManager: true;
-}> {
-  await requireCommunityManager({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
-  return {
-    actorType: "admin",
-    actorUserId: args.userId,
-    isManager: true,
   };
 }
 

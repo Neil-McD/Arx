@@ -14,7 +14,6 @@ import {
   requireCommunityChannelCapacity,
   archiveActiveCommunityChannel,
   createActiveCommunityChannel,
-  getGeneralChannel,
   listAuthorizedCommunityChannels,
   listAuthorizedCommunityChannelPage,
   moveActiveCommunityChannel,

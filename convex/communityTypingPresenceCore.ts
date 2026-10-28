@@ -8,7 +8,6 @@ import {
   type CommunityLike,
   type CommunityTypingPresenceLike,
   normalizeIdValue,
-  requireCommunityChatAccess,
   resolvePublicUserId,
   toIsoString,
 } from "./communityCore";

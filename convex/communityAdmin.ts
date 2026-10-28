@@ -1,5 +1,4 @@
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -19,7 +18,6 @@ import {
   getUniqueCommunityMembershipByPair,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
-  mapCommunityPricingRow,
   normalizeCommunityRoleForOutput,
   normalizeRoleAssignment,
   parseIsoMs,
@@ -54,7 +52,6 @@ import {
   PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
 } from "./platformHomeCommunity";
 import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
-import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   activateCommunityMembershipCore,
 } from "./communityMembershipLifecycle";
@@ -138,9 +135,6 @@ const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
   "past_due",
   "cancel_at_period_end",
 ]);
-
-const COMMUNITY_ADMIN_MEMBERS_DEFAULT_PAGE_SIZE = 25;
-const COMMUNITY_ADMIN_MEMBERS_MAX_PAGE_SIZE = 100;
 
 function normalizeAnalyticsRange(rawRange: unknown): AnalyticsRangeValue {
   const range = String(rawRange ?? "30d").trim();
@@ -260,10 +254,6 @@ function buildAnalyticsRecurringRevenueSeries(params: {
   });
 }
 
-async function resolveCommunityMemberIdentity(ctx: any, userRowId: any) {
-  return await resolveUserProfileDisplayProjection(ctx, userRowId);
-}
-
 async function resolveCommunityAdminMembersContext(args: {
   ctx: any;
   userId?: any;
@@ -300,41 +290,6 @@ async function resolveCommunityAdminMembersContext(args: {
     community,
     viewerCanManageMembers:
       String(community.ownerId) === String(userId) || viewerRole === "admin",
-  };
-}
-
-async function mapCommunityOwnerAdminMemberRow(args: {
-  ctx: any;
-  community: CommunityLike;
-  userIdCache: Map<string, string | null>;
-}) {
-  return {
-    id: `owner:${String(args.community._id)}`,
-    community_id: String(args.community._id),
-    user_id:
-      (await resolvePublicUserId(args.ctx, args.community.ownerId, args.userIdCache)) ??
-      String(args.community.ownerId),
-    ...(await resolveCommunityMemberIdentity(args.ctx, args.community.ownerId)),
-    role: "owner",
-    created_at: toIsoString(args.community.createdAt),
-  };
-}
-
-async function mapCommunityAdminMembershipRow(args: {
-  ctx: any;
-  row: CommunityMembershipLike;
-  userIdCache: Map<string, string | null>;
-}) {
-  const identity = await resolveCommunityMemberIdentity(args.ctx, args.row.userId);
-  return {
-    id: String(args.row._id),
-    community_id: String(args.row.communityId),
-    user_id:
-      (await resolvePublicUserId(args.ctx, args.row.userId, args.userIdCache)) ??
-      String(args.row.userId),
-    ...identity,
-    role: normalizeCommunityRoleForOutput(args.row.role) || "member",
-    created_at: toIsoString(args.row.createdAt),
   };
 }
 

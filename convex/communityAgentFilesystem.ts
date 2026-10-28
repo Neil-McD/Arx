@@ -287,22 +287,6 @@ function contextMetadata(context: ResolvedCommunityAgentFilesystemContext) {
   };
 }
 
-function directoryEntry(args: {
-  type: "directory" | "file";
-  name: string;
-  path: string;
-  summary?: string;
-  updatedAt?: number;
-}) {
-  return {
-    type: args.type,
-    name: args.name,
-    path: args.path,
-    summary: args.summary ?? null,
-    updated_at: typeof args.updatedAt === "number" ? toIsoString(args.updatedAt) : null,
-  };
-}
-
 function mapDigest(row: DigestRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -412,14 +396,6 @@ async function latestNodes(ctx: any, communityId: any, limit: number): Promise<N
       .take(Math.max(5, Math.ceil(limit / 2)))) as NodeRow[];
     rows.push(...batch);
   }
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
-}
-
-async function latestEdges(ctx: any, communityId: any, limit: number): Promise<EdgeRow[]> {
-  const rows = (await ctx.db
-    .query("communityIntelligenceEdges" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(Math.max(100, limit * 4))) as EdgeRow[];
   return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
 }
 

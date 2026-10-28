@@ -141,23 +141,6 @@ function requireExpectedCommunitySettingsRevision(
   }
 }
 
-async function saveCommunityOneLinerInternal(
-  ctx: any,
-  community: CommunityLike,
-  oneLiner: string | null | undefined,
-  nowMs: number,
-): Promise<CommunityLike> {
-  const nextOneLiner = normalizeOptionalText(oneLiner);
-  await ctx.db.patch(community._id as any, {
-    oneLiner: nextOneLiner,
-    settingsRevision: resolveCommunitySettingsRevision(community) + 1,
-    updatedAt: nowMs,
-  });
-  const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
-  if (!updated) throw new Error("community_not_found");
-  return updated;
-}
-
 function requireCommunityPublishReadinessTransition(input: {
   currentVisibility?: string | null;
   nextVisibility?: string | null;

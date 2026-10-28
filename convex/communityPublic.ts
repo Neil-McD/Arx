@@ -2,12 +2,10 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityLike,
-  type CommunityMembershipLike,
   type CommunityPricePointLike,
   type CommunityResourceModuleLike,
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
-  communityUserIsBlocked,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
   countCanonicalCommunityMembersFromRows,
@@ -16,11 +14,9 @@ import {
   mapActivePlanSummaries,
   normalizeCommunityRoleForOutput,
   normalizeSlug,
-  pickMostRelevantCommunityMembership,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   requireCommunityUserNotBlocked,
-  resolveCommunityAccessBundle,
   resolveCommunityBrandingFields,
   buildCommunityVisualIdentity,
   resolveCommunityEntryPolicy,
@@ -36,7 +32,6 @@ import {
   ensurePendingCommunityJoinRequest,
   getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
-import { findAuthenticatedActorState } from "./authActor";
 import { COMMUNITY_FUNNEL_PUBLIC_CONFIG } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {

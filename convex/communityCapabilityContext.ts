@@ -5,7 +5,6 @@ import { internalAction, internalQuery } from "./_generated/server";
 import {
   buildResolvedCommunityCapabilityContext,
   normalizeCommunityCapabilitySlug,
-  type CommunityCapabilityContextErrorCode,
   type CommunityMembershipProjection,
   type ResolvedCommunityCapabilityContext,
 } from "../shared/communityCapabilityContextContract";

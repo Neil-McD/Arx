@@ -1,14 +1,11 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v, type ObjectType } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity, COMMUNITY_CONVERSATION_PREFIX } from "../shared/communityConversationIdentity";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
   applyRuntimeHarnessTelemetryEvent,
-  buildRuntimeHarnessScorecard,
-  buildRuntimeHarnessTelemetrySummaryFromEvents,
   createEmptyRuntimeHarnessTelemetrySummary,
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
@@ -18,13 +15,11 @@ import {
 } from "../shared/runtimeWorkingStateLedger";
 import {
   requireCommunityChatAccess,
-  requireCommunityManager,
 } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   MEMBER_AGENT_GLOBAL_SCOPE_KEY,
-  buildGlobalMemberAgentEpisodeThreadKey,
   isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
@@ -632,68 +627,6 @@ function assertRuntimeRunMatchesRequestedCommunityLens(args: {
   }
 }
 
-function buildThreadContextResponse(row: ThreadLike, fallbackContextVersion: number): {
-  thread_id: string;
-  community_id: string | null;
-  context_version: number;
-  updated_at: string;
-} {
-  return {
-    thread_id: String(row._id),
-    community_id: row.communityId ?? null,
-    context_version: Number.isFinite(Number(row.contextVersion ?? fallbackContextVersion))
-      ? Number(row.contextVersion ?? fallbackContextVersion)
-      : fallbackContextVersion,
-    updated_at: new Date(row.updatedAt).toISOString(),
-  };
-}
-
-async function setCloudThreadContextForOwnedThread(args: {
-  ctx: any;
-  ownerId: any;
-  existing: ThreadLike;
-  expectedContextVersion: number;
-  communityId?: string | null;
-  updateCommunityId?: boolean;
-  nowMs: number;
-}): Promise<{
-  thread_id: string;
-  community_id: string | null;
-  context_version: number;
-  updated_at: string;
-} | null> {
-  const existing = args.existing;
-  const boundCommunity = communityConversationScope(existing);
-  if (boundCommunity && (args.updateCommunityId ?? true) && args.communityId !== boundCommunity) {
-    throw new Error("community_conversation_scope_immutable");
-  }
-  if (typeof existing.archivedAt === "number") return null;
-
-  const currentContextVersion = normalizeContextVersion(existing.contextVersion);
-  const expectedContextVersion = Math.max(0, Math.floor(args.expectedContextVersion));
-  if (currentContextVersion !== expectedContextVersion) {
-    throw new Error("thread_context_version_conflict");
-  }
-
-  const nextContextVersion = currentContextVersion + 1;
-  const patch: Record<string, unknown> = {
-    contextVersion: nextContextVersion,
-    updatedAt: args.nowMs,
-  };
-  if (args.updateCommunityId ?? true) {
-    const nextCommunityId = await validateThreadCommunityLensAccess({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      userId: args.ownerId,
-    });
-    patch.communityId = nextCommunityId;
-  }
-  await args.ctx.db.patch(existing._id, patch);
-  const updated = (await args.ctx.db.get(existing._id)) as ThreadLike | null;
-  if (!updated) return null;
-  return buildThreadContextResponse(updated, nextContextVersion);
-}
-
 function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null {
   const value = String(raw ?? "")
     .replace(/\s+/g, " ")
@@ -1061,42 +994,6 @@ async function getRunningRuntimeRunByThread(args: {
     .withIndex("by_thread_status_startedAt", (q: any) => q.eq("threadId", args.threadId).eq("status", "running"))
     .order("desc")
     .first()) as RuntimeRunLike | null;
-}
-
-async function listRecentRuntimeRunsForScorecard(args: {
-  ctx: any;
-  ownerId: any;
-  limit: number;
-  includeInternalHidden: boolean;
-}): Promise<RuntimeRunLike[]> {
-  const out: RuntimeRunLike[] = [];
-  const pageSize = Math.max(50, Math.min(200, args.limit * 2));
-  let cursorStartedAt: number | null = null;
-  let scannedPages = 0;
-
-  while (out.length < args.limit && scannedPages < 10) {
-    const rows = (await args.ctx.db
-      .query("runtimeRuns")
-      .withIndex("by_owner_startedAt", (q: any) =>
-        cursorStartedAt === null
-          ? q.eq("ownerId", args.ownerId)
-          : q.eq("ownerId", args.ownerId).lt("startedAt", cursorStartedAt),
-      )
-      .order("desc")
-      .take(pageSize)) as RuntimeRunLike[];
-    if (rows.length === 0) break;
-    scannedPages += 1;
-    for (const row of rows) {
-      if (!args.includeInternalHidden && row.visibility === "internal_hidden") continue;
-      out.push(row);
-      if (out.length >= args.limit) break;
-    }
-    const nextCursor = rows[rows.length - 1]?.startedAt;
-    if (typeof nextCursor !== "number" || !Number.isFinite(nextCursor)) break;
-    cursorStartedAt = Math.floor(nextCursor);
-  }
-
-  return out.slice(0, args.limit);
 }
 
 function isRuntimeRunStale(args: {
@@ -1496,28 +1393,6 @@ async function requireWritableClaimedImageAttachmentThread(args: {
   throw new Error("member_agent_attachment_thread_required");
 }
 
-async function prepareActiveGlobalMemberAgentThread(args: {
-  ctx: any;
-  thread: ThreadLike;
-  episodeOrdinal: number;
-  nowMs: number;
-}): Promise<ThreadLike> {
-  const threadKey = String(args.thread.threadKey ?? "").trim();
-  if (
-    threadKey !== buildGlobalMemberAgentEpisodeThreadKey(args.episodeOrdinal) ||
-    !isGlobalMemberAgentEpisodeThreadKey(threadKey)
-  ) {
-    throw new Error("member_agent_thread_context_mismatch");
-  }
-  const patch: Record<string, unknown> = {};
-  if (args.thread.modelId !== DEFAULT_ACTIVE_MODEL_ID) patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
-  if (typeof args.thread.archivedAt === "number") patch.archivedAt = undefined;
-  if (Object.keys(patch).length === 0) return args.thread;
-  patch.updatedAt = args.nowMs;
-  await args.ctx.db.patch(args.thread._id, patch);
-  return ((await args.ctx.db.get(args.thread._id)) as ThreadLike | null) ?? args.thread;
-}
-
 function buildMemberAgentChannelResponse(args: {
   channel: MemberAgentChannelLike;
   episode: MemberAgentEpisodeLike;
@@ -1600,12 +1475,6 @@ export const startNewCommunityAgentConversation = mutation({
     return buildMemberAgentChannelResponse({ channel: (await ctx.db.get(channel._id))!, episode: (await ctx.db.get(episodeId))!, thread: (await ctx.db.get(threadId))!, communityId: args.communityId });
   },
 });
-
-async function preventActiveCommunityConversationArchive(ctx: any, thread: ThreadLike) {
-  if (!communityConversationScope(thread)) return;
-  const episode = await ctx.db.query("memberAgentEpisodes").withIndex("by_thread", (q: any) => q.eq("threadId", thread._id)).unique();
-  if (episode?.status === "active") throw new Error("community_conversation_start_new_instead");
-}
 
 const listNewestCloudThreadMessagesArgs = {
     ownerId: v.optional(v.id("users")),

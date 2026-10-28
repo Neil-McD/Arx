@@ -1,4 +1,4 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -10,7 +10,6 @@ import {
   buildCommunitySourceTraceRevision,
   drainIneligiblePendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
-  type SourceTraceRow,
 } from "./communityCompilerEvidenceCore";
 import {
   buildCommunityMemoryDigestVersionKey,

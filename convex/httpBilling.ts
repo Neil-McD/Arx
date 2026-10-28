@@ -76,13 +76,6 @@ async function recordStripeWebhookAudit(
   }
 }
 
-function parseOptionalString(value: unknown, maxLen = 300): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed.slice(0, maxLen);
-}
-
 function readStripeSignature(req: Request): string | null {
   const signature = String(req.headers.get("stripe-signature") ?? "").trim();
   return signature || null;
