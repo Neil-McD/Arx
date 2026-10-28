@@ -11,7 +11,7 @@ const modules = import.meta.glob([
   "./_generated/**/*.*s",
 ]);
 
-test("queued GitHub and Google Drive sources are not pending ingestion work", async () => {
+test("retired GitHub and Google Drive sources are neither pending nor failed ingestion work", async () => {
   const t = convexTest(schema, modules);
   const nowMs = 1_760_000_000_000;
   const { communityId } = await t.run(async (ctx) => {
@@ -57,6 +57,12 @@ test("queued GitHub and Google Drive sources are not pending ingestion work", as
       sourceExternalId: "owner/repo:main:README.md",
       url: "https://github.com/owner/repo/blob/main/README.md",
     });
+    await source("Old Drive doc", {
+      sourceIngestionKind: "google_drive",
+      sourceIngestionStatus: "failed",
+      sourceExternalProvider: "google_drive",
+      sourceExternalId: "drive-file-2",
+    });
     await source("Link", {
       sourceIngestionKind: "url",
       sourceIngestionStatus: "queued",
@@ -70,7 +76,8 @@ test("queued GitHub and Google Drive sources are not pending ingestion work", as
       authSubject: "retired-provider-owner",
       communityId,
     });
-  expect(state.total_sources).toBe(3);
+  expect(state.total_sources).toBe(4);
   expect(state.pending_sources).toBe(1);
+  expect(state.failed_sources).toBe(0);
   expect(state.pending_url_sources).toBe(1);
 });

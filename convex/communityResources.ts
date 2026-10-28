@@ -5670,11 +5670,11 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
     const fileSources = sources.filter(isPlainFileSource);
     const googleDriveSources = sources.filter(isGoogleDriveSourceResource);
     const githubSources = sources.filter(isGitHubSourceResource);
+    // Retired GitHub and Google Drive sources are never claimed or retried again,
+    // so they count as neither pending nor failed work; their text stays.
     const failedSources = sources.filter(
-      (row) => normalizeResourceSourceIngestionStatus(row) === "failed",
+      (row) => isIngestibleCommunitySource(row) && normalizeResourceSourceIngestionStatus(row) === "failed",
     );
-    // Retired GitHub and Google Drive sources are never claimed again, so they
-    // do not count as pending work even if they were queued when import ended.
     const pendingSources = sources.filter((row) => {
       const status = normalizeResourceSourceIngestionStatus(row);
       return isIngestibleCommunitySource(row) && (status === "queued" || status === "processing");
