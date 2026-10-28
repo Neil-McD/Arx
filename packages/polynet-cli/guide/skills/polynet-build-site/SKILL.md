@@ -23,7 +23,10 @@ world, and every standard page lives inside it.
   world's header, navigation and footer around exactly one
   `<polynet-page></polynet-page>`, every path starting with `/`. Polynet
   serves it at each standard page and `<polynet-page>` renders that page's
-  blocks inside, in the page's own DOM, so your CSS lays it out.
+  blocks inside, in the page's own DOM, so your CSS lays it out. Polynet
+  also sets each of those pages' `<title>` to `<Page> · <community name>`
+  (`Chat · Port Wren Lantern Guild`); the frame's own `<title>` shows only
+  where Polynet can't read the community's name, so make it that name.
 - **The standard pages**, automatic, in this order in the shell's menu
   (Discover sits apart: it's every community, not this one):
 
@@ -37,12 +40,13 @@ world, and every standard page lives inside it.
   | `/ask` | `<polynet-ask>` | none (private to each member) |
   | `/discover` | `<polynet-discover>` | none (public: signed out works too) |
 
-- **Extras** you build with the SDK (`polynet-sdk`): a route log, a
+- **Extras** you build with the SDK (`polynet-sdk`): a parade map, a
   "this week" strip, a leaderboard. Each links into the standard pages.
-- **The shell**, `<polynet-account>`: Polynet adds `/__polynet/ui.js` to
-  every page and puts the shell in a corner where a page has none. Place it
-  in the frame and on the front door yourself, visible at every width, and
-  never add a second "Sign in" beside it.
+- **The shell**, `<polynet-account>`: Polynet adds `/__polynet/ui.js` and
+  `/__polynet/ui.css` to every HTML page it serves (adding the script tag
+  yourself is harmless), and ui.js puts the shell in a corner where a page
+  has none. Place it in the frame and on the front door yourself, visible
+  at every width, and never add a second "Sign in" beside it.
 
 A site may ship its own file at a standard path (`chat.html`,
 `events.html`, `learn/index.html`, `discover.html`, ...): it wins over
@@ -65,17 +69,30 @@ settings page or a "your communities" list.
    the page classes (recipes below).
 5. **Build the front door and any extras** by hand; fill live data with the
    SDK.
-6. **Preview on Polynet.** Blocks render only there: deploy (`--staging`
-   for a community on staging), then open the home page and every standard
-   page at 390 and 1440 px, signed out and signed in. A local static server
-   shows the tags empty; that's expected.
+6. **Preview on Polynet.** There is no local preview: the blocks, the
+   shell and the SDK render only on Polynet, and a local static server
+   shows the tags empty. Deploy (`--staging` for a community on Polynet's
+   staging), then open the home page and every standard page at 390 and
+   1440 px, signed out and signed in.
 7. **Finish** with `polynet-accessibility`, then `polynet-deploy-verify`.
+
+**When you can't deploy** (no access yet, or no terminal or MCP): build the
+strongest direction rather than three, run `npx @polynet/cli check` if you
+can, and put in your report the three directions (name, idea, why this one
+won) and exactly what the founder should verify after deploying: every
+standard page at 390 and 1440 px, signed out and signed in; that each
+block takes the world's type, color and edges (not a stock widget); that
+every slot's words appear (page headings, empty states, the Ask privacy
+line and starters); one shell in the header, none doubled; the current
+page marked in the nav; and tab titles reading `Chat · <community name>`.
 
 Changing an existing site? Keep its world unless the founder asks for a new one.
 
 ## A complete minimal site
 
-`frame.html`: the world's chrome. Everything in it starts from `/`.
+Port Wren Lantern Guild (a made-up community: paper lanterns, a harbor
+town, Thursday nights in the net loft). `frame.html`: the world's chrome.
+Everything in it starts from `/`.
 
 ```html
 <!doctype html>
@@ -83,27 +100,32 @@ Changing an existing site? Keep its world unless the founder asks for a new one.
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sunrise Climbing Club</title>
+  <title>Port Wren Lantern Guild</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="top">
-    <a class="mark" href="/">Sunrise</a>
-    <nav aria-label="The crag">
-      <a href="/chat">The wall</a> <a href="/people">The crew</a> <a href="/events">Sessions</a>
-      <a href="/learn">Technique</a> <a href="/knowledge">Beta book</a> <a href="/ask">Ask the coach</a>
+    <a class="mark" href="/">Port Wren</a>
+    <nav aria-label="The quay">
+      <a href="/chat">The workbench</a> <a href="/people">The guild</a> <a href="/events">Lantern nights</a>
+      <a href="/learn">Patterns</a> <a href="/knowledge">The ledger</a> <a href="/ask">Ask the keeper</a>
     </nav>
     <polynet-account></polynet-account>
   </header>
   <main>
     <polynet-page>
-      <h1 slot="chat-heading">The wall</h1>
-      <h1 slot="knowledge-heading">The beta book</h1>
-      <p data-block="polynet-chat" slot="empty">Chalk's dry. Nobody's posted yet. First beta?</p>
-      <p data-block="polynet-events" slot="empty">No sessions on the board. The wall's still there.</p>
+      <h1 slot="chat-heading">The workbench</h1>
+      <h1 slot="knowledge-heading">The guild ledger</h1>
+      <p data-block="polynet-chat" slot="empty">The bench is clear. Post the first sketch, or ask who has spare tissue paper.</p>
+      <p data-block="polynet-events" slot="empty">No lantern nights on the tide table. The quay's still dark.</p>
+      <p data-block="polynet-ask" slot="privacy">Just you and the keeper. Nobody else on the quay reads this.</p>
+      <div data-block="polynet-ask" slot="starters">
+        <button type="button">Which paper takes a candle best?</button>
+        <button type="button">When's the next lantern night?</button>
+      </div>
     </polynet-page>
   </main>
-  <footer>Open at first light · <a href="/discover">Other crews</a></footer>
+  <footer>Lit on Quay Street every Thursday · <a href="/discover">Other harbors</a></footer>
 </body>
 </html>
 ```
@@ -117,18 +139,18 @@ frame (shortened here).
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sunrise Climbing Club</title>
+  <title>Port Wren Lantern Guild</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="top"><a class="mark" href="/">Sunrise</a><polynet-account></polynet-account></header>
+  <header class="top"><a class="mark" href="/">Port Wren</a><polynet-account></polynet-account></header>
   <main>
     <section class="hero">
-      <h1>Sunrise Climbing Club</h1>
+      <h1>Port Wren Lantern Guild</h1>
       <p id="promise"></p>
-      <a id="join" hidden>Join the crew</a>
+      <a id="join" hidden>Join the guild</a>
     </section>
-    <section aria-labelledby="next"><h2 id="next">Next sessions</h2><polynet-events limit="3"></polynet-events></section>
+    <section aria-labelledby="next"><h2 id="next">Next lantern nights</h2><polynet-events limit="3"></polynet-events></section>
   </main>
   <script type="module">
     import polynet from "/__polynet/sdk.js";
@@ -140,6 +162,37 @@ frame (shortened here).
 </html>
 ```
 
+## What `<polynet-page>` renders
+
+At `/chat`, the frame above becomes this (in the page's own DOM, no shadow
+root; the children you wrote are replaced):
+
+```html
+<polynet-page page="chat">
+  <div class="pn-page-header">
+    <h1>The workbench</h1>  <!-- your slot="chat-heading" element, moved here, its slot attribute removed -->
+  </div>
+  <div class="pn-page-body pn-page-chat">
+    <polynet-channels></polynet-channels>
+    <polynet-chat>
+      <p data-block="polynet-chat" slot="empty">The bench is clear. …</p>
+    </polynet-chat>
+  </div>
+</polynet-page>
+```
+
+- `.pn-page-heading` is only on Polynet's own heading (`<h1
+  class="pn-page-heading">Chat</h1>`, used when you give no
+  `<name>-heading`). Your slotted heading keeps just its own attributes:
+  style it with `.pn-page-header > h1` or a class of yours.
+- Every page has the same shape: `page="<name>"`, then `.pn-page-body
+  .pn-page-<name>` holding that page's block(s). Children meant for other
+  pages (here the `knowledge-heading` and the Ask's slots) are dropped.
+  `<polynet-page no-heading>` leaves out `.pn-page-header`.
+- An address it doesn't know gets `page="not-found"`, "Page not found" (or
+  your `not-found-heading`) and `.pn-page-body.pn-page-missing` with a
+  `.pn-page-links` list of every page.
+
 ## Giving each page its feel
 
 Set the tokens once; every block and the shell read them, and take the
@@ -147,13 +200,13 @@ page's font and text color.
 
 ```css
 :root {
-  --polynet-accent: #ff6a3d;   /* unread dot, "@" badge, "New", presence, focus, "You're here" */
-  --polynet-on-accent: #160b05;
-  --polynet-text: #f6efe6;
-  --polynet-muted: #b3a597;
-  --polynet-border: #3a2e26;
-  --polynet-surface: #1b1410;  /* the profile panel and overlays: set it on dark sites */
-  --polynet-radius: 2px;
+  --polynet-accent: #f2a541;   /* unread dot, "@" badge, "New", presence, focus, "You're here" */
+  --polynet-on-accent: #1a1206;
+  --polynet-text: #efe6d2;
+  --polynet-muted: #a59c88;
+  --polynet-border: #2e3a4a;
+  --polynet-surface: #131c28;  /* the profile panel and overlays: set it on dark sites */
+  --polynet-radius: 6px;
 }
 [hidden] { display: none !important; }
 ```
@@ -161,19 +214,23 @@ page's font and text color.
 Then page by page, with `polynet-page[page=<name>]` and `::part()`:
 
 ```css
-/* /chat: the wall */
-polynet-chat::part(message-author) { font-family: "Archivo Black"; text-transform: uppercase; letter-spacing: .06em; }
-polynet-chat::part(day-divider) { font-family: "DM Mono"; color: var(--polynet-accent); }
-polynet-chat::part(composer-box) { border: 2px solid currentColor; border-radius: 0; }
+/* every page's heading, yours or Polynet's */
+polynet-page .pn-page-header > h1 { font: italic 700 clamp(2.5rem, 6vw, 4.5rem)/1 "Fraunces"; }
+/* /chat: the workbench */
+polynet-chat::part(message-author) { font-family: "Fraunces"; font-style: italic; }
+polynet-chat::part(day-divider) { font-family: "IBM Plex Mono"; color: var(--polynet-accent); }
+polynet-chat::part(composer-box) { border: 1px dashed currentColor; }
 polynet-channels::part(channel-current) { background: var(--polynet-accent); color: var(--polynet-on-accent); }
-/* /events: a session board */
-polynet-events::part(month-title) { font: 700 .8rem/1 "DM Mono"; letter-spacing: .2em; }
-polynet-events::part(event-date) { font-size: 2.5rem; font-family: "Archivo Black"; }
-/* /learn and /knowledge: reading rooms */
+/* /events: the tide table */
+polynet-events::part(month-title) { font: 600 .8rem/1 "IBM Plex Mono"; letter-spacing: .2em; text-transform: uppercase; }
+polynet-events::part(event-date) { font: 700 2.5rem/1 "Fraunces"; }
+/* /learn and /knowledge: the pattern book */
 polynet-page[page=learn] .pn-page-body, polynet-page[page=knowledge] .pn-page-body { max-width: 40rem; margin-inline: auto; }
 polynet-learn::part(lesson-number) { color: var(--polynet-accent); }
-/* /discover: other crews, as route cards */
-polynet-discover::part(community) { border-width: 2px; border-radius: 0; }
+/* /ask: the keeper's lamp */
+polynet-ask::part(message-agent) { background: color-mix(in srgb, var(--polynet-accent) 8%, transparent); }
+/* /discover: other harbors, as paper tags */
+polynet-discover::part(community) { border-style: dashed; border-radius: 0 12px 12px 0; }
 polynet-discover::part(community-here) { text-transform: uppercase; }
 polynet-profile::part(panel) { border-left: 6px solid var(--polynet-accent); }
 ```
@@ -183,23 +240,39 @@ Slots carry the world's voice; write every one in its words:
 | Block | Slots |
 | --- | --- |
 | `<polynet-channels>` | `header` |
-| `<polynet-chat>` | `header` (replaces the "#channel" title), `empty` (a channel with no posts), `signed-out`, `read-only` (where the member can't post or reply) |
+| `<polynet-chat>` | `header` (replaces the "#channel" title in every channel), `empty` (a channel with no posts), `signed-out`, `read-only` (where the member can't post or reply) |
 | `<polynet-members>` | `header`, `empty`, `signed-out` |
 | `<polynet-events>` | `empty` (nothing on the calendar), `signed-out` |
 | `<polynet-learn>` | `empty` (no courses yet), `signed-out` |
 | `<polynet-knowledge>` | `header`, `intro` (above the search), `empty`, `signed-out` |
-| `<polynet-ask>` | `header`, `privacy` (the "only you can see this" line), `starters` (buttons that each ask their text), `signed-out` |
+| `<polynet-ask>` | `header`, `privacy` (the "only you can see this" line), `starters` (your buttons; each asks its text), `signed-out` |
 | `<polynet-discover>` | `header`, `intro` (above the search), `empty` |
 
-`signed-out` replaces only the sign-in line: Polynet's "Sign in" and "New
-here? Join" stay under it. Style state with the `state` attribute:
+- A `header` slot takes any element (`<h2>`, `<p>`, a `<div>` of your
+  own). The chat's `header` replaces the "#channel" title in every
+  channel, so the chat no longer says which one is open: leave it out of
+  the frame unless you mean that, and rename the page with `chat-heading`.
+- `starters`: one element with `slot="starters"` holding your buttons (or
+  each button slotted on its own). Each button asks its own text, and they
+  show only while the conversation is empty. They're your elements, so
+  style them with your CSS, not `::part(starter)` (Polynet's defaults, which
+  yours replace). On your own page:
+
+```html
+<polynet-ask><div slot="starters">
+  <button type="button">Which paper takes a candle best?</button> <button type="button">How do I wire a frame?</button>
+</div></polynet-ask>
+```
+
+- `signed-out` replaces only the sign-in line: Polynet's "Sign in" and
+  "New here? Join" stay under it. Style state with the `state` attribute:
 `polynet-chat[state=signed-out] { height: auto; }`.
 
 The shell reads the same tokens. On a header darker or lighter than the
 page, set them on the shell itself, with a matching `--polynet-surface`:
 
 ```css
-.top polynet-account { --polynet-text: #f6efe6; --polynet-surface: #1b1410; }
+.top polynet-account { --polynet-text: #efe6d2; --polynet-surface: #131c28; }
 ```
 
 ## Blocks beyond their pages
@@ -208,7 +281,7 @@ Every block also works on any page of yours: `<polynet-events limit="3">`
 lists the next three and links to `/events`; `<polynet-discover limit="4">`
 shows four communities and links to `/discover`; a home page can carry
 `<polynet-chat channel="general">` with a height. The channel lives in the
-URL (`?channel=<slug>`), so `/chat?channel=routes` opens that channel.
+URL (`?channel=<slug>`), so `/chat?channel=glasswork` opens that channel.
 
 ## Layout and mobile
 

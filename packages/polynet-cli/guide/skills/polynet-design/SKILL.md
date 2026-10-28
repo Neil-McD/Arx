@@ -25,7 +25,7 @@ has three layers:
   shell behave the same on every site, so members always know how to talk
   and find each other. How they look is your job: tokens, `::part()`,
   slots and the page classes.
-- **Extras**: custom views (a route log, a tide chart) built with the SDK,
+- **Extras**: custom views (a parade map, a tide chart) built with the SDK,
   linking into the standard pages.
 
 A direction isn't done until the blocks look like they were made for it.
@@ -42,8 +42,8 @@ brief already answers these, don't ask: start.
   a brand, a magazine, an album cover, a place.
 - Anything to use: logo, photos, colors, fonts, phrases they always say.
 
-Collect concrete nouns. "6:00 am, the river, coffee after" designs far better
-than "friendly and inclusive".
+Collect concrete nouns. "Thursday nights, the net loft, tea from the urn"
+designs far better than "friendly and inclusive".
 
 ## 2. Explore three directions
 
@@ -53,7 +53,7 @@ Safe is the failure mode.
 
 For each, decide:
 
-- **Name**, two or three words ("First Light", "Track Notes", "Night Shift").
+- **Name**, two or three words ("Tide Table", "Paper & Flame", "Night Shift").
 - **Idea**: the world or metaphor it borrows from, in one sentence.
 - **Type**: the faces and how they're used ("ultra-condensed display at 140px,
   set tight; a quiet serif for reading").
@@ -62,7 +62,7 @@ For each, decide:
 - **Voice**: the headline and two lines of copy, in the community's words.
 - **The frame**: the world's chrome (what the header and footer are in
   this world: a tide clock, a station ident) and the nav's names for the
-  standard pages ("the boathouse noticeboard" for `/chat`, "the night log"
+  standard pages ("the net-loft noticeboard" for `/chat`, "the night log"
   for `/events`).
 - **The pages' feel**: how the blocks take on the look: tokens, two or
   three `::part()` moves per page, and the words in their slots.
@@ -88,13 +88,13 @@ and tell them in a line why it won.
   a loop. JavaScript fills live data into it (recipes in `polynet-sdk`).
 - Walk every standard page in the frame and give it a feel of its own
   within the world: the calendar as this world's noticeboard, lessons as
-  its manual, Discover as its window onto other crews
+  its manual, Discover as its window onto other harbors
   (`polynet-build-site` has recipes).
 - Set the look as a few CSS variables (color, type, space, radius), map
   them onto the `--polynet-*` tokens, then compose with them.
 - Design every state in the concept's voice: loading, empty, error, signed
-  out. "No runs on the calendar yet. The river's still there." beats a gray
-  box that says "No events".
+  out. "No lantern nights on the tide table yet. The quay's still dark."
+  beats a gray box that says "No events".
 - Real words everywhere. Never ship test data or placeholder text. If the
   community's description reads like a placeholder, write better copy and
   tell the founder.
@@ -129,8 +129,9 @@ Fix, deploy, look again. At least two passes.
   characters wide.
 - **Commit to a color world.** One dominant color, one sharp accent, and
   dark, light or both because the concept calls for it, not by default.
-- **Depth and texture with meaning:** a gradient that is the dawn, film
-  grain, duotone photos, huge numerals, print-style rules and grids.
+- **Depth and texture with meaning:** a gradient that is lamplight on dark
+  water, film grain, duotone photos, huge numerals, print-style rules and
+  grids.
 - **Layout with intent:** asymmetric grids, full-bleed moments, editorial
   columns, one element that is unapologetically huge.
 - **Motion with purpose:** arrivals, hovers, page transitions (the View
@@ -146,16 +147,16 @@ Fix, deploy, look again. At least two passes.
 
 ## The bar
 
-Dawn Patrol Run Club, built by an agent from one sentence:
+Port Wren Lantern Guild (made up), from one sentence of brief:
 
-- **Idea:** the city before sunrise. A night-navy page warming into an
-  orange dawn gradient.
-- **Type:** Barlow Condensed at 88px, extra bold; uppercase eyebrows with
-  wide tracking; Inter for reading.
-- **Voice:** "Early miles. Good people." Above it: "Every weekday · 6:00 am ·
-  Riverside boathouse". Below it, three stats: Weekly runs 5 · Paces
-  4:30–7:30/km · Coffee after: Always.
-- **Signature:** a drawn sunrise mark and the gradient.
+- **Idea:** a harbor town at lighting-up time. A slate-blue page with
+  pools of lantern amber, like lamps along the quay.
+- **Type:** Fraunces at 96px, heavy and italic, set tight; tide-table
+  labels in IBM Plex Mono with wide tracking; Source Serif for reading.
+- **Voice:** "Paper, wire and a little fire." Above it: "Thursdays · 7:30 pm ·
+  The net loft, Quay Street". Below it, three stats: Lanterns this season
+  212 · Parade night 14 Dec · Tea in the urn: Always.
+- **Signature:** a hand-cut paper-lantern mark and the pools of light.
 
 Match that specificity, then go further.
 

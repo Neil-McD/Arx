@@ -23,8 +23,9 @@ every standard page into it.**
    replace a block.
 4. **Style only through the rails:** the `--polynet-*` tokens, `::part()`,
    slots, and the page classes (`.pn-page-header`, `.pn-page-heading`,
-   `.pn-page-body`, `.pn-page-<name>`, `polynet-page[page=<name>]`). Never
-   reach inside a block.
+   `.pn-page-body`, `.pn-page-<name>`, `polynet-page[page=<name>]`; what
+   `<polynet-page>` renders is in `polynet-build-site`). Never reach inside
+   a block.
 5. **Nothing personal is built by a site:** no direct messages, settings,
    "your communities" or private member data. The shell
    (`<polynet-account>`, added to every page) carries those; place it in the
@@ -38,18 +39,18 @@ every standard page into it.**
 ## The world model
 
 There is no template. Start from the community and invent its world: a
-boathouse at 5:40 am, a night-shift radio room, a chalk-dusted bouldering
-cave. Then build three things from it:
+lantern workshop on a harbor quay, a night-shift radio room, a seed library
+in a church hall. Then build three things from it:
 
 - **The frame is the world's chrome.** Header, navigation and footer as
-  that place would have them: a tide clock, a station ident, a route-grade
-  ribbon. The nav names the standard pages in the world's words ("The
-  river" for `/chat`, "Runs" for `/events`, "The almanac" for
+  that place would have them: a tide clock, a station ident, a row of
+  seed packets. The nav names the standard pages in the world's words ("The
+  workbench" for `/chat`, "Lantern nights" for `/events`, "The ledger" for
   `/knowledge`).
 - **Each standard page gets its own feel,** set with tokens and parts:
   how the calendar reads here, what a lesson looks like, what the agent's
   answers sit on. Same blocks on every site; never the same look.
-- **Custom views are extras** (a route log, a leaderboard, a tide chart),
+- **Custom views are extras** (a parade map, a leaderboard, a tide chart),
   built with the SDK. They link into the standard pages; they never stand
   in for them.
 
@@ -70,7 +71,7 @@ it won.
 | `/ask` | the member's private conversation with the agent | `<polynet-ask>` | `message-agent`, `starter`, `box` | `header`, `privacy`, `starters`, `signed-out` |
 | `/discover` | every published community, searchable; public | `<polynet-discover>` | `community`, `community-name`, `community-here` | `header`, `intro`, `empty` |
 
-Inside `<polynet-page>` in the frame, `<h1 slot="events-heading">Runs</h1>`
+Inside `<polynet-page>` in the frame, `<h1 slot="events-heading">Lantern nights</h1>`
 renames a page (`<name>-heading`), and
 `<p data-block="polynet-events" slot="empty">…</p>` gives a block your
 words. Signed out, every block but Discover shows a sign-in and join prompt
@@ -78,13 +79,17 @@ and nothing inside. The full list of parts and slots is in llms.txt.
 
 ## Preview loop
 
-Blocks and the shell render only on Polynet, which serves `/__polynet/*`
-to the site. On a local static server the tags stay empty (slot text shows
-unstyled): expected, not a bug. So deploy to see them; a community on
-Polynet's staging deploys with `--staging` to
+There is no local preview. The blocks, the shell and the SDK render only
+on Polynet, which serves `/__polynet/*` to the site; on a local static
+server the tags stay empty (slot text shows unstyled). Deploy to see them;
+a community on Polynet's staging deploys with `--staging` to
 `https://<slug>-staging.polynet.page`. After each meaningful change, open
 the home page and every standard page at 390 and 1440 px wide, signed out
 and signed in, and fix what reads as a stock widget.
+
+Can't deploy? Build the strongest direction, keep the three directions and
+why this one won in your report, and list exactly what the founder should
+verify once it's live (`polynet-build-site` has the list).
 
 ## Skills
 

@@ -22,10 +22,10 @@ export const PAGE_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // In the site's frame:
 //   <main><polynet-page></polynet-page></main>
 // Optional, inside it (each replaces Polynet's default for that page):
-//   <h1 slot="chat-heading">The wall</h1>   <h1 slot="people-heading">The crew</h1>
+//   <h1 slot="chat-heading">The workbench</h1>   <h1 slot="people-heading">The guild</h1>
 //   (also events-heading, learn-heading, knowledge-heading, ask-heading, discover-heading)
-//   <h1 slot="not-found-heading">Off the map</h1>
-//   <p data-block="polynet-chat" slot="empty">Chalk's dry.</p>   (moved into that block, keeping its slot)
+//   <h1 slot="not-found-heading">Off the quay</h1>
+//   <p data-block="polynet-chat" slot="empty">The bench is clear.</p>   (moved into that block, keeping its slot)
 //   <polynet-page no-heading></polynet-page>                     (no headings at all)
 // Lay it out with classes: .pn-page-header, .pn-page-heading, .pn-page-body,
 // .pn-page-chat, .pn-page-people, .pn-page-events, .pn-page-learn,

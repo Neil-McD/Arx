@@ -1896,6 +1896,39 @@ test("ask: starters while the conversation is empty, the site's own too; signed 
   await out.close();
 });
 
+test("ask: the privacy line sits inside a site's border and radius, clear of the conversation", async () => {
+  // A site that frames the Ask (both proof sites did) and rules the privacy line off.
+  const site = `polynet-page[page=ask] polynet-ask { height: 460px; border: 2px solid #000; border-radius: 26px; }
+    polynet-ask::part(privacy) { border-bottom: 1px dashed #999; } polynet-ask::part(log) { border: 1px solid #000; }`;
+  const clear = async (page: Page, text: () => DOMRect) => {
+    const ask = askOf(page);
+    await expect.poll(() => ask.getAttribute("state")).toBe("ready");
+    await page.addStyleTag({ content: site });
+    const host = await box(ask);
+    const privacy = await box(ask.locator("[part=privacy]"));
+    const log = await box(ask.locator("[part=log]"));
+    expect(privacy.y + privacy.height).toBeLessThanOrEqual(log.y);
+    const words = await page.evaluate(text);
+    // Clear of the 2px border, and of the 26px corner where the line starts.
+    expect(words.top - (host.y + 2)).toBeGreaterThanOrEqual(6);
+    expect(words.left - (host.x + 2)).toBeGreaterThanOrEqual(8);
+    expect(words.bottom).toBeLessThanOrEqual(log.y);
+  };
+
+  const own = await open((fake) => { conversation(fake); },
+    frame('<p data-block="polynet-ask" slot="privacy" style="margin: 0">Just you and the coach.</p>'), "/ask");
+  await clear(own, () => document.querySelector("[slot=privacy]")!.getBoundingClientRect());
+  await own.close();
+
+  const page = await open((fake) => { conversation(fake); }, frame(), "/ask");
+  await clear(page, () => {
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector("polynet-ask")!.shadowRoot!.querySelector("slot[name=privacy]")!);
+    return range.getBoundingClientRect();
+  });
+  await page.close();
+});
+
 const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 // Published communities as the edge lists them: this one, one with its own
 // site, one without (its card opens Polynet), and enough for a preview to cut.
@@ -2045,3 +2078,4 @@ test("blocks and the shell are styled under a strict style-src, with a <style> f
   expect(fallback.styles.every((n) => n === 1)).toBe(true);
   await legacy.close();
 });
+

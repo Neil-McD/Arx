@@ -10,7 +10,7 @@ Polynet's blocks carry the standard pages, inside the site's frame:
 (`/people`), `<polynet-events>` (`/events`), `<polynet-learn>` (`/learn`),
 `<polynet-knowledge>` (`/knowledge`), `<polynet-ask>` (`/ask`) and
 `<polynet-discover>` (`/discover`); see `polynet-build-site`. The SDK is
-for everything around them: the front door and extras like a route log, a
+for everything around them: the front door and extras like a parade map, a
 "this week" strip or a "who's here now" strip. Extras link into the
 standard pages; they never replace them.
 
@@ -61,12 +61,12 @@ talks to them.
   (`detail: { slug }`) on `document`; `<polynet-chat>` follows, and your
   views can too. Switch from your own navigation by linking to
   `?channel=<slug>` or dispatching the event:
-  `document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "routes" } }))`.
+  `document.dispatchEvent(new CustomEvent("polynet:channel", { detail: { slug: "glasswork" } }))`.
   `channel="<slug>"` pins a chat to one channel.
 - The chat fires `polynet:read` (`{ slug }`) when it marks a channel read.
 - Profiles: a member in `<polynet-members>`, a chat author and an @-tag all
   open Polynet's profile panel (with Message). Open one from your own view
-  (a name in your route log) with
+  (a name on your parade map) with
   `document.dispatchEvent(new CustomEvent("polynet:profile", { detail: { handle: "sam" } }))`
   (or `{ ref }` from `members()` or `online()`), or link to `?member=<handle>`. Don't
   build your own profile view.
@@ -76,7 +76,7 @@ talks to them.
 ## A custom feed in your own markup
 
 The chat already is the community's feed. Build one only for a different
-view of the same posts (a highlights wall, a route log), beside the chat.
+view of the same posts (a highlights wall, a lantern gallery), beside the chat.
 
 ```html
 <ol id="feed" role="log" aria-label="Club feed" aria-live="off"></ol>
@@ -189,8 +189,8 @@ export default { build: { rollupOptions: { external: [/^\/__polynet\//] } } };
 
 Deploy the build folder (`npx @polynet/cli deploy dist`); `polynet.json`
 stays in the project folder, so a clean build doesn't lose it. Polynet adds
-`/__polynet/ui.js` to every page, so it's fine if the bundler moves it into
-its own script.
+`/__polynet/ui.js` and `/__polynet/ui.css` to every HTML page it serves, so
+it's fine if the bundler moves the script into its own (or drops it).
 
 ## Traps
 
