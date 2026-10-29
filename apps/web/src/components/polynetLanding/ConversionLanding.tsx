@@ -187,7 +187,7 @@ const OUTCOMES = [
   },
 ] as const;
 
-const OFFER_META = "$79/month for one managed community · Hosted AI allowance included · No technical setup";
+const OFFER_META = "Free to build your community · The agent is $79/month with AI included · No technical setup";
 
 function ProductLedVsl() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -272,7 +272,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <ProductLedVsl />
 
           <div className="conversion">
-            <button className="cta" type="button" onClick={onJoin}>Start with Polynet — $79/month</button>
+            <button className="cta" type="button" onClick={onJoin}>Start your community free</button>
             <p className="microcopy">{OFFER_META}</p>
           </div>
 
@@ -312,7 +312,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <section className="closing" aria-labelledby="closing-title">
             <h2 id="closing-title">Train it once. Put it to work for every client.</h2>
             <p className="closing-copy">Launch an autonomous client success system grounded in how you think, coach, and deliver results.</p>
-            <button className="cta" type="button" onClick={onJoin}>Start with Polynet — $79/month</button>
+            <button className="cta" type="button" onClick={onJoin}>Start your community free</button>
             <p className="closing-meta">{OFFER_META}</p>
           </section>
         </main>

@@ -179,7 +179,7 @@ function hasSequencedAssistantText(events: ThreadStreamingRuntimeEvent[]): boole
 function formatInferenceIssue(issue: InferenceIssueModalState | null): string | null {
   if (!issue) return null;
   if (issue.reason === "provider_connection_required") {
-    return "Community AI is unavailable for this turn. Ask the community owner to check Builder billing.";
+    return "The community agent is off. Ask the community owner to turn on the Agent plan.";
   }
   return issue.message?.trim() || "The community agent could not complete this turn. Try again.";
 }

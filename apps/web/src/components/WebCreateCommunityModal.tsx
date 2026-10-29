@@ -61,11 +61,11 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
       ) : null}
 
       <div className="builder-create-heading" id="builder-create-title">
-        <span>Builder setup</span>
+        <span>New community</span>
         <h2>Set up your community</h2>
         <p>
           {props.isPaidSetup
-            ? "Your payment is confirmed. Add the identity members will see. You can change any of it later."
+            ? "Your Agent plan is ready. Add the identity members will see. You can change any of it later."
             : "Add the identity members will see. You can change any of it later."}
         </p>
       </div>

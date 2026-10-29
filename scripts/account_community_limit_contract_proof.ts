@@ -40,7 +40,8 @@ assert.doesNotMatch(shellController, /hasCommunityCreateAccess|setIsFreeAccountI
 assert.doesNotMatch(mobileController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
 assert.equal(existsSync("shared/CommunityLimitModal.tsx"), false);
 assert.match(matrix, /\$79 \/ month \/ community/);
-assert.match(matrix, /Every newly created non-operator community is subscription-required/);
+assert.match(matrix, /Creating a community needs no payment; an owner may have at most 10 live communities/);
+assert.doesNotMatch(matrix, /Every newly created non-operator community is subscription-required/);
 assert.match(matrix, /2\.9%/);
 
 console.log("account_community_limit_contract_proof: one verified subscription per paid community ok");

@@ -1380,13 +1380,13 @@ export default function App() {
         ])
         : Promise.resolve([]);
       return refresh.then(() => {
-        showAppToastMessage("Your Builder subscription is already attached. We refreshed your communities.");
+        showAppToastMessage("Your Agent plan is already attached. We refreshed your communities.");
       });
     },
     onRequiredCommunityCreateUnavailable: (founderSubscriptionId) => {
       suppressBuilderSetupSubscription(founderSubscriptionId, "unavailable");
       showAppToastMessage(
-        "This Builder payment is no longer available for setup. Review Billing to continue.",
+        "This Agent plan payment is no longer available for setup. Review Billing to continue.",
       );
       navigateTo("/settings/billing");
       void founderBilling.refresh(sessionRef.current);

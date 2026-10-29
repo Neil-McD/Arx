@@ -14,25 +14,25 @@ export const POLYNET_BUILDER_OFFER = {
   priceBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
   cadence: "month",
   scopeLabel: "per community",
-  headline: "Build a community that gets smarter every day",
+  headline: "Give your community an agent",
   description:
-    "Builder gives one community the intelligence, memory, and member experience to compound what it learns.",
-  purchaseHeadline: "Create a community",
+    "Your community is free. The Agent plan gives it one AI agent that remembers what the community learns, answers members, and does the work.",
+  purchaseHeadline: "Turn on the agent",
   purchaseDescription:
-    "Everything you need to operate one AI-powered community.",
-  purchaseNote: "Payment first. Community setup comes next.",
+    "One AI agent for one community, with a monthly AI allowance included.",
+  purchaseNote: "Your community stays free either way.",
   benefits: [
     {
-      title: "Build your community",
-      description: "Bring your people, conversations, and resources into one shared place.",
+      title: "An agent that remembers",
+      description: "It learns from your conversations, calls, and resources, so it answers the way your community would.",
     },
     {
-      title: "Train your AI on your knowledge",
-      description: "Seed it with your content, calls, and best answers so it learns how you think.",
+      title: "Answers for every member",
+      description: "Members ask it on the Agent page, by @mention, or on your site, whenever they need it.",
     },
     {
-      title: "Serve every member at scale",
-      description: "Give every member an agent grounded in your knowledge whenever they need it.",
+      title: "Work done for you",
+      description: "Daily briefs, memory upkeep, and follow-ups, without you doing them by hand.",
     },
   ],
   platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
@@ -47,21 +47,21 @@ export function formatBuilderOfferPrice(
 export function builderFundingStateLabel(state: BuilderFundingState): string {
   switch (state) {
     case "builder_required":
-      return "Builder not active";
+      return "Agent plan off";
     case "checkout_pending":
       return "Checkout incomplete";
     case "builder_active":
-      return "Builder active";
+      return "Agent plan active";
     case "builder_canceling":
-      return "Builder cancels at period end";
+      return "Agent plan ends at period end";
     case "builder_inactive":
-      return "Builder needs attention";
+      return "Agent plan needs attention";
     case "builder_past_due":
       return "Payment needs attention";
     case "builder_ended":
-      return "Builder inactive";
+      return "Agent plan off";
     case "builder_included":
-      return "Builder included";
+      return "Agent plan included";
   }
 }
 
@@ -89,7 +89,7 @@ export function builderFundingActionLabel(params: {
   const price = params.includePrice ? ` — ${formatBuilderOfferPrice()}` : "";
   switch (params.action) {
     case "buy_builder":
-      return `Get Builder${price}`;
+      return `Turn on the agent${price}`;
     case "resume_checkout":
       return "Resume checkout";
     case "manage_builder":

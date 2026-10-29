@@ -62,7 +62,7 @@ function communityFundingStateLabel(community: CloudFounderBillingCommunity): st
     community.funding_state === "builder_canceling" &&
     community.current_period_end_at
   ) {
-    return `Builder active until ${new Date(community.current_period_end_at).toLocaleDateString()}`;
+    return `Agent plan active until ${new Date(community.current_period_end_at).toLocaleDateString()}`;
   }
   return builderFundingStateLabel(community.funding_state);
 }
@@ -93,7 +93,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
           {props.isLoadingFounderBilling && activeCommunities.length === 0 ? (
             <div className="chat-loading">
               <div className="loading-spinner" />
-              <span>Loading Builder…</span>
+              <span>Loading your Agent plan…</span>
             </div>
           ) : activeCommunities.length === 0 ? (
             <div className="builder-empty-state">

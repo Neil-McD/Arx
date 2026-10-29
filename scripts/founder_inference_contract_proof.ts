@@ -435,12 +435,13 @@ assert.match(
   cognitionContract,
   /The community agent under an authorized community lens, direct Concierge chat,[\s\S]*autonomous cognition, and AI-assisted setup generation are[\s\S]*community-founder-funded/,
 );
-assert.match(billingContract, /\$79 USD monthly for Builder on each managed community/);
-assert.match(billingContract, /Visibility, membership, roles, paid-member commerce, Builder payment, AI allowance, and lifecycle remain separate canonical facts/);
-assert.match(billingContract, /Existing grandfathered communities retain ordinary platform operation without Builder/);
-assert.match(billingContract, /Newly created non-operator communities are subscription-required/);
-assert.match(billingContract, /Grandfathering grants platform operation, not hosted AI/);
-assert.match(billingContract, /Funding suspension does not mutate or delete the community/);
+assert.match(billingContract, /\$79 USD monthly for the Agent plan on each community that uses Polynet-hosted AI/);
+assert.match(billingContract, /Visibility, membership, roles, paid-member commerce, Agent plan payment, AI allowance, and lifecycle remain separate canonical facts/);
+assert.match(billingContract, /Every community operates free: new communities are created `free`, grandfathered communities keep operating/);
+assert.doesNotMatch(billingContract, /Newly created non-operator communities are subscription-required/);
+assert.match(billingContract, /Hosted AI requires an Agent plan attached to that community/);
+assert.match(billingContract, /Operating free grants platform operation, not hosted AI/);
+assert.match(billingContract, /Funding never mutates or deletes the community/);
 assert.match(billingContract, /Each `\$79` monthly cycle includes up to `\$20` in combined raw provider cost for hosted AI inference and paid web research or crawl tools/);
 assert.match(billingContract, /Redirects are UX only; verified provider\/webhook state is authoritative/);
 assert.match(billingContract, /2\.9% application fee/);

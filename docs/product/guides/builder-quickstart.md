@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent job, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each community uses its own $79 monthly Builder subscription for Polynet-hosted AI. Existing grandfathered communities may keep operating without Builder, but hosted AI remains unavailable until Builder is active. The canonical platform operator receives included Builder funding. There is no account-wide Builder entitlement, community BYOK option, personal Premium plan, or paid tool tier.
+Creating and running a community is free. Its agent (Polynet-hosted AI) needs the community's own Agent plan: $79 a month, with $20 of AI included. Without it the community runs as usual and only the agent is off. The canonical platform operator receives included funding. There is no account-wide plan, community BYOK option, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -29,9 +29,9 @@ If those answers are vague, more settings will not fix the product.
 
 ## Core Steps
 
-1. Open the Builder offer from Create Community. Existing community funding actions remain available from Billing and Account.
-2. Complete the $79 monthly Builder checkout.
-3. Finish account setup, then name the funded community and define its purpose and public profile.
+1. Finish account setup, then choose Create Community and name your community, its purpose and public profile. No payment is needed.
+2. Turn on the agent with the Agent plan ($79 a month) when you want Polynet-hosted AI: from the agent, Billing or Account, at any time.
+3. Keep shaping the community; the agent plan can be added before or after.
 4. Write the community agent's instructions.
 5. Add resources that represent durable community knowledge.
 6. Configure member access, billing, and roles.
@@ -80,14 +80,12 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Existing founders can continue managing grandfathered communities without Builder; hosted AI requires Builder per community.
-- Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
-- A paying builder may own an unlimited number of communities. There is no
-  account-level numeric cap, but every existing community must have current
-  funding for every newly created community.
-- Create Community presents the Builder offer and completes checkout before asking for the community name and optional URL. Verified payment authority is consumed exactly once when the community is created.
+- Every community operates free; hosted AI requires an Agent plan per community.
+- Each community that uses Polynet-hosted AI needs its own verified $79 monthly Agent plan.
+- An owner may have up to 10 live communities (archived ones don't count).
+- Create Community goes straight to setup. A plan bought first is attached to the community created next, exactly once.
 - Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
-- A grandfathered community can remain configured, published, listed in Discover, accept public joins, and collect paid-member revenue without Builder. Only its community-funded AI remains disabled.
+- A community without an Agent plan can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its agent is off.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.

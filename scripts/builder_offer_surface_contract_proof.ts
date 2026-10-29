@@ -32,15 +32,15 @@ const founderBillingController = read("apps/web/src/controllers/useWebFounderBil
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 const settingsStyles = read("apps/web/src/styles/settings-runtime-and-theme-overrides.css");
 
-assert.equal(POLYNET_BUILDER_OFFER.name, "Builder");
+assert.equal(POLYNET_BUILDER_OFFER.name, "Agent plan");
 assert.equal(POLYNET_BUILDER_OFFER.priceBaseUnits, 7_900);
 assert.equal(POLYNET_BUILDER_OFFER.platformFeeBps, 290);
 assert.equal(POLYNET_BUILDER_OFFER.benefits.length, 3);
 assert.match(POLYNET_BUILDER_OFFER.headline, /community/i);
 
-assert.equal(builderFundingStateLabel("builder_required"), "Builder not active");
+assert.equal(builderFundingStateLabel("builder_required"), "Agent plan off");
 assert.equal(builderFundingStateLabel("builder_past_due"), "Payment needs attention");
-assert.equal(builderFundingStateLabel("builder_included"), "Builder included");
+assert.equal(builderFundingStateLabel("builder_included"), "Agent plan included");
 assert.equal(
   resolveBuilderOfferPrimaryAction({
     state: "builder_required",
@@ -54,7 +54,7 @@ assert.equal(
     state: "builder_required",
     includePrice: true,
   }),
-  "Get Builder — $79/month",
+  "Turn on the agent — $79/month",
 );
 
 for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /tokens?/i]) {
@@ -62,7 +62,7 @@ for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /token
 }
 
 assert.doesNotMatch(createModal, /WebBuilderOfferSummary/);
-assert.match(createModal, /Your payment is confirmed/);
+assert.match(createModal, /Add the identity members will see/);
 assert.match(createModal, /Community name/);
 assert.match(createModal, /One-liner/);
 assert.match(createModal, /Community handle/);
@@ -83,7 +83,7 @@ for (const surface of [billing, account]) {
 }
 assert.match(billing, /Member purchase recovery/);
 assert.doesNotMatch(billing, /Switch to managed|Managed plan|required managed/i);
-assert.match(account, /Builder is attached to communities, not your account/);
+assert.match(account, /The Agent plan is attached to a community, not your account/);
 assert.doesNotMatch(account, /Legacy API funding|Personal AI connection|API key/i);
 assert.doesNotMatch(account, /Free account|Paid account|account tier/i);
 
@@ -94,7 +94,7 @@ assert.equal((globalOverlay.match(/<WebBuilderOfferModal/g) ?? []).length, 1);
 assert.match(globalOverlay, /<WebBuilderPurchaseModal/);
 assert.equal((globalOverlay.match(/<WebBuilderPurchaseModal/g) ?? []).length, 1);
 assert.match(purchaseModal, /WebBuilderOfferSummary compact purpose="purchase"/);
-assert.match(purchaseModal, /Buy Builder/);
+assert.match(purchaseModal, /Get the Agent plan/);
 assert.match(purchaseModal, /operator_included/);
 assert.doesNotMatch(purchaseModal, /paid_setup|Continue to community setup/);
 assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
@@ -144,8 +144,10 @@ assert.match(createModal, /Community handle/);
 assert.doesNotMatch(createModal, /Customize community URL/);
 assert.match(
   builderSetupFlowController,
-  /openCommunityPurchaseFlow[\s\S]*params\.openPurchasePrompt\(\)/,
+  /openCommunityPurchaseFlow[\s\S]*params\.openCreateCommunityModal\(draft\)/,
+  "creating a community is free: the create flow opens setup directly",
 );
+assert.doesNotMatch(builderSetupFlowController, /params\.openPurchasePrompt\(\)/);
 assert.match(app, /useWebBuilderPurchaseFlowController\(\{/);
 assert.match(
   app,

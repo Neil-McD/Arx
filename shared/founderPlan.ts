@@ -1,5 +1,5 @@
 
-export const POLYNET_BUILDER_OFFER_NAME = "Builder";
+export const POLYNET_BUILDER_OFFER_NAME = "Agent plan";
 export const POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900;
 export const POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000;
 // Operator-funded communities get the same monthly ceiling as a Builder

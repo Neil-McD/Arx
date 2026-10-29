@@ -56,7 +56,8 @@ assert.match(founderPlan, /MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /INCLUDED_COST_MICROS = 20_000_000/);
 assert.match(founderPlan, /INCLUDED_COMMUNITIES = 1/);
 assert.match(founderPlan, /COMMUNITY_PLATFORM_FEE_BPS = 290/);
-assert.match(founderPlan, /POLYNET_BUILDER_OFFER_NAME = "Builder"/);
+assert.match(founderPlan, /POLYNET_BUILDER_OFFER_NAME = "Agent plan"/);
+assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_FREE = "free"/);
 assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_GRANDFATHERED = "grandfathered"/);
 assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED/);
 assert.match(schema, /builderAccessMode: v\.optional/);
@@ -130,9 +131,11 @@ assert.doesNotMatch(communityLifecycle, /resolveAdditionalManagedCommunityAdmiss
 assert.match(communityLifecycle, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);
 assert.match(communityLifecycle, /founderSubscriptionStatusGrantsAccess/);
 assert.match(communityLifecycle, /founder_subscription_already_attached/);
-assert.match(communityLifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED/);
-assert.match(communityLifecycle, /community_funding_required_before_create/);
-assert.doesNotMatch(communityLifecycle, /max_communities|community_owner_limit_reached/);
+assert.match(communityLifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,/);
+// Pricing v2: creating is free; the brake is a live-community cap per owner.
+assert.doesNotMatch(communityLifecycle, /community_funding_required_before_create/);
+assert.match(communityLifecycle, /community_owner_limit_reached/);
+assert.doesNotMatch(communityLifecycle, /max_communities/);
 assert.match(auth, /CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT = Number\.MAX_SAFE_INTEGER/);
 assert.doesNotMatch(
   auth,
@@ -214,8 +217,8 @@ assert.equal(
 );
 
 // Public offer truth stays conceptual. Allowances, model versions, and cost controls are internal.
-assert.match(publicLanding, /\$79\/month for one managed community/);
-assert.match(publicLanding, /Hosted AI allowance included/);
+assert.match(publicLanding, /Free to build your community · The agent is \$79\/month/);
+assert.match(publicLanding, /with AI included/);
 assert.match(publicLanding, /(?:shared|collective) intelligence/i);
 for (const forbiddenPublicClaim of [
   /Start free/i,
@@ -286,11 +289,12 @@ assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/);
 assert.match(currentTerms, /newly created non-operator community requires its own current Builder subscription/);
 assert.match(currentTerms, /Existing communities that Polynet classifies as grandfathered/);
 assert.match(currentTerms, /Archiving is a separate lifecycle action/);
-assert.match(billingDocs, /Existing grandfathered communities retain ordinary platform operation without Builder/);
-assert.match(billingDocs, /Newly created non-operator communities are subscription-required/);
+assert.match(billingDocs, /Every community operates free: new communities are created `free`, grandfathered communities keep operating/);
+assert.doesNotMatch(billingDocs, /Newly created non-operator communities are subscription-required/);
+assert.match(billingDocs, /Hosted AI requires an Agent plan attached to that community/);
 assert.match(billingDocs, /Archive is a lifecycle action, not a billing status/);
 assert.match(billingDocs, /Community BYOK and requester ChatGPT are retired as authority/);
-assert.match(billingDocs, /Builder is not an account-wide tier/);
+assert.match(billingDocs, /The Agent plan is not an account-wide tier/);
 assert.match(legacyTermsSupersessionNotice, /accepted by 27\s+production users/);
 assert.match(termsSupersessionNotice, /do not satisfy current v3\s+acceptance/);
 assert.match(termsSupersessionNotice, /New acceptance writes require `terms_of_service_v3`/);

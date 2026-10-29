@@ -67,16 +67,17 @@ export function useWebBuilderPurchaseFlowController(params: {
   const pendingDraftRef = useRef<CreateCommunityIntentDraft | null>(null);
 
   const openCommunityPurchaseFlow = useCallback<OpenCommunityCreate>((draft = null) => {
+    // A plan bought first is attached to the community created next.
     if (params.pendingSubscriptionId) {
       params.openRequiredCreateCommunityModal(params.pendingSubscriptionId, draft);
       return;
     }
-    pendingDraftRef.current = draft;
-    params.openPurchasePrompt();
+    // Creating a community is free: straight to setup.
+    params.openCreateCommunityModal(draft);
   }, [
     params.pendingSubscriptionId,
     params.openRequiredCreateCommunityModal,
-    params.openPurchasePrompt,
+    params.openCreateCommunityModal,
   ]);
 
   const clearPendingDraft = useCallback(() => {
