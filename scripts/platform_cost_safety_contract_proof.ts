@@ -208,9 +208,10 @@ assert.match(
 );
 assert.match(
   attentionBackend,
-  /communityIds\.length > MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY[\s\S]*community_attention_scope_limit_exceeded/,
-  "attention backend must reject oversized execution scopes before domain reads",
+  /listMyCommunityAttentionPage = query\([\s\S]*numItems: Math\.min\(10, args\.paginationOpts\.numItems\)/,
+  "attention backend reads one community and at most ten channels per execution",
 );
+assert.doesNotMatch(attentionBackend, /export const listMyCommunityAttention = query/, "the unpaged multi-community attention query stays deleted");
 assert.match(
   attentionBackend,
   /MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES = 50[\s\S]*query\("communityResources"[\s\S]*take\(MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES\)[\s\S]*referencedModuleIds[\s\S]*ctx\.db\.get/,

@@ -5,10 +5,18 @@ records what was removed, what is in review, and what waits on Neil.
 
 ## Done (outside the repo)
 
+The local branches and stashes are backed up in
+`~/code/arx-local-backups/branch-archive-20261028/` (one verified git bundle
+with every branch and stash, a branch list, and stash patches; restore steps
+in its README). The 12 stashes are still in place.
+
 | What | Before → after |
 | --- | --- |
 | Remote branches already merged into `main` | 318 → 58 |
 | Local branches already merged | 634 → 227 |
+| Remaining local branches (backed up first, never pushed) | 238 → 5 |
+| Remote branches (merged, or archived as `archive/…` tags) | 58 → 8 |
+| Worktrees | 16 → 5 |
 | Staging Convex env vars no code reads | 17 removed |
 | Old staging site-route KV keys | 4 removed |
 | Staging UI Canary workflow (failing, superseded) | disabled |
@@ -83,5 +91,8 @@ records what was removed, what is in review, and what waits on Neil.
 
 ## Next sweeps
 
-- `listMyCommunityAttention`: move its tests to the paged query, then delete it.
+- Done: `listMyCommunityAttention` deleted; its tests read the paged query.
+- One-off backfills (channel names, resource module statuses, membership
+  active flags, bridge social-link facts, the General-channel migration and
+  audit): delete once a read-only production check shows they finished.
 - Studio doesn't know sites exist (links, settings, Discover cards).

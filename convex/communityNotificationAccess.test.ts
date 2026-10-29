@@ -11,6 +11,27 @@ import {
 import { scheduleEverybodyMentionBroadcast } from "./communityMentionBroadcasts";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
+// A member's attention for one community, as the web reads it: both channel
+// sections of the paged query, combined.
+type MyAttention = {
+  chat: boolean;
+  resources: boolean;
+  events: boolean;
+  mentions: boolean;
+  channels: Array<{ channel_slug: string; chat: boolean; mentions: boolean }>;
+};
+async function myAttention(client: any, communityId: any): Promise<MyAttention[]> {
+  const page = (section: "shared" | "private") => client.query(api.communityAttention.listMyCommunityAttentionPage,
+    { communityId, section, paginationOpts: { numItems: 10, cursor: null } });
+  const [shared, own] = await Promise.all([page("shared"), page("private")]);
+  return [{
+    ...shared.attention,
+    chat: shared.attention.chat || own.attention.chat,
+    mentions: shared.attention.mentions || own.attention.mentions,
+    channels: [...shared.page, ...own.page],
+  }];
+}
+
 const sendEmail = vi.hoisted(() =>
   vi.fn(async (_params: unknown) => ({
     providerMessageId: "simulated-notification-delivery",
@@ -569,13 +590,13 @@ test("attention ignores an inaccessible mention and still finds older valid acti
   });
   expect(
     (
-      await member.query(api.communityAttention.listMyCommunityAttention, args)
+      await myAttention(member, args.communityIds[0])
     )[0].mentions,
   ).toBe(true);
   await t.run((ctx) => ctx.db.patch(f.rootId, { status: "hidden" }));
   expect(
     (
-      await member.query(api.communityAttention.listMyCommunityAttention, args)
+      await myAttention(member, args.communityIds[0])
     )[0].mentions,
   ).toBe(false);
 });
