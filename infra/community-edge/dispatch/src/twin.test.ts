@@ -100,6 +100,7 @@ async function backend(request: Request): Promise<Response> {
     return reply;
   }
   if (url.pathname === "/runtime/app/me/messages" || url.pathname.startsWith("/runtime/app/me/messages/")) return messagesBackend(url.pathname, JSON.parse(body || "{}"));
+  if (url.pathname.startsWith("/runtime/app/me/moderation/") || url.pathname.startsWith("/runtime/app/me/requests")) return moderationBackend(url.pathname, JSON.parse(body || "{}"));
   if (url.pathname.startsWith("/runtime/app/me/") && url.pathname !== "/runtime/app/me/communities") return settingsBackend(url.pathname, JSON.parse(body || "{}"));
   return Response.json({ ok: true, value: {} });
 }
@@ -362,6 +363,38 @@ test("the twin draws the site's frame with nothing of the site's left to run", a
 });
 
 // The page in a browser: the edge answers every request to the site and its twin.
+// Moderation, standing in for Studio's cores: a moderator (or not), one post, join requests.
+const mod = {
+  allowed: true, removed: [] as string[], decided: [] as Array<[string, string]>, paid: false,
+  requests: [] as Array<{ id: string; name: string; handle: string | null; avatar_url: null }>,
+};
+function resetModeration(allowed = true) {
+  mod.allowed = allowed;
+  mod.removed = [];
+  mod.decided = [];
+  mod.paid = false;
+  mod.requests = [{ id: "req1", name: "Ana Ito", handle: "ana", avatar_url: null }, { id: "req2", name: "Kai Moss", handle: "kai", avatar_url: null }];
+}
+function moderationBackend(path: string, body: Record<string, any>): Response {
+  if (!mod.allowed) return Response.json({ ok: false, code: "not_a_moderator" }, { status: 403 });
+  switch (path) {
+    case "/runtime/app/me/moderation/post":
+      return mod.removed.includes(body.ref) ? Response.json({ ok: false, code: "post_not_found" }, { status: 404 })
+        : Response.json({ ok: true, post: { ref: body.ref, author: "Sam Rivera", text: "Selling my old rope, DM me", mine: false } });
+    case "/runtime/app/me/moderation/remove":
+      mod.removed.push(body.ref);
+      return Response.json({ ok: true });
+    case "/runtime/app/me/requests":
+      return Response.json({ ok: true, paid: mod.paid, requests: mod.requests.filter((row) => !mod.decided.some(([id]) => id === row.id)) });
+    case "/runtime/app/me/requests/approve":
+    case "/runtime/app/me/requests/deny":
+      mod.decided.push([body.request_id, path.endsWith("approve") ? "approved" : "denied"]);
+      return Response.json({ ok: true });
+    default:
+      return Response.json({ ok: false, code: "not_found" }, { status: 404 });
+  }
+}
+
 async function openTwin(type: BrowserType, path: string, token: string | null, siteToken?: string, options: { fakeLive?: boolean } = {}) {
   const browser = await type.launch();
   const context = await browser.newContext();
@@ -1183,6 +1216,60 @@ test("Messages: a session the backend refuses shows the page's own sign-in, and 
     expect(await personal.textContent()).not.toContain("Sam");
     // Nothing left watching once it's signed out.
     await expect.poll(() => watching(page)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Moderation: a moderator sees exactly what goes, removes it, and goes back to the site", async () => {
+  resetModeration();
+  const ref = "interaction:root:abc123";
+  const { browser, page } = await openTwin(chromium, `/moderate?ref=${encodeURIComponent(ref)}&back=${encodeURIComponent("/chat?channel=general")}`, TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    expect(await page.title()).toBe("Remove a post · Sunrise Climbing Club");
+    expect([await personal.locator("[part=quote-author]").textContent(), await personal.locator("[part=quote-text]").textContent()])
+      .toEqual(["Sam Rivera", "Selling my old rope, DM me"]);
+    expect(await personal.locator("[part=moderate-back]").getAttribute("href")).toBe(`${SITE}/chat?channel=general`);
+    await personal.locator("[part=moderate-remove]").click();
+    await expect.poll(() => personal.locator("[part=moderation-status]").textContent()).toBe("Post removed.");
+    expect(mod.removed).toEqual([ref]);
+    expect(await personal.locator("[part=moderate-back]").textContent()).toBe("Back to the community");
+    expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+  // Someone who doesn't moderate here: told so, and nothing about the post.
+  resetModeration(false);
+  const other = await openTwin(chromium, `/moderate?ref=${encodeURIComponent(ref)}`, TOKEN);
+  try {
+    const personal = other.page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=moderation-error]").textContent()).toBe("Only this community's moderators can remove posts.");
+    expect(await personal.locator("[part=quote]").count()).toBe(0);
+  } finally {
+    await other.browser.close();
+  }
+}, 60_000);
+
+test("Join requests: a moderator approves and denies on the twin; a paid community has none", async () => {
+  resetModeration();
+  const { browser, page } = await openTwin(chromium, "/requests", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.locator("[part=request-name]").allTextContents()).toEqual(["Ana Ito", "Kai Moss"]);
+    expect(await page.title()).toBe("Join requests · Sunrise Climbing Club");
+    await personal.getByRole("button", { name: "Approve Ana Ito" }).click();
+    await personal.getByRole("button", { name: "Deny Kai Moss" }).click();
+    await expect.poll(() => personal.locator("[part=request-status]").allTextContents()).toEqual(["Approved", "Denied"]);
+    expect(mod.decided).toEqual([["req1", "approved"], ["req2", "denied"]]);
+    expect(await personal.locator("[part=request-approve], [part=request-deny]").count()).toBe(0);
+    await page.reload();
+    await expect.poll(() => personal.locator("[part=empty]").textContent()).toBe("No one is waiting to join.");
+    mod.paid = true;
+    await page.reload();
+    await expect.poll(() => personal.locator("[part=empty]").textContent()).toBe("People join this community by choosing a plan, so there are no requests to review.");
+    expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
   } finally {
     await browser.close();
   }

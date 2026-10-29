@@ -196,8 +196,9 @@ keep it visible on every page and at every width. Signed out it shows "Join"
 those on polynet-account itself, with a matching --polynet-surface; signed
 in, the member's avatar opens their account menu: "In this club" (the
 site's own standard pages, the current one marked), "Manage this
-community" for owners and admins (Studio), Messages, "Your communities"
-and Settings (the member's own pages, on the site's private twin), and
+community" for owners and admins (Studio), "Join requests" for moderators,
+Messages, "Your communities" and Settings (the member's own pages, on the
+site's private twin), and
 "Discover communities" (this site's own /discover). Don't rebuild these
 yourself.
 

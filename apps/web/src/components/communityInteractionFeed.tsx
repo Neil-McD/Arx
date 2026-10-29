@@ -1092,9 +1092,9 @@ export function CommunityInteractionFeedList(
                                     : undefined
                                 }
                                 onDelete={
-                                  isOwnRoot && props.onDeleteMessage
+                                  (isOwnRoot || props.canModerateContent) && props.onDeleteMessage
                                     ? () => {
-                                        if (window.confirm("Delete this message?")) {
+                                        if (window.confirm(isOwnRoot ? "Delete this message?" : "Remove this message for everyone?")) {
                                           props.onDeleteMessage?.("root", root.id);
                                         }
                                       }

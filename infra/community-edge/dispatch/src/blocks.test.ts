@@ -2153,3 +2153,52 @@ test("blocks and the shell are styled under a strict style-src, with a <style> f
   await legacy.close();
 });
 
+
+test("a moderator sees Remove on others' posts, which opens the site's private twin to confirm; members and the author don't", async () => {
+  const twin = "https://run-club--me.polynet.test";
+  const as = (role: string) => (fake: ReturnType<typeof fixture>) => {
+    (fake.session as any).private_origin = twin;
+    (fake.session as any).member = { name: "Me", handle: "me", avatar_url: null, role };
+  };
+  const page = await open(as("moderator"), PAGE, "/?channel=general");
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  const remove = chat.locator("[part~=message-action-remove]");
+  expect(await remove.count()).toBe(5);
+  expect(await chat.locator("[part~=message-mine] [part~=message-action-remove]").count()).toBe(0);
+  const href = await remove.first().getAttribute("href");
+  expect(href).toBe(`${twin}/moderate?ref=${encodeURIComponent("interaction:root:1")}&back=${encodeURIComponent("/?channel=general")}`);
+  await page.close();
+  for (const role of ["member", ""]) {
+    const other = await open(as(role), PAGE, "/");
+    await expect.poll(() => other.locator("polynet-chat [part~=message]").count()).toBe(5);
+    expect(await other.locator("polynet-chat [part~=message-action-remove]").count(), role).toBe(0);
+    await other.close();
+  }
+  // No private twin (off the sites domain): no Remove here either.
+  const off = await open((fake) => { (fake.session as any).member = { name: "Me", handle: "me", avatar_url: null, role: "admin" }; }, PAGE, "/");
+  await expect.poll(() => off.locator("polynet-chat [part~=message]").count()).toBe(5);
+  expect(await off.locator("polynet-chat [part~=message-action-remove]").count()).toBe(0);
+  await off.close();
+});
+
+test("the account menu: Join requests on the private twin for those who review them, not for members", async () => {
+  const twin = "https://run-club--me.polynet.test";
+  const menu = async (role: string) => {
+    const page = await open((fake) => {
+      (fake.session as any).site_origin = SITE;
+      (fake.session as any).private_origin = twin;
+      (fake as any).account = { member: { name: "Me" }, community: { role }, links: {} };
+    }, frame(), "/chat");
+    const shell = page.locator("polynet-account");
+    await shell.locator("[part=trigger]").click();
+    await expect.poll(() => shell.locator("[part=panel] a", { hasText: "Your communities" }).count()).toBe(1);
+    const requests = shell.locator("[part=panel] a", { hasText: "Join requests" });
+    const result = (await requests.count()) ? await requests.getAttribute("href") : null;
+    await page.close();
+    return result;
+  };
+  expect(await menu("moderator")).toBe(`${twin}/requests`);
+  expect(await menu("owner")).toBe(`${twin}/requests`);
+  expect(await menu("member")).toBeNull();
+});

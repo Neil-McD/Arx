@@ -55,6 +55,8 @@ export type WebCommunityInteractionProjectionProps = {
   isUpdatingPinnedRoot?: boolean;
   pinnedRootError?: string | null;
   canManagePinnedRoot?: boolean;
+  // Owners, admins and moderators: Delete on anyone's post (the server decides).
+  canModerateContent?: boolean;
   onSetPinnedRoot?: (rootId: string | null) => Promise<boolean> | boolean;
   roots: CommunityInteractionRootBundle[];
   activityEvents: CommunityActivityEvent[];
@@ -822,9 +824,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                               : undefined
                           }
                           onDelete={
-                            isOwnReply && props.onDeleteMessage
+                            (isOwnReply || props.canModerateContent) && props.onDeleteMessage
                               ? () => {
-                                  if (window.confirm("Delete this reply?")) {
+                                  if (window.confirm(isOwnReply ? "Delete this reply?" : "Remove this reply for everyone?")) {
                                     props.onDeleteMessage?.("reply", reply.id);
                                   }
                                 }
