@@ -14,12 +14,14 @@ import {
   normalizeCommunityLifecycle,
   restoreCommunityLifecycle,
 } from "../shared/communityLifecycle";
-import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import { requireOwnerBelowFreeCommunityLimit, resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import { getFounderSubscriptionByCommunity } from "./founderPlanCore";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { isPlatformHomeCommunity } from "./platformHomeCommunity";
 import {
-  COMMUNITY_BUILDER_ACCESS_GRANDFATHERED,
+  communityRunsFree,
+  founderSubscriptionStatusGrantsAccess,
   parseCommunityBuilderAccessMode,
 } from "../shared/founderPlan";
 import {
@@ -266,9 +268,20 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
   }
   if (
     !operatorComped &&
-    builderAccessMode !== COMMUNITY_BUILDER_ACCESS_GRANDFATHERED
+    !communityRunsFree(builderAccessMode)
   ) {
     throw new Error("community_restore_payment_required");
+  }
+  // Coming back counts against the owner's free communities, as creating does,
+  // unless it brings its own Agent plan.
+  if (!operatorComped) {
+    // Only a plan paying now exempts it: archive cleanup leaves the old plan
+    // attached as ended.
+    const plan = await getFounderSubscriptionByCommunity(ctx, args.communityId);
+    const funded = Boolean(plan) && founderSubscriptionStatusGrantsAccess({
+      status: plan!.status, currentPeriodEndAt: plan!.currentPeriodEndAt, nowMs: Date.now(),
+    });
+    if (!funded) await requireOwnerBelowFreeCommunityLimit(ctx, community.ownerId);
   }
 
   const lifecycle = normalizeCommunityLifecycle(community);

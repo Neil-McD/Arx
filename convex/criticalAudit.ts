@@ -74,6 +74,7 @@ const CRITICAL_AUDIT_METADATA_BLOCKED_KEY_PARTS = [
   "payload",
   "body",
   "raw",
+  "community_builder_access_freed",
 ];
 
 const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {

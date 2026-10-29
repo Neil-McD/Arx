@@ -28,6 +28,7 @@ export function WebArchivedCommunityList(props: WebArchivedCommunityListProps) {
           const isActing = props.actionCommunityId === community.community_id;
           const canRestoreWithoutPayment =
             community.funding_mode === "operator_comp" ||
+            community.builder_access_mode === "free" ||
             community.builder_access_mode === "grandfathered";
           const canRestoreWithPayment =
             community.allowed_actions.includes("buy_builder") ||

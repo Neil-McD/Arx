@@ -30,7 +30,7 @@ assert.match(
 );
 assert.match(
   archive,
-  /restoreCommunityWithoutPaymentHandler[\s\S]*community_restore_forbidden[\s\S]*parseCommunityBuilderAccessMode[\s\S]*COMMUNITY_BUILDER_ACCESS_GRANDFATHERED[\s\S]*community_restore_payment_required[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
+  /restoreCommunityWithoutPaymentHandler[\s\S]*community_restore_forbidden[\s\S]*parseCommunityBuilderAccessMode[\s\S]*communityRunsFree\(builderAccessMode\)[\s\S]*community_restore_payment_required[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
   "non-payment restoration must be owner-only, grandfather-or-operator authorized, generation-bound, cleanup-gated, and audited",
 );
 assert.match(

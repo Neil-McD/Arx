@@ -1380,13 +1380,13 @@ export default function App() {
         ])
         : Promise.resolve([]);
       return refresh.then(() => {
-        showAppToastMessage("Your Builder subscription is already attached. We refreshed your communities.");
+        showAppToastMessage("Your Agent plan is already attached. We refreshed your communities.");
       });
     },
     onRequiredCommunityCreateUnavailable: (founderSubscriptionId) => {
       suppressBuilderSetupSubscription(founderSubscriptionId, "unavailable");
       showAppToastMessage(
-        "This Builder payment is no longer available for setup. Review Billing to continue.",
+        "This Agent plan payment is no longer available for setup. Review Billing to continue.",
       );
       navigateTo("/settings/billing");
       void founderBilling.refresh(sessionRef.current);
@@ -2491,8 +2491,11 @@ export default function App() {
     publicRoute: shellPublicRoute,
     holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
+      // "Start your community free": sign in (and finish account setup), then
+      // community setup. The Agent plan is bought later, from the community.
       onStartBuilderPurchase: () => {
-        void publicBuilderCheckout.startPurchase();
+        if (session) openNewCommunityPurchaseFlow();
+        else requireSignIn({ reason: "create_community", payload: { draft: null } });
       },
       builderPurchaseStatus: publicBuilderCheckout.status,
       builderPurchaseError: publicBuilderCheckout.error,

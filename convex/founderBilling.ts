@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import {
   POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
-  COMMUNITY_BUILDER_ACCESS_GRANDFATHERED,
+  communityRunsFree,
   founderSubscriptionStatusGrantsAccess,
   parseCommunityBuilderAccessMode,
   type FounderSubscriptionStatus,
@@ -140,7 +140,7 @@ async function requireFounderCheckoutLifecycle(
     if (!builderAccessMode) {
       throw new Error("community_restore_access_mode_invalid");
     }
-    if (builderAccessMode === COMMUNITY_BUILDER_ACCESS_GRANDFATHERED) {
+    if (communityRunsFree(builderAccessMode)) {
       throw new Error("community_restore_payment_not_required");
     }
     await requireCompletedCommunityArchiveBillingCleanup(

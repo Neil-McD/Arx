@@ -928,7 +928,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent job, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each community uses its own $79 monthly Builder subscription for Polynet-hosted AI. Existing grandfathered communities may keep operating without Builder, but hosted AI remains unavailable until Builder is active. The canonical platform operator receives included Builder funding. There is no account-wide Builder entitlement, community BYOK option, personal Premium plan, or paid tool tier.
+Creating and running a community is free. Its agent (Polynet-hosted AI) needs the community's own Agent plan: $79 a month, with $20 of AI included. Without it the community runs as usual and only the agent is off. The canonical platform operator receives included funding. There is no account-wide plan, community BYOK option, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -943,9 +943,9 @@ If those answers are vague, more settings will not fix the product.
 
 ## Core Steps
 
-1. Open the Builder offer from Create Community. Existing community funding actions remain available from Billing and Account.
-2. Complete the $79 monthly Builder checkout.
-3. Finish account setup, then name the funded community and define its purpose and public profile.
+1. Finish account setup, then choose Create Community and name your community, its purpose and public profile. No payment is needed.
+2. Turn on the agent with the Agent plan ($79 a month) when you want Polynet-hosted AI: from the agent, Billing or Account, at any time.
+3. Keep shaping the community; the agent plan can be added before or after.
 4. Write the community agent's instructions.
 5. Add resources that represent durable community knowledge.
 6. Configure member access, billing, and roles.
@@ -994,14 +994,12 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Existing founders can continue managing grandfathered communities without Builder; hosted AI requires Builder per community.
-- Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
-- A paying builder may own an unlimited number of communities. There is no
-  account-level numeric cap, but every existing community must have current
-  funding for every newly created community.
-- Create Community presents the Builder offer and completes checkout before asking for the community name and optional URL. Verified payment authority is consumed exactly once when the community is created.
+- Every community operates free; hosted AI requires an Agent plan per community.
+- Each community that uses Polynet-hosted AI needs its own verified $79 monthly Agent plan.
+- An owner may have up to 10 live free communities (archived ones don't count); one created with its own Agent plan is never capped.
+- Create Community goes straight to setup. A plan bought first is attached to the community created next, exactly once.
 - Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
-- A grandfathered community can remain configured, published, listed in Discover, accept public joins, and collect paid-member revenue without Builder. Only its community-funded AI remains disabled.
+- A community without an Agent plan can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its agent is off.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.
@@ -1984,33 +1982,33 @@ Summary: The authority model for paid access, checkout, and subscriptions.
 
 Polynet has two live money rails:
 
-1. A builder pays $79 USD monthly for Builder on each managed community.
+1. Communities are free. A builder pays $79 USD monthly for the Agent plan on each community that uses Polynet-hosted AI.
 2. Polynet keeps a 2.9% application fee from paid-member community revenue.
 
-Builder is not an account-wide tier. One subscription belongs to one community. Visibility, membership, roles, paid-member commerce, Builder payment, AI allowance, and lifecycle remain separate canonical facts.
+The Agent plan is not an account-wide tier. One subscription belongs to one community. Visibility, membership, roles, paid-member commerce, Agent plan payment, AI allowance, and lifecycle remain separate canonical facts. (The code and older records call the Agent plan "Builder"; it is the same subscription.)
 
-## Lifecycle And Builder Authority
+## Lifecycle And Community Operation
 
 Community operation is resolved in this order:
 
 1. Lifecycle: archived communities are unavailable regardless of payment, grandfathering, membership, or operator status.
-2. Commercial compatibility: missing legacy `builderAccessMode` means `grandfathered`; malformed values fail closed.
-3. Funding: an active `subscription_required` community needs the operator grant or one correctly attached, paid-through Builder subscription.
+2. Commercial mode: `free` (every new community) and legacy `grandfathered` (a missing value) always operate; legacy `subscription_required` is migrated to `free`; malformed values fail closed.
+3. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Agent plan). Community operation never does.
 4. Membership and role: only after the community is operational do membership and role determine what a user may do.
 
-Existing grandfathered communities retain ordinary platform operation without Builder. Hosted AI for those communities still requires Builder. Newly created non-operator communities are subscription-required: Builder authorizes both ordinary platform operation and hosted AI for that attached community.
+Every community operates free: new communities are created `free`, grandfathered communities keep operating, and subscription-required communities are migrated to free. Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities created free; a community created with its own Agent plan is never capped, the operator is exempt, and archived ones don't count.
 
-Funding suspension does not mutate or delete the community, memberships, visibility, content, or history. A subscription-required community without current funding is removed from Discover and rejects private entry, public joins, and new paid-member checkout. Its join page may remain visible with a neutral unavailable state and an owner billing-recovery action.
+When an Agent plan lapses or its cycle's AI allowance is spent, hosted AI pauses; nothing else changes. A past-due plan keeps the community operating while Stripe retries within the period, but hosted AI pauses until payment succeeds. Funding never mutates or deletes the community, memberships, visibility, content, or history.
 
-## Payment-First Builder Sequence
+## Creating A Community, And Adding The Agent Plan
 
-The canonical new-builder sequence is:
+Creating a community needs no payment: Create Community goes straight to setup. The Agent plan can be bought for an existing community from the agent, Billing, or Account (`startFounderSubscriptionCheckout`), or bought first, as before:
 
-1. The public landing page or internal Create Community surface starts anonymous Stripe checkout before authentication or community creation.
+1. The public landing page starts anonymous Stripe checkout before authentication or community creation.
 2. The verified Stripe webhook creates durable paid receipt evidence. Redirect success is progress UI only.
 3. The buyer authenticates and claims the receipt through the browser secret or verified checkout-email recovery.
 4. The user completes display name, handle, avatar, current Terms, and current Privacy acceptance. Provider credentials are not account setup.
-5. Community creation atomically consumes one owned active unassigned subscription, creates the unlisted subscription-required community, attaches the subscription, and opens its usage cycle.
+5. Community creation atomically consumes one owned active unassigned subscription, creates the unlisted free community, attaches the subscription as its Agent plan, and opens its usage cycle.
 
 An unassigned subscription grants setup, not access to any existing community. The same subscription cannot be attached twice. Replays are idempotent and cross-user attachment fails closed.
 
@@ -2018,8 +2016,8 @@ An unassigned subscription grants setup, not access to any existing community. T
 
 Archive is a lifecycle action, not a billing status. It immediately freezes ordinary runtime access and starts durable asynchronous billing cleanup. Cleanup completion is required before any restoration but grants no access by itself.
 
-- A grandfathered owner may restore the archived community without payment after cleanup. The community returns with its ordinary grandfathered access; hosted AI remains off unless Builder is separately current.
-- A subscription-required community restores only from verified active `$79` payment bound to the current archived lifecycle generation.
+- An owner may restore an archived free or grandfathered community without payment after cleanup. Hosted AI remains off unless an Agent plan is separately current.
+- A legacy subscription-required community (before its migration to free) restores only from verified active `$79` payment bound to the current archived lifecycle generation.
 - The canonical operator may restore an operator-owned community after cleanup without simulated Stripe state.
 - Every restoration increments `lifecycleGeneration`. Checkout and webhook evidence from an earlier generation cannot restore or mutate the newer generation.
 
@@ -2057,10 +2055,10 @@ Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain 
 
 1. Redirects are UX only; verified provider/webhook state is authoritative.
 2. Archive always wins over commercial and access state.
-3. Missing legacy Builder mode is grandfathered; malformed mode fails closed.
-4. One `$79` subscription attaches to one managed community.
-5. Grandfathering grants platform operation, not hosted AI.
-6. Builder funding never widens member permissions.
+3. Communities operate free; missing legacy mode is grandfathered (also free); malformed mode fails closed.
+4. One `$79` Agent plan attaches to one community.
+5. Operating free grants platform operation, not hosted AI.
+6. Agent plan funding never widens member permissions.
 7. Restoration is cleanup-gated, generation-fenced, and idempotent.
 8. Paid-member revenue always uses the 2.9% application fee.
 9. Community BYOK and requester ChatGPT authorize no community AI execution.
@@ -2070,11 +2068,11 @@ Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain 
 
 - treating a successful redirect as entitlement
 - checking payment before lifecycle
-- making grandfathered platform access depend on AI funding
+- making community operation depend on AI funding
 - allowing payment or operator status to bypass archive
 - treating an unassigned subscription as community access
 - storing a second `suspended` flag instead of resolving current truth
-- mutating membership or visibility when Builder funding lapses
+- mutating membership or visibility when Agent plan funding lapses
 - restoring an archived community before billing cleanup completes
 - allowing a stale checkout generation to restore a community
 - letting frontend state reconstruct backend authority

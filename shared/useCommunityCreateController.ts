@@ -94,11 +94,11 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
   if (message.includes("community_publish_ready_required")) {
     return "Published communities need a name, one-liner, avatar, and banner.";
   }
-  if (message.includes("community_funding_required_before_create")) {
-    return "Fund your existing community before creating another one.";
+  if (message.includes("community_owner_limit_reached")) {
+    return "You've reached the limit of live communities. Archive one to start another.";
   }
   if (message.includes("founder_subscription_already_attached")) {
-    return "This Builder subscription is already attached to a community.";
+    return "This Agent plan is already attached to a community.";
   }
   return message;
 }

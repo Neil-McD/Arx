@@ -21,7 +21,7 @@ function primaryLabel(props: WebBuilderPurchaseModalProps): string {
   if (props.accessMode === "operator_included") {
     return "Continue — included with operator access";
   }
-  return `Buy Builder — ${formatBuilderOfferPrice()}`;
+  return `Get the Agent plan — ${formatBuilderOfferPrice()}`;
 }
 
 export function WebBuilderPurchaseModal(props: WebBuilderPurchaseModalProps) {

@@ -61,13 +61,16 @@ assert.doesNotMatch(founderRecovery, /email_enqueue_failed|skipped: true/);
 assert.match(lifecycle, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);
 assert.match(
   lifecycle,
-  /if \(args\.founderSubscriptionId\) \{[\s\S]*founderSubscription = \(await ctx\.db\.get\([\s\S]*\}\s*else if \(!operatorComped\) \{[\s\S]*community_funding_required_before_create/,
+  /if \(args\.founderSubscriptionId\) \{[\s\S]*founderSubscription = \(await ctx\.db\.get\(/,
 );
-assert.match(lifecycle, /community_funding_required_before_create/);
+// Pricing v2: creating needs no plan (a plan bought first still attaches);
+// every new community is free and only its agent needs a plan.
+assert.doesNotMatch(lifecycle, /community_funding_required_before_create/);
+assert.match(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,/);
 assert.match(lifecycle, /founder_subscription_already_attached/);
 assert.match(lifecycle, /founder_subscription_risk_revoked/);
 assert.match(lifecycle, /founder_subscription_price_mismatch/);
-assert.match(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED/);
+assert.doesNotMatch(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,/);
 assert.match(lifecycle, /ctx\.db\.patch\(founderSubscription\._id,[\s\S]*communityId,[\s\S]*attachedAt: nowMs/);
 assert.match(lifecycle, /syncFounderUsageCycle\(/);
 assert.match(gateway, /founderSubscriptionId: params\.founderSubscriptionId \?\? undefined/);

@@ -8,7 +8,7 @@ Scope: community lifecycle, Builder funding, paid-member commerce, and provider-
 
 Polynet has two money rails:
 
-1. `$79 / month / community` for Builder platform operation and Polynet-hosted community AI.
+1. `$79 / month / community` for the Agent plan (Builder in code): Polynet-hosted community AI. Communities themselves are free.
 2. A `2.9%` Polynet application fee on paid-member community revenue.
 
 Lifecycle, Builder access, membership, visibility, member commerce, and AI allowance are separate facts. One backend resolver composes them. Frontend state and redirects are never authority.
@@ -17,12 +17,13 @@ Lifecycle, Builder access, membership, visibility, member commerce, and AI allow
 
 | Community state | Ordinary platform | Hosted AI | Restore authority |
 |---|---:|---:|---|
-| Active grandfathered, no Builder | yes | no | not applicable |
-| Active grandfathered, active attached Builder | yes | yes | not applicable |
-| Archived grandfathered | no | no | owner, after archive cleanup, without payment |
-| Active subscription-required, paid-through Builder | yes | yes | not applicable |
-| Active subscription-required, missing, expired, past-due, refunded, or disputed Builder | no | no | billing recovery |
-| Archived subscription-required | no | no | verified paid Builder fulfillment after archive cleanup |
+| Active free or grandfathered, no Agent plan | yes | no | not applicable |
+| Active free or grandfathered, active attached Agent plan | yes | yes | not applicable |
+| Active free or grandfathered, past-due Agent plan | yes | no | not applicable |
+| Archived free or grandfathered | no | no | owner, after archive cleanup, without payment |
+| Active legacy subscription-required, paid-through Agent plan (until migrated) | yes | yes | not applicable |
+| Active legacy subscription-required, missing, expired, refunded, or disputed plan (until migrated) | no | no | billing recovery, or the free migration |
+| Archived legacy subscription-required (until migrated) | no | no | verified paid fulfillment after archive cleanup |
 | Active operator-owned | yes | yes | not applicable |
 | Archived operator-owned | no | no | operator, after archive cleanup, without simulated payment |
 
@@ -40,12 +41,12 @@ Archive is the outer authority boundary and always wins over payment, grandfathe
 
 ## 3) Founder Funding
 
-- Existing production communities are grandfathered for ordinary platform operation. They require Builder for Polynet-hosted AI.
-- Every newly created non-operator community is subscription-required and must consume one verified active Builder subscription.
+- Every community operates free: new communities are created `free`, grandfathered ones stay free, and legacy subscription-required communities are migrated to free (`migrateSubscriptionRequiredCommunitiesToFreeInternal`, audited). Polynet-hosted AI requires the community's Agent plan.
+- Creating a community needs no payment; an owner may have at most 10 live communities created free (the operator is exempt, and a community created with its own Agent plan is never capped).
 - Each active Builder cycle includes up to `$20` raw GPT 5.6 Luna model cost for that community.
 - `active` and `cancel_at_period_end` grant only through the paid-through timestamp. `past_due` keeps the community operating while Stripe retries inside the current paid-through period (the same grace paid members get) but grants no hosted AI (`founderSubscriptionKeepsCommunityRunning` vs `founderSubscriptionStatusGrantsAccess`). `canceled`, `ended`, expired, revoked, ambiguous, or malformed state fails closed.
-- Archived grandfathered communities restore free after cleanup and return without AI unless Builder is separately active.
-- Archived subscription-required communities restore only from verified active payment for the current archived generation.
+- Archived free and grandfathered communities restore free after cleanup and return without AI unless an Agent plan is separately active.
+- Archived legacy subscription-required communities (before migration) restore only from verified active payment for the current archived generation.
 - Community BYOK and requester ChatGPT are not authority for community AI. Historical records are audit or migration evidence only.
 
 ## 4) Paid-Member Commerce

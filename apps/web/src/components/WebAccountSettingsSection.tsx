@@ -92,6 +92,7 @@ export function WebAccountSettingsSection(
       })
     : null;
   const builderIsOptional =
+    builderAttentionCommunity?.builder_access_mode === "free" ||
     builderAttentionCommunity?.builder_access_mode === "grandfathered";
 
   return (
@@ -136,19 +137,19 @@ export function WebAccountSettingsSection(
         <div className="settings-section builder-account-section">
           <div className="settings-section-title">Builder communities</div>
           <div className="settings-section-desc">
-            Builder is attached to communities, not your account. Each Builder community is {formatBuilderOfferPrice()}.
+            The Agent plan is attached to a community, not your account. Each community's agent is {formatBuilderOfferPrice()}; the community itself is free.
           </div>
           {props.isLoadingFounderBilling && props.founderBillingOverview.communities.length === 0 ? (
             <div className="chat-loading">
               <div className="loading-spinner" />
-              <span>Checking Builder…</span>
+              <span>Checking your Agent plan…</span>
             </div>
           ) : (
             <div className="builder-account-summary">
               <div>
                 {props.founderBillingOverview.communities.length === 0 ? (
                   <>
-                    <strong>No Builder community yet</strong>
+                    <strong>No Agent plan yet</strong>
                     <span>Create your first community to continue.</span>
                   </>
                 ) : activeCommunities.length === 0 && archivedCommunityCount > 0 ? (
@@ -160,13 +161,13 @@ export function WebAccountSettingsSection(
                   <>
                     <strong>
                       {builderIsOptional
-                        ? `Builder AI is optional for ${builderAttentionCommunity.community_name}`
+                        ? `The agent is optional for ${builderAttentionCommunity.community_name}`
                         : `${builderAttentionCommunity.community_name} needs attention`}
                     </strong>
                     <span>
                       {builderIsOptional
-                        ? "Your community remains available. Activate Builder for Polynet-hosted AI."
-                        : "Restore Builder to recover paid community access and hosted AI."}
+                        ? "Your community stays free. Turn on the Agent plan to give it an AI agent."
+                        : "Turn on the Agent plan to bring back its AI agent."}
                     </span>
                   </>
                 ) : (

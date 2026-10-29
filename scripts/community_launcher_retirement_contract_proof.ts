@@ -86,8 +86,8 @@ assert.doesNotMatch(
 
 assert.match(
   createModal,
-  /Your payment is confirmed[\s\S]*Community name[\s\S]*Community handle[\s\S]*Create community/,
-  "community creation should remain one post-payment identity form",
+  /Add the identity members will see[\s\S]*Community name[\s\S]*Community handle[\s\S]*Create community/,
+  "community creation should remain one identity form (free; a plan bought first attaches)",
 );
 assert.match(
   createModal,
@@ -104,7 +104,7 @@ assert.match(
   /WebBuilderOfferSummary compact purpose="purchase"/,
   "the pre-payment offer must remain a separate compact surface",
 );
-assert.match(purchaseModal, /Buy Builder/);
+assert.match(purchaseModal, /Get the Agent plan/);
 assert.match(
   webCreateController,
   /useCommunityCreateController[\s\S]*openCreateCommunityModal[\s\S]*modalHostProps/,

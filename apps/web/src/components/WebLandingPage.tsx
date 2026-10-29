@@ -16,7 +16,7 @@ function activationMessage(
 ): string | null {
   if (status === "starting_checkout") return "Opening secure checkout…";
   if (status === "canceled") return "Checkout canceled. You can restart whenever you’re ready.";
-  if (status === "error") return error ?? "Builder checkout needs attention.";
+  if (status === "error") return error ?? "Checkout needs attention.";
   return null;
 }
 
