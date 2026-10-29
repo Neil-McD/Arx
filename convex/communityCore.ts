@@ -1190,6 +1190,21 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   };
 }
 
+// Live communities an owner may have before the next one needs its own Agent
+// plan. Callers exempt the platform owner and a community with its own plan.
+export const FREE_COMMUNITIES_PER_OWNER = 10;
+
+// Counts every live community the owner has (archived ones don't count), never
+// a truncated page of their history; stops at the limit.
+export async function requireOwnerBelowFreeCommunityLimit(ctx: any, ownerId: any): Promise<void> {
+  let live = 0;
+  for await (const row of ctx.db.query("communities").withIndex("by_owner", (q: any) => q.eq("ownerId", ownerId))) {
+    if (!communityIsActive(row as any)) continue;
+    live += 1;
+    if (live >= FREE_COMMUNITIES_PER_OWNER) throw new Error("community_owner_limit_reached");
+  }
+}
+
 // The one answer to "who is this person in this community, and what may they
 // do": every access check, Studio's access bundle, the twin, the site API and
 // the MCP read it. Relations and powers are granted only while the community

@@ -14,7 +14,8 @@ import {
   normalizeCommunityLifecycle,
   restoreCommunityLifecycle,
 } from "../shared/communityLifecycle";
-import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import { requireOwnerBelowFreeCommunityLimit, resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import { getFounderSubscriptionByCommunity } from "./founderPlanCore";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { isPlatformHomeCommunity } from "./platformHomeCommunity";
@@ -269,6 +270,11 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
     !communityRunsFree(builderAccessMode)
   ) {
     throw new Error("community_restore_payment_required");
+  }
+  // Coming back counts against the owner's free communities, as creating does,
+  // unless it brings its own Agent plan.
+  if (!operatorComped && !(await getFounderSubscriptionByCommunity(ctx, args.communityId))) {
+    await requireOwnerBelowFreeCommunityLimit(ctx, community.ownerId);
   }
 
   const lifecycle = normalizeCommunityLifecycle(community);

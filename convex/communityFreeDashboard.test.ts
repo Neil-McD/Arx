@@ -7,7 +7,7 @@ import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { getCommunityAndMembership, requireCommunityChatAccess, resolveCommunityLens } from "./communityCore";
 import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
-import { FREE_COMMUNITIES_PER_OWNER } from "./communityLifecycle";
+import { FREE_COMMUNITIES_PER_OWNER } from "./communityCore";
 
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
 const NOW = Date.now();
@@ -59,6 +59,46 @@ test("free dashboard: an owner has a bounded number of live communities; archive
     .rejects.toThrow("community_owner_limit_reached");
   await t.run((ctx) => ctx.db.patch(ids[0], { lifecycleStatus: "archived" } as any));
   await expect(asOwner.mutation(api.communityLifecycle.createCommunity, { name: "One more", slug: "busy-one-more" })).resolves.toMatchObject({ slug: "busy-one-more" });
+});
+
+test("free dashboard: the cap counts every live community, however much archived history comes first", async () => {
+  const t = convexTest(schema, modules);
+  const ownerId = await founder(t, "history-founder");
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 205; index += 1) {
+      await ctx.db.insert("communities", { ownerId, slug: `old-${index}`, name: `Old ${index}`, lifecycleStatus: "archived", lifecycleGeneration: 1,
+        visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 1, createdAt: NOW, updatedAt: NOW } as any);
+    }
+  });
+  const asOwner = t.withIdentity({ subject: "history-founder-subject" });
+  for (let index = 0; index < FREE_COMMUNITIES_PER_OWNER; index += 1) {
+    await asOwner.mutation(api.communityLifecycle.createCommunity, { name: `New ${index}`, slug: `history-new-${index}` });
+  }
+  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, { name: "One more", slug: "history-one-more" }))
+    .rejects.toThrow("community_owner_limit_reached");
+});
+
+test("free dashboard: restoring a free community counts against the cap, as creating does", async () => {
+  const t = convexTest(schema, modules);
+  const ownerId = await founder(t, "restore-founder");
+  const asOwner = t.withIdentity({ subject: "restore-founder-subject" });
+  const archivedId = await t.run(async (ctx) => {
+    const id = await ctx.db.insert("communities", { ownerId, slug: "restore-me", name: "Restore me", lifecycleStatus: "archived", lifecycleGeneration: 1,
+      builderAccessMode: "free", visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 1,
+      createdAt: NOW, updatedAt: NOW } as any);
+    await ctx.db.insert("communityArchiveBillingJobs", { communityId: id, lifecycleGeneration: 1, status: "complete", attemptCount: 0,
+      nextAttemptAt: NOW, completedAt: NOW, createdAt: NOW, updatedAt: NOW } as any);
+    return id;
+  });
+  for (let index = 0; index < FREE_COMMUNITIES_PER_OWNER; index += 1) {
+    await asOwner.mutation(api.communityLifecycle.createCommunity, { name: `Live ${index}`, slug: `restore-live-${index}` });
+  }
+  const restore = () => asOwner.mutation((api as any).communityColdArchive.restoreCommunityWithoutPayment, { communityId: archivedId, lifecycleGeneration: 1 });
+  await expect(restore()).rejects.toThrow("community_owner_limit_reached");
+  // One live community archived: there's room, and it comes back.
+  const live = await t.run((ctx) => ctx.db.query("communities").withIndex("by_slug", (q) => q.eq("slug", "restore-live-0")).first());
+  await t.run((ctx) => ctx.db.patch(live!._id, { lifecycleStatus: "archived" } as any));
+  await expect(restore()).resolves.toMatchObject({ ok: true, changed: true });
 });
 
 test("free dashboard: a founder at the cap still creates a community that brings its own Agent plan", async () => {

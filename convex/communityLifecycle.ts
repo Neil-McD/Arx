@@ -3,6 +3,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
+import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
 import {
   type CommunityLike,
   type CommunityPricePointLike,
@@ -599,10 +600,6 @@ export const migrateSubscriptionRequiredCommunitiesToFreeInternal = internalMuta
   },
 });
 
-// Live communities one owner may have before the next one needs its own Agent
-// plan (the platform owner is exempt).
-export const FREE_COMMUNITIES_PER_OWNER = 10;
-
 export const createCommunity = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -666,15 +663,7 @@ export const createCommunity = mutation({
     // Creating is free; a plan bought first still attaches below. Without
     // payment as the brake, an owner has a bounded number of live communities;
     // a community created with its own verified Agent plan is never capped.
-    if (!operatorComped && !founderSubscription) {
-      const owned = await ctx.db
-        .query("communities")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .take(200);
-      if (owned.filter((row) => communityIsActive(row as any)).length >= FREE_COMMUNITIES_PER_OWNER) {
-        throw new Error("community_owner_limit_reached");
-      }
-    }
+    if (!operatorComped && !founderSubscription) await requireOwnerBelowFreeCommunityLimit(ctx, ownerId);
     const slug = normalizeSlug(args.slug);
     const existing = await ctx.db
       .query("communities")

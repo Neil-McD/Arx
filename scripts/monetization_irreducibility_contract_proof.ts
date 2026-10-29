@@ -134,7 +134,7 @@ assert.match(communityLifecycle, /founder_subscription_already_attached/);
 assert.match(communityLifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,/);
 // Pricing v2: creating is free; the brake is a live-community cap per owner.
 assert.doesNotMatch(communityLifecycle, /community_funding_required_before_create/);
-assert.match(communityLifecycle, /community_owner_limit_reached/);
+assert.match(communityLifecycle, /requireOwnerBelowFreeCommunityLimit/);
 assert.doesNotMatch(communityLifecycle, /max_communities/);
 assert.match(auth, /CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT = Number\.MAX_SAFE_INTEGER/);
 assert.doesNotMatch(
