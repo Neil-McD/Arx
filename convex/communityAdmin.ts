@@ -60,6 +60,7 @@ import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { recordCriticalAuditEvent } from "./criticalAudit";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -1304,6 +1305,19 @@ export const approveCommunityJoinRequest = mutation({
       actorUserId: args.userId,
       requestId: args.requestId,
     };
+    return await approveCommunityJoinRequestCore(ctx, { requestId: args.requestId, userId: args.userId, logContext });
+  },
+});
+
+// Approving a join request, for Studio and for a site's private twin: the
+// reviewer must moderate this community (owner, admin or moderator).
+async function approveCommunityJoinRequestCore(ctx: any, args: {
+  requestId: any;
+  userId: any;
+  logContext: Record<string, unknown>;
+  communityId?: any;
+}) {
+  const logContext = args.logContext;
     return await runLoggedCommunityAdminMutation({
       operation: "approve_join_request",
       context: logContext,
@@ -1326,6 +1340,9 @@ export const approveCommunityJoinRequest = mutation({
         }
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
+        if (args.communityId && String(args.communityId) !== String(request.communityId)) {
+          throw new Error("join_request_not_found");
+        }
         const { community } = await requireCommunityModerator({
           ctx,
           communityId: request.communityId,
@@ -1359,8 +1376,7 @@ export const approveCommunityJoinRequest = mutation({
         return { ok: true };
       },
     });
-  },
-});
+}
 
 export const denyCommunityJoinRequest = mutation({
   args: {
@@ -1379,6 +1395,18 @@ export const denyCommunityJoinRequest = mutation({
       actorUserId: args.userId,
       requestId: args.requestId,
     };
+    return await denyCommunityJoinRequestForReviewerCore(ctx, { requestId: args.requestId, userId: args.userId, logContext });
+  },
+});
+
+// Denying a join request, for Studio and for a site's private twin.
+async function denyCommunityJoinRequestForReviewerCore(ctx: any, args: {
+  requestId: any;
+  userId: any;
+  logContext: Record<string, unknown>;
+  communityId?: any;
+}) {
+  const logContext = args.logContext;
     return await runLoggedCommunityAdminMutation({
       operation: "deny_join_request",
       context: logContext,
@@ -1386,6 +1414,9 @@ export const denyCommunityJoinRequest = mutation({
         const nowMs = Date.now();
         const request = (await ctx.db.get(args.requestId)) as CommunityJoinRequestLike | null;
         if (!request) throw new Error("join_request_not_found");
+        if (args.communityId && String(args.communityId) !== String(request.communityId)) {
+          throw new Error("join_request_not_found");
+        }
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
         const { community } = await requireCommunityModerator({
@@ -1408,7 +1439,59 @@ export const denyCommunityJoinRequest = mutation({
         return { ok: true };
       },
     });
+}
+
+// A request id from outside (the twin): a join request's, or refused.
+function requireJoinRequestId(ctx: any, raw: string) {
+  const id = ctx.db.normalizeId("communityJoinRequests", raw);
+  if (!id) throw new Error("join_request_not_found");
+  return id;
+}
+
+// Join review on a site's private twin (httpCommunityApps, private sessions
+// only): the pending requests of the session's own community, with the names
+// a reviewer needs, and Studio's approve and deny for exactly that community.
+export const listPendingJoinRequestsForTrustedReviewerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
+    const rows = (await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("status", "pending"))
+      .order("desc")
+      .take(100)) as CommunityJoinRequestLike[];
+    const requests = [];
+    for (const row of rows) {
+      if (assertCanonicalCommunityJoinRequest(row) !== "pending") continue;
+      const user = (await ctx.db.get(row.userId)) as { handle?: string } | null;
+      const display = await resolveUserProfileDisplayProjection(ctx, row.userId);
+      requests.push({
+        id: String(row._id),
+        name: display.display_name ?? user?.handle ?? "Someone",
+        handle: typeof user?.handle === "string" ? user.handle : null,
+        avatar_url: display.avatar_url ?? null,
+        asked_at: toIsoString(row.createdAt),
+      });
+    }
+    // A paid community admits through checkout only; there's nothing to approve.
+    return { paid: resolveCommunityEntryPolicy(community) === "paid_subscription", requests };
   },
+});
+
+export const approveJoinRequestForTrustedReviewerInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.string() },
+  handler: async (ctx, args) => await approveCommunityJoinRequestCore(ctx, {
+    requestId: requireJoinRequestId(ctx, args.requestId), userId: args.userId, communityId: args.communityId,
+    logContext: { actorUserId: args.userId, requestId: args.requestId, surface: "community_site_twin" },
+  }),
+});
+
+export const denyJoinRequestForTrustedReviewerInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.string() },
+  handler: async (ctx, args) => await denyCommunityJoinRequestForReviewerCore(ctx, {
+    requestId: requireJoinRequestId(ctx, args.requestId), userId: args.userId, communityId: args.communityId,
+    logContext: { actorUserId: args.userId, requestId: args.requestId, surface: "community_site_twin" },
+  }),
 });
 
 export const setCommunityMemberRole = mutation({

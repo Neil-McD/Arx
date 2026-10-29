@@ -68,6 +68,11 @@ export const COMMUNITY_APP_MY_JOIN_REQUEST_PATH = "/runtime/app/me/join/request"
 export const COMMUNITY_APP_MY_JOIN_CANCEL_PATH = "/runtime/app/me/join/cancel";
 export const COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH = "/runtime/app/me/join/checkout";
 export const COMMUNITY_APP_MY_JOIN_FINISH_PATH = "/runtime/app/me/join/finish";
+export const COMMUNITY_APP_MY_MODERATION_POST_PATH = "/runtime/app/me/moderation/post";
+export const COMMUNITY_APP_MY_MODERATION_REMOVE_PATH = "/runtime/app/me/moderation/remove";
+export const COMMUNITY_APP_MY_REQUESTS_PATH = "/runtime/app/me/requests";
+export const COMMUNITY_APP_MY_REQUEST_APPROVE_PATH = "/runtime/app/me/requests/approve";
+export const COMMUNITY_APP_MY_REQUEST_DENY_PATH = "/runtime/app/me/requests/deny";
 const CHECKOUT_SESSION_ID_PATTERN = /^chk_[a-f0-9]{32}$/;
 
 function readEnv(name: string): string {
@@ -251,6 +256,39 @@ const JOIN_REFUSALS: Record<string, { status: number; code: string }> = {
   paid_plan_required: { status: 409, code: "paid_plan_required" },
   community_checkout_unavailable: { status: 409, code: "community_checkout_unavailable" },
 };
+// Moderation and join review on the twin: Studio's cores and refusals; someone
+// who can't moderate here (or a post or request not of this community) gets a
+// plain refusal, never what the post or request was.
+const MODERATION_REFUSALS: Record<string, { status: number; code: string }> = {
+  community_forbidden: { status: 403, code: "not_a_moderator" },
+  community_entitlement_required: { status: 403, code: "not_a_moderator" },
+  community_user_blocked: { status: 403, code: "not_a_moderator" },
+  community_temporarily_unavailable: { status: 403, code: "community_unavailable" },
+  community_archived: { status: 404, code: "community_unavailable" },
+  community_channel_unavailable: { status: 404, code: "post_not_found" },
+  interaction_target_not_found: { status: 404, code: "post_not_found" },
+  interaction_delete_forbidden: { status: 403, code: "not_a_moderator" },
+  join_request_not_found: { status: 404, code: "request_not_found" },
+  join_request_already_decided: { status: 409, code: "request_already_decided" },
+  community_paid_checkout_required: { status: 409, code: "community_paid_checkout_required" },
+};
+
+async function runModeration<T>(run: () => Promise<T>): Promise<{ ok: true; value: T } | Response> {
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    const data = (error as { data?: unknown } | null)?.data;
+    const text = typeof (data as { code?: unknown } | null)?.code === "string"
+      ? String((data as { code: string }).code) : String((error as { message?: unknown } | null)?.message ?? "");
+    const known = Object.keys(MODERATION_REFUSALS).find((code) => text === code || text.includes(code));
+    if (known) return reply(MODERATION_REFUSALS[known].status, { ok: false, code: MODERATION_REFUSALS[known].code });
+    return reply(500, { ok: false, code: "moderation_unavailable", message: "That didn't work. Try again." });
+  }
+}
+
+const INTERACTION_REF_PATTERN = /^interaction:(root|reply):[A-Za-z0-9_-]{1,64}$/;
+const JOIN_REQUEST_ID_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
+
 async function runJoin<T>(run: () => Promise<T>): Promise<{ ok: true; value: T } | Response> {
   try {
     return { ok: true, value: await run() };
@@ -1089,6 +1127,80 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       return reply(200, { ok: true, checkout_url: started.value.checkout_url, session_id: started.value.session_id });
     }),
   });
+
+  // A post a moderator is about to remove: who wrote it and what it says, so
+  // the twin's confirmation shows exactly what goes.
+  args.http.route({
+    path: COMMUNITY_APP_MY_MODERATION_POST_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const ref = typeof body?.ref === "string" && INTERACTION_REF_PATTERN.test(body.ref) ? body.ref : null;
+      if (!ref) return reply(400, { ok: false, code: "invalid_request" });
+      const post = await runModeration(() => ctx.runQuery(internal.communityInteractions.readInteractionForTrustedModeratorInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, ref,
+      }));
+      if (post instanceof Response) return post;
+      if (!post.value) return reply(404, { ok: false, code: "post_not_found" });
+      return reply(200, { ok: true, post: post.value });
+    }),
+  });
+
+  args.http.route({
+    path: COMMUNITY_APP_MY_MODERATION_REMOVE_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const body = await readJsonObject(req, 1024);
+      const ref = typeof body?.ref === "string" && INTERACTION_REF_PATTERN.test(body.ref) ? body.ref : null;
+      if (!ref) return reply(400, { ok: false, code: "invalid_request" });
+      const removed = await runModeration(() => ctx.runMutation(internal.communityInteractions.removeInteractionForTrustedModeratorInternal, {
+        userId: session.userId as any, communityId: session.communityId as any, ref,
+      }));
+      if (removed instanceof Response) return removed;
+      return reply(200, { ok: true });
+    }),
+  });
+
+  // Join review: this community's pending requests, then Studio's approve or deny.
+  args.http.route({
+    path: COMMUNITY_APP_MY_REQUESTS_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      const session = await requirePrivateMemberSession(ctx, req);
+      if (session instanceof Response) return session;
+      const list = await runModeration(() => ctx.runQuery(internal.communityAdmin.listPendingJoinRequestsForTrustedReviewerInternal, {
+        userId: session.userId as any, communityId: session.communityId as any,
+      }));
+      if (list instanceof Response) return list;
+      return reply(200, { ok: true, ...(list.value as { paid: boolean; requests: unknown[] }) });
+    }),
+  });
+
+  for (const [path, decide] of [
+    [COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, internal.communityAdmin.approveJoinRequestForTrustedReviewerInternal],
+    [COMMUNITY_APP_MY_REQUEST_DENY_PATH, internal.communityAdmin.denyJoinRequestForTrustedReviewerInternal],
+  ] as const) {
+    args.http.route({
+      path,
+      method: "POST",
+      handler: args.httpAction(async (ctx, req) => {
+        const session = await requirePrivateMemberSession(ctx, req);
+        if (session instanceof Response) return session;
+        const body = await readJsonObject(req, 1024);
+        const requestId = typeof body?.request_id === "string" && JOIN_REQUEST_ID_PATTERN.test(body.request_id) ? body.request_id : null;
+        if (!requestId) return reply(400, { ok: false, code: "invalid_request" });
+        const decided = await runModeration(() => ctx.runMutation(decide, {
+          userId: session.userId as any, communityId: session.communityId as any, requestId,
+        }));
+        if (decided instanceof Response) return decided;
+        return reply(200, { ok: true });
+      }),
+    });
+  }
 
   // Back from Stripe: membership only once the provider's verified webhook says so.
   args.http.route({

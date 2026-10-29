@@ -1,10 +1,11 @@
 import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE, presentInteractionActorType, type StoredInteractionActorType } from "../shared/communityAgentIdentity";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
 import { fingerprintCommunityComposerPayload } from "./communityComposerReplay";
 import { v } from "convex/values";
 import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   normalizeIdValue,
   requireCommunityChatAccess,
@@ -2390,6 +2391,51 @@ export const deleteCommunityInteractionMessage = mutation({
     deleteCommunityInteractionMessageCore(ctx, args, await resolveUserIdForAuthenticatedRequest({
       ctx, userId, authSubject: authSubject ?? null,
     }), true),
+});
+
+// Moderation from a site's private twin (httpCommunityApps, private sessions
+// only, so a site's own code never reaches it): a post of the session's own
+// community, by ref, that its member may remove as a moderator.
+async function loadModerationTarget(ctx: any, args: { communityId: any; ref: string }) {
+  const match = /^interaction:(root|reply):([A-Za-z0-9_-]{1,64})$/.exec(String(args.ref ?? ""));
+  if (!match) return null;
+  const targetType = match[1] as "root" | "reply";
+  const id = ctx.db.normalizeId(targetType === "root" ? "communityInteractionRoots" : "communityInteractionReplies", match[2]);
+  if (!id) return null;
+  const target = (await ctx.db.get(id)) as InteractionRootRow | InteractionReplyRow | null;
+  if (!target || normalizeIdValue(target.communityId) !== normalizeIdValue(args.communityId)) return null;
+  return { targetType, target };
+}
+
+export const readInteractionForTrustedModeratorInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), ref: v.string() },
+  handler: async (ctx, args) => {
+    await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
+    const found = await loadModerationTarget(ctx, args);
+    if (!found || found.target.status !== "live") return null;
+    await requireTargetChannelAccess({ ctx, target: found.target, userId: args.userId });
+    const author = found.target.actorType === "human" && found.target.actorUserId
+      ? await resolveUserProfileDisplayProjection(ctx, found.target.actorUserId)
+      : null;
+    return {
+      ref: args.ref,
+      author: author?.display_name ?? (found.target.actorType === "human" ? "A member" : "The community agent"),
+      text: String(found.target.contentSummary ?? "").slice(0, 600),
+      mine: normalizeIdValue(found.target.actorUserId) === normalizeIdValue(args.userId),
+      created_at: new Date(found.target.createdAt).toISOString(),
+    };
+  },
+});
+
+export const removeInteractionForTrustedModeratorInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), ref: v.string() },
+  handler: async (ctx, args) => {
+    const found = await loadModerationTarget(ctx, args);
+    if (!found) throw new Error("interaction_target_not_found");
+    return await deleteCommunityInteractionMessageCore(ctx, {
+      targetType: found.targetType, targetId: String(found.target._id),
+    }, args.userId, true);
+  },
 });
 
 export const deleteOwnCommunityInteractionMessageForTrustedUserInternal = internalMutation({
