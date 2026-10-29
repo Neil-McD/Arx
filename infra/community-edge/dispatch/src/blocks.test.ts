@@ -270,6 +270,8 @@ async function open(setup: (fake: ReturnType<typeof fixture>) => void = () => {}
   const fake = fixture();
   setup(fake);
   const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, ...device });
+  // A test that depends on calendar days runs its page at a pinned time.
+  if ((fake as any).now) await page.clock.install({ time: (fake as any).now });
   const files: Record<string, string> = {
     "/__polynet/ui.js": UI_SOURCE, "/__polynet/sdk.js": FAKE_SDK, "/__polynet/blocks/kit.js": KIT_SOURCE,
     "/__polynet/blocks/channels.js": CHANNELS_SOURCE, "/__polynet/blocks/chat.js": CHAT_SOURCE, "/__polynet/blocks/composer.js": COMPOSER_SOURCE,
@@ -372,8 +374,20 @@ test("a channel in the URL opens directly; an unknown one falls back to General"
   await other.close();
 });
 
+// Runs as if it were noon: the fixture's "an hour ago" lands yesterday just
+// after midnight, where no "Today" divider can exist.
+function atNoon(fake: ReturnType<typeof fixture>) {
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  const shift = noon.getTime() - Date.now();
+  const move = (iso: string) => new Date(Date.parse(iso) + shift).toISOString();
+  for (const feed of Object.values(fake.feeds) as any[]) for (const item of feed) item.created_at = move(item.created_at);
+  for (const channel of fake.channels as any[]) if (typeof channel.seenThroughAt === "number") channel.seenThroughAt += shift;
+  (fake as any).now = noon.getTime();
+}
+
 test("the feed groups by author, divides days, marks what's new, and styles the agent", async () => {
-  const page = await open();
+  const page = await open(atNoon);
   const chat = page.locator("polynet-chat");
   await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
   const feed = chat.locator("[part=feed]");
