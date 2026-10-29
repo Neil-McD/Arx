@@ -14,6 +14,7 @@ const ALLOWED = new Map<string, string>([
   ["convex/communityBuilderAccessCore.ts", "the can-run decision the lens reads"],
   ["convex/communityCommerce.ts", "checkout refuses a blocked buyer before any membership exists"],
   ["convex/communityPublic.ts", "Discover lists only communities that can run; no person involved"],
+  ["convex/communityAppJoin.ts", "the join page says whether the community can run, to anyone (signed out too); a person's access comes from the lens"],
 ]);
 
 const files = execFileSync("git", ["ls-files", "convex", "shared"], { encoding: "utf8" })
