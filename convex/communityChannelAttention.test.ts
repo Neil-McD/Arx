@@ -4,8 +4,28 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
 import { api } from "./_generated/api";
-import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
 import schema from "./schema";
+
+// A member's attention for one community, as the web reads it: both channel
+// sections of the paged query, combined.
+type MyAttention = {
+  chat: boolean;
+  resources: boolean;
+  events: boolean;
+  mentions: boolean;
+  channels: Array<{ channel_slug: string; chat: boolean; mentions: boolean }>;
+};
+async function myAttention(client: any, communityId: any): Promise<MyAttention[]> {
+  const page = (section: "shared" | "private") => client.query(api.communityAttention.listMyCommunityAttentionPage,
+    { communityId, section, paginationOpts: { numItems: 10, cursor: null } });
+  const [shared, own] = await Promise.all([page("shared"), page("private")]);
+  return [{
+    ...shared.attention,
+    chat: shared.attention.chat || own.attention.chat,
+    mentions: shared.attention.mentions || own.attention.mentions,
+    channels: [...shared.page, ...own.page],
+  }];
+}
 
 const modules = import.meta.glob([
   "./communityAttention.ts",
@@ -106,10 +126,7 @@ test("attention and acknowledgements remain independent per channel", async () =
   });
   const asMember = t.withIdentity({ subject: "channel-attention-member" });
 
-  const initial = await asMember.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: [fixture.communityId] },
-  );
+  const initial = await myAttention(asMember, fixture.communityId);
   expect(initial[0]).toMatchObject({ chat: true });
   expect(initial[0]?.channels).toEqual([
     expect.objectContaining({
@@ -132,10 +149,7 @@ test("attention and acknowledgements remain independent per channel", async () =
       throughAtMs: 3_000,
     },
   );
-  const afterCustom = await asMember.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: [fixture.communityId] },
-  );
+  const afterCustom = await myAttention(asMember, fixture.communityId);
   expect(afterCustom[0]?.chat).toBe(true);
   expect(
     afterCustom[0]?.channels.find((row) => row.channel_slug === "custom")?.chat,
@@ -152,10 +166,7 @@ test("attention and acknowledgements remain independent per channel", async () =
     api.communityAttention.acknowledgeCommunityChatRead,
     { communityId: fixture.communityId, throughAtMs: 2_000 },
   );
-  const afterGeneral = await asMember.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: [fixture.communityId] },
-  );
+  const afterGeneral = await myAttention(asMember, fixture.communityId);
   expect(afterGeneral[0]?.chat).toBe(false);
 });
 
@@ -232,10 +243,7 @@ test("resource attention inspects only recent referenced modules and fails close
   });
   const asOwner = t.withIdentity({ subject: "resource-attention-owner" });
 
-  const initial = await asOwner.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: [fixture.communityId] },
-  );
+  const initial = await myAttention(asOwner, fixture.communityId);
   expect(initial[0]?.resources).toBe(true);
 
   await asOwner.mutation(api.communityAttention.markCommunitySurfaceSeen, {
@@ -243,10 +251,7 @@ test("resource attention inspects only recent referenced modules and fails close
     surface: "resources",
     nowMs: 4_500,
   });
-  const acknowledged = await asOwner.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: [fixture.communityId] },
-  );
+  const acknowledged = await myAttention(asOwner, fixture.communityId);
   expect(acknowledged[0]?.resources).toBe(false);
 
   await t.run(async (ctx) => {
@@ -267,44 +272,6 @@ test("resource attention inspects only recent referenced modules and fails close
       updatedAt: 5_000,
     });
   });
-  const afterNewLivePage = await asOwner.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: [fixture.communityId] },
-  );
+  const afterNewLivePage = await myAttention(asOwner, fixture.communityId);
   expect(afterNewLivePage[0]?.resources).toBe(true);
-});
-
-test("attention rejects an oversized execution scope before domain reads", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await t.run(async (ctx) => {
-    const ownerId = await ctx.db.insert("users", {
-      authSubject: "attention-scope-owner",
-      displayName: "attention-scope-owner",
-      handle: "attention-scope-owner",
-      normalizedHandle: "attention-scope-owner",
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    });
-    const communityIds = [];
-    for (let index = 0; index <= MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY; index += 1) {
-      communityIds.push(await ctx.db.insert("communities", {
-        ownerId,
-        slug: `attention-scope-${index}`,
-        name: `Attention scope ${index}`,
-        visibility: "unlisted",
-        inferenceFundingPolicy: "managed_required",
-        entryPolicy: "open",
-        activeMemberCount: 1,
-        createdAt: 1_000 + index,
-        updatedAt: 1_000 + index,
-      }));
-    }
-    return { communityIds };
-  });
-  const asOwner = t.withIdentity({ subject: "attention-scope-owner" });
-
-  await expect(asOwner.query(
-    api.communityAttention.listMyCommunityAttention,
-    { communityIds: fixture.communityIds },
-  )).rejects.toThrow("community_attention_scope_limit_exceeded");
 });

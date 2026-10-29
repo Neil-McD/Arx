@@ -729,7 +729,10 @@ test("100 private rooms coexist with 10 shared rooms; creation and conversion sh
   await convert(shared[0]!.id, "restricted", "all_members");
   await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "Replacement", accessMode: "restricted" });
   await expect(owner.query(api.communityChannels.listCommunityChannels, { communityId: f.communityId })).rejects.toThrow("community_channel_refresh_required");
-  await expect(owner.query(api.communityAttention.listMyCommunityAttention, { communityIds: [f.communityId] })).rejects.toThrow("community_channel_refresh_required");
+  // Attention reads in pages, so a community past the unpaged list's limit still gets it.
+  const attentionPage = await owner.query(api.communityAttention.listMyCommunityAttentionPage, { communityId: f.communityId, section: "private", paginationOpts: { numItems: 10, cursor: null } });
+  expect(attentionPage.page.length).toBeGreaterThan(0);
+  expect(attentionPage.page.length).toBeLessThanOrEqual(10);
   const sharedRows = await t.run(ctx => listSharedCommunityChannels({ ctx, communityId: f.communityId }));
   expect(sharedRows).toHaveLength(10);
   expect(sharedRows.every(row => row.accessMode === "all_members")).toBe(true);

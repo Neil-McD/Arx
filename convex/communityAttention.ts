@@ -24,7 +24,6 @@ import {
   resolveAuthorizedCommunityChannel,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
-import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
 import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
 
 type CommunityAttentionSurface = "chat" | "resources" | "events" | "mentions";
@@ -82,18 +81,6 @@ const MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES = 50;
 function normalizePositiveMarker(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
   return Math.floor(value);
-}
-
-function isSkippableCommunityAccessError(error: unknown): boolean {
-  const message =
-    error instanceof Error && typeof error.message === "string"
-      ? error.message.trim()
-      : String(error ?? "").trim();
-  return new Set([
-    "community_not_found",
-    "community_forbidden",
-    "community_entitlement_required",
-  ]).has(message);
 }
 
 async function getCommunityMemberSettingsRow(
@@ -522,43 +509,6 @@ export const listMyCommunityAttentionPage = query({
       section: args.section, paginationOpts: { ...args.paginationOpts, numItems: Math.min(10, args.paginationOpts.numItems) } });
     const attention = await getCommunityAttentionRow(ctx, args.communityId, userId, result.page);
     return { ...result, page: attention.channels, attention };
-  },
-});
-
-// Cached-client bounded adapter. New clients use the paged endpoint above.
-export const listMyCommunityAttention = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityIds: v.array(v.id("communities")),
-  },
-  handler: async (ctx, args) => {
-    const communityIds = Array.from(
-      new Map(args.communityIds.map((communityId) => [String(communityId), communityId])).values(),
-    );
-    if (communityIds.length > MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY) {
-      throw new Error("community_attention_scope_limit_exceeded");
-    }
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const rows: CommunityAttentionRow[] = [];
-    for (const communityId of communityIds) {
-      try {
-        await requireCommunityChatAccess({
-          ctx,
-          communityId,
-          userId,
-        });
-      } catch (error) {
-        if (isSkippableCommunityAccessError(error)) continue;
-        throw error;
-      }
-      rows.push(await getCommunityAttentionRow(ctx, communityId, userId));
-    }
-    return rows;
   },
 });
 

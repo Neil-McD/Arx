@@ -28,7 +28,6 @@ const ALLOWED = new Map<string, string>([
   ["communityChannels:backfillChannelNamesInternal", "hand-run: channel name backfill"],
   ["communityChannels:listCommunityChannels", "channel access tests read through it; replace in the channel slice"],
   ["communityCompilerEvidence:measureCommunityCompilerEvidenceInternal", "operator diagnostic, run by hand"],
-  ["communityAttention:listMyCommunityAttention", "attention tests read through it; replace with the paged query in the channel slice"],
   ["communityCompilerDigest:runCommunityCompilerDigestPass", "protected core (community compiler): deleting needs Neil's confirmation"],
   ["communityResources:listCommunityResourceBuilderDirectory", "protected core (resources): deleting needs Neil's confirmation"],
   ["communityResources:readCommunityResourceBuilderResource", "protected core (resources): deleting needs Neil's confirmation"],
