@@ -37,6 +37,11 @@ import {
   COMMUNITY_APP_MY_JOIN_CANCEL_PATH,
   COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH,
   COMMUNITY_APP_MY_JOIN_FINISH_PATH,
+  COMMUNITY_APP_MY_MODERATION_POST_PATH,
+  COMMUNITY_APP_MY_MODERATION_REMOVE_PATH,
+  COMMUNITY_APP_MY_REQUESTS_PATH,
+  COMMUNITY_APP_MY_REQUEST_APPROVE_PATH,
+  COMMUNITY_APP_MY_REQUEST_DENY_PATH,
 } from "./httpCommunityApps";
 import { twinCheckoutReturnUrls } from "./communityAppJoin";
 import { deriveCommunityFunnelAction } from "../shared/communityJoinPolicy";
@@ -1490,4 +1495,91 @@ test("twin join: checkout returns only to this community's own twin", async () =
   expect(await own(f.ids.communityId, f.twin)).toBe(true);
   expect(await own(f.ids.communityId, f.site)).toBe(false);
   expect(await own(f.ids.otherCommunityId, f.twin)).toBe(false);
+});
+
+// Moderation on the twin: a moderator removes a post and reviews join requests
+// with Studio's cores; a member, a site's own session and another community's
+// post get nothing.
+test("twin moderation: a moderator removes a post of this community; a member and a site session can't", async () => {
+  const f = await twinFixture();
+  const siteToken = await f.signInAt(f.site);
+  const posted = await f.call(siteToken, { tool: "polynet_write", input: { path: `${COMMUNITY}/channels/general/`, mode: "create", content: { text: "Selling my old rope, DM me" }, idempotency_key: "mod-1" } }, f.site);
+  const rootId = String(posted.body.value.result.interaction.root_id);
+  const ref = `interaction:root:${rootId}`;
+  // Removing someone else's post: the owner can, as a moderator here.
+  const ownerTwin = await f.signInAt(f.twin, "apps-owner");
+  const memberTwin = await f.signInAt(f.twin);
+  // A member who isn't a moderator: refused, and the post isn't described.
+  await f.t.run(async (c) => {
+    const other = await c.db.insert("users", { authSubject: "apps-mod-subject", displayName: "apps-mod", handle: "apps-mod", normalizedHandle: "apps-mod", createdAt: 1, updatedAt: 1 });
+    for (const document of PLATFORM_LEGAL_DOCUMENTS) {
+      await c.db.insert("legalAcceptances", { userId: other, documentKey: document.key, documentVersion: document.version, acceptedAt: 1, source: "test", createdAt: 1 });
+    }
+    await c.db.insert("authSessions", { sessionId: "sess-apps-mod", authSubject: "apps-mod-subject", userId: other, encryptedSecretHex: "x", secretIvHex: "x", secretVersion: 1,
+      idleExpiresAt: Date.now() + 86_400_000, absoluteExpiresAt: Date.now() + 86_400_000, createdAt: 1, updatedAt: 1 } as any);
+    await c.db.insert("communityMemberships", { communityId: f.ids.communityId, userId: other, role: "member", accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
+  });
+  const modTwin = await f.signInAt(f.twin, "apps-mod");
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_POST_PATH, modTwin, { ref })).toMatchObject({ status: 403, body: { code: "not_a_moderator" } });
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_REMOVE_PATH, modTwin, { ref })).toMatchObject({ status: 403, body: { code: "not_a_moderator" } });
+  // The site's own session never reaches moderation, even the owner's.
+  const ownerSite = await f.signInAt(f.site, "apps-owner");
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_REMOVE_PATH, ownerSite, { ref }, f.site)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+  // Made a moderator: the post as it will go, then gone, recorded as theirs.
+  await f.t.run(async (c) => {
+    const user = await c.db.query("users").withIndex("by_authSubject", (q) => q.eq("authSubject", "apps-mod-subject")).first();
+    const row = await c.db.query("communityMemberships").withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", user!._id)).first();
+    await c.db.patch(row!._id, { role: "moderator" });
+  });
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_POST_PATH, modTwin, { ref })).toMatchObject({ status: 200, body: { ok: true, post: { ref, author: "apps-member", text: "Selling my old rope, DM me", mine: false } } });
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_REMOVE_PATH, modTwin, { ref })).toEqual({ status: 200, body: { ok: true } });
+  const root = await f.t.run((c) => c.db.get(c.db.normalizeId("communityInteractionRoots", rootId)!));
+  expect(root?.status).toBe("deleted");
+  const events = await f.t.run((c) => c.db.query("communityInteractionModerationEvents").collect());
+  const moderator = await f.t.run((c) => c.db.query("users").withIndex("by_authSubject", (q) => q.eq("authSubject", "apps-mod-subject")).first());
+  expect(events).toEqual([expect.objectContaining({ eventType: "tombstone", actorUserId: moderator!._id, nextStatus: "deleted" })]);
+  // Gone: nothing more to describe or remove.
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_POST_PATH, modTwin, { ref })).toMatchObject({ status: 404, body: { code: "post_not_found" } });
+  // Another community's post, or a malformed ref: nothing at all.
+  const foreign = await f.t.run(async (c) => {
+    const id = await c.db.insert("communityInteractionRoots", { ...(root as any), _id: undefined, _creationTime: undefined, communityId: f.ids.otherCommunityId, status: "live", idempotencyKey: "foreign" } as any);
+    return `interaction:root:${id}`;
+  });
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_REMOVE_PATH, modTwin, { ref: foreign })).toMatchObject({ status: 404, body: { code: "post_not_found" } });
+  expect(await f.me(COMMUNITY_APP_MY_MODERATION_REMOVE_PATH, modTwin, { ref: "interaction:root:../x" })).toMatchObject({ status: 400 });
+  void ownerTwin; void memberTwin;
+});
+
+test("twin join review: a moderator lists, approves and denies this community's requests; a member can't; a paid community has none to approve", async () => {
+  const f = await twinFixture();
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { entryPolicy: "approval" } as any));
+  const outsider = await f.signInAt(f.twin, "apps-outsider");
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, outsider)).body).toMatchObject({ outcome: "approval_pending" });
+  const member = await f.signInAt(f.twin);
+  expect(await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, member)).toMatchObject({ status: 403, body: { code: "not_a_moderator" } });
+  const owner = await f.signInAt(f.twin, "apps-owner");
+  const listed = await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner);
+  expect(listed).toMatchObject({ status: 200, body: { ok: true, paid: false, requests: [{ name: "apps-outsider", handle: "apps-outsider" }] } });
+  const requestId = listed.body.requests[0].id as string;
+  // A member can't decide it; the site's own session can't either.
+  expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, member, { request_id: requestId })).toMatchObject({ status: 403 });
+  const ownerSite = await f.signInAt(f.site, "apps-owner");
+  expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, ownerSite, { request_id: requestId }, f.site)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
+  // Approved: they're in, and the request is gone from the list.
+  expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, owner, { request_id: requestId })).toEqual({ status: 200, body: { ok: true } });
+  const membership = await f.t.run((c) => c.db.query("communityMemberships").withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", f.ids.outsiderId)).first());
+  expect(membership).toMatchObject({ active: true, role: "member" });
+  expect((await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner)).body.requests).toEqual([]);
+  expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, owner, { request_id: requestId })).toMatchObject({ status: 200 });
+  // Denied: the next asker waits out Studio's cooldown.
+  await f.t.run(async (c) => { await c.db.delete(membership!._id); });
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, outsider)).body).toMatchObject({ outcome: "approval_pending" });
+  const again = (await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner)).body.requests[0].id as string;
+  expect(await f.me(COMMUNITY_APP_MY_REQUEST_DENY_PATH, owner, { request_id: again })).toEqual({ status: 200, body: { ok: true } });
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, outsider)).body).toMatchObject({ outcome: "approval_denied" });
+  // A request of another community, or a malformed id: nothing.
+  expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, owner, { request_id: "../x" })).toMatchObject({ status: 400 });
+  // Paid: admission is checkout only.
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { entryPolicy: "paid_subscription" } as any));
+  expect((await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner)).body).toMatchObject({ ok: true, paid: true });
 });

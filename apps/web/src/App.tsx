@@ -2297,6 +2297,7 @@ export default function App() {
         communityOwnerId: activeCommunity?.owner_id ?? null,
         canManageCommunityMembers: canManageMembersActiveCommunity,
         canReviewCommunityJoinRequests: canReviewJoinRequestsActiveCommunity,
+        canModerateContent: canModerateContentActiveCommunity,
         communityJoinReviewMode: activeCommunityMembersJoinReviewMode,
         communityJoinRequests: communityContextJoinRequests,
         isLoadingCommunityJoinRequests,

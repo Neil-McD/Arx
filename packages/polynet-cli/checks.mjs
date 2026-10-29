@@ -56,6 +56,9 @@ export const PERSONAL_PAGES = [
   { path: "/messages", name: "messages", title: "Messages", ready: true, signIn: true, below: [["conversation", CONVERSATION_SEGMENT]] },
   { path: "/settings", name: "settings", title: "Settings", ready: true, signIn: true, below: [] },
   { path: "/join", name: "join", title: "Join", ready: true, signIn: false, below: [] },
+  // Moderation (owners, admins, moderators): removing one post, and join requests.
+  { path: "/moderate", name: "moderate", title: "Remove a post", ready: true, signIn: true, below: [] },
+  { path: "/requests", name: "requests", title: "Join requests", ready: true, signIn: true, below: [] },
 ];
 
 // Which personal page a path is (exactly, or an address under it, with or

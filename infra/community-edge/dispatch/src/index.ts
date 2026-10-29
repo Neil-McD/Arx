@@ -41,6 +41,7 @@ import { PERSONAL_SOURCE } from "./blocks/personal";
 import { SETTINGS_SOURCE } from "./blocks/settings";
 import { MESSAGES_SOURCE } from "./blocks/messages";
 import { JOIN_SOURCE } from "./blocks/join";
+import { MODERATION_SOURCE } from "./blocks/moderation";
 import {
   plainStyleHash, plainTwinPage, stripFrame, twinPageHeaders, twinPolicy, withTwinHeaders, type StripRewriterClass,
 } from "./twin";
@@ -59,7 +60,7 @@ const BLOCKS: Record<string, string> = {
   discover: DISCOVER_SOURCE,
 };
 // Blocks that only the private twin serves: they read the member's own data.
-const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE, messages: MESSAGES_SOURCE, join: JOIN_SOURCE };
+const TWIN_BLOCKS: Record<string, string> = { personal: PERSONAL_SOURCE, settings: SETTINGS_SOURCE, messages: MESSAGES_SOURCE, join: JOIN_SOURCE, moderation: MODERATION_SOURCE };
 const BLOCKS_PREFIX = "/__polynet/blocks/";
 
 const LIVE_CLIENT = LIVE_CLIENT_BUNDLE.replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");
@@ -241,6 +242,20 @@ const MY_MESSAGES: Record<string, MyRoute> = {
   "/__polynet/me/messages/mute": { method: "POST", backend: "/runtime/app/me/messages/mute", maxBytes: 1024 },
   "/__polynet/me/messages/typing": { method: "POST", backend: "/runtime/app/me/messages/typing", maxBytes: 1024 },
   "/__polynet/me/messages/block": { method: "POST", backend: "/runtime/app/me/messages/block", maxBytes: 1024 },
+};
+
+// Moderation (owners, admins, moderators; the backend decides): a post to
+// remove, by its ref, and the join requests to review, by id.
+const INTERACTION_REF_PATTERN = /^interaction:(root|reply):[A-Za-z0-9_-]{1,64}$/;
+const MY_MODERATION: Record<string, MyRoute> = {
+  "/__polynet/me/moderation/post": { method: "GET", backend: "/runtime/app/me/moderation/post", maxBytes: 0, query: (url) => {
+    const ref = url.searchParams.get("ref") ?? "";
+    return INTERACTION_REF_PATTERN.test(ref) ? { ref } : null;
+  } },
+  "/__polynet/me/moderation/remove": { method: "POST", backend: "/runtime/app/me/moderation/remove", maxBytes: 1024 },
+  "/__polynet/me/requests": { method: "GET", backend: "/runtime/app/me/requests", maxBytes: 0, query: () => ({}) },
+  "/__polynet/me/requests/approve": { method: "POST", backend: "/runtime/app/me/requests/approve", maxBytes: 1024 },
+  "/__polynet/me/requests/deny": { method: "POST", backend: "/runtime/app/me/requests/deny", maxBytes: 1024 },
 };
 
 // Join: the page reads (GET, signed out too) and acts (small JSON POSTs, signed
@@ -847,6 +862,36 @@ function mySettingsAnswer(path: string, answer: Record<string, unknown>, env: En
 
 // Messages: only what the page draws leaves the edge, whatever the backend
 // sends. People by name, handle and avatar; files only at Polynet's storage.
+// Only what the moderation pages show: the post being removed (author, text,
+// whether it's the member's own) and each request's name, handle and photo.
+function myModerationAnswer(path: string, answer: Record<string, unknown>, env: Env): Record<string, unknown> | null {
+  const storage = storageOrigin(env);
+  const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
+  switch (path) {
+    case "/__polynet/me/moderation/post": {
+      const post = (answer.post ?? {}) as Record<string, unknown>;
+      const ref = typeof post.ref === "string" && INTERACTION_REF_PATTERN.test(post.ref) ? post.ref : null;
+      return { post: { ref, author: text(post.author, 120), text: text(post.text, 600), mine: post.mine === true } };
+    }
+    case "/__polynet/me/requests": {
+      const requests = Array.isArray(answer.requests) ? answer.requests.slice(0, 100) : [];
+      return {
+        paid: answer.paid === true,
+        requests: requests.flatMap((raw) => {
+          const row = (raw ?? {}) as Record<string, unknown>;
+          const id = typeof row.id === "string" && /^[A-Za-z0-9_]{1,64}$/.test(row.id) ? row.id : null;
+          if (!id) return [];
+          const handle = typeof row.handle === "string" && /^[a-z0-9_-]{1,32}$/.test(row.handle) ? row.handle : null;
+          const avatar = typeof row.avatar_url === "string" && storage && row.avatar_url.startsWith(`${storage}/api/storage/`) ? row.avatar_url : null;
+          return [{ id, name: text(row.name, 120) ?? "Someone", handle, avatar_url: avatar }];
+        }),
+      };
+    }
+    default:
+      return {};
+  }
+}
+
 function myMessagesAnswer(path: string, answer: Record<string, unknown>, env: Env): Record<string, unknown> | null {
   const storage = storageOrigin(env);
   const stored = (value: unknown) => (typeof value === "string" && storage && value.startsWith(`${storage}/api/storage/`) ? value : null);
@@ -969,6 +1014,7 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (Object.hasOwn(MY_MESSAGES, url.pathname)) return await proxyMine(request, url, env, place, MY_MESSAGES[url.pathname], myMessagesAnswer, "messages_unavailable");
   if (url.pathname === MY_JOIN_PATH && request.method === "GET") return await proxyJoinRead(request, url, env, place);
   if (Object.hasOwn(MY_JOIN, url.pathname)) return await proxyMine(request, url, env, place, MY_JOIN[url.pathname], myJoinAnswer, "join_unavailable");
+  if (Object.hasOwn(MY_MODERATION, url.pathname)) return await proxyMine(request, url, env, place, MY_MODERATION[url.pathname], myModerationAnswer, "moderation_unavailable");
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
   if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
   if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);

@@ -1286,3 +1286,65 @@ test("twin join: each action goes to Studio's core with the twin's session; chec
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false, code: "community_checkout_unavailable", message: "<b>raw</b>" }, { status: 409 })));
   expect(await act("/__polynet/me/join/checkout", checkoutBody)).toEqual([409, { ok: false, code: "community_checkout_unavailable" }]);
 });
+
+// Moderation on the twin: removing a post and reviewing join requests, through
+// /__polynet/me/* (the backend decides who moderates); never on the site.
+const MODERATION_PATHS: Array<[string, "GET" | "POST"]> = [
+  ["/__polynet/me/moderation/post?ref=interaction:root:abc123", "GET"], ["/__polynet/me/moderation/remove", "POST"],
+  ["/__polynet/me/requests", "GET"], ["/__polynet/me/requests/approve", "POST"], ["/__polynet/me/requests/deny", "POST"],
+];
+
+test("twin moderation: the routes and the moderation module exist only on the twin, as same-origin JSON", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  for (const [path, method] of MODERATION_PATHS) {
+    expect((await edge.fetch(settingsCall(SITE, path, method), e)).status, `site ${path}`).toBe(404);
+    for (const site of ["same-site", "cross-site"]) {
+      expect((await edge.fetch(settingsCall(TWIN, path, method, { "sec-fetch-site": site }), e)).status, `${site} ${path}`).toBe(403);
+    }
+    const other = method === "GET" ? "POST" : "GET";
+    expect((await edge.fetch(settingsCall(TWIN, path, other), e)).status, `${other} ${path}`).toBe(405);
+    expect((await edge.fetch(at(TWIN, path, { method, body: method === "POST" ? "{}" : undefined, headers: { "content-type": "application/json" } }), e)).status, path).toBe(401);
+    if (method === "POST") expect((await edge.fetch(settingsCall(TWIN, path, method, { "content-type": "application/x-www-form-urlencoded" }, "a=1"), e)).status, path).toBe(415);
+  }
+  // A post is named only by its ref.
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/moderation/post?ref=../users", "GET"), e)).status).toBe(400);
+  expect((await edge.fetch(at(SITE, "/__polynet/blocks/moderation.js"), e)).status).toBe(404);
+  expect(backend).not.toHaveBeenCalled();
+  const module = await edge.fetch(at(TWIN, "/__polynet/blocks/moderation.js"), e);
+  expect(module.status).toBe(200);
+  const source = await module.text();
+  expect(source).toContain("export function mountModerate");
+  expect(source).toContain("export function mountRequests");
+  expect(source).not.toContain("innerHTML");
+});
+
+test("twin moderation: forwarded with the twin's session; only what the pages show comes back", async () => {
+  resetEdgeCaches();
+  const answers: Record<string, unknown> = {
+    "/runtime/app/me/moderation/post": { ok: true, post: { ref: "interaction:root:abc123", author: "Sam", text: "Selling rope", mine: false, author_user_id: "secret", created_at: "x" } },
+    "/runtime/app/me/requests": { ok: true, paid: false, requests: [
+      { id: "req1", name: "Ana", handle: "ana", avatar_url: "https://evil.example/a.png", email: "ana@example.com" },
+      { id: "../x", name: "Bad" },
+    ] },
+  };
+  const seen: Array<{ path: string; body: string; auth: string | null }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo, init?: RequestInit) => {
+    const url = new URL(typeof input === "string" ? input : input.url);
+    seen.push({ path: url.pathname, body: String(init?.body ?? ""), auth: new Headers(init?.headers).get("authorization") });
+    return Response.json(answers[url.pathname] ?? { ok: true });
+  }));
+  const e = sitesEnv();
+  const post = await (await edge.fetch(settingsCall(TWIN, "/__polynet/me/moderation/post?ref=interaction:root:abc123", "GET"), e)).json();
+  expect(post).toEqual({ ok: true, post: { ref: "interaction:root:abc123", author: "Sam", text: "Selling rope", mine: false } });
+  const requests = await (await edge.fetch(settingsCall(TWIN, "/__polynet/me/requests", "GET"), e)).json();
+  expect(requests).toEqual({ ok: true, paid: false, requests: [{ id: "req1", name: "Ana", handle: "ana", avatar_url: null }] });
+  await edge.fetch(settingsCall(TWIN, "/__polynet/me/requests/approve", "POST", {}, JSON.stringify({ request_id: "req1" })), e);
+  expect(seen.map((call) => [call.path, call.body, call.auth])).toEqual([
+    ["/runtime/app/me/moderation/post", JSON.stringify({ ref: "interaction:root:abc123" }), `Bearer ${TOKEN}`],
+    ["/runtime/app/me/requests", "{}", `Bearer ${TOKEN}`],
+    ["/runtime/app/me/requests/approve", JSON.stringify({ request_id: "req1" }), `Bearer ${TOKEN}`],
+  ]);
+});

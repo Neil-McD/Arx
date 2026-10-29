@@ -280,6 +280,11 @@ class PolynetAccount extends HTMLElement {
       const onSettings = Boolean(session.private_origin) && location.origin === session.private_origin && location.pathname === "/settings";
       // Discover is a page of this site too (/discover, in its frame), so it never leaves.
       everyday.push([messages, "Messages", onMessages], [mine, "Your communities", onMine], [sitePath(session, "/discover"), "Discover communities"], [settings, "Settings", onSettings]);
+      // Who's asking to join, for those who review it here (on the twin; the twin decides).
+      if ((here.role === "owner" || here.role === "admin" || here.role === "moderator") && session.private_origin) {
+        const onRequests = onTwin && location.pathname === "/requests";
+        everyday.splice(everyday.length - 1, 0, [session.private_origin + "/requests", "Join requests", onRequests]);
+      }
       for (const [href, label, here] of everyday) {
         if (href) children.push(h("a", { class: "item", href: href, part: "item", "aria-current": here || href === current ? "page" : null }, [h("span", { class: "label", text: label })]));
       }

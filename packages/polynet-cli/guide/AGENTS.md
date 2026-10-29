@@ -30,7 +30,8 @@ every standard page into it.**
    a block.
 5. **Nothing personal is built by a site:** no direct messages, settings,
    "your communities", join flow or private member data. Polynet serves those
-   pages (`/messages`, `/settings`, `/communities`, `/join`) on the site's
+   pages (`/messages`, `/settings`, `/communities`, `/join`, and moderation:
+   `/moderate`, `/requests`) on the site's
    private twin, in your frame with its scripts removed, and the site's own
    addresses send members there. The shell (`<polynet-account>`, added to
    every page) links them; place it in the frame. Never ship a file at those

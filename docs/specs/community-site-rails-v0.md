@@ -144,7 +144,8 @@ shell's menu ("In this club") and the checks.
 | `/settings` | the member's settings: profile, this community's notifications, leave, sign out (see *Settings* below) | 3b-2 (now), private twin |
 | `/messages`, `/messages/<conversation>`, `/messages/new?to=<handle>` | the member's direct messages (see *Messages* below) | 3b-3 (now), private twin |
 | `/join` | the community's own join page: its pitch and gate, free, approval or paid (see *Join* below) | 3b-4 (now), private twin |
-| `/manage` | community admin | after the personal pages |
+| `/moderate?ref=…&back=…`, `/requests` | moderation: remove one post (Remove on a post opens it), and review join requests (see *Moderation* below) | 3c-1 (now), private twin |
+| `/manage` | community admin | after moderation |
 
 Until `/manage` exists, "Manage this community" opens Studio's community
 settings (`/c/<slug>/settings/community`), not the public join page.
@@ -330,6 +331,30 @@ Endpoints: `GET /__polynet/me/join` (signed out too) and `POST
 only, same-origin, small JSON POSTs (1 KB), forwarded to
 `/runtime/app/me/join*`; every action requires a private session (the site's
 own session, which its code holds, is refused).
+
+## Moderation (3c-1, Oct 28)
+
+Approved by Neil: moderators (and owners and admins) moderate content and
+review join requests; channels, events and members stay with admins. On a
+site, moderation goes through the private twin, so a site's own code never
+moderates (a site session stays member-level for everything):
+
+- **Remove a post.** The chat block shows Remove on others' posts to an
+  owner, admin or moderator (`session.member.role`; display only). It's a
+  link to the twin's `/moderate?ref=<interaction ref>&back=<site path>`,
+  which shows the post's author and text, removes it with Studio's own
+  moderator delete on confirmation (`/__polynet/me/moderation/*`), and links
+  back. A removed post leaves the feeds like an author's own delete; the
+  moderation log records who removed it.
+- **Join requests.** The account menu shows "Join requests" to those who
+  review them, opening the twin's `/requests`: the community's pending
+  requests (name, handle, photo) with Studio's approve and deny. A paid
+  community admits through checkout only, so it has none.
+- **Who may.** The backend decides on every call with the one lens
+  (`requireCommunityModerator`), for the session's own community only: a
+  post or request of another community reads as none at all.
+- **Studio.** Owners, admins and moderators see Delete on anyone's post and
+  reply ("Remove this message for everyone?").
 
 ## Private messages stay private
 

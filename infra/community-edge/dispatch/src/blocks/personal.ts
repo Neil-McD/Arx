@@ -69,6 +69,8 @@ class PolynetPersonal extends HTMLElement {
     if (page === "settings") return this.loadModule("settings", "Couldn't load your settings.", (module, generation) => module.mountSettings(this, generation));
     if (page === "messages") return this.loadModule("messages", "Couldn't load your messages.", (module, generation) => module.mountMessages(this, generation));
     if (page === "join") return this.loadModule("join", "Couldn't load this page.", (module, generation) => module.mountJoin(this, generation));
+    if (page === "moderate") return this.loadModule("moderation", "Couldn't load this page.", (module, generation) => module.mountModerate(this, generation));
+    if (page === "requests") return this.loadModule("moderation", "Couldn't load the join requests.", (module, generation) => module.mountRequests(this, generation));
     // The rest are built next; until then a quiet note in the site's own frame.
     this.show("soon", [h("div", { class: "state", part: "soon" }, [h("p", { class: "muted", text: "This page is coming soon." })])]);
   }

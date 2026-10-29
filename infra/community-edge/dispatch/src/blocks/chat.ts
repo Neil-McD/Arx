@@ -315,6 +315,7 @@ class PolynetChat extends HTMLElement {
       this.communityName = session.community_name;
       this.communitySlug = session.community;
       this.me = session.member;
+      this.privateOrigin = typeof session.private_origin === "string" && /^https:\/\//.test(session.private_origin) ? session.private_origin : null;
       if (!session.signed_in) { this.signedOut(session); return; }
       const pinned = this.getAttribute("channel");
       const channels = await readChannels(polynet);
@@ -733,7 +734,9 @@ class PolynetChat extends HTMLElement {
   }
 
   // React for everyone; Reply on a post in the feed (where the member can
-  // reply); Edit and Delete on the member's own words only.
+  // reply); Edit and Delete on the member's own words only; Remove on anyone
+  // else's for a moderator, which opens the site's private twin to confirm
+  // (only Polynet's code removes a post; a site's page never can).
   buildTools(post, inThread, ui) {
     const ref = post.ref;
     const act = (key, label, onclick, extra) => h("button", Object.assign({
@@ -745,6 +748,13 @@ class PolynetChat extends HTMLElement {
     if (!inThread && this.canReply()) buttons.push(act("reply", "Reply", () => this.openThread(ref, true)));
     if (post.by_me && post.can_edit) buttons.push(act("edit", "Edit", () => this.startEdit(ref, inThread)));
     if (post.by_me) buttons.push(act("delete", "Delete", () => this.toggleUi("confirming", ref, inThread), { "aria-expanded": ui.confirming ? "true" : "false" }));
+    if (!post.by_me && this.canModerate() && /^interaction:(root|reply):/.test(String(ref || ""))) {
+      const back = location.pathname + location.search;
+      buttons.push(h("a", {
+        class: "act", part: "message-action message-action-remove", "data-key": "act:remove", text: "Remove",
+        href: this.privateOrigin + "/moderate?ref=" + encodeURIComponent(ref) + "&back=" + encodeURIComponent(back),
+      }));
+    }
     const tools = document.createDocumentFragment();
     tools.append(
       h("button", {
@@ -754,6 +764,12 @@ class PolynetChat extends HTMLElement {
       h("div", { class: "tools", part: "message-actions", role: "group", "aria-label": "Message actions" }, buttons),
     );
     return tools;
+  }
+
+  // Owners, admins and moderators (the twin decides; this only shows the way there).
+  canModerate() {
+    const role = this.me && this.me.role;
+    return Boolean(this.privateOrigin) && (role === "owner" || role === "admin" || role === "moderator");
   }
 
   buildPicker(post, inThread) {
