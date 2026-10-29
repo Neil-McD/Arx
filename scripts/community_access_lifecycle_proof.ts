@@ -108,7 +108,7 @@ function assertSourceAnchors() {
 
   assertIncludes(communityPublic, "outcome: \"paid_plan_required\"", "paid public join must route to checkout");
   assertIncludes(communityAdmin, "community_paid_checkout_required", "paid approval must be rejected");
-  assertIncludes(communityCore, "await requireCommunityUserNotBlocked({", "shared community gates must enforce blocks");
+  assertIncludes(communityCore, "if (lens.isBlocked) throw new Error(\"community_user_blocked\");", "shared community gates (the one lens) must enforce blocks");
   assertIncludes(billingCore, "String(checkoutSession.status ?? \"\").trim().toLowerCase() !== \"complete\"", "claim redemption requires complete checkout");
   assertIncludes(billingCore, "await requireCommunityUserNotBlocked({", "claim redemption rejects blocked users");
   assertIncludes(communityAdmin, "revokedReason:", "manager removal keeps revoked membership evidence");

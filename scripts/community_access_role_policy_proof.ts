@@ -126,14 +126,16 @@ function assertSourceAnchors() {
     "const isModerator = !isOwner && isMembershipEntitled && role === \"moderator\";",
     "moderator relation depends on membership entitlement",
   );
+  // The one lens (resolveCommunityLens) decides these for every gate.
   assertIncludes(
     communityCore,
-    "const canManageMembers = builderAccess.operational && (isOwner || isAdmin);",
-    "member management requires both role and operational Builder access",
+    "const manager = operational && (isOwner || isAdmin);",
+    "member and resource management require both role and operational Builder access",
   );
+  assertIncludes(communityCore, "manageMembers: manager,", "member management is the manager power");
   assertIncludes(
     communityCore,
-    "const canManageResources = builderAccess.operational && (isOwner || isAdmin);",
+    "manageResources: manager,",
     "resource management excludes moderators and fails closed without Builder access",
   );
   assertIncludes(
@@ -166,10 +168,15 @@ function assertSourceAnchors() {
     "throw new Error(\"community_paid_checkout_required\");",
     "join approval uses paid checkout required domain error",
   );
-  const blockGuardCalls = communityCore.match(/await requireCommunityUserNotBlocked\(\{/g) ?? [];
+  assertIncludes(
+    communityCore,
+    "if (lens.isBlocked) throw new Error(\"community_user_blocked\");",
+    "the lens refuses an actively blocked member",
+  );
+  const lensGateCalls = communityCore.match(/const lens = await requireCommunityLens\(args\);/g) ?? [];
   assert.ok(
-    blockGuardCalls.length >= 3,
-    "expected chat, manager, and moderator gates to enforce active community blocks",
+    lensGateCalls.length >= 3,
+    "expected chat, manager, and moderator gates to go through the lens, which enforces active community blocks",
   );
   assertIncludes(
     communityCore,

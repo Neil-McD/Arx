@@ -5,7 +5,7 @@ import {
   pickMostRelevantCommunityMembership,
   requireCommunityChatAccess,
   resolveCommunityBrandingFields,
-  resolveCommunityMembershipEntitlementState,
+  resolveCommunityLens,
 } from "./communityCore";
 import { registeredSiteOrigin } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -172,8 +172,8 @@ export const listCommunityAppMemberCommunitiesInternal = internalQuery({
       const membership = pickMostRelevantCommunityMembership(memberships as any);
       const community = membership ? await ctx.db.get(membership.communityId) : null;
       if (!membership || !community || !communityIsActive(community as any)) continue;
-      const entitlement = await resolveCommunityMembershipEntitlementState({ ctx, community: community as any, membership, userId: args.userId });
-      if (!entitlement.isEntitled) continue;
+      const lens = await resolveCommunityLens({ ctx, community: community as any, membership, userId: args.userId });
+      if (!lens.membershipEntitled) continue;
       seen.add(communityId);
       picked.push({ community, role: normalizeCommunityRoleForOutput(membership.role) || "member", since: membership.createdAt });
     }

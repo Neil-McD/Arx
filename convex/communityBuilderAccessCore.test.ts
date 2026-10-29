@@ -180,6 +180,8 @@ test("subscription-required access follows attachment, status, and paid-through 
   const grantingCases = [
     { status: "active" as const, currentPeriodEndAt: NOW_MS + 1 },
     { status: "cancel_at_period_end" as const, currentPeriodEndAt: NOW_MS + 1 },
+    // Past due runs while Stripe retries within the period (members' grace).
+    { status: "past_due" as const, currentPeriodEndAt: NOW_MS + 10_000 },
   ];
   for (const [index, granting] of grantingCases.entries()) {
     const fixture = await createFixture({ accessMode: "subscription_required" });
@@ -207,7 +209,7 @@ test("subscription-required access follows attachment, status, and paid-through 
   const deniedCases = [
     { status: "active" as const, currentPeriodEndAt: NOW_MS },
     { status: "cancel_at_period_end" as const, currentPeriodEndAt: NOW_MS },
-    { status: "past_due" as const, currentPeriodEndAt: NOW_MS + 10_000 },
+    { status: "past_due" as const, currentPeriodEndAt: NOW_MS },
     { status: "canceled" as const, currentPeriodEndAt: NOW_MS + 10_000 },
     { status: "ended" as const, currentPeriodEndAt: NOW_MS + 10_000 },
   ];
