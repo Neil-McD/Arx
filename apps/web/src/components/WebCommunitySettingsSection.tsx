@@ -1,5 +1,4 @@
-import { WebCommunityCreatorsSettings } from "./WebCommunityCreatorsSettings";
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, ImageUp, Megaphone } from "lucide-react";
 import { buildCommunityTabPath } from "../../../../shared/webAppRouteState";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
@@ -18,12 +17,21 @@ import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAgentProfileCard } from "./WebCommunityAgentProfileCard";
-import { WebCommunityAppearanceSettings } from "./WebCommunityAppearanceSettings";
-import { WebCommunityOffersSettings } from "./WebCommunityOffersSettings";
-import { WebCommunitySalesPageSettings } from "./WebCommunitySalesPageSettings";
-import { WebCommunitySettingProposals } from "./WebCommunitySettingProposals";
 import { buildCommunitySettingsNav, WebCommunitySettingsNav } from "./WebCommunitySettingsNav";
 import "./WebCommunitySettings.css";
+
+// Panes only the owner and their team open load on demand, so members never
+// download them (scripts/web_bundle_budget_check.mjs).
+const WebCommunityCreatorsSettings = lazy(() =>
+  import("./WebCommunityCreatorsSettings").then((module) => ({ default: module.WebCommunityCreatorsSettings })));
+const WebCommunityAppearanceSettings = lazy(() =>
+  import("./WebCommunityAppearanceSettings").then((module) => ({ default: module.WebCommunityAppearanceSettings })));
+const WebCommunityOffersSettings = lazy(() =>
+  import("./WebCommunityOffersSettings").then((module) => ({ default: module.WebCommunityOffersSettings })));
+const WebCommunitySalesPageSettings = lazy(() =>
+  import("./WebCommunitySalesPageSettings").then((module) => ({ default: module.WebCommunitySalesPageSettings })));
+const WebCommunitySettingProposals = lazy(() =>
+  import("./WebCommunitySettingProposals").then((module) => ({ default: module.WebCommunitySettingProposals })));
 import { WebCommunityAccessSettings, WebCommunityMyAccessCard } from "./WebCommunityAccess";
 import { useCommunityAccessGatewayForSession, type CommunityAccessGateway } from "../controllers/useWebCommunityAccessGateway";
 import { useWebCommunityFrame } from "../controllers/useWebCommunityFrame";
@@ -1064,6 +1072,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               <SaveStatusPill status={autosave.status} onRetry={autosave.retry} />
             ) : null}
           </header>
+          <Suspense fallback={<div className="pn-settings-loading" role="status"><span className="pn-settings-spinner" aria-hidden="true" />Loading…</div>}>
           {canManageCommunitySettings && resolvedActiveCommunity ? (
             <WebCommunitySettingProposals communityId={resolvedActiveCommunity.id} session={props.session} />
           ) : null}
@@ -1123,6 +1132,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
             <CommunityArchiveCard activeCommunity={resolvedActiveCommunity} state={state} actions={actions} />
           ) : null}
+          </Suspense>
         </div>
       </div>
     </div>

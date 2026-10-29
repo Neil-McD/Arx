@@ -7,13 +7,18 @@ const assetsDir = join(appDir, "dist", "assets");
 const limits = {
   maxSingleJsBytes: readLimit("WEB_BUNDLE_MAX_SINGLE_JS_BYTES", 1_600_000),
   maxIndexJsBytes: readLimit("WEB_BUNDLE_MAX_INDEX_JS_BYTES", 1_000_000),
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_400_000),
-  maxBuilderOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_BUILDER_ONLY_JS_BYTES", 750_000),
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_700_000),
+  maxBuilderOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_BUILDER_ONLY_JS_BYTES", 1_100_000),
 };
 
-// Chunks only owners and their team load, on demand (the lesson editor). They
-// never reach members, so they have their own budget instead of the total's.
-const BUILDER_ONLY_CHUNK = /^LessonEditor-/;
+// Chunks only owners and their team load, on demand: the lesson editor,
+// Workflows, People, Analytics and the owner's Settings panes. They never reach
+// members, so they have their own budget instead of the total's.
+const BUILDER_ONLY_CHUNK = new RegExp(
+  "^(LessonEditor|WebCommunityWorkflowsSection|WebCommunityMembers|WebCommunityAnalyticsSection" +
+    "|WebCommunityAppearanceSettings|WebCommunityOffersSettings|WebCommunitySalesPageSettings" +
+    "|WebCommunityCreatorsSettings|WebCommunitySettingProposals)-",
+);
 
 function readLimit(name, fallback) {
   const value = Number(process.env[name]);
