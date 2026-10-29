@@ -9,13 +9,24 @@ export const POLYNET_FOUNDER_PLAN_INCLUDED_COMMUNITIES = 1;
 export const POLYNET_FOUNDER_PLAN_PRICING_VERSION = "founder_plan_luna_v1";
 export const POLYNET_COMMUNITY_PLATFORM_FEE_BPS = 290;
 
+// Free: the community always runs; only its agent needs a plan (the Agent
+// plan). Every new community is free. Grandfathered (communities from before
+// the Builder plan) means the same thing; subscription_required (a community
+// that ran only while its plan was paid) is legacy, migrated to free.
+export const COMMUNITY_BUILDER_ACCESS_FREE = "free" as const;
 export const COMMUNITY_BUILDER_ACCESS_GRANDFATHERED = "grandfathered" as const;
 export const COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED =
   "subscription_required" as const;
 
 export type CommunityBuilderAccessMode =
+  | typeof COMMUNITY_BUILDER_ACCESS_FREE
   | typeof COMMUNITY_BUILDER_ACCESS_GRANDFATHERED
   | typeof COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED;
+
+// Runs without any plan (free, or grandfathered).
+export function communityRunsFree(mode: CommunityBuilderAccessMode | null | undefined): boolean {
+  return mode === COMMUNITY_BUILDER_ACCESS_FREE || mode === COMMUNITY_BUILDER_ACCESS_GRANDFATHERED;
+}
 
 export function parseCommunityBuilderAccessMode(
   value: unknown,
@@ -24,6 +35,7 @@ export function parseCommunityBuilderAccessMode(
     return COMMUNITY_BUILDER_ACCESS_GRANDFATHERED;
   }
   if (
+    value === COMMUNITY_BUILDER_ACCESS_FREE ||
     value === COMMUNITY_BUILDER_ACCESS_GRANDFATHERED ||
     value === COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED
   ) {

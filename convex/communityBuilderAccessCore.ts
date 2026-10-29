@@ -1,4 +1,5 @@
 import {
+  communityRunsFree,
   founderSubscriptionKeepsCommunityRunning,
   parseCommunityBuilderAccessMode,
   type CommunityBuilderAccessMode,
@@ -12,12 +13,14 @@ import {
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 
 export type CommunityBuilderAccessSource =
+  | "free"
   | "grandfathered"
   | "operator_comp"
   | "founder_subscription"
   | "none";
 
 export type CommunityBuilderAccessReason =
+  | "free"
   | "grandfathered"
   | "operator_comp"
   | "active_subscription"
@@ -121,14 +124,14 @@ export async function resolveCommunityBuilderAccess(args: {
     });
   }
 
-  if (parsedAccessMode === "grandfathered") {
+  if (communityRunsFree(parsedAccessMode)) {
     return {
       accessMode: parsedAccessMode,
       lifecycleStatus: lifecycle.status,
       lifecycleGeneration: lifecycle.generation,
       operational: true,
-      source: "grandfathered",
-      reason: "grandfathered",
+      source: parsedAccessMode as "free" | "grandfathered",
+      reason: parsedAccessMode as "free" | "grandfathered",
       subscriptionId: null,
       subscriptionStatus: null,
       currentPeriodEndAt: null,

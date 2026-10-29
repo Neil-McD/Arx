@@ -19,7 +19,7 @@ import { recordCriticalAuditEvent } from "./criticalAudit";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { isPlatformHomeCommunity } from "./platformHomeCommunity";
 import {
-  COMMUNITY_BUILDER_ACCESS_GRANDFATHERED,
+  communityRunsFree,
   parseCommunityBuilderAccessMode,
 } from "../shared/founderPlan";
 import {
@@ -266,7 +266,7 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
   }
   if (
     !operatorComped &&
-    builderAccessMode !== COMMUNITY_BUILDER_ACCESS_GRANDFATHERED
+    !communityRunsFree(builderAccessMode)
   ) {
     throw new Error("community_restore_payment_required");
   }

@@ -1088,7 +1088,7 @@ export default defineSchema({
     ),
     lifecycleGeneration: v.optional(v.number()),
     builderAccessMode: v.optional(
-      v.union(v.literal("grandfathered"), v.literal("subscription_required")),
+      v.union(v.literal("free"), v.literal("grandfathered"), v.literal("subscription_required")),
     ),
     builderKnowledgeSetupPending: v.optional(v.boolean()),
     builderKnowledgeBuildStage: v.optional(

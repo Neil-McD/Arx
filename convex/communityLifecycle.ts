@@ -1,6 +1,8 @@
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { communityIsActive } from "../shared/communityLifecycle";
+import { recordCriticalAuditEvent } from "./criticalAudit";
 import {
   type CommunityLike,
   type CommunityPricePointLike,
@@ -42,6 +44,7 @@ import { ensureGeneralChannel } from "./communityChannelCore";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import {
+  COMMUNITY_BUILDER_ACCESS_FREE,
   COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,
   founderSubscriptionStatusGrantsAccess,
 } from "../shared/founderPlan";
@@ -565,6 +568,40 @@ async function upsertCommunitySettingsPricePoints(args: {
   });
 }
 
+// Pricing v2 (free dashboard): a community that ran only while its Builder plan
+// was paid becomes free. Its plan, if any, stays attached as the community's
+// Agent plan. Hand-run, in batches, until it reports none left; each change is
+// audited.
+export const migrateSubscriptionRequiredCommunitiesToFreeInternal = internalMutation({
+  args: { limit: v.optional(v.number()), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
+    const nowMs = Date.now();
+    const changed: string[] = [];
+    for await (const community of ctx.db.query("communities")) {
+      if (changed.length >= limit) break;
+      if (community.builderAccessMode !== COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED) continue;
+      changed.push(String(community._id));
+      if (args.dryRun) continue;
+      await ctx.db.patch(community._id, { builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE, updatedAt: nowMs });
+      await recordCriticalAuditEvent(ctx, {
+        eventKey: `community_builder_access_freed:${String(community._id)}`,
+        eventType: "community_builder_access_freed",
+        severity: "info",
+        status: "succeeded",
+        communityId: community._id,
+        provider: "polynet",
+        metadata: { from: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED, to: COMMUNITY_BUILDER_ACCESS_FREE },
+        createdAt: nowMs,
+      });
+    }
+    return { dryRun: args.dryRun === true, changed: changed.length, communityIds: changed };
+  },
+});
+
+// Live communities one owner may have (the platform owner is exempt).
+export const FREE_COMMUNITIES_PER_OWNER = 10;
+
 export const createCommunity = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -624,8 +661,17 @@ export const createCommunity = mutation({
       })) {
         throw new Error("founder_subscription_inactive");
       }
-    } else if (!operatorComped) {
-      throw new Error("community_funding_required_before_create");
+    }
+    // Creating is free; a plan bought first still attaches below. Without
+    // payment as the brake, an owner has a bounded number of live communities.
+    if (!operatorComped) {
+      const owned = await ctx.db
+        .query("communities")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .take(200);
+      if (owned.filter((row) => communityIsActive(row as any)).length >= FREE_COMMUNITIES_PER_OWNER) {
+        throw new Error("community_owner_limit_reached");
+      }
     }
     const slug = normalizeSlug(args.slug);
     const existing = await ctx.db
@@ -663,7 +709,7 @@ export const createCommunity = mutation({
       name,
       lifecycleStatus: "active",
       lifecycleGeneration: 0,
-      builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,
+      builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,
       builderKnowledgeSetupPending: true,
       oneLiner,
       avatarUrl,
