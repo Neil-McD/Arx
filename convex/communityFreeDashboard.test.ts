@@ -95,6 +95,13 @@ test("free dashboard: restoring a free community counts against the cap, as crea
   }
   const restore = () => asOwner.mutation((api as any).communityColdArchive.restoreCommunityWithoutPayment, { communityId: archivedId, lifecycleGeneration: 1 });
   await expect(restore()).rejects.toThrow("community_owner_limit_reached");
+  // Its old plan, ended by archive cleanup, doesn't exempt it.
+  await t.run((ctx) => ctx.db.insert("founderSubscriptions", {
+    ownerUserId: ownerId, communityId: archivedId, provider: "stripe", providerCustomerId: "cus_r", providerSubscriptionId: "sub_r", providerPriceId: "price_r",
+    status: "ended", cancelAtPeriodEnd: false, lastProviderEventCreatedAt: NOW, currentPeriodStartAt: NOW - 2000, currentPeriodEndAt: NOW - 1000,
+    attachedAt: NOW - 2000, createdAt: NOW, updatedAt: NOW,
+  } as any));
+  await expect(restore()).rejects.toThrow("community_owner_limit_reached");
   // One live community archived: there's room, and it comes back.
   const live = await t.run((ctx) => ctx.db.query("communities").withIndex("by_slug", (q) => q.eq("slug", "restore-live-0")).first());
   await t.run((ctx) => ctx.db.patch(live!._id, { lifecycleStatus: "archived" } as any));
