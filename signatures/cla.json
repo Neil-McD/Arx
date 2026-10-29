@@ -1,4 +1,13 @@
 {
   "claDocument": "https://github.com/Neil-McD/Arx/blob/main/CLA.md",
-  "signatures": []
+  "signatures": [
+    {
+      "login": "the2hourclo",
+      "id": 239114467,
+      "signedAt": "2026-10-29T12:56:59.589Z",
+      "pullRequest": 288,
+      "commentId": 6497283766,
+      "claDocument": "https://github.com/Neil-McD/Arx/blob/main/CLA.md"
+    }
+  ]
 }
