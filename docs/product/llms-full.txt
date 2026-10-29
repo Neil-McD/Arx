@@ -996,7 +996,7 @@ The cash path is simple: configure the community, define the paid access model, 
 - Builder payouts depend on payout provider readiness.
 - Every community operates free; hosted AI requires an Agent plan per community.
 - Each community that uses Polynet-hosted AI needs its own verified $79 monthly Agent plan.
-- An owner may have up to 10 live communities (archived ones don't count).
+- An owner may have up to 10 live free communities (archived ones don't count); one created with its own Agent plan is never capped.
 - Create Community goes straight to setup. A plan bought first is attached to the community created next, exactly once.
 - Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
 - A community without an Agent plan can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its agent is off.
@@ -1996,7 +1996,7 @@ Community operation is resolved in this order:
 3. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Agent plan). Community operation never does.
 4. Membership and role: only after the community is operational do membership and role determine what a user may do.
 
-Every community operates free: new communities are created `free`, grandfathered communities keep operating, and subscription-required communities are migrated to free. Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities (the operator is exempt); archived ones don't count.
+Every community operates free: new communities are created `free`, grandfathered communities keep operating, and subscription-required communities are migrated to free. Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities created free; a community created with its own Agent plan is never capped, the operator is exempt, and archived ones don't count.
 
 When an Agent plan lapses or its cycle's AI allowance is spent, hosted AI pauses; nothing else changes. A past-due plan keeps the community operating while Stripe retries within the period, but hosted AI pauses until payment succeeds. Funding never mutates or deletes the community, memberships, visibility, content, or history.
 

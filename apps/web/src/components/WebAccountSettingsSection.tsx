@@ -92,6 +92,7 @@ export function WebAccountSettingsSection(
       })
     : null;
   const builderIsOptional =
+    builderAttentionCommunity?.builder_access_mode === "free" ||
     builderAttentionCommunity?.builder_access_mode === "grandfathered";
 
   return (

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
@@ -59,6 +59,33 @@ test("free dashboard: an owner has a bounded number of live communities; archive
     .rejects.toThrow("community_owner_limit_reached");
   await t.run((ctx) => ctx.db.patch(ids[0], { lifecycleStatus: "archived" } as any));
   await expect(asOwner.mutation(api.communityLifecycle.createCommunity, { name: "One more", slug: "busy-one-more" })).resolves.toMatchObject({ slug: "busy-one-more" });
+});
+
+test("free dashboard: a founder at the cap still creates a community that brings its own Agent plan", async () => {
+  vi.stubEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID", "price_agent_plan");
+  vi.stubEnv("POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS", "200000");
+  vi.stubEnv("POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS", "1200000");
+  vi.stubEnv("POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS", "1000000");
+  try {
+    const t = convexTest(schema, modules);
+    const ownerId = await founder(t, "funded-founder");
+    const asOwner = t.withIdentity({ subject: "funded-founder-subject" });
+    for (let index = 0; index < FREE_COMMUNITIES_PER_OWNER; index += 1) {
+      await asOwner.mutation(api.communityLifecycle.createCommunity, { name: `Club ${index}`, slug: `funded-club-${index}` });
+    }
+    await expect(asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Free one", slug: "funded-free-one" }))
+      .rejects.toThrow("community_owner_limit_reached");
+    const subscriptionId = await t.run((ctx) => ctx.db.insert("founderSubscriptions", {
+      ownerUserId: ownerId, provider: "stripe", providerCustomerId: "cus_f", providerSubscriptionId: "sub_f", providerPriceId: "price_agent_plan",
+      status: "active", cancelAtPeriodEnd: false, lastProviderEventCreatedAt: NOW, currentPeriodStartAt: NOW - 1000, currentPeriodEndAt: NOW + 86_400_000,
+      createdAt: NOW, updatedAt: NOW,
+    } as any));
+    const funded = await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Funded one", slug: "funded-one", founderSubscriptionId: subscriptionId });
+    expect(funded).toMatchObject({ slug: "funded-one" });
+    expect(await t.run((ctx) => ctx.db.get(subscriptionId))).toMatchObject({ communityId: funded.id });
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test("pricing v2 migration: subscription-required communities become free, audited, plans untouched; free and grandfathered stay", async () => {

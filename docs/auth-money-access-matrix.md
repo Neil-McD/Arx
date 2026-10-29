@@ -42,7 +42,7 @@ Archive is the outer authority boundary and always wins over payment, grandfathe
 ## 3) Founder Funding
 
 - Every community operates free: new communities are created `free`, grandfathered ones stay free, and legacy subscription-required communities are migrated to free (`migrateSubscriptionRequiredCommunitiesToFreeInternal`, audited). Polynet-hosted AI requires the community's Agent plan.
-- Creating a community needs no payment; an owner may have at most 10 live communities (the operator is exempt).
+- Creating a community needs no payment; an owner may have at most 10 live communities created free (the operator is exempt, and a community created with its own Agent plan is never capped).
 - Each active Builder cycle includes up to `$20` raw GPT 5.6 Luna model cost for that community.
 - `active` and `cancel_at_period_end` grant only through the paid-through timestamp. `past_due` keeps the community operating while Stripe retries inside the current paid-through period (the same grace paid members get) but grants no hosted AI (`founderSubscriptionKeepsCommunityRunning` vs `founderSubscriptionStatusGrantsAccess`). `canceled`, `ended`, expired, revoked, ambiguous, or malformed state fails closed.
 - Archived free and grandfathered communities restore free after cleanup and return without AI unless an Agent plan is separately active.

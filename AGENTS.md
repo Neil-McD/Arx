@@ -135,11 +135,13 @@ every change must respect:
 ### Money
 - Redirects are UX only; Stripe webhooks are authoritative.
 - `checkout_finalize` stays idempotent.
-- Each active founder subscription funds exactly one community. The operator
-  grant (one active `operatorRoles.owner` row) is the only complimentary
-  funding. Historical BYOK grants and credentials grant nothing.
-- A founder may own any number of communities: no account-level cap, each
-  community needs its own funding, and unfunded drafts cannot stack.
+- Communities are free to create and run; Polynet-hosted AI is paid. Each
+  active founder subscription (the Agent plan) funds exactly one community's
+  agent. The operator grant (one active `operatorRoles.owner` row) is the only
+  complimentary funding. Historical BYOK grants and credentials grant nothing.
+- A founder may own any number of funded communities: no account-level cap on
+  communities created with their own Agent plan. Unfunded (free) communities
+  are bounded at 10 live per owner, so they cannot stack without limit.
 - Every paid-member charge carries the same 2.9% application fee; Stripe
   processing fees are separate.
 

@@ -2490,8 +2490,11 @@ export default function App() {
     publicRoute: shellPublicRoute,
     holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
+      // "Start your community free": sign in (and finish account setup), then
+      // community setup. The Agent plan is bought later, from the community.
       onStartBuilderPurchase: () => {
-        void publicBuilderCheckout.startPurchase();
+        if (session) openNewCommunityPurchaseFlow();
+        else requireSignIn({ reason: "create_community", payload: { draft: null } });
       },
       builderPurchaseStatus: publicBuilderCheckout.status,
       builderPurchaseError: publicBuilderCheckout.error,

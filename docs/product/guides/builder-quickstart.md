@@ -82,7 +82,7 @@ The cash path is simple: configure the community, define the paid access model, 
 - Builder payouts depend on payout provider readiness.
 - Every community operates free; hosted AI requires an Agent plan per community.
 - Each community that uses Polynet-hosted AI needs its own verified $79 monthly Agent plan.
-- An owner may have up to 10 live communities (archived ones don't count).
+- An owner may have up to 10 live free communities (archived ones don't count); one created with its own Agent plan is never capped.
 - Create Community goes straight to setup. A plan bought first is attached to the community created next, exactly once.
 - Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
 - A community without an Agent plan can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its agent is off.

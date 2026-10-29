@@ -25,7 +25,7 @@ assert.match(
 // Pricing v2: creating is free; the brake is a bounded number of live
 // communities per owner (the platform owner is exempt).
 assert.doesNotMatch(lifecycle, /community_funding_required_before_create/);
-assert.match(lifecycle, /FREE_COMMUNITIES_PER_OWNER = \d+;[\s\S]*if \(!operatorComped\) \{[\s\S]*community_owner_limit_reached/);
+assert.match(lifecycle, /FREE_COMMUNITIES_PER_OWNER = \d+;[\s\S]*if \(!operatorComped && !founderSubscription\) \{[\s\S]*community_owner_limit_reached/);
 assert.doesNotMatch(lifecycle, /max_communities/);
 assert.match(
   founderInference,

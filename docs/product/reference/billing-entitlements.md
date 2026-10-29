@@ -26,7 +26,7 @@ Community operation is resolved in this order:
 3. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Agent plan). Community operation never does.
 4. Membership and role: only after the community is operational do membership and role determine what a user may do.
 
-Every community operates free: new communities are created `free`, grandfathered communities keep operating, and subscription-required communities are migrated to free. Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities (the operator is exempt); archived ones don't count.
+Every community operates free: new communities are created `free`, grandfathered communities keep operating, and subscription-required communities are migrated to free. Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities created free; a community created with its own Agent plan is never capped, the operator is exempt, and archived ones don't count.
 
 When an Agent plan lapses or its cycle's AI allowance is spent, hosted AI pauses; nothing else changes. A past-due plan keeps the community operating while Stripe retries within the period, but hosted AI pauses until payment succeeds. Funding never mutates or deletes the community, memberships, visibility, content, or history.
 
