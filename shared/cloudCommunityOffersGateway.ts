@@ -137,6 +137,7 @@ const OFFER_UPGRADE_ERRORS: Record<string, string> = {
   offer_price_missing: "This offer has no price yet.",
   offer_not_for_sale: "This offer isn't for sale right now.",
   offer_not_found: "This offer isn't for sale right now.",
+  offer_checkout_already_paying: "You already pay for this community. Choose Upgrade on your offer to move up.",
   community_checkout_unavailable: "Checkout is temporarily unavailable for this community.",
 };
 

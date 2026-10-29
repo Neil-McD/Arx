@@ -295,6 +295,27 @@ describe("offers in a community", () => {
     await expect(f.asSam.mutation(api.communityOffers.setCommunityBaseOfferPrice, { communityId: f.communityId, price: null })).rejects.toThrow();
   });
 
+  test("a price that isn't a number is refused, and the community stays paid", async () => {
+    const f = await fixture();
+    for (const amountBaseUnits of [Number.NaN, Number.POSITIVE_INFINITY, 99]) {
+      await expect(f.asOwner.mutation(api.communityOffers.setCommunityBaseOfferPrice, {
+        communityId: f.communityId, price: { billingPeriod: "monthly", amountBaseUnits },
+      })).rejects.toThrow("offer_price_invalid");
+    }
+    expect(await f.t.run((ctx) => ctx.db.get(f.communityId))).toMatchObject({ entryPolicy: "paid_subscription" });
+    const prices = await f.t.run((ctx) => ctx.db.query("communityPricePoints").collect());
+    expect(prices.filter((row) => row.isCurrent).map((row) => row.amountBaseUnits)).toEqual([13000]);
+  });
+
+  test("a member who already pays can't start a second checkout; others can", async () => {
+    const f = await fixture();
+    const check = (userId: any) => f.t.query(internalApi.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal, { communityId: f.communityId, userId });
+    await expect(check(f.samId)).rejects.toThrow("offer_checkout_already_paying");
+    await expect(check(f.leeId)).resolves.toEqual({ ok: true });
+    // Access given by hand has no plan to switch, so Anna buys at checkout.
+    await expect(check(f.annaId)).resolves.toEqual({ ok: true });
+  });
+
   test("a track sold through Consulting: a Membership member reads the first lesson free and sees the rest locked, without their text", async () => {
     const f = await fixture();
     const { key } = await f.asOwner.mutation(api.communityOffers.saveCommunityOffer, {

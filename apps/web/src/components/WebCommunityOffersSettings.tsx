@@ -26,7 +26,7 @@ function errorText(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
   if (message.includes("offer_name_taken")) return "Another offer already has that name.";
   if (message.includes("offer_name_required")) return "Give the offer a name.";
-  if (message.includes("offer_price_invalid")) return "Enter a price of at least $1.";
+  if (message.includes("offer_price_invalid")) return "Enter a price of at least $1, like 130.";
   if (/community_(payout_access_required|stripe_connect_required|stripe_connect_not_ready)/.test(message)) {
     return "Connect Stripe in General › Payments first, then Membership can be paid.";
   }
@@ -176,6 +176,10 @@ export function WebCommunityOffersSettings<SessionT>(props: {
     if (!draft || !props.session) return;
     const offer = data?.offers.find((item) => item.key === draft.key) ?? null;
     const amount = Math.round(Number(draft.amount) * 100);
+    if ((!offer?.is_base || draft.paid) && !(Number.isSafeInteger(amount) && amount >= 100)) {
+      setError(errorText(new Error("offer_price_invalid")));
+      return;
+    }
     const ok = await run("save", async () => {
       await saveCloudCommunityOffer({
         session: props.session!, communityId: props.communityId, ...(draft.key ? { key: draft.key } : {}),

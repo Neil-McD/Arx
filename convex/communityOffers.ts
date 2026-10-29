@@ -278,7 +278,8 @@ async function setBaseOfferPrice(ctx: any, args: any) {
   const userId = await actor(ctx, args);
   const { community } = await requireCommunityOwner({ ctx, communityId: args.communityId, userId });
   const amount = args.price ? Math.round(args.price.amountBaseUnits) : null;
-  if (amount !== null && (amount < 100 || amount > 10_000_000)) throw new CommunityOfferError("offer_price_invalid");
+  // NaN passes both comparisons, and the settings save reads it as "no price".
+  if (amount !== null && (!Number.isSafeInteger(amount) || amount < 100 || amount > 10_000_000)) throw new CommunityOfferError("offer_price_invalid");
   await saveCommunitySettingsCore(ctx, {
     userId,
     communityId: args.communityId,

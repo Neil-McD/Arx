@@ -1368,6 +1368,21 @@ export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
       communityId: args.communityId,
       userId: args.userId,
     });
+    // A member who already pays moves up with Upgrade, which switches their
+    // plan; a second checkout would bill them for two.
+    const membership = (await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
+      .first()) as CommunityMembershipLike | null;
+    if (membership && communityMembershipRowIsActive(membership)) {
+      const subscriptions = (await ctx.db
+        .query("communitySubscriptions" as any)
+        .withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id))
+        .take(20)) as Array<Record<string, any>>;
+      if (subscriptions.some((row) => ["active", "past_due", "cancel_at_period_end"].includes(String(row.status)))) {
+        throw new Error("offer_checkout_already_paying");
+      }
+    }
     return { ok: true };
   },
 });
