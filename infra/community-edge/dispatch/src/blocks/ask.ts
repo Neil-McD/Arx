@@ -3,7 +3,8 @@
 // conversation with the community agent. The history, a box to ask in, the
 // reply as it streams, and starter questions while the conversation is
 // empty. A question that fails stays in the box. It says plainly that only
-// the member sees it. Kept as text (a String.raw literal: no backticks or
+// the member sees it, and that the agent is off when it is (no Agent plan, or
+// its owner turned it off): no box to ask in then. Kept as text (a String.raw literal: no backticks or
 // template placeholders inside) so the edge serves exactly what is reviewed.
 export const ASK_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block: <polynet-ask>. ui.js loads it on pages that place the tag.
@@ -45,6 +46,7 @@ const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   ".send:disabled { opacity: .4; cursor: default; }",
   ".problem { margin: 0; padding: .375em .25em 0; font-size: .875em; }",
   ".problem:empty { display: none; }",
+  ".off { display: grid; justify-items: start; gap: .5em; padding: .75em .25em; } .off p { margin: 0; }",
   "@media (pointer: coarse) { .send, .starter { min-height: 44px; } .input { font-size: max(1em, 16px); } }",
 ].join("\n");
 
@@ -96,9 +98,10 @@ class PolynetAsk extends HTMLElement {
       h("div", { class: "box", part: "box" }, [this.input, this.send]),
       this.problem,
     ]);
+    this.off = h("div", { class: "off", part: "agent-off", role: "status", hidden: true });
     this.announce = h("p", { class: "sr", role: "status" });
     this.frame = h("div", { class: "ask", part: "ask", role: "region", "aria-label": "Ask the community agent", hidden: true }, [
-      h("slot", { name: "header" }), this.privacy, this.log, this.starters, this.form, this.announce,
+      h("slot", { name: "header" }), this.privacy, this.log, this.starters, this.form, this.off, this.announce,
     ]);
     this.state = h("div", { class: "state", part: "state" });
     this.root.replaceChildren(...styled(this.root, STYLE), this.frame, this.state);
@@ -126,6 +129,9 @@ class PolynetAsk extends HTMLElement {
 
   async load() {
     const generation = ++this.generation;
+    this.isOff = false;
+    this.form.hidden = false;
+    this.off.hidden = true;
     this.show("loading", [h("p", { class: "muted", role: "status", text: "Loading your conversation…" })]);
     try {
       const session = await polynet.session();
@@ -136,12 +142,29 @@ class PolynetAsk extends HTMLElement {
       if (generation !== this.generation) return;
       this.messages = history.filter((message) => message && (message.role === "user" || message.role === "assistant"));
       this.show("ready");
+      if (session.agent_on === false) this.agentOff(session);
       this.render();
       this.toBottom();
     } catch (error) {
       if (generation !== this.generation) return;
       this.fail(error);
     }
+  }
+
+  // The conversation so far stays readable; in place of the box, that the agent
+  // is off, and (to the owner) where to turn it on.
+  agentOff(session) {
+    this.isOff = true;
+    this.form.hidden = true;
+    this.starters.hidden = true;
+    const owner = session && session.member && session.member.role === "owner";
+    this.off.replaceChildren(
+      h("p", { text: "The community agent is off here." }),
+      owner && session.agent_plan_url
+        ? h("a", { class: "primary", part: "agent-plan", href: session.agent_plan_url, text: "Turn on the Agent plan" })
+        : h("p", { class: "muted", text: owner ? "Turn on the Agent plan in Polynet." : "Ask the community owner to turn it on." }),
+    );
+    this.off.hidden = false;
   }
 
   async fail(error) {
@@ -162,7 +185,7 @@ class PolynetAsk extends HTMLElement {
 
   render() {
     this.log.replaceChildren(...this.messages.map((message) => this.item(message)));
-    this.starters.hidden = this.messages.length > 0 || this.busy;
+    this.starters.hidden = this.messages.length > 0 || this.busy || this.isOff;
   }
 
   item(message) {
@@ -205,7 +228,7 @@ class PolynetAsk extends HTMLElement {
   // in under it; if it fails, both go and the question is back in the box.
   async ask(raw) {
     const text = String(raw || "").trim();
-    if (!text || this.busy || this.getAttribute("state") !== "ready") return;
+    if (!text || this.busy || this.isOff || this.getAttribute("state") !== "ready") return;
     if (text.length > MAX_TEXT_CHARS) {
       this.problem.textContent = "A question can be up to " + MAX_TEXT_CHARS.toLocaleString() + " characters; this one has " + text.length.toLocaleString() + ".";
       return;
@@ -258,6 +281,7 @@ class PolynetAsk extends HTMLElement {
       if (!this.input.value.trim()) this.input.value = text;
       this.autosize();
       if (error && error.code === "sign_in_required") { this.fail(error); return; }
+      if (error && error.code === "agent_off") { this.agentOff(await polynet.session().catch(() => ({}))); return; }
       const why = error && error.message && error.message !== error.code ? error.message : "The agent couldn't answer just now.";
       this.problem.replaceChildren("Not answered. " + why + " ", h("button", {
         class: "quiet", part: "retry", type: "button", text: "Try again", onclick: () => this.ask(this.input.value),
@@ -267,7 +291,7 @@ class PolynetAsk extends HTMLElement {
       if (generation === this.generation) {
         this.busy = false;
         this.send.disabled = false;
-        this.starters.hidden = this.messages.length > 0;
+        this.starters.hidden = this.messages.length > 0 || this.isOff;
       }
     }
   }

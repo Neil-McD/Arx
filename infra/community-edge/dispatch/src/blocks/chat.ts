@@ -314,6 +314,8 @@ class PolynetChat extends HTMLElement {
       if (generation !== this.generation) return;
       this.communityName = session.community_name;
       this.communitySlug = session.community;
+      // The agent is offered in @-mentions only while it answers here.
+      this.agentOn = session.agent_on !== false;
       this.me = session.member;
       this.privateOrigin = typeof session.private_origin === "string" && /^https:\/\//.test(session.private_origin) ? session.private_origin : null;
       if (!session.signed_in) { this.signedOut(session); return; }
@@ -1009,7 +1011,7 @@ class PolynetChat extends HTMLElement {
     const channel = this.channel;
     return {
       community: this.communitySlug || "", channel: channel.slug, channelName: channel.name || channel.slug, thread: thread || null,
-      canWrite: thread ? this.canReply() : channel.canPost === true, agentName: this.communityName || null, me: this.me || null,
+      canWrite: thread ? this.canReply() : channel.canPost === true, agentName: (this.agentOn && this.communityName) || null, me: this.me || null,
     };
   }
 

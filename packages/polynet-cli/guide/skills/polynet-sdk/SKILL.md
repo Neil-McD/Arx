@@ -168,6 +168,12 @@ Each `onDelta` has the whole text so far: replace, don't append. The first
 words can take a few seconds while the agent uses tools.
 `agentHistory()` returns the member's earlier conversation.
 
+The agent can be off (no Agent plan, or its owner turned it off): then
+`session.agent_on` is `false` and `askAgent` throws `agent_off`. Say "The
+community agent is off here" in place of the box, give the owner
+(`member.role === "owner"`) a link to `session.agent_plan_url`, and don't
+offer `askAgent: true` in channels.
+
 ## Everything else
 
 | Need | Call |

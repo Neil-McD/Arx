@@ -336,7 +336,7 @@ export function safeReturnPath(raw: string | null): string {
   return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
 }
 
-type PublicIdentity = { name: string; one_liner: string | null; about: string | null; member_count: number };
+type PublicIdentity = { name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean };
 const IDENTITY_CACHE_MS = 60_000;
 const identityCache = new Map<string, { identity: PublicIdentity | null; until: number }>();
 
@@ -503,8 +503,12 @@ async function handleAuth(request: Request, url: URL, route: Route, place: Place
       community_one_liner: identity?.one_liner ?? null,
       community_about: identity?.about ?? null,
       member_count: identity?.member_count ?? null,
+      // Whether the community agent answers here (null: not known just now).
+      agent_on: typeof identity?.agent_on === "boolean" ? identity.agent_on : null,
       join_url: joinUrl,
       studio_url: studioUrl,
+      // Where the owner turns the Agent plan on, in Polynet.
+      agent_plan_url: new URL("/settings/account", env.POLYNET_AUTH_URL).toString(),
     };
     if (!TOKEN_PATTERN.test(token)) return json(200, { signed_in: false, ...base });
     return json(200, { signed_in: true, ...base, live: { url: env.POLYNET_LIVE_URL, token: await deriveWatchToken(token) } });

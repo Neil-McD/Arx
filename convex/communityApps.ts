@@ -7,7 +7,9 @@ import {
   resolveCommunityBrandingFields,
   resolveCommunityLens,
 } from "./communityCore";
+import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { registeredSiteOrigin } from "./communitySites";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -80,6 +82,20 @@ export const registerCommunityDomainInternal = internalMutation({
 });
 
 // Removing a domain ends its sign-in immediately; its sessions stop resolving.
+// Whether the community agent answers here: its owner hasn't turned it off, and
+// an Agent plan (or the operator) pays for it. Sites say "off" up front rather
+// than taking a question that can't be answered.
+export async function communityAgentIsOn(ctx: any, communityId: any): Promise<boolean> {
+  const agent = await readCanonicalCommunityAgentContext(ctx, communityId);
+  if (!agent?.agentEnabled) return false;
+  return (await resolveCommunityInferenceFundingAdmission(ctx, communityId)).ok;
+}
+
+export const communityAgentIsOnInternal = internalQuery({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => await communityAgentIsOn(ctx, args.communityId),
+});
+
 // What anyone may see about a community on its own site, signed in or not: the
 // same identity its public join page shows. Members, posts and events stay private.
 export const getCommunityPublicIdentityByOriginInternal = internalQuery({
@@ -97,6 +113,7 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
       one_liner: text((community as any).oneLiner, 500),
       about: text((community as any).about, 4000),
       member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
+      agent_on: await communityAgentIsOn(ctx, community._id),
     };
   },
 });
