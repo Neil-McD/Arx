@@ -161,6 +161,7 @@ export default {
   // Streams fake.agent.reply in two pieces; hold pauses after the first.
   askAgent: async (text, options) => {
     record("askAgent", [text, options.key || null]);
+    if (fake.agent.off) { const error = new Error("The community agent is off here."); error.code = "agent_off"; throw error; }
     if (fake.agent.fail > 0) { fake.agent.fail -= 1; const error = new Error("The agent is busy right now."); error.code = "agent_failed"; throw error; }
     const reply = fake.agent.reply;
     const half = reply.slice(0, Math.ceil(reply.length / 2));
@@ -798,6 +799,17 @@ test("tagging the community agent inserts its mention token and asks it", async 
   expect(text).toBe("@Run Club what's the route?");
   expect(options.askAgent).toBe(true);
   expect(options.mentions).toEqual([]);
+  await page.close();
+});
+
+test("with the community agent off, tagging doesn't offer it", async () => {
+  const page = await open((fake) => { fake.session = { ...fake.session, agent_on: false }; });
+  const chat = page.locator("polynet-chat");
+  await expect.poll(() => chat.locator("[part~=message]").count()).toBe(5);
+  await chat.locator("[part=footer] [part=composer-input]").focus();
+  await page.keyboard.type("@ru");
+  await page.waitForTimeout(150);
+  expect(await chat.locator("[part=footer] [part~=mention-agent]").count()).toBe(0);
   await page.close();
 });
 
@@ -1982,6 +1994,40 @@ test("ask: starters while the conversation is empty, the site's own too; signed 
   expect(await askOf(out).evaluate((el) => el.shadowRoot!.textContent)).not.toContain("long run");
   expect(await calls(out, "askAgent")).toEqual([]);
   await out.close();
+});
+
+test("ask: with the agent off, the conversation stays readable, there's no box, and only the owner gets a way to turn it on", async () => {
+  const off = (fake: ReturnType<typeof fixture>, role: string) => {
+    conversation(fake);
+    fake.session = { ...fake.session, agent_on: false, agent_plan_url: "https://polynet.test/settings/account", member: { ...fake.session.member, role } };
+  };
+  const member = await open((fake) => off(fake, "member"), frame(), "/ask");
+  const ask = askOf(member);
+  await expect.poll(() => ask.getAttribute("state")).toBe("ready");
+  expect(await ask.locator("[part~=message]").count()).toBe(2);
+  expect(await ask.locator("[part=agent-off]").textContent()).toBe("The community agent is off here.Ask the community owner to turn it on.");
+  expect(await ask.locator("[part=input]").isVisible()).toBe(false);
+  expect(await ask.locator("[part=agent-plan]").count()).toBe(0);
+  await member.close();
+
+  const owner = await open((fake) => { off(fake, "owner"); fake.agent.history = []; }, frame(), "/ask");
+  const mine = askOf(owner);
+  await expect.poll(() => mine.getAttribute("state")).toBe("ready");
+  expect(await mine.locator("[part=agent-plan]").getAttribute("href")).toBe("https://polynet.test/settings/account");
+  expect(await mine.locator("[part=starters]").isVisible()).toBe(false);
+  expect(await calls(owner, "askAgent")).toEqual([]);
+  await owner.close();
+
+  // Turned off while the page was open: the question isn't shown as asked, and the box goes.
+  const late = await open((fake) => { conversation(fake); fake.agent.off = true; }, frame(), "/ask");
+  const ask2 = askOf(late);
+  await expect.poll(() => ask2.getAttribute("state")).toBe("ready");
+  await ask2.locator("[part=input]").fill("Still there?");
+  await ask2.locator("[part=input]").press("Enter");
+  await expect.poll(() => ask2.locator("[part=agent-off]").isVisible()).toBe(true);
+  expect(await ask2.locator("[part~=message]").count()).toBe(2);
+  expect(await ask2.locator("[part=input]").isVisible()).toBe(false);
+  await late.close();
 });
 
 test("ask: the privacy line sits inside a site's border and radius, clear of the conversation", async () => {

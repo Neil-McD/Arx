@@ -357,6 +357,31 @@ test("an owner's agent in a front end stays in the member lane", async () => {
   expect(JSON.parse(String(outputItem?.output))).toMatchObject({ tool_name: "polynet_list", success: false, error_code: "semantic_not_found" });
 });
 
+test("with the agent off here, a question is refused as agent_off and never kept unanswered", async () => {
+  const f = await fixture();
+  const token = await f.signIn("agent-member");
+  const calls = fakeModel("unused");
+  const history = async () => ((await (await f.post(COMMUNITY_APP_AGENT_MESSAGES_PATH, f.asEdge(token), {})).json()) as any).messages;
+  const isOn = () => f.t.query(internal.communityApps.communityAgentIsOnInternal, { communityId: f.ids.communityId });
+  expect(await isOn()).toBe(true);
+
+  // No Agent plan.
+  const plan = await f.t.run(async (c) => (await c.db.query("founderSubscriptions").collect())[0]);
+  await f.t.run((c) => c.db.patch(plan._id, { status: "canceled", currentPeriodEndAt: Date.now() - 1 } as any));
+  expect(await isOn()).toBe(false);
+  const noPlan = await f.post(COMMUNITY_APP_AGENT_PATH, f.asEdge(token), { text: "Anyone there?", message_key: "off-no-plan" });
+  expect([noPlan.status, await noPlan.json()]).toEqual([409, { ok: false, code: "agent_off", message: "The community agent is off here." }]);
+
+  // A plan, but the owner turned the agent off.
+  await f.t.run((c) => c.db.patch(plan._id, { status: "active", currentPeriodEndAt: Date.now() + 2_592_000_000 } as any));
+  await f.t.run((c) => c.db.insert("communityAgentConfigs", { communityId: f.ids.communityId, systemPrompt: "", agentEnabled: false, createdAt: Date.now(), updatedAt: Date.now() }));
+  expect(await isOn()).toBe(false);
+  expect((await f.post(COMMUNITY_APP_AGENT_PATH, f.asEdge(token), { text: "Anyone there?", message_key: "off-disabled" })).status).toBe(409);
+
+  expect(await history()).toEqual([]);
+  expect(calls.length).toBe(0);
+});
+
 test("front-end agent turns are refused without the edge, without input, or without membership", async () => {
   const f = await fixture();
   const token = await f.signIn("agent-member");

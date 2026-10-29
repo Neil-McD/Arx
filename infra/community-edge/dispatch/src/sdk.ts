@@ -25,9 +25,12 @@ let communityInfo = null;
 
 // Who is here: { signed_in, community, community_name, community_one_liner,
 // community_about, member_count, member, join_url, studio_url, site_origin,
-// private_origin, live }. private_origin: the site's private twin, where the
-// member's own pages are (/communities); link there, never fetch from it.
-// join_url: the community's own join page (/join, on the private twin).
+// private_origin, agent_on, agent_plan_url, live }. private_origin: the site's
+// private twin, where the member's own pages are (/communities); link there,
+// never fetch from it. join_url: the community's own join page (/join, on the
+// private twin). agent_on: whether the community agent answers here (false:
+// it's off, so askAgent fails with "agent_off"; null: unknown).
+// agent_plan_url: where the owner turns the Agent plan on.
 // The community fields are public; member is { name, handle, avatar_url, role }
 // when signed in, else null.
 async function session(options) {

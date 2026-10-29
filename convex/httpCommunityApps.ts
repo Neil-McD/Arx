@@ -354,6 +354,11 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       } catch {
         return reply(403, { ok: false, code: "not_a_member", message: "Join this community to use your agent here." });
       }
+      // Off here (no Agent plan, or its owner turned it off): say so before the
+      // question is kept, so it never sits in the conversation unanswered.
+      if (!(await ctx.runQuery(internal.communityApps.communityAgentIsOnInternal, { communityId: session.communityId as any }))) {
+        return reply(409, { ok: false, code: "agent_off", message: "The community agent is off here." });
+      }
       const member = { userId: session.userId, authSubject: session.authSubject };
       const turnCtx = trustedMemberTurnContext(ctx, member);
       // The dock saves the member's message before the turn; so does a front end.

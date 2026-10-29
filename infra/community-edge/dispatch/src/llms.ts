@@ -151,6 +151,9 @@ session() -> {
                        // role: "owner", "admin", "moderator" or "member"
   join_url,            // the community's own join page (/join, on its private twin)
   studio_url,          // where owners and admins manage it in Polynet Studio
+  agent_on,            // public: whether the community agent answers here
+                       // (false: it's off; null: not known just now)
+  agent_plan_url,      // where the owner turns the Agent plan on, in Polynet
   live                 // used by watch(); ignore it
 }
 
@@ -596,6 +599,8 @@ Failed calls throw PolynetError with .code, .message and .status. Codes:
 - not_ready: you called something before awaiting session().
 - upload_failed, live_unavailable, agent_unavailable, agent_failed: show
   .message and let the member retry.
+- agent_off: the community agent is off here. Don't offer to retry; see
+  "The community agent".
 - any other code (for example a permission or rate limit): show .message.
 
 ## Chat
@@ -733,6 +738,12 @@ It is the same conversation the member has on the community's Agent page in
 Polynet, and the one <polynet-ask> (on /ask) shows; use that block rather
 than building your own. In channels, post(..., { askAgent: true }) asks it
 publicly.
+
+The agent can be off: the community has no Agent plan, or its owner turned
+it off. session().agent_on is then false and askAgent throws agent_off. Say
+"The community agent is off here" instead of a way to ask (to the owner,
+member.role "owner", link agent_plan_url to turn it on), and don't offer
+askAgent in channels.
 
 ## Rendering
 

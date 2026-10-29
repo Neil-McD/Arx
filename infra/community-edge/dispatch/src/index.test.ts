@@ -192,10 +192,12 @@ test("the community's own Worker never receives Polynet's cookies", async () => 
 
 test("the session endpoint gives every visitor the community's public identity, and a signed-in page its watch-only token", async () => {
   resetEdgeCaches();
-  const backend = vi.fn(async () => Response.json({ ok: true, community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12 } }));
+  const backend = vi.fn(async () => Response.json({ ok: true, community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, agent_on: false } }));
   vi.stubGlobal("fetch", backend);
   const identity = {
     community: "apps-community", community_name: "Apps Club", community_one_liner: "We build.", community_about: "About us.", member_count: 12,
+    // Whether the community agent answers here, and where its owner turns it on.
+    agent_on: false, agent_plan_url: "https://polynet.example.com/settings/account",
     join_url: "https://polynet.example.com/c/apps-community", studio_url: "https://polynet.example.com/c/apps-community/settings/community",
     // Off the sites domain there's no private twin.
     site_origin: ORIGIN, private_origin: null,
