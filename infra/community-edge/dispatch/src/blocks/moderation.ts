@@ -114,7 +114,7 @@ class Moderate {
     const actions = [remove];
     if (this.backUrl) actions.push(h("a", { class: "quiet", part: "moderate-back", href: this.backUrl, text: "Cancel" }));
     this.block.show("ready", [h("div", { class: "moderate", part: "moderate" }, [
-      h("p", { text: post.mine ? "Remove your post for everyone?" : "Remove this post for everyone? It's gone from the community, and only moderators see who removed it." }),
+      h("p", { text: post.mine ? "Remove your post for everyone?" : "Remove this post for everyone? It's gone from the community for good." }),
       h("blockquote", { class: "quote", part: "quote" }, [
         h("span", { class: "quote-author", part: "quote-author", text: String(post.author || "A member") }),
         h("span", { part: "quote-text", text: String(post.text || "") }),
