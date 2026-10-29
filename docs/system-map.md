@@ -426,14 +426,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `publicAppUrl`.
 - **Hosting:** Vercel `polynet` (production, www.polynet.ai) and `polynet-staging`.
 - **Known hot spot:** `App.tsx` (3,100 lines).
-- **Community looks (proposed):** each community's theme (colours per scheme,
-  fonts, type, corners, density), saved themes and brand. Members see the
-  published theme inside the community; managers edit a draft in Settings →
-  Appearance and publish it. The theme also writes the `--polynet-*` site
-  tokens. Agents read and write `/builder/theme.json` and `/builder/brand.json`.
-  Code: `communityThemes`, `communitySavedThemes`, `communityBrands`;
-  `shared/communityTheme.ts`. Tables: `communityThemes`, `communitySavedThemes`,
-  `communityBrands`. Contract: [community-theme-v1.md](community-theme-v1.md).
 
 ### 18. Release, CI and the factory — Keep
 
@@ -443,6 +435,48 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `secret-scan.yml`, `cla.yml`), `docs/receipts/`.
 - **Contracts:** [alpha-release-workflow.md](alpha-release-workflow.md); factory
   rules in [AGENTS.md](../AGENTS.md) §9.
+
+### 19. Fork additions — Proposed (each needs Neil's OK and its own PR)
+
+Built in the2hourclo/Polynet and tested there; listed so the map stays whole.
+
+- **Looks:** themes, layouts and brands per community, saved themes, a
+  member's own layout choice. Code: `communityThemes`, `communityLayouts`,
+  `communityBrands`, `communitySavedThemes`. Tables: `communityThemes`,
+  `communityLayouts`, `communityBrands`, `communitySavedThemes`,
+  `communityMemberLayoutPreferences`.
+- **Lessons and progress:** lesson validators, per-member progress, page
+  revisions, skill tracks, YouTube chapters, embed values. Code:
+  `communityLessonValidators`, `communityResourceProgress`,
+  `communityLessonTracks`, `youtubeChapters`, `communityEmbedValues`. Tables:
+  `communityResourceProgress`, `communityResourceRevisions`,
+  `communityLessonTracks`, `youtubeVideoChapters`, `communityEmbedValues`.
+- **Post cards:** polls and forms shared in posts. Code: `communityPostCards`,
+  `communityPostCardRead`. Tables: `communityInteractionPolls`,
+  `communityInteractionPollVotes`, `communityInteractionFormShares`,
+  `communityInteractionFormResponses`.
+- **Members database:** properties, values, events, saved views, bulk actions,
+  referrals. Code: `communityClients`. Tables: `communityClientProperties`,
+  `communityClientValues`, `communityClientSettings`, `communityClientEvents`,
+  `communityClientViews`, `communityClientBulkActions`, `communityReferrals`.
+- **Pods:** invite-only rooms in Classroom. Code: `communityPods`.
+- **Offers (risk-high):** the offer ladder and upgrades. Code:
+  `communityOffers`, `communityOfferAccessCore`, `communityOfferCheckout`.
+  Tables: `communityOffers`.
+- **Access integrations (risk-high):** outside services that check who may use
+  them, license keys, Continue with Polynet. Code: `communityAccess`,
+  `communityAccessSecrets`, `communityAccessSync`, `httpCommunityAccess`.
+  Tables: `communityAccessGrants`, `communityAccessMembers`,
+  `communityMemberLicenseKeys`, `communityAccessIntegrations`,
+  `communityAccessSignInCodes`, `communityAccessDeliveryStates`,
+  `communityAccessEvents`.
+- **Test members (risk-high, touches sign-in):** an owner goes through the
+  community as a new member. Code: `communityTestMembers`,
+  `communityTestMemberCore`, `communityTestMemberAutoplay`. Tables:
+  `communityTestMembers`.
+- **Agent parity:** every Settings change as an agent operation, and changes an
+  owner applies. Code: `polynetBuilderSettings`, `polynetMemberSelfSettings`,
+  `communitySettingProposals`. Tables: `communitySettingProposals`.
 
 ## Scheduled jobs
 

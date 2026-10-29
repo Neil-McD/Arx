@@ -38,7 +38,9 @@ export async function resolveMemberServiceChannel(args: {
   if (!channel || channel.communityId !== membership.communityId
     || channel.status !== "active" || channel.accessMode !== "restricted") return unavailable;
   try {
-    const actorArgs = { ctx, communityId: membership.communityId, userId: membership.userId };
+    // The welcome flow holds the member out of rooms for now; it does not change
+    // which room is theirs, so a join rule can still set it up during the hold.
+    const actorArgs = { ctx, communityId: membership.communityId, userId: membership.userId, allowWelcome: true };
     const member = await resolveCommunityChannelActor(actorArgs);
     const agent = await resolveCommunityChannelActor({ ...actorArgs, kind: "community_agent" });
     const memberAccess = await getCommunityChannelCapabilities({ ctx, channel, actor: member });
@@ -81,7 +83,8 @@ export async function requireMemberFormServiceAudience(args: {
     if (!communityMembershipRowIsActive(participant) ||
       grant.membershipActivationSequence !== (participant.activationSequence ?? 0)) continue;
     try {
-      const actor = await resolveCommunityChannelActor({ ctx, communityId: membership.communityId, userId: participant.userId });
+      // A participant still in the welcome flow counts as the reader they will become.
+      const actor = await resolveCommunityChannelActor({ ctx, communityId: membership.communityId, userId: participant.userId, allowWelcome: true });
       const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
       if (capabilities.canRead && participant._id !== membership._id && !actor.isManager) {
         throw new Error("workflow_form_audience_unavailable");

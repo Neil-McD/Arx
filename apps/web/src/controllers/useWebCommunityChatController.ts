@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
+import { readTestMemberRun } from "../../../../shared/testMemberRun";
 import type { CommittedMention } from "../components/communityMentionAutocomplete";
 import type { WebCommunityReplyTarget } from "./communityRootReplyTarget";
 import {
@@ -148,6 +149,11 @@ function mapCommunityComposerErrorMessage(error: unknown): string {
   if (message.includes("interaction_mention_everybody_edit_create_not_allowed")) {
     return "Create a new top-level post to notify everybody.";
   }
+  if (message.includes("community_attachment_claim_invalid")) {
+    return "An attachment didn't finish uploading. Remove it and add it again.";
+  }
+  // Never show a raw server trace ("[Request ID: …] Server Error Uncaught Error: …").
+  if (/\[Request ID:|Server Error|Uncaught Error/.test(message)) return "Your message didn't send. Try again.";
   return message;
 }
 
@@ -191,6 +197,12 @@ async function ingestAttachments(
   onError: (message: string) => void,
 ): Promise<WebCommunityMessageAttachment[]> {
   if (files.length === 0) return existing;
+  // Uploads go through an HTTP route that acts as the signed-in owner, so a
+  // test member's post can't claim them. Say so instead of failing on Send.
+  if (readTestMemberRun()) {
+    onError("Attachments aren't available in a test run. Post text instead.");
+    return existing;
+  }
   const remaining = Math.max(0, MAX_WEB_ATTACHMENTS_PER_MESSAGE - existing.length);
   if (remaining === 0) {
     onError(`You can attach up to ${MAX_WEB_ATTACHMENTS_PER_MESSAGE} files per message.`);

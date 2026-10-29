@@ -41,7 +41,7 @@ for (const source of [contracts, webContentController, controller] as const) {
 
 assert.match(
   core,
-  /body_md: row\.bodyMd \?\? null,[\s\S]*body_chars: communityResourceBodyChars\(row\)/,
+  /body_md: (?:row\.)?bodyMd \?\? null,[\s\S]*body_chars: communityResourceBodyChars\(row\)/,
   "Convex resource mapper must expose both hydrated body_md and body_chars",
 );
 assert.match(
@@ -61,12 +61,12 @@ assert.match(
 );
 assert.match(
   resources,
-  /export const listCommunityResources = query\([\s\S]*\.map\(\(row\) => mapCommunityResourceRowWithBody\(ctx, row, userIdCache, moduleNameCache\)\)/,
+  /export const listCommunityResources = query\([\s\S]*\.map\(async \(row\) => \{[\s\S]*mapCommunityResourceRowWithBody\(ctx, row, \{ canManage: canManageResources \}, userIdCache, moduleNameCache\)/,
   "main Resources UI list query must use the hydrated row mapper",
 );
 assert.match(
   resources,
-  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const row = await hydrateCommunityResourceBody\(ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
+  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const row = await hydrateCommunityResourceBody\(ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = (?:String\(row\.bodyMd \?\? ""\)|memberLessonBody\(row\))[\s\S]*body_md: bodySlice/,
   "single member-visible resource reads must hydrate split body content before slicing response text",
 );
 assert.match(
@@ -76,7 +76,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)/,
+  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource(?:, \{ canManage: true \})?\)/,
   "builder resource reads must hydrate split body content before exposing draft or source rows",
 );
 assert.match(
@@ -122,7 +122,7 @@ assert.match(
 );
 assert.match(
   viewer,
-  /const renderedBodyMarkdown = useMemo\([\s\S]*renderMarkdown\(trimmedBody, \{ embedStandaloneMedia: true, headingLevelOffset: 1 \}\)[\s\S]*\[hasBody, trimmedBody\]/,
+  /const renderedBodyMarkdown = useMemo\([\s\S]*renderMarkdown\([\s\S]*CONTENT_MARKDOWN_OPTIONS,[\s\S]*headingLevelOffset: 1,[\s\S]*\}, \[shownBody,/,
   "resource body markdown should be memoized and hierarchy-scoped so unrelated reader state changes do not rebuild the media subtree",
 );
 console.log("community resource content hydration contract proof passed");

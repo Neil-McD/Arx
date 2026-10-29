@@ -10,20 +10,20 @@ export function formatWorkflowMilestoneAge(
   nowMs = Date.now(),
 ): string {
   const enteredAtMs = new Date(enteredAt).getTime();
-  if (!Number.isFinite(enteredAtMs)) return "Milestone timing unavailable";
+  if (!Number.isFinite(enteredAtMs)) return "Stage timing unavailable";
   const elapsedMs = Math.max(0, nowMs - enteredAtMs);
   if (elapsedMs < MINUTE_MS) return "Entered just now";
   if (elapsedMs < HOUR_MS) {
-    return `In this milestone ${Math.floor(elapsedMs / MINUTE_MS)}m`;
+    return `In this stage ${Math.floor(elapsedMs / MINUTE_MS)}m`;
   }
   if (elapsedMs < DAY_MS) {
-    return `In this milestone ${Math.floor(elapsedMs / HOUR_MS)}h`;
+    return `In this stage ${Math.floor(elapsedMs / HOUR_MS)}h`;
   }
   const days = Math.floor(elapsedMs / DAY_MS);
-  if (days < 14) return `In this milestone ${days}d`;
-  if (days < 60) return `In this milestone ${Math.floor(days / 7)}w`;
-  if (days < 365) return `In this milestone ${Math.floor(days / 30)}mo`;
-  return `In this milestone ${Math.floor(days / 365)}y`;
+  if (days < 14) return `In this stage ${days}d`;
+  if (days < 60) return `In this stage ${Math.floor(days / 7)}w`;
+  if (days < 365) return `In this stage ${Math.floor(days / 30)}mo`;
+  return `In this stage ${Math.floor(days / 365)}y`;
 }
 
 export function WebCommunityWorkflowMemberStub(props: {
@@ -35,7 +35,7 @@ export function WebCommunityWorkflowMemberStub(props: {
   );
   const enteredAt = new Date(props.member.current_milestone_entered_at);
   const enteredAtTitle = Number.isFinite(enteredAt.getTime())
-    ? `Entered this milestone ${enteredAt.toLocaleString()}`
+    ? `Entered this stage ${enteredAt.toLocaleString()}`
     : undefined;
   const status = props.member.workflow_completed_at ? "Workflow complete" : milestoneAge;
 

@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
 import { resolveSelfCommunityMembershipContext } from "./communityMembershipContextCore";
+import { intakeCommunityAgentTurn } from "./communityAgentConciergeCore";
 
 const modules = import.meta.glob(["./communityMemberWorkflows.ts", "./_generated/**/*.*s"]);
 const mutate = api.communityMemberWorkflows.setBuilderMemberServiceChannel;
@@ -137,4 +138,24 @@ test("cross-community membership cannot be targeted", async () => {
     await ctx.db.patch(s.f.membershipId, { communityId: foreign });
   });
   await expect(s.set(s.f.channelId)).rejects.toThrow("member_not_found");
+});
+
+test("the member's own posts in their guide channel go to the agent without an @mention; others' don't", async () => {
+  const s = await fixture();
+  await s.set(s.f.channelId);
+  const post = (actorUserId: any, channelId: any, key: string) => s.t.run(async ctx => {
+    const now = Date.now();
+    const rootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: s.f.communityId, channelId, actorType: "human", actorUserId, kind: "discussion", status: "live",
+      visibilityScope: "community", contentSummary: "What should I do first?", replyCount: 0, reactionSummary: [],
+      idempotencyKey: key, createdAt: now, updatedAt: now,
+    } as any);
+    const result = await intakeCommunityAgentTurn({ ctx, communityId: s.f.communityId, rootId, nowMs: now });
+    return `${result.trigger_kind}:${result.status}`;
+  });
+  expect(await post(s.f.userId, s.f.channelId, "guide-post")).toBe("direct_reply:queued");
+  // Someone else posting in that room (the owner looking in) still needs an @mention.
+  expect(await post(s.f.ownerId, s.f.channelId, "owner-post")).toBe("null:ignored");
+  const generalId = await s.t.run(ctx => ctx.db.insert("communityChannels", { communityId: s.f.communityId, name: "General", slug: "general", accessMode: "all_members", postingPolicy: "members", status: "active", position: 0, createdAt: Date.now(), updatedAt: Date.now() } as any));
+  expect(await post(s.f.userId, generalId, "general-post")).toBe("null:ignored");
 });

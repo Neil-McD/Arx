@@ -94,6 +94,12 @@ const READ_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
       type: ["string", "null"],
       maxLength: 180,
     },
+    lesson: {
+      type: "object",
+      additionalProperties: true,
+      description:
+        "Resource pages only: board placement (stage, stage_order, order), kind, minutes, video_url, gate and summary, plus intro_md, platform variants, slides and commands derived from the body.",
+    },
   },
 };
 
@@ -204,10 +210,21 @@ const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
     name: { type: "string", minLength: 1, maxLength: 180 },
     title: { type: "string", minLength: 1, maxLength: 180 },
     description_md: { type: ["string", "null"], maxLength: 1_200 },
-    body_md: { type: ["string", "null"], maxLength: 20_000 },
+    body_md: {
+      type: ["string", "null"],
+      maxLength: 240_000,
+      description:
+        "create_page / edit_page: the page's Markdown. Reading a page returns its earlier versions under revisions; read builder/resources/<revision id>.json for one's body_md, and send it (with its title) in edit_page to restore it.",
+    },
     module_status: {
       type: ["string", "null"],
       enum: ["draft", "live", null],
+    },
+    lesson_style: {
+      type: "string",
+      enum: ["article", "video"],
+      description:
+        "create_module / edit_module: how the course's lessons read. article = a clean newsletter-style page (default); video = a classic video course with the lesson text on a card under the video.",
     },
     resource_status: {
       type: ["string", "null"],
@@ -216,6 +233,22 @@ const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
     type: { type: "string", minLength: 1, maxLength: 64 },
     url: { type: ["string", "null"], maxLength: 2_048 },
     pinned: { type: "boolean" },
+    lesson: {
+      type: "object",
+      additionalProperties: false,
+      description:
+        "create_page / edit_page: board, library and wizard presentation. Send {} to clear. Platform versions (### In <Platform>), slides (## Slides), callouts (a quote starting > [!TIP], [!NOTE], [!IMPORTANT], [!ACTION] or [!WARNING]; any text after the marker on that first line, e.g. > [!TIP] One tool first, is the optional callout title, and no type label is shown) and fenced commands stay in body_md.",
+      properties: {
+        kind: { type: "string", enum: ["lesson", "build", "checkpoint", "prompt", "skill", "video", "doc"] },
+        stage: { type: "string", maxLength: 80 },
+        stage_order: { type: "integer", minimum: 0, maximum: 999 },
+        order: { type: "integer", minimum: 0, maximum: 9_999 },
+        minutes: { type: "integer", minimum: 0, maximum: 600 },
+        video_url: { type: "string", maxLength: 2_048 },
+        gate: { type: "boolean" },
+        summary: { type: "string", maxLength: 280 },
+      },
+    },
   },
 };
 

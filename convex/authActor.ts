@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
+import { isTestMemberAuthSubject } from "./communityTestMemberCore";
 import { isAnonymousAuthSubject, normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 
 type UserRow = {
@@ -412,6 +413,8 @@ export async function resolveAuthenticatedActorByTrustedSubject(args: {
 }): Promise<AuthenticatedActor> {
   const authSubject = normalizeIdValue(args.authSubject);
   if (!authSubject) throw new Error("auth_subject_required");
+  // Trusted subjects come from actions and workers; test members run neither.
+  if (isTestMemberAuthSubject(authSubject)) throw new Error("test_member_unavailable_here");
   const actor = await findActorByResolvedSubject({
     ctx: args.ctx,
     authSubject,
@@ -650,6 +653,9 @@ export const resolveAuthenticatedActorInternal = internalQuery({
     authSubject: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Actions resolve their user here; they reach payments, providers and
+    // agents, so a test member never runs one.
+    if (isTestMemberAuthSubject(args.authSubject)) throw new Error("test_member_unavailable_here");
     return await resolveAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,

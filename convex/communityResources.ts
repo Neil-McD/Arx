@@ -5,6 +5,13 @@ import {
   sha256HexText,
 } from "./secretCrypto";
 import {
+  normalizeCommunityLessonFields,
+  parseCommunityLessonElements,
+  redactCommunityLessonAnswers,
+  projectCommunityLessonBody,
+  type CommunityLessonFields,
+} from "../shared/communityLessonContract";
+import {
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
   communityResourceBodyChars,
@@ -24,6 +31,7 @@ import {
   normalizeOptionalText,
   normalizeOptionalUrl,
   normalizeResourceRole,
+  normalizeResourceModuleLessonStyle,
   normalizeResourceModuleStatus,
   normalizeResourceSourceIngestionKind,
   normalizeResourceSourceIngestionStatus,
@@ -38,6 +46,7 @@ import {
   requireResourceStatusForWrite,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
+  welcomeLessonIsLive,
 } from "./communityCore";
 import {
   revokeCommunityResourceMemoryProjection,
@@ -46,10 +55,15 @@ import {
 import {
   deleteCommunityResourceBodyContent,
   hydrateCommunityResourceBody,
+  normalizeAuthoredCommunityResourceBodyMd,
   normalizeCommunityResourceBodyMd,
   writeCommunityResourceBodyContent,
+  listCommunityResourceRevisionRows,
+  type CommunityResourceRevisionLike,
 } from "./communityResourceContent";
+import { COMMUNITY_RESOURCE_BODY_MAX_CHARS, communityLessonSections } from "../shared/communityLessonSections";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
+import { readCommunityPaidLockedLessonIds } from "./communityLessonTracks";
 import {
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
@@ -96,6 +110,9 @@ const COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS = 240;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS = 14 * 24 * 60 * 60 * 1000;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_OPERATIONS = 25;
+// A changeset is one stored record, so its page bodies share one budget that
+// keeps it well inside the database's record size. A page body alone always fits.
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_BODY_CHARS = 250_000;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_SUMMARY_MAX_CHARS = 2000;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_EXPIRED_MESSAGE =
@@ -130,11 +147,12 @@ const GITHUB_SOURCE_PROVIDER = "github" as const;
 async function mapCommunityResourceRowWithBody(
   ctx: any,
   row: CommunityResourceLike,
+  viewer: { canManage: boolean },
   userIdCache?: Map<string, string | null>,
   moduleNameCache?: Map<string, string | null>,
 ) {
   const hydrated = await hydrateCommunityResourceBody(ctx, row) ?? row;
-  return await mapCommunityResourceRow(ctx, hydrated, userIdCache, moduleNameCache);
+  return await mapCommunityResourceRow(ctx, hydrated, userIdCache, moduleNameCache, viewer);
 }
 
 type CommunitySourceCrawlJobLike = {
@@ -214,6 +232,7 @@ type CommunityResourceBuilderChangesetOperation =
       name: string;
       description_md?: string | null;
       module_status?: "draft" | "live";
+      lesson_style?: "article" | "video";
     }
   | {
       op: "edit_module";
@@ -222,6 +241,7 @@ type CommunityResourceBuilderChangesetOperation =
       name?: string;
       description_md?: string | null;
       module_status?: "draft" | "live";
+      lesson_style?: "article" | "video";
     }
   | {
       op: "create_page";
@@ -234,6 +254,7 @@ type CommunityResourceBuilderChangesetOperation =
       url?: string | null;
       resource_status?: string;
       pinned?: boolean;
+      lesson?: CommunityLessonFields | null;
     }
   | {
       op: "edit_page";
@@ -247,6 +268,7 @@ type CommunityResourceBuilderChangesetOperation =
       url?: string | null;
       resource_status?: string;
       pinned?: boolean;
+      lesson?: CommunityLessonFields | null;
     }
   | {
       op: "move_resource";
@@ -1069,6 +1091,14 @@ export const backfillCommunityResourceModuleStatusesInternal = internalMutation(
   },
 });
 
+// A long page's sections, so an agent can read it one section at a time with
+// offset and limit. Pages with one section leave it out.
+function readSectionOutline(body: string) {
+  const sections = communityLessonSections(body);
+  if (sections.length < 2) return undefined;
+  return sections.map(({ index, heading, offset, chars }) => ({ index, heading, offset, chars }));
+}
+
 function boundedReadOffset(raw: unknown): number {
   const parsed = Math.floor(Number(raw ?? 0));
   if (!Number.isFinite(parsed)) return 0;
@@ -1128,6 +1158,19 @@ function normalizeBuilderResourceStatus(args: {
   return next;
 }
 
+// Members never get a quiz's answer key in the lesson text.
+function memberLessonBody(row: CommunityResourceLike): string {
+  const body = String(row.bodyMd ?? "");
+  return row.lesson ? redactCommunityLessonAnswers(body) : body;
+}
+
+// An agent staging a body hears about a broken button, checklist or quiz right
+// away; a body edited by hand just shows a bad block as plain code.
+function strictLessonBody<T extends string | null | undefined>(bodyMd: T): T {
+  parseCommunityLessonElements(bodyMd, { strict: true });
+  return bodyMd;
+}
+
 function hasOwnField(record: Record<string, unknown>, field: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, field);
 }
@@ -1169,6 +1212,13 @@ function normalizeChangesetModuleStatus(raw: unknown): "draft" | "live" {
   return requireResourceModuleStatusForWrite(raw);
 }
 
+// How a course's lessons read: "article" (clean page) or "video" (text on a
+// card under the video). Agents must name one exactly.
+function normalizeChangesetLessonStyle(raw: unknown): "article" | "video" {
+  if (raw === "article" || raw === "video") return raw;
+  throw new Error("community_resource_changeset_lesson_style_invalid");
+}
+
 function normalizeCommunityResourceBuilderChangesetOperations(
   rawOperations: unknown,
 ): CommunityResourceBuilderChangesetOperation[] {
@@ -1182,7 +1232,7 @@ function normalizeCommunityResourceBuilderChangesetOperations(
     throw new Error("community_resource_changeset_too_large");
   }
 
-  return rawOperations.map((raw, index) => {
+  const operations = rawOperations.map((raw, index): CommunityResourceBuilderChangesetOperation => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       throw new Error(`community_resource_changeset_operation_${index}_invalid`);
     }
@@ -1199,6 +1249,9 @@ function normalizeCommunityResourceBuilderChangesetOperations(
         module_status: hasOwnField(record, "module_status")
           ? normalizeChangesetModuleStatus(record.module_status)
           : "draft",
+        ...(hasOwnField(record, "lesson_style")
+          ? { lesson_style: normalizeChangesetLessonStyle(record.lesson_style) }
+          : null),
       };
     }
     if (op === "edit_module") {
@@ -1214,7 +1267,10 @@ function normalizeCommunityResourceBuilderChangesetOperations(
       if (hasOwnField(record, "module_status")) {
         next.module_status = normalizeChangesetModuleStatus(record.module_status);
       }
-      if (!hasOwnField(record, "name") && !hasOwnField(record, "description_md") && !hasOwnField(record, "module_status")) {
+      if (hasOwnField(record, "lesson_style")) {
+        next.lesson_style = normalizeChangesetLessonStyle(record.lesson_style);
+      }
+      if (!hasOwnField(record, "name") && !hasOwnField(record, "description_md") && !hasOwnField(record, "module_status") && !hasOwnField(record, "lesson_style")) {
         throw new Error("community_resource_changeset_edit_module_empty");
       }
       return next;
@@ -1228,7 +1284,7 @@ function normalizeCommunityResourceBuilderChangesetOperations(
           : null),
         title: normalizeName(record.title),
         body_md: hasOwnField(record, "body_md")
-          ? normalizeCommunityResourceBodyMd(record.body_md, 20_000)
+          ? strictLessonBody(normalizeAuthoredCommunityResourceBodyMd(record.body_md))
           : null,
         source_resource_id: normalizeOptionalModuleId(record.source_resource_id),
         ...(hasOwnField(record, "type") ? { type: normalizeResourceType(record.type) } : null),
@@ -1237,6 +1293,7 @@ function normalizeCommunityResourceBuilderChangesetOperations(
           ? { resource_status: normalizeChangesetPageStatus(record.resource_status) }
           : null),
         ...(hasOwnField(record, "pinned") ? { pinned: Boolean(record.pinned) } : null),
+        ...(hasOwnField(record, "lesson") ? { lesson: normalizeCommunityLessonFields(record.lesson) } : null),
       };
     }
     if (op === "edit_page") {
@@ -1247,7 +1304,7 @@ function normalizeCommunityResourceBuilderChangesetOperations(
       };
       if (hasOwnField(record, "module_id")) next.module_id = normalizeOptionalModuleId(record.module_id);
       if (hasOwnField(record, "title")) next.title = normalizeName(record.title);
-      if (hasOwnField(record, "body_md")) next.body_md = normalizeCommunityResourceBodyMd(record.body_md, 20_000);
+      if (hasOwnField(record, "body_md")) next.body_md = strictLessonBody(normalizeAuthoredCommunityResourceBodyMd(record.body_md));
       if (hasOwnField(record, "source_resource_id")) {
         next.source_resource_id = normalizeOptionalModuleId(record.source_resource_id);
       }
@@ -1255,6 +1312,7 @@ function normalizeCommunityResourceBuilderChangesetOperations(
       if (hasOwnField(record, "url")) next.url = normalizeOptionalUrl(record.url) ?? null;
       if (hasOwnField(record, "resource_status")) next.resource_status = normalizeChangesetPageStatus(record.resource_status);
       if (hasOwnField(record, "pinned")) next.pinned = Boolean(record.pinned);
+      if (hasOwnField(record, "lesson")) next.lesson = normalizeCommunityLessonFields(record.lesson);
       if (Object.keys(next).length <= 3) {
         throw new Error("community_resource_changeset_edit_page_empty");
       }
@@ -1292,6 +1350,12 @@ function normalizeCommunityResourceBuilderChangesetOperations(
     }
     throw new Error("community_resource_changeset_operation_unsupported");
   });
+  const bodyChars = operations.reduce((total, operation) =>
+    total + ("body_md" in operation ? String(operation.body_md ?? "").length : 0), 0);
+  if (bodyChars > COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_BODY_CHARS) {
+    throw new Error(`community_resource_changeset_too_large: These pages hold ${bodyChars.toLocaleString("en-US")} characters together; one changeset carries up to ${COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_BODY_CHARS.toLocaleString("en-US")}. Stage the rest in the next changeset.`);
+  }
+  return operations;
 }
 
 function communityResourceBuilderChangesetOperationSummary(
@@ -1731,6 +1795,7 @@ async function createModuleFromChangesetOperation(args: {
     status: args.operation.module_status ?? "draft",
     name: args.operation.name,
     descriptionMd: args.operation.description_md ?? undefined,
+    lessonStyle: args.operation.lesson_style ?? "article",
     sortOrder: nextSortOrder,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
@@ -1791,6 +1856,7 @@ async function createPageFromChangesetOperation(args: {
     sourceIngestionStatus: "not_required",
     sourceIngestionKind: "manual",
     pinned: Boolean(args.operation.pinned),
+    ...(args.operation.lesson ? { lesson: args.operation.lesson } : {}),
     sortOrder,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
@@ -1803,7 +1869,7 @@ async function createPageFromChangesetOperation(args: {
       resourceId: created._id,
       bodyMd: args.operation.body_md,
       nowMs: args.nowMs,
-      maxChars: 20_000,
+      maxChars: COMMUNITY_RESOURCE_BODY_MAX_CHARS,
     });
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, created) ?? created;
@@ -1870,6 +1936,7 @@ async function editPageFromChangesetOperation(args: {
     ...(hasOwnField(args.operation as any, "title") ? { title: normalizeName(args.operation.title) } : {}),
     ...(hasOwnField(args.operation as any, "url") ? { url: normalizeOptionalUrl(args.operation.url) } : {}),
     ...(hasOwnField(args.operation as any, "pinned") ? { pinned: Boolean(args.operation.pinned) } : {}),
+    ...(hasOwnField(args.operation as any, "lesson") ? { lesson: args.operation.lesson ?? undefined } : {}),
     ...(typeof nextSortOrder === "number" ? { sortOrder: nextSortOrder } : {}),
     updatedAt: args.nowMs,
   });
@@ -1881,7 +1948,7 @@ async function editPageFromChangesetOperation(args: {
       resourceId: updated._id,
       bodyMd: args.operation.body_md ?? null,
       nowMs: args.nowMs,
-      maxChars: 20_000,
+      maxChars: COMMUNITY_RESOURCE_BODY_MAX_CHARS,
     });
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
@@ -1969,6 +2036,7 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         ...(hasOwnField(operation as any, "name") ? { name: operation.name } : {}),
         ...(hasOwnField(operation as any, "description_md") ? { descriptionMd: operation.description_md ?? undefined } : {}),
         ...(hasOwnField(operation as any, "module_status") ? { status: operation.module_status } : {}),
+        ...(hasOwnField(operation as any, "lesson_style") ? { lessonStyle: operation.lesson_style } : {}),
         updatedAt: args.nowMs,
       });
       if (moduleStatusChanged) {
@@ -2171,13 +2239,16 @@ async function listResourceDirectoryLivePageResources(
   ctx: any,
   communityId: any,
   liveModuleIds: Set<string>,
+  readerUserId: any,
 ): Promise<CommunityResourceLike[]> {
   const rows = (await ctx.db
     .query("communityResources" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .take(COMMUNITY_RESOURCE_DIRECTORY_TOOL_SCAN_LIMIT)) as CommunityResourceLike[];
+  // A member's agent can't list or read lessons sold in a track they don't have.
+  const paid = await readCommunityPaidLockedLessonIds(ctx, communityId, readerUserId);
   return rows
-    .filter((row) => communityResourceIsLiveModulePage(row, liveModuleIds))
+    .filter((row) => communityResourceIsLiveModulePage(row, liveModuleIds) && !paid.has(normalizeIdValue(row._id)))
     .sort(compareCommunityResources);
 }
 
@@ -2241,6 +2312,7 @@ function mapCommunityResourceSemanticPageEntry(args: {
     ref: buildCommunityResourceEvidenceRef(resourceId),
     directory_path: directory.directory_path,
     directory_uri: directory.directory_uri,
+    lesson: args.resource.lesson ?? null,
   };
 }
 
@@ -2438,6 +2510,7 @@ function buildResourceDirectoryEntry(
     url: row.url ?? null,
     has_file: Boolean(row.fileKey),
     summary: compactResourceSummary(row),
+    lesson: row.lesson ?? null,
     lineage: deriveCommunityResourceLineageEnvelope({
       communityId: normalizeIdValue(row.communityId),
       resourceId,
@@ -2608,7 +2681,7 @@ async function buildCommunityResourceDirectoryReadPayload(args: {
   limit: unknown;
 }) {
   const row = await hydrateCommunityResourceBody(args.ctx, args.resource) ?? args.resource;
-  const body = String(row.bodyMd ?? "");
+  const body = memberLessonBody(row);
   const offset = boundedReadOffset(args.offset);
   const limit = boundedReadLimit(args.limit);
   const bodySlice = body ? body.slice(offset, offset + limit) : null;
@@ -2622,9 +2695,11 @@ async function buildCommunityResourceDirectoryReadPayload(args: {
       offset,
       limit,
       total_chars: body.length,
+      sections: readSectionOutline(body),
       truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
       unavailable_reason: readContentUnavailableReason(row),
     },
+    lesson_body: row.lesson ? projectCommunityLessonBody(row.bodyMd) : null,
   };
 }
 
@@ -2657,7 +2732,7 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireCommunityResourceDirectoryToolAccess({
+    const readerUserId = await requireCommunityResourceDirectoryToolAccess({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
@@ -2668,6 +2743,10 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
       communityId: args.communityId,
       ref: args.ref,
     });
+    if (exact && (await readCommunityPaidLockedLessonIds(ctx, args.communityId, readerUserId)).has(normalizeIdValue(exact.resource._id))) {
+      return { ok: false, kind: "community_resource_read", ref: args.ref, reason_code: "community_resource_paywalled",
+        message: "This lesson is in a track the member hasn't added to their plan." };
+    }
     if (exact) {
       return await buildCommunityResourceDirectoryReadPayload({
         ctx,
@@ -2680,7 +2759,7 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
 
     const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
     const liveModuleIds = new Set(modules.map((module) => normalizeIdValue(module._id)));
-    const resources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds);
+    const resources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds, readerUserId);
     const moduleNameMap = buildModuleNameMap(modules);
     const resolved = await resolveResourceByRef({
       ctx,
@@ -2697,7 +2776,7 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
     }
 
     const row = await hydrateCommunityResourceBody(ctx, resolved.resource) ?? resolved.resource;
-    const body = String(row.bodyMd ?? "");
+    const body = memberLessonBody(row);
     const offset = boundedReadOffset(args.offset);
     const limit = boundedReadLimit(args.limit);
     const bodySlice = body ? body.slice(offset, offset + limit) : null;
@@ -2711,9 +2790,11 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
         offset,
         limit,
         total_chars: body.length,
+        sections: readSectionOutline(body),
         truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
         unavailable_reason: readContentUnavailableReason(row),
       },
+      lesson_body: row.lesson ? projectCommunityLessonBody(row.bodyMd) : null,
     };
   },
 });
@@ -2833,6 +2914,7 @@ function buildBuilderModuleRefMatch(args: {
       ? `${entry.directory_uri}/${COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT}`
       : entry.directory_uri,
     module_status: args.module ? normalizeResourceModuleStatus(args.module.status) : null,
+    ...(args.module && !args.sourceInbox ? { lesson_style: normalizeResourceModuleLessonStyle(args.module.lessonStyle) } : null),
     ...(args.sourceInbox ? { source_inbox: true } : null),
     resource_count: resourceRows.length,
     page_count: resourceRows.filter((row) => normalizeResourceRole(row.role) !== "source").length,
@@ -3222,6 +3304,9 @@ async function listCommunityResourceBuilderDirectoryCore(args: {
   userId: any;
   communityId: any;
   limit?: number;
+  // Resources to skip, for paging through a large directory. Modules are
+  // always listed in full.
+  offset?: number;
 }) {
   await requireCommunityManager({
     ctx: args.ctx,
@@ -3235,6 +3320,7 @@ async function listCommunityResourceBuilderDirectoryCore(args: {
       Math.floor(args.limit ?? COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT),
     ),
   );
+  const offset = Math.max(0, Math.floor(Number(args.offset) || 0));
   const [modules, resources] = await Promise.all([
     args.ctx.db
       .query("communityResourceModules" as any)
@@ -3253,7 +3339,9 @@ async function listCommunityResourceBuilderDirectoryCore(args: {
     kind: "community_resource_builder_directory",
     limit,
     total_resources: resources.length,
-    truncated: resources.length > limit,
+    offset,
+    truncated: resources.length > offset + limit,
+    next_offset: resources.length > offset + limit ? offset + limit : null,
     health: buildCommunityResourceBuilderHealthReportFromRows({
       modules,
       resources,
@@ -3269,7 +3357,7 @@ async function listCommunityResourceBuilderDirectoryCore(args: {
       resources
         .slice()
         .sort(compareCommunityResources)
-        .slice(0, limit)
+        .slice(offset, offset + limit)
         .map((row) => mapCompactCommunityResourceBuilderListRow(row, moduleNameMap)),
     ),
   };
@@ -3302,6 +3390,7 @@ export const listCommunityResourceBuilderDirectoryInternal = internalQuery({
     userId: v.id("users"),
     communityId: v.id("communities"),
     limit: v.optional(v.number()),
+    offset: v.optional(v.number()),
   },
   handler: async (ctx, args) =>
     await listCommunityResourceBuilderDirectoryCore({
@@ -3309,6 +3398,7 @@ export const listCommunityResourceBuilderDirectoryInternal = internalQuery({
       userId: args.userId,
       communityId: args.communityId,
       limit: args.limit,
+      offset: args.offset,
     }),
 });
 
@@ -3347,17 +3437,33 @@ async function readCommunityResourceBuilderResourceCore(args: {
     moduleNameMap,
   });
   if (!resolved.ok) {
+    // A ref the resource map listed under a page's "revisions" is an earlier
+    // version of that page: read its body, then restore it with edit_page.
+    const revisionId = args.ctx.db.normalizeId("communityResourceRevisions", ref);
+    const revision = revisionId ? (await args.ctx.db.get(revisionId)) as CommunityResourceRevisionLike | null : null;
+    if (revision && normalizeIdValue(revision.communityId) === normalizeIdValue(args.communityId)) {
+      return {
+        ok: true,
+        kind: "community_resource_builder_read",
+        target_type: "revision",
+        revision: mapCommunityResourceRevision(revision, { withBody: true }),
+      };
+    }
     return {
       kind: "community_resource_builder_read",
       ...resolved,
     };
   }
   if (resolved.target_type === "resource") {
+    const revisions = await listCommunityResourceRevisionRows(args.ctx, resolved.resource._id);
     return {
       ok: true,
       kind: "community_resource_builder_read",
       target_type: "resource",
-      resource: await mapCommunityResourceRowWithBody(args.ctx, resolved.resource),
+      resource: await mapCommunityResourceRowWithBody(args.ctx, resolved.resource, { canManage: true }),
+      // Earlier versions, newest first. Read builder/resources/<id>.json for a
+      // version's body; edit_page with that body_md (and title) restores it.
+      revisions: revisions.map((revision) => mapCommunityResourceRevision(revision, { withBody: false })),
     };
   }
   return await buildCommunityResourceBuilderModuleReadPayload({
@@ -3393,6 +3499,78 @@ export const readCommunityResourceBuilderResource = query({
       resourceId: args.resourceId,
       moduleId: args.moduleId,
     });
+  },
+});
+
+function mapCommunityResourceRevision(revision: CommunityResourceRevisionLike, options: { withBody: boolean }) {
+  const preview = revision.bodyMd.replace(/\s+/g, " ").trim();
+  return {
+    id: normalizeIdValue(revision._id),
+    resource_id: normalizeIdValue(revision.resourceId),
+    title: revision.title,
+    saved_at: toIsoString(revision.savedAt),
+    replaced_at: toIsoString(revision.createdAt),
+    body_chars: revision.bodyChars,
+    ...(options.withBody
+      ? { body_md: revision.bodyMd }
+      : { preview: preview.length > 160 ? `${preview.slice(0, 157).trimEnd()}...` : preview }),
+  };
+}
+
+async function requireManagedResourceRevision(ctx: any, userId: any, revisionId: any) {
+  const revision = (await ctx.db.get(revisionId)) as CommunityResourceRevisionLike | null;
+  if (!revision) throw new Error("community_resource_revision_not_found");
+  await requireCommunityManager({ ctx, communityId: revision.communityId, userId });
+  return revision;
+}
+
+// A lesson's earlier versions, newest first, for the owner's Version history.
+export const listCommunityResourceRevisions = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    resourceId: v.id("communityResources"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    const resource = (await ctx.db.get(args.resourceId)) as CommunityResourceLike | null;
+    if (!resource) return [];
+    await requireCommunityManager({ ctx, communityId: resource.communityId, userId });
+    const rows = await listCommunityResourceRevisionRows(ctx, resource._id);
+    return rows.map((revision) => mapCommunityResourceRevision(revision, { withBody: true }));
+  },
+});
+
+// Puts an earlier version back. The version being replaced is kept too, so a
+// restore can be undone the same way.
+export const restoreCommunityResourceRevision = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    revisionId: v.id("communityResourceRevisions"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    const revision = await requireManagedResourceRevision(ctx, userId, args.revisionId);
+    const resource = (await ctx.db.get(revision.resourceId)) as CommunityResourceLike | null;
+    if (!resource) throw new Error("community_resource_not_found");
+    const nowMs = Date.now();
+    const previousTitle = String(resource.title ?? "");
+    if (revision.title.trim()) await ctx.db.patch(resource._id as any, { title: normalizeName(revision.title), updatedAt: nowMs });
+    await writeCommunityResourceBodyContent(ctx, {
+      communityId: resource.communityId,
+      resourceId: resource._id,
+      bodyMd: revision.bodyMd,
+      nowMs,
+      maxChars: COMMUNITY_RESOURCE_BODY_MAX_CHARS,
+      previousTitle,
+      forceRevision: true,
+    });
+    const updated = (await ctx.db.get(resource._id)) as CommunityResourceLike | null;
+    if (!updated) throw new Error("community_resource_not_found");
+    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
+    return await mapCommunityResourceRow(ctx, hydrated, undefined, undefined, { canManage: true });
   },
 });
 
@@ -4056,7 +4234,7 @@ export const compactCommunityResourceBodyStorage = mutation({
           resourceId: row._id,
           bodyMd: row.bodyMd,
           nowMs,
-          maxChars: 20_000,
+          maxChars: COMMUNITY_RESOURCE_BODY_MAX_CHARS,
           resourceUpdatedAt: row.updatedAt,
         });
       }
@@ -4297,6 +4475,9 @@ export const saveCommunityResourceModule = mutation({
         bannerFocusX: normalizeBannerFocus(payload.banner_focus_x ?? existing.bannerFocusX),
         bannerFocusY: normalizeBannerFocus(payload.banner_focus_y ?? existing.bannerFocusY),
         bannerZoom: normalizeBannerZoom(payload.banner_zoom ?? existing.bannerZoom),
+        ...(Object.prototype.hasOwnProperty.call(payload, "lesson_style")
+          ? { lessonStyle: normalizeResourceModuleLessonStyle(payload.lesson_style) }
+          : {}),
         updatedAt: nowMs,
       });
       if (previousBannerStorageId && String(previousBannerStorageId) !== String(nextBannerStorageId ?? "")) {
@@ -4345,6 +4526,7 @@ export const saveCommunityResourceModule = mutation({
       bannerFocusX: normalizeBannerFocus(payload.banner_focus_x),
       bannerFocusY: normalizeBannerFocus(payload.banner_focus_y),
       bannerZoom: normalizeBannerZoom(payload.banner_zoom),
+      lessonStyle: normalizeResourceModuleLessonStyle(payload.lesson_style),
       sortOrder: nextSortOrder,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -4512,14 +4694,46 @@ export const listCommunityResources = query({
     );
     const userIdCache = new Map<string, string | null>();
     const moduleNameCache = new Map<string, string | null>();
+    // Lessons in a track sold through an offer the member doesn't have: listed
+    // (so the Roadmap can show what's inside) without their text.
+    const paid = canManageResources ? new Set<string>() : await readCommunityPaidLockedLessonIds(ctx, args.communityId, userId);
     return await Promise.all(
       rows
         .slice()
         .filter((row) => canManageResources || communityResourceIsLiveModulePage(row, liveModuleIds))
         .sort(compareCommunityResources)
         .slice(0, limit)
-        .map((row) => mapCommunityResourceRowWithBody(ctx, row, userIdCache, moduleNameCache)),
+        .map(async (row) => {
+          if (!paid.has(normalizeIdValue(row._id))) return await mapCommunityResourceRowWithBody(ctx, row, { canManage: canManageResources }, userIdCache, moduleNameCache);
+          const mapped = await mapCommunityResourceRow(ctx, { ...row, bodyMd: undefined }, userIdCache, moduleNameCache, { canManage: false });
+          return { ...mapped, body_md: null, url: null, file_key: null, lesson_elements: [], lesson: row.lesson ? { ...row.lesson, video_url: undefined } : null, paywalled: true };
+        }),
     );
+  },
+});
+
+// The welcome page a member sees while held: the builder's words and the lesson
+// pages to work through, in order. Readable while held, for these lessons only.
+export const getMyWelcomePage = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId, allowWelcome: true });
+    const workflow = await ctx.db.query("communityMemberWorkflows" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).first() as any;
+    const lessons = [];
+    for (const resourceId of workflow?.welcomeGate ? workflow.welcomeLessonIds ?? [] : []) {
+      if (!(await welcomeLessonIsLive(ctx, args.communityId, resourceId))) continue;
+      const row = (await ctx.db.get(resourceId)) as CommunityResourceLike;
+      lessons.push(await mapCommunityResourceRowWithBody(ctx, row, { canManage: false }));
+    }
+    return {
+      title: workflow?.welcomePage?.title ?? null,
+      message: workflow?.welcomePage?.message ?? null,
+      media_url: workflow?.welcomePage?.mediaUrl ?? null,
+      layout: workflow?.welcomeGate ? workflow?.welcomePage?.layout ?? null : null,
+      lessons,
+    };
   },
 });
 
@@ -4669,6 +4883,48 @@ export const generateCommunityResourceSourceUploadUrl = mutation({
     return {
       uploadUrl: await ctx.storage.generateUploadUrl(),
     };
+  },
+});
+
+// Lesson images go up through the same upload URL as source files; this
+// confirms the upload is a picture of a sane size and hands back the address
+// the lesson body links to. Anything else is deleted, not kept.
+const COMMUNITY_RESOURCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
+export const COMMUNITY_RESOURCE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+export const resolveCommunityResourceImageUrl = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const file = await ctx.db.system.get(args.storageId);
+    if (!file) return { url: null, problem: "community_resource_image_missing" };
+    const contentType = String(file.contentType ?? "").toLowerCase();
+    // Refusals return instead of throwing, so the delete isn't rolled back.
+    const problem = !COMMUNITY_RESOURCE_IMAGE_TYPES.has(contentType)
+      ? "community_resource_image_type"
+      : file.size > COMMUNITY_RESOURCE_IMAGE_MAX_BYTES
+        ? "community_resource_image_too_large"
+        : null;
+    if (problem) {
+      await ctx.storage.delete(args.storageId);
+      return { url: null, problem };
+    }
+    const url = await ctx.storage.getUrl(args.storageId);
+    return url ? { url, problem: null } : { url: null, problem: "community_resource_image_missing" };
   },
 });
 
@@ -4943,7 +5199,7 @@ export const finalizeCommunitySourceIngestionInternal = internalMutation({
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-    return { ok: true, resource: await mapCommunityResourceRow(ctx, hydrated) };
+    return { ok: true, resource: await mapCommunityResourceRow(ctx, hydrated, undefined, undefined, { canManage: true }) };
   },
 });
 
@@ -6135,7 +6391,12 @@ export const saveCommunityResource = mutation({
         : existing.moduleId;
       const nextRole = normalizeResourceRole(nextRoleRaw);
       const bodyChanged = Object.prototype.hasOwnProperty.call(payload, "body_md");
-      const nextBodyMd = bodyChanged ? normalizeCommunityResourceBodyMd(payload.body_md, 20_000) : null;
+      // Sources keep their old ceiling; pages are refused whole rather than cut off.
+      const nextBodyMd = !bodyChanged
+        ? null
+        : normalizeResourceRole(nextRoleRaw) === "source"
+          ? normalizeCommunityResourceBodyMd(payload.body_md, 20_000)
+          : normalizeAuthoredCommunityResourceBodyMd(payload.body_md);
       const nextBodyChars = bodyChanged ? String(nextBodyMd ?? "").trim().length : communityResourceBodyChars(existing);
       const nextUrl = normalizeOptionalUrl(nextUrlRaw);
       const nextFileKey = normalizeOptionalFileKey(nextFileKeyRaw);
@@ -6241,12 +6502,13 @@ export const saveCommunityResource = mutation({
           resourceId: updated._id,
           bodyMd: nextBodyMd,
           nowMs,
-          maxChars: 20_000,
+          maxChars: COMMUNITY_RESOURCE_BODY_MAX_CHARS,
+          previousTitle: String(existing.title ?? ""),
         });
       }
       const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
       await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-      return await mapCommunityResourceRow(ctx, hydrated);
+      return await mapCommunityResourceRow(ctx, hydrated, undefined, undefined, { canManage: true });
     }
 
     const communityIdRaw = args.communityId ?? (payload.community_id as any);
@@ -6270,7 +6532,9 @@ export const saveCommunityResource = mutation({
         ? "review"
         : "draft";
     const title = normalizeName(payload.title);
-    const bodyMd = normalizeCommunityResourceBodyMd(payload.body_md, 20_000);
+    const bodyMd = role === "source"
+      ? normalizeCommunityResourceBodyMd(payload.body_md, 20_000)
+      : normalizeAuthoredCommunityResourceBodyMd(payload.body_md);
     const url = normalizeOptionalUrl(payload.url);
     const fileKey = normalizeOptionalFileKey(payload.file_key);
     const sourceIngestionStatus = Object.prototype.hasOwnProperty.call(payload, "source_ingestion_status")
@@ -6299,6 +6563,7 @@ export const saveCommunityResource = mutation({
       communityId: community._id,
       moduleId,
     });
+    const lessonFields = hasOwnField(payload, "lesson") ? normalizeCommunityLessonFields(payload.lesson) : null;
 
     const id = await ctx.db.insert("communityResources" as any, {
       communityId: community._id,
@@ -6330,6 +6595,8 @@ export const saveCommunityResource = mutation({
           }
         : {}),
       pinned,
+      // "Add lesson" makes a lesson, so its buttons, checklists and quizzes work.
+      ...(role === "page" && lessonFields ? { lesson: lessonFields } : {}),
       sortOrder: nextSortOrder,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -6342,7 +6609,7 @@ export const saveCommunityResource = mutation({
         resourceId: created._id,
         bodyMd,
         nowMs,
-        maxChars: 20_000,
+        maxChars: COMMUNITY_RESOURCE_BODY_MAX_CHARS,
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
@@ -6368,7 +6635,52 @@ export const saveCommunityResource = mutation({
         nowMs,
       });
     }
-    return await mapCommunityResourceRow(ctx, hydrated);
+    return await mapCommunityResourceRow(ctx, hydrated, undefined, undefined, { canManage: true });
+  },
+});
+
+// Knowledge -> Roadmap editing: a lesson's stage, the stage's place, the
+// lesson's place in it, and its title, for many lessons in one write (renaming
+// or moving a stage touches every lesson in it).
+export const updateCommunityLessonBoard = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    updates: v.array(v.object({
+      resourceId: v.string(),
+      stage: v.string(),
+      stageOrder: v.optional(v.number()),
+      order: v.optional(v.number()),
+      title: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    if (args.updates.length > 300) throw new Error("community_lesson_board_too_many");
+    const nowMs = Date.now();
+    for (const update of args.updates) {
+      const resourceId = ctx.db.normalizeId("communityResources", update.resourceId);
+      const row = (resourceId ? await ctx.db.get(resourceId) : null) as CommunityResourceLike | null;
+      if (!row || String(row.communityId) !== String(args.communityId)) throw new Error("community_resource_not_found");
+      if (normalizeResourceRole(row.role) !== "page") throw new Error("community_lesson_board_page_required");
+      const current = (row as any).lesson ?? {};
+      const lesson = normalizeCommunityLessonFields({
+        ...current,
+        stage: update.stage,
+        stage_order: update.stageOrder ?? current.stage_order,
+        order: update.order ?? current.order,
+      });
+      if (!lesson?.stage) throw new Error("community_lesson_board_stage_required");
+      const title = update.title === undefined ? null : normalizeName(update.title);
+      await ctx.db.patch(row._id as any, { lesson, ...(title ? { title } : {}), updatedAt: nowMs });
+      if (title && title !== row.title) {
+        const updated = (await ctx.db.get(row._id as any)) as CommunityResourceLike | null;
+        if (updated) await syncCommunityResourceMemoryProjection(ctx, await hydrateCommunityResourceBody(ctx, updated) ?? updated, nowMs);
+      }
+    }
+    return { ok: true, updated: args.updates.length };
   },
 });
 

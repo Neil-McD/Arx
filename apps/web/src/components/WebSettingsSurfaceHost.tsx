@@ -8,6 +8,10 @@ import {
   WebSettingsPanels,
   type WebSettingsPanelsProps,
 } from "./WebSettingsPanels";
+import { WebYourSettingsNav } from "./WebYourSettingsNav";
+import "./WebCommunitySettings.css";
+import "./WebCommunityCreators.css";
+import "./WebYourSettings.css";
 
 export type WebSettingsSurfaceHostProps = {
   settingsGroup: SettingsGroup;
@@ -19,10 +23,9 @@ export type WebSettingsSurfaceHostProps = {
 };
 
 export function WebSettingsSurfaceHost(props: WebSettingsSurfaceHostProps) {
-  return (
+  return props.showMobileSettingsShell ? (
     <div className="settings-panel">
-      {props.showMobileSettingsShell ? (
-        props.showMobileSettingsIndex ? (
+      {props.showMobileSettingsIndex ? (
           <div className="mobile-settings-index">
             <div className="mobile-settings-index-header">
               <div className="mobile-settings-index-title">Settings</div>
@@ -52,16 +55,31 @@ export function WebSettingsSurfaceHost(props: WebSettingsSurfaceHostProps) {
             <div className="mobile-settings-detail-title">
               {settingsGroupLabel(props.settingsGroup)}
             </div>
-            <div className="web-settings-centered-pane mobile-global-settings-centered-pane">
-              <WebSettingsPanels {...props.settingsPanelsProps} />
+            <div className="web-settings-centered-pane mobile-global-settings-centered-pane pn-settings pn-your-settings">
+              <div className="pn-settings-main">
+                <div className="pn-settings-stack">
+                  <WebSettingsPanels {...props.settingsPanelsProps} />
+                </div>
+              </div>
             </div>
           </div>
-        )
-      ) : (
-        <div className="web-settings-centered-pane">
-          <WebSettingsPanels {...props.settingsPanelsProps} />
-        </div>
       )}
+    </div>
+  ) : (
+    // Desktop: laid out like Community settings, Substack-style, in the
+    // colours of the community you came from.
+    <div className="settings-panel pn-settings pn-your-settings">
+      <div className="pn-settings-layout">
+        <WebYourSettingsNav page={props.settingsGroup} onSelectPage={props.onSelectMobileSettingsPage} />
+        <div className="pn-settings-main">
+          <header className="pn-settings-page-header">
+            <h1>{settingsGroupLabel(props.settingsGroup)}</h1>
+          </header>
+          <div className="pn-settings-stack">
+            <WebSettingsPanels {...props.settingsPanelsProps} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

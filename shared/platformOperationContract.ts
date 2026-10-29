@@ -143,6 +143,111 @@ const COMMUNITY_SEMANTIC_LIST_MCP_INPUT_SCHEMA: PlatformOperationJsonSchema = {
   },
 };
 
+// Lesson presentation fields (shared/communityLessonContract.ts). Present only
+// on resource pages that carry them.
+const COMMUNITY_LESSON_FIELD_PROPERTIES: Record<string, PlatformOperationJsonSchema> = {
+  kind: {
+    type: "string",
+    enum: ["lesson", "build", "checkpoint", "prompt", "skill", "video", "doc"],
+  },
+  stage: { type: "string", maxLength: 80 },
+  stage_order: { type: "integer", minimum: 0, maximum: 999 },
+  order: { type: "integer", minimum: 0, maximum: 9_999 },
+  minutes: { type: "integer", minimum: 0, maximum: 600 },
+  video_url: { type: "string", maxLength: 2_048 },
+  gate: { type: "boolean" },
+  summary: { type: "string", maxLength: 280 },
+};
+
+const COMMUNITY_LESSON_LIST_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: COMMUNITY_LESSON_FIELD_PROPERTIES,
+};
+
+const COMMUNITY_LESSON_READ_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    ...COMMUNITY_LESSON_FIELD_PROPERTIES,
+    intro_md: { type: "string" },
+    variants: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["key", "label", "body_md"],
+        properties: {
+          key: { type: "string", maxLength: 120 },
+          label: { type: "string", maxLength: 120 },
+          body_md: { type: "string" },
+        },
+      },
+    },
+    slides: {
+      type: "array",
+      maxItems: 60,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["image", "alt", "note_md"],
+        properties: {
+          image: { type: "string", maxLength: 2_048 },
+          alt: { type: "string" },
+          note_md: { type: "string" },
+        },
+      },
+    },
+    commands: {
+      type: "array",
+      maxItems: 60,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["variant", "language", "text"],
+        properties: {
+          variant: { type: ["string", "null"], maxLength: 120 },
+          language: { type: ["string", "null"], maxLength: 40 },
+          text: { type: "string", maxLength: 4_000 },
+        },
+      },
+    },
+    elements: {
+      type: "array",
+      maxItems: 40,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "type", "required", "prompt"],
+        properties: {
+          id: { type: "string", maxLength: 40 },
+          type: { type: "string", enum: ["button", "checklist", "quiz", "form"] },
+          action: { type: "string", enum: ["confirm", "mark_done", "ask_agent", "open_form"] },
+          form_key: { type: "string", maxLength: 80 },
+          required: { type: "boolean" },
+          prompt: { type: "string", maxLength: 1_000 },
+          label: { type: "string", maxLength: 300 },
+          multiple: { type: "boolean" },
+          choices: {
+            type: "array",
+            maxItems: 20,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["id", "label"],
+              properties: {
+                id: { type: "string", maxLength: 40 },
+                label: { type: "string", maxLength: 300 },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 const COMMUNITY_SEMANTIC_LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -190,6 +295,7 @@ const COMMUNITY_SEMANTIC_LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
             type: "string",
             maxLength: 80,
           },
+          lesson: COMMUNITY_LESSON_LIST_SCHEMA,
           handle: {
             type: ["string", "null"],
             maxLength: 120,
@@ -309,6 +415,7 @@ const COMMUNITY_SEMANTIC_READ_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
       minimum: 0,
       maximum: 1_000_000,
     },
+    lesson: COMMUNITY_LESSON_READ_SCHEMA,
   },
 };
 

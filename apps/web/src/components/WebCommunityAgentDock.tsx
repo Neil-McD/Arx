@@ -15,10 +15,11 @@ import {
 import {
   LoaderCircle,
   MessageSquarePlus,
-  Sparkles,
   Square,
   X,
 } from "lucide-react";
+import { CommunityAgentIcon, useCommunityAgentProfile } from "../../../../shared/CommunityAgentIcon";
+import { readTestMemberRun } from "../../../../shared/testMemberRun";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { CommunityComposerControls } from "./CommunityComposerControls";
 import { renderMarkdown } from "../../../../shared/markdownUi";
@@ -131,6 +132,8 @@ export type WebCommunityAgentDockProps = {
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   finalizeVoiceInputForSubmit?: () => Promise<string>;
   onStartBuilder?: () => void;
+  // Classroom layout: a floating panel opened from a bottom-right button.
+  floating?: { open: boolean; onOpenChange: (open: boolean) => void } | null;
 };
 
 const COMMUNITY_AGENT_LIMIT_CODE = COMMUNITY_AGENT_LIMIT_REACHED_CODE;
@@ -188,9 +191,23 @@ export const WebCommunityAgentDock = forwardRef<WebCommunityAgentDockHandle, Web
 function WebCommunityAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
   const communityName = String(props.community?.name ?? "").trim();
+  // The owner's name for the agent (Settings > Agent), if they gave it one.
+  const agentCustomName = useCommunityAgentProfile()?.custom_name ?? null;
   const isOpenSurface = props.pageMode
     ? Boolean(props.pageActive)
-    : Boolean(props.mobileShellActive && props.mobileRoot);
+    : props.floating
+      ? props.floating.open
+      : Boolean(props.mobileShellActive && props.mobileRoot);
+  const floatingOpen = Boolean(props.floating?.open);
+  const onFloatingOpenChange = props.floating?.onOpenChange;
+  useEffect(() => {
+    if (!floatingOpen || !onFloatingOpenChange) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onFloatingOpenChange(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [floatingOpen, onFloatingOpenChange]);
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
@@ -611,7 +628,12 @@ function WebCommunityAgentDock(props, ref) {
     !localError && inferenceIssue?.code === COMMUNITY_AGENT_LIMIT_CODE
       ? formatInferenceIssue(inferenceIssue)
       : null;
-  const dockError = memberLimitNotice ? null : localError ?? formatInferenceIssue(inferenceIssue);
+  // A test member can't open this chat (it runs as an action, which test runs
+  // never do); their guide channel reaches the same agent.
+  const testRunNotice = readTestMemberRun()
+    ? `In a test run, talk to ${agentCustomName || "the agent"} in your guide channel. This chat opens for real members.`
+    : null;
+  const dockError = testRunNotice ?? (memberLimitNotice ? null : localError ?? formatInferenceIssue(inferenceIssue));
   useEffect(() => {
     const request = pendingResourceBuildRef.current;
     if (
@@ -1098,7 +1120,7 @@ function WebCommunityAgentDock(props, ref) {
     props.surfaceContext,
     communityName,
   );
-  const presentation = { ...legacyPresentation, title: "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Message the community agent", loadingLabel: "Loading conversation" };
+  const presentation = { ...legacyPresentation, title: agentCustomName || "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: agentCustomName ? `Message ${agentCustomName}` : "Message the community agent", loadingLabel: "Loading conversation" };
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
@@ -1122,9 +1144,9 @@ function WebCommunityAgentDock(props, ref) {
 
       <section className="community-agent-dock-panel" aria-label={presentation.title}>
         <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "community-agent-dock-header"}>
-          {props.pageMode ? <div className="community-channel-header-identity"><Sparkles size={18} aria-hidden="true" /><h1>{presentation.title}</h1></div> : <div className="community-agent-dock-identity">
+          {props.pageMode ? <div className="community-channel-header-identity"><CommunityAgentIcon size={18} /><h1>{presentation.title}</h1></div> : <div className="community-agent-dock-identity">
             {!props.pageMode && <span className="community-agent-dock-avatar" aria-hidden="true">
-              <Sparkles />
+              <CommunityAgentIcon />
             </span>}
             <span>
               <strong>{presentation.title}</strong>
@@ -1153,6 +1175,16 @@ function WebCommunityAgentDock(props, ref) {
             >
               <MessageSquarePlus size={props.pageMode ? 18 : undefined} aria-hidden="true" />
             </button>
+            {props.floating ? (
+              <button
+                type="button"
+                onClick={() => props.floating?.onOpenChange(false)}
+                aria-label="Close the community agent"
+                title="Close"
+              >
+                <X aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -1162,7 +1194,7 @@ function WebCommunityAgentDock(props, ref) {
           !isPreparing &&
           !isStartingNewChat ? (
             <div className="community-agent-dock-empty">
-              <Sparkles aria-hidden="true" />
+              <span className="community-agent-dock-empty-face" aria-hidden="true"><CommunityAgentIcon size={56} strokeWidth={1.5} /></span>
               <p>
                 {presentation.emptyLabel}
               </p>
@@ -1379,6 +1411,19 @@ function WebCommunityAgentDock(props, ref) {
         </div>
       </section>
     </aside>
+    {props.floating && !props.floating.open ? (
+      <button
+        type="button"
+        className="community-agent-launcher"
+        onClick={() => props.floating?.onOpenChange(true)}
+        aria-label={agentCustomName ? `Ask ${agentCustomName}` : `Ask the ${communityName || "community"} agent`}
+        aria-controls="polynet-community-agent-surface"
+        aria-expanded={false}
+      >
+        <CommunityAgentIcon size={20} strokeWidth={2} />
+        <span>Ask AI</span>
+      </button>
+    ) : null}
     </>
   );
 });

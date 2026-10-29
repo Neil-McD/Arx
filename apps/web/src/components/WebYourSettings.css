@@ -1,0 +1,320 @@
+/* Your settings: Community settings' layout (WebCommunitySettings.css) for a
+   person's own settings, in the colours of the community they came from.
+   Sizes in rem so the community theme map doesn't rescale them. */
+
+.pn-your-settings {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--pn-set-font);
+}
+.pn-your-settings-title {
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.pn-your-settings .pn-settings-stack { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* Sections written for the older settings page get the same card, however
+   deeply they sit (Billing wraps its own). */
+.pn-your-settings .pn-settings-stack .settings-section:not(.pn-settings-card) {
+  display: block;
+  margin: 0;
+  padding: 0 1.25rem 1.25rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-set-r);
+  background: var(--bg-card);
+  box-shadow: none;
+}
+.pn-your-settings .pn-settings-stack .settings-section:not(.pn-settings-card) > .settings-section-title {
+  display: block;
+  margin: 0 -1.25rem 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+}
+.pn-your-settings .pn-settings-stack .settings-section:not(.pn-settings-card) > .settings-section-title svg { display: none; }
+/* A description sits in the card's header, under its title. */
+.pn-your-settings .pn-settings-stack .settings-section:not(.pn-settings-card) > .settings-section-title:has(+ .settings-section-desc) {
+  margin-bottom: 0;
+  padding-bottom: 0.25rem;
+  border-bottom: 0;
+}
+.pn-your-settings .pn-settings-stack .settings-section:not(.pn-settings-card) > .settings-section-desc {
+  margin: 0 -1.25rem 1.25rem;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+.pn-your-settings .pn-settings-stack .settings-section .settings-section { border: 0; padding: 0; background: none; }
+.pn-your-settings .pn-settings-stack > :not(.settings-section):not(.pn-settings-stack) { min-width: 0; }
+
+/* Memberships: one row per community, like Substack's subscriptions. */
+.pn-your-membership {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.875rem 1.25rem;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.pn-your-membership + .pn-your-membership { border-top: 1px solid var(--border-muted, var(--border-default)); }
+.pn-your-membership:hover { background: var(--hover-overlay); }
+.pn-your-membership:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.pn-your-membership-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: var(--bg-card-hover, var(--bg-card-alt));
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.pn-your-membership-avatar-image { width: 100%; height: 100%; object-fit: cover; }
+.pn-your-membership-text { display: flex; flex: 1; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.pn-your-membership-text strong { overflow: hidden; font-size: 0.9375rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pn-your-membership-text small { overflow: hidden; color: var(--text-secondary); font-size: 0.8125rem; text-overflow: ellipsis; white-space: nowrap; }
+.pn-your-membership-manage { display: inline-flex; flex: none; align-items: center; gap: 0.125rem; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; }
+
+@media (max-width: 860px) {
+  .pn-your-settings-title { padding: 0 0 0.5rem; font-size: 1.375rem; }
+  .pn-your-membership-manage { display: none; }
+}
+
+/* Display: the theme picker inside its card, without its old headings. */
+
+/* Rows are buttons; keep them flat whatever the page's button styles. */
+.pn-your-settings .pn-settings-card-body > .pn-your-membership {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.pn-your-settings .pn-settings-card-body > .pn-your-membership + .pn-your-membership { border-top: 1px solid var(--border-muted, var(--border-default)); }
+.pn-your-settings .pn-settings-card-body > .pn-your-membership:hover { background: var(--hover-overlay); }
+
+/* Folds: a card whose controls fold away under its title and summary. */
+.pn-settings-fold { overflow: hidden; }
+.pn-settings-fold-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pn-settings-fold-head:hover { background: var(--hover-overlay); }
+.pn-settings-fold-head:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.pn-settings-fold.is-open .pn-settings-fold-head { border-bottom: 1px solid var(--border-default); }
+.pn-settings-fold-text { display: flex; flex: 1; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.pn-settings-fold-summary { color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.25rem; }
+.pn-settings-fold-chevron { flex: none; color: var(--text-secondary); transition: transform 0.15s ease; }
+.pn-settings-fold.is-open .pn-settings-fold-chevron { transform: rotate(180deg); }
+.pn-settings-fold-body[hidden] { display: none; }
+.pn-settings-fold-body > .web-social-profile-links { padding: 1rem 1.25rem 1.25rem; }
+/* An older section inside a fold: the fold's head is its title. */
+.pn-your-settings .pn-settings-stack .pn-settings-fold-body > .settings-section {
+  margin: 0;
+  padding: 0.25rem 1.25rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.pn-your-settings .pn-settings-stack .pn-settings-fold-body > .settings-section > :is(.settings-section-title, .settings-section-desc) { display: none; }
+@media (prefers-reduced-motion: reduce) { .pn-settings-fold-chevron { transition: none; } }
+
+/* Display: Light and Dark as two pages in the community's design. */
+.pn-display-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1.25rem; }
+.pn-settings-mode.pn-display-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-set-r);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pn-settings-mode.pn-display-mode:hover { border-color: var(--text-secondary); }
+.pn-settings-mode.pn-display-mode.is-selected { border-color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--text-primary); }
+.pn-settings-mode.pn-display-mode:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.pn-display-mode-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; font-weight: 600; }
+.pn-display-mode-check { margin-left: auto; }
+.pn-display-note { margin: 0; padding: 0 1.25rem 1.25rem; color: var(--text-secondary); font-size: 0.8125rem; }
+
+.pn-display-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 7.5rem;
+  padding: 0.5rem;
+  border: 1px solid;
+  border-radius: 0.625rem;
+  box-sizing: border-box;
+}
+.pn-display-sample-bar { display: flex; align-items: center; height: 1rem; padding: 0 0.375rem; border: 1px solid; border-radius: 0.25rem; }
+.pn-display-sample-bar i { width: 1.5rem; height: 0.25rem; border-radius: 1rem; }
+.pn-display-sample-card { display: flex; flex: 1; flex-direction: column; gap: 0.375rem; padding: 0.5rem; border: 1px solid; border-radius: 0.375rem; }
+.pn-display-sample-card i { height: 0.3125rem; border-radius: 1rem; }
+.pn-display-sample-card i:first-child { width: 70%; }
+.pn-display-sample-card i:nth-child(2) { width: 45%; }
+.pn-display-sample-card b { width: 2.5rem; height: 0.75rem; margin-top: auto; border-radius: 0.25rem; }
+.pn-display-sample.is-small { width: 3rem; height: 2.25rem; gap: 0.1875rem; padding: 0.1875rem; border-radius: 0.375rem; }
+.pn-display-sample.is-small .pn-display-sample-bar { height: 0.375rem; padding: 0 0.125rem; }
+.pn-display-sample.is-small .pn-display-sample-bar i { width: 0.5rem; height: 0.125rem; }
+.pn-display-sample.is-small .pn-display-sample-card { gap: 0.125rem; padding: 0.1875rem; border-radius: 0.1875rem; }
+.pn-display-sample.is-small .pn-display-sample-card i { height: 0.125rem; }
+.pn-display-sample.is-small .pn-display-sample-card b { width: 0.75rem; height: 0.25rem; }
+.pn-display-community { cursor: default; }
+.pn-display-community:hover { background: none; }
+.pn-display-community-samples { display: flex; flex: none; gap: 0.375rem; }
+
+@media (max-width: 860px) {
+  .pn-display-modes { gap: 0.75rem; padding: 1rem; }
+  .pn-display-sample:not(.is-small) { height: 6rem; }
+  .pn-settings-fold-head { padding: 0.875rem 1rem; }
+}
+
+/* Profile: the form beside a live preview of what people see when they
+   click your name, like Substack's profile editor. */
+.pn-your-settings .pn-profile-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 2rem;
+  padding: 1.5rem 1.25rem;
+}
+.pn-profile-editor-form { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+.pn-profile-editor-photo {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin: -0.5rem;
+  padding: 0.5rem;
+  border: 1px dashed transparent;
+  border-radius: var(--pn-set-r-frame);
+}
+.pn-profile-editor-photo.is-drag-over { border-color: var(--text-secondary); background: var(--hover-overlay); }
+.pn-profile-editor-photo .pn-profile-editor-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-card-alt, var(--hover-overlay));
+  box-shadow: 0 0 0 1px var(--border-default);
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.pn-profile-editor-photo-text { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.pn-profile-editor-photo-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.625rem; }
+.pn-profile-editor-upload { position: relative; cursor: pointer; }
+.pn-profile-editor-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.pn-profile-editor-upload:focus-within { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.pn-profile-editor-field { display: flex; flex-direction: column; gap: 0.375rem; }
+.pn-profile-editor-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.pn-your-settings textarea.pn-profile-editor-bio {
+  height: auto;
+  min-height: 6.5rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+  resize: vertical;
+}
+.pn-profile-editor-preview { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.pn-profile-editor-preview-label {
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pn-profile-editor-preview-card {
+  position: sticky;
+  top: 1rem;
+  padding-top: 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-set-r-frame);
+  background: var(--bg-app);
+  pointer-events: none;
+  user-select: none;
+}
+.pn-profile-editor-error { margin: 0 1.25rem 1rem; }
+.pn-profile-editor-status { color: var(--text-secondary); font-size: 0.8125rem; }
+.pn-profile-editor-status.is-dirty { color: var(--text-primary); font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .pn-your-settings .pn-profile-editor-body { grid-template-columns: minmax(0, 1fr); }
+  .pn-profile-editor-preview-card { position: static; }
+}
+@media (max-width: 860px) {
+  .pn-your-settings .pn-profile-editor-body { gap: 1.5rem; padding: 1.25rem 1rem; }
+  .pn-profile-editor-photo .pn-profile-editor-avatar { width: 4.5rem; height: 4.5rem; }
+}
+.pn-display-everywhere { border-top: 1px solid var(--border-default); }
+
+/* Billing: a row per community with its plan as a badge and its one action
+   on the right; the price sits in the card's header. */
+.pn-billing-price { display: flex; flex-direction: column; align-items: flex-end; gap: 0.125rem; text-align: right; }
+.pn-billing-price strong { font-size: 1.0625rem; font-weight: 700; line-height: 1.5rem; color: var(--text-primary); }
+.pn-billing-price span { font-size: 0.75rem; color: var(--text-secondary); }
+.pn-billing-community .pn-settings-row-head { justify-content: flex-start; gap: 0.75rem; }
+.pn-billing-community .pn-settings-row-text { flex: 1; }
+.pn-billing-community .pn-settings-label { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; font-size: 0.9375rem; }
+.pn-billing-community .pn-settings-badge { margin-left: 0; }
+.pn-billing-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--pn-set-r);
+  background: var(--bg-card-hover, var(--bg-card-alt, var(--hover-overlay)));
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.pn-billing-card .pn-settings-row .pn-settings-inline-error { flex: 1; }
+.pn-billing-card .pn-settings-loading { padding: 1rem 1.25rem; }
+.pn-billing-disclosure { border-top: 1px solid var(--border-muted, var(--border-default)); font-size: 0.75rem; }
+.pn-billing-recovery-error { padding: 0 1.25rem 1rem; }
+.pn-billing-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+@media (max-width: 640px) {
+  .pn-billing-price { align-items: flex-start; text-align: left; }
+  .pn-billing-community .pn-settings-row-head { flex-wrap: wrap; }
+  .pn-billing-community .pn-settings-row-control { width: 100%; }
+  .pn-billing-community .pn-settings-row-control .pn-settings-button { width: 100%; }
+}

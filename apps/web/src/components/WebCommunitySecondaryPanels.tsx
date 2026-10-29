@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
+import { WebCommunityAboutPage } from "./WebCommunityAboutPage";
 import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
@@ -13,12 +14,14 @@ import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 import { WebCommunityKnowledgePanel } from "./WebCommunityKnowledgePanel";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 import { WebCommunityWorkflowsSection } from "./WebCommunityWorkflowsSection";
+import { WebCommunityMembers } from "./WebCommunityMembers";
+import { WebCommunityPageBack } from "./WebCommunityPageBack";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
   settings: Omit<
     ComponentProps<typeof WebCommunitySettingsSection>,
-    "state" | "actions" | "aiAgentProps" | "externalWebsite"
+    "state" | "actions" | "aiAgentProps" | "externalWebsite" | "funnel"
   > & {
     state: ComponentProps<typeof WebCommunitySettingsSection>["state"];
     actions: Omit<
@@ -117,8 +120,13 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "workflows" &&
         renderWorkspacePane(<WebCommunityWorkflowsSection {...props.workflows} />)}
 
+      {props.communityTab === "people" &&
+        renderWorkspacePane(props.workflows.access
+          ? <div className="pn-page-with-back"><WebCommunityPageBack /><WebCommunityMembers key={props.workflows.access.scopeKey} gateway={props.workflows.access} /></div>
+          : <p role="status">Only the community's owner and admins can see members.</p>)}
+
       {props.communityTab === "analytics" &&
-        renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
+        renderCenteredPane(<div className="pn-page-with-back"><WebCommunityPageBack /><WebCommunityAnalyticsSection {...props.analytics} /></div>)}
 
       {props.communityTab === "resources" ? (
         <>
@@ -130,6 +138,8 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "events" &&
         renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
+
+      {props.communityTab === "about" && <WebCommunityAboutPage />}
 
     </>
   );

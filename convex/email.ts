@@ -1,3 +1,4 @@
+import { optOutOfWorkflowEmailsByToken } from "./communityWorkflowEmailCore";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
@@ -164,6 +165,12 @@ async function weeklyDigestRecipientHasCommunityAccess(
     .unique();
   return communityMembershipRowIsActive(membership);
 }
+
+// The link in an automation email (Workflows → Send an email).
+export const optOutOfWorkflowEmailsInternal = internalMutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => optOutOfWorkflowEmailsByToken(ctx, args.token, Date.now()),
+});
 
 export const enqueueEmailJobInternal = internalMutation({
   args: {

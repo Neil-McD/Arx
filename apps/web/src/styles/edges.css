@@ -1,12 +1,16 @@
-/* Edges. The theme's Edges setting
+/* Edges and alignment. The theme's Edges setting
    (soft | sharp | clean | framed, see shared/communityTheme.ts) sets the
    --pn-edge-* values and the line colours; these rules only read them, so
    "soft" and dark schemes look as they did. Sizes are in rem so the theme
    map leaves them alone. */
 
 /* Cards draw their line at full strength (soft keeps the old 72% line) and
-   take the setting's lift. */
+   take the setting's lift. Course cards keep their own Card edge choice. */
 [data-community-theme] :is(
+  .community-post-card,
+  .community-posts-composer,
+  .community-aside-card,
+  .pn-settings-card,
   .community-events-month-nav,
   .resource-course-outline
 ) {
@@ -14,19 +18,67 @@
   box-shadow: var(--pn-edge-lift, none);
 }
 [data-community-theme] article.resource-course-card { border-color: var(--pn-edge-card-line, var(--border-default)); }
-[data-community-theme] .chat-input-bar { border-color: var(--composer-border); }
+[data-community-theme] :is(.chat-input-bar, .community-top-nav-search) { border-color: var(--composer-border); }
 
 /* Framed: each column is its own rounded panel with a gap around it, on the
    tinted canvas. With the other settings the gap and radius are 0. */
 .product-shell-surface[data-community-theme] { background: var(--pn-edge-canvas, var(--bg-app)); }
-.product-shell-surface--community[data-community-theme] {
+:is(.product-shell-surface--community, .product-shell-surface--single)[data-community-theme] {
   gap: var(--pn-edge-gap, 0rem);
   padding: var(--pn-edge-gap, 0rem);
 }
-.product-shell-surface--community[data-community-theme] > :is(.community-nav, main.workspace) {
+:is(.product-shell-surface--community, .product-shell-surface--single)[data-community-theme] > :is(.community-nav, main.workspace),
+:is(.product-shell-surface--community, .product-shell-surface--single)[data-community-theme] .channels-feel-body :is(.channels-feel-masthead, main.workspace) {
   border-radius: var(--pn-edge-panel-radius, 0rem);
   box-shadow: var(--pn-edge-frame, none);
 }
+:is(.product-shell-surface--community, .product-shell-surface--single)[data-community-theme] > .channels-feel-body { gap: var(--pn-edge-gap, 0rem); }
+.product-shell-surface--community-top[data-community-theme] .community-top-nav { box-shadow: var(--pn-edge-frame, none); }
+
+/* ---------------------------------------------------------------------------
+   Alignment, the same with every Edges setting.
+   --------------------------------------------------------------------------- */
+
+/* Channels: every page sits under the same 3.5rem bar as chat, ruled level
+   with the side column's name row, so the top-right buttons have a bar of
+   their own instead of floating over page titles and buttons. */
+.product-shell-surface[data-channels-feel="publication"] > .channels-feel-body:not(:has(> .channels-feel-masthead)) {
+  position: relative;
+  padding-top: 3.5rem;
+}
+.product-shell-surface[data-channels-feel="publication"] > .channels-feel-body:not(:has(> .channels-feel-masthead)) main.workspace {
+  border-top: 1px solid var(--border-default);
+}
+/* Framed: with no masthead the bar and the page are one panel. */
+:is(.product-shell-surface--community, .product-shell-surface--single)[data-community-theme][data-channels-feel="publication"] > .channels-feel-body:not(:has(> .channels-feel-masthead)) {
+  background: var(--bg-workspace);
+  border-radius: var(--pn-edge-panel-radius, 0rem);
+  box-shadow: var(--pn-edge-frame, none);
+  overflow: hidden;
+}
+:is(.product-shell-surface--community, .product-shell-surface--single)[data-community-theme][data-channels-feel="publication"] > .channels-feel-body:not(:has(> .channels-feel-masthead)) main.workspace {
+  border-radius: 0;
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel="publication"] > .channels-feel-body:not(:has(> .channels-feel-masthead)) :is(
+  .community-knowledge-header,
+  .community-events-panel > .feed-header-row
+) {
+  padding-right: 1.5rem;
+}
+
+/* Quiet and Reader: the members panel's title row is where the top-right
+   buttons sit, so it carries no title (as in the Polynet look); the panel
+   starts at Creator. */
+.product-shell-surface:is([data-channels-feel="quiet"], [data-channels-feel="reader"]) .community-context-rail-name {
+  visibility: hidden;
+}
+
+/* Classroom: one left edge. The logo, tabs, page titles, cards and Events
+   all start on the header's gutter. */
+.product-shell-surface--community-top .community-knowledge-page:not([data-reading]) { margin-inline: -1.25rem; }
+.product-shell-surface--community-top .web-community-centered-pane:has(> .community-events-panel) { justify-content: flex-start; }
+.product-shell-surface--community-top .community-events-panel { margin-inline: 0.25rem auto; }
 
 /* Framed: the top-right buttons move in with the panels, so they sit inside
    the top panel's bar instead of on its edge. */

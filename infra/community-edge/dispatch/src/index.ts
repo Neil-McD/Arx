@@ -25,6 +25,7 @@
 import { SDK_SOURCE } from "./sdk";
 import { LLMS_TXT } from "./llms";
 import { UI_CSS, UI_SOURCE } from "./ui";
+import { EMBED_SOURCE } from "./embed";
 import { KIT_SOURCE } from "./blocks/kit";
 import { CHANNELS_SOURCE } from "./blocks/channels";
 import { CHAT_SOURCE } from "./blocks/chat";
@@ -1025,6 +1026,12 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
       return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
     }
     return polynetAsset(source, "text/javascript", 300);
+  }
+  if (url.pathname === "/__polynet/embed.js") {
+    // Widgets run in frames with an opaque origin; the script must load from there.
+    const response = polynetAsset(EMBED_SOURCE, "text/javascript", 300);
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    return response;
   }
   if (url.pathname === "/__polynet/ui.js") return polynetAsset(UI_SOURCE, "text/javascript", 300);
   if (url.pathname === "/__polynet/ui.css") return polynetAsset(UI_CSS, "text/css", 300);

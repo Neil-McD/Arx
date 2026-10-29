@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { contrastRatio, normalizeCommunityTheme, type CommunityThemeV1 } from "../shared/communityTheme";
-import { communityThemeTwinColors } from "../shared/communityThemePalettes";
+import { communityThemeWithBothSchemes } from "../shared/communityThemePalettes";
 import { COMMUNITY_THEME_PRESETS } from "../shared/communityThemePresets";
 
 function preset(id: string): CommunityThemeV1 {
   return COMMUNITY_THEME_PRESETS.find((entry) => entry.id === id)!.theme;
 }
 
-// Turning a one-version look into "Member chooses" in Customize starts the
-// missing version from its twin.
-describe("a one-version look's other version", () => {
+describe("a one-version look gets the member's other version", () => {
+  it("leaves a look made in both versions alone", () => {
+    const theme = preset("classroom");
+    expect(communityThemeWithBothSchemes(theme)).toBe(theme);
+  });
+
   it("uses the starting design's twin when the colours match one", () => {
     const darkOnly: CommunityThemeV1 = { ...preset("night-workshop"), schemes: { dark: preset("night-workshop").schemes.dark } };
-    expect(communityThemeTwinColors(darkOnly, "light")).toEqual(preset("clean-white").schemes.light);
+    const both = communityThemeWithBothSchemes(darkOnly);
+    expect(both.schemes.dark).toEqual(darkOnly.schemes.dark);
+    expect(both.schemes.light).toEqual(preset("clean-white").schemes.light);
   });
 
   it("builds a readable version around the look's own accent otherwise", () => {
@@ -24,7 +29,7 @@ describe("a one-version look's other version", () => {
       } },
     });
     if (!result.ok) throw new Error("invalid");
-    const light = communityThemeTwinColors(result.theme, "light");
+    const light = communityThemeWithBothSchemes(result.theme).schemes.light!;
     expect(contrastRatio(light.accent, light.surface)).toBeGreaterThanOrEqual(3);
     expect(contrastRatio(light.on_button, light.button)).toBeGreaterThanOrEqual(3);
     expect(normalizeCommunityTheme({ ...result.theme, schemes: { light } }).ok).toBe(true);

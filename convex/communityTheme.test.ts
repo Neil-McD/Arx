@@ -10,9 +10,10 @@ import {
   normalizeCommunityTheme,
 } from "../shared/communityTheme";
 
-// A course look: paper, ink, green, hand-drawn corners. The green #2D8C3C
-// carries white text at 4.3:1; #2B863A is the validator's nearest passing shade.
-const PAPER_THEME = {
+// The AI Employee Builders course look (paper, ink, green, hand-drawn corners).
+// The portal's green #2D8C3C carries white text at 4.3:1; #2B863A is the
+// validator's nearest passing shade.
+const CLO_THEME = {
   version: 1,
   schemes: {
     light: {
@@ -30,7 +31,7 @@ const PAPER_THEME = {
   shadow: "hard",
 };
 
-// A "Stopwatch" look: black, the logo's green, condensed type, timer numerals.
+// The 2-Hour Club's "Stopwatch" look: black, the logo's green, condensed type, timer numerals.
 const STOPWATCH_THEME = {
   version: 1,
   schemes: {
@@ -48,12 +49,23 @@ const STOPWATCH_THEME = {
   button_shape: "square",
   density: "compact",
   media_plate: "light",
+  course_cover_ratio: "16:9",
+  course_card_size: "medium",
 };
 
 describe("community theme validation", () => {
-  test("the paper and Stopwatch themes are valid", () => {
-    expect(normalizeCommunityTheme(PAPER_THEME)).toMatchObject({ ok: true });
+  test("the CLO and Stopwatch themes are valid", () => {
+    expect(normalizeCommunityTheme(CLO_THEME)).toMatchObject({ ok: true });
     expect(normalizeCommunityTheme(STOPWATCH_THEME)).toMatchObject({ ok: true });
+  });
+
+  test("a banner that already shows the name can hide the side column's name", () => {
+    expect(DEFAULT_COMMUNITY_THEME.banner_name).toBe("show");
+    expect(communityThemeVariables(DEFAULT_COMMUNITY_THEME, "dark")["--pn-banner-name"]).toBe("visible");
+    const result = normalizeCommunityTheme({ banner_name: "hide" });
+    if (!result.ok) throw new Error(JSON.stringify(result.problems));
+    expect(communityThemeVariables(result.theme, "dark")).toMatchObject({ "--pn-banner-name": "hidden", "--pn-banner-scrim": "0.45" });
+    expect(normalizeCommunityTheme({ banner_name: "maybe" }).ok).toBe(false);
   });
 
   test("an empty theme is Polynet's own look", () => {
@@ -77,7 +89,7 @@ describe("community theme validation", () => {
 
   test("a brand fill too light for its label gets a nearby passing fill", () => {
     const result = normalizeCommunityTheme({
-      schemes: { light: { ...PAPER_THEME.schemes.light, accent: "#2D8C3C" } },
+      schemes: { light: { ...CLO_THEME.schemes.light, accent: "#2D8C3C" } },
     });
     expect(result).toEqual({
       ok: false,
@@ -116,8 +128,8 @@ describe("community theme compilation", () => {
   test("a one-scheme theme is scoped to the community area only", () => {
     const result = normalizeCommunityTheme(STOPWATCH_THEME);
     if (!result.ok) throw new Error("invalid");
-    const css = compileCommunityThemeCss(result.theme, '[data-community-theme="stopwatch-club"]');
-    expect(css).toContain('[data-community-theme="stopwatch-club"] {\n  color-scheme: dark;');
+    const css = compileCommunityThemeCss(result.theme, '[data-community-theme="the-2-hour-club"]');
+    expect(css).toContain('[data-community-theme="the-2-hour-club"] {\n  color-scheme: dark;');
     expect(css).not.toMatch(/(^|\n):root\b/);
     expect(css).not.toContain("--surface-rail");
     expect(css).toContain("--pn-heading-case: uppercase;");
@@ -132,13 +144,70 @@ describe("community theme compilation", () => {
   });
 
   test("links are always readable, even when the accent alone is not", () => {
-    const result = normalizeCommunityTheme(PAPER_THEME);
+    const result = normalizeCommunityTheme(CLO_THEME);
     if (!result.ok) throw new Error("invalid");
     const vars = communityThemeVariables(result.theme, "light");
     expect(contrastRatio(vars["--pn-link"], "#FAFAFA")).toBeGreaterThanOrEqual(4.5);
     expect(vars["--accent-brand"]).toBe("#2B863A");
     expect(vars["--pn-radius-card"]).toBe("15px 4px 15px 4px");
     expect(vars["--pn-radius-button"]).toContain("255px");
+  });
+
+  test("course cards: Classroom's medium cards by default, the page style's own columns on request, and a cover ratio", () => {
+    const defaults = communityThemeVariables(DEFAULT_COMMUNITY_THEME, "light");
+    expect(defaults["--pn-course-columns"]).toBe("repeat(auto-fill, minmax(min(100%, 260px), 1fr))");
+    expect(defaults["--pn-course-cover-ratio"]).toBe("16 / 9");
+    const own = normalizeCommunityTheme({ version: 1, course_card_size: "default", course_cover_ratio: "auto" });
+    if (!own.ok) throw new Error("invalid");
+    const ownVars = communityThemeVariables(own.theme, "light");
+    expect(ownVars["--pn-course-columns"]).toBe("repeat(2, minmax(0, 1fr))");
+    expect(ownVars["--pn-course-cover-ratio"]).toBe("auto");
+    const stopwatch = normalizeCommunityTheme(STOPWATCH_THEME);
+    if (!stopwatch.ok) throw new Error("invalid");
+    const vars = communityThemeVariables(stopwatch.theme, "dark");
+    expect(vars["--pn-course-columns"]).toBe("repeat(auto-fill, minmax(min(100%, 260px), 1fr))");
+    // A picked size beats the page style's columns and lets the catalog fill the screen.
+    expect(vars["--pn-course-columns-owner"]).toBe(vars["--pn-course-columns"]);
+    expect(vars["--pn-course-catalog-max-owner"]).toBe("90rem");
+    expect(ownVars["--pn-course-columns-owner"]).toBe("initial");
+    expect(ownVars["--pn-course-catalog-max-owner"]).toBe("initial");
+    expect(vars["--pn-course-cover-ratio"]).toBe("16 / 9");
+    expect(vars["--pn-course-cover-height"]).toBe("auto");
+    expect(normalizeCommunityTheme({ course_cover_ratio: "2:1" }).ok).toBe(false);
+  });
+
+  test("a cover tint prints covers onto a wash of the accent, in light schemes only", () => {
+    const defaults = communityThemeVariables(DEFAULT_COMMUNITY_THEME, "light");
+    expect(defaults["--pn-cover-blend"]).toBe("normal");
+    const tinted = normalizeCommunityTheme({ ...CLO_THEME, course_cover_plate: "tint" });
+    if (!tinted.ok) throw new Error("invalid");
+    expect(communityThemeVariables(tinted.theme, "light")["--pn-cover-plate"]).toBe("color-mix(in srgb, #2B863A 9%, #FFFFFF)");
+    expect(communityThemeVariables(tinted.theme, "light")["--pn-cover-blend"]).toBe("multiply");
+    const dark = normalizeCommunityTheme({ ...STOPWATCH_THEME, course_cover_plate: "tint" });
+    if (!dark.ok) throw new Error("invalid");
+    expect(communityThemeVariables(dark.theme, "dark")["--pn-cover-blend"]).toBe("normal");
+    expect(normalizeCommunityTheme({ course_cover_plate: "photo" }).ok).toBe(false);
+  });
+
+  test("the course card text panel is shaded by default, and a custom colour keeps its text readable", () => {
+    expect(DEFAULT_COMMUNITY_THEME.course_card_panel).toBe("shade");
+    expect(communityThemeVariables(DEFAULT_COMMUNITY_THEME, "light")["--pn-course-panel"]).toContain("color-mix");
+    const darkPanel = normalizeCommunityTheme({ ...CLO_THEME, course_card_panel: "custom", course_card_panel_color: "#222222" });
+    if (!darkPanel.ok) throw new Error("invalid");
+    const vars = communityThemeVariables(darkPanel.theme, "light");
+    expect(vars["--pn-course-panel"]).toBe("#222222");
+    expect(vars["--pn-course-panel-text"]).toBe("#FFFFFF");
+    expect(normalizeCommunityTheme({ course_card_panel: "custom" }).ok).toBe(false);
+    expect(normalizeCommunityTheme({ course_card_panel: "custom", course_card_panel_color: "red" }).ok).toBe(false);
+    expect(normalizeCommunityTheme({ course_card_panel: "neon" }).ok).toBe(false);
+  });
+
+  test("a whole cover fit shows each cover in full, over its inline framing", () => {
+    expect(compileCommunityThemeCss(DEFAULT_COMMUNITY_THEME, ".c")).not.toContain("object-fit: contain");
+    const whole = normalizeCommunityTheme({ ...STOPWATCH_THEME, course_cover_fit: "whole" });
+    if (!whole.ok) throw new Error("invalid");
+    expect(compileCommunityThemeCss(whole.theme, ".c")).toContain(".c .resource-course-card-cover-image {\n  inset: 0 !important;");
+    expect(normalizeCommunityTheme({ course_cover_fit: "stretch" }).ok).toBe(false);
   });
 
   test("text roles all follow the one text-size setting, a reading step above Polynet's CSS", () => {
@@ -173,8 +242,8 @@ describe("community theme compilation", () => {
 
   test("grey text on a dark scheme reads near-white, and light schemes keep their greys", () => {
     const stopwatch = normalizeCommunityTheme(STOPWATCH_THEME);
-    const paper = normalizeCommunityTheme(PAPER_THEME);
-    if (!stopwatch.ok || !paper.ok) throw new Error("invalid");
+    const clo = normalizeCommunityTheme(CLO_THEME);
+    if (!stopwatch.ok || !clo.ok) throw new Error("invalid");
     const dark = communityThemeVariables(stopwatch.theme, "dark");
     const surface = stopwatch.theme.schemes.dark!.surface;
     expect(contrastRatio(dark["--text-secondary"], surface)).toBeGreaterThanOrEqual(15);
@@ -185,7 +254,7 @@ describe("community theme compilation", () => {
     expect(dark["--text-on-accent"]).toBe(stopwatch.theme.schemes.dark!.on_accent);
     expect(contrastRatio(dark["--text-link"], surface)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(dark["--chat-meta-text"], surface)).toBeGreaterThanOrEqual(12);
-    const light = communityThemeVariables(paper.theme, "light");
+    const light = communityThemeVariables(clo.theme, "light");
     expect(light["--text-muted"]).toBe("#6B6B63");
     expect(contrastRatio(light["--text-faint"], "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
   });

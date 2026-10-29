@@ -20,7 +20,7 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /const activeCommunityComposerPlaceholder = activeCommunityChannelSlug[\s\S]*`Message #\$\{activeCommunityChannelSlug\}`[\s\S]*: "Message the community\.\.\.";/,
+  /const activeCommunityComposerPlaceholder = [\s\S]*: activeCommunityChannelSlug[\s\S]*`Message #\$\{activeCommunityChannelSlug\}`[\s\S]*: "Message the community\.\.\.";/,
   "community composer placeholder must identify the selected channel with a safe fallback",
 );
 assert.match(

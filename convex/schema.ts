@@ -1,6 +1,7 @@
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { defineSchema, defineTable } from "convex/server";
 import { communityFormQuestionValidator } from "./communityFormValidators";
+import { communityLessonFieldsValidator } from "./communityLessonValidators";
 import { v } from "convex/values";
 import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
@@ -10,6 +11,63 @@ const workflowRequirementEvidenceValidator = v.array(v.object({
   automationKey: v.string(), generation: v.string(), activationSequence: v.number(),
   sourceRef: v.string(), satisfiedAt: v.number(),
 }));
+
+// One "Only if" clause: a member property compared with a value.
+const workflowConditionClauseValidator = v.object({
+  propertyKey: v.string(),
+  op: v.union(v.literal("is"), v.literal("is_not"), v.literal("is_set"), v.literal("is_empty")),
+  value: v.optional(v.union(v.string(), v.number(), v.boolean())),
+});
+
+// One rule of a Workflow stage: a trigger and an action.
+const workflowAutomationValidator = v.object({
+  key: v.string(),
+  timerGeneration: v.optional(v.string()),
+  sequenceEnabledAt: v.optional(v.number()),
+  sequenceEnabledRevision: v.optional(v.number()),
+  condition: v.optional(v.object({
+    propertyKey: v.string(),
+    op: v.union(v.literal("is"), v.literal("is_not"), v.literal("is_set"), v.literal("is_empty")),
+    value: v.optional(v.union(v.string(), v.number(), v.boolean())),
+    // More clauses, joined by match (all = AND, any = OR); otherwise runs when they don't hold.
+    match: v.optional(v.union(v.literal("all"), v.literal("any"))),
+    also: v.optional(v.array(workflowConditionClauseValidator)),
+    otherwise: v.optional(v.boolean()),
+  })),
+  trigger: v.union(
+    v.object({ type: v.literal("member_joined") }),
+      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string(), delayMinutes: v.optional(v.number()) }),
+    v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
+    v.object({ type: v.literal("lesson_completed"), resourceId: v.optional(v.string()) }),
+    v.object({ type: v.literal("course_completed"), moduleId: v.optional(v.string()) }),
+    v.object({ type: v.literal("track_completed"), trackKey: v.optional(v.string()) }),
+    v.object({ type: v.literal("client_property_changed"), propertyKey: v.string(), value: v.optional(v.union(v.string(), v.number(), v.boolean())) }),
+    v.object({ type: v.literal("property_date"), propertyKey: v.string(), offsetDays: v.number() }),
+    v.object({ type: v.literal("offer_started"), offerKey: v.optional(v.string()) }),
+    v.object({ type: v.literal("offer_ended"), offerKey: v.optional(v.string()) }),
+    v.object({ type: v.literal("pod_member_added"), channelId: v.optional(v.string()) }),
+    v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
+    v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number(), nudge: v.optional(v.boolean()) }),
+  ),
+  action: v.union(
+    v.object({ key: v.string(), type: v.literal("create_service_channel") }),
+    v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
+    v.object({
+      key: v.string(),
+      type: v.literal("prompt_agent"),
+      prompt: v.string(),
+      sees: v.optional(v.array(v.string())),
+    }),
+    v.object({
+      key: v.string(),
+      type: v.literal("set_client_property"),
+      propertyKey: v.string(),
+      value: v.union(v.string(), v.number(), v.boolean(), v.array(v.string()), v.null()),
+    }),
+    v.object({ key: v.string(), type: v.literal("send_email"), subject: v.string(), body: v.string() }),
+    v.object({ key: v.string(), type: v.literal("set_pod_member"), channelId: v.string(), active: v.boolean() }),
+  ),
+});
 
 export default defineSchema({
   communityFormRequests: defineTable({
@@ -27,6 +85,10 @@ export default defineSchema({
     communityId: v.id("communities"), key: v.string(), name: v.string(),
     questions: v.array(communityFormQuestionValidator), revision: v.number(),
     publishedRevision: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),
+    /** Order in the Forms list and every form picker; absent sorts by creation. */
+    position: v.optional(v.number()),
+    /** Deleted from the list but kept, so past answers still read; restorable. */
+    deletedAt: v.optional(v.number()),
   }).index("by_community_key", ["communityId", "key"]),
   communityFormVersions: defineTable({
     communityId: v.id("communities"), formId: v.id("communityForms"), revision: v.number(),
@@ -893,6 +955,15 @@ export default defineSchema({
        (Intl.DateTimeFormat), refreshed when it drifts. Never asked. */
     timezone: v.optional(v.string()),
     timezoneCapturedAt: v.optional(v.number()),
+    // What their profile shows others: communities they own or co-create,
+    // and public ones they've joined. Both shown unless turned off.
+    hideOwnedCommunities: v.optional(v.boolean()),
+    hideJoinedCommunities: v.optional(v.boolean()),
+    // Their Light/Dark pick, kept on the account so it follows them to every
+    // device and their own agent can set it. Absent: the browser's pick stands.
+    displayTheme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
+    // "Use my pick in every community" from Display.
+    displayLookEverywhere: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
@@ -1159,6 +1230,9 @@ export default defineSchema({
     status: v.union(v.literal("active"), v.literal("archived")),
     position: v.number(),
     pinnedRootId: v.optional(v.id("communityInteractionRoots")),
+    /** Who gets this channel by offer (communityOffers keys). Members on one of these
+     *  offers, or on a higher one that includes it, are added and removed automatically. */
+    offerAudience: v.optional(v.array(v.string())),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1178,6 +1252,8 @@ export default defineSchema({
     membershipId: v.optional(v.id("communityMemberships")),
     membershipActivationSequence: v.optional(v.number()),
     status: v.union(v.literal("active"), v.literal("revoked")),
+    /** Added because of the member's offer (the channel's offerAudience); the offer sync only removes these. */
+    viaOffer: v.optional(v.boolean()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1191,6 +1267,9 @@ export default defineSchema({
     serviceChannelId: v.optional(v.id("communityChannels")),
     serviceChannelRevision: v.optional(v.number()),
     role: v.union(v.literal("admin"), v.literal("moderator"), v.literal("member")),
+    // An admin the owner made a co-creator: builds the community with them and
+    // is shown publicly as one of its creators. No payouts.
+    coCreator: v.optional(v.boolean()),
     accessSource: v.optional(
       v.union(
         v.literal("free_grant"),
@@ -1199,6 +1278,8 @@ export default defineSchema({
       ),
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
+    /** The offers this member had at the last offer sync (communityOffers keys), so a change can start Workflow steps. */
+    heldOfferKeys: v.optional(v.array(v.string())),
     active: v.optional(v.boolean()),
     activationSequence: v.optional(v.number()),
     activatedAt: v.optional(v.number()),
@@ -1211,7 +1292,8 @@ export default defineSchema({
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_coCreator", ["communityId", "coCreator"]),
 
   communityOnboardingConfigs: defineTable({
     communityId: v.id("communities"),
@@ -1291,6 +1373,31 @@ export default defineSchema({
 
   communityMemberWorkflows: defineTable({
     communityId: v.id("communities"),
+    /** Builder setting: members who joined with a pending welcome form see only that form until they submit it. */
+    welcomeGate: v.optional(v.boolean()),
+    /** When the welcome flow was last turned on; members who join after it are held from the moment they join. */
+    welcomeGateEnabledAt: v.optional(v.number()),
+    /** How the welcome page shows: the whole community pane ("page", the default), or a pop-up over the open community. */
+    welcomeDisplay: v.optional(v.union(v.literal("page"), v.literal("popup"))),
+    /** Whether a stage change made over the MCP/CLI goes live at once ("apply", the default),
+     *  waits for the owner when another admin's agent made it ("ask_others"), or always waits ("ask"). */
+    agentChangeReview: v.optional(v.union(v.literal("apply"), v.literal("ask_others"), v.literal("ask"))),
+    /** Lesson pages a member marks done in the welcome flow, after its join forms, in this order. */
+    welcomeLessonIds: v.optional(v.array(v.id("communityResources"))),
+    /** The builder's words on the welcome page; Polynet's defaults where absent. */
+    welcomePage: v.optional(v.object({
+      title: v.optional(v.string()),
+      message: v.optional(v.string()),
+      mediaUrl: v.optional(v.string()),
+      /** The page as blocks with "Next" breaks (shared/communityWelcomeLayout.ts); message and media before it existed. */
+      layout: v.optional(v.array(v.union(
+        v.object({ type: v.literal("text"), markdown: v.string() }),
+        v.object({ type: v.literal("choice"), prompt: v.string(), options: v.array(v.object({ label: v.string(), hint: v.string(), markdown: v.string(), icon: v.optional(v.string()) })), agent: v.optional(v.boolean()) }),
+        v.object({ type: v.literal("form"), formKey: v.string() }),
+        v.object({ type: v.literal("lesson"), resourceId: v.string() }),
+        v.object({ type: v.literal("next") }),
+      ))),
+    })),
     milestones: v.array(
       v.object({
         key: v.string(),
@@ -1298,28 +1405,11 @@ export default defineSchema({
         instructions: v.optional(v.string()),
         goal: v.optional(v.string()),
         requireHumanApproval: v.optional(v.boolean()),
-        automations: v.array(v.object({
-          key: v.string(),
-          timerGeneration: v.optional(v.string()),
-          sequenceEnabledAt: v.optional(v.number()),
-          sequenceEnabledRevision: v.optional(v.number()),
-          trigger: v.union(
-            v.object({ type: v.literal("member_joined") }),
-      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
-            v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
-            v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
-            v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
-          ),
-          action: v.union(
-            v.object({ key: v.string(), type: v.literal("create_service_channel") }),
-            v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
-            v.object({
-              key: v.string(),
-              type: v.literal("prompt_agent"),
-              prompt: v.string(),
-            }),
-          ),
-        })),
+        color: v.optional(v.union(v.literal("grey"), v.literal("green"), v.literal("teal"), v.literal("blue"), v.literal("purple"),
+          v.literal("pink"), v.literal("red"), v.literal("orange"), v.literal("yellow"))),
+        automations: v.array(workflowAutomationValidator),
+        /** Automations the owner switched off: kept as they were, never run. */
+        pausedAutomations: v.optional(v.array(workflowAutomationValidator)),
       }),
     ),
     revision: v.number(),
@@ -1356,6 +1446,13 @@ export default defineSchema({
     automationKey: v.string(),
     timerGeneration: v.string(),
     dueAt: v.number(),
+    // Waits and event-started agent steps: the moment the wait began, and the
+    // receipt it came from (one timer per receipt and rule).
+    startedAt: v.optional(v.number()),
+    sourceRef: v.optional(v.string()),
+    // The owner skipped the wait (Run now, Test run, Autoplay): an agent step
+    // it starts may run before the rule's own due time.
+    runEarlyAt: v.optional(v.number()),
     status: v.union(v.literal("pending"), v.literal("consumed"), v.literal("obsolete")),
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
@@ -1380,27 +1477,53 @@ export default defineSchema({
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
-    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted"), v.literal("all_actions_complete"), v.literal("previous_action_completed")),
+    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted"), v.literal("all_actions_complete"), v.literal("previous_action_completed"), v.literal("lesson_completed"), v.literal("course_completed"), v.literal("track_completed"), v.literal("client_property_changed"), v.literal("offer_started"), v.literal("offer_ended"), v.literal("property_date"), v.literal("pod_member_added")),
     // Optional for historical runs. New runs capture the condition that matched.
     triggerSnapshot: v.optional(v.union(
       v.object({ type: v.literal("member_joined") }),
-      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
+      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string(), delayMinutes: v.optional(v.number()) }),
       v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
       v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
-      v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
+      v.object({ type: v.literal("lesson_completed"), resourceId: v.optional(v.string()) }),
+      v.object({ type: v.literal("course_completed"), moduleId: v.optional(v.string()) }),
+      v.object({ type: v.literal("track_completed"), trackKey: v.optional(v.string()) }),
+      v.object({ type: v.literal("client_property_changed"), propertyKey: v.string(), value: v.optional(v.union(v.string(), v.number(), v.boolean())) }),
+      v.object({ type: v.literal("property_date"), propertyKey: v.string(), offsetDays: v.number() }),
+            v.object({ type: v.literal("offer_started"), offerKey: v.optional(v.string()) }),
+            v.object({ type: v.literal("offer_ended"), offerKey: v.optional(v.string()) }),
+            v.object({ type: v.literal("pod_member_added"), channelId: v.optional(v.string()) }),
+      v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number(), nudge: v.optional(v.boolean()) }),
     )),
     triggerReceiptRef: v.string(),
     predecessorRunId: v.optional(v.id("communityMemberWorkflowRuns")),
+    // The rule's "Only if" when it ran; a skip only proves the step under the same condition.
+    conditionSnapshot: v.optional(v.object({
+      propertyKey: v.string(),
+      op: v.union(v.literal("is"), v.literal("is_not"), v.literal("is_set"), v.literal("is_empty")),
+      value: v.optional(v.union(v.string(), v.number(), v.boolean())),
+      // More clauses, joined by match (all = AND, any = OR); otherwise runs when they don't hold.
+      match: v.optional(v.union(v.literal("all"), v.literal("any"))),
+      also: v.optional(v.array(workflowConditionClauseValidator)),
+      otherwise: v.optional(v.boolean()),
+    })),
     actionSnapshot: v.union(
       v.object({ key: v.string(), type: v.literal("evaluate_goal") }),
       v.object({ key: v.string(), type: v.literal("create_service_channel") }),
       v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
-      v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),
+      v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string(), sees: v.optional(v.array(v.string())) }),
+      v.object({
+        key: v.string(),
+        type: v.literal("set_client_property"),
+        propertyKey: v.string(),
+        value: v.union(v.string(), v.number(), v.boolean(), v.array(v.string()), v.null()),
+      }),
       v.object({
         key: v.string(),
         type: v.literal("move_member"),
         destination: v.literal("next_or_complete"),
       }),
+      v.object({ key: v.string(), type: v.literal("send_email"), subject: v.string(), body: v.string() }),
+      v.object({ key: v.string(), type: v.literal("set_pod_member"), channelId: v.string(), active: v.boolean() }),
     ),
     status: v.union(
       v.literal("running"),
@@ -1552,6 +1675,41 @@ export default defineSchema({
 
   // Looks an owner saved under a name, to switch back to later. Applying one
   // copies it into communityThemes' draft; publishing stays a separate step.
+  // Skill tracks (shared/communityLessonTracks.ts): roadmaps over the lesson
+  // library. Key "main" holds the existing roadmap's title and rules; with no
+  // stages of its own, its stages come from the lesson fields.
+  communityLessonTracks: defineTable({
+    communityId: v.id("communities"),
+    key: v.string(),
+    title: v.string(),
+    summary: v.optional(v.string()),
+    coverUrl: v.optional(v.string()),
+    coverStyle: v.optional(v.union(v.literal("route"), v.literal("diagram"), v.literal("terminal"))),
+    outcomes: v.optional(v.array(v.string())),
+    audience: v.optional(v.string()),
+    order: v.number(),
+    show: v.union(v.literal("always"), v.literal("when_open")),
+    opensWhen: v.array(v.union(
+      v.object({ type: v.literal("after_track"), track: v.string() }),
+      v.object({ type: v.literal("after_checkpoint"), resource_id: v.string() }),
+      v.object({ type: v.literal("workflow_stage"), milestone_key: v.string() }),
+      v.object({ type: v.literal("client_property"), property: v.string(), equals: v.union(v.string(), v.number(), v.boolean()) }),
+      v.object({ type: v.literal("offer"), offer: v.string() }),
+    )),
+    stages: v.array(v.object({
+      name: v.string(),
+      steps: v.array(v.object({ resource_id: v.string(), checkpoint: v.optional(v.boolean()) })),
+    })),
+    revision: v.number(),
+    archivedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_key", ["communityId", "key"]),
+
   communitySavedThemes: defineTable({
     communityId: v.id("communities"),
     name: v.string(),
@@ -1563,8 +1721,9 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"]),
 
-  // A community's brand (shared/communityBrand.ts): what designs start from.
-  // Kept apart from communityThemes so changing the look never resets it.
+  // A community's layout (shared/communityLayout.ts): navigation position, tab
+  // order and page arrangement. Kept apart from communityThemes so changing
+  // the look never resets the layout, and the other way round.
   communityBrands: defineTable({
     communityId: v.id("communities"),
     brand: v.any(),
@@ -1573,6 +1732,31 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
+
+  communityLayouts: defineTable({
+    communityId: v.id("communities"),
+    draftLayout: v.any(),
+    draftRevision: v.number(),
+    draftUpdatedAt: v.number(),
+    draftUpdatedByUserId: v.id("users"),
+    publishedLayout: v.optional(v.any()),
+    publishedDraftRevision: v.optional(v.number()),
+    publishedAt: v.optional(v.number()),
+    publishedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"]),
+
+  // A member's own pick of the community's arrangement, where the owner's
+  // layout allows one (navigation.member_choice). No row: the owner's layout.
+  communityMemberLayoutPreferences: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    position: v.union(v.literal("top"), v.literal("side")),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"]),
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
@@ -1610,8 +1794,30 @@ export default defineSchema({
     .index("by_visitor_hash_createdAt", ["visitorKeyHash", "createdAt"])
     .index("by_visitor_scope_bucket", ["visitorKeyHash", "pathKind", "scopeKey", "visitBucketStartAt"]),
 
+  // The packages a community sells, as a ladder: an offer includes every offer
+  // ranked below it. The base offer (rank 0) is priced by the community's
+  // current price points; higher offers own their price points (offerId).
+  communityOffers: defineTable({
+    communityId: v.id("communities"),
+    key: v.string(),
+    name: v.string(),
+    blurb: v.optional(v.string()),
+    rank: v.number(),
+    isBase: v.optional(v.boolean()),
+    showOnSalesPage: v.boolean(),
+    archivedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_key", ["communityId", "key"]),
+
   communityPricePoints: defineTable({
     communityId: v.id("communities"),
+    /** Set on a higher offer's own prices; these are never the community's isCurrent price. */
+    offerId: v.optional(v.id("communityOffers")),
     billingPeriod: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
@@ -1825,6 +2031,8 @@ export default defineSchema({
     })),
     idempotencyKey: v.string(),
     lastReplyAt: v.optional(v.number()),
+    // Set when the post carries a poll or a shared Form (communityPostCards.ts).
+    cardKind: v.optional(v.union(v.literal("poll"), v.literal("form"))),
     composerPayloadHash: v.optional(v.string()),
     lockedAt: v.optional(v.number()),
     hiddenAt: v.optional(v.number()),
@@ -2250,6 +2458,56 @@ export default defineSchema({
     .index("by_requester_createdAt", ["requesterUserId", "createdAt"])
     .index("by_requester_community_createdAt", ["requesterUserId", "communityId", "createdAt"]),
 
+  // A post's card (shared/communityPostCards.ts): a poll or a shared Form.
+  communityInteractionPolls: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.id("communityInteractionRoots"),
+    question: v.string(),
+    options: v.array(v.object({ key: v.string(), label: v.string() })),
+    multiple: v.boolean(),
+    createdByUserId: v.id("users"),
+    closedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_root", ["rootId"]),
+
+  communityInteractionPollVotes: defineTable({
+    communityId: v.id("communities"),
+    pollId: v.id("communityInteractionPolls"),
+    userId: v.id("users"),
+    optionKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_poll", ["pollId"])
+    .index("by_poll_user", ["pollId", "userId"])
+    .index("by_user", ["userId"]),
+
+  communityInteractionFormShares: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.id("communityInteractionRoots"),
+    formId: v.id("communityForms"),
+    versionId: v.id("communityFormVersions"),
+    note: v.string(),
+    answersVisibleTo: v.union(v.literal("everyone"), v.literal("builders")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_root", ["rootId"]),
+
+  communityInteractionFormResponses: defineTable({
+    communityId: v.id("communities"),
+    shareId: v.id("communityInteractionFormShares"),
+    userId: v.id("users"),
+    status: v.union(v.literal("draft"), v.literal("submitted")),
+    answers: v.record(v.string(), v.union(v.string(), v.array(v.string()))),
+    revision: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+  })
+    .index("by_share", ["shareId"])
+    .index("by_share_user", ["shareId", "userId"])
+    .index("by_user", ["userId"]),
+
   communityInteractionReactions: defineTable({
     communityId: v.id("communities"),
     targetType: v.union(v.literal("root"), v.literal("reply")),
@@ -2415,6 +2673,10 @@ export default defineSchema({
     // Owner-set display name for the agent's taggable identity; absent means
     // the community's own name.
     agentDisplayName: v.optional(v.string()),
+    // Owner-set photo for the agent (an upload, or an https image). Absent
+    // means it wears the community's icon.
+    agentAvatarStorageId: v.optional(v.id("_storage")),
+    agentAvatarUrl: v.optional(v.string()),
     // Owner off-switch for the memory agent. Absent means enabled; inference
     // admission is resolved through the canonical managed-funding policy.
     agentEnabled: v.optional(v.boolean()),
@@ -2676,12 +2938,17 @@ export default defineSchema({
     mentionsLastSeenAt: v.optional(v.number()),
     resourcesLastSeenAt: v.optional(v.number()),
     eventsLastSeenAt: v.optional(v.number()),
+    // Automation emails (Workflows → Send an email): the member's unsubscribe
+    // link carries this token, and opting out stops this community's ones.
+    workflowEmailToken: v.optional(v.string()),
+    workflowEmailsOptedOutAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_community", ["communityId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_workflowEmailToken", ["workflowEmailToken"]),
 
   // One durable, monotonic position per member and community chat stream.
   // The requested position is always re-authorized and clamped to the
@@ -2762,6 +3029,8 @@ export default defineSchema({
     sourceExternalModifiedAt: v.optional(v.number()),
     pinned: v.boolean(),
     sortOrder: v.optional(v.number()),
+    // Board, library and wizard presentation (shared/communityLessonContract.ts).
+    lesson: v.optional(communityLessonFieldsValidator),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -2781,6 +3050,331 @@ export default defineSchema({
     ])
     .index("by_createdBy", ["createdByUserId"]),
 
+  // A member's own progress through lesson pages. Locks are computed on read
+  // from lesson gates; only completion state is stored.
+  // The owner's own fields about their clients (shared/communityClients.ts).
+  // Member facts stay in memberFacts; these are the founder's records.
+  communityClientProperties: defineTable({
+    communityId: v.id("communities"),
+    key: v.string(),
+    name: v.string(),
+    type: v.union(
+      v.literal("text"),
+      v.literal("number"),
+      v.literal("select"),
+      v.literal("multi_select"),
+      v.literal("date"),
+      v.literal("checkbox"),
+      v.literal("url"),
+    ),
+    options: v.array(v.string()),
+    position: v.number(),
+    /** Kept by Polynet, not the owner: "offer" lists the offers a member has. */
+    system: v.optional(v.literal("offer")),
+    archivedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_key", ["communityId", "key"]),
+
+  // The community's client rules: for now, how many days without progress count as stuck.
+  communityClientSettings: defineTable({
+    communityId: v.id("communities"),
+    stuckDays: v.number(),
+    // Set once the default views were copied in, so deleting them all doesn't bring them back.
+    viewsSeededAt: v.optional(v.number()),
+    updatedByUserId: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
+  // What the owner or their agent did about a client: property changes, flags,
+  // notes, drafts and contact. Everything else on a client's timeline is read
+  // from the record that owns it.
+  communityClientEvents: defineTable({
+    communityId: v.id("communities"),
+    membershipId: v.id("communityMemberships"),
+    type: v.union(
+      v.literal("property_set"),
+      // A form answer that couldn't fill its property (the property changed after publishing).
+      v.literal("property_skipped"),
+      v.literal("flagged"),
+      v.literal("note"),
+      v.literal("drafted"),
+      v.literal("contacted"),
+    ),
+    actorUserId: v.id("users"),
+    via: v.union(v.literal("web"), v.literal("agent"), v.literal("workflow"), v.literal("form")),
+    propertyKey: v.optional(v.string()),
+    value: v.optional(v.union(v.string(), v.number(), v.boolean(), v.array(v.string()), v.null())),
+    body: v.optional(v.string()),
+    channel: v.optional(v.union(v.literal("email"), v.literal("message"), v.literal("call"), v.literal("other"))),
+    createdAt: v.number(),
+  }).index("by_membership_createdAt", ["membershipId", "createdAt"])
+    .index("by_membership_type_createdAt", ["membershipId", "type", "createdAt"]),
+
+  // Saved views of the Members page (shared/communityClientViews.ts): columns,
+  // filters and sort as data, edited by the owner and their agent alike.
+  communityClientViews: defineTable({
+    communityId: v.id("communities"),
+    key: v.string(),
+    name: v.string(),
+    columns: v.array(v.string()),
+    filters: v.array(v.object({ field: v.string(), op: v.string(),
+      value: v.optional(v.union(v.string(), v.number(), v.array(v.string()))) })),
+    match: v.union(v.literal("all"), v.literal("any")),
+    sort: v.optional(v.object({ field: v.string(), direction: v.union(v.literal("asc"), v.literal("desc")) })),
+    group: v.optional(v.string()),
+    position: v.number(),
+    updatedByUserId: v.id("users"),
+    updatedVia: v.union(v.literal("web"), v.literal("agent")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community_key", ["communityId", "key"]),
+
+  // One bulk action on selected clients (set a property, message, flag, note).
+  // It runs in small scheduled batches; this row is its progress and result.
+  communityClientBulkActions: defineTable({
+    communityId: v.id("communities"),
+    actorUserId: v.id("users"),
+    type: v.union(v.literal("set_property"), v.literal("message"), v.literal("flag"), v.literal("note")),
+    propertyKey: v.optional(v.string()),
+    value: v.optional(v.union(v.string(), v.number(), v.boolean(), v.array(v.string()), v.null())),
+    body: v.optional(v.string()),
+    membershipIds: v.array(v.id("communityMemberships")),
+    cursor: v.number(),
+    status: v.union(v.literal("running"), v.literal("done")),
+    results: v.array(v.object({ membershipId: v.id("communityMemberships"), ok: v.boolean(), code: v.optional(v.string()) })),
+    createdAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  }).index("by_community_createdAt", ["communityId", "createdAt"]),
+
+  // Test members: stand-in accounts an owner creates to go through their own
+  // community as a new member (welcome page, forms, lessons, Workflows). Only
+  // the owner who made one can act as it, only in its community, and ending it
+  // deletes its membership and member data.
+  communityTestMembers: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    authSubject: v.string(),
+    ownerUserId: v.id("users"),
+    ownerAuthSubject: v.string(),
+    label: v.string(),
+    number: v.number(),
+    /** The stage the run started in, when not the first: no welcome flow then. */
+    startMilestoneKey: v.optional(v.string()),
+    /** Autoplay is playing until then: agent messages a Workflow sends are previewed, not sent. */
+    autoplayUntil: v.optional(v.number()),
+    /** What autoplay already did, so a step whose rules are still running isn't done twice. */
+    autoplayDone: v.optional(v.array(v.string())),
+    /** Autoplay's latest step, so the test member's own tab can go there and show it. */
+    autoplayLast: v.optional(v.object({ at: v.number(), text: v.string(), path: v.optional(v.string()), target: v.optional(v.string()) })),
+    /** On screen: the step the test member's own tab is doing now, and whether it saw and finished it. */
+    autoplayPending: v.optional(v.object({
+      id: v.string(), plan: v.any(), pace: v.number(), issuedAt: v.number(),
+      seenAt: v.optional(v.number()), reportedAt: v.optional(v.number()), reportOk: v.optional(v.boolean()), reportDetail: v.optional(v.string()),
+    })),
+    createdAt: v.number(),
+    endedAt: v.optional(v.number()),
+  }).index("by_authSubject", ["authSubject"])
+    .index("by_user", ["userId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
+  // Who sent a member to a community: the `ref` on the join link they arrived
+  // by, kept first-touch. Affiliates and payouts build on this later.
+  communityReferrals: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    ref: v.string(),
+    capturedAt: v.number(),
+  }).index("by_community_user", ["communityId", "userId"]),
+
+  // A member's own widget answers (community site embeds), kept on the server so
+  // they follow the member across devices. Member data: only the member reads it.
+  communityEmbedValues: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    key: v.string(),
+    value: v.string(),
+    updatedAt: v.number(),
+  }).index("by_community_user_key", ["communityId", "userId", "key"]),
+
+  communityClientValues: defineTable({
+    communityId: v.id("communities"),
+    membershipId: v.id("communityMemberships"),
+    propertyKey: v.string(),
+    value: v.union(v.string(), v.number(), v.boolean(), v.array(v.string())),
+    updatedByUserId: v.id("users"),
+    updatedVia: v.union(v.literal("web"), v.literal("agent"), v.literal("workflow"), v.literal("form")),
+    updatedAt: v.number(),
+  })
+    .index("by_membership", ["membershipId"])
+    .index("by_membership_property", ["membershipId", "propertyKey"])
+    .index("by_community_property", ["communityId", "propertyKey"]),
+
+  // Access the owner gave by hand: free or comp time, with why and until when.
+  // The membership stays the gate (accessSource manual_grant); this row is the
+  // who, why and end date, and the end job reads it. One active row per member.
+  communityAccessGrants: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    membershipId: v.id("communityMemberships"),
+    status: v.union(v.literal("active"), v.literal("ended")),
+    endsAt: v.optional(v.number()),
+    reason: v.string(),
+    grantedByUserId: v.id("users"),
+    grantedVia: v.union(v.literal("web"), v.literal("agent")),
+    /** The offer this access is for (communityOffers key); the base offer when unset. */
+    offerKey: v.optional(v.string()),
+    endJobId: v.optional(v.id("_scheduled_functions")),
+    endedAt: v.optional(v.number()),
+    endedByUserId: v.optional(v.id("users")),
+    endedReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user_status", ["communityId", "userId", "status"])
+    .index("by_membership_createdAt", ["membershipId", "createdAt"])
+    .index("by_status_endsAt", ["status", "endsAt"]),
+
+  // A stable, community-scoped id an outside service knows a member by, so the
+  // internal user id never leaves Polynet. Kept across leaving and rejoining.
+  communityAccessMembers: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    memberId: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_member_id", ["memberId"]),
+
+  // One license key per member and community. Only a hash is stored; the key
+  // is a pointer to the membership, valid exactly while the member is entitled.
+  communityMemberLicenseKeys: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    keyHash: v.string(),
+    last4: v.string(),
+    status: v.union(v.literal("active"), v.literal("rotated"), v.literal("revoked")),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+    lastCheckedAt: v.optional(v.number()),
+    lastCheckedByIntegrationId: v.optional(v.id("communityAccessIntegrations")),
+  })
+    .index("by_key_hash", ["keyHash"])
+    .index("by_community_user_status", ["communityId", "userId", "status"]),
+
+  // An outside service the owner registered to learn who is entitled: a signed
+  // webhook on every change plus a read-only lookup key. The API key is stored
+  // hashed; the signing secret is encrypted, because Polynet signs with it.
+  communityAccessIntegrations: defineTable({
+    communityId: v.id("communities"),
+    name: v.string(),
+    webhookUrl: v.string(),
+    // Empty = every paid plan.
+    pricePointIds: v.array(v.id("communityPricePoints")),
+    includeOwnerGrants: v.boolean(),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    apiKeyHash: v.string(),
+    apiKeyLast4: v.string(),
+    encryptedSigningSecretHex: v.string(),
+    signingSecretIvHex: v.string(),
+    signingSecretLast4: v.string(),
+    // The sweep walks every membership in pages so a missed write still reaches
+    // the service; this is where the next page starts.
+    sweepCursor: v.optional(v.string()),
+    sweepStartedAt: v.optional(v.number()),
+    lastDeliveredAt: v.optional(v.number()),
+    lastFailedAt: v.optional(v.number()),
+    lastErrorCode: v.optional(v.string()),
+    lastLookupAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_api_key_hash", ["apiKeyHash"])
+    .index("by_status", ["status"]),
+
+  // "Continue with Polynet": a one-time code a signed-in member hands an access
+  // integration through their browser. Stored hashed, good for five minutes,
+  // once, and only for the integration and return address it was made for.
+  communityAccessSignInCodes: defineTable({
+    communityId: v.id("communities"),
+    integrationId: v.id("communityAccessIntegrations"),
+    userId: v.id("users"),
+    codeHash: v.string(),
+    returnUrl: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  })
+    .index("by_code_hash", ["codeHash"])
+    .index("by_user_createdAt", ["userId", "createdAt"]),
+
+  // What an integration was last told about each member, so a change is sent
+  // once, in order, and only when something it can see changed.
+  communityAccessDeliveryStates: defineTable({
+    integrationId: v.id("communityAccessIntegrations"),
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    fingerprint: v.string(),
+    sequence: v.number(),
+    updatedAt: v.number(),
+  }).index("by_integration_user", ["integrationId", "userId"]),
+
+  // The outbox: one row per membership.access_changed (or test) event, written
+  // in the same transaction as the change and delivered with retries for 72h.
+  communityAccessEvents: defineTable({
+    communityId: v.id("communities"),
+    integrationId: v.id("communityAccessIntegrations"),
+    userId: v.optional(v.id("users")),
+    memberId: v.optional(v.string()),
+    eventId: v.string(),
+    type: v.union(v.literal("membership.access_changed"), v.literal("integration.test")),
+    payload: v.any(),
+    entitled: v.optional(v.boolean()),
+    status: v.union(v.literal("pending"), v.literal("delivering"), v.literal("delivered"), v.literal("needs_attention")),
+    attemptCount: v.number(),
+    attemptToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    responseStatus: v.optional(v.number()),
+    lastErrorCode: v.optional(v.string()),
+    deliveredAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_integration_createdAt", ["integrationId", "createdAt"])
+    .index("by_community_user_createdAt", ["communityId", "userId", "createdAt"])
+    .index("by_status_next_attempt_at", ["status", "nextAttemptAt"])
+    .index("by_status_lease_expires_at", ["status", "leaseExpiresAt"]),
+
+  communityResourceProgress: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    resourceId: v.id("communityResources"),
+    status: v.union(v.literal("in_progress"), v.literal("done")),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    // Answers to the lesson's follow-along elements, one per element id.
+    responses: v.optional(v.array(v.object({
+      element: v.string(),
+      value: v.union(v.boolean(), v.array(v.string())),
+      correct: v.optional(v.boolean()),
+      complete: v.boolean(),
+      at: v.number(),
+    }))),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_user_resource", ["communityId", "userId", "resourceId"])
+    .index("by_resource", ["resourceId"])
+    .index("by_user", ["userId"]),
+
   communityResourceContents: defineTable({
     communityId: v.id("communities"),
     resourceId: v.id("communityResources"),
@@ -2793,6 +3387,32 @@ export default defineSchema({
     .index("by_resource", ["resourceId"])
     .index("by_community_resource", ["communityId", "resourceId"])
     .index("by_community_updatedAt", ["communityId", "updatedAt"]),
+
+  // Earlier versions of a lesson's body, so an owner (or their agent) can go
+  // back. One row per editing session: autosave keeps changing the body every
+  // second or so, and only the version before a pause of a few minutes is kept.
+  communityResourceRevisions: defineTable({
+    communityId: v.id("communities"),
+    resourceId: v.id("communityResources"),
+    title: v.string(),
+    bodyMd: v.string(),
+    bodyChars: v.number(),
+    bodyHash: v.string(),
+    // When this version was last saved, before it was replaced.
+    savedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_resource_createdAt", ["resourceId", "createdAt"]),
+
+  // A YouTube video's chapters, read from its public description once and
+  // shared by every lesson that shows the video (convex/youtubeChapters.ts).
+  youtubeVideoChapters: defineTable({
+    videoId: v.string(),
+    chapters: v.array(v.object({ seconds: v.number(), time: v.string(), label: v.string() })),
+    found: v.boolean(),
+    fetchedAt: v.number(),
+  })
+    .index("by_video", ["videoId"]),
 
   communitySourceUnits: defineTable({
     communityId: v.id("communities"),
@@ -2883,6 +3503,9 @@ export default defineSchema({
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
+    // How lessons read: "article" (a clean Medium-like page, the default) or
+    // "video" (a classic course, the lesson text on a card under the video).
+    lessonStyle: v.optional(v.union(v.literal("article"), v.literal("video"))),
     sortOrder: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2890,6 +3513,54 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_sortOrder", ["communityId", "sortOrder"])
     .index("by_createdBy", ["createdByUserId"]),
+
+  // Hard-to-undo Settings changes an agent proposed, waiting for a manager's Apply.
+  communitySettingProposals: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    idempotencyKey: v.string(),
+    operation: v.string(),
+    args: v.any(),
+    summary: v.string(),
+    details: v.array(v.object({ label: v.string(), value: v.string() })),
+    note: v.optional(v.string()),
+    // Which agent proposed it, in its own words ("Claude Code").
+    proposedBy: v.optional(v.string()),
+    // A workflow stage change: the stage as it was when proposed (so Apply can
+    // tell it changed since) and the stage as it would be.
+    baseStage: v.optional(v.string()),
+    previewStage: v.optional(v.any()),
+    status: v.union(v.literal("staged"), v.literal("applying"), v.literal("applied"),
+      v.literal("rejected"), v.literal("failed"), v.literal("expired")),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+    decidedAt: v.optional(v.number()),
+    decidedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_creator_idempotencyKey", ["communityId", "createdByUserId", "idempotencyKey"]),
+
+  // Every saved change to a workflow stage, from the app or an agent, with the
+  // stage before and after, so Workflows can show what changed and undo it.
+  communityWorkflowChanges: defineTable({
+    communityId: v.id("communities"),
+    milestoneKey: v.string(),
+    changedByUserId: v.id("users"),
+    via: v.union(v.literal("app"), v.literal("agent")),
+    // The agent's own name for itself ("Claude Code"), when an agent made it.
+    changedBy: v.optional(v.string()),
+    // Set when the owner approved an agent's suggestion.
+    approvedByUserId: v.optional(v.id("users")),
+    undoOf: v.optional(v.id("communityWorkflowChanges")),
+    before: v.any(),
+    after: v.any(),
+    revision: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   communityResourceBuilderChangesets: defineTable({
     communityId: v.id("communities"),
@@ -2973,6 +3644,8 @@ export default defineSchema({
     locationLabel: v.optional(v.string()),
     url: v.optional(v.string()),
     visibility: v.union(v.literal("members"), v.literal("public")),
+    /** A pod's own call: only people who can open this invite-only channel see it. */
+    channelId: v.optional(v.id("communityChannels")),
     status: v.union(v.literal("live"), v.literal("cancelled")),
     recurrenceFrequency: v.optional(v.union(v.literal("none"), v.literal("daily"), v.literal("weekly"), v.literal("monthly"))),
     recurrenceInterval: v.optional(v.number()),

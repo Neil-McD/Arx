@@ -72,59 +72,70 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
     (community) => community.lifecycle_status === "active",
   );
 
+  // Laid out like the rest of Settings (Substack's admin): one card per
+  // subject, a row per community with its action on the right.
   return (
     <>
-      <div className="panel-title">Billing</div>
-      <div className="memory-panel">
-        <div className="settings-section builder-settings-section">
-          <div className="builder-settings-heading">
-            <div>
-              <div className="settings-section-title">Builder</div>
-              <div className="settings-section-desc">
-                Community platform and Polynet-hosted AI.
-              </div>
-            </div>
-            <div className="builder-settings-price">
-              <strong>{formatBuilderOfferPrice()}</strong>
-              <span>{POLYNET_BUILDER_OFFER.scopeLabel}</span>
-            </div>
+      <section className="settings-section pn-settings-card pn-billing-card" aria-label="Builder">
+        <header className="pn-settings-card-header is-row">
+          <div>
+            <h2 className="settings-section-title">Builder</h2>
+            <p className="settings-section-desc">Community platform and Polynet-hosted AI.</p>
           </div>
+          <div className="pn-billing-price">
+            <strong>{formatBuilderOfferPrice()}</strong>
+            <span>{POLYNET_BUILDER_OFFER.scopeLabel}</span>
+          </div>
+        </header>
 
+        <div className="pn-settings-card-body">
           {props.isLoadingFounderBilling && activeCommunities.length === 0 ? (
-            <div className="chat-loading">
-              <div className="loading-spinner" />
-              <span>Loading your Agent plan…</span>
+            <div className="pn-settings-loading" role="status">
+              <span className="pn-settings-spinner" aria-hidden="true" />
+              Loading your Agent plan…
             </div>
           ) : activeCommunities.length === 0 ? (
-            <div className="builder-empty-state">
-              <span>No active communities.</span>
-              <button className="settings-primary-action" type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
+            <div className="pn-settings-row">
+              <div className="pn-settings-row-head">
+                <div className="pn-settings-row-text">
+                  <span className="pn-settings-label">No active communities</span>
+                  <span className="pn-settings-help">Builder is billed per community. Create one to start.</span>
+                </div>
+                <div className="pn-settings-row-control">
+                  <button className="pn-settings-button is-primary" type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="builder-community-list">
-              {activeCommunities.map((community) => {
-                const primaryAction = resolveBuilderOfferPrimaryAction({
-                  state: community.funding_state,
-                  allowedActions: community.allowed_actions,
-                });
-                const isActing = props.founderBillingActionCommunityId === community.community_id;
-                const isOperatorComped = community.funding_mode === "operator_comp";
-                return (
-                  <div className="builder-community-row" key={community.community_id}>
-                    <div className="builder-community-copy">
-                      <span>{community.community_name}</span>
-                      <strong>{communityFundingStateLabel(community)}</strong>
-                      <small>
+            activeCommunities.map((community) => {
+              const primaryAction = resolveBuilderOfferPrimaryAction({
+                state: community.funding_state,
+                allowedActions: community.allowed_actions,
+              });
+              const isActing = props.founderBillingActionCommunityId === community.community_id;
+              const isOperatorComped = community.funding_mode === "operator_comp";
+              return (
+                <div className="pn-settings-row pn-billing-community" key={community.community_id}>
+                  <div className="pn-settings-row-head">
+                    <span className="pn-billing-avatar" aria-hidden="true">
+                      {community.community_name.trim().charAt(0).toUpperCase() || "·"}
+                    </span>
+                    <div className="pn-settings-row-text">
+                      <span className="pn-settings-label">
+                        {community.community_name}
+                        <span className="pn-settings-badge">{communityFundingStateLabel(community)}</span>
+                      </span>
+                      <span className="pn-settings-help">
                         {community.funding_lane === "builder_included"
                           ? "Polynet-hosted community AI is included."
                           : `${formatBuilderOfferPrice(community.monthly_price_base_units)} · Polynet-hosted community AI`}
-                      </small>
+                      </span>
                     </div>
-                    <div className="builder-community-actions">
+                    <div className="pn-settings-row-control">
                       {isOperatorComped ? null : primaryAction ? (
                         <button
                           type="button"
-                          className="settings-primary-action"
+                          className={`pn-settings-button${primaryAction === "manage_builder" ? "" : " is-primary"}`}
                           disabled={isActing}
                           onClick={() => runFundingAction({
                             action: primaryAction,
@@ -144,87 +155,95 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                       ) : null}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })
           )}
 
-          <small className="builder-settings-disclosure">
-            Paid memberships carry a {POLYNET_BUILDER_OFFER.platformFeeBps / 100}% Polynet platform fee.
-            Stripe processing fees are separate.
-          </small>
-
           {props.founderBillingError ? (
-            <div className="builder-settings-retry">
-              <div className="billing-settings-error">{props.founderBillingError}</div>
-              <button
-                type="button"
-                className="secondary"
-                disabled={props.isLoadingFounderBilling}
-                onClick={() => void props.refreshFounderBilling()}
-              >
-                {props.isLoadingFounderBilling ? "Retrying…" : "Retry"}
-              </button>
+            <div className="pn-settings-row">
+              <div className="pn-settings-row-head">
+                <p className="pn-settings-inline-error" role="alert">{props.founderBillingError}</p>
+                <div className="pn-settings-row-control">
+                  <button
+                    type="button"
+                    className="pn-settings-button"
+                    disabled={props.isLoadingFounderBilling}
+                    onClick={() => void props.refreshFounderBilling()}
+                  >
+                    {props.isLoadingFounderBilling ? "Retrying…" : "Retry"}
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
         </div>
 
-        {props.session &&
-        (props.isLoadingPendingPurchases ||
-          props.pendingPurchaseClaims.length > 0 ||
-          props.pendingPurchasesError ||
-          props.pendingPurchasesSuccess) ? (
-          <div className="settings-section">
-            <div className="settings-section-title">Member purchase recovery</div>
-            <div className="settings-section-desc">
+        <p className="pn-settings-note pn-billing-disclosure">
+          Paid memberships carry a {POLYNET_BUILDER_OFFER.platformFeeBps / 100}% Polynet platform fee.
+          Stripe processing fees are separate.
+        </p>
+      </section>
+
+      {props.session &&
+      (props.isLoadingPendingPurchases ||
+        props.pendingPurchaseClaims.length > 0 ||
+        props.pendingPurchasesError ||
+        props.pendingPurchasesSuccess) ? (
+        <section className="settings-section pn-settings-card pn-billing-card" aria-label="Member purchase recovery">
+          <header className="pn-settings-card-header">
+            <h2 className="settings-section-title">Member purchase recovery</h2>
+            <p className="settings-section-desc">
               Recover community access if member payment completed before the join flow.
-            </div>
+            </p>
+          </header>
+          <div className="pn-settings-card-body">
             {props.isLoadingPendingPurchases ? (
-              <div className="chat-loading">
-                <div className="loading-spinner" />
-                <span>Checking…</span>
+              <div className="pn-settings-loading" role="status">
+                <span className="pn-settings-spinner" aria-hidden="true" />
+                Checking…
               </div>
             ) : null}
-            {!props.isLoadingPendingPurchases && props.pendingPurchaseClaims.length > 0 ? (
-              <div className="model-list">
-                {props.pendingPurchaseClaims.map((claim) => (
-                  <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
-                    <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
+            {!props.isLoadingPendingPurchases
+              ? props.pendingPurchaseClaims.map((claim) => (
+                  <div key={`${claim.community_id}:${claim.expires_at}`} className="pn-settings-row">
+                    <span className="pn-settings-label">{claim.community_name || claim.community_slug || claim.community_id}</span>
                   </div>
-                ))}
-              </div>
-            ) : null}
+                ))
+              : null}
             {!props.isLoadingPendingPurchases &&
             props.pendingPurchaseClaims.length === 0 &&
             props.pendingPurchasesSuccess ? (
-              <div className="auth-status">{props.pendingPurchasesSuccess}</div>
+              <p className="pn-settings-note" role="status">{props.pendingPurchasesSuccess}</p>
             ) : null}
-            <div className="auth-actions">
-              <button
-                className="settings-primary-action"
-                type="button"
-                onClick={() => void props.redeemPendingPurchases()}
-                disabled={
-                  props.isRedeemingPendingPurchases ||
-                  props.isLoadingPendingPurchases ||
-                  props.pendingPurchaseClaims.length === 0
-                }
-              >
-                {props.isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
-              </button>
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => void props.refreshPendingPurchases()}
-                disabled={props.isRedeemingPendingPurchases || props.isLoadingPendingPurchases}
-              >
-                Refresh
-              </button>
-            </div>
-            {props.pendingPurchasesError ? <div className="auth-error">{props.pendingPurchasesError}</div> : null}
+            {props.pendingPurchasesError ? (
+              <p className="pn-settings-inline-error pn-billing-recovery-error" role="alert">{props.pendingPurchasesError}</p>
+            ) : null}
           </div>
-        ) : null}
-      </div>
+          <div className="pn-settings-card-footer pn-billing-actions">
+            <button
+              className="pn-settings-button"
+              type="button"
+              onClick={() => void props.refreshPendingPurchases()}
+              disabled={props.isRedeemingPendingPurchases || props.isLoadingPendingPurchases}
+            >
+              Refresh
+            </button>
+            <button
+              className="pn-settings-button is-primary"
+              type="button"
+              onClick={() => void props.redeemPendingPurchases()}
+              disabled={
+                props.isRedeemingPendingPurchases ||
+                props.isLoadingPendingPurchases ||
+                props.pendingPurchaseClaims.length === 0
+              }
+            >
+              {props.isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
+            </button>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

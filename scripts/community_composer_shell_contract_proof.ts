@@ -61,7 +61,7 @@ assert.match(
 );
 assert.match(
   composerControls,
-  /community-composer-add[\s\S]*<Plus[\s\S]*ask-mention[\s\S]*<AtSign[\s\S]*community-composer-emoji[\s\S]*<Smile[\s\S]*community-composer-submit-tools[\s\S]*props\.voiceControl[\s\S]*props\.sendControl/,
+  /<ComposerAddMenu[\s\S]*ask-mention[\s\S]*<AtSign[\s\S]*community-composer-emoji[\s\S]*<Smile[\s\S]*community-composer-submit-tools[\s\S]*props\.voiceControl[\s\S]*props\.sendControl/,
   "shared composer row should order add, mention, emoji, voice, and send actions",
 );
 assert.doesNotMatch(

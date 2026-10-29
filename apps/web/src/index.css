@@ -5,7 +5,11 @@
 @import "./styles/settings-runtime-and-theme-overrides.css";
 @import "./styles/message-media.css";
 @import "./styles/community-theme-map.css";
+@import "./styles/community-layout.css";
 @import "./styles/community-theme-hooks.css";
+@import "./styles/draft-looks.css";
+@import "./styles/chat-view.css";
+@import "./styles/course-cards.css";
 @import "./styles/edges.css";
 
 :root {
@@ -1988,4 +1992,40 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+/* The community agent wears its community's icon inside whichever avatar or
+   icon slot it renders in (CommunityAgentIcon). */
+.community-agent-face { display: block; width: 100%; height: 100%; min-width: 1em; min-height: 1em; border-radius: inherit; overflow: hidden; }
+.community-agent-face img { width: 100%; height: 100%; object-fit: cover; }
+.community-agent-photo { object-fit: cover; }
+.is-agent-avatar:has(.community-agent-face), .community-agent-dock-avatar:has(.community-agent-face) { background: none; padding: 0; }
+
+/* A community visited before: its logo and name while it opens, in its colours. */
+.web-route-access-hold-community {
+  position: fixed;
+  z-index: 100;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  transform: translate(-50%, -50%);
+  animation: web-route-access-hold-in 300ms ease-out both;
+}
+.web-route-access-hold-community img {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border-muted, rgba(0, 0, 0, 0.08));
+}
+.web-route-access-hold-community p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+@keyframes web-route-access-hold-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

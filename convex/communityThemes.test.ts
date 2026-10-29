@@ -35,8 +35,8 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
     const memberId = await ctx.db.insert("users", { authSubject: MEMBER_SUBJECT, displayName: "Member", createdAt: nowMs, updatedAt: nowMs });
     const communityId = await ctx.db.insert("communities", {
       ownerId,
-      slug: "stopwatch-club",
-      name: "Stopwatch Club",
+      slug: "the-2-hour-club",
+      name: "The 2-Hour Club",
       visibility: "published",
       inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",

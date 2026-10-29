@@ -11,6 +11,7 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { requireNotTestMemberOutsideCommunity } from "./communityTestMemberCore";
 import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCore";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { getUniqueUserByNormalizedHandle } from "./profileCore";
@@ -1081,6 +1082,8 @@ export const ensureDirectConversationFromCommunity = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
+    // Test members are an owner's stand-ins inside one community; they message no one.
+    await requireNotTestMemberOutsideCommunity(ctx, viewerUserId);
     const targetUser = await findUserByPublicId(ctx, args.targetUserId);
     if (!targetUser) throw new Error("dm_target_not_found");
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
@@ -1670,6 +1673,8 @@ async function sendDirectMessageForUser(
   viewerUserId: any,
   args: { conversationId: any; text: string; attachments?: unknown; clientMessageId?: string | null },
 ) {
+  // Test members are an owner's stand-ins inside one community; they message no one.
+  await requireNotTestMemberOutsideCommunity(ctx, viewerUserId);
   const { conversation, participant } = await requireActiveUserParticipant({
     ctx,
     conversationId: args.conversationId,
@@ -1734,6 +1739,7 @@ async function sendDirectMessageToTargetForUser(
   targetUser: UserRow,
   args: { communityId?: any | null; text: string; attachments?: unknown; clientMessageId?: string | null },
 ) {
+  await requireNotTestMemberOutsideCommunity(ctx, viewerUserId);
   const contextCommunityId = await requireDirectMessageRelationshipAccess({
     ctx,
     viewerUserId,
@@ -1821,6 +1827,8 @@ export const sendDirectMessageToUser = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
+    // Test members are an owner's stand-ins inside one community; they message no one.
+    await requireNotTestMemberOutsideCommunity(ctx, viewerUserId);
     const targetUser = await findUserByPublicId(ctx, args.targetUserId);
     if (!targetUser) throw new Error("dm_target_not_found");
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
@@ -1992,6 +2000,48 @@ export const readSiteDirectConversationForTrustedUserInternal = internalQuery({
     };
   },
 });
+
+/**
+ * An owner's or admin's message to one member, sent from the Members page's
+ * bulk "Message" (convex/communityClients.ts). Same conversation, blocks,
+ * relationship check and email nudge as a message typed by hand; the per-person
+ * DM counters are left to the bulk action's own daily cap, which the caller enforces.
+ */
+export async function sendCommunityManagerDirectMessage(ctx: any, args: {
+  senderUserId: any; targetUserId: any; communityId: any; text: string;
+}): Promise<{ conversationId: string; seq: number }> {
+  if (normalizeIdValue(args.targetUserId) === normalizeIdValue(args.senderUserId)) throw new Error("dm_target_self");
+  await requireDirectMessageRelationshipAccess({
+    ctx, viewerUserId: args.senderUserId, targetUserId: args.targetUserId,
+    preferredCommunityId: args.communityId, requiredCommunityId: null,
+  });
+  const nowMs = Date.now();
+  let conversation = await findDirectConversationByUsers(ctx, args.senderUserId, args.targetUserId);
+  const isNewConversation = !conversation;
+  if (!conversation) {
+    const conversationId = await ctx.db.insert("dmConversations" as any, {
+      kind: DIRECT_CONVERSATION_KIND,
+      canonicalKey: buildDirectConversationCanonicalKey(args.senderUserId, args.targetUserId),
+      createdByUserId: args.senderUserId,
+      createdFromCommunityId: args.communityId,
+      lastSeq: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    conversation = (await ctx.db.get(conversationId)) as DirectMessageConversationLike | null;
+  }
+  if (!conversation) throw new Error("dm_conversation_create_failed");
+  await ensureUserParticipant({ ctx, conversationId: conversation._id, userId: args.senderUserId, nowMs, touchActivity: true });
+  await ensureUserParticipant({ ctx, conversationId: conversation._id, userId: args.targetUserId, nowMs,
+    touchActivity: isNewConversation, fallbackActivityAt: conversation.updatedAt });
+  const { participant } = await requireActiveUserParticipant({ ctx, conversationId: conversation._id, userId: args.senderUserId });
+  const message = await appendDirectMessageFromUser({
+    ctx, conversation, senderUserId: args.senderUserId, senderParticipantId: participant._id, text: args.text, attachments: [],
+  });
+  await scheduleDirectMessageEmailNotification({ ctx, conversationId: conversation._id, messageSeq: message.seq,
+    recipientUserId: args.targetUserId, senderUserId: args.senderUserId });
+  return { conversationId: String(conversation._id), seq: message.seq };
+}
 
 // "Message @handle": their conversation with the member if there is one;
 // otherwise who they are, once Studio's rules say the member may message them

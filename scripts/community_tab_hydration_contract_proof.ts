@@ -37,7 +37,7 @@ assert.doesNotMatch(
 );
 assert.match(
   directoryPredicate,
-  /activePage === "community"[\s\S]*communityTab === "chat"/,
+  /activePage === "community"[\s\S]*(?:communityTab === "chat"|isCommunityChatBackedTab\(communityTab\))/,
   "chat context and the durable mobile Members view must hydrate the member-facing community directory",
 );
 assert.doesNotMatch(
@@ -94,8 +94,8 @@ assert.match(
 );
 assert.match(
   communityPublic,
-  /resolvePublicCommunityStats[\s\S]*listCanonicalCommunityMemberMembershipRows[\s\S]*countCanonicalCommunityMembersFromRows/,
-  "presence/social summary counts must use the canonical member count helper",
+  /resolvePublicCommunityStats[\s\S]*listCanonicalCommunityMemberMembershipRows[\s\S]*listActiveTestMemberUserIds[\s\S]*countPeopleFacingMembers/,
+  "presence/social summary counts must use the people-facing member count (owner and test members left out)",
 );
 
 console.log("PASS: community tab hydration uses the member-facing directory and leaves no Members-tab roster read.");

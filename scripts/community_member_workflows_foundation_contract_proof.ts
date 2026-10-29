@@ -18,7 +18,8 @@ assert.doesNotMatch(inputValidator, /move_member|evaluate_goal|completionGenerat
 assert.match(backend, /reconcileCompletedWorkflowActionsInternal/);
 assert.match(backend, /approveBuilderMemberMilestone/);
 assert.match(backend, /forceBuilderMemberMilestone/);
-assert.match(completion, /all_actions_complete: actions\.length > 0/);
+// Only the actions that hold the member count toward completion.
+assert.match(completion, /all_actions_complete: (?:actions|holding)\.length > 0 && (?:actions|holding)\.every/);
 assert.match(goalReview, /readCompletionReviewSnapshot/);
 assert.doesNotMatch(modal, /Add condition|Automatic advancement \(existing system\)|Move on when/);
 assert.doesNotMatch(editor, /<option value="evaluate_goal">|<option value="move_member">/);

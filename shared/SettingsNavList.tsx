@@ -37,6 +37,20 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     ),
   },
   {
+    id: "memberships",
+    page: "memberships",
+    icon: (
+      <span className="nav-icon nav-icon-emphasis">
+        <svg viewBox="0 0 24 24">
+          <circle cx="9" cy="8" r="3.5" />
+          <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+          <path d="M16 4.5a3.5 3.5 0 0 1 0 7" />
+          <path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5" />
+        </svg>
+      </span>
+    ),
+  },
+  {
     id: "billing",
     page: "billing",
     icon: (
@@ -45,6 +59,20 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
           <rect x="3" y="6" width="18" height="12" rx="2" />
           <path d="M3 10h18" />
           <path d="M7 15h4" />
+        </svg>
+      </span>
+    ),
+  },
+  {
+    id: "apps",
+    page: "apps",
+    icon: (
+      <span className="nav-icon nav-icon-emphasis">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 2v6" />
+          <path d="M15 2v6" />
+          <path d="M6 8h12v4a6 6 0 0 1-12 0z" />
+          <path d="M12 18v4" />
         </svg>
       </span>
     ),

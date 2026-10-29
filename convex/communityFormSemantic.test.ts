@@ -225,3 +225,259 @@ test("funnel builder self directory does not advertise the private forms adapter
   expect(result).toMatchObject({ ok: true });
   expect(JSON.stringify(result)).not.toContain("/forms/");
 });
+
+test("the welcome flow holds a new member to the join form until it is submitted, then opens the community", async () => {
+  const f = await fixture("form");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const member = f.t.withIdentity({ subject: "join-member" });
+  await owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeGate, { communityId: f.communityId, expectedRevision: 1, enabled: true });
+  await f.t.mutation(joinHandler, { ...f.job, workflowRevision: 2 });
+  const row = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  const gate = () => f.t.run(async ctx => {
+    const { getCommunityAndMembership, readCommunityWelcomeGate, requireCommunityChatAccess } = await import("./communityCore");
+    const { community, membership } = await getCommunityAndMembership({ ctx, communityId: f.communityId, userId: f.memberId });
+    const held = await requireCommunityChatAccess({ ctx, communityId: f.communityId, userId: f.memberId }).then(() => null, (error: Error) => error.message);
+    const owner = await requireCommunityChatAccess({ ctx, communityId: f.communityId, userId: f.ownerId }).then(() => "open");
+    return { ...(await readCommunityWelcomeGate({ ctx, community, membership, userId: f.memberId })), held, owner };
+  });
+  expect(await gate()).toEqual({ required: true, requestIds: [String(row._id)], lessonIds: [], display: "page", held: "community_welcome_required", owner: "open" });
+  // As a pop-up it still asks, but the community opens behind it.
+  await owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeDisplay, { communityId: f.communityId, expectedRevision: 2, display: "popup" });
+  expect(await gate()).toEqual({ required: true, requestIds: [String(row._id)], lessonIds: [], display: "popup", held: null, owner: "open" });
+  await owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeDisplay, { communityId: f.communityId, expectedRevision: 3, display: "page" });
+  expect((await gate()).held).toBe("community_welcome_required");
+  // The form itself stays reachable, so the member can finish it.
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: row._id, expectedRevision: row.revision, answers: {}, submit: true });
+  expect(await gate()).toEqual({ required: false, requestIds: [], lessonIds: [], display: "page", held: null, owner: "open" });
+});
+
+test.each([false, true])("with the welcome flow on, a join rule still sets up the member's private channel (form first=%s)", async reverse => {
+  const f = await fixture("both", reverse);
+  await f.t.run(ctx => ctx.db.patch(f.workflowId, { welcomeGate: true, welcomeGateEnabledAt: f.now - 1 }));
+  await f.t.mutation(joinHandler, f.job);
+  await f.t.run(async ctx => {
+    expect(await ctx.db.query("communityFormRequests").collect()).toHaveLength(1);
+    expect((await ctx.db.get(f.membershipId))!.serviceChannelId).toBeDefined();
+    expect((await ctx.db.query("communityMemberWorkflowRuns").collect()).map(r => r.status)).toEqual(["finished", "finished"]);
+    // The room is theirs, but the hold still keeps them out of it until the form is in.
+    const { requireCommunityChatAccess } = await import("./communityCore");
+    await expect(requireCommunityChatAccess({ ctx, communityId: f.communityId, userId: f.memberId })).rejects.toThrow("community_welcome_required");
+  });
+});
+
+test("a member who joins after the welcome flow is on is held before the join rule has made their form", async () => {
+  const f = await fixture("form");
+  const gate = () => f.t.run(async ctx => {
+    const { getCommunityAndMembership, readCommunityWelcomeGate } = await import("./communityCore");
+    const { community, membership } = await getCommunityAndMembership({ ctx, communityId: f.communityId, userId: f.memberId });
+    return await readCommunityWelcomeGate({ ctx, community, membership, userId: f.memberId });
+  });
+  const setActivatedAt = (activatedAt: number) => f.t.run(ctx => ctx.db.patch(f.membershipId, { activatedAt }));
+  await f.t.run(ctx => ctx.db.patch(f.workflowId, { welcomeGate: true, welcomeGateEnabledAt: f.now - 1 }));
+  // Joined, join rule not run yet: held, with no form to show yet.
+  expect(await gate()).toEqual({ required: true, requestIds: [], lessonIds: [], display: "page" });
+  // Joined before the flow was turned on: never held for a form that isn't coming.
+  await setActivatedAt(f.now - 2);
+  expect(await gate()).toEqual({ required: false, requestIds: [], lessonIds: [], display: "page" });
+  // The join rule never ran: the hold lapses instead of locking the member out.
+  await setActivatedAt(Date.now() - 3 * 60_000);
+  await f.t.run(ctx => ctx.db.patch(f.workflowId, { welcomeGateEnabledAt: Date.now() - 4 * 60_000 }));
+  expect(await gate()).toEqual({ required: false, requestIds: [], lessonIds: [], display: "page" });
+  await setActivatedAt(f.now);
+  await f.t.run(ctx => ctx.db.patch(f.workflowId, { welcomeGateEnabledAt: f.now - 1 }));
+  await f.t.mutation(joinHandler, f.job);
+  const row = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  expect(await gate()).toEqual({ required: true, requestIds: [String(row._id)], lessonIds: [], display: "page" });
+});
+
+test("welcome lessons hold the member after the forms, and only they open while held", async () => {
+  const f = await fixture("form");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const member = f.t.withIdentity({ subject: "join-member" });
+  const { welcomeLesson, otherLesson } = await f.t.run(async ctx => {
+    const moduleId = await ctx.db.insert("communityResourceModules", { communityId: f.communityId, createdByUserId: f.ownerId, status: "live",
+      name: "Start here", sortOrder: 0, createdAt: f.now, updatedAt: f.now });
+    const page = (title: string, lesson: object) => ctx.db.insert("communityResources", { communityId: f.communityId, moduleId, createdByUserId: f.ownerId,
+      type: "post", role: "page", title, bodyMd: `# ${title}\n\nRead this.`, pinned: false, lesson, createdAt: f.now, updatedAt: f.now } as any);
+    // The welcome lesson sits in a later board stage, behind the other lesson's gate.
+    return { welcomeLesson: await page("Install Claude Code", { stage: "Week 2", stage_order: 2 }),
+      otherLesson: await page("Week 1 check-in", { stage: "Week 1", stage_order: 1, gate: true }) };
+  });
+  await owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeGate, { communityId: f.communityId, expectedRevision: 1, enabled: true });
+  await owner.mutation(api.communityMemberWorkflows.saveBuilderWelcomePage, { communityId: f.communityId, expectedRevision: 2,
+    title: "Welcome, builder", message: "Two quick steps.", mediaUrl: "", lessonIds: [String(welcomeLesson)] });
+  // The member joined before the flow existed, so only their pending join form holds them; lessons follow it.
+  await f.t.mutation(joinHandler, { ...f.job, workflowRevision: 3 });
+  const row = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  const gate = () => f.t.run(async ctx => {
+    const { getCommunityAndMembership, readCommunityWelcomeGate } = await import("./communityCore");
+    const { community, membership } = await getCommunityAndMembership({ ctx, communityId: f.communityId, userId: f.memberId });
+    const { required, requestIds, lessonIds } = await readCommunityWelcomeGate({ ctx, community, membership, userId: f.memberId });
+    return { required, requestIds, lessonIds };
+  });
+  expect(await gate()).toEqual({ required: true, requestIds: [String(row._id)], lessonIds: [String(welcomeLesson)] });
+  const page = await member.query(api.communityResources.getMyWelcomePage, { communityId: f.communityId });
+  expect(page).toMatchObject({ title: "Welcome, builder", message: "Two quick steps.", media_url: null });
+  expect(page.lessons.map((lesson: any) => lesson.title)).toEqual(["Install Claude Code"]);
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: row._id, expectedRevision: row.revision, answers: {}, submit: true });
+  // Form done: the member is still held by the lesson, and may work on it but not on other lessons.
+  expect(await gate()).toEqual({ required: true, requestIds: [], lessonIds: [String(welcomeLesson)] });
+  // While held, their progress shows only the welcome lesson, unlocked despite the earlier stage's gate.
+  const progress = await member.query(api.communityResourceProgress.getOwnResourceProgress, { communityId: f.communityId });
+  expect(progress).toMatchObject({ journey: null, courses: [], stages: [] });
+  expect(progress.lessons.map((lesson: any) => [lesson.title, lesson.locked])).toEqual([["Install Claude Code", false]]);
+  await expect(member.mutation(api.communityResourceProgress.setOwnResourceProgressStatus,
+    { communityId: f.communityId, resourceId: String(otherLesson), status: "done" })).rejects.toThrow("community_welcome_required");
+  await expect(member.mutation(api.communityResourceProgress.setOwnResourceProgressStatus,
+    { communityId: f.communityId, resourceId: String(welcomeLesson), status: "done" })).resolves.toMatchObject({ ok: true });
+  expect(await gate()).toEqual({ required: false, requestIds: [], lessonIds: [] });
+  // Released: the full progress comes back, and the gate still locks the rest of week 2.
+  const released = await member.query(api.communityResourceProgress.getOwnResourceProgress, { communityId: f.communityId });
+  expect(released.lessons.map((lesson: any) => lesson.title).sort()).toEqual(["Install Claude Code", "Week 1 check-in"]);
+  expect(released.courses).toHaveLength(1);
+});
+
+test("a welcome page saved as blocks keeps its order, and its forms become the join forms", async () => {
+  const f = await fixture("both");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const member = f.t.withIdentity({ subject: "join-member" });
+  const lesson = await f.t.run(async ctx => {
+    await ctx.db.insert("communityForms", { communityId: f.communityId, key: "goals", name: "Goals", questions: [], revision: 1, publishedRevision: 1, createdAt: f.now, updatedAt: f.now });
+    await ctx.db.insert("communityForms", { communityId: f.communityId, key: "draft", name: "Draft", questions: [], revision: 1, createdAt: f.now, updatedAt: f.now } as any);
+    const moduleId = await ctx.db.insert("communityResourceModules", { communityId: f.communityId, createdByUserId: f.ownerId, status: "live",
+      name: "Start here", sortOrder: 0, createdAt: f.now, updatedAt: f.now });
+    return await ctx.db.insert("communityResources", { communityId: f.communityId, moduleId, createdByUserId: f.ownerId,
+      type: "post", role: "page", title: "Install Claude Code", bodyMd: "Read this.", pinned: false, createdAt: f.now, updatedAt: f.now } as any);
+  });
+  const save = (layout: any[], expectedRevision: number) => owner.mutation(api.communityMemberWorkflows.saveBuilderWelcomePage, {
+    communityId: f.communityId, expectedRevision, title: "Welcome, builder", message: "", mediaUrl: "", lessonIds: [], layout });
+  await expect(save([{ type: "form", formKey: "draft" }], 1)).rejects.toThrow("form_not_published");
+  await expect(save([{ type: "form", formKey: "goals" }, { type: "next" }, { type: "form", formKey: "goals" }], 1)).rejects.toThrow("welcome_step_duplicate");
+  await save([
+    { type: "next" }, { type: "text", markdown: "  Hello  " }, { type: "text", markdown: "https://youtu.be/abc" }, { type: "next" }, { type: "next" },
+    { type: "lesson", resourceId: String(lesson) }, { type: "next" }, { type: "form", formKey: "goals" }, { type: "text", markdown: " " }, { type: "next" },
+  ], 1);
+  const workflow = (await f.t.run(ctx => ctx.db.get(f.workflowId)))!;
+  // Tidied: no breaks at the ends or twice in a row, no empty text.
+  expect(workflow.welcomePage).toEqual({ title: "Welcome, builder", layout: [
+    { type: "text", markdown: "Hello" }, { type: "text", markdown: "https://youtu.be/abc" }, { type: "next" },
+    { type: "lesson", resourceId: String(lesson) }, { type: "next" }, { type: "form", formKey: "goals" },
+  ] });
+  expect(workflow.welcomeLessonIds).toEqual([lesson]);
+  // The private-channel rule stays; the intake form left the page, so its join rule went, and goals joined.
+  expect(workflow.milestones[0].automations.map(a => [a.trigger.type, a.action.type, (a.action as any).formKey ?? null]))
+    .toEqual([["member_joined", "create_service_channel", null], ["member_joined", "request_form", "goals"]]);
+  await owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeGate, { communityId: f.communityId, expectedRevision: 2, enabled: true });
+  const page = await member.query(api.communityResources.getMyWelcomePage, { communityId: f.communityId });
+  expect(page.layout).toEqual(workflow.welcomePage!.layout);
+  expect(page.lessons.map((row: any) => row.title)).toEqual(["Install Claude Code"]);
+});
+
+test("a lesson-done rule after the join form still runs, and the stage waits for that lesson", async () => {
+  vi.useFakeTimers();
+  const f = await fixture("form");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const member = f.t.withIdentity({ subject: "join-member" });
+  await owner.mutation(api.communityClients.createClientProperty, { communityId: f.communityId, name: "Stage", type: "select", options: ["Joined", "Building"] });
+  const lesson = await f.t.run(async ctx => {
+    const moduleId = await ctx.db.insert("communityResourceModules", { communityId: f.communityId, createdByUserId: f.ownerId, status: "live",
+      name: "Start here", sortOrder: 0, createdAt: f.now, updatedAt: f.now });
+    return ctx.db.insert("communityResources", { communityId: f.communityId, moduleId, createdByUserId: f.ownerId,
+      type: "post", role: "page", title: "Watch this first", bodyMd: "Hello.", pinned: false, createdAt: f.now, updatedAt: f.now });
+  });
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { communityId: f.communityId, milestoneKey: "new", expectedRevision: 1, name: "New",
+    automations: [
+      { key: "intake", trigger: { type: "member_joined" as const }, action: { key: "intake", type: "request_form" as const, formKey: "intake" } },
+      { key: "", trigger: { type: "lesson_completed" as const, resourceId: String(lesson) }, action: { key: "", type: "set_client_property" as const, propertyKey: "stage", value: "Building" } },
+    ] });
+  await f.t.mutation(joinHandler, { ...f.job, workflowRevision: 2 });
+  const row = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: row._id, expectedRevision: row.revision, answers: {}, submit: true });
+  await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  // The form alone no longer finishes the stage: finishing the lesson is still to do.
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+  await member.mutation(api.communityResourceProgress.setOwnResourceProgressStatus, { communityId: f.communityId, resourceId: String(lesson), status: "done" });
+  await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.t.run(ctx => ctx.db.query("communityClientValues").collect())).toMatchObject([{ propertyKey: "stage", value: "Building", updatedVia: "workflow" }]);
+  expect(await f.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toMatchObject([{ completedWorkflow: true }]);
+});
+
+test("a welcome page with only a lesson can be turned on, and holds members who join after it", async () => {
+  const f = await fixture("room");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const lesson = await f.t.run(async ctx => {
+    const moduleId = await ctx.db.insert("communityResourceModules", { communityId: f.communityId, createdByUserId: f.ownerId, status: "live",
+      name: "Start here", sortOrder: 0, createdAt: f.now, updatedAt: f.now });
+    return ctx.db.insert("communityResources", { communityId: f.communityId, moduleId, createdByUserId: f.ownerId,
+      type: "post", role: "page", title: "Watch this first", bodyMd: "Hello.", pinned: false, createdAt: f.now, updatedAt: f.now });
+  });
+  await expect(owner.mutation(api.communityMemberWorkflows.saveBuilderWelcomePage, { communityId: f.communityId, expectedRevision: 1,
+    title: "Hi", message: "", mediaUrl: "not a link", lessonIds: [String(lesson)] })).rejects.toThrow("welcome_media_url_invalid");
+  await owner.mutation(api.communityMemberWorkflows.saveBuilderWelcomePage, { communityId: f.communityId, expectedRevision: 1,
+    title: "  Hi   there ", message: "", mediaUrl: "https://www.youtube.com/watch?v=abc", lessonIds: [String(lesson)] });
+  await owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeGate, { communityId: f.communityId, expectedRevision: 2, enabled: true });
+  const board = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowBoardPage, { communityId: f.communityId });
+  expect(board.workflow).toMatchObject({ welcome_gate: true, welcome_lesson_ids: [String(lesson)],
+    welcome_page: { title: "Hi there", message: "", media_url: "https://www.youtube.com/watch?v=abc" } });
+  // Removing the last step while the page is on would leave nothing to finish, so it is refused.
+  await expect(owner.mutation(api.communityMemberWorkflows.saveBuilderWelcomePage, { communityId: f.communityId, expectedRevision: 3,
+    title: "", message: "", mediaUrl: "", lessonIds: [] })).rejects.toThrow("welcome_gate_requires_join_form");
+  await f.t.run(ctx => ctx.db.patch(f.workflowId, { welcomeGateEnabledAt: f.now - 1 }));
+  const gate = () => f.t.run(async ctx => {
+    const { getCommunityAndMembership, readCommunityWelcomeGate } = await import("./communityCore");
+    const { community, membership } = await getCommunityAndMembership({ ctx, communityId: f.communityId, userId: f.memberId });
+    const { required, requestIds, lessonIds } = await readCommunityWelcomeGate({ ctx, community, membership, userId: f.memberId });
+    return { required, requestIds, lessonIds };
+  });
+  expect(await gate()).toEqual({ required: true, requestIds: [], lessonIds: [String(lesson)] });
+  await f.t.withIdentity({ subject: "join-member" }).mutation(api.communityResourceProgress.setOwnResourceProgressStatus,
+    { communityId: f.communityId, resourceId: String(lesson), status: "done" });
+  expect(await gate()).toEqual({ required: false, requestIds: [], lessonIds: [] });
+});
+
+test("the welcome flow can only be turned on when the first stage requests a form on join", async () => {
+  const f = await fixture("room");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  await expect(owner.mutation(api.communityMemberWorkflows.setBuilderWelcomeGate, { communityId: f.communityId, expectedRevision: 1, enabled: true }))
+    .rejects.toThrow("welcome_gate_requires_join_form");
+});
+
+test("a submitted form fills the client properties its questions map to, asks for the right shape, and logs an answer that no longer fits", async () => {
+  const f = await fixture("form");
+  const owner = f.t.withIdentity({ subject: "join-owner" });
+  const member = f.t.withIdentity({ subject: "join-member" });
+  await owner.mutation(api.communityClients.createClientProperty, { communityId: f.communityId, name: "Business", type: "text" });
+  await owner.mutation(api.communityClients.createClientProperty, { communityId: f.communityId, name: "Hours per week", type: "number" });
+  await owner.mutation(api.communityClients.createClientProperty, { communityId: f.communityId, name: "Stage", type: "select", options: ["Idea", "Selling"] });
+  await expect(owner.mutation(api.communityForms.saveBuilderForm, { communityId: f.communityId, key: "check", expectedRevision: 0, name: "Check",
+    questions: [{ key: "s", title: "Stage", description: "", required: false, type: "long_text", options: [], clientPropertyKey: "stage" }] }))
+    .rejects.toThrow("form_property_type_mismatch");
+  // A choice the property doesn't have would never fill it, so the mapping is refused.
+  await expect(owner.mutation(api.communityForms.saveBuilderForm, { communityId: f.communityId, key: "check", expectedRevision: 0, name: "Check",
+    questions: [{ key: "s", title: "Stage", description: "", required: false, type: "single_choice", options: ["Beginner", "Experienced"], clientPropertyKey: "stage" }] }))
+    .rejects.toThrow("form_property_options_mismatch");
+  await f.t.run(ctx => ctx.db.patch(f.versionId, { questions: [
+    { key: "sells", title: "What does your business sell?", description: "", type: "long_text", required: true, options: [], clientPropertyKey: "business" },
+    { key: "hours", title: "How many hours a week?", description: "", type: "short_text", required: false, options: [], clientPropertyKey: "hours_per_week" },
+    { key: "stage", title: "Where are you?", description: "", type: "single_choice", required: false, options: ["Selling", "Idea"], clientPropertyKey: "stage" },
+    { key: "free", title: "Anything else?", description: "", type: "short_text", required: false, options: [] },
+  ] }));
+  await f.t.mutation(joinHandler, f.job);
+  const row = (await f.t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  // The member is told the hours answer must be a number, and can't submit text there.
+  const served = await member.query(api.communityFormRequests.getMyRequest, { communityId: f.communityId, requestId: row._id });
+  expect(served.questions.find((q: any) => q.key === "hours")).toMatchObject({ answerFormat: "number" });
+  await expect(member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: row._id, expectedRevision: row.revision,
+    answers: { sells: "AI employee builds", hours: "about 5", stage: "0", free: "hi" }, submit: true })).rejects.toThrow("Enter a number");
+  // The owner renames a Stage option after publishing: that answer can't fill it any more.
+  const stage = (await f.t.run(ctx => ctx.db.query("communityClientProperties").collect())).find(row => row.key === "stage")!;
+  await f.t.run(ctx => ctx.db.patch(stage._id, { options: ["Idea", "Scaling"] }));
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { communityId: f.communityId, requestId: row._id, expectedRevision: row.revision,
+    answers: { sells: "AI employee builds", hours: "5", stage: "0", free: "hi" }, submit: true });
+  const values = await f.t.run(ctx => ctx.db.query("communityClientValues").collect());
+  expect(values.map(row => [row.propertyKey, row.value, row.updatedVia]).sort()).toEqual([
+    ["business", "AI employee builds", "form"], ["hours_per_week", 5, "form"]]);
+  expect(await f.t.run(ctx => ctx.db.get(row._id))).toMatchObject({ status: "submitted" });
+  const timeline = await owner.query(api.communityClients.getClientTimeline, { communityId: f.communityId, membershipId: String(f.membershipId) });
+  expect(timeline.entries.map((entry: any) => entry.summary)).toContain("Form answer to “Where are you?” didn’t fit stage, so it wasn’t saved");
+});

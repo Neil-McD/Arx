@@ -99,37 +99,31 @@ assert.doesNotMatch(
   "the instructions-only Community Agent pane must not retain a nested tab interface",
 );
 
-for (const [source, label] of [
-  [communitySettings, "community settings"],
-] as const) {
-  assert.match(
-    source,
-    /WebPlatformTabList/,
-    `${label} must use the shared tab contract`,
-  );
-  assert.match(
-    source,
-    /role="tabpanel"/,
-    `${label} must expose its selected panel`,
-  );
-  assert.match(
-    source,
-    /aria-labelledby=\{platformTabId/,
-    `${label} panel must reference its tab`,
-  );
-}
-
+// Community settings use a page-style side nav (one button per pane) rather
+// than tabs: the selected pane is announced as the current page.
+const communitySettingsNav = read("apps/web/src/components/WebCommunitySettingsNav.tsx");
 assert.match(
-  communitySettings,
-  /source === "keyboard" \? \{ replace: true \} : undefined/,
-  "route-backed arrow navigation must replace instead of polluting browser history",
+  communitySettingsNav,
+  /<nav className="pn-settings-nav" aria-label="Settings">/,
+  "community settings navigation must be a labelled nav landmark",
 );
+assert.match(
+  communitySettingsNav,
+  /type="button"[\s\S]*aria-current=\{props\.activePane === item\.pane \? "page" : undefined\}[\s\S]*onClick=\{\(\) => props\.onSelectPane\(item\.pane\)\}/,
+  "each pane must be a keyboard-reachable button that exposes the current page",
+);
+assert.doesNotMatch(communitySettingsNav, /role="tab"/, "the settings side nav must not claim tab semantics");
+
 assert.match(
   communitySettings,
   /listCommunitySettingsPanesForAccess\(settingsPaneAccess\)/,
   "keyboard targets must remain filtered by centralized access authority",
 );
-assert.match(communitySettings, /WebPlatformRadioGroup/);
+assert.match(
+  communitySettings,
+  /htmlFor="community-settings-pricing"[\s\S]*id="community-settings-pricing"/,
+  "Pricing must be one labelled native control",
+);
 assert.doesNotMatch(
   communitySettings,
   /role="tablist"\s*aria-label="Pricing options"/,
@@ -155,15 +149,17 @@ assert.match(
   /\.create-banner-btn:has\(input\[type="file"\]:focus-visible\)[\s\S]*var\(--focus-ring\)/,
   "community image upload labels must expose a visible focus indicator",
 );
+// General settings save themselves, like Substack: a short pause after a
+// change, never mid-save, and never while a field is incomplete.
 assert.match(
   communitySettings,
-  /state\.isCommunitySettingsDirty \|\|[\s\S]*state\.isSavingCommunitySettings \|\|[\s\S]*state\.isProcessingCommunitySettingsBanner \?[\s\S]*Save changes[\s\S]*: null/,
-  "the save action must disappear when there is nothing actionable",
+  /const canSave =\s*state\.isCommunitySettingsDirty &&\s*!state\.isSavingCommunitySettings &&\s*!state\.isProcessingCommunitySettingsBanner &&[\s\S]*!hint;/,
+  "autosave must run only when there is something valid to save",
 );
 assert.match(
   communitySettings,
-  /onClick=\{actions\.handleCancelCommunitySettings\}[\s\S]*Cancel[\s\S]*onClick=\{\(\) => void actions\.handleSaveCommunitySettings\(\)\}/,
-  "dirty General settings must expose Cancel immediately to the left of Save changes",
+  /if \(!canSave \|\| failed\) return;[\s\S]*window\.setTimeout\([\s\S]*actions\.handleSaveCommunitySettings\(\)[\s\S]*AUTOSAVE_DELAY_MS\)/,
+  "autosave must debounce and must not retry a failed save on its own",
 );
 assert.match(
   communitySettingsUiController,

@@ -214,6 +214,27 @@
   height: 22px;
 }
 
+/* The agent's face, a round picture or the Sparkles, never a cropped strip. */
+.community-agent-dock-empty-face {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.community-agent-dock-empty-face > :is(img, span) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.community-agent-dock-empty .community-agent-dock-empty-face svg {
+  width: 28px;
+  height: 28px;
+}
+
 .community-agent-dock-empty p {
   max-width: 240px;
   margin: 0;
@@ -471,4 +492,45 @@
   .is-spinning {
     animation: none;
   }
+}
+
+/* Classroom layout: the agent waits behind a button at the bottom right and
+   opens as the floating panel above it. Escape and the header × close it. */
+.community-agent-launcher {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 71;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 18px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pn-button, var(--accent-brand));
+  color: var(--pn-on-button, var(--text-on-accent, #fff));
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18), 0 1px 3px rgb(0 0 0 / 0.12);
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+/* Owner pages (Workflows, Members, Settings, Funnels) are tables and forms
+   right to the bottom edge, where the button covered rows (2026-10-28 review
+   U1). The agent stays one click away from every member-facing page. */
+body:has(:is(.workflow-page, .community-settings-panel, .pn-funnels)) .community-agent-launcher {
+  display: none;
+}
+
+.community-agent-launcher:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.community-agent-launcher:focus-visible {
+  outline: 2px solid var(--accent-brand);
+  outline-offset: 3px;
 }

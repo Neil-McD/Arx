@@ -1,0 +1,123 @@
+/* Workflows → Test run, and the bar a test-run tab shows. Sizes and corners
+   read the community theme's tokens, with Polynet's defaults outside one. */
+.test-run { overflow: auto; display: flex; flex-direction: column; gap: 24px; padding: 8px 24px 32px; max-width: 760px; box-sizing: border-box; }
+.test-run-help { margin: 0; color: var(--text-secondary); font-size: var(--pn-type-ui, 14px); line-height: 1.5; }
+.test-run-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.test-run-actions [role="alert"] { margin: 0; color: var(--accent-error); font-size: var(--pn-type-ui, 14px); }
+.test-run-member-name {
+  flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 0; text-align: left;
+  color: var(--text-primary); background: none; border: 0; font: inherit; font-size: var(--pn-type-ui, 14px); cursor: pointer;
+}
+.test-run-member-name small { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.test-run-member-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.test-run-member-actions button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font: inherit; font-size: var(--pn-type-small, 13px);
+  color: var(--text-primary); background: transparent; border: 1px solid var(--border-default);
+  border-radius: calc(8px * var(--pn-radius-scale, 1)); cursor: pointer;
+}
+.test-run-member-actions button:hover:not(:disabled) { background: var(--hover-overlay); }
+.test-run-member-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.test-run :is(button):focus-visible, .test-run-bar button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.test-run-timeline { display: flex; flex-direction: column; gap: 10px; }
+.test-run-timeline-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.test-run-timeline h2 { margin: 0; font-size: var(--pn-type-label, 12px); font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.test-run-link { padding: 0; border: 0; background: none; color: var(--text-primary); font: inherit; font-size: var(--pn-type-small, 13px); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.test-run-entries { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border-left: 2px solid var(--border-default); }
+.test-run-entries li { display: flex; gap: 12px; padding: 6px 0 6px 14px; font-size: var(--pn-type-ui, 14px); line-height: 1.45; }
+.test-run-entries time { flex-shrink: 0; min-width: 6.5em; color: var(--text-secondary); font-size: var(--pn-type-small, 13px); font-variant-numeric: tabular-nums; }
+.test-run-entries span { min-width: 0; overflow-wrap: anywhere; }
+.test-run-entries li[data-type="workflow_action_failed"] span { color: var(--accent-error); }
+@container workflow-sections (max-width: 760px) {
+  .test-run { padding: 8px 16px 24px; }
+}
+
+/* A test-run tab says so on every page, above the app. */
+.test-run-bar {
+  position: fixed; z-index: 2147483000; left: 50%; bottom: 16px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 8px 8px 8px 14px;
+  color: #fff; background: #1f2937; border-radius: 999px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  font-size: 13px; line-height: 1.3;
+}
+.test-run-bar strong { font-weight: 650; }
+.test-run-bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.test-run-bar button {
+  flex-shrink: 0; padding: 6px 12px; font: inherit; font-weight: 600; color: #1f2937; background: #fff; border: 0; border-radius: 999px; cursor: pointer;
+}
+.test-run-bar.is-ended { background: #7f1d1d; }
+/* On a phone the composer's Send sits at the bottom, so the bar goes up top. */
+.app-root.mobile-shell .test-run-bar { top: calc(var(--mobile-topbar-clearance, 56px) + 6px); bottom: auto; }
+
+/* The start picker and the sequence review. */
+.test-run-field { display: flex; align-items: center; gap: 8px; }
+.test-run-field label { font-size: var(--pn-type-ui, 14px); font-weight: 600; }
+.test-run-field select {
+  padding: 8px 10px; font: inherit; font-size: var(--pn-type-ui, 14px); color: var(--text-primary); background: var(--surface-input, transparent);
+  border: 1px solid var(--border-default); border-radius: calc(8px * var(--pn-radius-scale, 1));
+}
+.test-run-field select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.test-run-error { margin: 0; color: var(--accent-error); font-size: var(--pn-type-ui, 14px); }
+.test-run-sequence { display: flex; flex-direction: column; gap: 10px; }
+.test-run-stages { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.test-run-stages > li {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  border: 1px solid var(--border-default); border-radius: calc(12px * var(--pn-radius-scale, 1));
+}
+.test-run-stages > li:not(.is-current):not(.is-reached) { opacity: 0.7; }
+.test-run-stages > li.is-current { border-color: var(--accent-primary, var(--text-primary)); }
+.test-run-stages h3 { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--pn-type-body, 15px); }
+.test-run-stages h3 > .test-run-stage-number {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 1.6em; height: 1.6em; border-radius: 999px;
+  background: var(--hover-overlay); font-size: var(--pn-type-small, 13px); font-variant-numeric: tabular-nums;
+}
+.test-run-stages h3 em { font-style: normal; font-weight: 500; color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.test-run-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.test-run-steps li { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.test-run-step-status {
+  flex-shrink: 0; min-width: 6.5em; padding: 2px 8px; box-sizing: border-box; text-align: center; border-radius: 999px;
+  background: var(--hover-overlay); color: var(--text-secondary); font-size: var(--pn-type-meta, 11px); font-weight: 650;
+}
+.test-run-steps li[data-status="done"] .test-run-step-status { background: color-mix(in srgb, var(--accent-success, #1f7a30) 16%, transparent); color: var(--accent-success, #1f7a30); }
+.test-run-steps li[data-status="failed"] .test-run-step-status { background: color-mix(in srgb, var(--accent-error, #b42318) 14%, transparent); color: var(--accent-error, #b42318); }
+.test-run-steps li[data-status="scheduled"] .test-run-step-status,
+.test-run-steps li[data-status="running"] .test-run-step-status { background: color-mix(in srgb, var(--accent-primary, #2563eb) 14%, transparent); color: var(--text-primary); }
+.test-run-step-text { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--pn-type-ui, 14px); overflow-wrap: anywhere; }
+.test-run-step-text strong { font-weight: 600; }
+.test-run-step-text small { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.test-run-steps button, .test-run-sequence [role="alert"] button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font: inherit; font-size: var(--pn-type-small, 13px);
+  color: var(--text-primary); background: transparent; border: 1px solid var(--border-default);
+  border-radius: calc(8px * var(--pn-radius-scale, 1)); cursor: pointer;
+}
+.test-run-steps button:disabled, .test-run-link:disabled { opacity: 0.5; cursor: not-allowed; }
+.test-run-workflow-button { margin-top: 8px; }
+
+/* In a test-run tab, what Autoplay just pressed. */
+.test-run-highlight {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 3px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.25) !important;
+  transition: outline-color 0.2s, box-shadow 0.2s;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .test-run-highlight { animation: test-run-highlight-pulse 0.8s ease-out 2; }
+}
+@keyframes test-run-highlight-pulse { from { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); } to { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); } }
+
+/* Autoplay on screen: the test member's cursor, with their name. */
+.test-run-cursor {
+  position: fixed; z-index: 2147483001; pointer-events: none; display: flex; align-items: flex-start; gap: 4px;
+  transform: translate(-3px, -2px); transition-property: left, top; transition-timing-function: cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.test-run-cursor svg { fill: #f59e0b; stroke: #111827; stroke-width: 1.5; stroke-linejoin: round; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)); }
+.test-run-cursor span {
+  margin-top: 16px; padding: 2px 8px; color: #111827; background: #f59e0b; border-radius: 999px;
+  font: 600 12px/1.4 system-ui, sans-serif; white-space: nowrap;
+}
+.test-run-cursor.is-clicking svg { transform: scale(0.85); }
+.test-run-cursor.is-clicking::before {
+  content: ""; position: absolute; left: -10px; top: -10px; width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid #f59e0b; animation: test-run-click 0.5s ease-out forwards;
+}
+@keyframes test-run-click { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .test-run-cursor { transition-duration: 0ms !important; } .test-run-cursor.is-clicking::before { animation: none; } }

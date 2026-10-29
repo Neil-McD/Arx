@@ -26,6 +26,8 @@ export type CloudCommunityEvent = {
   location_label: string | null;
   url: string | null;
   visibility: CloudCommunityEventVisibility;
+  /** Set when the event is one pod's own call. */
+  channel_id?: string | null;
   status: CloudCommunityEventStatus;
   recurrence_frequency: CloudCommunityEventRecurrenceFrequency;
   recurrence_interval: number;
@@ -47,6 +49,7 @@ export type CloudCommunityEventSavePayload = {
   location_label?: string | null;
   url?: string | null;
   visibility?: CloudCommunityEventVisibility;
+  channel_id?: string | null;
   status?: CloudCommunityEventStatus;
   recurrence_frequency?: CloudCommunityEventRecurrenceFrequency;
   recurrence_interval?: number;
@@ -61,6 +64,8 @@ export async function listCloudCommunityEvents<SessionT>(
     includeCancelled?: boolean;
     overlap?: boolean;
     limit?: number;
+    /** Only this pod's calls. */
+    channelId?: string;
   },
 ): Promise<CloudCommunityEvent[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -71,6 +76,7 @@ export async function listCloudCommunityEvents<SessionT>(
     endIso: params.endIso,
     includeCancelled: params.includeCancelled ?? false,
     ...(params.overlap === undefined ? {} : { overlap: params.overlap }),
+    ...(params.channelId ? { channelId: params.channelId } : {}),
     limit:
       typeof params.limit === "number" && Number.isFinite(params.limit)
         ? Math.max(1, Math.floor(params.limit))

@@ -105,7 +105,9 @@ same files are in `.claude/skills/` for Claude Code):
 
 - `polynet-build-site`: the flow, the frame, a complete example.
 - `polynet-design`: discover the world, three directions, build, critique.
-- `polynet-sdk`: community data and actions for custom views.
+- `polynet-ui-design`: design taste and craft (type, colour, space, polish,
+  avoiding the generic AI look), for the site and for the community in the app.
+- `polynet-sdk`: community data and actions, with recipes.
 - `polynet-accessibility`: the final pass, and what the checks block.
 - `polynet-deploy-verify`: ship it and prove it works.
 

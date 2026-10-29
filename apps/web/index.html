@@ -40,6 +40,32 @@
           ?.setAttribute("content", definition.browserColor);
       })();
     </script>
+    <script data-community-boot-look>
+      // A community's page opens in its own colours (communityBootLook.ts
+      // keeps them after a visit); the real theme replaces them once loaded.
+      (() => {
+        try {
+          const match = /^\/c\/([^/?#]+)/.exec(location.pathname);
+          if (!match) return;
+          const look = JSON.parse(localStorage.getItem("polynet-boot-look:" + decodeURIComponent(match[1])) || "null");
+          if (!look || look.v !== 1 || !look.vars) return;
+          const root = document.documentElement;
+          const names = [];
+          for (const [name, value] of Object.entries(look.vars)) {
+            if (!/^--[\w-]+$/.test(name) || typeof value !== "string") continue;
+            root.style.setProperty(name, value);
+            names.push(name);
+          }
+          root.setAttribute("data-boot-look", names.join(" "));
+          const background = look.vars["--bg-workspace"];
+          if (background) {
+            document.querySelector('meta[name="theme-color"]')?.setAttribute("content", background);
+          }
+        } catch {
+          // No saved look, or storage is blocked: Polynet's own look loads.
+        }
+      })();
+    </script>
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest?v=20260811a" />
     <link rel="icon" href="%BASE_URL%favicon.ico?v=20260425a" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg?v=20260425a" />

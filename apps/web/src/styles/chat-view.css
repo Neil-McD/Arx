@@ -1,0 +1,99 @@
+/* Wide chat: every Channels chat. Messages run the full width
+   of the chat from the left edge: avatar and name on the left, messages
+   stacked under the name, and joins, dates and the message box lined up on
+   the same left edge. Rows highlight across the whole width on hover.
+   Colours all come from the community's theme. Sizes are in rem so the theme
+   map leaves them alone. */
+.product-shell-surface[data-chat-view="wide"] {
+  --wide-chat-inset: 1.25rem;
+  --wide-chat-gutter: 2.25rem;
+  --wide-chat-gap: 0.75rem;
+  --wide-chat-hover: var(--feel-fill-hover, var(--hover-overlay));
+}
+
+.product-shell-surface[data-chat-view="wide"] .community-interaction-feed,
+.product-shell-surface[data-chat-view="wide"] .community-interaction-main-composer .chat-input-bar {
+  width: auto;
+  max-width: none;
+  margin-inline: 0;
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-feed {
+  gap: 0;
+  padding-bottom: 0.5rem;
+}
+/* Rows reach both edges of the chat, so the hover band does too. */
+.product-shell-surface[data-chat-view="wide"] .community-interaction-feed-scroll {
+  padding-inline: 0;
+}
+
+/* Messages: one row per sender, edge to edge. */
+.product-shell-surface[data-chat-view="wide"] .community-interaction-group {
+  grid-template-columns: var(--wide-chat-gutter) minmax(0, 1fr);
+  gap: var(--wide-chat-gap);
+  padding: 0.5rem var(--wide-chat-inset);
+  border-radius: 0;
+  transition: background 120ms ease;
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-group:hover {
+  background: var(--wide-chat-hover);
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-group-gutter .community-interaction-avatar {
+  width: var(--wide-chat-gutter);
+  height: var(--wide-chat-gutter);
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-message,
+.product-shell-surface[data-chat-view="wide"] .community-interaction-message:hover {
+  margin-left: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-msg-actions {
+  right: 0;
+}
+
+/* Dates: the label on the left, a hairline running to the right edge. */
+.product-shell-surface[data-chat-view="wide"] .community-interaction-day {
+  gap: 0.75rem;
+  margin-block: 0.75rem 0.25rem;
+  padding: 0.5rem var(--wide-chat-inset) 0.25rem;
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-day::before {
+  display: none;
+}
+
+/* Joins and notices: small faces in the avatar column, the words where
+   message text starts. */
+.product-shell-surface[data-chat-view="wide"] .community-interaction-member-arrivals,
+.product-shell-surface[data-chat-view="wide"] .community-interaction-system {
+  justify-content: flex-start;
+  gap: var(--wide-chat-gap);
+  min-height: 1.75rem;
+  padding: 0.125rem var(--wide-chat-inset);
+  text-align: left;
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-system span {
+  max-width: none;
+}
+.product-shell-surface[data-chat-view="wide"] .community-interaction-system::before {
+  content: "";
+  flex: 0 0 var(--wide-chat-gutter);
+}
+/* One face (see community-and-content.css), centred in the avatar column. */
+.product-shell-surface[data-chat-view="wide"] .community-interaction-member-arrival-faces {
+  flex: 0 0 var(--wide-chat-gutter);
+  justify-content: center;
+  overflow: hidden;
+}
+
+.product-shell-surface[data-chat-view="wide"] .community-interaction-unread-divider,
+.product-shell-surface[data-chat-view="wide"] .community-interaction-typing {
+  padding-inline: var(--wide-chat-inset);
+}
+
+/* The message box spans the chat too, on the same edges as the rows. */
+.product-shell-surface[data-chat-view="wide"] .community-interaction-main-composer {
+  padding-inline: var(--wide-chat-inset);
+}
+.product-shell-surface[data-chat-view="wide"] .community-chat .community-interaction-main-composer .chat-input-bar {
+  margin-inline: 0;
+}

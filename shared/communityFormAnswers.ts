@@ -1,4 +1,5 @@
 import type { CommunityFormQuestion } from "./communityForms";
+import { communityClientAnswerFormatIssue } from "./communityClients";
 export type FormAnswers = Record<string, string | string[]>;
 export function formQuestionAnswered(q: CommunityFormQuestion, answers: FormAnswers): boolean {
   const answer = answers[q.key];
@@ -16,6 +17,10 @@ export function formAnswersIssue(questions: CommunityFormQuestion[], answers: Fo
       else if (q.type === "single_choice" && a !== "" && !q.options.map((_, i) => String(i)).includes(a)) return "Invalid choice.";
     }
     if (submitting && q.required && !formQuestionAnswered(q, answers)) return "Please answer all required questions.";
+    if (submitting && q.answerFormat && typeof a === "string") {
+      const issue = communityClientAnswerFormatIssue(q.answerFormat, a);
+      if (issue) return `${q.title}: ${issue}`;
+    }
   }
   return null;
 }

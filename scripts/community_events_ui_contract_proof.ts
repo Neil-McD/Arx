@@ -135,7 +135,7 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /<span>Event timezone<\/span>[\s\S]*normalizeCommunityEventTimeZone\(draft\.timezone\)/,
+  /Time zone<\/span>[\s\S]*normalizeCommunityEventTimeZone\(draft\.timezone\)/,
   "event editor must expose the event timezone anchor",
 );
 
@@ -147,7 +147,7 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /draft\.recurrence_frequency !== "none" \? \([\s\S]*<span>Repeats until<\/span>/,
+  /draft\.recurrence_frequency !== "none" \? \([\s\S]*<span>Until<\/span>/,
   "the recurrence end field must stay absent until recurrence is enabled",
 );
 

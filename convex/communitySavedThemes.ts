@@ -1,7 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
-import { normalizeCommunityTheme } from "../shared/communityTheme";
+import { normalizeCommunityTheme, type CommunityThemeV1 } from "../shared/communityTheme";
+import { applyCommunityThemePalette, findCommunityThemePalette } from "../shared/communityThemePalettes";
 import { requireCommunityManager, resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import { saveDraft } from "./communityThemes";
 
 // Looks an owner saved under a name (Settings → Appearance → Customize →
 // Saved themes), and the ready-made colour palettes. Saving, renaming and
@@ -132,5 +134,46 @@ export const deleteCommunitySavedTheme = mutation({
     const row = await requireRow(ctx, args.communityId, args.savedThemeId);
     await ctx.db.delete(row._id);
     return await listProjection(ctx, args.communityId);
+  },
+});
+
+/** Makes a saved theme the draft. Members see it once the draft is published. */
+export const applyCommunitySavedThemeToDraft = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    savedThemeId: v.id("communitySavedThemes"),
+    expectedDraftRevision: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireManager(ctx, args);
+    const row = await requireRow(ctx, args.communityId, args.savedThemeId);
+    return await saveDraft(ctx, { userId, communityId: args.communityId, expectedDraftRevision: args.expectedDraftRevision, theme: row.theme });
+  },
+});
+
+/** Puts a ready-made palette's colours on the draft; fonts, shapes and course cards stay. */
+export const applyCommunityThemePaletteToDraft = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    paletteId: v.string(),
+    // "light" or "dark" fixes the look to one scheme; left out, the draft keeps the schemes it has.
+    scheme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
+    expectedDraftRevision: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireManager(ctx, args);
+    const palette = findCommunityThemePalette(args.paletteId);
+    if (!palette) throw new ConvexError({ code: "theme_palette_not_found", paletteId: args.paletteId });
+    const row = await ctx.db.query("communityThemes").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).unique();
+    const current = row ? normalizeCommunityTheme(row.draftTheme) : null;
+    const base: CommunityThemeV1 = current?.ok ? current.theme : (normalizeCommunityTheme({ version: 1 }) as { ok: true; theme: CommunityThemeV1 }).theme;
+    return await saveDraft(ctx, {
+      userId, communityId: args.communityId, expectedDraftRevision: args.expectedDraftRevision,
+      theme: applyCommunityThemePalette(base, palette, args.scheme),
+    });
   },
 });

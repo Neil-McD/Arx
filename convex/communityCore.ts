@@ -1,4 +1,5 @@
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { findTestMemberByUserId } from "./communityTestMemberCore";
 import {
   buildCommunityResourceDirectoryFields,
   buildCommunityResourceModuleDirectoryFields,
@@ -8,6 +9,12 @@ import {
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
 import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
+import type { CommunityLessonFields } from "../shared/communityLessonContract";
+import {
+  parseCommunityLessonElements,
+  publicCommunityLessonElement,
+  redactCommunityLessonAnswers,
+} from "../shared/communityLessonContract";
 import {
   communityIsActive,
   type CommunityLifecycleStatus,
@@ -72,6 +79,7 @@ export type CommunityMembershipLike = {
   communityId: any;
   userId: any;
   role: string;
+  coCreator?: boolean;
   accessSource?: string;
   pricePointId?: any;
   active?: boolean;
@@ -244,6 +252,7 @@ export type CommunityResourceLike = {
   sourceExternalModifiedAt?: number;
   pinned: boolean;
   sortOrder?: number;
+  lesson?: CommunityLessonFields;
   createdAt: number;
   updatedAt: number;
 };
@@ -274,10 +283,17 @@ export type CommunityResourceModuleLike = {
   bannerFocusX?: number;
   bannerFocusY?: number;
   bannerZoom?: number;
+  lessonStyle?: CommunityResourceModuleLessonStyle;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
 };
+
+export type CommunityResourceModuleLessonStyle = "article" | "video";
+
+export function normalizeResourceModuleLessonStyle(value: unknown): CommunityResourceModuleLessonStyle {
+  return value === "video" ? "video" : "article";
+}
 
 async function resolveCommunityResourceModuleName(
   ctx: any,
@@ -737,6 +753,10 @@ export function normalizeOptionalFileKey(raw: unknown): string | undefined {
   return value.slice(0, 4096);
 }
 
+export function communityMembershipIsCoCreator(membership: CommunityMembershipLike | null | undefined): boolean {
+  return Boolean(membership) && normalizeCommunityRoleForOutput(membership!.role) === "admin" && membership!.coCreator === true;
+}
+
 export function normalizeRoleAssignment(raw: unknown): "admin" | "moderator" | "member" {
   const role = String(raw ?? "")
     .trim()
@@ -796,6 +816,21 @@ export async function listCanonicalCommunityMemberMembershipRows(args: {
       communityMembershipCountsTowardActiveMemberCount({ community, membership: row })
     ),
   };
+}
+
+/** Users standing in as an owner's test members here. They are left out of
+ * every member count a person reads (sales page, Offers, Workflows, Members),
+ * so a test run never makes a community look bigger. */
+export async function listActiveTestMemberUserIds(ctx: any, communityId: any, options?: { includeEnded?: boolean }): Promise<Set<string>> {
+  const rows = await ctx.db.query("communityTestMembers")
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
+    .take(500);
+  return new Set(rows.filter((row: any) => options?.includeEnded || !row.endedAt).map((row: any) => String(row.userId)));
+}
+
+/** The number people see: active members, without the owner and without test members. */
+export function countPeopleFacingMembers(rows: CommunityMembershipLike[] | null | undefined, testUserIds: Set<string>): number {
+  return (rows ?? []).filter((row) => !testUserIds.has(String(row.userId))).length;
 }
 
 export function countCanonicalCommunityMembersFromRows(
@@ -1009,7 +1044,16 @@ export async function mapCommunityResourceRow(
   row: CommunityResourceLike,
   userIdCache?: Map<string, string | null>,
   moduleNameCache?: Map<string, string | null>,
+  // Members get lesson bodies without quiz answers; only people who can edit
+  // the resource see (and save back) the original.
+  viewer: { canManage: boolean } = { canManage: false },
 ) {
+  const lessonElements = row.lesson
+    ? parseCommunityLessonElements(row.bodyMd).map(publicCommunityLessonElement)
+    : null;
+  const bodyMd = row.lesson && !viewer.canManage && row.bodyMd
+    ? redactCommunityLessonAnswers(row.bodyMd)
+    : row.bodyMd;
   const resourceDirectory = buildCommunityResourceDirectoryFields({
     communityId: String(row.communityId),
     moduleId: row.moduleId ? String(row.moduleId) : null,
@@ -1029,7 +1073,7 @@ export async function mapCommunityResourceRow(
     resource_status: normalizeResourceStatus(row.status),
     source_resource_id: row.sourceResourceId ? String(row.sourceResourceId) : null,
     title: row.title,
-    body_md: row.bodyMd ?? null,
+    body_md: bodyMd ?? null,
     body_chars: communityResourceBodyChars(row),
     url: row.url ?? null,
     file_key: row.fileKey ?? null,
@@ -1055,6 +1099,8 @@ export async function mapCommunityResourceRow(
       typeof row.sourceExternalModifiedAt === "number" ? toIsoString(row.sourceExternalModifiedAt) : null,
     pinned: Boolean(row.pinned),
     sort_order: Number.isFinite(row.sortOrder) ? row.sortOrder : null,
+    lesson: row.lesson ?? null,
+    lesson_elements: lessonElements,
     created_by: (await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)) ?? String(row.createdByUserId),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
@@ -1088,6 +1134,7 @@ export async function mapCommunityResourceModuleRow(
     banner_focus_x: typeof row.bannerFocusX === "number" ? row.bannerFocusX : null,
     banner_focus_y: typeof row.bannerFocusY === "number" ? row.bannerFocusY : null,
     banner_zoom: typeof row.bannerZoom === "number" ? row.bannerZoom : null,
+    lesson_style: normalizeResourceModuleLessonStyle(row.lessonStyle),
     sort_order: Number.isFinite(row.sortOrder) ? row.sortOrder : 0,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
@@ -1190,6 +1237,107 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   };
 }
 
+/**
+ * The welcome flow: when the builder turns it on, a member whose first-stage
+ * "member joins" rule requested a form, and who has not submitted it yet,
+ * can open only that form. Owners and admins are never held. The gate is read
+ * from the pending requests themselves, so cancelling or submitting a request
+ * (or turning the setting off) opens the community at once.
+ */
+export async function readCommunityWelcomeGate(args: {
+  ctx: any;
+  community: CommunityLike;
+  membership: CommunityMembershipLike | null;
+  userId: any;
+}): Promise<{ required: boolean; requestIds: string[]; lessonIds: string[]; display: WelcomeDisplay }> {
+  const open = { required: false, requestIds: [] as string[], lessonIds: [] as string[], display: "page" as WelcomeDisplay };
+  if (String(args.community.ownerId) === String(args.userId) || !args.membership) return open;
+  if (normalizeCommunityRoleForOutput(args.membership.role) === "admin") return open;
+  const workflow = await args.ctx.db.query("communityMemberWorkflows")
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.community._id)).first();
+  if (!workflow?.welcomeGate) return open;
+  const display: WelcomeDisplay = workflow.welcomeDisplay === "popup" ? "popup" : "page";
+  // A test run started at a later stage tests that stage, not the welcome flow.
+  const testMember = await findTestMemberByUserId(args.ctx, args.userId);
+  if (testMember?.startMilestoneKey && testMember.startMilestoneKey !== workflow.milestones?.[0]?.key) return open;
+  const byStatus = (status: "pending" | "submitted") => args.ctx.db.query("communityFormRequests")
+    .withIndex("by_member_status", (q: any) => q.eq("membershipId", args.membership!._id).eq("status", status))
+    .take(20);
+  const [pending, submitted] = await Promise.all([byStatus("pending"), byStatus("submitted")]);
+  // Only a request whose first-stage "member joins" rule still exists holds the
+  // member; a rule the builder removed never leaves anyone locked out.
+  const first = workflow.milestones?.[0];
+  const joinRules = new Set((first?.automations ?? [])
+    .filter((rule: any) => rule.trigger?.type === "member_joined" && rule.action?.type === "request_form")
+    .map((rule: any) => rule.key));
+  const isWelcomeRequest = async (request: any) => {
+    if (String(request.workflowId) !== String(workflow._id) || request.milestoneKey !== first?.key) return false;
+    if ((request.activationSequence ?? 0) !== (args.membership!.activationSequence ?? 0)) return false;
+    if (!joinRules.has(request.automationKey)) return false;
+    const run = await args.ctx.db.get(request.workflowRunId);
+    return run?.triggerType === "member_joined";
+  };
+  const requestIds: string[] = [];
+  for (const request of pending) if (await isWelcomeRequest(request)) requestIds.push(String(request._id));
+  // A member who has already sent a welcome form is in the flow, so its lessons apply to them too.
+  let sentWelcomeForm = false;
+  for (const request of submitted) if (!sentWelcomeForm && await isWelcomeRequest(request)) sentWelcomeForm = true;
+  const membership = args.membership;
+  const joinedAfterGate = membership.activationSequence === 1
+    && typeof workflow.welcomeGateEnabledAt === "number" && typeof membership.activatedAt === "number"
+    && membership.activatedAt >= workflow.welcomeGateEnabledAt;
+  // Welcome lessons come after the forms and hold anyone the flow applies to
+  // until each is marked done. A lesson since removed or unpublished drops out.
+  const lessonIds: string[] = [];
+  if ((requestIds.length || sentWelcomeForm || joinedAfterGate) && workflow.welcomeLessonIds?.length) {
+    for (const resourceId of workflow.welcomeLessonIds) {
+      if (!(await welcomeLessonIsLive(args.ctx, args.community._id, resourceId))) continue;
+      const progress = await args.ctx.db.query("communityResourceProgress")
+        .withIndex("by_community_user_resource", (q: any) =>
+          q.eq("communityId", args.community._id).eq("userId", args.userId).eq("resourceId", resourceId))
+        .unique();
+      if (progress?.status !== "done") lessonIds.push(String(resourceId));
+    }
+  }
+  if (requestIds.length || lessonIds.length) return { required: true, requestIds, lessonIds, display };
+  // The join rule runs just after the join commits, so a member who joined
+  // after the flow was turned on is held from the first moment, before their
+  // forms exist. The hold lapses if the rule never runs, so nobody is locked out.
+  if (!joinedAfterGate || joinRules.size === 0 || Date.now() - membership.activatedAt! >= WELCOME_PREPARING_MS) return open;
+  const runs = await args.ctx.db.query("communityMemberWorkflowRuns")
+    .withIndex("by_workflow_membership_createdAt", (q: any) => q.eq("workflowId", workflow._id).eq("membershipId", membership._id))
+    .take(20);
+  const joinRan = runs.some((run: any) => run.triggerType === "member_joined");
+  return joinRan ? open : { required: true, requestIds: [], lessonIds: [], display };
+}
+
+export type WelcomeDisplay = "page" | "popup";
+
+/** Whether the welcome flow keeps the member out of the rest of the community.
+ * A pop-up opens the community behind it, so it asks without holding. */
+export function welcomeHolds(gate: { required: boolean; display: WelcomeDisplay }): boolean {
+  return gate.required && gate.display !== "popup";
+}
+
+/** A welcome lesson counts only while members can see it: a page in a live course. */
+export async function welcomeLessonIsLive(ctx: any, communityId: any, resourceId: any): Promise<boolean> {
+  const row = (await ctx.db.get(resourceId)) as CommunityResourceLike | null;
+  if (!row || String((row as any).communityId) !== String(communityId)) return false;
+  const module = row.moduleId ? ((await ctx.db.get(row.moduleId)) as CommunityResourceModuleLike | null) : null;
+  const liveModuleIds = new Set(module && communityResourceModuleIsLive(module) ? [normalizeIdValue(module._id)] : []);
+  return communityResourceIsLiveModulePage(row, liveModuleIds);
+}
+
+/** The community's welcome lesson ids while the welcome flow is on, else none. A held member may work on these. */
+export async function communityWelcomeLessonIds(ctx: any, communityId: any): Promise<Set<string>> {
+  const workflow = await ctx.db.query("communityMemberWorkflows")
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId)).first();
+  return new Set(workflow?.welcomeGate ? (workflow.welcomeLessonIds ?? []).map((id: any) => String(id)) : []);
+}
+
+/** How long a new member waits on the join rule before the welcome hold lapses. */
+const WELCOME_PREPARING_MS = 2 * 60_000;
+
 // Live communities an owner may have before the next one needs its own Agent
 // plan. Callers exempt the platform owner and a community with its own plan.
 export const FREE_COMMUNITIES_PER_OWNER = 10;
@@ -1268,6 +1416,7 @@ export async function resolveCommunityLens(args: {
   const entitled = membershipEntitled && operational;
   const isAdmin = !isOwner && membershipEntitled && storedRole === "admin";
   const isModerator = !isOwner && membershipEntitled && storedRole === "moderator";
+  const isCoCreator = isAdmin && communityMembershipIsCoCreator(membership);
   const relation = !entitled
     ? null
     : isOwner
@@ -1306,8 +1455,8 @@ export async function resolveCommunityLens(args: {
       manageMembers: manager,
       manageResources: manager,
       managePricing: manager,
-      manageBranding: operational && isOwner,
-      managePublishing: operational && isOwner,
+      manageBranding: operational && (isOwner || isCoCreator),
+      managePublishing: operational && (isOwner || isCoCreator),
       managePayouts: operational && isOwner,
     },
   };
@@ -1331,9 +1480,16 @@ export async function requireCommunityChatAccess(args: {
   ctx: any;
   communityId: any;
   userId: any;
+  /** Form paths pass this so a member held by the welcome flow can finish it. */
+  allowWelcome?: boolean;
 }): Promise<{ community: CommunityLike }> {
   const lens = await requireCommunityLens(args);
   if (!lens.can.readChat) throw new Error("community_entitlement_required");
+  if (!args.allowWelcome && welcomeHolds(await readCommunityWelcomeGate({
+    ctx: args.ctx, community: lens.community, membership: lens.membership, userId: args.userId,
+  }))) {
+    throw new Error("community_welcome_required");
+  }
   return { community: lens.community };
 }
 
@@ -1379,10 +1535,15 @@ export async function resolveCommunityAccessBundle(args: {
             : !isBlocked
               ? "visitor"
               : null;
+  const welcome = isEntitled
+    ? await readCommunityWelcomeGate({ ctx: args.ctx, community: args.community, membership: args.membership, userId: args.userId })
+    : { required: false, requestIds: [] as string[], lessonIds: [] as string[], display: "page" as WelcomeDisplay };
+  const held = welcomeHolds(welcome);
   const canViewLanding = true;
+  // A member held by the welcome flow enters the community but sees only the form.
   const canEnterCommunity = lens.can.enter;
-  const canReadChat = lens.can.readChat;
-  const canPostChat = lens.can.postChat;
+  const canReadChat = lens.can.readChat && !held;
+  const canPostChat = lens.can.postChat && !held;
   const canView = lens.can.view;
   const canManageMembers = lens.can.manageMembers;
   const canManageResources = lens.can.manageResources;
@@ -1392,7 +1553,7 @@ export async function resolveCommunityAccessBundle(args: {
   const canManageBranding = lens.can.manageBranding;
   const canManagePublishing = lens.can.managePublishing;
   const canManagePayouts = lens.can.managePayouts;
-  const canPostMessage = lens.can.postMessage;
+  const canPostMessage = lens.can.postMessage && !welcome.required;
   const primaryCta: CommunityPrimaryCta = !builderAccess.operational
     ? isOwner
       ? "manage_billing"
@@ -1444,6 +1605,10 @@ export async function resolveCommunityAccessBundle(args: {
     can_manage_branding: canManageBranding,
     can_manage_publishing: canManagePublishing,
     can_manage_payouts: canManagePayouts,
+    welcome_required: welcome.required,
+    welcome_form_request_ids: welcome.requestIds,
+    welcome_lesson_ids: welcome.lessonIds,
+    welcome_display: welcome.display,
   };
 }
 

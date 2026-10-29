@@ -10,6 +10,7 @@ import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
 import { scheduleFirstMemberWorkflowJoin } from "./communityMemberWorkflowJoinCore";
+import { syncCommunityAccessForUser } from "./communityAccessSync";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -25,6 +26,8 @@ export async function activateCommunityMembershipCore(args: {
   pricePointId?: any;
   activationReason: string;
   nowMs: number;
+  // The owner-grant flow writes its grant row after activating and syncs once itself.
+  skipAccessSync?: boolean;
 }): Promise<{
   membership: CommunityMembershipLike;
   accessGranted: boolean;
@@ -56,6 +59,14 @@ export async function activateCommunityMembershipCore(args: {
       communityId: args.communityId,
       userId: args.userId,
     });
+    if (!args.skipAccessSync) {
+      await syncCommunityAccessForUser(args.ctx, {
+        communityId: args.communityId,
+        userId: args.userId,
+        nowMs: args.nowMs,
+        reason: args.activationReason,
+      });
+    }
     return {
       membership: refreshed,
       accessGranted: false,
@@ -121,6 +132,14 @@ export async function activateCommunityMembershipCore(args: {
     communityId: args.communityId,
     userId: args.userId,
   });
+  if (!args.skipAccessSync) {
+    await syncCommunityAccessForUser(args.ctx, {
+      communityId: args.communityId,
+      userId: args.userId,
+      nowMs: args.nowMs,
+      reason: args.activationReason,
+    });
+  }
   return {
     membership,
     accessGranted: true,

@@ -6,13 +6,16 @@ import { requestIsCurrent, pendingFormsForVisit, cancelMilestoneFormRequests } f
 import { getCommunityMemberWorkflowByCommunity, getMemberMilestone, resolveCurrentMilestone } from "./communityMemberWorkflowReadCore";
 import { readSubmittedFormRecord, readSubmittedFormRecords } from "./communityFormEvidenceCore";
 import { processSubmittedWorkflowForm } from "./communityMemberWorkflows";
+import { writeMappedFormAnswers } from "./communityClients";
 import { formAnswersIssue, formQuestionAnswered } from "../shared/communityFormAnswers";
+import { communityClientAnswerFormat } from "../shared/communityClients";
+import type { CommunityFormQuestion } from "../shared/communityForms";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 const scope = { communityId: v.id("communities"), authSubject: v.optional(v.string()) };
 async function actor(ctx: any, args: any) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
-  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId, allowWelcome: true });
   return userId;
 }
 async function ownRequest(ctx: any, args: any): Promise<Doc<"communityFormRequests">> {
@@ -45,7 +48,7 @@ async function listOwnRequests(ctx: QueryCtx, args: { communityId: Id<"communiti
   for (const row of rows) {
     if (!await requestIsCurrent(ctx, row)) continue;
     const version = await ctx.db.get(row.versionId);
-    if (version) result.push({ id: row._id, name: version.name, answered: version.questions.filter(q => formQuestionAnswered(q, row.answers)).length, total: version.questions.length, createdAt: row.createdAt });
+    if (version) result.push({ id: row._id, form_key: row.formKey, name: version.name, answered: version.questions.filter(q => formQuestionAnswered(q, row.answers)).length, total: version.questions.length, createdAt: row.createdAt });
   }
   result.sort((a, b) => a.createdAt - b.createdAt);
   return args.paged ? { rows: result, nextCursor: page.isDone ? null : page.continueCursor, visit: visitKey } : result;
@@ -67,14 +70,25 @@ export const cancelVisitPendingInternal = internalMutation({ args: {
   }
   await cancelMilestoneFormRequests(ctx, args);
 } });
+// Questions as the member answers them: a short answer that fills a number, date
+// or link property says so, so the member is asked for that shape up front.
+export async function memberFormQuestions(ctx: QueryCtx, communityId: Id<"communities">, questions: CommunityFormQuestion[]): Promise<CommunityFormQuestion[]> {
+  return await Promise.all(questions.map(async (question) => {
+    if (!question.clientPropertyKey || question.type !== "short_text") return question;
+    const property = await ctx.db.query("communityClientProperties")
+      .withIndex("by_community_key", (q: any) => q.eq("communityId", communityId).eq("key", question.clientPropertyKey!)).unique();
+    const answerFormat = property && !property.archivedAt ? communityClientAnswerFormat(property.type) : null;
+    return answerFormat ? { ...question, answerFormat } : question;
+  }));
+}
 export const getMyRequest = query({ args: { ...scope, requestId: v.id("communityFormRequests") }, handler: async (ctx, args) => {
   const row = await ownRequest(ctx, args);
   if (row.status !== "pending" || !await requestIsCurrent(ctx, row)) throw new Error("form_request_expired");
   const version = await ctx.db.get(row.versionId);
   if (!version) throw new Error("form_version_missing");
-  return { id: row._id, name: version.name, questions: version.questions, answers: row.answers, revision: row.revision };
+  return { id: row._id, name: version.name, questions: await memberFormQuestions(ctx, row.communityId, version.questions), answers: row.answers, revision: row.revision };
 } });
-async function saveOwnAnswers(ctx: MutationCtx, args: { expectedRevision: number; answers: Record<string, string | string[]>; submit: boolean }, row: Doc<"communityFormRequests">) {
+export async function saveOwnAnswers(ctx: MutationCtx, args: { expectedRevision: number; answers: Record<string, string | string[]>; submit: boolean }, row: Doc<"communityFormRequests">) {
   // A lost submit response may safely retry, never overwrite completed answers.
   if (row.status === "submitted" && args.submit) {
     if (JSON.stringify(row.answers) !== JSON.stringify(args.answers)) throw new Error("form_already_submitted");
@@ -85,12 +99,18 @@ async function saveOwnAnswers(ctx: MutationCtx, args: { expectedRevision: number
   if (row.revision !== args.expectedRevision) throw new Error("form_answer_conflict");
   const version = await ctx.db.get(row.versionId);
   if (!version) throw new Error("form_version_missing");
-  const issue = formAnswersIssue(version.questions, args.answers, args.submit);
+  const issue = formAnswersIssue(args.submit ? await memberFormQuestions(ctx, row.communityId, version.questions) : version.questions, args.answers, args.submit);
   if (issue) throw new Error(issue);
   const revision = row.revision + 1;
   await ctx.db.patch(row._id, { answers: args.answers, revision, updatedAt: Date.now(),
     ...(args.submit ? { status: "submitted" as const, submittedAt: Date.now() } : {}) });
-  if (args.submit) await processSubmittedWorkflowForm(ctx, await ctx.db.get(row._id));
+  if (args.submit) {
+    // Answers fill the client properties their questions map to before any
+    // Workflow rule on this submission runs, so those rules see the new values.
+    await writeMappedFormAnswers(ctx, { communityId: row.communityId, membership: await ctx.db.get(row.membershipId),
+      questions: version.questions, answers: args.answers });
+    await processSubmittedWorkflowForm(ctx, await ctx.db.get(row._id));
+  }
   return { revision, submitted: args.submit };
 }
 export const saveMyAnswers = mutation({ args: { ...scope, requestId: v.id("communityFormRequests"), expectedRevision: v.number(), answers: v.record(v.string(), v.union(v.string(), v.array(v.string()))), submit: v.boolean() }, handler: async (ctx, args) => {
@@ -112,7 +132,7 @@ export const listBuilderResponses = query({ args: { ...scope, membershipId: v.id
 // caller-selected self identity. Current authority is checked before receipt replay.
 const selfScope = { communityId: v.id("communities"), userId: v.id("users") };
 async function selfMembership(ctx: QueryCtx, args: { communityId: Id<"communities">; userId: Id<"users"> }) {
-  await requireCommunityChatAccess({ ctx, ...args });
+  await requireCommunityChatAccess({ ctx, ...args, allowWelcome: true });
   const membership = await getUniqueCommunityMembershipByPair({ ctx, ...args });
   if (!communityMembershipRowIsActive(membership)) throw new Error("form_request_unavailable");
   const row = membership ? await ctx.db.get(membership._id as Id<"communityMemberships">) : null;
@@ -143,7 +163,7 @@ function formDocument(row: Doc<"communityFormRequests">, version: Doc<"community
   return value;
 }
 export const listOwnFormsInternal = internalQuery({ args: { ...selfScope, cursor: v.optional(v.string()) }, handler: async (ctx, args) => {
-  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId, allowWelcome: true });
   const scope = JSON.stringify([args.userId, args.communityId, 1]);
   let decoded: { scope: string; cursor: string; visit: string } | undefined;
   if (args.cursor !== undefined) {

@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import { verifyResendWebhookPayload } from "./emailCore";
+import { WORKFLOW_EMAIL_UNSUBSCRIBE_PATH } from "./communityWorkflowEmailCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -105,4 +106,47 @@ export function registerEmailRoutes(args: RegisterEmailRoutesArgs): void {
       });
     }),
   });
+
+  // Unsubscribe from a community's automation emails. Opening the link shows a
+  // button, so mail scanners that open links don't unsubscribe anyone; the
+  // button and mail apps' one-click unsubscribe both POST.
+  http.route({
+    path: WORKFLOW_EMAIL_UNSUBSCRIBE_PATH,
+    method: "GET",
+    handler: httpAction(async (_ctx, req) => {
+      const token = readString(new URL(req.url).searchParams.get("t"));
+      return unsubscribePage(token
+        ? `<h1>Unsubscribe?</h1><p>You'll stop getting this community's automated emails. Account emails still arrive.</p>
+           <form method="post"><input type="hidden" name="t" value="${escapeHtml(token)}" /><button type="submit">Unsubscribe</button></form>`
+        : `<h1>This link is incomplete</h1><p>Open the unsubscribe link from the email again.</p>`, token ? 200 : 400);
+    }),
+  });
+  http.route({
+    path: WORKFLOW_EMAIL_UNSUBSCRIBE_PATH,
+    method: "POST",
+    handler: httpAction(async (ctx, req) => {
+      let token = readString(new URL(req.url).searchParams.get("t"));
+      if (!token) {
+        const form = new URLSearchParams(await req.text());
+        token = readString(form.get("t"));
+      }
+      const result = await ctx.runMutation((internal as any).email.optOutOfWorkflowEmailsInternal, { token });
+      return result.status === "unsubscribed"
+        ? unsubscribePage(`<h1>You're unsubscribed</h1><p>${escapeHtml(result.community_name)} won't send you automated emails any more.</p>`, 200)
+        : unsubscribePage(`<h1>This link doesn't work</h1><p>Open the unsubscribe link from the email again.</p>`, 400);
+    }),
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+
+function unsubscribePage(content: string, status: number): Response {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Email preferences</title><style>body{margin:0;padding:48px 16px;background:#fafaf9;color:#151a16;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+main{max-width:440px;margin:0 auto}h1{font-size:22px;margin:0 0 8px}p{font-size:15px;line-height:1.55;color:#4b524d}
+button{margin-top:12px;padding:10px 16px;border:0;border-radius:8px;background:#151a16;color:#fff;font-size:15px;cursor:pointer}</style></head>
+<body><main>${content}</main></body></html>`;
+  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }

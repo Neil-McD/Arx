@@ -1,3 +1,4 @@
+import { readCommunityAgentProfile } from "./communityAgentContext";
 import { v } from "convex/values";
 import { resolveSelfCommunityMembershipContext } from "./communityMembershipContextCore";
 import { internal } from "./_generated/api";
@@ -907,6 +908,7 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
                       ref: entry.ref,
                       directoryPath: entry.directory_path,
                       directoryUri: entry.directory_uri,
+                      lesson: entry.lesson ?? null,
                     })),
                     nextCursor: directory.next_cursor,
                   },
@@ -1127,6 +1129,9 @@ export const readCommunitySemanticRepositoryInternal = internalAction({
           offset: payload.content?.offset,
           totalChars: payload.content?.total_chars,
           truncated: payload.content?.truncated,
+          sections: Array.isArray(payload.content?.sections) ? payload.content.sections : null,
+          lesson: payload.resource?.lesson ?? null,
+          lessonBody: payload.lesson_body ?? null,
         },
       });
     } catch {
@@ -1162,7 +1167,10 @@ export const getCommunityRepositoryIdentityInternal = internalQuery({
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
     if (!community) return null;
-    const identity = { slug: String(community.slug ?? ""), name: String(community.name ?? "") };
+    // agent_name is what members @mention the community agent as (Settings > Agent).
+    const agentProfile = await readCommunityAgentProfile(ctx, args.communityId);
+    const identity = { slug: String(community.slug ?? ""), name: String(community.name ?? ""),
+      agent_name: agentProfile?.name ?? String(community.name ?? "") };
     if (!args.viewerUserId) return identity;
     // The signed-in member, as a front end greets them.
     const [user, display] = await Promise.all([

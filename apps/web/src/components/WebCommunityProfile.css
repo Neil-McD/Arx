@@ -1,0 +1,152 @@
+/* A person's profile when you click their name, after Substack's profile
+   pages: a large picture, the name in the community's heading face, one
+   quiet line of facts, the bio at reading size, one clear action with
+   icon-only links beside it, then their communities as rows. Sizes in rem
+   so the community theme map doesn't rescale them. */
+
+.community-profile-panel.pn-profile { gap: 1.25rem; padding: 1.5rem; }
+/* The panel scrolls; its parts keep their height instead of squeezing. */
+.community-profile-panel.pn-profile > * { flex-shrink: 0; }
+.community-profile-panel.pn-profile.community-profile-panel--docked { padding: 0.5rem 1.25rem 1.5rem; }
+
+.pn-profile-head { display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; }
+.pn-profile-head .community-interaction-avatar {
+  width: 5rem;
+  height: 5rem;
+  margin-bottom: 0.875rem;
+  font-size: 1.5rem;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.pn-profile .pn-profile-name {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-family: var(--pn-font-heading, inherit);
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.75rem;
+  letter-spacing: -0.01em;
+}
+.pn-profile .pn-profile-meta {
+  max-width: 100%;
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.pn-profile .pn-profile-bio {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+.pn-profile .pn-profile-bio.is-empty { color: var(--text-muted); font-style: italic; }
+
+.pn-profile-actions { display: flex; align-items: center; gap: 0.5rem; }
+.pn-profile-button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pn-profile-button:hover:not(:disabled) { background: var(--hover-overlay); }
+.pn-profile-button.is-primary { border-color: transparent; background: var(--bg-button); color: var(--bg-button-text); }
+.pn-profile-button.is-primary:hover:not(:disabled) { background: var(--bg-button-hover, var(--bg-button)); }
+.pn-profile-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.pn-profile-button svg { width: 1.0625rem; height: 1.0625rem; }
+.pn-profile-social {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+}
+.pn-profile-social:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-profile-social svg { width: 1.0625rem; height: 1.0625rem; }
+:is(.pn-profile-button, .pn-profile-social, .pn-profile-community, .pn-profile-more):focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+.pn-profile-group { display: flex; flex-direction: column; gap: 0.25rem; padding-top: 1rem; border-top: 1px solid var(--border-default); }
+.pn-profile .pn-profile-group-label {
+  margin: 0 0 0.25rem;
+  font-family: inherit;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pn-profile-communities { display: flex; flex-direction: column; margin: 0 -0.5rem; padding: 0; list-style: none; }
+.pn-profile-community {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.pn-profile-community:hover { background: var(--hover-overlay); }
+.pn-profile-community .pn-profile-community-avatar {
+  display: grid;
+  flex: 0 0 2.25rem;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+}
+.pn-profile-community-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pn-profile-community-role { flex: none; color: var(--text-muted); font-size: 0.8125rem; }
+.pn-profile-more {
+  align-self: flex-start;
+  margin: 0.125rem 0 0;
+  padding: 0.25rem 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pn-profile-more:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 0.1875rem; }
+
+@media (max-width: 760px) {
+  .community-profile-panel.pn-profile { padding: 1.25rem; }
+}

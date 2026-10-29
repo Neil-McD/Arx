@@ -92,3 +92,11 @@ describe("community interaction link presentation", () => {
     expect(markup).not.toContain("<button");
   });
 });
+
+describe("Descript video links", () => {
+  it("plays share and embed links in Descript's embed player", () => {
+    expect(parseEmbedUrl("https://share.descript.com/view/42pEyvI1VyH")).toEqual({ provider: "descript", id: "42pEyvI1VyH", src: "https://share.descript.com/embed/42pEyvI1VyH" });
+    expect(parseEmbedUrl("https://share.descript.com/embed/42pEyvI1VyH")?.provider).toBe("descript");
+    expect(parseEmbedUrl("https://descript.com/view/42pEyvI1VyH")).toBeNull();
+  });
+});

@@ -112,7 +112,8 @@ for (const required of [
 assert.match(resources, /requireCommunityResourceDirectoryToolAccess/);
 assert.match(resources, /requireCommunityManager/);
 assert.match(resources, /community_resource_directory_community_mismatch/);
-assert.doesNotMatch(resources, /file_key:/);
+// Only the paywall redaction may name file keys, to blank them.
+assert.doesNotMatch(resources, /file_key:(?! null)/);
 
 assert.match(evidence, /searchCommunityResourceEvidenceInternal/);
 assert.match(evidence, /readCommunityResourceEvidenceForToolInternal/);

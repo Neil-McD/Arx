@@ -20,7 +20,7 @@ export async function requestIsCurrent(ctx: any, request: any) {
   if (!communityMembershipRowIsActive(membership) || !workflow || workflow.communityId !== request.communityId
     || membership.communityId !== request.communityId || (membership.activationSequence ?? 0) !== request.activationSequence) return false;
   try {
-    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId });
+    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId, allowWelcome: true });
     const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });
     const current = resolveCurrentMilestone({ workflow, membership, state });
     return !current.completedAt && current.milestone.key === request.milestoneKey
@@ -42,10 +42,10 @@ export async function assignWorkflowForm(args: any) {
   if ((await pendingFormsForVisit(ctx, visit).take(MAX_PENDING_MEMBER_FORMS)).length >= MAX_PENDING_MEMBER_FORMS) {
     throw new Error("form_pending_limit_reached");
   }
-  await requireCommunityChatAccess({ ctx, communityId: workflow.communityId, userId: membership.userId });
+  await requireCommunityChatAccess({ ctx, communityId: workflow.communityId, userId: membership.userId, allowWelcome: true });
   const form = await ctx.db.query("communityForms").withIndex("by_community_key", (q: any) => q
     .eq("communityId", workflow.communityId).eq("key", automation.action.formKey)).unique();
-  if (!form?.publishedRevision) throw new Error("form_not_published");
+  if (!form?.publishedRevision || form.deletedAt) throw new Error("form_not_published");
   const version = await ctx.db.query("communityFormVersions").withIndex("by_form_revision", (q: any) => q
     .eq("formId", form._id).eq("revision", form.publishedRevision)).unique();
   if (!version) throw new Error("form_version_missing");

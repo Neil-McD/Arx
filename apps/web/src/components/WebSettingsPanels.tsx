@@ -9,7 +9,6 @@ import {
   WebAccountSettingsSection,
   type WebAccountSettingsSectionProps,
 } from "./WebAccountSettingsSection";
-import { WebAppearanceSettingsSection } from "./WebAppearanceSettingsSection";
 import {
   WebEmailPreferencesSection,
   type WebEmailPreferencesSectionProps,
@@ -20,6 +19,12 @@ import {
 } from "./WebBillingSettingsSection";
 import { WebPolynetMcpAccountSection } from "./WebPolynetMcpAccountSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
+import { WebProfileCommunityVisibility } from "./WebProfileCommunityVisibility";
+import { WebYourMembershipsSection } from "./WebYourMembershipsSection";
+import { WebYourDisplaySection } from "./WebYourDisplaySection";
+import { WebSettingsFold } from "./WebSettingsFold";
+import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
+import { SOCIAL_PROFILE_KINDS } from "../../../../shared/socialProfileLinks";
 
 type SessionLike = AuthSession | null;
 
@@ -43,7 +48,11 @@ export type WebSettingsPanelsProps = {
   appearance: {
     appTheme: AppTheme;
     setAppTheme: (value: AppTheme) => void;
+    // The community whose colours Your settings wears, for the Display samples.
+    community?: { id: string; name: string } | null;
   };
+  // Opens an in-app path (a community's own Settings from Memberships).
+  onOpenPath?: (path: string) => void;
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
@@ -92,23 +101,78 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   };
 
   switch (props.settingsGroup) {
-    case "profile":
-      return <WebProfileSettingsSection {...profileSectionProps} />;
+    case "profile": {
+      const visibility = (props.profile.cloudProfile ?? {}) as { show_owned_communities?: boolean; show_joined_communities?: boolean };
+      const showOwned = visibility.show_owned_communities !== false;
+      const showJoined = visibility.show_joined_communities !== false;
+      const ui = props.profile.profileUi;
+      const linkCount = SOCIAL_PROFILE_KINDS.filter((kind) => Boolean(ui.profileSocialLinks?.[kind])).length;
+      const linksDisabled =
+        !props.profile.session || ui.isSavingProfile || ui.profileLoadStatus === "loading" ||
+        (!props.profile.cloudProfile && ui.profileLoadStatus === "error");
+      return (
+        <>
+          <WebProfileSettingsSection {...profileSectionProps} hideLinks />
+          <WebSettingsFold
+            id="profile-links"
+            title="Links"
+            summary={linkCount === 0 ? "None yet. Add YouTube, X or Instagram." : `${linkCount} ${linkCount === 1 ? "link" : "links"} on your profile`}
+          >
+            <WebSocialProfileLinksFields
+              values={ui.profileSocialLinks}
+              disabled={linksDisabled}
+              variant="settings"
+              onChange={ui.setProfileSocialLink}
+              onSave={(nextLinks) => props.profile.saveProfileToCloud({ socialLinks: nextLinks })}
+            />
+          </WebSettingsFold>
+          <WebSettingsFold
+            id="profile-communities"
+            title="On your profile"
+            summary={showOwned && showJoined ? "Shows the communities you create and the ones you're in"
+              : showOwned ? "Shows the communities you create"
+              : showJoined ? "Shows the communities you're in"
+              : "Hides your communities"}
+          >
+            <WebProfileCommunityVisibility bare session={props.profile.session} showOwned={showOwned} showJoined={showJoined} />
+          </WebSettingsFold>
+        </>
+      );
+    }
     case "account":
       return (
         <>
           <WebAccountSettingsSection {...props.account} />
-          <WebEmailPreferencesSection {...props.emailPreferences} />
-          <WebPolynetMcpAccountSection session={props.account.session} />
+          {props.emailPreferences.isVisible ? (
+            <WebSettingsFold
+              id="account-email"
+              title="Email"
+              summary={!props.emailPreferences.hasLoaded ? "Which community emails Polynet sends you"
+                : props.emailPreferences.weeklyDigestEnabled ? "Weekly digest on" : "Weekly digest off"}
+            >
+              <WebEmailPreferencesSection {...props.emailPreferences} />
+            </WebSettingsFold>
+          ) : null}
         </>
       );
+    case "memberships":
+      return (
+        <WebYourMembershipsSection
+          session={props.profile.session}
+          onOpenPath={(path) => (props.onOpenPath ? props.onOpenPath(path) : window.location.assign(path))}
+        />
+      );
+    case "apps":
+      return <WebPolynetMcpAccountSection session={props.account.session} />;
     case "billing":
       return <WebBillingSettingsSection {...props.billing} />;
     case "appearance":
       return (
-        <WebAppearanceSettingsSection
+        <WebYourDisplaySection
+          session={props.profile.session}
           appTheme={props.appearance.appTheme}
           setAppTheme={props.appearance.setAppTheme}
+          community={props.appearance.community ?? null}
         />
       );
   }

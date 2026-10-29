@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "navigation": {
+    "position": "top",
+    "tabs": [
+      { "tab": "chat", "label": "Community" },
+      { "tab": "resources", "label": "Classroom" },
+      { "tab": "events", "label": "Calendar" },
+      { "tab": "members", "label": "Members" },
+      { "tab": "agent", "label": "Ask AI" },
+      { "tab": "about", "label": "About" }
+    ],
+    "home": "chat"
+  },
+  "width": "centered",
+  "pages": {
+    "chat": {
+      "presentation": "posts",
+      "aside": ["community_card", "upcoming_events"]
+    },
+    "about": {
+      "presentation": "funnel"
+    }
+  }
+}

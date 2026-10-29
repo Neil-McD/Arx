@@ -242,8 +242,8 @@ assert.doesNotMatch(
 
 assert.match(
   app,
-  /activeCommunityMemberCount:[\s\S]*communityDirectoryMemberCount \?\?[\s\S]*activeCommunityPresenceSummary\?\.member_count \?\?[\s\S]*null/,
-  "the header count should use canonical directory or presence membership totals",
+  /activeCommunityMemberCount:[\s\S]*activeCommunityPresenceSummary\?\.member_count \?\?[\s\S]*communityDirectoryMemberCount \?\?[\s\S]*null/,
+  "the header count should use the people-facing presence total, then the directory total",
 );
 assert.doesNotMatch(
   topBar,
@@ -278,12 +278,12 @@ assert.doesNotMatch(
 
 assert.match(
   bottomRail,
-  /import \{ House, MessageCircle, Sparkles \} from "lucide-react";/,
-  "the rail should use the shared icon library",
+  /import \{ House, MessageCircle \} from "lucide-react";[\s\S]*import \{ CommunityAgentIcon \} from "..\/..\/..\/..\/shared\/CommunityAgentIcon";/,
+  "the rail should use the shared icon library and the community's own agent face",
 );
 assert.match(
   bottomRail,
-  /<House className="mobile-bottom-rail-community-base" aria-hidden="true" \/>[\s\S]*mobile-bottom-rail-ai\$\{activeRoot === "agent" \? " active" : ""\}[\s\S]*aria-current=\{activeRoot === "agent" \? "page" : undefined\}[\s\S]*onClick=\{\(\) => communityShell\.onSelectMobileRootPage\("agent"\)\}[\s\S]*<Sparkles aria-hidden="true" \/>[\s\S]*<MessageCircle aria-hidden="true" \/>/,
+  /<House className="mobile-bottom-rail-community-base" aria-hidden="true" \/>[\s\S]*mobile-bottom-rail-ai\$\{activeRoot === "agent" \? " active" : ""\}[\s\S]*aria-current=\{activeRoot === "agent" \? "page" : undefined\}[\s\S]*onClick=\{\(\) => communityShell\.onSelectMobileRootPage\("agent"\)\}[\s\S]*<CommunityAgentIcon \/>[\s\S]*<MessageCircle aria-hidden="true" \/>/,
   "Community, centered AI, and Messages should render in that order",
 );
 assert.match(
@@ -354,7 +354,7 @@ assert.match(
 );
 assert.match(
   communityNavSurface,
-  /const hasDestinationSelection =[\s\S]*!isMobileHome &&[\s\S]*webDestinationHasCommunityNavSelection\(communityShell\.destination\)[\s\S]*hideIdentitySettings=\{isMobileHome\}[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
+  /const hasDestinationSelection =[\s\S]*!isMobileHome &&[\s\S]*webDestinationHasCommunityNavSelection\(communityShell\.destination\)[\s\S]*hideIdentitySettings(?:=\{isMobileHome\})?[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
   "mobile home should keep community identity without claiming an active destination or exposing reorder controls",
 );
 assert.match(
@@ -511,7 +511,7 @@ assert.match(
 );
 assert.match(
   app,
-  /const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*communityTab === "chat"[\s\S]*mobileRootPage === "community"[\s\S]*const mobileChromeScrollTrackingEnabled = Boolean\([\s\S]*!mobileOverlay[\s\S]*onMobileReadingModeChange: mobileChromeScrollTrackingEnabled[\s\S]*setMobileChromeReadingMode/,
+  /const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*(?:communityTab === "chat"|isCommunityChatBackedTab\(communityTab\))[\s\S]*mobileRootPage === "community"[\s\S]*const mobileChromeScrollTrackingEnabled = Boolean\([\s\S]*!mobileOverlay[\s\S]*onMobileReadingModeChange: mobileChromeScrollTrackingEnabled[\s\S]*setMobileChromeReadingMode/,
   "mobile reading mode should be enabled only for the bottom-anchored Community chat root",
 );
 assert.match(

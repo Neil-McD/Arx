@@ -1,0 +1,967 @@
+/* Workflows in the style of Substack's dashboard (polynet-ui/substack-study),
+   matching community Settings (WebCommunitySettings.css): a 24px page title,
+   underlined section tabs, flat cards with 8/12 radii, status badges, tinted
+   callouts and small centred empty states. Colours are the community's own.
+   Sizes are in rem so community-theme-map.css doesn't rescale them. */
+
+.pn-wf {
+  --pn-wf-r: 0.5rem;
+  --pn-wf-r-frame: 0.75rem;
+  --pn-wf-gutter: 2rem;
+  background: var(--bg-workspace);
+  font-size: 0.9375rem;
+}
+
+.pn-wf .workflow-page { background: transparent; }
+
+.pn-wf-header { flex-shrink: 0; padding: 1.75rem var(--pn-wf-gutter) 0; }
+.pn-wf-header h1 { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
+.pn-wf-header p { margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.9375rem; line-height: 1.4; }
+
+/* Section tabs: text with an underline under the current one. */
+.pn-wf-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 1.5rem;
+  margin: 1.25rem var(--pn-wf-gutter) 1.5rem;
+  border-bottom: 1px solid var(--border-default);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pn-wf-tabs > button {
+  position: relative;
+  flex-shrink: 0;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.pn-wf-tabs > button:hover:not(:disabled) { color: var(--text-primary); }
+.pn-wf-tabs > button[aria-selected="true"] { color: var(--text-primary); font-weight: 600; }
+.pn-wf-tabs > button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-primary);
+}
+.pn-wf-tabs > button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; border-radius: 0.25rem; }
+.pn-wf-tabs > button:disabled { cursor: progress; }
+
+/* Shared pieces. */
+.pn-wf .workflow-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pn-wf .workflow-secondary-button:hover:not(:disabled) { background: var(--bg-card-hover, var(--hover-overlay)); }
+.pn-wf-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: var(--pn-wf-r);
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pn-wf-primary:hover:not(:disabled) { background: var(--bg-button-hover, var(--bg-button)); }
+.pn-wf-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.pn-wf :is(.workflow-secondary-button, .pn-wf-primary, .pn-wf-list > button, .workflow-add-milestone-button):focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.pn-wf-muted { margin: 0; color: var(--text-secondary); }
+
+.pn-wf-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 1.375rem;
+  padding: 0 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--hover-overlay);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pn-wf-badge:is(.is-on, .is-published) {
+  background: color-mix(in srgb, var(--accent-success, #1f9d55) 16%, transparent);
+  color: var(--text-primary);
+}
+.pn-wf-badge.is-edited {
+  background: color-mix(in srgb, var(--accent-warning, #d97706) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.pn-wf-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+.pn-wf-section-head > div { flex: 1 1 20rem; min-width: 0; }
+.pn-wf-section-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; line-height: 1.3; }
+.pn-wf-section-head p { max-width: 40rem; margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.875rem; line-height: 1.45; }
+
+.pn-wf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+  text-align: center;
+}
+.pn-wf-empty strong { font-size: 0.9375rem; font-weight: 600; }
+.pn-wf-empty p { max-width: 24rem; margin: 0 0 0.5rem; color: var(--text-secondary); font-size: 0.875rem; line-height: 1.45; }
+.pn-wf-empty-icon,
+.pn-wf-callout-icon,
+.pn-wf-row-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--pn-wf-r);
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+.pn-wf-empty-icon { width: 2.5rem; height: 2.5rem; }
+
+/* Board: the welcome page callout above the milestone columns. */
+.pn-wf .community-utility-panel.workflow-pipeline-shell {
+  gap: 1rem;
+  padding: 0 var(--pn-wf-gutter) 1.5rem;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.pn-wf-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf-callout-icon { width: 2.5rem; height: 2.5rem; }
+.pn-wf-callout-text { display: flex; flex: 1 1 16rem; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.pn-wf-callout-text strong { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; font-weight: 600; }
+.pn-wf-callout-text small { color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.4; }
+.pn-wf-callout-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Board bar: Steps | Members, then Add stage and the one primary action, Test. */
+.pn-wf-board-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.pn-wf-board-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.pn-wf-board-actions :is(.pn-wf-primary, .workflow-secondary-button) { display: inline-flex; align-items: center; gap: 0.375rem; }
+.pn-wf-view-switch {
+  display: inline-flex;
+  padding: 0.1875rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r);
+  background: var(--bg-workspace);
+}
+.pn-wf-view-switch > button {
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-radius: calc(var(--pn-wf-r) - 0.1875rem);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.pn-wf-view-switch > button[aria-selected="true"] { background: var(--bg-card); color: var(--text-primary); font-weight: 600; box-shadow: 0 0 0 1px var(--border-default); }
+.pn-wf-view-switch > button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.pn-wf-note { max-width: 46rem; margin: 0; color: var(--text-secondary); font-size: 0.875rem; line-height: 1.5; }
+.pn-wf-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--border-default);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.pn-wf-link:hover:not(:disabled) { text-decoration-color: currentColor; }
+.pn-wf-link:disabled { opacity: 0.5; cursor: not-allowed; }
+.pn-wf-link:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; border-radius: 0.125rem; }
+
+/* Steps: stages top to bottom, every rule one sentence, later steps tucked under the one they wait for. */
+.pn-wf-steps { display: flex; flex-direction: column; max-width: 46rem; margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.pn-wf-stage { padding: 1.5rem 0; border-top: 1px solid var(--border-default); }
+.pn-wf-stage:first-child { padding-top: 0.5rem; border-top: 0; }
+.pn-wf-stage-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.5rem 1.5rem; }
+.pn-wf-stage-title { flex: 1 1 18rem; min-width: 0; }
+.pn-wf-stage-eyebrow { color: var(--text-muted, var(--text-secondary)); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.pn-wf .pn-wf-stage-title h2 { margin: 0.25rem 0 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+.pn-wf-stage-title p { margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.875rem; line-height: 1.45; }
+.pn-wf-stage-actions { display: flex; gap: 1.25rem; padding-top: 1.25rem; font-size: 0.875rem; }
+.pn-wf-step-list { margin: 0.875rem 0 0; padding: 0 0 0 0.875rem; border-left: 2px solid var(--border-default); list-style: none; }
+.pn-wf-step > button {
+  display: block;
+  width: 100%;
+  padding: 0.4375rem 0.625rem 0.4375rem calc(0.625rem + var(--pn-wf-depth, 0) * 1.5rem);
+  border: 0;
+  border-radius: var(--pn-wf-r);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+.pn-wf-step > button:hover:not(:disabled) { background: var(--hover-overlay); }
+.pn-wf-step > button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.pn-wf-step.is-after > button::before { content: "↳ "; color: var(--text-muted, var(--text-secondary)); }
+.pn-wf .pn-wf-step-lead { font-weight: 600; }
+.pn-wf-stage-empty { margin: 0.875rem 0 0; color: var(--text-secondary); font-size: 0.875rem; }
+.pn-wf-add-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.375rem 0 0 1.5rem;
+  padding: 0.25rem 0.375rem;
+  border: 0;
+  border-radius: var(--pn-wf-r);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.pn-wf-add-step:hover:not(:disabled) { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-wf-add-step:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.pn-wf-stage-advance { margin: 0.625rem 0 0 1.5rem; color: var(--text-muted, var(--text-secondary)); font-size: 0.8125rem; line-height: 1.45; }
+.pn-wf-steps + .pn-wf-agent-led { max-width: 46rem; }
+
+.pn-wf .workflow-board-stage { gap: 0; }
+.pn-wf .workflow-milestone-canvas { align-items: flex-start; gap: 1rem; margin: 0; padding: 0 0 0.5rem; overflow-y: auto; }
+.pn-wf .workflow-milestone-column {
+  flex: 0 0 17rem;
+  max-height: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .workflow-milestone-column-header {
+  min-height: 3.25rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.pn-wf .workflow-milestone-column-header h2 { color: var(--text-primary); font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
+.pn-wf .workflow-milestone-position {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+}
+.pn-wf .workflow-milestone-column-actions > .pn-wf-count {
+  min-width: 1.5rem;
+  height: 1.375rem;
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  background: var(--hover-overlay);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+  box-sizing: border-box;
+}
+.pn-wf .workflow-milestone-edit-button { width: 2.25rem; height: 2.25rem; border-radius: var(--pn-wf-r); color: var(--text-secondary); }
+.pn-wf .workflow-milestone-edit-button:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-wf .workflow-milestone-column-body { gap: 0.375rem; padding: 0.5rem; }
+.pn-wf .workflow-member-stub {
+  min-height: 3.5rem;
+  padding: 0.5rem 0.75rem;
+  border-color: transparent;
+  border-radius: var(--pn-wf-r);
+  background: transparent;
+}
+.pn-wf .workflow-member-stub:hover { border-color: transparent; background: var(--hover-overlay); }
+.pn-wf .workflow-member-stub + .workflow-member-stub { margin-top: 0; }
+.pn-wf .workflow-member-stub .community-interaction-avatar {
+  width: 2rem;
+  height: 2rem;
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+  font-size: 0.6875rem;
+}
+.pn-wf .workflow-member-stub .community-interaction-avatar.has-image { background: var(--bg-card); }
+.pn-wf .workflow-member-stub-copy strong { font-size: 0.875rem; font-weight: 600; }
+.pn-wf .workflow-member-stub-copy span { font-size: 0.8125rem; font-weight: 400; }
+.pn-wf .workflow-milestone-empty { padding: 1.25rem 0.75rem; color: var(--text-secondary); font-size: 0.8125rem; text-align: center; }
+.pn-wf .test-run-workflow-button {
+  margin-top: 0.25rem;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-secondary);
+}
+.pn-wf .test-run-workflow-button:hover:not(:disabled) { color: var(--text-primary); }
+.pn-wf .workflow-add-milestone-button {
+  display: flex;
+  flex: 0 0 12rem;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  gap: 0.375rem;
+  width: auto;
+  height: auto;
+  min-height: 7.5rem;
+  max-height: 12rem;
+  border: 1px dashed var(--border-strong, var(--border-default));
+  border-radius: var(--pn-wf-r-frame);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pn-wf .workflow-add-milestone-button:hover:not(:disabled) { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-wf .workflow-add-milestone-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.pn-wf .workflow-board-footnote { color: var(--text-secondary); font-size: 0.8125rem; }
+
+/* Forms: a list card of rows (icon, name and questions, status, chevron). */
+.pn-wf .community-forms-page { gap: 1.25rem; max-width: 52rem; padding: 0 var(--pn-wf-gutter) 2.5rem; }
+.pn-wf-list {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .pn-wf-list > button {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 4rem;
+  padding: 0.75rem 1rem 0.75rem 1.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.pn-wf .pn-wf-list > button:last-child { border-bottom: 0; }
+.pn-wf .pn-wf-list > button:hover { background: var(--hover-overlay); }
+.pn-wf-row-icon { width: 2rem; height: 2rem; }
+.pn-wf-row-text { display: flex; flex: 1; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.pn-wf-row-text strong { overflow: hidden; font-size: 0.9375rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pn-wf .pn-wf-row-text small { color: var(--text-secondary); font-size: 0.8125rem; }
+.pn-wf-row-chevron { flex-shrink: 0; color: var(--text-secondary); }
+
+/* Clients (WebCommunityAccess): the table sits in a card. */
+.pn-wf .access-clients-page { padding: 0 var(--pn-wf-gutter) 2.5rem; }
+.pn-wf .access-clients-header h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; letter-spacing: 0; }
+.pn-wf .access-clients-header .access-muted { margin: 0.25rem 0 0; font-size: 0.875rem; }
+.pn-wf .access-actions { display: flex; gap: 0.5rem; }
+.pn-wf .access-table-wrap {
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .access-table { font-size: 0.875rem; }
+.pn-wf .access-table th,
+.pn-wf .access-table td { padding: 0.75rem 1rem; }
+.pn-wf .access-table thead th { color: var(--text-secondary); font-size: 0.6875rem; }
+.pn-wf .access-table tbody tr:last-child > * { border-bottom: 0; }
+
+/* Test run: a section heading with the start picker, a safety callout, the
+   runs as a list card, then the sequence and record as cards of their own. */
+.pn-wf .test-run { gap: 1.25rem; max-width: 52rem; padding: 0 var(--pn-wf-gutter) 2.5rem; }
+.pn-wf .test-run > section { display: flex; flex-direction: column; gap: 0.75rem; }
+.pn-wf .test-run-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.pn-wf .test-run-field select {
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  border-radius: var(--pn-wf-r);
+  background: var(--bg-card);
+  font-size: 0.875rem;
+}
+.pn-wf .test-run-safety { padding: 0.875rem 1.25rem; }
+
+/* The way in: three plain steps and the Watch button, one card. */
+.pn-wf .test-run-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .test-run-hero-steps { display: flex; flex-direction: column; gap: 0.5rem; margin: 0; padding: 0; list-style: none; counter-reset: test-run-step; }
+.pn-wf .test-run-hero-steps li {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 0.625rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  counter-increment: test-run-step;
+}
+.pn-wf .test-run-hero-steps li::before {
+  content: counter(test-run-step);
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.pn-wf .test-run-hero-steps strong { color: var(--text-primary); font-weight: 600; }
+
+/* Watching: the member's screen on the left, the sequence on the right, over the whole window. */
+.pn-wf .test-run-watch {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-workspace);
+}
+.pn-wf .test-run-watch-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-card);
+}
+.pn-wf .test-run-watch-head .pn-wf-row-icon { width: 2.25rem; height: 2.25rem; }
+.pn-wf .test-run-watch-head .pn-wf-row-text { display: flex; flex: 1 1 20rem; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.pn-wf .test-run-watch-head strong { font-size: 1rem; }
+.pn-wf .test-run-watch-head small { color: var(--text-secondary); font-size: 0.8125rem; }
+.pn-wf .test-run-watch-actions { display: flex; gap: 0.5rem; }
+.pn-wf .test-run-watch-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 26rem);
+  gap: 1rem;
+  min-height: 0;
+  padding: 1rem;
+}
+.pn-wf .test-run-watch-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .test-run-watch-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.pn-wf .test-run-watch-chrome span { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--border-default); }
+.pn-wf .test-run-watch-chrome em { margin-left: 0.5rem; color: var(--text-secondary); font-size: 0.75rem; font-style: normal; font-weight: 600; }
+.pn-wf .test-run-watch-screen iframe { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; background: var(--bg-workspace); }
+.pn-wf .test-run-watch-side { display: flex; flex-direction: column; gap: 0.75rem; min-height: 0; overflow-y: auto; padding-right: 0.25rem; }
+.pn-wf .test-run-watch-side .test-run-sequence { display: flex; flex-direction: column; gap: 0.75rem; }
+.pn-wf .test-run-watch-side .pn-wf-section-head { flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .pn-wf .test-run-watch { overflow-y: auto; }
+  .pn-wf .test-run-watch-head .pn-wf-row-icon { display: none; }
+  .pn-wf .test-run-watch-body { display: flex; flex-direction: column; flex: none; }
+  .pn-wf .test-run-watch-screen { height: 70vh; flex: none; }
+  .pn-wf .test-run-watch-side { overflow: visible; }
+}
+.pn-wf .test-run-error { margin: 0; color: var(--accent-error); font-size: 0.875rem; }
+.pn-wf .test-run-help { font-size: 0.8125rem; }
+.pn-wf .pn-wf-muted { font-size: 0.875rem; }
+
+/* A grid, not a wrapping row: the actions always keep their room, so nothing
+   spills past the card's clipped edge where a click can't reach it. */
+.pn-wf .test-run-members { display: flex; flex-direction: column; overflow: visible; }
+.pn-wf .test-run-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.625rem 1rem 0.625rem 0.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.pn-wf .test-run-row:first-child { border-radius: var(--pn-wf-r-frame) var(--pn-wf-r-frame) 0 0; }
+.pn-wf .test-run-row:last-child { border-bottom: 0; border-radius: 0 0 var(--pn-wf-r-frame) var(--pn-wf-r-frame); }
+.pn-wf .test-run-row:only-child { border-radius: var(--pn-wf-r-frame); }
+.pn-wf .test-run-row.is-selected { background: var(--hover-overlay); box-shadow: inset 3px 0 0 var(--text-primary); }
+@media (max-width: 1100px) { .pn-wf .test-run-row { grid-template-columns: minmax(0, 1fr); } }
+.pn-wf .test-run-member-name {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.875rem;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--pn-wf-r);
+}
+.pn-wf .test-run-member-name .pn-wf-row-text { min-width: 0; }
+.pn-wf .test-run-member-name .pn-wf-row-text small { font-size: 0.8125rem; }
+.pn-wf .test-run-member-actions { flex-wrap: wrap; gap: 0.375rem; }
+.pn-wf .test-run-member-actions .workflow-secondary-button { min-height: 2rem; padding: 0 0.75rem; }
+.pn-wf .test-run-end:hover:not(:disabled) { color: var(--accent-error); }
+.pn-wf .test-run :is(.workflow-secondary-button, .pn-wf-primary):disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* The sequence: one card per stage, a row per rule with a status badge. */
+.pn-wf .test-run-stages { gap: 0.75rem; }
+.pn-wf .test-run-stages > li {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .test-run-stages > li:not(.is-current):not(.is-reached) { opacity: 0.6; }
+.pn-wf .test-run-stages > li.is-current { border-color: var(--text-primary); }
+.pn-wf .test-run-stages h3 {
+  min-height: 3.25rem;
+  padding: 0.5rem 1rem;
+  box-sizing: border-box;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.pn-wf .test-run-stages > li:has(.test-run-steps, .test-run-no-steps) h3 { border-bottom: 1px solid var(--border-default); }
+.pn-wf .test-run-stages h3 > .test-run-stage-number {
+  width: 1.375rem;
+  min-width: 0;
+  height: 1.375rem;
+  border-radius: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.pn-wf .test-run-stage-name { flex: 1 1 auto; min-width: 0; }
+.pn-wf .test-run-stages h3 em.pn-wf-badge { font-size: 0.75rem; font-weight: 600; color: var(--text-primary); }
+.pn-wf .test-run-steps { gap: 0; }
+.pn-wf .test-run-steps li {
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.pn-wf .test-run-steps li:last-child { border-bottom: 0; }
+.pn-wf .test-run-step-text { flex: 1 1 16rem; font-size: 0.875rem; }
+.pn-wf .test-run-step-text small { font-size: 0.8125rem; line-height: 1.4; }
+.pn-wf .test-run-steps .test-run-step-status { min-width: 0; padding: 0 0.5rem; border-radius: 0.25rem; }
+.pn-wf .test-run-steps li[data-status] .pn-wf-badge.test-run-step-status { color: var(--text-secondary); }
+.pn-wf .test-run-steps li[data-status] .pn-wf-badge.test-run-step-status:is(.is-on, .is-edited) { color: var(--text-primary); }
+.pn-wf .test-run-steps li[data-status="done"] .test-run-step-status { background: color-mix(in srgb, var(--accent-success, #1f9d55) 16%, transparent); }
+.pn-wf .test-run-steps li:is([data-status="scheduled"], [data-status="running"]) .test-run-step-status { background: color-mix(in srgb, var(--accent-warning, #d97706) 18%, transparent); }
+.pn-wf .test-run-steps li[data-status="failed"] .pn-wf-badge.test-run-step-status {
+  background: color-mix(in srgb, var(--accent-error, #b42318) 14%, transparent);
+  color: var(--accent-error, #b42318);
+}
+.pn-wf .test-run-steps li[data-status="failed"] .test-run-step-text small { color: var(--accent-error, #b42318); }
+.pn-wf .test-run-steps .workflow-secondary-button { min-height: 2rem; padding: 0 0.75rem; }
+.pn-wf .test-run-no-steps { padding: 0.75rem 1rem; font-size: 0.8125rem; }
+.pn-wf .test-run-stages > li.is-finished h3 { border-bottom: 0; }
+
+/* The record: a card with a time column. */
+.pn-wf .test-run-entries {
+  padding: 0.25rem 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+}
+.pn-wf .test-run-entries li { gap: 1rem; padding: 0.5rem 1.25rem; font-size: 0.875rem; }
+.pn-wf .test-run-entries li + li { border-top: 1px solid var(--border-default); }
+.pn-wf .test-run-entries time { min-width: 6rem; font-size: 0.8125rem; }
+
+.pn-wf .test-run h2 { margin: 0; color: var(--text-primary); font-size: 1.0625rem; font-weight: 700; letter-spacing: 0; text-transform: none; }
+
+@media (max-width: 640px) {
+  .pn-wf { --pn-wf-gutter: 1rem; }
+  .pn-wf-header { padding-top: 1.25rem; }
+  .pn-wf-header h1 { font-size: 1.375rem; }
+  .pn-wf-tabs { gap: 1.25rem; margin-top: 1rem; margin-bottom: 1rem; }
+  .pn-wf-callout-actions { width: 100%; }
+  .pn-wf-callout-actions > button { flex: 1 1 auto; }
+  .pn-wf .workflow-milestone-column { flex-basis: 16rem; }
+  .pn-wf-row-text small { display: none; }
+}
+
+/* Headings in the community's body font, whatever its display font. */
+.pn-wf .pn-wf-callout .pn-wf-callout-actions { flex-direction: row; }
+[data-community-theme] .pn-wf :is(h1, h2, h3) {
+  font-family: var(--font-sans, inherit);
+  letter-spacing: normal;
+  text-transform: none;
+}
+[data-community-theme] .pn-wf :is(.pn-wf-header h1, .pn-wf-section-head h2, .access-clients-header h2, .test-run h2) { font-weight: 700; }
+
+/* Small links big enough to tap; "stuck" amber that reads on light and dark. */
+.pn-wf :is(.test-run-link, .welcome-settings-link) { display: inline-flex; align-items: center; min-height: 1.5rem; }
+.pn-wf .access-table tr.is-stuck .access-client-name small { color: color-mix(in srgb, #b7791f 55%, var(--text-primary)); }
+
+/* Phones: milestones stack instead of scrolling sideways. */
+@media (max-width: 640px) {
+  .pn-wf .workflow-milestone-canvas { flex-direction: column; align-items: stretch; overflow: visible; }
+  .pn-wf .workflow-milestone-column { flex: none; max-height: none; }
+  .pn-wf .workflow-add-milestone-button { flex: none; min-height: 3rem; }
+  .pn-wf .workflow-section-content { flex-direction: column; overflow-y: auto; }
+  .pn-wf :is(.workflow-pipeline-page, .workflow-board-stage) { flex: none; min-height: auto; overflow: visible; }
+  .pn-wf .workflow-pipeline-shell { flex: 1 1 auto; min-width: 0; min-height: auto; overflow: visible; }
+}
+
+/* Welcome (restyled with the Knowledge pages): only line it up with the
+   other sections and give its title the same section-heading size. */
+.pn-wf .welcome-settings { padding: 0 var(--pn-wf-gutter); }
+.pn-wf :is(.welcome-settings-header, .welcome-settings-bar-title) h1 { font-size: 1.0625rem; font-weight: 700; line-height: 1.3; }
+.pn-wf :is(.welcome-settings-header, .welcome-settings-bar-title) p { font-size: 0.875rem; line-height: 1.45; }
+/* Discard is a quiet text button here, as in Automations: no grey chip while there's nothing to discard. */
+.pn-wf .welcome-settings-bar-actions .workflow-secondary-button:nth-of-type(2):disabled { background: transparent; border-color: transparent; color: var(--text-muted, var(--text-secondary)); }
+
+/* Disabled buttons stay readable: a flat grey chip with secondary text
+   instead of fading the whole button to 40%. */
+.pn-wf :is(.platform-save-button, .workflow-secondary-button, .pn-wf-primary):disabled,
+.pn-wf .welcome-settings .welcome-settings-actions :is(.platform-save-button, .workflow-secondary-button):disabled,
+.workflow-milestone-modal :is(.platform-save-button, .secondary):disabled {
+  opacity: 1;
+  border-color: var(--border-default);
+  background: var(--hover-overlay);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+/* Test run → Autoplay: the player, what the test member did, and the result. */
+.pn-wf .test-run-autoplay { display: flex; flex-direction: column; gap: 0.75rem; }
+.pn-wf .test-run-autoplay .pn-wf-callout-actions { align-items: center; }
+.pn-wf .test-run-autoplay select {
+  min-height: 2.25rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.pn-wf .test-run-autoplay .pn-wf-primary { min-height: 2.25rem; font-size: 0.8125rem; }
+.pn-wf .test-run-result { border-color: color-mix(in srgb, var(--accent-success, #1f9d55) 45%, var(--border-default)); }
+.pn-wf .test-run-result.is-failed { border-color: color-mix(in srgb, var(--accent-error, #b42318) 45%, var(--border-default)); }
+.pn-wf .test-run-result .pn-wf-callout-text small + small { margin-top: 0.125rem; }
+.pn-wf .test-run-beats {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+  list-style: none;
+}
+.pn-wf .test-run-beats li { display: flex; align-items: center; gap: 0.75rem; padding: 0.625rem 1rem; }
+.pn-wf .test-run-beats li + li { border-top: 1px solid var(--border-default); }
+.pn-wf .test-run-beats li:last-child { animation: test-run-beat-in 0.3s ease-out; }
+.pn-wf .test-run-beats li.is-failed .test-run-step-text strong { color: var(--accent-error, #b42318); }
+.pn-wf .test-run-beats time { flex-shrink: 0; color: var(--text-secondary); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+@keyframes test-run-beat-in { from { background: var(--hover-overlay); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .pn-wf .test-run-beats li:last-child { animation: none; } }
+/* Board → "Let your agent lead each member": the plan opens inside the card. */
+.pn-wf-agent-led { margin-top: 0.75rem; }
+.pn-wf-agent-led-plan { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.625rem; }
+.pn-wf-agent-led-plan ol { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; line-height: 1.45; }
+.pn-wf-agent-led-plan [role="alert"] { color: var(--accent-error); }
+.pn-wf-agent-led-icon { overflow: hidden; border-radius: 999px; }
+.pn-wf-agent-led-icon:has(.community-agent-face) { padding: 0; background: none; }
+.pn-wf-agent-led-icon .community-agent-face { width: 100%; height: 100%; }
+.pn-wf .test-run-beats li.is-acting { background: color-mix(in srgb, var(--accent-warning, #d97706) 8%, transparent); }
+.pn-wf .test-run-beats li.is-acting .pn-wf-row-icon { animation: test-run-acting 1.2s ease-in-out infinite; }
+@keyframes test-run-acting { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .pn-wf .test-run-beats li.is-acting .pn-wf-row-icon { animation: none; } }
+.pn-wf .test-run-autoplay .pn-wf-callout-text .test-run-link { font-size: 0.8125rem; min-height: 0; }
+
+/* Workflows → Automations: Airtable's structure (list | When and Then cards |
+   settings) in the Settings and Members styling (polynet-ui/airtable-study).
+   White cards on the workspace grey, icons in the text colour, and the
+   community's accent only on the selected card and the primary button. */
+.pn-au {
+  display: grid;
+  grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(18rem, 21.5rem);
+  min-height: 38rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r-frame);
+  background: var(--bg-card);
+  overflow: hidden;
+}
+.pn-au svg { flex: none; }
+.pn-au-group { color: var(--text-muted, var(--text-secondary)); font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.pn-au-btn, .pn-au-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem;
+  border: 1px solid var(--border-default); border-radius: var(--pn-wf-r); background: var(--bg-card); color: var(--text-primary);
+  font: inherit; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.pn-au-ghost { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.pn-au :is(.pn-au-btn, .pn-au-ghost):hover:not(:disabled) { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-au :is(.pn-au-btn, .pn-au-ghost):disabled { opacity: 0.5; cursor: not-allowed; }
+.pn-au-iconbtn { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: var(--pn-wf-r); background: none; color: var(--text-secondary); cursor: pointer; }
+.pn-au-iconbtn:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-wf-primary.is-small { min-height: 2rem; padding: 0 0.875rem; font-size: 0.8125rem; }
+
+.pn-au-list { display: flex; flex-direction: column; gap: 0.125rem; padding: 0.875rem 0.625rem; border-right: 1px solid var(--border-default); overflow-y: auto; }
+.pn-au-listhead { display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 0.625rem; margin-bottom: 0.5rem; }
+.pn-wf .pn-au-listhead h2 { margin: 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600; }
+.pn-au-section { display: flex; flex-direction: column; gap: 0.125rem; }
+.pn-au-section + .pn-au-section { margin-top: 0.875rem; }
+.pn-au-section > header { display: flex; align-items: center; gap: 0.375rem; min-height: 1.75rem; padding: 0 0 0 0.625rem; }
+.pn-au-section > header .pn-au-group { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-au-count { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.125rem 0.375rem; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted, var(--text-secondary)); font: inherit; font-size: 0.75rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.pn-au-count:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-au-item, .pn-au-option {
+  display: flex; align-items: center; gap: 0.625rem; width: 100%; min-height: 2.75rem; padding: 0.375rem 0.625rem; border: 0; border-radius: var(--pn-wf-r);
+  background: none; color: var(--text-primary); font: inherit; font-size: 0.875rem; text-align: left; cursor: pointer;
+}
+.pn-au-item > svg, .pn-au-option > svg { color: var(--text-secondary); }
+.pn-au-item:hover, .pn-au-item[aria-current="true"], .pn-au-option:hover:not(:disabled) { background: var(--hover-overlay); }
+.pn-au-item-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.pn-au-item-text > span { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pn-au-item[aria-current="true"] .pn-au-item-text > span { font-weight: 600; }
+.pn-au-item-text small { overflow: hidden; color: var(--text-muted, var(--text-secondary)); font-size: 0.78125rem; text-overflow: ellipsis; white-space: nowrap; }
+.pn-au-none { margin: 0; padding: 0.25rem 0.625rem; color: var(--text-muted, var(--text-secondary)); font-size: 0.8125rem; }
+.pn-au-ghost.is-stage { justify-content: flex-start; margin-top: 0.75rem; }
+.pn-au :is(.pn-au-item, .pn-au-option, .pn-au-step, .pn-au-btn, .pn-au-ghost, .pn-au-iconbtn, .pn-au-typepick, .pn-au-delete):focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+
+.pn-au-main { display: flex; flex-direction: column; min-width: 0; background: var(--bg-workspace); }
+.pn-au-head { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-default); background: var(--bg-card); }
+.pn-au-head > div { flex: 1; min-width: 0; }
+.pn-wf .pn-au-head h2 { margin: 0; color: var(--text-primary); font-size: 1.0625rem; font-weight: 700; line-height: 1.3; }
+.pn-au-head p { margin: 0.125rem 0 0; color: var(--text-muted, var(--text-secondary)); font-size: 0.8125rem; }
+.pn-au-savebar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.625rem 1.25rem; border-bottom: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-secondary); font-size: 0.8125rem; }
+.pn-au-savebar > span { flex: 1 1 14rem; min-width: 0; }
+.pn-au-flow { display: flex; flex-direction: column; width: min(35rem, 100%); margin: 0 auto; padding: 1.75rem 1.25rem 3rem; box-sizing: border-box; }
+.pn-au-step {
+  display: flex; align-items: flex-start; gap: 0.75rem; width: 100%; padding: 0.75rem 0.875rem; border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r); background: var(--bg-card); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.pn-au-step:hover { border-color: var(--border-strong, var(--text-muted)); }
+.pn-au-step[aria-pressed="true"] { border-color: var(--accent-selection, var(--bg-button)); box-shadow: 0 0 0 1px var(--accent-selection, var(--bg-button)); }
+.pn-au-icon { display: grid; flex: none; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 0.375rem; background: var(--hover-overlay); color: var(--text-secondary); }
+.pn-au-step-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.pn-au-step-text small { color: var(--text-muted, var(--text-secondary)); font-size: 0.75rem; }
+.pn-au-step-text strong { font-size: 0.90625rem; font-weight: 600; line-height: 1.35; }
+.pn-au-step-text > span { margin-top: 0.125rem; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.4; }
+.pn-au-then { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.pn-au-then > li { position: relative; padding-top: 1.125rem; }
+.pn-au-then > li::before { content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 1.125rem; background: var(--border-default); }
+.pn-au-add { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 1rem; }
+.pn-au-empty { margin: 4rem auto; color: var(--text-secondary); text-align: center; }
+.pn-au-empty p { margin: 0.25rem 0 0; font-size: 0.875rem; }
+
+.pn-au-panel { display: flex; flex-direction: column; gap: 0.875rem; padding: 1.125rem 1.25rem; border-left: 1px solid var(--border-default); overflow-y: auto; min-width: 0; max-height: 56rem; }
+.pn-au-panelhead { display: flex; align-items: center; justify-content: space-between; }
+.pn-au-typepick {
+  display: flex; align-items: center; gap: 0.625rem; width: 100%; padding: 0.625rem 0.75rem; border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r); background: var(--bg-card); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.pn-au-typepick:hover { background: var(--hover-overlay); }
+.pn-au-typepick > svg { color: var(--text-secondary); }
+.pn-au-typepick > span, .pn-au-option > span { display: flex; flex: 1; flex-direction: column; min-width: 0; line-height: 1.3; }
+.pn-au-typepick strong, .pn-au-option strong { font-size: 0.875rem; font-weight: 600; }
+.pn-au-option strong { font-weight: 500; }
+.pn-au-option[aria-pressed="true"] strong { font-weight: 600; }
+.pn-au-typepick small, .pn-au-option small { color: var(--text-muted, var(--text-secondary)); font-size: 0.78125rem; }
+.pn-au-family { display: flex; flex-direction: column; gap: 0.125rem; }
+.pn-au-family > .pn-au-group { padding: 0.25rem 0.625rem; }
+.pn-au-option[aria-pressed="true"] { background: var(--hover-overlay); }
+.pn-au-option[aria-pressed="true"]::after { content: "✓"; color: var(--accent-selection, var(--text-primary)); font-weight: 700; }
+.pn-au-option:disabled { cursor: not-allowed; }
+.pn-au-option:disabled :is(strong, small, svg) { opacity: 0.55; }
+.pn-au-option em { color: var(--text-muted, var(--text-secondary)); font-size: 0.75rem; font-style: normal; }
+.pn-au-panel .workflow-milestone-automation-fields { display: flex; flex-direction: column; gap: 0.75rem; }
+.pn-au-delete { display: inline-flex; align-self: flex-start; align-items: center; gap: 0.375rem; margin-top: 0.25rem; padding: 0.25rem 0; border: 0; background: none; color: var(--danger-text, #c2413a); font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.pn-au-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 1100px) { .pn-au { grid-template-columns: minmax(13rem, 15rem) minmax(0, 1fr); } .pn-au-panel { grid-column: 1 / -1; border-top: 1px solid var(--border-default); border-left: 0; max-height: none; } }
+@media (max-width: 720px) { .pn-au { grid-template-columns: 1fr; } .pn-au-list { border-right: 0; border-bottom: 1px solid var(--border-default); } .pn-au-flow { padding-inline: 0.75rem; } .pn-au-head { flex-wrap: wrap; } }
+
+/* The step's settings, in the side panel rather than the old modal. */
+.pn-au-panel .workflow-milestone-automation-row { display: flex; flex-direction: column; gap: 0.75rem; }
+.pn-au-panel :is(label, .workflow-automation-field) { display: flex; flex-direction: column; gap: 0.375rem; color: var(--text-primary); font-size: 0.8125rem; font-weight: 600; }
+.pn-au-panel :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%; min-width: 0; box-sizing: border-box; padding: 0.5rem 0.625rem; border: 1px solid var(--border-default); border-radius: var(--pn-wf-r);
+  background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 0.875rem; font-weight: 400;
+}
+.pn-au-panel textarea { min-height: 6rem; resize: vertical; line-height: 1.5; }
+.pn-au-panel :is(input, select, textarea):focus-visible { outline: 2px solid var(--text-primary); outline-offset: 0; }
+.pn-au-panel :is(small, .workflow-field-hint) { color: var(--text-secondary); font-size: 0.75rem; font-weight: 400; line-height: 1.45; }
+.pn-au-panel .workflow-action-choice-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
+.pn-au-panel .workflow-agent-inputs { padding: 0.75rem; border-radius: var(--pn-wf-r-frame); }
+.pn-au-panel .workflow-agent-inputs .secondary { padding: 0.375rem 0.625rem; border: 1px solid var(--border-default); border-radius: var(--pn-wf-r); background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.pn-au-panel .workflow-nudge-toggle { flex-direction: row; }
+.pn-au-panel .workflow-agent-input { display: grid; font-weight: 450; }
+
+/* Header: the title on the left, "Test as a new member" on the right. */
+.pn-wf-header-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; }
+.pn-wf-header-row .pn-wf-test { display: inline-flex; align-items: center; gap: 0.375rem; }
+.pn-wf-test-error { margin: 0.75rem var(--pn-wf-gutter) 0; }
+
+/* Workflows → Run history: a Members-style table in a card, with All / Failed / Tests. */
+.pn-runs { display: flex; flex-direction: column; gap: 1.25rem; padding: 0 var(--pn-wf-gutter) 2.5rem; }
+.pn-runs-card { border: 1px solid var(--border-default); border-radius: var(--pn-wf-r-frame); background: var(--bg-card); overflow: hidden; }
+.pn-runs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.625rem 0.875rem; border-bottom: 1px solid var(--border-default); }
+.pn-runs-seg { display: inline-flex; border: 1px solid var(--border-default); border-radius: var(--pn-wf-r); overflow: hidden; }
+.pn-runs-seg > button { height: 1.875rem; padding: 0 0.75rem; border: 0; background: var(--bg-card); color: var(--text-secondary); font: inherit; font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+.pn-runs-seg > button + button { border-left: 1px solid var(--border-default); }
+.pn-runs-seg > button[aria-selected="true"] { background: var(--hover-overlay); color: var(--text-primary); font-weight: 600; }
+.pn-runs-seg > button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+/* Run history's filters are the same quiet pills as Forms' (2026-10-28 review #16). */
+.pn-runs-bar > .pn-runs-seg { gap: 0.25rem; border: 0; border-radius: 0; overflow: visible; }
+.pn-runs-bar > .pn-runs-seg > button { border-radius: 0.375rem; background: transparent; padding: 0 0.625rem; }
+.pn-runs-bar > .pn-runs-seg > button + button { border-left: 0; }
+.pn-runs-hint { color: var(--text-muted, var(--text-secondary)); font-size: 0.8125rem; }
+.pn-runs-scroll { overflow-x: auto; }
+.pn-runs-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.pn-runs-table th { padding: 0.5rem 0.875rem; border-bottom: 1px solid var(--border-default); background: color-mix(in srgb, var(--hover-overlay) 55%, var(--bg-card)); color: var(--text-secondary); font-size: 0.78125rem; font-weight: 600; text-align: left; white-space: nowrap; }
+.pn-runs-table td { padding: 0.625rem 0.875rem; border-bottom: 1px solid var(--border-default); color: var(--text-primary); vertical-align: middle; }
+.pn-runs-table tbody tr:not(.pn-runs-steps) { cursor: pointer; }
+.pn-runs-table tbody tr:not(.pn-runs-steps):hover td, .pn-runs-table tr.is-open td { background: var(--hover-overlay); }
+.pn-runs-table td small { display: block; color: var(--text-muted, var(--text-secondary)); font-size: 0.75rem; }
+.pn-runs-table .is-toggle { width: 2.25rem; padding-right: 0; }
+.pn-runs-table .is-muted { color: var(--text-secondary); white-space: nowrap; }
+.pn-runs-name { font-weight: 500; }
+.pn-runs-dot { display: inline-block; width: 0.375rem; height: 0.375rem; margin-right: 0.4375rem; border-radius: 50%; background: var(--text-muted, var(--text-secondary)); vertical-align: middle; }
+.pn-runs-dot.is-done { background: var(--success-text, #1e7a3c); }
+.pn-runs-dot.is-failed { background: var(--danger-text, #c2413a); }
+.pn-runs-dot.is-waiting, .pn-runs-dot.is-running { background: var(--warning-text, #b7791f); }
+.pn-runs-steps td { padding: 0.25rem 0.875rem 0.875rem 3.125rem; background: var(--bg-card); }
+.pn-runs-steps ol { margin: 0 0 0.75rem; padding: 0; list-style: none; }
+.pn-runs-steps li { display: grid; grid-template-columns: 1.375rem minmax(0, 1fr) auto; gap: 0.625rem; align-items: start; padding: 0.5rem 0; border-bottom: 1px dashed var(--border-default); }
+.pn-runs-steps li:last-child { border-bottom: 0; }
+.pn-runs-steps li > svg { margin-top: 0.125rem; color: var(--text-secondary); }
+.pn-runs-steps li strong { display: block; font-size: 0.84375rem; font-weight: 500; }
+.pn-runs-steps li small { display: block; margin-top: 0.125rem; color: var(--text-muted, var(--text-secondary)); font-size: 0.78125rem; }
+.pn-runs-steps li small.is-error { color: var(--danger-text, #c2413a); }
+.pn-runs-steps li .pn-runs-dot { margin-top: 0.4375rem; }
+.pn-runs-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1px var(--text-muted, var(--text-secondary)); }
+.pn-runs-empty { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 3rem 1rem; color: var(--text-secondary); text-align: center; }
+.pn-runs-empty strong { color: var(--text-primary); }
+.pn-runs-empty p { margin: 0; font-size: 0.875rem; }
+.pn-runs-foot { margin: 0; padding: 0.625rem 0.875rem; color: var(--text-muted, var(--text-secondary)); font-size: 0.8125rem; }
+.pn-runs .pn-au-btn, .pn-runs .pn-au-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem; border: 1px solid var(--border-default);
+  border-radius: var(--pn-wf-r); background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+}
+.pn-runs .pn-au-iconbtn { width: 1.75rem; height: 1.75rem; padding: 0; border: 0; background: none; color: var(--text-secondary); }
+.pn-runs .pn-au-btn:hover, .pn-runs .pn-au-iconbtn:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-runs .test-run { padding: 0; max-width: none; }
+@media (max-width: 720px) { .pn-runs-steps td { padding-left: 0.875rem; } }
+
+/* The step's settings inside the panel: no row divider, Settings-style hints and quiet add buttons. */
+.pn-au-panel .workflow-milestone-automation-row { border-top: 0; }
+.pn-au-panel .workflow-milestone-automation-fields { padding: 0; }
+.pn-au-panel p.workflow-field-hint { margin: 0; color: var(--text-muted, var(--text-secondary)); font-size: 0.8125rem; line-height: 1.45; }
+.pn-au-panel .workflow-step-extra { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+.pn-au-panel .workflow-step-extra-add {
+  display: inline-flex; align-items: center; height: 2rem; padding: 0 0.75rem; border: 1px solid var(--border-default); border-radius: var(--pn-wf-r);
+  background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+}
+.pn-au-panel .workflow-step-extra-add:hover:not(:disabled) { background: var(--hover-overlay); }
+.pn-runs { box-sizing: border-box; width: 100%; }
+
+/* Stage colours live in workflowStageColors.css (Members uses them too). */
+.pn-au-stagedot { flex: none; display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--stage-color); }
+.pn-au-head p .pn-au-stagedot { margin-right: 0.375rem; vertical-align: 0.0625rem; }
+.pn-au-section[class*="pn-stage-color-"] .pn-au-item { box-shadow: inset 2px 0 0 var(--stage-color); }
+.workflow-stage-colors { display: flex; flex-direction: column; gap: 0.375rem; }
+.workflow-stage-colors > div { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.workflow-stage-swatch { width: 1.5rem; height: 1.5rem; padding: 0; border-radius: 50%; border: 1px solid var(--border-default); background: var(--stage-color); cursor: pointer; }
+.workflow-stage-swatch.is-none { background: linear-gradient(135deg, transparent 46%, var(--text-muted) 46% 54%, transparent 54%); }
+.workflow-stage-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--bg-primary, #fff), 0 0 0 4px var(--stage-color, var(--text-muted)); }
+.workflow-stage-swatch:focus-visible { outline: 2px solid var(--accent-selection); outline-offset: 3px; }
+
+/* On/off per automation, like Airtable's toggle. Off rows stay listed, quieter. */
+.pn-au-switch { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2rem; padding: 0 0.625rem 0 0.375rem; border: 1px solid var(--border-default);
+  border-radius: 0.5rem; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+.pn-au-switch:hover:not(:disabled) { background: var(--hover-overlay); }
+.pn-au-switch:focus-visible { outline: 2px solid var(--accent-selection); outline-offset: 2px; }
+.pn-au-switch-track { position: relative; width: 1.75rem; height: 1rem; border-radius: 999px; background: var(--border-default); transition: background 120ms ease; }
+.pn-au-switch-thumb { position: absolute; top: 0.125rem; left: 0.125rem; width: 0.75rem; height: 0.75rem; border-radius: 50%; background: var(--bg-card, #fff); transition: transform 120ms ease; }
+.pn-au-switch.is-on { color: var(--text-primary); }
+.pn-au-switch.is-on .pn-au-switch-track { background: var(--bg-button); }
+.pn-au-switch.is-on .pn-au-switch-thumb { transform: translateX(0.75rem); background: var(--bg-button-text, #fff); }
+.pn-au-item.is-off .pn-au-item-text > span, .pn-au-item.is-off > svg { color: var(--text-muted, var(--text-secondary)); }
+
+/* Only if with AND/OR: one row per condition, "and"/"or" between them. */
+.pn-au-panel .workflow-condition-clause { display: flex; flex-direction: column; gap: 0.375rem; }
+.pn-au-panel .workflow-condition-clause + .workflow-condition-clause { margin-top: 0.25rem; }
+.pn-au-panel .workflow-condition-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.pn-au-panel .workflow-condition-row > :is(input, select):nth-child(3) { grid-column: 1 / 3; grid-row: 2; }
+.pn-au-panel .workflow-condition-remove {
+  grid-column: 3; grid-row: 1; width: 2rem; height: 2.125rem; padding: 0; border: 0; border-radius: var(--pn-wf-r); background: none;
+  color: var(--text-secondary); font: inherit; font-size: 1.125rem; line-height: 1; cursor: pointer;
+}
+.pn-au-panel .workflow-condition-remove:hover:not(:disabled) { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-au-panel .workflow-condition-join { align-self: flex-start; width: auto; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; }
+.pn-au-panel select.workflow-condition-join { width: auto; padding: 0.25rem 1.75rem 0.25rem 0.5rem; }
+.pn-au-panel .workflow-condition-row:not(:has(.workflow-condition-remove)) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+/* The way back to the community (Channels), as in Settings' menu. */
+.pn-wf-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  height: 2rem;
+  margin: 0 0 0.5rem -0.625rem;
+  padding: 0 0.625rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.pn-wf-back span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-wf-back:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-wf-back:focus-visible { outline: 2px solid var(--border-active); outline-offset: 1px; }
+
+.pn-au-item-text > span:first-child .pn-pill { font-size: 0.9375em; }

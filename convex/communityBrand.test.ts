@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { normalizeCommunityBrand, themeDriftsFromBrand, themeFromCommunityBrand } from "../shared/communityBrand";
 import { DEFAULT_COMMUNITY_THEME, contrastRatio, normalizeCommunityTheme } from "../shared/communityTheme";
 
-const green = { version: 1, colours: [{ hex: "#2D8C3C", role: "primary" }, { hex: "#FFFFFF", role: "neutral" }], fonts: [{ name: "Inter", use: "both" }] };
+const clo = { version: 1, colours: [{ hex: "#2D8C3C", role: "primary" }, { hex: "#FFFFFF", role: "neutral" }], fonts: [{ name: "Inter", use: "both" }] };
 
 test("a brand fills in over time: every field is optional, unknown keys are errors", () => {
   expect(normalizeCommunityBrand({})).toEqual({ ok: true, brand: { version: 1 } });
@@ -13,7 +13,7 @@ test("a brand fills in over time: every field is optional, unknown keys are erro
 });
 
 test("one brand runs light in one community and dark in another, always readable", () => {
-  const brand = normalizeCommunityBrand(green);
+  const brand = normalizeCommunityBrand(clo);
   if (!brand.ok) throw new Error("brand");
   for (const scheme of ["light", "dark"] as const) {
     const theme = themeFromCommunityBrand(brand.brand, DEFAULT_COMMUNITY_THEME, scheme);
@@ -28,7 +28,7 @@ test("one brand runs light in one community and dark in another, always readable
 });
 
 test("a theme far from the brand is flagged", () => {
-  const brand = normalizeCommunityBrand(green);
+  const brand = normalizeCommunityBrand(clo);
   if (!brand.ok) throw new Error("brand");
   expect(themeDriftsFromBrand(DEFAULT_COMMUNITY_THEME, brand.brand).length).toBeGreaterThan(0);
 });

@@ -31,7 +31,7 @@ assert.match(
 );
 assert.match(
   communityTypes,
-  /export type ProfileCommunityContext = \{[\s\S]*owned_communities: CommunityAvatarSummary\[];[\s\S]*mutual_communities: CommunityAvatarSummary\[];[\s\S]*is_self: boolean;[\s\S]*can_message: boolean;[\s\S]*message_context_community_id: string \| null;[\s\S]*message_unavailable_reason: "self" \| "no_mutual_community" \| null;/,
+  /export type ProfileCommunityContext = \{[\s\S]*owned_communities: (?:CommunityAvatarSummary|Array<CommunityAvatarSummary & \{ co_creator\?: boolean \}>)\[?\]?;[\s\S]*mutual_communities: CommunityAvatarSummary\[];[\s\S]*is_self: boolean;[\s\S]*can_message: boolean;[\s\S]*message_context_community_id: string \| null;[\s\S]*message_unavailable_reason: "self" \| "no_mutual_community" \| null;/,
   "profile community context must include display buckets plus viewer-relative message eligibility",
 );
 

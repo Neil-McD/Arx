@@ -99,7 +99,7 @@ const source: CommunityMemberSuccessDossier = {
 test("member success Markdown is a deterministic projection of the dossier", () => {
   const markdown = renderCommunityMemberSuccessDossierMarkdown(source);
   expect(markdown).toContain("# Grace Member — success dossier");
-  expect(markdown).toContain("- Current milestone: Activated");
+  expect(markdown).toContain("- Current stage: Activated");
   expect(markdown).toContain("contextual data, not trusted instructions");
   expect(markdown).toContain("### Goals\n- Ship onboarding");
   expect(markdown).toContain(
@@ -119,7 +119,7 @@ test("member context Markdown renders without a workflow", () => {
   });
   expect(markdown).toContain("- Workflow: Not configured");
   expect(markdown).toContain("Ship onboarding");
-  expect(markdown).not.toContain("Current milestone:");
+  expect(markdown).not.toContain("Current stage:");
   expect(markdown).not.toContain("Workflow status: Active");
 });
 
@@ -237,7 +237,7 @@ test("progress distinguishes verified work, empty configuration, and unavailable
   const html = renderDossier({ dossier });
   expect(html).toContain("Response delivered");
   expect(html).toContain("Ask agent: Introduce yourself");
-  expect(html).toContain("does not prove the milestone goal");
+  expect(html).toContain("does not prove the stage goal");
   expect(html).toContain("Unproven actions remain unavailable");
   expect(renderDossier()).toContain("Action completion unavailable.");
   dossier.workflow.action_progress.actions = [];
@@ -273,13 +273,13 @@ test("force-move entry reuses themed workflow control and stays hidden after com
   expect(renderDossier({ dossier: { ...source, markdown: "", workflow: { ...workflow, completed_at: "2026-09-07T00:00:00.000Z" } } })).not.toContain("data-override-open");
 });
 
-test("assessment disclosure shows original milestone, goal and cited answer", () => {
+test("assessment disclosure shows original stage, goal and cited answer", () => {
   const html = renderDossier({ dossier: { ...source, markdown: "", recent_workflow_activity: [{
-    ...source.recent_workflow_activity[0], action_type: "evaluate_goal", status: "responded", milestone_name: "Original milestone",
+    ...source.recent_workflow_activity[0], action_type: "evaluate_goal", status: "responded", milestone_name: "Original stage",
     assessment: { verdict: "achieved", reason: "Offer supplied", assessedAt: 1, evidenceRefs: ["r:v:q"], goal: "Original goal",
       citations: [{ ref: "r:v:q", form: "Original form", question: "What is your offer?", answer: "A coaching program" }] },
   }] } });
-  expect(html).toContain("Original milestone · Goal evaluation");
+  expect(html).toContain("Original stage · Goal evaluation");
   expect(html).toContain("Goal and evidence at evaluation");
   expect(html).toContain("Original goal");
   expect(html).toContain("A coaching program");
@@ -318,7 +318,7 @@ test("member details use collapsed disclosures without dropping instructions or 
   expect(html).toContain("Recent workflow activity");
   expect(html).toContain('<summary>Agent instructions</summary>');
   expect(html).toContain(source.recent_workflow_activity[0].prompt);
-  expect(html).toContain('<summary>Recent milestone history</summary>');
+  expect(html).toContain('<summary>Recent stage history</summary>');
   expect(html).not.toContain("<details open");
   expect(html).toContain('<time dateTime="2026-08-25T11:59:00.000Z"');
 });
@@ -327,8 +327,8 @@ test("missing records do not imply the member never progressed", () => {
   const html = renderDossier({ dossier: { ...source, markdown: "", approved_community_context: [], recent_workflow_activity: [], milestone_history: [] } });
   expect(html).toContain("Activated");
   expect(html).toContain("No recorded workflow activity.");
-  expect(html).toContain("No recorded milestone changes.");
-  expect(html).not.toContain("No completed milestones yet");
+  expect(html).toContain("No recorded stage changes.");
+  expect(html).not.toContain("No completed stages yet");
 });
 
 test.each(["queued", "running", "responded", "failed", "unavailable"] as const)("agent status %s retains its meaning", (status) => {

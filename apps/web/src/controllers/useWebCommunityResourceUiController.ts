@@ -10,6 +10,7 @@ import {
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
 import { WebDeleteResourceModuleModal } from "../components/WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "../components/WebCommunityResourceModuleModal";
+import type { CommunityResourceRestoreTarget, CommunityResourceVersion } from "../components/communityResourcesContracts";
 
 type SessionLike = unknown;
 
@@ -39,6 +40,7 @@ type ResourceModuleLike = {
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
+  lesson_style?: "article" | "video" | null;
   sort_order?: number;
 };
 
@@ -76,6 +78,7 @@ export type UseWebCommunityResourceUiControllerResult<
   openNewModuleModal: () => void;
   handleEditModule: (module: ResourceModuleT) => void;
   handleSetModuleStatus: (module: ResourceModuleT, status: "draft" | "live") => Promise<boolean>;
+  handleSetModuleLessonStyle: (module: ResourceModuleT, lessonStyle: "article" | "video") => Promise<boolean>;
   handleDeleteModule: (moduleId: string) => Promise<boolean>;
   handleReorderModules: (moduleIds: string[]) => Promise<boolean>;
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean>;
@@ -101,14 +104,17 @@ export type UseWebCommunityResourceUiControllerResult<
     isSaving: boolean;
     beginInlineEditResource: (resource: ResourceT) => void;
     cancelInlineEditResource: () => void;
-    saveInlineEditResource: () => Promise<boolean>;
+    saveInlineEditResource: (options?: { keepEditing?: boolean }) => Promise<boolean>;
+    uploadImage: (file: File) => Promise<string>;
+    listVersions: (resourceId: string) => Promise<CommunityResourceVersion[]>;
+    restoreVersion: (target: CommunityResourceRestoreTarget) => Promise<boolean>;
     onChangeTitle: (value: string) => void;
     onChangeUrl: (value: string) => void;
     onChangeBody: (value: string) => void;
     onChangePinned: (value: boolean) => void;
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
-  handleCreateBlankPageDraft: (moduleId: string) => Promise<ResourceT | null>;
+  handleCreateBlankPageDraft: (moduleId: string, lesson?: { order: number }) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   loadCommunityResourceModules: (communityId: string, session: SessionT) => Promise<void>;
@@ -141,6 +147,7 @@ export function useWebCommunityResourceUiController<
   const [moduleBannerFocusX, setModuleBannerFocusX] = useState(0.5);
   const [moduleBannerFocusY, setModuleBannerFocusY] = useState(0.5);
   const [moduleBannerZoom, setModuleBannerZoom] = useState(1);
+  const [moduleLessonStyleInput, setModuleLessonStyleInput] = useState<"article" | "video">("article");
   const [isModuleBannerDragOver, setIsModuleBannerDragOver] = useState(false);
   const [isProcessingModuleBanner, setIsProcessingModuleBanner] = useState(false);
   const [moduleBannerUploadError, setModuleBannerUploadError] = useState<string | null>(null);
@@ -163,11 +170,15 @@ export function useWebCommunityResourceUiController<
     loadCommunityResources,
     handleSaveCommunityResourceModule,
     handleSetCommunityResourceModuleStatus,
+    handleSetCommunityResourceModuleLessonStyle,
+    handleListCommunityResourceRevisions,
+    handleRestoreCommunityResource,
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
     handleReorderCommunityResources,
     handleMoveCommunityResourceToModule,
     handleSaveCommunityResource,
+    handleUploadCommunityResourceImage,
     handleDeleteResource,
     handleCreateBlankPageDraft,
     handleAddCommunitySources,
@@ -194,6 +205,7 @@ export function useWebCommunityResourceUiController<
     moduleBannerFocusX,
     moduleBannerFocusY,
     moduleBannerZoom,
+    moduleLessonStyleInput,
     editingResourceId,
     editingResourceModuleId,
     editingResourceModuleBannerStorageId,
@@ -223,6 +235,7 @@ export function useWebCommunityResourceUiController<
     setModuleBannerFocusX,
     setModuleBannerFocusY,
     setModuleBannerZoom,
+    setModuleLessonStyleInput,
   });
 
   const {
@@ -249,8 +262,8 @@ export function useWebCommunityResourceUiController<
     resetResourceForm();
   };
 
-  const saveInlineEditResource = async () => {
-    const didSave = await handleSaveCommunityResource();
+  const saveInlineEditResource = async (options?: { keepEditing?: boolean }) => {
+    const didSave = await handleSaveCommunityResource(options);
     return didSave === true;
   };
 
@@ -264,6 +277,7 @@ export function useWebCommunityResourceUiController<
     setModuleBannerFocusX(0.5);
     setModuleBannerFocusY(0.5);
     setModuleBannerZoom(1);
+    setModuleLessonStyleInput("article");
     setModuleBannerUploadError(null);
     setIsModuleBannerFocusModalOpen(false);
     setResourceModuleError(null);
@@ -280,6 +294,7 @@ export function useWebCommunityResourceUiController<
     setModuleBannerFocusX(module.banner_focus_x ?? 0.5);
     setModuleBannerFocusY(module.banner_focus_y ?? 0.5);
     setModuleBannerZoom(module.banner_zoom ?? 1);
+    setModuleLessonStyleInput(module.lesson_style === "video" ? "video" : "article");
     setModuleBannerUploadError(null);
     setIsModuleBannerFocusModalOpen(false);
     setResourceModuleError(null);
@@ -376,6 +391,7 @@ export function useWebCommunityResourceUiController<
     openNewModuleModal,
     handleEditModule,
     handleSetModuleStatus: handleSetCommunityResourceModuleStatus,
+    handleSetModuleLessonStyle: handleSetCommunityResourceModuleLessonStyle,
     handleDeleteModule,
     handleReorderModules: handleReorderCommunityResourceModules,
     handleReorderResources: handleReorderCommunityResources,
@@ -393,6 +409,9 @@ export function useWebCommunityResourceUiController<
       beginInlineEditResource,
       cancelInlineEditResource,
       saveInlineEditResource,
+      uploadImage: handleUploadCommunityResourceImage,
+      listVersions: handleListCommunityResourceRevisions,
+      restoreVersion: handleRestoreCommunityResource,
       onChangeTitle: setResourceTitleInput,
       onChangeUrl: setResourceUrlInput,
       onChangeBody: setResourceBodyInput,
@@ -410,6 +429,7 @@ export function useWebCommunityResourceUiController<
       moduleBannerFocusX,
       moduleBannerFocusY,
       moduleBannerZoom,
+      moduleLessonStyleInput,
       isModuleBannerDragOver,
       isProcessingModuleBanner,
       moduleBannerUploadError,
@@ -430,6 +450,7 @@ export function useWebCommunityResourceUiController<
         setModuleBannerFocusX(0.5);
         setModuleBannerFocusY(0.5);
         setModuleBannerZoom(1);
+        setModuleLessonStyleInput("article");
         setModuleBannerUploadError(null);
         setIsModuleBannerFocusModalOpen(false);
         setResourceModuleError(null);
@@ -442,6 +463,7 @@ export function useWebCommunityResourceUiController<
       onChangeBannerFocusX: setModuleBannerFocusX,
       onChangeBannerFocusY: setModuleBannerFocusY,
       onChangeBannerZoom: setModuleBannerZoom,
+      onChangeLessonStyle: setModuleLessonStyleInput,
       onSetBannerDragOver: setIsModuleBannerDragOver,
       onBannerDrop: handleModuleBannerDrop,
       onBannerUpload: handleModuleBannerUpload,

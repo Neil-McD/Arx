@@ -1,4 +1,6 @@
-import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import { api } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
+import { bootstrapConvexAuthenticatedClient, createConvexClient } from "./convexAuthenticatedClient";
 
 type CloudCommunityAgentGatewayParams<SessionT> = {
   session: SessionT;
@@ -87,3 +89,49 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
   });
   return parseConfigMutationResult(payload);
 }
+
+export type CloudCommunityAgentProfile = {
+  community_id: string;
+  name: string;
+  custom_name: string | null;
+  avatar_url: string | null;
+  avatar_storage_id: string | null;
+  community_avatar_url?: string | null;
+};
+
+/** The agent's name and photo. Needs no session. */
+export async function fetchCloudCommunityAgentProfile(communityId: string): Promise<CloudCommunityAgentProfile | null> {
+  const client = createConvexClient();
+  return (await client.query(api.communityAgent.getCommunityAgentProfile, {
+    communityId: communityId as Id<"communities">,
+  })) as CloudCommunityAgentProfile | null;
+}
+
+/**
+ * Saves the agent's name and photo. `displayName` null puts the community's
+ * name back; `photo` is a new image file, or null for the community's icon.
+ * Leave either out to keep it.
+ */
+export async function saveCloudCommunityAgentProfile(session: unknown, communityId: string, change: {
+  displayName?: string | null;
+  photo?: File | null;
+}): Promise<CloudCommunityAgentProfile | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
+  let avatarStorageId: string | null | undefined;
+  if (change.photo === null) avatarStorageId = null;
+  else if (change.photo) {
+    const { uploadUrl } = await client.mutation(api.communityLifecycle.generateCommunityBrandingUploadUrl, { authSubject, kind: "avatar" });
+    const response = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": change.photo.type || "image/png" }, body: change.photo });
+    if (!response.ok) throw new Error("Couldn't upload the photo.");
+    avatarStorageId = String(((await response.json()) as { storageId?: string }).storageId ?? "") || null;
+    if (!avatarStorageId) throw new Error("Couldn't upload the photo.");
+  }
+  return (await client.mutation(api.communityAgent.saveCommunityAgentProfile, {
+    authSubject,
+    communityId: communityId as Id<"communities">,
+    ...(change.displayName !== undefined ? { displayName: change.displayName } : {}),
+    ...(avatarStorageId !== undefined ? { avatarStorageId: avatarStorageId as Id<"_storage"> | null } : {}),
+    ...(change.photo === null ? { avatarUrl: null } : {}),
+  })) as CloudCommunityAgentProfile | null;
+}
+

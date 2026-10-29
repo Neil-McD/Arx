@@ -38,6 +38,9 @@ const mocks = {
     "saveCloudCommunityResource",
     "saveCloudCommunityResourceModule",
     "uploadCloudCommunityResourceSourceFile",
+    "uploadCloudCommunityResourceImage",
+    "listCloudCommunityResourceRevisions",
+    "restoreCloudCommunityResourceRevision",
   ]),
   "shared/cloudCommunityEventsGateway.ts": gateway([
     "listCloudCommunityEvents",
@@ -218,7 +221,7 @@ try {
         .isDisabled(),
     );
     await page.screenshot({ path: join(output, "profile-ready.png") });
-    await page.getByPlaceholder("Bio", { exact: true }).fill("");
+    await page.getByRole("textbox", { name: /^Bio/ }).fill("");
     await page
       .getByRole("status")
       .getByText("Unsaved changes", { exact: true })

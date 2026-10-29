@@ -12,8 +12,9 @@
   place-items: center;
   background: var(--surface-card);
   color: var(--text-ink-primary);
-  font-family: var(--font-mono);
+  font-family: inherit;
   font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.2px;
   user-select: none;
 }
@@ -845,6 +846,16 @@
   padding-right: var(--web-topbar-right-action-safe-inset);
 }
 
+/* Beside a channel the bar's buttons (Messages, bell, Display, gear, your
+   picture) float over this row, so a longer name was cut to "Classroom …".
+   The sidebar already names the community; the row stays as their clearance.
+   On a phone the people page keeps its name beside its back arrow. */
+@media (min-width: 641px) {
+  .app-root:has(.app-topbar .topbar-right-island) .channel-roster-panel:not([data-channels-feel] *) .community-context-rail-name {
+    visibility: hidden;
+  }
+}
+
 .community-interaction-bootstrap-composer {
   height: 60px;
   margin: 0 14px 14px;
@@ -1193,6 +1204,9 @@
 
 .community-context-member.is-offline { opacity: 0.5; }
 .community-context-member.is-offline:hover { opacity: 1; }
+/* Inside a community, offline people stay readable: only the picture fades. */
+[data-community-theme] .community-context-member.is-offline { opacity: 1; }
+[data-community-theme] .community-context-member.is-offline .community-context-member-avatar { opacity: 0.55; }
 
 
 .community-context-member-avatar {
@@ -1381,6 +1395,12 @@
     border-left: 0;
   }
   .people-panel-open .channel-people-back { display: flex; flex-shrink: 0; }
+  /* Phone app: the people page has its own "Back to channel", so the chat's
+     floating top bar (whose back leaves the community) steps aside. */
+  .app-root.mobile-shell:has(.community-interaction-projection.people-panel-open) .mobile-topbar { display: none; }
+  .app-root.mobile-shell .community-interaction-projection.people-panel-open > .channel-roster-panel {
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--mobile-topbar-top-offset));
+  }
   .people-panel-open .community-context-rail-head { justify-content: flex-start; gap: 8px; }
   .channel-people-back .back-to-workspace { padding: 8px; }
   .channel-people-back .back-icon { width: 17px; height: 17px; }
@@ -1538,6 +1558,9 @@
 .community-channel-header-actions {
   position: relative;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .community-channel-header-menu-trigger {
@@ -1830,6 +1853,18 @@
 .community-interaction-drawer-back .back-icon {
   width: 17px;
   height: 17px;
+}
+
+/* Inside a themed community the thread's title speaks the community's type,
+   like the channel title beside it, instead of Polynet's path-style mono. */
+[data-community-theme] .community-interaction-drawer-back .back-to-workspace {
+  font-family: var(--pn-font-body, inherit);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+[data-community-theme] .community-interaction-drawer-back .back-path {
+  text-transform: capitalize;
 }
 
 /* Threads own a stable top band so scrolling root content never competes with
@@ -2242,7 +2277,7 @@
   margin: -2px -2px 8px;
   padding: 8px 10px;
   border: 0;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-default);
   border-radius: 12px 12px 4px 4px;
   background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
 }
@@ -2345,8 +2380,9 @@
 }
 
 .community-mention-chip.is-agent {
-  background: rgba(167, 139, 250, 0.16);
-  color: #c4b5fd;
+  background: color-mix(in srgb, #8b5cf6 14%, transparent);
+  /* Mixed toward the text colour so it stays readable on light and dark. */
+  color: color-mix(in srgb, #8b5cf6 70%, var(--text-primary));
 }
 
 .community-mention-chip.is-self,
@@ -2414,8 +2450,11 @@
   object-fit: cover;
 }
 
+/* Initials sit on a light pastel tint, so they take dark ink: white letters on
+   those tints measured under 3:1. */
 .community-interaction-avatar-fallback {
   background: color-mix(in srgb, var(--bg-card) 65%, var(--accent) 35%);
+  color: #1c1c1e;
 }
 
 .community-interaction-reply-content,
@@ -2631,7 +2670,9 @@
 .community-interaction-reaction.is-mine {
   background: color-mix(in srgb, var(--bg-card) 82%, var(--accent-attention) 18%);
   border-color: var(--accent-attention);
-  color: color-mix(in srgb, var(--accent-attention) 88%, var(--text-primary));
+  /* The tint and border mark it as yours; the count stays full-strength text,
+     since the accent as text measured 3.7:1 on dark themes. */
+  color: var(--text-primary);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-attention) 14%, transparent);
 }
 
@@ -2739,7 +2780,7 @@
 
 .community-interaction-drawer-root {
   padding: 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-default);
   background: transparent;
 }
 
@@ -2788,6 +2829,9 @@
 .community-interaction-feed {
   margin-top: auto;
   display: grid;
+  /* One column no wider than the feed: a long nowrap line (member arrivals)
+     must ellipsize, not stretch every message past a phone's edge. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
 }
 
@@ -2852,6 +2896,11 @@
 .community-interaction-member-arrival-faces {
   --member-avatar-stack-face-size: 24px;
 }
+/* One face per join line: two small faces with initials read as a collision
+  , and the words already say "and 3 others". */
+.community-interaction-member-arrival-faces > :nth-child(n + 2) {
+  display: none;
+}
 
 .community-interaction-member-arrivals > span {
   overflow: hidden;
@@ -2874,7 +2923,7 @@
   gap: 12px;
   margin: 4px 12px 8px;
   padding: 8px 10px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 12px;
@@ -3197,10 +3246,11 @@
   align-items: center;
   padding: 1px 6px;
   border-radius: 5px;
-  /* Agent purple, fixed across both themes — matches the mention-picker AGENT
-     badge rather than the active theme accent. */
+  /* Agent purple across both themes, matching the mention-picker AGENT badge
+     rather than the theme accent. The text leans toward the page's text
+     colour so it reads on light pages too (#c4b5fd was 1.5:1 on white). */
   background: rgba(167, 139, 250, 0.2);
-  color: #c4b5fd;
+  color: color-mix(in srgb, #a78bfa 55%, var(--text-primary));
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -3317,6 +3367,86 @@
   font-size: 12px;
 }
 
+/* Replying is one obvious step: Reply leads the hover
+   toolbar with its name on it; the "N replies" row is one click target that
+   frames itself on hover and says where it goes; touch screens, which have no
+   hover toolbar, get a visible Reply link under messages with no replies. */
+.community-interaction-msg-action.community-interaction-msg-reply {
+  width: auto;
+  gap: 5px;
+  padding: 0 9px 0 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.community-interaction-thread-row {
+  position: relative;
+  margin-left: -5px;
+  padding: 3px 10px 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.community-interaction-thread-row:hover {
+  border-color: var(--border-default);
+  background: var(--bg-card-solid);
+}
+
+.community-interaction-thread-row .community-interaction-reply-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.community-interaction-thread-row:hover .community-interaction-reply-pill {
+  text-decoration: none;
+}
+
+.community-interaction-thread-open {
+  display: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.community-interaction-thread-open::after {
+  content: " \203A";
+}
+
+.community-interaction-thread-row:hover .community-interaction-thread-open {
+  display: inline;
+}
+
+.community-interaction-reply-start {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .community-interaction-footer.is-reply-start-only {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .community-interaction-reply-start {
+    display: inline-flex;
+  }
+}
+
 .community-interaction-overflow-menu {
   position: absolute;
   right: 0;
@@ -3355,6 +3485,7 @@
   font-family: inherit;
   cursor: pointer;
   text-align: left;
+  white-space: nowrap;
 }
 
 .community-interaction-overflow-item:hover {
@@ -4321,7 +4452,9 @@
 }
 
 .community-dm-panel-context.is-presence.is-active-now {
-  color: #34d399;
+  /* Green leaning toward the text colour, so it reads on light and dark pages
+     alike (pure #34d399 was 1.9:1 on white). */
+  color: color-mix(in srgb, #22c55e 60%, var(--text-primary));
 }
 
 .community-dm-panel-menu-wrap {
@@ -4538,6 +4671,17 @@
   text-align: center;
   background: rgba(0, 0, 0, 0.44);
   pointer-events: none;
+}
+
+/* The remove button stays above the upload overlay, so a failed chip can still be removed. */
+.community-dm-media-grid .community-dm-composer-media-item .chat-media-remove {
+  z-index: 2;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  font-size: 15px;
+  line-height: 20px;
 }
 
 .community-dm-attachment-state {
@@ -5870,16 +6014,16 @@
 .resources-back-btn {
   appearance: none;
   border: 0;
+  min-height: 32px;
   padding: 0;
   background: transparent;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   flex: 0 0 auto;
@@ -5888,8 +6032,8 @@
 }
 
 .resources-back-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -6039,7 +6183,7 @@
 
 .resource-delete-confirm-fields input {
   width: 100%;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 76%, transparent);
   color: var(--text-primary);
@@ -6216,6 +6360,14 @@
   min-width: 0;
   border-right: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   padding-right: 12px;
+}
+
+.resource-course-outline.knowledge-resource-rail {
+  gap: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+  padding: 16px 8px 8px;
 }
 
 .knowledge-resource-list {
@@ -6411,9 +6563,46 @@
 .resource-course-outline .knowledge-resource-item {
   align-items: center;
   gap: 7px;
-  min-height: 52px;
+  border: 0;
   border-radius: 8px;
-  padding: 8px 9px;
+  padding: 0;
+}
+
+/* The whole row is the link. */
+.resource-course-outline .knowledge-resource-item-main {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.knowledge-resource-item-status {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.knowledge-resource-item-status.is-done {
+  border-color: var(--accent-brand);
+  background: var(--accent-brand);
+  color: var(--pn-on-accent, var(--bg-card));
+}
+
+/* In progress: the circle half filled from the left, in the accent. */
+.knowledge-resource-item-status.is-started {
+  border-color: var(--accent-brand);
+  background: linear-gradient(90deg, var(--accent-brand) 50%, transparent 50%);
+}
+
+.knowledge-resource-item-status > svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
 }
 
 .knowledge-resource-item:hover,
@@ -6422,14 +6611,17 @@
   background: color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
 }
 
+.resource-course-outline .knowledge-resource-item:hover {
+  background: var(--hover-overlay);
+}
+
 .resource-course-outline .knowledge-resource-item.is-active {
-  border-color: var(--stroke-selected);
-  background: var(--surface-selected);
-  color: var(--text-selected);
+  background: color-mix(in srgb, var(--accent-brand) 10%, transparent);
 }
 
 .resource-course-outline .knowledge-resource-item.is-active .knowledge-resource-item-title {
-  color: var(--text-selected);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .knowledge-resource-item-main:focus-visible {
@@ -6512,8 +6704,9 @@
 }
 
 .resource-course-outline .knowledge-resource-item-title {
-  font-size: 12.5px;
-  font-weight: 650;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 400;
 }
 
 .knowledge-resource-item-actions {
@@ -6903,26 +7096,279 @@
 }
 
 .knowledge-resource-reader .resource-viewer-title {
-  font-size: clamp(28px, 2.5vw, 36px);
+  font-size: clamp(30px, 3vw, 40px);
+}
+
+/* Lessons read like an article: one centred ~680px column with room on both
+   sides, the same measure the lesson editor uses (--lesson-reading-measure), so
+   what the owner writes is what members read. */
+.knowledge-resource-reader {
+  --lesson-reading-measure: 680px;
+}
+
+.knowledge-resource-reader .resource-viewer-content {
+  box-sizing: border-box;
+  padding-inline: clamp(16px, 5vw, 64px);
 }
 
 .knowledge-resource-reader .resource-viewer-column {
-  max-width: min(100%, 860px);
-  margin-inline: 0;
+  max-width: var(--lesson-reading-measure);
+  margin-inline: auto;
+}
+
+/* On a phone the page already has its gutter; the text uses the full width. */
+@media (max-width: 640px) {
+  .knowledge-resource-reader .resource-viewer-content {
+    padding-inline: 0;
+  }
 }
 
 .knowledge-resource-reader .resource-viewer-prose {
   width: 100%;
-  max-width: 680px;
+  max-width: none;
+  line-height: 1.75;
+}
+.knowledge-resource-reader .resource-viewer-prose.resource-viewer-prose-edit-trigger { width: calc(100% + 12px); }
+
+.knowledge-resource-reader .resource-viewer-prose :is(.md-paragraph, .md-list, .md-blockquote) {
+  margin-block: 0 1.25em;
+}
+
+.knowledge-resource-reader .resource-viewer-prose :is(h2, h3).md-header {
+  margin-block: 2em 0.6em;
+}
+
+.knowledge-resource-reader .resource-viewer-prose :is(h2, h3).md-header:first-child {
+  margin-top: 0;
+}
+
+/* Pictures, videos and embeds get space above and below so text doesn't crowd them.
+   Not media inside a slide deck, an embed's frame or a lesson element: those
+   are sized by their box, and a margin would push them out of it. */
+.knowledge-resource-reader .resource-viewer-prose :is(img, figure, .md-media-embed, .md-video, iframe):not(.lesson-slide-deck *, .md-media-embed *, .lesson-element *) {
+  margin-block: 2em;
 }
 
 .knowledge-resource-reader .resource-viewer-header {
-  padding: 0 0 22px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
+  padding: 0 0 4px;
+  border-bottom: 0;
+}
+
+/* ── The lesson page: Substack's reading rhythm ──
+   A video lesson leads with its video, wider than the text. The title and
+   text share one centred column; Contents and Files sit in a side column
+   where there is room, and Contents folds into a menu above the text where
+   there isn't. */
+.knowledge-resource-reader { container-type: inline-size; container-name: lesson; }
+.knowledge-resource-reader .resource-viewer-header,
+.knowledge-resource-reader .resource-viewer-hero {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--lesson-reading-measure, 680px);
+  margin-inline: auto;
+}
+.knowledge-resource-reader .resource-viewer-hero {
+  max-width: calc(var(--lesson-reading-measure, 680px) + 10rem);
+  margin-bottom: 1.75rem;
+}
+.knowledge-resource-reader .resource-viewer-content.is-video-lesson .resource-viewer-hero { margin-top: 1rem; }
+
+/* Mark as done: the last thing in a lesson, the same tick the outline shows. */
+.lesson-done-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border-default); }
+.lesson-done-button {
+  display: inline-flex; align-items: center; gap: 0.5rem; height: 2.5rem; padding: 0 1rem;
+  border: 1px solid var(--border-default); border-radius: 0.5rem; background: var(--bg-card); color: var(--text-primary);
+  font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+}
+.lesson-done-button svg { width: 1rem; height: 1rem; color: var(--text-muted); }
+.lesson-done-button:hover { background: var(--hover-overlay); }
+.lesson-done-button.is-done { border-color: transparent; background: var(--accent-brand, var(--bg-button)); color: var(--bg-button-text, #fff); }
+.lesson-done-button.is-done svg { color: currentColor; }
+.lesson-done-button:focus-visible { outline: 2px solid var(--border-active, var(--text-primary)); outline-offset: 2px; }
+/* Mark as done and Next stay in reach while reading: the row sits at the end
+   of the lesson and, until the reader gets there, sticks to the bottom of the
+   window. */
+.lesson-done-row:has(> button) {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  padding-bottom: 1rem;
+  background: color-mix(in srgb, var(--bg-primary, var(--bg-card, #fff)) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+/* Phone: one row (Done keeps its size, Next shortens), and the floating Ask AI
+   button rises above the bar instead of covering Next. */
+@media (max-width: 640px) {
+  .lesson-done-row:has(> button) { flex-wrap: nowrap; gap: 0.5rem; max-width: 100%; box-sizing: border-box; }
+  .lesson-done-row .lesson-done-button { flex: none; }
+  .lesson-done-row .lesson-next-button { flex: 1 1 0; min-width: 0; margin-left: 0; justify-content: center; padding: 0 0.75rem; }
+  body:has(.lesson-done-row > button) .community-agent-launcher { bottom: 5.25rem; }
+  .lesson-next-title { display: none; }
+  /* The phone's bottom tab bar is fixed over the page: the row sticks just
+     above it instead of half under it. */
+  body:has(.mobile-bottom-rail) .lesson-done-row:has(> button) {
+    bottom: calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.mobile-bottom-rail):has(.lesson-done-row > button) .community-agent-launcher {
+    bottom: calc(5.25rem + var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Why Mark as done didn't stick (e.g. a required quiz), on its own line above the buttons. */
+.lesson-done-row .lesson-done-note { flex: 1 1 100%; margin: 0; color: var(--accent-error, #b42318); font-size: var(--pn-type-ui, 14px); line-height: 1.4; }
+.lesson-done-row:has(> .lesson-done-note) { flex-wrap: wrap; }
+/* Next lesson, on the right of Mark as done, in the community's accent. */
+.lesson-next-button {
+  /* A long lesson title stays one short line; the full title is in the tooltip. */
+  display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; max-width: min(100%, 22rem); margin-left: auto;
+  height: 2.5rem; padding: 0 1rem; border: 1px solid transparent; border-radius: 8px;
+  background: var(--accent-brand, var(--bg-button)); color: var(--bg-button-text, #fff);
+  font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+}
+.lesson-next-button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lesson-next-button svg { flex: none; width: 1rem; height: 1rem; }
+.lesson-next-button:hover { filter: brightness(1.06); }
+.lesson-next-button:focus-visible { outline: 2px solid var(--border-active, var(--text-primary)); outline-offset: 2px; }
+/* Course · Lesson 2 of 8 · 4 min read, the quiet line over a lesson's title. */
+.lesson-kicker {
+  display: flex; flex-wrap: wrap; gap: 0 0.5rem; margin: 0 0 0.5rem;
+  color: var(--text-muted); font-size: 0.8125rem; line-height: 1.4;
+}
+.lesson-kicker span + span::before { content: "·"; margin-right: 0.5rem; }
+.knowledge-resource-reader .resource-viewer-prose { line-height: 1.7; }
+.knowledge-resource-reader .resource-viewer-prose h4.md-header {
+  margin-block: 1.75em 0.5em;
+  font-size: 1.125em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.knowledge-resource-reader .lesson-reading { display: contents; }
+.knowledge-resource-reader .resource-viewer-prose .md-code-block,
+.knowledge-resource-reader .resource-viewer-prose .md-code-block code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* "I build in": the member's platform, picked once. */
+.lesson-platform-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Contents and Files */
+.lesson-rail-label {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lesson-toc-list,
+.lesson-rail-files {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lesson-toc-item a,
+.lesson-rail-files a {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.5rem;
+  border-radius: 0.375rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.lesson-toc-item.is-level-3 a { padding-left: 1.25rem; }
+.lesson-toc-item a:hover,
+.lesson-rail-files a:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.lesson-toc-item.is-active a {
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent-brand, var(--text-primary));
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+.lesson-toc-item svg,
+.lesson-rail-files svg { flex: none; width: 0.875rem; height: 0.875rem; margin-top: 0.125rem; color: var(--accent-brand, var(--text-muted)); }
+/* Without a side column, Files follow the text (Contents is the menu above it). */
+.lesson-rail { display: none; }
+.resource-viewer-body.has-lesson-rail .lesson-rail:has(.lesson-rail-files) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--lesson-reading-measure, 680px);
+  margin: 2rem auto 0;
+}
+.resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-rail-section { display: none; }
+.resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-rail-section + .lesson-rail-section { margin-top: 0; }
+.lesson-rail-section + .lesson-rail-section { margin-top: 1.5rem; }
+
+.lesson-toc-compact {
+  border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
+  border-radius: 0.625rem;
+  background: var(--bg-card);
+}
+.lesson-toc-compact summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.lesson-toc-compact summary::-webkit-details-marker { display: none; }
+.lesson-toc-compact summary svg { width: 1rem; height: 1rem; color: var(--text-muted); }
+.lesson-toc-compact .lesson-toc-list { padding: 0 0.375rem 0.5rem; }
+
+@container lesson (min-width: 56rem) {
+  .resource-viewer-body.has-lesson-rail {
+    display: grid;
+    grid-template-columns: minmax(0, var(--lesson-reading-measure, 680px)) 13.5rem;
+    justify-content: center;
+    gap: 3rem;
+  }
+  .resource-viewer-body.has-lesson-rail .resource-viewer-column { margin: 0; max-width: none; }
+  .resource-viewer-body.has-lesson-rail .lesson-rail,
+  .resource-viewer-body.has-lesson-rail .lesson-rail:has(.lesson-rail-files) {
+    display: block;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    position: sticky;
+    top: 1.5rem;
+    align-self: start;
+    max-height: calc(100dvh - 3rem);
+    overflow-y: auto;
+    padding-top: 0.25rem;
+  }
+  .resource-viewer-body.has-lesson-rail .lesson-toc-compact { display: none; }
+  .resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-rail-section { display: block; }
+  .resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-rail-section + .lesson-rail-section { margin-top: 1.5rem; }
+  /* With the side column, the title lines up with the text column. */
+  .knowledge-resource-reader:has(.has-lesson-rail) .resource-viewer-header {
+    max-width: calc(var(--lesson-reading-measure, 680px) + 16.5rem);
+    padding-right: 16.5rem;
+  }
 }
 
 .knowledge-resource-reader .resource-viewer-body {
-  padding: 28px 0 8px;
+  padding: 16px 0 8px;
   overflow: visible;
 }
 
@@ -6959,6 +7405,50 @@
   margin-left: auto;
 }
 
+/* "View as member": the owner's preview toggle, a quiet pill. */
+.resources-preview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.resources-preview-pill:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.resources-preview-pill:focus-visible { outline: 2px solid var(--border-active); outline-offset: 2px; }
+.resources-preview-pill svg { width: 0.9375rem; height: 0.9375rem; }
+.resources-preview-pill.is-on {
+  border-color: transparent;
+  background: var(--bg-button, var(--accent-brand));
+  color: var(--bg-button-text, #fff);
+}
+
+/* Member view is on from the top bar: the page says so, with a way out. */
+.resources-member-view-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--accent-brand, var(--text-primary)) 10%, var(--bg-card, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-brand, var(--text-primary)) 30%, transparent);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+.resources-member-view-banner > svg { flex: none; width: 1rem; height: 1rem; }
+.resources-member-view-banner > span { flex: 1; min-width: 0; }
+.resources-member-view-banner > span > strong { font-weight: 600; }
+.resources-member-view-banner > button { flex: none; }
+
 .resources-preview-mode-control {
   display: inline-flex;
   align-items: center;
@@ -6987,15 +7477,15 @@
 }
 
 .resource-course-catalog {
-  width: min(100%, 1080px);
+  width: min(100%, 1120px);
   margin: 0;
-  padding: 8px 0 34px;
+  padding: 12px 0 40px;
 }
 
 .resource-course-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 24px;
   align-items: stretch;
 }
 
@@ -7054,14 +7544,16 @@
   border: 1px solid var(--border-default);
   border-radius: 16px;
   background: var(--bg-card);
-  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  /* A hairline lift, so white cards still read as cards on a white page. */
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 6%, transparent);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .resource-course-card:hover,
 .resource-course-card:focus-within {
   border-color: var(--border-strong);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
-  transform: translateY(-1px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  transform: translateY(-2px);
 }
 
 .resource-course-card.is-dragging {
@@ -7075,7 +7567,12 @@
 }
 
 .resource-course-card-main {
+  position: relative;
   appearance: none;
+  /* A column, so the cover stays on top and the footer at the bottom
+     whatever the text length (a button centres its content by default). */
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-height: 100%;
   overflow: hidden;
@@ -7094,6 +7591,7 @@
 }
 
 .resource-course-card-cover {
+  flex: none;
   height: clamp(118px, 17vw, 158px);
   display: grid;
   place-items: center;
@@ -7103,10 +7601,39 @@
   color: var(--text-faint);
 }
 
-.resource-course-card-cover > svg {
-  width: 34px;
-  height: 34px;
-  stroke-width: 1.35;
+/* A course without a cover gets a soft gradient in the community's colours
+   (accent and button, over the card surface) with its first letter set in the
+   heading font. The card picks the angle and glow positions per course. */
+.resource-course-card-cover-fallback {
+  --cover-accent: var(--pn-accent, var(--accent-brand));
+  --cover-second: var(--pn-button, var(--accent-primary, var(--accent-brand)));
+  --cover-surface: var(--pn-surface, var(--bg-card));
+  position: relative;
+  align-self: stretch;
+  justify-self: stretch;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  container-type: size;
+  background:
+    radial-gradient(circle at var(--cover-glow-a-x, 20%) var(--cover-glow-a-y, 25%), color-mix(in srgb, var(--cover-accent) 60%, transparent), transparent 60%),
+    radial-gradient(circle at var(--cover-glow-b-x, 80%) var(--cover-glow-b-y, 75%), color-mix(in srgb, var(--cover-second) 45%, transparent), transparent 55%),
+    linear-gradient(var(--cover-angle, 135deg), color-mix(in srgb, var(--cover-accent) 30%, var(--cover-surface)), color-mix(in srgb, var(--cover-accent) 6%, var(--cover-surface)));
+  /* Where relative colours work, each course also leans its glows a little
+     around the accent's hue, so a row of covers isn't one flat green. */
+  background:
+    radial-gradient(circle at var(--cover-glow-a-x, 20%) var(--cover-glow-a-y, 25%), oklch(from var(--cover-accent) l c calc(h + var(--cover-hue, 0)) / 0.62), transparent 60%),
+    radial-gradient(circle at var(--cover-glow-b-x, 80%) var(--cover-glow-b-y, 75%), oklch(from var(--cover-second) l c calc(h - var(--cover-hue, 0)) / 0.45), transparent 55%),
+    linear-gradient(var(--cover-angle, 135deg), color-mix(in srgb, var(--cover-accent) 30%, var(--cover-surface)), color-mix(in srgb, var(--cover-accent) 6%, var(--cover-surface)));
+}
+.resource-course-card-cover-initial {
+  font-family: var(--pn-font-heading, inherit);
+  font-weight: var(--pn-heading-weight, 600);
+  font-size: min(4.5rem, 44cqh);
+  line-height: 1;
+  color: var(--pn-text, var(--text-primary));
+  opacity: 0.55;
+  user-select: none;
 }
 
 .resource-course-card-cover-image {
@@ -7118,11 +7645,11 @@
 }
 
 .resource-course-card-body {
-  min-height: 132px;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 15px 17px 16px;
+  gap: 6px;
+  padding: 20px;
 }
 
 .resource-course-card-heading {
@@ -7135,9 +7662,9 @@
 .resource-course-card-heading > strong {
   min-width: 0;
   color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 1.3;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .resource-course-card-status {
@@ -7158,17 +7685,72 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  min-height: calc(2 * 1.5em);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .resource-course-card-meta {
   margin-top: auto;
+  padding-top: 10px;
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
 }
+
+.resource-course-card-progress {
+  margin-top: auto;
+  padding-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resource-course-card-progress-track {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.resource-course-card-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-brand);
+}
+
+.resource-course-card-progress-label {
+  min-width: 3ch;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.resource-course-card-lock {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--bg-card);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 14%, transparent);
+  color: var(--text-primary);
+}
+
+.resource-course-card-lock > svg {
+  width: 14px;
+  height: 14px;
+}
+
+
 
 .resource-course-card-menu,
 .resource-course-card-drag {
@@ -7275,20 +7857,27 @@
 }
 
 .resource-course-workspace {
-  grid-template-columns: minmax(196px, 232px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 264px) minmax(0, 1fr);
+  gap: 40px;
 }
 
 .resource-course-outline {
   position: sticky;
   top: 12px;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* Title, progress, lessons, style switch: only the lessons shrink and scroll
+     (a two-line course title used to squeeze the progress row under the first
+     lesson). */
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: calc(100dvh - 24px);
 }
+
+.resource-course-outline:has(> .resource-course-outline-progress) { grid-template-rows: auto auto minmax(0, 1fr) auto; }
 
 .resource-course-outline-scroll {
   display: grid;
   align-content: start;
   gap: 10px;
+  margin-top: 10px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -7306,30 +7895,46 @@
   overflow: hidden;
   border: 0;
   background: transparent;
-  color: var(--text-secondary);
-  padding: 2px 4px 8px;
+  color: var(--text-primary);
+  min-height: 32px;
+  padding: 0 12px;
   font: inherit;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.1em;
+  font-size: 15px;
+  font-weight: 600;
   text-align: left;
-  text-transform: uppercase;
   cursor: pointer;
 }
 
 .resource-course-outline-count {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.resource-course-outline-progress {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.resource-course-outline-progress .resource-course-card-progress-track {
+  display: block;
 }
 
 .resource-course-outline-title {
   width: 100%;
   min-width: 0;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.3;
 }
 
 .resource-course-outline-count svg {
@@ -7344,6 +7949,11 @@
 
 .resource-course-outline [hidden] {
   display: none !important;
+}
+
+.resource-course-outline .knowledge-resource-list {
+  gap: 2px;
+  padding: 0;
 }
 
 .resource-course-outline .knowledge-resource-item-title {
@@ -7501,10 +8111,16 @@
   transition: border-color 140ms ease, background 140ms ease;
 }
 
-.resource-viewer-title-edit-trigger:hover,
 .resource-viewer-title-edit-trigger:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Only a real pointer previews the edit box; a tap would leave it stuck on. */
+@media (hover: hover) {
+  .resource-viewer-title-edit-trigger:hover {
+    border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  }
 }
 
 .resource-viewer-title-edit-trigger > span {
@@ -7516,15 +8132,28 @@
   color: var(--text-muted);
 }
 
+/* The title edits in place: same size, weight and wrapping as when read,
+   no box around it, a faint placeholder when empty. */
 .resource-viewer-title-input {
-  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  padding: 2px 4px 4px;
-  margin: -2px -4px -4px;
+  display: block;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  min-height: 1lh;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.resource-viewer-title-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 .resource-viewer-title-input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--border-default) 88%, transparent);
 }
 
 .resource-viewer-edit-actions {
@@ -7575,6 +8204,9 @@
 }
 
 .resource-viewer-prose-edit-trigger {
+  /* The -6px margin gives the hover outline room; the extra width keeps the
+     text on the same column edges as the editor and the member's view. */
+  width: calc(100% + 12px);
   border: 1px solid transparent;
   cursor: text;
   transition: border-color 140ms ease, background 140ms ease;
@@ -7631,9 +8263,10 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: 16px;
-  border: 1px solid var(--border-default);
-  background: rgba(0, 0, 0, 0.32);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
+  background: #111;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 12px 32px -16px rgb(0 0 0 / 0.28);
 }
 
 .resource-viewer-embed iframe {
@@ -7645,6 +8278,7 @@
 
 .resource-viewer-embed .deferred-youtube {
   height: 100%;
+  min-height: 0;
   border-radius: 0;
 }
 
@@ -7746,6 +8380,84 @@
   overflow-wrap: anywhere;
 }
 
+/* Callouts ("> [!TIP]" and friends): a soft tint of one tone, a small label
+   with an icon, and the text at reading size. Tip, key idea and do-this use
+   the community's accent; a note stays neutral; a warning is amber. */
+.md-callout {
+  --md-callout-tone: var(--pn-accent, var(--accent-primary, #2f7d5b));
+  margin: 2em 0;
+  padding: 16px 20px 18px;
+  border: 1px solid color-mix(in srgb, var(--md-callout-tone) 22%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--md-callout-tone) 7%, transparent);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.md-callout.is-note {
+  --md-callout-tone: var(--text-muted);
+}
+
+.md-callout.is-warning {
+  --md-callout-tone: #c27a12;
+}
+
+.md-callout.is-action {
+  border-left: 4px solid var(--md-callout-tone);
+  background: color-mix(in srgb, var(--md-callout-tone) 10%, transparent);
+}
+
+/* Readers see an icon and the author's own title, never the type's name
+  . */
+.md-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+}
+.md-callout-icon {
+  display: grid;
+  place-items: center;
+  height: 1.7em;
+  color: color-mix(in srgb, var(--md-callout-tone) 80%, var(--text-primary));
+}
+.md-callout-icon svg { width: 18px; height: 18px; }
+.md-callout-main { min-width: 0; }
+.md-callout-title {
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.md-callout-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  /* Mixed with the text colour so the label stays readable on light and dark pages. */
+  color: color-mix(in srgb, var(--md-callout-tone) 72%, var(--text-primary));
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.md-callout-label svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.md-callout-body > :first-child {
+  margin-top: 0;
+}
+
+.md-callout-body > :last-child {
+  margin-bottom: 0;
+}
+
 .resource-viewer-prose .md-hr {
   border: 0;
   height: 1px;
@@ -7789,9 +8501,10 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border-default) 76%, transparent);
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
+  border-radius: 12px;
+  background: #111;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 12px 32px -16px rgb(0 0 0 / 0.28);
 }
 
 .resource-viewer-prose .md-media-embed-frame iframe {
@@ -7804,8 +8517,9 @@
 .resource-viewer-prose .md-media-embed-caption {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
+  text-align: center;
 }
 
 .resource-viewer-prose .md-media-embed-link {
@@ -8385,6 +9099,14 @@
 .cp-node-circle.type-decision { fill: var(--accent-gold); }
 .cp-node-circle.type-question { fill: #8b93a7; }
 .cp-node-circle.type-resource { fill: #38bdf8; }
+
+/* In a themed community the small memory preview speaks the community's
+   colours: every node in its accent, types told apart by strength, so the
+   card never shows a cyan-and-purple graph on a green-and-white page. */
+[data-community-theme] .community-context-memory-graph .cp-node-circle { fill: var(--accent-primary, var(--text-secondary)); }
+[data-community-theme] .community-context-memory-graph .cp-node-circle:is(.type-question, .type-resource) { fill: color-mix(in srgb, var(--accent-primary, var(--text-secondary)) 55%, var(--bg-app)); }
+[data-community-theme] .community-context-memory-graph .cp-root-circle { fill: var(--text-primary); }
+[data-community-theme] .community-context-memory-graph .cp-root-circle.activity-error { stroke: color-mix(in srgb, var(--text-primary) 30%, transparent); }
 
 /* Status treatment, independent of the type color. */
 .cp-node-circle.status-promising { opacity: 0.8; }
@@ -9209,4 +9931,681 @@
   stroke: var(--text-muted);
   stroke-width: 2;
   fill: none;
+}
+.ask-toolbar-right .ask-mic {
+  /* Keep a bit of breathing room between mic and send. */
+  margin-right: 6px;
+}
+
+/* Interactive widgets in lessons (polynet-embed blocks) */
+.md-community-embed {
+  margin: 20px 0;
+  display: grid;
+  gap: 8px;
+}
+.md-community-embed-frame {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--pn-radius-card, 12px);
+  background: var(--surface-card);
+  transition: height 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-community-embed-frame { transition: none; }
+}
+.md-community-embed-caption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.md-community-embed--placeholder {
+  padding: 16px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--pn-radius-card, 12px);
+}
+.md-community-embed--placeholder img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* Follow-along elements in lessons: buttons, checklists, quizzes, forms */
+.lesson-element {
+  margin: 16px 0;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+  border: var(--pn-border-width, 1px) solid var(--border-default);
+  border-radius: var(--pn-radius-card, 12px);
+  background: var(--surface-card);
+}
+.lesson-element-head,
+.lesson-element-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.lesson-element-prompt {
+  margin: 0;
+  flex: 1 1 240px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.lesson-element-required,
+.lesson-element-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.lesson-element-required {
+  padding: 2px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+}
+.lesson-element-choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.lesson-element-choices label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: calc(var(--pn-radius, 8px) * 0.75);
+  cursor: pointer;
+}
+.lesson-element-choices input {
+  margin-top: 3px;
+  accent-color: var(--accent-brand);
+}
+.lesson-element-choices label.is-answer {
+  border-color: var(--accent-brand);
+}
+.lesson-element-button,
+.lesson-element-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  font: inherit;
+  font-weight: 600;
+  border-radius: var(--pn-radius-button, 8px);
+  cursor: pointer;
+}
+.lesson-element-button {
+  border: 0;
+  background: var(--pn-button, var(--bg-button));
+  color: var(--pn-on-button, var(--bg-button-text));
+}
+.lesson-element-button.is-done,
+.lesson-element-secondary {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+}
+.lesson-element-button:disabled,
+.lesson-element-button[aria-disabled="true"],
+.lesson-element-choices[aria-disabled="true"] input,
+.lesson-element-choices input[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+.lesson-element-result {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: calc(var(--pn-radius, 8px) * 0.75);
+  border: 1px solid var(--border-default);
+}
+.lesson-element-result.is-correct strong { color: var(--accent-brand); }
+.lesson-element-result .lesson-element-secondary { justify-self: start; }
+.lesson-element-explanation > :first-child { margin-top: 0; }
+.lesson-element-explanation > :last-child { margin-bottom: 0; }
+.lesson-element-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent-error);
+}
+
+/* Owner's member view: course progress */
+.member-course-progress ul {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.member-course-progress li {
+  display: grid;
+  gap: 6px;
+}
+.member-course-progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.member-course-progress-row span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Draft preview (?design=draft): a manager is looking at unpublished changes. */
+.community-theme-draft-banner {
+  position: fixed;
+  z-index: 1000;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--text-primary);
+  color: var(--bg-workspace);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+@container lesson (min-width: 56rem) {
+  .knowledge-resource-reader:has(.has-lesson-rail) .resource-viewer-hero {
+    max-width: calc(var(--lesson-reading-measure, 680px) + 16.5rem);
+  }
+}
+
+/* ═════════ Lesson reading type ═════════
+   Medium and Substack set body text near 18–20px on a ~1.6–1.7 line, with a
+   line's worth of space between paragraphs, headings that sit closer to the
+   text they introduce than to the text before, and list items with air
+   between them. Lessons and the lesson editor share these, so what the owner
+   writes is what members read. "##" is h3 in the read view and h2 in the
+   editor; "###" is h4 and h3. Sizes in rem so the theme's type scale doesn't
+   rescale the reading size twice. */
+.knowledge-resource-reader .resource-viewer-prose {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  letter-spacing: -0.003em;
+}
+.knowledge-resource-reader .resource-viewer-prose :is(.md-paragraph, .lesson-editor-content > p) {
+  margin: 0 0 1.25em;
+}
+/* Headings step down like Notion's: the editor's
+   Heading 1, 2 and 3 are "##", "###" and "####" in the Markdown, which the
+   read view renders as h3, h4 and h5 and the editor as h2, h3 and h4. */
+.knowledge-resource-reader .resource-viewer-prose :is(h3.md-header, .lesson-editor-content > h2):not(.lesson-editor-platform-heading) {
+  margin: 1.6em 0 0.4em;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.knowledge-resource-reader .resource-viewer-prose :is(h4.md-header, .lesson-editor-content > h3:not(.lesson-editor-platform-heading)) {
+  margin: 1.5em 0 0.35em;
+  font-size: 1.625rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  text-transform: none;
+  color: var(--text-primary);
+}
+/* Heading 3: the :not() lifts it over the theme's "h5 = body size" rule, which
+   made it read as bold text. */
+.knowledge-resource-reader .resource-viewer-prose :is(h5.md-header, h6.md-header, .lesson-editor-content > h4, .lesson-editor-content > h5):not(.lesson-editor-platform-heading) {
+  margin: 1.6em 0 0.4em;
+  font-size: 1.375rem;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.008em;
+  text-transform: none;
+  color: var(--text-primary);
+}
+.knowledge-resource-reader .resource-viewer-prose :is(h3.md-header, h4.md-header, h5.md-header, .lesson-editor-content > h2, .lesson-editor-content > h3, .lesson-editor-content > h4):first-child { margin-top: 0; }
+.knowledge-resource-reader .resource-viewer-prose :is(.md-list, .lesson-editor-content > ul, .lesson-editor-content > ol) {
+  margin: 0 0 1.25em;
+  padding-left: 1.5em;
+}
+.knowledge-resource-reader .resource-viewer-prose :is(.md-list, .lesson-editor-content ul, .lesson-editor-content ol) li { margin: 0.45em 0; padding-left: 0.2em; }
+.knowledge-resource-reader .resource-viewer-prose :is(.md-list, .lesson-editor-content ul, .lesson-editor-content ol) li > :is(p, .md-paragraph) { margin: 0; }
+.knowledge-resource-reader .resource-viewer-prose li::marker { color: var(--text-muted); }
+.knowledge-resource-reader .resource-viewer-prose :is(.md-blockquote, blockquote) { margin: 1.75em 0; }
+.knowledge-resource-reader .resource-viewer-prose :is(strong, b) { font-weight: 650; }
+.knowledge-resource-reader .resource-viewer-prose a:not([class]) { text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+@media (max-width: 640px) {
+  .knowledge-resource-reader .resource-viewer-prose { font-size: 1.0625rem; line-height: 1.65; }
+  .knowledge-resource-reader .resource-viewer-prose :is(h3.md-header, .lesson-editor-content > h2):not(.lesson-editor-platform-heading) { font-size: 1.625rem; }
+  .knowledge-resource-reader .resource-viewer-prose :is(h4.md-header, .lesson-editor-content > h3:not(.lesson-editor-platform-heading)) { font-size: 1.375rem; }
+  .knowledge-resource-reader .resource-viewer-prose :is(h5.md-header, h6.md-header, .lesson-editor-content > h4, .lesson-editor-content > h5):not(.lesson-editor-platform-heading) { font-size: 1.25rem; }
+}
+
+/* Edit course › Lesson style: two cards with a small sketch of each page. */
+.resource-lesson-styles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+.resource-lesson-style {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.resource-lesson-style:hover:not(:disabled) { border-color: var(--border-strong); }
+.resource-lesson-style.is-selected {
+  border-color: var(--accent-selection, var(--border-active));
+  box-shadow: inset 0 0 0 1px var(--accent-selection, var(--border-active));
+}
+.resource-lesson-style:focus-visible { outline: 2px solid var(--border-active); outline-offset: 2px; }
+.resource-lesson-style-text { display: flex; flex-direction: column; gap: 0.125rem; padding-right: 1.25rem; }
+.resource-lesson-style-text strong { font-size: 0.875rem; font-weight: 600; }
+.resource-lesson-style-text small { font-size: 0.78125rem; line-height: 1.4; color: var(--text-secondary); }
+.resource-lesson-style-check { position: absolute; right: 0.75rem; bottom: 0.875rem; color: var(--accent-selection, var(--border-active)); }
+.resource-lesson-style-sketch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  height: 4.5rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  background: var(--bg-card-alt);
+}
+.resource-lesson-style-sketch .sketch-title { width: 55%; height: 0.375rem; border-radius: 99px; background: var(--text-secondary); opacity: 0.55; }
+.resource-lesson-style-sketch .sketch-video { width: 62%; height: 1.5rem; border-radius: 4px; background: var(--text-secondary); opacity: 0.4; }
+.resource-lesson-style-sketch .sketch-text { display: flex; flex-direction: column; gap: 0.25rem; width: 62%; }
+.resource-lesson-style-sketch .sketch-text span { height: 0.25rem; border-radius: 99px; background: var(--text-faint, var(--text-secondary)); opacity: 0.5; }
+.resource-lesson-style-sketch .sketch-text span:last-child { width: 70%; }
+.resource-lesson-style-sketch.is-video .sketch-text {
+  padding: 0.3125rem;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  background: var(--bg-card);
+}
+
+/* Lesson style switch at the foot of a course's outline (owners only). */
+.resource-course-style-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.625rem 0.25rem;
+  border-top: 1px solid var(--border-default);
+}
+.resource-course-style-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.resource-course-style-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+.resource-course-style-options button {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.375rem 0.5rem;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.resource-course-style-options button:hover { color: var(--text-primary); }
+.resource-course-style-options button.is-selected {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+.resource-course-style-options button:focus-visible { outline: 2px solid var(--border-active); outline-offset: 1px; }
+
+/* Undo after Done: a quiet toast at the bottom of the page for a few seconds
+   after a lesson's edits are saved. */
+.lesson-undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 10px 10px 16px;
+  transform: translateX(-50%);
+  border-radius: 12px;
+  background: var(--text-primary);
+  color: var(--bg-workspace);
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.lesson-undo-toast button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--bg-workspace) 16%, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lesson-undo-toast button:hover { background: color-mix(in srgb, var(--bg-workspace) 26%, transparent); }
+.lesson-undo-toast .lesson-undo-toast-close { padding: 4px 8px; background: transparent; font-weight: 400; opacity: 0.7; }
+
+/* Version history: versions on the left, the picked one on the right. */
+.modal.lesson-history-modal {
+  width: min(960px, calc(100vw - 32px));
+  max-width: none;
+  height: min(720px, calc(100dvh - 48px));
+  display: flex;
+  flex-direction: column;
+}
+.lesson-history-title { margin: 4px 0 0; font-size: 20px; line-height: 1.3; }
+.lesson-history-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  border-top: 1px solid var(--border-muted, var(--border-default));
+  border-bottom: 1px solid var(--border-muted, var(--border-default));
+}
+.lesson-history-empty { grid-column: 1 / -1; margin: 0; padding: 32px 24px; color: var(--text-secondary); }
+.lesson-history-list {
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  list-style: none;
+  border-right: 1px solid var(--border-muted, var(--border-default));
+}
+.lesson-history-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lesson-history-item strong { font-size: 14px; font-weight: 600; }
+.lesson-history-item span { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.lesson-history-item:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+.lesson-history-item.is-selected { background: color-mix(in srgb, var(--text-primary) 9%, transparent); }
+.lesson-history-preview { min-width: 0; overflow-y: auto; padding: 20px 28px; }
+.lesson-history-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .lesson-history-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .lesson-history-list { display: flex; gap: 6px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border-muted, var(--border-default)); }
+  .lesson-history-list li { flex: 0 0 auto; }
+  .lesson-history-preview { padding: 16px; }
+}
+/* In the lesson editor's bar it sits inline, before History and Done. */
+.resource-course-style-switch.is-editor {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+.resource-course-style-switch.is-editor .resource-course-style-label { white-space: nowrap; }
+@media (max-width: 900px) {
+  .resource-course-style-switch.is-editor .resource-course-style-label { display: none; }
+}
+
+/* Members "View all": the full directory slides in from the right, over the
+   page, instead of opening as a centred box. Search and Online/All sit on top. */
+.modal-overlay.members-directory-overlay { justify-content: flex-end; align-items: stretch; padding: 0; background: rgba(0, 0, 0, 0.28); backdrop-filter: none; }
+.modal.members-directory-modal.members-directory-drawer {
+  width: min(420px, 100vw);
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 0 0 1px;
+  display: flex;
+  flex-direction: column;
+  animation: members-drawer-in 180ms ease-out;
+}
+.members-directory-drawer .members-directory-content { flex: 1; }
+@keyframes members-drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .members-directory-drawer { animation: none; } }
+
+.members-directory-filter { display: flex; gap: 6px; margin: 0 0 10px; }
+.members-directory-filter button {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border-subtle); border-radius: 999px;
+  background: transparent; color: var(--text-secondary);
+  font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+}
+.members-directory-filter button span { color: var(--text-faint); font-size: 12px; }
+.members-directory-filter button[aria-pressed="true"] { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-panel); }
+.members-directory-filter button[aria-pressed="true"] span { color: inherit; opacity: 0.75; }
+
+.members-view-all.members-view-all-footer {
+  display: block; width: calc(100% - 16px); margin: 10px 8px 4px; padding: 8px;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  font-size: 13px; color: var(--text-secondary); text-align: center;
+}
+.members-view-all.members-view-all-footer:hover { color: var(--text-primary); background: var(--bg-hover, transparent); }
+
+/* Lesson code, Notion style: a soft grey card, colours
+   that tell the parts apart (blue words, yellow-brown text in quotes, red
+   names, grey notes), and Copy at the top right, like Claude's own UI. Each
+   colour is mixed with the page's text colour, so it darkens on a light page
+   and lightens on a dark one, in every community theme. Inline code is red
+   on grey, as in Notion. */
+.resource-viewer-prose {
+  --lesson-code-bg: color-mix(in srgb, var(--text-primary) 9%, var(--bg-card, var(--bg-primary, transparent)));
+  --lesson-code-line: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  --lesson-code-text: color-mix(in srgb, var(--text-primary) 88%, transparent);
+  --lesson-code-muted: color-mix(in srgb, var(--text-primary) 50%, transparent);
+  --lesson-code-blue: color-mix(in srgb, #2f7fd8 78%, var(--text-primary) 22%);
+  --lesson-code-yellow: color-mix(in srgb, #c98a12 80%, var(--text-primary) 20%);
+  --lesson-code-red: color-mix(in srgb, #e0484f 80%, var(--text-primary) 20%);
+  --lesson-code-purple: color-mix(in srgb, #9a5bd0 78%, var(--text-primary) 22%);
+}
+.resource-viewer-prose .md-inline-code {
+  color: var(--lesson-code-red);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-color: transparent;
+}
+.resource-viewer-prose .code-block-wrapper,
+.resource-viewer-prose .code-block-variant-terminal,
+.resource-viewer-prose .code-block-variant-artifact,
+.resource-viewer-prose .code-block-variant-diff {
+  margin: 1.1em 0;
+  border: 1px solid var(--lesson-code-line);
+  background: var(--lesson-code-bg);
+  box-shadow: none;
+}
+.resource-viewer-prose .code-block-wrapper .code-block-header {
+  background: transparent;
+  border-bottom: 0;
+  padding: 8px 10px 0 16px;
+}
+.resource-viewer-prose .code-block-wrapper .code-block-lang { color: var(--lesson-code-muted); }
+.resource-viewer-prose .code-block-wrapper .code-block-copy {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
+  font-family: inherit; font-size: 12px; padding: 4px 9px; opacity: 1;
+  color: var(--lesson-code-muted);
+  border: 1px solid var(--lesson-code-line);
+  background: color-mix(in srgb, var(--bg-card, transparent) 70%, transparent);
+}
+.resource-viewer-prose .code-block-wrapper .code-block-copy:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+.resource-viewer-prose .code-block-wrapper .code-block-copy.is-copied { color: var(--lesson-code-blue); border-color: currentColor; }
+.resource-viewer-prose .code-block-wrapper .md-code-block { padding: 8px 16px 16px; font-size: 13.5px; line-height: 1.65; }
+.resource-viewer-prose .code-block-wrapper .md-code-block,
+.resource-viewer-prose .code-block-wrapper .md-code-block code,
+.resource-viewer-prose .code-block-wrapper .md-code-block code.hljs { color: var(--lesson-code-text); }
+.resource-viewer-prose .md-code-block .hljs-comment,
+.resource-viewer-prose .md-code-block .hljs-quote { color: var(--lesson-code-muted); font-style: italic; }
+.resource-viewer-prose .md-code-block .hljs-keyword,
+.resource-viewer-prose .md-code-block .hljs-selector-tag,
+.resource-viewer-prose .md-code-block .hljs-literal,
+.resource-viewer-prose .md-code-block .hljs-built_in,
+.resource-viewer-prose .md-code-block .hljs-type,
+.resource-viewer-prose .md-code-block .hljs-section,
+.resource-viewer-prose .md-code-block .hljs-link { color: var(--lesson-code-blue); }
+.resource-viewer-prose .md-code-block .hljs-string,
+.resource-viewer-prose .md-code-block .hljs-regexp,
+.resource-viewer-prose .md-code-block .hljs-addition,
+.resource-viewer-prose .md-code-block .hljs-bullet { color: var(--lesson-code-yellow); }
+.resource-viewer-prose .md-code-block .hljs-title,
+.resource-viewer-prose .md-code-block .hljs-name,
+.resource-viewer-prose .md-code-block .hljs-attr,
+.resource-viewer-prose .md-code-block .hljs-attribute,
+.resource-viewer-prose .md-code-block .hljs-selector-class,
+.resource-viewer-prose .md-code-block .hljs-deletion,
+.resource-viewer-prose .md-code-block .hljs-variable,
+.resource-viewer-prose .md-code-block .hljs-template-variable { color: var(--lesson-code-red); }
+.resource-viewer-prose .md-code-block .hljs-number,
+.resource-viewer-prose .md-code-block .hljs-symbol,
+.resource-viewer-prose .md-code-block .hljs-meta,
+.resource-viewer-prose .md-code-block .hljs-params,
+.resource-viewer-prose .md-code-block .hljs-subst { color: var(--lesson-code-purple); }
+.resource-viewer-prose .code-block-variant-terminal .md-code-block .hljs-built_in,
+.resource-viewer-prose .code-block-variant-terminal .md-code-block .hljs-keyword { color: var(--lesson-code-blue); }
+
+/* Copy-ready blocks (```prompt / ```copy, e.g. the welcome page's setup steps)
+   wear the same card as code: a clearly shaded box (darker on a light page,
+   lighter on a dark one) with its label and Copy icon inside at the top right
+  . */
+.resource-viewer-prose .md-artifact-block {
+  margin: 1.1em 0;
+  border: 1px solid var(--lesson-code-line);
+  border-radius: calc(10px * var(--pn-radius-scale, 1));
+  background: var(--lesson-code-bg);
+  overflow: hidden;
+}
+.resource-viewer-prose .md-artifact-toolbar { margin: 0; padding: 8px 10px 0 16px; }
+.resource-viewer-prose .md-artifact-label { color: var(--lesson-code-muted); font-family: inherit; font-size: 12px; letter-spacing: 0; }
+.resource-viewer-prose .md-artifact-action { font-family: inherit; font-size: 12px; color: var(--lesson-code-muted); }
+.resource-viewer-prose .md-artifact-action.md-artifact-copy {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px;
+  border: 1px solid var(--lesson-code-line);
+  background: color-mix(in srgb, var(--bg-card, transparent) 70%, transparent);
+}
+.resource-viewer-prose .md-artifact-action:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+.resource-viewer-prose .md-artifact-action.is-copied { color: var(--lesson-code-blue); border-color: currentColor; }
+.resource-viewer-prose .md-artifact-content {
+  border: 0; border-radius: 0; background: transparent;
+  padding: 8px 16px 16px; font-size: 13.5px; line-height: 1.65;
+  color: var(--lesson-code-text); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* "← community" above an owner page (Members); same look as the Workflows one. */
+.pn-page-back {
+  display: inline-flex; align-items: center; gap: 0.5rem; max-width: 100%;
+  height: 2rem; margin: 0 0 0.5rem -0.625rem; padding: 0 0.625rem;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-secondary); font: inherit; font-size: 0.875rem; cursor: pointer;
+}
+.pn-page-back span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-page-back:hover { background: var(--hover-overlay); color: var(--text-primary); }
+.pn-page-back:focus-visible { outline: 2px solid var(--border-active); outline-offset: 1px; }
+
+/* Video chapters: in the right panel, each timestamp
+   plays the lesson's video from there; the same lines in the lesson do too. */
+.lesson-chapter-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lesson-chapter-list button {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.625rem; align-items: baseline;
+  width: 100%; padding: 0.375rem 0.5rem; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.875rem;
+  text-align: left; cursor: pointer;
+}
+.lesson-chapter-list button:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); color: var(--text-primary); }
+.lesson-chapter-list button:focus-visible { outline: 2px solid var(--border-active); outline-offset: 1px; }
+.lesson-chapter-time { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--accent-primary, var(--text-primary)); }
+.lesson-chapter-label { overflow-wrap: anywhere; }
+.resource-viewer-prose .lesson-chapter-line { cursor: pointer; border-radius: 6px; }
+.resource-viewer-prose .lesson-chapter-line:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+/* The arrow sits above the page it leaves, not beside it. */
+.pn-page-with-back { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.pn-page-with-back > .pn-page-back { align-self: flex-start; margin: 0.75rem 0 0 0.875rem; }
+/* The page's top row keeps clear of the bar's buttons fixed at the top right
+   (the account avatar sat on "Give access" at 1980 wide, 2026-10-27). */
+.pn-page-with-back .pn-members-head { padding-right: var(--web-topbar-right-action-safe-inset, 0px); }
+.lesson-toc-compact-label { margin: 0.5rem 0.875rem 0.25rem; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.lesson-toc-compact .lesson-chapter-list { padding: 0 0.375rem 0.5rem; }
+
+/* Channels has no header strip over a lesson, so the Messages, Display and
+   Settings buttons float over the text as it scrolls. While a lesson is open
+   they sit on a small solid backing in the page's own colour. */
+body:has(.community-knowledge-page[data-reading]) .app-topbar .topbar-right-island > .community-theme-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 6px var(--bg-workspace);
+}
+
+/* ── Phone: owner pages clear the floating pill (2026-10-28 review #2, U2) ──
+   The pill at the top already goes back, so pages drop their own back link,
+   and the page header starts below the pill instead of behind it. */
+.app-root.mobile-shell .pn-wf-back { display: none; }
+.app-root.mobile-shell .pn-page-with-back { padding-top: var(--mobile-topbar-clearance); }
+.app-root.mobile-shell .workflow-page.pn-wf { padding-top: var(--mobile-topbar-clearance); }
+/* Community Settings on a phone gets the full width, like the other phone
+   pages: no community rail beside it. */
+.app-root.mobile-shell .mobile-global-shell:has(.community-settings-panel) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app-root.mobile-shell .mobile-global-shell:has(.community-settings-panel) > :not(.mobile-global-shell-surface) {
+  display: none;
+}
+.app-root.mobile-shell .mobile-global-shell:has(.community-settings-panel) > .mobile-global-shell-surface {
+  margin-left: var(--community-shell-inset);
+}
+
+/* One page title on owner pages in both layouts (2026-10-28 review #8):
+   Events and Analytics were big titles in Channels and small labels in
+   Classroom. Same size as the Workflows title. */
+.community-panel.community-events-panel .resources-header,
+.analytics-header-row .analytics-title-stack .panel-title {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1.5rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-primary);
+}
+/* Channels: the Events header's New event button stays clear of the
+   top-right buttons (they float over the page there). */
+.app-root:not(.mobile-shell) .community-events-panel > .feed-header-row {
+  padding-right: var(--web-topbar-right-action-safe-inset, 0px);
 }

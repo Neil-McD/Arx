@@ -1,51 +1,210 @@
-.community-forms-page { flex-direction: column; overflow: auto; padding: 24px 32px; gap: 24px; width: 100%; box-sizing: border-box; }
-.community-forms-header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex-shrink: 0; }
+/* Forms in the style of Substack's admin (polynet-ui/substack-study), matching
+   Workflows (WebCommunityWorkflowsPage.css): system font, one centred column,
+   a sticky header with a status pill, the question in a flat card, 40px boxed
+   fields, toggles and accent only on primary actions and selection. Sizes are
+   in rem so community-theme-map.css doesn't rescale them. */
+.community-forms-page {
+  --pn-form-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  --pn-form-accent: var(--accent-primary, var(--bg-button));
+  flex-direction: column; overflow: auto; padding: 1.75rem 2rem; gap: 1.5rem; width: 100%; box-sizing: border-box;
+  font-family: var(--pn-form-font); font-size: 0.9375rem; line-height: 1.4;
+}
+[data-community-theme] .community-forms-page,
+[data-community-theme] .community-forms-page :is(h1, h2, h3, button, input, select, textarea) { font-family: var(--pn-form-font); text-transform: none; letter-spacing: normal; }
+.community-forms-page :is(input, select, textarea, button) { font-family: inherit; }
+
+/* Header: back, the name, a status pill, Preview and Publish. */
+.community-forms-header { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; flex-shrink: 0; padding-bottom: 1rem; border-bottom: 1px solid var(--border-default); }
 .community-forms-header .resources-header { margin: 0; }
-.community-form-name { flex: 1; min-width: 120px; border: 0; background: transparent; color: var(--text-primary); font-weight: 650 !important; padding: 8px 0; }
-.community-form-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
-.community-form-workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr); flex: 1; min-height: 460px; }
-.community-form-workspace.is-preview { grid-template-columns: minmax(0, 1fr); }
-.community-form-questions { border-right: 1px solid var(--border-default); padding: 12px 18px 12px 0; }
-.community-form-questions > div { display: flex; align-items: center; border-radius: 6px; margin-bottom: 5px; transition: background-color 140ms; }
-.community-form-questions .is-selected { background: var(--hover-overlay); }
-.community-form-questions button { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; padding: 10px 3px; }
-.community-form-questions > div > button:first-child { flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 12px 8px; }
-.community-form-questions button span { display: inline-block; width: 20px; }
-.community-form-questions .is-selected > button:first-child { color: var(--text-primary); }
-.community-form-questions > .workflow-secondary-button { margin-top: 12px; width: 100%; }
-.community-form-canvas { padding: 8px 28px; min-width: 0; }
-.community-form-tools { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); }
-.community-form-tools label { display: flex; gap: 8px; align-items: center; }
-.community-form-tools select { color: var(--text-primary); background: var(--surface-workspace); border: 1px solid var(--border-default); border-radius: 6px; padding: 8px; font: inherit; }
-.community-form-question { max-width: 640px; margin: 64px auto 24px; overflow-wrap: anywhere; }
-.community-form-question h2, .community-form-title { font-size: clamp(24px, 2.5vw, 34px); font-weight: 600; line-height: 1.35; letter-spacing: -.025em; }
-.community-form-title, .community-form-description { display: block; width: 100%; border: 0; background: transparent; color: var(--text-primary); resize: vertical; padding: 4px 0; font-family: inherit; }
-.community-form-description { font-size: 15px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 24px; }
+.community-forms-header > .workflow-secondary-button:first-child { border-color: transparent; background: transparent; color: var(--text-secondary); padding: 0 0.625rem; }
+.community-forms-header > .workflow-secondary-button:first-child:hover:not(:disabled) { color: var(--text-primary); background: var(--hover-overlay); }
+.community-form-name { display: block; width: calc(100% + 1rem); box-sizing: border-box; margin: 0 -0.5rem 0.75rem; padding: 0.125rem 0.5rem; border: 1px solid transparent; border-radius: 0.5rem; background: transparent; color: var(--text-primary); font-size: 2rem; font-weight: 700 !important; letter-spacing: -0.02em; line-height: 1.25; }
+.community-form-name:hover:not(:disabled) { border-color: var(--border-default); }
+.community-form-name:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.community-forms-header > [role=status] { display: inline-flex; align-items: center; gap: 0.375rem; height: 1.5rem; padding: 0 0.625rem; border-radius: 999px; background: var(--hover-overlay); color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.community-forms-header > [role=status]::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--text-secondary); }
+.community-forms-header > [data-state=published]::before { background: var(--accent-success, #1f9d55); }
+.community-forms-header > [data-state=edited]::before, .community-forms-header > [data-state=dirty]::before { background: var(--accent-warning, #d97706); }
+.community-form-hint { color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.5; }
+
+
+.community-form-side-toggle input[type=checkbox] { appearance: none; position: relative; flex-shrink: 0; width: 2.75rem; height: 1.5rem; margin: 0; border-radius: 999px; background: var(--border-strong, var(--border-default)); cursor: pointer; transition: background-color 140ms; }
+.community-form-side-toggle input[type=checkbox]::after { content: ""; position: absolute; top: 0.1875rem; left: 0.1875rem; width: 1.125rem; height: 1.125rem; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform 140ms; }
+.community-form-side-toggle input[type=checkbox]:checked { background: var(--pn-form-accent); }
+.community-form-side-toggle input[type=checkbox]:checked::after { transform: translateX(1.25rem); }
+.community-form-side-toggle input[type=checkbox]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* The question card. */
+.community-form-question { margin-top: 1.25rem; margin-bottom: 1rem; padding: 2rem; border: 1px solid var(--border-default); border-radius: 0.75rem; background: var(--bg-card, var(--surface-workspace)); overflow-wrap: anywhere; }
+.community-form-question > .community-form-hint:first-child { margin: 0 0 0.5rem; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.community-form-question h2, .community-form-title { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; }
+.community-form-title, .community-form-description { display: block; width: 100%; box-sizing: border-box; border: 1px solid transparent; border-radius: 0.5rem; background: transparent; color: var(--text-primary); resize: none; margin-inline: -0.5rem; width: calc(100% + 1rem); padding: 0.25rem 0.5rem; field-sizing: content; }
+.community-form-title:hover:not(:disabled), .community-form-description:hover:not(:disabled) { border-color: var(--border-default); }
+.community-form-description { margin-top: 0.25rem; font-size: 0.9375rem; line-height: 1.5; color: var(--text-secondary); }
 .community-form-title::placeholder, .community-form-description::placeholder { color: var(--text-secondary); opacity: .75; }
-.community-form-answer { display: block; width: 100%; color: var(--text-primary); background: transparent; border: 0; border-bottom: 1px solid var(--border-strong); padding: 12px 0; font: inherit; resize: vertical; margin: 28px 0; }
-.community-form-options { display: grid; gap: 10px; margin: 24px 0; }
-.community-form-options > div, .community-form-options > label { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-default); border-radius: 7px; }
-.community-form-options input:not([type=radio]):not([type=checkbox]) { min-width: 0; flex: 1; background: transparent; border: 0; color: var(--text-primary); }
-.community-form-options > div > button { background: transparent; color: var(--text-secondary); border: 0; cursor: pointer; }
-.community-form-options > .workflow-secondary-button { justify-self: start; }
-.community-form-navigation { display: flex; gap: 10px; margin-top: 28px; }
-.community-form-list { display: grid; width: 100%; min-width: 0; }
-.community-form-list > button { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 0; background: transparent; border: 0; border-bottom: 1px solid var(--border-default); color: var(--text-primary); text-align: left; cursor: pointer; }
-.community-form-list > button > span { min-width: 0; overflow-wrap: anywhere; }
-.community-form-list small { color: var(--text-secondary); flex-shrink: 0; }
+.community-form-answer { display: block; width: 100%; box-sizing: border-box; min-height: 2.75rem; margin: 1.5rem 0 0; padding: 0.625rem 0.875rem; color: var(--text-primary); background: var(--bg-workspace, transparent); border: 1px solid var(--border-default); border-radius: 0.5rem; font-size: 0.9375rem; resize: vertical; }
+.community-form-answer:disabled { opacity: 1; cursor: default; }
+.community-form-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; margin: 1.5rem 0 0; }
+.community-form-options > div, .community-form-options > label { display: flex; align-items: center; gap: 0.75rem; min-height: 3rem; box-sizing: border-box; padding: 0 0.875rem; border: 1px solid var(--border-default); border-radius: 0.5rem; background: var(--bg-workspace, transparent); }
+.community-form-options > div > span { flex-shrink: 0; display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 0.25rem; background: var(--hover-overlay); color: var(--text-secondary); font-size: 0.75rem; font-weight: 700; }
+/* The option row carries the ring for the borderless field inside it. */
+.community-form-options > div:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.community-form-options input:not([type=radio]):not([type=checkbox]) { min-width: 0; width: 0; flex: 1; height: 2.75rem; background: transparent; border: 0; outline: none; color: var(--text-primary); font-size: 0.9375rem; }
+.community-form-options > div > button { width: 1.75rem; height: 1.75rem; border-radius: 0.375rem; background: transparent; color: var(--text-secondary); border: 0; cursor: pointer; font-size: 1.125rem; }
+.community-form-options > div > button:hover:not(:disabled) { background: var(--hover-overlay); color: var(--text-primary); }
+.community-form-options > label { cursor: pointer; }
+.community-form-options > label:hover { border-color: var(--border-strong); }
+.community-form-options > label:has(input:checked) { border-color: var(--pn-form-accent); background: color-mix(in srgb, var(--pn-form-accent) 8%, transparent); }
+.community-form-options > label input { accent-color: var(--pn-form-accent); margin: 0; }
+.community-form-options > .workflow-secondary-button { justify-self: start; border-color: transparent; background: transparent; color: var(--text-secondary); padding-inline: 0.5rem; }
+.community-form-options > .workflow-secondary-button:hover:not(:disabled) { color: var(--text-primary); background: var(--hover-overlay); }
+.community-form-navigation { display: flex; justify-content: space-between; gap: 0.75rem; margin-top: 1.75rem; }
+.community-form-navigation > button:first-child { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.community-form-navigation > button:last-child { min-height: 2.5rem; padding: 0 1.25rem; border: 0; background: var(--bg-button); color: var(--bg-button-text); font-size: 0.875rem; }
+.community-form-navigation > button:last-child:hover:not(:disabled) { background: var(--bg-button-hover, var(--bg-button)); }
+
 .community-forms-page > .workflow-secondary-button { align-self: flex-start; }
-.community-forms-page textarea:focus-visible, .community-forms-page select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+.community-forms-page textarea:focus-visible, .community-forms-page select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .community-forms-page button:disabled { opacity: .4; cursor: not-allowed; }
 /* The shell can constrain Forms even on a large monitor (for example with DMs
    open). Match the existing compact layout to its actual workspace width. */
 @container workflow-sections (max-width: 760px) {
-  .community-forms-page { padding: 18px; }
-  .community-form-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: max-content 1fr; }
-  .community-form-questions { display: flex; overflow-x: auto; gap: 8px; border-right: 0; border-bottom: 1px solid var(--border-default); padding: 0 0 12px; }
-  .community-form-questions > div { flex: 0 0 170px; }
-  .community-form-questions > .workflow-secondary-button { flex: 0 0 auto; width: auto; margin: 0; }
-  .community-form-canvas { padding: 20px 0; }
-  .community-form-question { margin-top: 32px; }
-  .community-forms-header > [role=status] { order: 5; width: 100%; }
+  .community-forms-page { padding: 1rem; }
+  .community-forms-header { gap: 0.5rem; padding-bottom: 0.75rem; }
+  .community-forms-header > [role=status] { margin-left: auto; }
+  .community-form-question { padding: 1.25rem; margin-top: 1rem; }
+  .community-form-question h2, .community-form-title { font-size: 1.25rem; }
 }
-@media (prefers-reduced-motion: reduce) { .community-form-questions > div { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .community-form-side-toggle input[type=checkbox], .community-form-side-toggle input[type=checkbox]::after { transition: none; } }
+
+/* Forms list: a Notion-style table in a card. Rows drag to reorder by the grip;
+   Used in reads as pill sentences, so a form in use is plain to see. */
+.community-form-notice { display: flex; align-items: center; gap: 0.5rem; margin: 0; padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: var(--hover-overlay); color: var(--text-primary); font-size: 0.875rem; }
+.community-form-notice button { margin-left: auto; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 1rem; }
+.community-form-table-card { border: 1px solid var(--border-default); border-radius: 0.75rem; background: var(--bg-card, var(--surface-workspace)); }
+.community-form-filters { display: flex; gap: 0.25rem; padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border-default); }
+.community-form-filters button { height: 1.875rem; padding: 0 0.625rem; border: 0; border-radius: 0.375rem; background: transparent; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+.community-form-filters button span { margin-left: 0.25rem; color: var(--text-muted, var(--text-secondary)); }
+.community-form-filters button[aria-selected=true] { background: var(--hover-overlay); color: var(--text-primary); font-weight: 600; }
+.community-form-table-scroll { overflow-x: auto; }
+.community-form-table { width: 100%; min-width: 46rem; border-collapse: collapse; font-size: 0.875rem; }
+.community-form-table th { padding: 0.5rem 0.625rem; border-bottom: 1px solid var(--border-default); color: var(--text-secondary); font-size: 0.78125rem; font-weight: 500; text-align: left; white-space: nowrap; }
+.community-form-table td { padding: 0.625rem; border-bottom: 1px solid var(--border-default); color: var(--text-primary); vertical-align: top; }
+.community-form-table tbody tr:last-child td { border-bottom: 0; }
+.community-form-table tbody tr:hover td { background: var(--hover-overlay); }
+.community-form-table tr.is-drop td { box-shadow: inset 0 2px 0 var(--pn-form-accent); }
+.community-form-grip { width: 1.75rem; padding-right: 0 !important; }
+.community-form-grip span { display: inline-grid; place-items: center; width: 1.375rem; height: 1.5rem; border-radius: 0.25rem; color: var(--text-muted, var(--text-secondary)); cursor: grab; }
+@media (hover: hover) { .community-form-grip span { opacity: 0; } .community-form-table tr:is(:hover, :focus-within) .community-form-grip span { opacity: 1; } }
+.community-form-open { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.community-form-open svg { margin-top: 0.125rem; color: var(--text-secondary); flex-shrink: 0; }
+.community-form-open span { display: flex; flex-direction: column; }
+.community-form-open strong { font-weight: 600; }
+.community-form-open:hover strong { text-decoration: underline; text-underline-offset: 2px; }
+.community-form-open small, .community-form-uses small, .community-form-fills small { color: var(--text-secondary); font-size: 0.8125rem; }
+.community-form-uses { line-height: 1.55; }
+.community-form-uses > span { display: block; }
+.community-form-uses > span + span { margin-top: 0.3125rem; }
+.community-form-fills { line-height: 1.8; }
+.community-form-fills .pn-pill { margin: 0 0.25rem 0.125rem 0; }
+.community-form-menu { position: relative; width: 2.5rem; text-align: right; }
+.community-form-pop { position: absolute; z-index: 5; top: 2.25rem; right: 0.5rem; width: 16rem; padding: 0.3125rem; border: 1px solid var(--border-default); border-radius: 0.625rem; background: var(--bg-card, var(--surface-workspace)); box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / .14); text-align: left; }
+.community-form-pop > * { display: block; width: 100%; padding: 0.4375rem 0.625rem; border: 0; border-radius: 0.375rem; background: transparent; color: var(--text-primary); font-size: 0.875rem; text-align: left; cursor: pointer; }
+.community-form-pop > button:hover { background: var(--hover-overlay); }
+.community-form-pop .is-danger { color: var(--danger-text, #c2413a); }
+.community-form-pop .is-disabled { color: var(--text-muted, var(--text-secondary)); cursor: default; }
+.community-form-pop .is-disabled small { display: block; margin-top: 0.125rem; color: var(--text-secondary); font-size: 0.75rem; line-height: 1.4; }
+.community-form-foot { margin: 0; padding: 0.5rem 0.875rem; color: var(--text-secondary); font-size: 0.8125rem; border-top: 1px solid var(--border-default); }
+.community-form-deleted { border-top: 1px solid var(--border-default); padding: 0.5rem 0.75rem; }
+.community-form-deleted > button { display: inline-flex; align-items: center; gap: 0.25rem; border: 0; background: transparent; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+.community-form-deleted ul { margin: 0.375rem 0 0; padding: 0; list-style: none; }
+.community-form-deleted li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.375rem 0.25rem; color: var(--text-secondary); font-size: 0.875rem; }
+.community-form-table th:nth-child(2) { width: 30%; }
+.community-form-table th:nth-child(3) { width: 30%; }
+.community-form-table th:nth-child(5) { width: 8.5rem; }
+.pn-wf .community-forms-page:not(.community-form-doc) { max-width: none; }
+.community-form-uses > strong { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+.community-form-uses > span { color: var(--text-secondary); font-size: 0.8125rem; }
+.community-form-uses .pn-pill { font-size: 0.8125rem; }
+.community-form-table td { padding-block: 0.875rem; }
+
+
+/* Form builder as a Notion page: a big title, property rows, questions as
+   blocks with + and ⋮⋮ on hover, a "/" line that adds a question, and the
+   selected question's settings in a side panel. */
+.community-form-crumb { display: flex; align-items: center; gap: 0.375rem; flex: 1; min-width: 0; color: var(--text-secondary); font-size: 0.875rem; }
+.community-form-crumb button { display: inline-flex; align-items: center; gap: 0.25rem; height: 1.875rem; padding: 0 0.5rem; border: 0; border-radius: 0.375rem; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.community-form-crumb button:hover:not(:disabled) { background: var(--hover-overlay); color: var(--text-primary); }
+.community-form-crumb span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-weight: 500; }
+.community-form-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 17.5rem; gap: 0; flex: 1; min-height: 28rem; border: 1px solid var(--border-default); border-radius: 0.75rem; background: var(--bg-card, var(--surface-workspace)); }
+.community-form-page { min-width: 0; padding: 2rem 2.5rem 2.5rem 1.5rem; }
+.community-form-page > .community-form-name, .community-form-props { margin-left: 3rem; width: calc(100% - 3rem); }
+.community-form-page > input.community-form-name { margin-left: 2.5rem; width: calc(100% - 2.5rem); font-size: 2rem; }
+.pn-wf .community-forms-page.community-form-doc { max-width: 72rem; }
+.community-form-props { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 0.5rem 0.75rem; margin: 0 0 1.25rem 3rem; padding-bottom: 1.125rem; border-bottom: 1px solid var(--border-default); font-size: 0.875rem; }
+.community-form-props dt { color: var(--text-secondary); padding-top: 0.125rem; }
+.community-form-props dd { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; margin: 0; min-width: 0; line-height: 1.55; }
+.community-form-props small { color: var(--text-secondary); font-size: 0.8125rem; }
+.community-form-props-uses { flex-direction: column; align-items: flex-start !important; gap: 0.25rem !important; }
+.community-form-blocks { margin: 0; padding: 0; list-style: none; }
+.community-form-block { display: grid; grid-template-columns: 3rem minmax(0, 1fr); padding: 0.75rem 0.75rem 0.875rem 0; border-radius: 0.5rem; cursor: text; }
+.community-form-block.is-selected { background: color-mix(in srgb, var(--pn-form-accent) 5%, transparent); }
+.community-form-block.is-drop { box-shadow: inset 0 2px 0 var(--pn-form-accent); }
+.community-form-block-handle { display: flex; justify-content: flex-end; gap: 0.125rem; padding: 0.125rem 0.25rem 0 0; color: var(--text-muted, var(--text-secondary)); }
+.community-form-block-handle > * { display: inline-grid; place-items: center; width: 1.25rem; height: 1.5rem; padding: 0; border: 0; border-radius: 0.25rem; background: transparent; color: inherit; }
+.community-form-block-handle button { cursor: pointer; }
+.community-form-block-handle span { cursor: grab; }
+.community-form-block-handle > *:hover { background: var(--hover-overlay); color: var(--text-primary); }
+@media (hover: hover) { .community-form-block-handle > * { opacity: 0; } .community-form-block:is(:hover, :focus-within, .is-selected) .community-form-block-handle > * { opacity: 1; } }
+.community-form-block-body { min-width: 0; }
+.community-form-block-meta { margin: 0 0 0.125rem; color: var(--text-secondary); font-size: 0.71875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.community-form-block .community-form-title { font-size: 1.125rem; font-weight: 600; line-height: 1.4; field-sizing: content; }
+.community-form-block .community-form-description { margin-top: 0; font-size: 0.875rem; field-sizing: content; }
+.community-form-block .community-form-options { margin-top: 0.75rem; max-width: 30rem; }
+.community-form-block .community-form-options > div { min-height: 2.5rem; }
+.community-form-block .community-form-options input:not([type=radio]):not([type=checkbox]) { height: 2.25rem; }
+.community-form-answer-ghost { max-width: 28rem; margin-top: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border-default); border-radius: 0.4375rem; color: var(--text-secondary); font-size: 0.875rem; opacity: .8; }
+.community-form-answer-ghost.is-long { min-height: 4rem; box-sizing: border-box; }
+.community-form-chips { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
+.community-form-chips span { padding: 0.1875rem 0.6875rem; border: 1px solid var(--border-default); border-radius: 999px; font-size: 0.84375rem; }
+.community-form-block-fills { margin: 0.5rem 0 0; color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.7; }
+.community-form-block .workflow-error { margin: 0.75rem 0 0; }
+.community-form-slash { position: relative; margin: 0.375rem 0 0 3rem; }
+.community-form-slash > input[aria-label] { width: 100%; box-sizing: border-box; height: 2.25rem; padding: 0 0.5rem; margin-left: -0.5rem; border: 0; border-radius: 0.375rem; background: transparent; color: var(--text-primary); font-size: 0.9375rem; cursor: pointer; }
+.community-form-slash > input::placeholder { color: var(--text-secondary); opacity: .7; }
+.community-form-slash > input:hover:not(:disabled) { background: var(--hover-overlay); }
+.community-form-slash-menu { position: absolute; z-index: 5; top: 2.5rem; left: -0.5rem; width: 15rem; padding: 0.3125rem; border: 1px solid var(--border-default); border-radius: 0.625rem; background: var(--bg-card, var(--surface-workspace)); box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / .14); outline: none; }
+.community-form-slash-menu p { margin: 0; padding: 0.375rem 0.625rem 0.25rem; color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; }
+.community-form-slash-menu button { display: block; width: 100%; padding: 0.4375rem 0.625rem; border: 0; border-radius: 0.375rem; background: transparent; color: var(--text-primary); font-size: 0.875rem; text-align: left; cursor: pointer; }
+.community-form-slash-menu button.is-active { background: var(--hover-overlay); }
+.community-form-side { display: flex; flex-direction: column; gap: 0.875rem; padding: 1.5rem 1.125rem; border-left: 1px solid var(--border-default); font-size: 0.875rem; }
+.community-form-side h3 { margin: 0; color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.community-form-side > label:not(.community-form-side-toggle) { display: grid; gap: 0.3125rem; color: var(--text-secondary); font-size: 0.8125rem; }
+.community-form-side select { height: 2.25rem; padding: 0 0.625rem; border: 1px solid var(--border-default); border-radius: 0.4375rem; background: var(--bg-card, var(--surface-workspace)); color: var(--text-primary); font-size: 0.875rem; }
+.community-form-side-toggle { display: flex; align-items: center; justify-content: space-between; color: var(--text-primary); }
+.community-form-side-actions { display: flex; gap: 0.375rem; }
+.community-form-side-actions .workflow-secondary-button { height: 2rem; padding: 0 0.625rem; }
+.community-form-side-actions .is-danger { margin-left: auto; color: var(--danger-text, #c2413a); }
+.community-form-side > .community-form-hint { margin: 0; }
+.community-form-preview { max-width: 40rem; width: 100%; margin: 0 auto; }
+.community-form-preview > .community-form-hint { text-align: center; margin: 0; }
+@container workflow-sections (max-width: 860px) {
+  .community-form-workspace { grid-template-columns: minmax(0, 1fr); }
+  .community-form-side { border-left: 0; border-top: 1px solid var(--border-default); }
+  .community-form-page { padding: 1.25rem 1rem 1.5rem 0.25rem; }
+  .community-form-page > input.community-form-name { font-size: 1.5rem; margin-left: 2.75rem; width: calc(100% - 2.75rem); }
+  .community-form-props { grid-template-columns: minmax(0, 1fr); gap: 0.125rem; }
+  .community-form-props dd { margin-bottom: 0.5rem; }
+}
+/* Draft with The Builder: a brief in, a draft form out, opened for review. */
+.community-form-head-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.community-form-agent-button { gap: 0.375rem; height: 2.5rem; padding: 0 0.875rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; }
+.community-form-agent-button svg, .community-form-agent label svg, .community-form-drafted svg { color: var(--pn-pill-agent, #1f9a52); flex-shrink: 0; }
+.community-form-agent { display: grid; gap: 0.5rem; padding: 1rem 1.125rem; border: 1px solid color-mix(in srgb, #1f9a52 35%, var(--border-default)); border-radius: 0.75rem; background: color-mix(in srgb, #1f9a52 5%, var(--bg-card, var(--surface-workspace))); }
+.community-form-agent label { display: flex; align-items: center; gap: 0.375rem; font-weight: 600; }
+.community-form-agent p { margin: 0; color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.5; }
+.community-form-agent textarea { width: 100%; box-sizing: border-box; padding: 0.625rem 0.75rem; border: 1px solid var(--border-default); border-radius: 0.5rem; background: var(--bg-card, var(--surface-workspace)); color: var(--text-primary); font: inherit; font-size: 0.9375rem; resize: vertical; }
+.community-form-agent > div { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.community-form-agent .workflow-error { margin: 0; }
+.community-form-drafted { background: color-mix(in srgb, #1f9a52 8%, transparent); }
+.pn-wf-empty .community-form-head-actions { justify-content: center; }

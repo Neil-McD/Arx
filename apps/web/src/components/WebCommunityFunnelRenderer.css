@@ -433,3 +433,21 @@
     transition: none;
   }
 }
+
+/* "Choose your offer" cards above the first join button (2+ offers only). */
+.community-funnel-offers {
+  width: min(520px, 100%);
+  margin: 24px auto 0;
+  text-align: left;
+}
+
+.community-funnel-offers + .community-funnel-action {
+  margin-top: 14px;
+}
+
+.community-funnel-offers-note {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}

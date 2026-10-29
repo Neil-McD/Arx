@@ -430,6 +430,31 @@ export async function uploadCloudCommunityResourceSourceFile<SessionT>(
   return storageId;
 }
 
+const RESOURCE_IMAGE_ERRORS: Record<string, string> = {
+  community_resource_image_type: "Use a PNG, JPEG, GIF, WebP or AVIF image.",
+  community_resource_image_too_large: "Images can be up to 10 MB.",
+};
+
+/** Uploads a picture for a lesson body and returns the address to link it by. */
+export async function uploadCloudCommunityResourceImage<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    file: File | Blob;
+  },
+): Promise<string> {
+  const storageId = await uploadCloudCommunityResourceSourceFile(params);
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("communityResources:resolveCommunityResourceImageUrl" as any, {
+    authSubject,
+    communityId: params.communityId,
+    storageId,
+  });
+  const row = payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+  const url = String(row.url ?? "").trim();
+  if (!url) throw new Error(RESOURCE_IMAGE_ERRORS[String(row.problem ?? "")] ?? "That image didn't upload. Try again.");
+  return url;
+}
+
 function normalizeCommunityLaunchKnowledgeSources(payload: unknown): CloudCommunityLaunchKnowledgeSource[] {
   if (!Array.isArray(payload)) return [];
   return payload
@@ -773,7 +798,7 @@ export async function setCloudCommunityMemberRole<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     membershipId: string;
-    role: "admin" | "moderator" | "member";
+    role: "co_creator" | "admin" | "moderator" | "member";
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -916,6 +941,52 @@ export async function saveCloudCommunityResource<SessionT, TResult = unknown>(
     payload: params.payload,
   });
   return payload as TResult;
+}
+
+/** One earlier version of a lesson, from its Version history. */
+export type CloudCommunityResourceRevision = {
+  id: string;
+  resource_id: string;
+  title: string;
+  saved_at: string | null;
+  replaced_at: string | null;
+  body_chars: number;
+  body_md: string;
+};
+
+export async function listCloudCommunityResourceRevisions<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { resourceId: string },
+): Promise<CloudCommunityResourceRevision[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("communityResources:listCommunityResourceRevisions" as any, {
+    authSubject,
+    resourceId: params.resourceId,
+  });
+  return coerceGatewayRows<CloudCommunityResourceRevision>(payload);
+}
+
+export async function restoreCloudCommunityResourceRevision<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { revisionId: string },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("communityResources:restoreCommunityResourceRevision" as any, {
+    authSubject,
+    revisionId: params.revisionId,
+  });
+}
+
+export type CloudCommunityLessonBoardUpdate = { resourceId: string; stage: string; stageOrder?: number; order?: number; title?: string };
+
+/** Roadmap editing: stages and lesson order (and titles) for many lessons in one write. */
+export async function updateCloudCommunityLessonBoard<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string; updates: CloudCommunityLessonBoardUpdate[] },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("communityResources:updateCommunityLessonBoard" as any, {
+    authSubject,
+    communityId: params.communityId,
+    updates: params.updates,
+  });
 }
 
 export async function getCloudCommunityResourceBuilderChangesetStatus<SessionT, TResult = unknown>(

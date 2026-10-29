@@ -5,19 +5,135 @@
 .community-next-step-action { display:flex; align-items:center; gap:8px; }
 .community-next-step-count { background:transparent; border:0; color:var(--text-secondary); margin:0 24px 12px; text-align:left; cursor:pointer; }
 .member-form-backdrop { position:fixed; inset:0; z-index:1200; background:var(--overlay-backdrop,rgba(0,0,0,.5)); display:flex; align-items:center; justify-content:center; padding:20px; }
-.member-form-dialog { width:min(720px,100%); max-height:90dvh; overflow:auto; padding:24px; color:var(--text-primary); background:var(--surface-workspace); border:1px solid var(--border-default); border-radius:12px; }
+.member-form-dialog { width:min(640px,100%); max-height:90dvh; overflow:auto; padding:28px 32px 32px; color:var(--text-primary); background:var(--surface-workspace); border:1px solid var(--border-default); border-radius:12px; box-shadow:0 24px 48px rgb(0 0 0 / .18); }
 .member-form-dialog header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
-.member-form-dialog header h2 { font-size:16px; margin:0; }
-.member-form-dialog section { padding:32px 12px; }
-.member-form-dialog section h2 { font-size:28px; overflow-wrap:anywhere; }
+.member-form-dialog header h2 { font-size:15px; margin:0; color:var(--text-secondary); font-weight:600; }
+.member-form-dialog header button { width:36px; height:36px; padding:0; display:inline-grid; place-items:center; border-color:transparent; }
+/* A thin bar shows how far through the form the member is. */
+.member-form-progress { height:4px; margin:0 0 20px; border-radius:999px; background:var(--hover-overlay); overflow:hidden; }
+.member-form-progress span { display:block; height:100%; border-radius:inherit; background:var(--accent-primary,var(--bg-button)); transition:width 200ms ease; }
+.member-form-dialog section { padding:20px 0 0; }
+.member-form-dialog section > small:first-of-type { display:block; font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+.member-form-dialog section h2 { font-size:28px; line-height:1.25; margin:8px 0 0; overflow-wrap:anywhere; }
+.member-form-dialog section h2 + p { margin:8px 0 0; color:var(--text-secondary); line-height:1.5; }
 .member-form-dialog small { color:var(--text-secondary); }
-.member-form-dialog button { color:var(--text-primary); background:transparent; border:1px solid var(--border-default); border-radius:6px; padding:8px 12px; font:inherit; cursor:pointer; }
-.member-form-dialog button:hover { background:var(--hover-overlay); }
+.member-form-dialog button { min-height:40px; color:var(--text-primary); background:transparent; border:1px solid var(--border-default); border-radius:8px; padding:0 16px; font:inherit; font-weight:600; cursor:pointer; }
+.member-form-dialog button:hover:not(:disabled) { background:var(--hover-overlay); }
 .member-form-dialog button:disabled { opacity:.45; cursor:default; }
-.member-form-dialog input:not([type=radio]):not([type=checkbox]), .member-form-dialog textarea { width:100%; padding:12px 0; color:var(--text-primary); background:transparent; border:0; border-bottom:1px solid var(--border-strong); font:inherit; }
-.member-form-choices { display:grid; gap:10px; }
-.member-form-choices label { display:flex; gap:12px; padding:12px; border:1px solid var(--border-default); border-radius:6px; }
-.member-form-dialog footer { display:flex; gap:12px; align-items:center; margin-top:24px; flex-wrap:wrap; }
+.member-form-dialog input:not([type=radio]):not([type=checkbox]), .member-form-dialog textarea { display:block; width:100%; box-sizing:border-box; min-height:48px; margin-top:24px; padding:12px 14px; color:var(--text-primary); background:var(--bg-card,transparent); border:1px solid var(--border-default); border-radius:8px; font:inherit; resize:vertical; }
+.member-form-dialog input:not([type=radio]):not([type=checkbox]):hover, .member-form-dialog textarea:hover { border-color:var(--border-strong); }
+.member-form-format { color:var(--text-secondary); margin:8px 0 0; }
+.member-form-issue { color:var(--accent-error); margin:8px 0 0; }
+.member-form-choices { display:grid; gap:8px; min-width:0; margin:24px 0 0; padding:0; border:0; }
+.member-form-choices label { display:flex; align-items:center; gap:12px; min-height:52px; box-sizing:border-box; padding:12px 16px; border:1px solid var(--border-default); border-radius:8px; background:var(--bg-card,transparent); cursor:pointer; transition:border-color 140ms, background-color 140ms; }
+.member-form-choices label:hover { border-color:var(--border-strong); }
+.member-form-choices label:has(input:checked) { border-color:var(--accent-primary,var(--border-strong)); background:color-mix(in srgb, var(--accent-primary,var(--bg-button)) 8%, var(--bg-card,transparent)); }
+.member-form-choices input { margin:0; flex-shrink:0; width:18px; height:18px; accent-color:var(--accent-primary,var(--bg-button)); }
+.member-form-dialog footer { display:flex; gap:12px; align-items:center; margin-top:28px; flex-wrap:wrap; }
+/* Back is quiet; Continue and Submit are the one primary action, on the right. */
+.member-form-dialog footer > button:first-child { border-color:transparent; color:var(--text-secondary); }
+.member-form-dialog footer > button:nth-child(2) { order:3; margin-left:auto; padding:0 20px; border:0; background:var(--bg-button); color:var(--bg-button-text); }
+.member-form-dialog footer > button:nth-child(2):hover:not(:disabled) { background:var(--bg-button-hover,var(--bg-button)); }
+.member-form-dialog footer > small { order:2; }
 .member-form-list-row { width:100%; display:flex; justify-content:space-between; gap:12px; margin-top:12px; }
 .community-next-step:focus-visible, .community-next-step-count:focus-visible, .member-form-dialog :focus-visible { outline:2px solid var(--focus-ring); outline-offset:3px; }
-@media(max-width:600px) { .member-form-backdrop { padding:8px; } .member-form-dialog { padding:16px; max-height:96dvh; } .member-form-dialog section { padding:24px 0; } }
+@media(max-width:600px) { .member-form-backdrop { padding:8px; } .member-form-dialog { padding:20px; max-height:96dvh; } .member-form-dialog section { padding:20px 0 0; } .member-form-dialog section h2 { font-size:22px; } }
+@media(prefers-reduced-motion:reduce) { .member-form-progress span, .member-form-choices label { transition:none; } }
+/* The welcome flow fills the whole area right of the rail: one open page, not a card. */
+.community-welcome { flex:1; min-width:0; min-height:100%; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:24px; padding:48px 24px; color:var(--text-primary); background:var(--surface-workspace); }
+/* Centred when it fits; a page taller than the window starts at its top (plain centring hid the top above the scroll). */
+.community-welcome > :first-child { margin-top:auto; }
+.community-welcome > :last-child { margin-bottom:auto; }
+.community-welcome-intro { width:min(720px,100%); display:flex; flex-direction:column; gap:8px; }
+.community-welcome-intro small, .community-welcome-step { color:var(--text-secondary); font-size:12px; margin:0; }
+.community-welcome-intro h1 { margin:0; font-size:28px; overflow-wrap:anywhere; }
+.community-welcome-intro p { margin:0; }
+.community-welcome-form { width:min(720px,100%); max-height:none; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+/* The page heading names the step and there is nothing to close: the community stays shut until the steps are done. */
+.community-welcome-form header { display:none; }
+.community-welcome-message { width:min(720px,100%); font-size:var(--pn-type-reading, 17px); line-height:1.65; overflow-wrap:anywhere; }
+.community-welcome-message img { display:block; max-width:100%; height:auto; border-radius:12px; }
+/* Where the member is: a quiet line and a thin bar that fills screen by screen. */
+.community-welcome-progress { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+.community-welcome-progress-track { display:block; height:4px; overflow:hidden; border-radius:999px; background:color-mix(in srgb, var(--text-primary) 10%, transparent); }
+.community-welcome-progress-track span { display:block; height:100%; border-radius:inherit; background:var(--accent-brand, var(--accent-primary)); transition:width .3s ease; }
+.community-welcome-next { width:min(720px,100%); display:flex; }
+.community-welcome-done { color:var(--text-secondary); }
+@media(prefers-reduced-motion:reduce) { .community-welcome-progress-track span { transition:none; } }
+.community-welcome-message > :first-child { margin-top:0; }
+.community-welcome-message > :last-child { margin-bottom:0; }
+.community-welcome-media { margin-top:8px; overflow:hidden; border-radius:12px; }
+.community-welcome-media img { display:block; max-width:100%; height:auto; }
+/* A welcome video uses the full column, framed like lesson videos. */
+.community-welcome :is(.community-welcome-media, .community-welcome-message) .md-media-embed { display:grid; gap:8px; margin:0; }
+.community-welcome :is(.community-welcome-media, .community-welcome-message) .md-media-embed-frame { position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border:1px solid color-mix(in srgb, var(--border-default) 70%, transparent); border-radius:12px; background:#111; }
+.community-welcome :is(.community-welcome-media, .community-welcome-message) .md-media-embed-frame iframe { display:block; width:100%; height:100%; border:0; }
+.community-welcome :is(.community-welcome-media, .community-welcome-message) .md-media-embed-caption { margin:0; color:var(--text-secondary); font-size:13px; text-align:center; }
+.community-welcome :is(.community-welcome-media, .community-welcome-message) .md-media-embed-link { color:inherit; }
+/* A welcome lesson reads like the lesson page itself, with one way forward under it. */
+.community-welcome-lesson { width:min(720px,100%); display:flex; flex-direction:column; gap:24px; }
+.community-welcome-lesson > footer { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.community-welcome-lesson > footer p { margin:0; color:var(--accent-error); }
+/* The lesson title lines up with its text, as on the lesson page. */
+.community-welcome-lesson .resource-viewer-header { padding: 0 0 4px; border-bottom: 0; }
+@media(max-width:600px) { .community-welcome { justify-content:flex-start; padding:32px 16px; } }
+/* A choice on the welcome page: cards in a row, the picked one's steps below. */
+.community-welcome-choice { width:min(720px,100%); display:flex; flex-direction:column; gap:14px; }
+.community-welcome-choice-prompt { margin:0; font-size:15px; font-weight:650; }
+.community-welcome-choice-cards { display:grid; grid-template-columns:repeat(var(--choice-count, 3), minmax(0, 1fr)); gap:10px; }
+.community-welcome-choice-card { position:relative; display:flex; align-items:flex-start; gap:12px; min-width:0; padding:14px 40px 14px 14px; border:1px solid var(--border-default); border-radius:calc(12px * var(--pn-radius-scale, 1)); background:var(--bg-card, var(--surface-workspace)); color:var(--text-primary); font:inherit; text-align:left; cursor:pointer; transition:border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+.community-welcome-choice-card:hover { border-color:color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 55%, var(--border-default)); }
+.community-welcome-choice-card:focus-visible { outline:2px solid var(--accent-brand, var(--accent-primary)); outline-offset:2px; }
+.community-welcome-choice-text { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.community-welcome-choice-icon { flex:none; display:grid; place-items:center; width:36px; height:36px; border-radius:calc(9px * var(--pn-radius-scale, 1)); background:color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 12%, var(--bg-card, var(--surface-workspace))); color:var(--accent-brand, var(--accent-primary)); }
+.community-welcome-choice-icon-mark { display:block; width:22px; height:22px; object-fit:contain; }
+.community-welcome-choice-card strong { font-size:15px; line-height:1.3; overflow-wrap:anywhere; }
+.community-welcome-choice-card small { color:var(--text-secondary); font-size:13px; line-height:1.45; }
+.community-welcome-choice-card.is-picked { border-color:var(--accent-brand, var(--accent-primary)); background:color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 7%, var(--bg-card, var(--surface-workspace))); box-shadow:0 0 0 1px var(--accent-brand, var(--accent-primary)); }
+.community-welcome-choice-mark { position:absolute; right:14px; top:15px; display:grid; place-items:center; width:16px; height:16px; border:1.5px solid var(--border-strong, var(--border-default)); border-radius:50%; color:#fff; }
+.community-welcome-choice-card.is-picked .community-welcome-choice-mark { border-color:var(--accent-brand, var(--accent-primary)); background:var(--accent-brand, var(--accent-primary)); }
+.community-welcome-choice-body { width:100%; padding-top:6px; border-top:1px solid color-mix(in srgb, var(--border-default) 70%, transparent); }
+@media(max-width:600px) { .community-welcome-choice-cards { grid-template-columns:1fr; } }
+@media(prefers-reduced-motion:reduce) { .community-welcome-choice-card { transition:none; } }
+/* A long prompt to paste wraps, and scrolls past a few lines, so the steps after it stay in view. */
+.community-welcome-choice-body .md-artifact-content { max-height:240px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+/* The welcome as a pop-up over the open community. */
+.community-welcome-popup-backdrop { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:24px; background:color-mix(in srgb, #000 42%, transparent); }
+.community-welcome-popup { position:relative; width:min(760px,100%); max-height:min(88vh, 900px); display:flex; overflow:hidden; border:1px solid var(--border-default); border-radius:calc(16px * var(--pn-radius-scale, 1)); background:var(--surface-workspace, var(--bg-workspace)); box-shadow:0 24px 80px rgba(0,0,0,.28); outline:0; }
+.community-welcome-popup .community-welcome { min-height:0; justify-content:flex-start; padding:40px 32px 32px; }
+.community-welcome-popup-later { position:absolute; top:12px; right:14px; z-index:1; padding:6px 10px; border:0; border-radius:8px; background:transparent; color:var(--text-secondary); font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+.community-welcome-popup-later:hover { background:color-mix(in srgb, var(--text-primary) 7%, transparent); color:var(--text-primary); }
+.community-welcome-popup-later:focus-visible, .community-welcome-pill:focus-visible { outline:2px solid var(--focus-ring, var(--accent-brand)); outline-offset:2px; }
+.community-welcome-pill { position:fixed; left:50%; bottom:20px; z-index:60; transform:translateX(-50%); display:flex; align-items:center; gap:10px; padding:10px 16px 10px 14px; border:1px solid var(--border-default); border-radius:999px; background:var(--surface-workspace, var(--bg-workspace)); color:var(--text-primary); font:inherit; text-align:left; cursor:pointer; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+.community-welcome-pill span:last-child { display:flex; flex-direction:column; }
+.community-welcome-pill strong { font-size:14px; }
+.community-welcome-pill small { color:var(--text-secondary); font-size:12px; }
+.community-welcome-pill-dot { width:10px; height:10px; border-radius:50%; background:var(--accent-brand, var(--accent-primary)); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 22%, transparent); }
+@media(max-width:600px) { .community-welcome-popup-backdrop { padding:0; align-items:end; } .community-welcome-popup { max-height:92vh; border-radius:16px 16px 0 0; } .community-welcome-popup .community-welcome { padding:44px 16px 24px; } }
+.community-welcome-next { align-items:center; gap:14px; flex-wrap:wrap; }
+.community-welcome-skip { display:flex; flex-direction:column; align-items:flex-start; gap:1px; padding:4px 2px; border:0; background:none; color:var(--text-primary); font:inherit; font-size:14px; font-weight:600; text-align:left; cursor:pointer; }
+.community-welcome-skip > span { text-decoration:underline; text-decoration-color:color-mix(in srgb, currentColor 35%, transparent); text-underline-offset:3px; }
+.community-welcome-skip small { color:var(--text-secondary); font-size:12px; font-weight:400; }
+.community-welcome-skip:hover > span { text-decoration-color:currentColor; }
+.community-welcome-skip:focus-visible { outline:2px solid var(--focus-ring, var(--accent-brand)); outline-offset:2px; border-radius:6px; }
+.community-welcome-connector { display:flex; align-items:center; gap:14px; padding:12px 14px; border:1px solid var(--border-default); border-radius:calc(14px * var(--pn-radius-scale, 1)); background:color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 5%, var(--bg-card, var(--surface-workspace))); }
+.community-welcome-connector-faces { display:flex; align-items:center; gap:6px; flex:none; }
+.community-welcome-connector-agent { display:grid; place-items:center; width:44px; height:44px; overflow:hidden; border-radius:calc(12px * var(--pn-radius-scale, 1)); background:var(--accent-brand, var(--accent-primary)); color:#fff; }
+.community-welcome-connector-agent img, .community-welcome-connector-agent .community-agent-face { width:44px !important; height:44px !important; object-fit:cover; border-radius:inherit; }
+.community-welcome-connector-link { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; border:1px dashed color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 55%, var(--border-default)); color:var(--accent-brand, var(--accent-primary)); }
+.community-welcome-connector-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.community-welcome-connector-text strong { font-size:15px; }
+.community-welcome-connector-text small { color:var(--text-secondary); font-size:13px; }
+/* The pill stays clear of the test-run bar (bottom centre) and, on narrow
+   screens, of the Ask AI button (bottom right). */
+:root:has(.test-run-bar) .community-welcome-pill { bottom:76px; }
+@media(max-width:640px) { .community-welcome-pill { bottom:84px; max-width:calc(100vw - 32px); } :root:has(.test-run-bar) .community-welcome-pill { bottom:84px; } }
+
+/* Phone: the full-page welcome fills the shell (no dark band under it) and
+   starts below the floating top bar (stress test 2026-10-28). */
+/* The welcome stands in for .workspace there (its theme wrapper is display:contents), so it takes .workspace's phone sizing. */
+.app-root.mobile-shell .community-welcome:not(.welcome-settings-page):not(.community-welcome-popup .community-welcome) { min-height:100dvh; padding-top:calc(var(--mobile-topbar-clearance) + 12px); padding-bottom:calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height, 0px) + 24px); }
+.app-root.mobile-shell .mobile-global-shell-surface > .community-welcome { min-height:0; height:100%; }
+/* Next / Mark done on a welcome screen are the page's main action: community button colours, not the white settings Save. */
+.community-welcome :is(.community-welcome-next, .community-welcome-lesson) .platform-save-button { background:var(--bg-button, var(--accent-brand)); color:var(--bg-button-text, #fff); border-color:transparent; }
+.community-welcome :is(.community-welcome-next, .community-welcome-lesson) .platform-save-button:hover:not(:disabled) { background:color-mix(in srgb, var(--bg-button, var(--accent-brand)) 88%, #000); }

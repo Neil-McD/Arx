@@ -42,8 +42,8 @@ for (const retiredTab of ["ai_feed", "ai-feed", "feed"] as const) {
 
 assert.equal(
   parseCommunityTab("members"),
-  "chat",
-  "legacy /members routes should collapse to the member-facing chat/right-panel surface",
+  "members",
+  "/members is the member directory tab again (a chat-backed view of who is in the community)",
 );
 assert.equal(
   parseCommunityTab("polynet"),
@@ -67,7 +67,7 @@ assert.deepEqual(
     canManageMembers: true,
     isOwner: false,
   }),
-  ["community", "appearance", "agent"],
+  ["community", "sales_page", "offers", "appearance", "agent", "creators", "access"],
   "admins must receive configuration panes without the owner-only Danger pane",
 );
 

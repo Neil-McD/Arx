@@ -1,4 +1,4 @@
-import { workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
+import { workflowActionIsInstant, workflowSequenceReceipt } from "../shared/communityMemberWorkflow";
 import type { Doc, Id } from "./_generated/dataModel";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import { readAssessmentCitations } from "../shared/communityWorkflowAssessment";
@@ -105,11 +105,14 @@ export async function resolveSelfCommunityMembershipContext(args: {
   ctx: QueryCtx;
   actorUserId: Id<"users">;
   communityId: Id<"communities">;
+  /** The member's own progress read, which a member in the welcome flow may make. */
+  allowWelcome?: boolean;
 }): Promise<CommunityMemberSelfContext> {
   const { community } = await requireCommunityChatAccess({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.actorUserId,
+    allowWelcome: args.allowWelcome,
   });
   const membership = await getUniqueCommunityMembershipByPair({
     ctx: args.ctx,
@@ -163,7 +166,7 @@ export async function resolveWorkflowExecutionMembershipContext(args: {
   if (!request || request.triggerKind !== "workflow" || request.status !== "running" ||
     request.attempt !== args.expectedAttempt || (request.leaseExpiresAt ?? 0) <= Date.now() ||
     !request.workflowRunId || !request.requesterUserId) throw new Error("workflow_context_forbidden");
-  await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: request.requesterUserId });
+  await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: request.requesterUserId, allowWelcome: true });
   const run = await ctx.db.get(request.workflowRunId);
   const membership = await getUniqueCommunityMembershipByPair({ ctx,
     communityId: request.communityId, userId: request.requesterUserId });
@@ -265,8 +268,9 @@ async function readMembershipContextRecords(args: {
             .take(COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT)
         : Promise.resolve([]),
     ]);
+  // Property writes are bookkeeping; the client timeline shows them.
   const recentWorkflowActivity = await Promise.all(
-    workflowRunRows.map(async (run) => {
+    workflowRunRows.filter((run) => !workflowActionIsInstant(run.actionSnapshot.type)).map(async (run) => {
       // History pagination is presentation only, never outcome authority.
       // A missing or mismatched linked record does not establish live work.
       const validActionResult =

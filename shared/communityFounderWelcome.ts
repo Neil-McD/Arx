@@ -20,6 +20,6 @@ export function buildCommunityFounderWelcomeText(args: {
   return [
     `Hi ${founderName} — welcome to ${communityName}.`,
     "I’m your community concierge.",
-    `Reply to me in this thread using Reply, or mention @${communityName} anywhere in chat whenever you want my help.`,
+    "Reply to me in this thread, or type @ and pick my name anywhere in chat whenever you want my help.",
   ].join(" ");
 }

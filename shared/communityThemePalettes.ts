@@ -87,6 +87,10 @@ export const COMMUNITY_THEME_PALETTES: readonly CommunityThemePalette[] = RAW_PA
   return { id: raw.id, name: raw.name, description: raw.description, schemes: schemes as Record<CommunityThemeScheme, CommunityThemeColors> };
 });
 
+export function findCommunityThemePalette(id: string): CommunityThemePalette | null {
+  return COMMUNITY_THEME_PALETTES.find((palette) => palette.id === id) ?? null;
+}
+
 // The theme with the palette's colours, keeping its other settings and the
 // schemes it already uses. `only` narrows it to one scheme (a fixed look).
 export function applyCommunityThemePalette(theme: CommunityThemeV1, palette: CommunityThemePalette, only?: CommunityThemeScheme): CommunityThemeV1 {
@@ -124,4 +128,17 @@ export function communityThemeTwinColors(theme: CommunityThemeV1, scheme: Commun
   const onSurface = nearestPassingColor(other.accent, base.surface, 3);
   const accent = (onSurface && nearestPassingColor(onSurface, base.background, 3)) ?? base.accent;
   return { ...base, accent, on_accent: readableOn(accent), button: accent, on_button: readableOn(accent) };
+}
+
+// The look with both versions, so a member's Light or Dark pick always has
+// one to show. Only what that member sees changes; the saved look doesn't.
+export function communityThemeWithBothSchemes(theme: CommunityThemeV1): CommunityThemeV1 {
+  if (theme.schemes.light && theme.schemes.dark) return theme;
+  return {
+    ...theme,
+    schemes: {
+      light: theme.schemes.light ?? communityThemeTwinColors(theme, "light"),
+      dark: theme.schemes.dark ?? communityThemeTwinColors(theme, "dark"),
+    },
+  };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import { workflowSectionFromSearch, workflowSectionUrl } from "../../../../shared/workflowSection";
+import { isWorkflowMembersSearch, workflowSectionFromSearch, workflowSectionUrl } from "../../../../shared/workflowSection";
 import {
   clearStripeConnectQueryParams,
   parseStripeConnectReturn,
@@ -14,6 +14,7 @@ import type {
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import {
+  buildCommunityTabPath,
   isLegacyWorkspaceRoutePath,
   type PublicRoute,
 } from "../../../../shared/webAppRouteState";
@@ -111,7 +112,23 @@ export function useWebPathRouteLifecycle(params: {
     });
     if (!nextPath) return;
     if (params.activePage === "community" && params.communityTab === "workflows" && window.location.pathname === nextPath) {
+      // Workflows › Members became the community's own Members tab.
+      if (isWorkflowMembersSearch(window.location.search)) {
+        const peoplePath = buildCommunityTabPath(params.activeCommunitySlug, "people");
+        if (peoplePath) {
+          window.history.replaceState({}, "", peoplePath);
+          window.dispatchEvent(new PopStateEvent("popstate"));
+          return;
+        }
+      }
       nextPath = workflowSectionUrl(new URL(nextPath, window.location.origin).href, workflowSectionFromSearch(window.location.search));
+    }
+    // Members keeps its open member and stage filter in the address.
+    if (params.activePage === "community" && params.communityTab === "people" && window.location.pathname === nextPath) {
+      const kept = new URLSearchParams();
+      const search = new URLSearchParams(window.location.search);
+      for (const key of ["member", "stage"]) { const value = search.get(key); if (value) kept.set(key, value); }
+      if (kept.size) nextPath = `${nextPath}?${kept}`;
     }
 
     const currentPath = `${window.location.pathname}${window.location.search}`;

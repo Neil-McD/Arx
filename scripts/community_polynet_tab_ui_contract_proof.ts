@@ -60,16 +60,17 @@ assert.doesNotMatch(controller, /RAIL_NODE_LIMIT|CommunityMemoryPresentation|isM
 assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "graph retains canonical realtime updates");
 assert.match(controller, /unsubscribe\?\.\(\)/, "graph changes dispose the subscription");
 assert.match(knowledge, /<CommunityMemoryGraph/, "Knowledge reuses the canonical graph");
-assert.match(knowledge, /hidden=\{graphOpen\}/, "resource draft state survives switching views");
+assert.match(knowledge, /hidden=\{activeView !== "resources"\}/, "resource draft state survives switching views");
 assert.match(knowledge, /canViewGraph/, "graph retains community access gating");
 assert.match(knowledge, /<WebPlatformTabList/, "Knowledge reuses the canonical platform selector");
-assert.match(knowledge, /buildPlatformSwitcherStyle/, "Knowledge uses the canonical selection indicator");
-assert.doesNotMatch(knowledge, /community-knowledge-switcher|aria-pressed=/, "no bespoke selector remains");
+assert.match(knowledge, /buttonClassName: chip/, "Knowledge views use the shared category chips as their selection indicator");
+assert.doesNotMatch(knowledge, /community-knowledge-switcher/, "no bespoke selector remains");
+assert.equal((knowledge.match(/aria-pressed=/g) ?? []).length, 1, "only the focus-mode toggle is a pressed button; views stay tabs");
 assert.match(nav, /<Brain[\s\S]*Knowledge/, "Knowledge has its brain icon");
 assert.doesNotMatch(navSurface, /onOpenMembers=/, "duplicate Members navigation is removed");
 assert.doesNotMatch(interactionController, /kind: "memory"|openMemory|memoryTriggerRef/, "chat no longer owns graph navigation");
 assert.doesNotMatch(interactionProjection, /community-memory-drawer|compact-context-open|has-context-panel/, "chat only opens explicit thread or profile details");
-assert.match(interactionProjection, /selectedRoot \|\| props.profilePanel/, "thread and profile detail remain");
+assert.match(interactionProjection, /hasDetailPanel = Boolean\((?:selectedRoot|showThreadDrawer) \|\| props\.profilePanel\)/, "thread and profile detail remain");
 assert.doesNotMatch(app, /communityPolynetController|isCommunityMemoryOpen/, "Knowledge owns graph hydration");
 
 assert.match(graph, /export function CommunityMemoryGraph/, "the retired page should leave one reusable graph surface");

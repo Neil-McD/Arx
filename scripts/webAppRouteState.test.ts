@@ -9,6 +9,7 @@ import {
   parseAppRouteFromPathname,
   readPublicRouteFromLocation,
   resolveInitialAppShellVariant,
+  resolvePhoneShellRedirect,
   webDestinationHasCommunityNavSelection,
 } from "../shared/webAppRouteState";
 
@@ -64,18 +65,16 @@ describe("community channel routes", () => {
     });
   });
 
-  it("redirects the retired mobile Members route to channel chat", () => {
-    const path = "/c/polynet/members";
-    expect(path).toBe("/c/polynet/members");
-    const parsed = parseAppRouteFromPathname(path ?? "");
+  it("keeps the Members route for layouts that show a Members page", () => {
+    const parsed = parseAppRouteFromPathname("/c/polynet/members");
     expect(parsed).toMatchObject({
       page: "community",
       view: "home",
       communitySlug: "polynet",
-      communityTab: "chat",
+      communityTab: "members",
       communityChannelSlug: null,
     });
-    expect(buildAppRoutePath(parsed!)).toBe("/c/polynet/chat");
+    expect(buildAppRoutePath(parsed!)).toBe("/c/polynet/members");
   });
 
   it("keeps General on the backward-compatible chat route", () => {
@@ -201,7 +200,8 @@ describe("canonical web destinations", () => {
     ["/c/polynet/preview", { kind: "community_funnel", slug: "polynet" }],
     ["/m/c/polynet/onboarding/preview", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/home", { kind: "community_home", slug: "polynet" }],
-    ["/m/c/polynet/members", { kind: "community_chat", slug: "polynet", channelSlug: null }],
+    ["/m/c/polynet/members", { kind: "community_members", slug: "polynet" }],
+    ["/m/c/polynet/people", { kind: "community_people", slug: "polynet" }],
     ["/m/c/polynet/chat", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/chat/wins", { kind: "community_chat", slug: "polynet", channelSlug: "wins" }],
     ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
@@ -280,5 +280,25 @@ describe("canonical web destinations", () => {
       kind: "claim",
       token: "claim_123",
     });
+  });
+});
+
+describe("phone layout redirect", () => {
+  const phone = { narrowViewport: true, embedded: false };
+
+  it("sends phones on community and settings links to the phone layout", () => {
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/c/aieb/chat" })).toBe("/m/c/aieb/chat");
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/c/aieb/workflows?section=forms#x" })).toBe("/m/c/aieb/workflows?section=forms#x");
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/settings/profile" })).toBe("/m/settings/profile");
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/c/aieb" })).toBe("/m/c/aieb");
+  });
+
+  it("leaves wide screens, embedded previews and phone links alone", () => {
+    expect(resolvePhoneShellRedirect({ narrowViewport: false, embedded: false, path: "/c/aieb/chat" })).toBeNull();
+    expect(resolvePhoneShellRedirect({ narrowViewport: true, embedded: true, path: "/c/aieb/chat" })).toBeNull();
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/c/aieb/preview?slot=default&embed=1" })).toBeNull();
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/m/c/aieb/chat" })).toBeNull();
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/" })).toBeNull();
+    expect(resolvePhoneShellRedirect({ ...phone, path: "/login" })).toBeNull();
   });
 });

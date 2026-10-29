@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
+import { AgentCommunityProvider } from "../../../../shared/CommunityAgentIcon";
 import { communityAgentSessionKey, showCommunityAgentWorkspace } from "../../../../shared/communityAgentPageState";
 import type { WebAppMainSurfaceHostProps } from "./WebAppMainSurfaceHost";
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
@@ -34,6 +35,7 @@ const WebCommunityAgentDock = lazy(() =>
 );
 
 export function WebAppCompositionRoot(props: {
+  activeCommunityId: string | null;
   globalOverlayHostProps: WebGlobalOverlayHostProps;
   communityAgentDockRef: Ref<WebCommunityAgentDockHandle>;
   communityAgentDockProps: WebCommunityAgentDockProps;
@@ -77,10 +79,12 @@ export function WebAppCompositionRoot(props: {
   );
 
   return (
-    <WebShellChromeHost
-      {...props.shellChromeHostProps}
-      mainSurface={mainSurface}
-      globalOverlays={globalOverlays}
-    />
+    <AgentCommunityProvider communityId={props.activeCommunityId}>
+      <WebShellChromeHost
+        {...props.shellChromeHostProps}
+        mainSurface={mainSurface}
+        globalOverlays={globalOverlays}
+      />
+    </AgentCommunityProvider>
   );
 }

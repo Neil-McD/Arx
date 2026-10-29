@@ -37,6 +37,7 @@ export type CommunityDirectoryMember = {
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
   role: string;
+  co_creator?: boolean;
   created_at: string;
   last_active_at: string;
 };
@@ -141,7 +142,10 @@ export type CommunityAvatarSummary = {
 };
 
 export type ProfileCommunityContext = {
-  owned_communities: CommunityAvatarSummary[];
+  // Owned and co-created (co_creator: true), unless the person hides them.
+  owned_communities: Array<CommunityAvatarSummary & { co_creator?: boolean }>;
+  // Published communities they've joined that aren't mutual, unless hidden.
+  joined_communities?: CommunityAvatarSummary[];
   mutual_communities: CommunityAvatarSummary[];
   is_self: boolean;
   can_message: boolean;
@@ -325,6 +329,13 @@ export type CommunityAccess = {
   can_manage_branding?: boolean;
   can_manage_publishing?: boolean;
   can_manage_payouts?: boolean;
+  /** The builder's welcome flow is on and this member still owes a welcome step. */
+  welcome_required?: boolean;
+  welcome_form_request_ids?: string[];
+  /** Welcome lesson pages still to mark done, after the forms. */
+  welcome_lesson_ids?: string[];
+  /** "popup": the welcome shows over the open community instead of in place of it. */
+  welcome_display?: "page" | "popup";
 };
 
 export type CommunityAgentConfig<TLanding = unknown> = {

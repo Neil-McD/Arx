@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Brain,
   Check,
@@ -7,10 +7,12 @@ import {
   GitFork,
   GripVertical,
   Hash,
-  LockKeyhole,
   Plus,
   Settings,
   UserPlus,
+  Users,
+  UserRound,
+  UsersRound,
   X,
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
@@ -52,6 +54,9 @@ type CommunityNavProps = {
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
   channels?: CommunityNavChannel[];
+  /** Personal pods: one member's own pod, made for them by a workflow. Listed
+   *  after the group pods, and folded when there are many. */
+  personalPodIds?: string[];
   isLoadingChannels?: boolean;
   selectedChannelSlug?: string | null;
   channelIndicators?: Record<string, { chat: boolean; mentions: boolean }>;
@@ -96,6 +101,8 @@ function moveChannelIdToIndex(
   next.splice(targetIndex, 0, moved);
   return next;
 }
+
+const PERSONAL_PODS_SHOWN = 3;
 
 const MODAL_FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -156,6 +163,7 @@ export const CommunityNav = memo(function CommunityNav({
   memberNextStep,
   onCopyCommunityJoinLink,
   channels = [],
+  personalPodIds,
   isLoadingChannels = false,
   selectedChannelSlug = "general",
   channelIndicators = {},
@@ -173,6 +181,7 @@ export const CommunityNav = memo(function CommunityNav({
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
+  const [showAllPersonalPods, setShowAllPersonalPods] = useState(false);
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
   const [channelName, setChannelName] = useState("");
   const [channelAccessMode, setChannelAccessMode] = useState<"all_members" | "restricted">("all_members");
@@ -199,7 +208,58 @@ export const CommunityNav = memo(function CommunityNav({
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelLoadingSkeleton =
     isLoadingAccess || (isLoadingChannels && channels.every((channel) => !channel.id));
-  const reorderableChannelIds = channels
+  // Pods: invite-only channels sit in their own group
+  // under the shared ones, the same Pods as in Classroom.
+  // A member's personal pod is a pod too; with many
+  // members they follow the group pods and fold away so they don't bury them.
+  const personalPods = new Set(personalPodIds ?? []);
+  const isPod = (channel: CommunityNavChannel) => channel.access_mode === "restricted";
+  const isPersonalPod = (channel: CommunityNavChannel) => isPod(channel) && personalPods.has(channel.id);
+  const groupedChannels = [
+    ...channels.filter((channel) => !isPod(channel)),
+    ...channels.filter((channel) => isPod(channel) && !isPersonalPod(channel)),
+    ...channels.filter(isPersonalPod),
+  ];
+  const firstPodId = groupedChannels.find(isPod)?.id ?? null;
+  // Owners and admins add a channel or a pod from the + beside its group's
+  // label, not from one shared "Add Channel" row.
+  const canCreateChannels = Boolean(!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel);
+  const openCreate = (accessMode: "all_members" | "restricted", trigger: HTMLButtonElement) => {
+    addChannelTriggerRef.current = trigger;
+    clearCreateChannelError?.();
+    setChannelAccessMode(accessMode);
+    setIsAddChannelOpen(true);
+  };
+  const groupLabel = (label: "Channels" | "Pods") => {
+    const accessMode = label === "Pods" ? "restricted" : "all_members";
+    const full = isAtChannelLimit || (label === "Pods" ? privateFull : sharedFull);
+    const noun = label === "Pods" ? "pod" : "channel";
+    return (
+      <div className={`community-nav-group-label${label === "Channels" ? " is-channels" : ""}`}>
+        <span>{label}</span>
+        {canCreateChannels ? (
+          <button
+            type="button"
+            className="community-nav-group-add"
+            disabled={full}
+            aria-label={`New ${noun}`}
+            title={full ? `${noun === "pod" ? "Pod" : "Channel"} limit reached` : `New ${noun}`}
+            onClick={(event) => openCreate(accessMode, event.currentTarget)}
+          >
+            <Plus size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+    );
+  };
+  const personalPodChannels = groupedChannels.filter(isPersonalPod);
+  // Folded personal pods still show when open or unread.
+  const foldedPersonalPods = showAllPersonalPods || personalPodChannels.length <= PERSONAL_PODS_SHOWN
+    ? new Set<string>()
+    : new Set(personalPodChannels.slice(PERSONAL_PODS_SHOWN)
+        .filter((channel) => channel.slug !== selectedChannelSlug && !channelIndicators[channel.slug]?.chat)
+        .map((channel) => channel.id));
+  const reorderableChannelIds = groupedChannels
     .filter((channel) => !channel.is_general && Boolean(channel.id))
     .map((channel) => channel.id);
   const canReorderChannels = Boolean(
@@ -419,23 +479,26 @@ export const CommunityNav = memo(function CommunityNav({
         aria-label="Channels"
         ref={setChannelListElement}
       >
+        {groupLabel("Channels")}
         {showChannelLoadingSkeleton ? (
           <div className="community-channel-loading" aria-label="Loading channels">
             <div className="community-channel-loading-row web-skeleton-row" />
             <div className="community-channel-loading-row is-short web-skeleton-row" />
           </div>
-        ) : channels.map((channel) => {
+        ) : groupedChannels.map((channel) => {
           const isSelected =
             showActiveSelection &&
             communityTab === "chat" &&
             (selectedChannelSlug ?? "general") === channel.slug;
+          if (foldedPersonalPods.has(channel.id)) return null;
           const indicator = channelIndicators[channel.slug];
           const sortableBindings = canReorderChannels && !channel.is_general
             ? getChannelItemBindings(channel.id)
             : null;
           return (
+            <Fragment key={channel.id || channel.slug}>
+            {channel.id && channel.id === firstPodId ? groupLabel("Pods") : null}
             <div
-              key={channel.id || channel.slug}
               ref={sortableBindings?.ref}
               style={sortableBindings?.style}
               className={`community-channel-row${draggingChannelId === channel.id ? " is-dragging" : ""}${sortableBindings ? " reorder-enabled" : ""}`}
@@ -452,7 +515,9 @@ export const CommunityNav = memo(function CommunityNav({
                 title={channel.name}
               >
                 <span className="nav-icon community-channel-icon" aria-hidden="true">
-                  {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.8} /> : <Hash size={17} strokeWidth={1.8} />}
+                  {channel.access_mode !== "restricted" ? <Hash size={17} strokeWidth={1.8} />
+                    : personalPods.has(channel.id) ? <UserRound size={17} strokeWidth={1.8} />
+                    : <UsersRound size={17} strokeWidth={1.8} />}
                 </span>
                 <span className="nav-item-label">{channel.name}</span>
                 {!isSelected && (indicator?.chat || indicator?.mentions) ? (
@@ -511,37 +576,29 @@ export const CommunityNav = memo(function CommunityNav({
                 </div>
               ) : null}
             </div>
+            </Fragment>
           );
         })}
+        {!showChannelLoadingSkeleton && personalPodChannels.length > PERSONAL_PODS_SHOWN ? (
+          <button
+            type="button"
+            className="nav-item community-channel-item community-nav-fold"
+            aria-expanded={showAllPersonalPods}
+            onClick={() => setShowAllPersonalPods((value) => !value)}
+          >
+            <span className="nav-icon community-channel-icon" aria-hidden="true">
+              {showAllPersonalPods ? <ChevronUp size={17} strokeWidth={1.8} /> : <ChevronDown size={17} strokeWidth={1.8} />}
+            </span>
+            <span className="nav-item-label">
+              {showAllPersonalPods ? "Fewer personal pods" : `${foldedPersonalPods.size} more personal pods`}
+            </span>
+          </button>
+        ) : null}
+        {canCreateChannels && !firstPodId ? groupLabel("Pods") : null}
         {reorderChannelsError ? (
           <div className="community-channel-reorder-error" role="status">
             {reorderChannelsError}
           </div>
-        ) : null}
-        {!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel ? (
-          <button
-            ref={addChannelTriggerRef}
-            className="nav-item community-channel-add"
-            type="button"
-            disabled={isAtChannelLimit}
-            onClick={() => {
-              clearCreateChannelError?.();
-              setChannelAccessMode(sharedFull ? "restricted" : "all_members");
-              setIsAddChannelOpen(true);
-            }}
-            title={
-              isAtChannelLimit
-                ? `Channel limit reached (${maxActiveChannels})`
-                : "Add Channel"
-            }
-          >
-            <span className="nav-icon" aria-hidden="true">
-              <Plus size={17} strokeWidth={1.8} />
-            </span>
-            <span className="nav-item-label">
-              {isAtChannelLimit ? `${maxActiveChannels} channel limit` : "Add Channel"}
-            </span>
-          </button>
         ) : null}
       </div>
       <div className="community-nav-divider" aria-hidden="true" />
@@ -617,6 +674,19 @@ export const CommunityNav = memo(function CommunityNav({
               Workflows
             </button>
           )}
+          {canManageMembersActiveCommunity && (
+            <button
+              className={showActiveSelection && communityTab === "people" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("people")}
+              title="Members"
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <Users size={18} strokeWidth={1.7} />
+              </span>
+              Members
+            </button>
+          )}
           {canViewActiveCommunityAnalytics && (
             <button
               className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
@@ -681,26 +751,28 @@ export const CommunityNav = memo(function CommunityNav({
           >
             <div className="community-channel-modal-header">
               <div>
-                <h2 id="community-channel-modal-title">Add channel</h2>
-                <p>Choose who can access this channel.</p>
+                <h2 id="community-channel-modal-title">{channelAccessMode === "restricted" ? "New pod" : "New channel"}</h2>
+                <p>{channelAccessMode === "restricted"
+                  ? "A private room. Next you pick who's in it; owners and admins always are."
+                  : "Everyone in the community can read and post here."}</p>
               </div>
               <button
                 type="button"
                 className="community-channel-modal-close"
                 onClick={closeAddChannel}
-                aria-label="Close add channel dialog"
+                aria-label={channelAccessMode === "restricted" ? "Close new pod dialog" : "Close new channel dialog"}
                 disabled={isCreatingChannel}
               >
                 <X size={18} />
               </button>
             </div>
             <label className="community-channel-modal-field">
-              <span>Channel name</span>
+              <span>{channelAccessMode === "restricted" ? "Pod name" : "Channel name"}</span>
               <input
                 ref={channelNameInputRef}
                 value={channelName}
                 maxLength={48}
-                placeholder="e.g. Product feedback"
+                placeholder={channelAccessMode === "restricted" ? "e.g. Agency owners" : "e.g. Product feedback"}
                 onChange={(event) => {
                   setChannelName(event.target.value);
                   clearCreateChannelError?.();
@@ -708,15 +780,6 @@ export const CommunityNav = memo(function CommunityNav({
                 disabled={isCreatingChannel}
               />
             </label>
-            <label className="community-channel-modal-field">
-              <span>Access</span>
-              <select value={channelAccessMode} disabled={isCreatingChannel}
-                onChange={event => { setChannelAccessMode(event.target.value as "all_members" | "restricted"); clearCreateChannelError?.(); }}>
-                <option value="all_members" disabled={sharedFull}>All community members{sharedFull ? " (10-channel limit reached)" : ""}</option>
-                <option value="restricted" disabled={privateFull}>Invite-only{privateFull ? " (100-channel limit reached)" : ""}</option>
-              </select>
-            </label>
-            {channelAccessMode === "restricted" ? <p>Only owners/admins and people you add in channel settings can enter.</p> : null}
             {createChannelError ? (
               <div className="community-channel-modal-error" role="alert">
                 {createChannelError}
@@ -731,7 +794,7 @@ export const CommunityNav = memo(function CommunityNav({
                 className="is-primary"
                 disabled={isCreatingChannel || !channelName.trim() || selectedCapacityFull}
               >
-                {isCreatingChannel ? "Adding…" : "Add channel"}
+                {isCreatingChannel ? "Creating…" : channelAccessMode === "restricted" ? "Create pod" : "Create channel"}
               </button>
             </div>
           </form>

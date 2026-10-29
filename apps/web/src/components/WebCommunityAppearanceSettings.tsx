@@ -15,6 +15,7 @@ import {
   type CommunityThemeV1,
 } from "../../../../shared/communityTheme";
 import { COMMUNITY_THEME_PRESETS, type CommunityThemePreset } from "../../../../shared/communityThemePresets";
+import { COURSE_CARD_LOOKS, matchingCourseCardLook, type CourseCardLook } from "../../../../shared/communityCourseCardLooks";
 import {
   applyCommunityThemePalette,
   COMMUNITY_THEME_PALETTES,
@@ -42,7 +43,8 @@ import {
 } from "../controllers/useWebCommunityThemeStyle";
 import "./WebCommunityAppearanceSettings.css";
 
-type Props = { communityId: string; communitySlug: string | null; session: unknown; ensureSession: (session: any) => Promise<any | null> };
+// hasBanner: the community has a banner image, so the side column prints its name over it.
+type Props = { communityId: string; communitySlug: string | null; hasBanner?: boolean; session: unknown; ensureSession: (session: any) => Promise<any | null> };
 
 const PREVIEW_SCOPE = "look-preview";
 // The width the Desktop preview lays the community out at before scaling it to fit.
@@ -55,7 +57,7 @@ const COLOR_FIELDS: [keyof CommunityThemeColors, string][] = [
   ["background", "Background"], ["surface", "Cards"], ["text", "Text"], ["muted", "Secondary text"],
   ["border", "Borders"], ["accent", "Accent"], ["on_accent", "Text on accent"], ["button", "Buttons"], ["on_button", "Button text"],
 ];
-type ChoiceKey = "heading_case" | "numerals" | "corner_style" | "shadow" | "density" | "button_shape" | "media_plate" | "edges";
+type ChoiceKey = "heading_case" | "numerals" | "corner_style" | "shadow" | "density" | "button_shape" | "course_cover_ratio" | "course_card_size" | "course_columns" | "course_columns_phone" | "course_gap" | "course_card_style" | "course_card_pills" | "course_card_description" | "course_card_progress" | "course_card_edge" | "course_card_panel" | "course_cover_plate" | "course_cover_fit" | "media_plate" | "banner_name" | "channels_look" | "rail_size" | "rail_color" | "sibling_communities" | "pods_place" | "classroom_chat" | "edges";
 const CHOICES: Record<ChoiceKey, [string, [string, string][]]> = {
   heading_case: ["Heading case", [["none", "As typed"], ["upper", "UPPERCASE"]]],
   numerals: ["Numbers", [["proportional", "Natural"], ["tabular", "Even width (for tables)"]]],
@@ -63,8 +65,28 @@ const CHOICES: Record<ChoiceKey, [string, [string, string][]]> = {
   shadow: ["Shadows", [["none", "None"], ["soft", "Soft"], ["hard", "Hard"]]],
   density: ["Spacing", [["compact", "Compact"], ["comfortable", "Comfortable"], ["roomy", "Roomy"]]],
   button_shape: ["Buttons", [["rounded", "Rounded"], ["pill", "Pill"], ["square", "Square"], ["sketch", "Sketch"]]],
+  course_cover_ratio: ["Cover shape", [["auto", "Polynet default"], ["16:9", "Wide 16:9"], ["3:2", "Photo 3:2"], ["4:3", "Classic 4:3"], ["1:1", "Square"], ["21:9", "Banner 21:9"]]],
+  course_card_size: ["Card size", [["default", "Page style's own"], ["small", "Small"], ["medium", "Medium"], ["large", "Large"]]],
+  course_columns: ["Cards per row", [["auto", "Fit to screen"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"]]],
+  course_columns_phone: ["Cards per row on phones", [["1", "1"], ["2", "2"]]],
+  course_gap: ["Space between cards", [["default", "Page style's own"], ["tight", "Tight"], ["roomy", "Roomy"]]],
+  course_card_style: ["Card style", [["classroom", "Classroom card"], ["cover", "Cover on top"], ["list", "List row"], ["overlay", "Title on cover"], ["text", "Text only"]]],
+  course_card_pills: ["Pills", [["hide", "Off"], ["show", "Lessons and status"]]],
+  course_card_description: ["Description", [["show", "Show"], ["hide", "Hide"]]],
+  course_card_progress: ["Progress", [["bar", "Bar"], ["ring", "Ring"], ["fraction", "3/6 lessons"]]],
+  course_card_edge: ["Card edge", [["border", "Border"], ["shadow", "Soft shadow"], ["none", "None (open)"]]],
+  course_card_panel: ["Text panel colour", [["shade", "Shaded (a step from the card)"], ["tint", "Soft tint"], ["accent", "Accent wash"], ["plain", "Same as the card"], ["custom", "Custom colour"]]],
+  course_cover_plate: ["Cover background (light scheme)", [["none", "Plain"], ["tint", "Soft accent tint"]]],
+  course_cover_fit: ["Cover pictures", [["crop", "Fill the box"], ["whole", "Show whole picture"]]],
   media_plate: ["White images (dark scheme)", [["none", "As they are"], ["light", "On a light plate"]]],
+  banner_name: ["Name on the banner", [["show", "Show it"], ["hide", "Hide it"]]],
+  channels_look: ["Page style", [["current", "Polynet (today)"], ["quiet", "Quiet: plain menu, one column"], ["reader", "Reader: reading column, post lists"], ["publication", "Publication: masthead, editorial cards"]]],
+  sibling_communities: ["Your other communities", [["hide", "Hidden"], ["show", "Show them under members"]]],
   edges: ["Edges (light)", [["soft", "Soft (faint lines)"], ["sharp", "Sharper lines"], ["clean", "Clean white"], ["framed", "Framed panels"]]],
+  classroom_chat: ["Classroom's Community tab", [["posts", "Post cards (default)"], ["chat", "A chat"]]],
+  pods_place: ["Where pods show", [["aside", "Top of the right column"], ["header", "In the header"], ["tab", "As a tab after Community"]]],
+  rail_size: ["Icon size", [["standard", "Standard"], ["large", "Bigger"]]],
+  rail_color: ["Colour", [["polynet", "Polynet (today)"], ["blend", "Blend with the page"], ["tint", "Soft brand tint"], ["brand", "Solid brand colour"]]],
 };
 // The community pages the preview can show, by their tab in the address.
 const PREVIEW_PAGES: [string, string][] = [["chat", "Chat"], ["resources", "Courses"], ["events", "Events"]];
@@ -121,7 +143,7 @@ function savedThemeProblem(error: unknown): string {
   return "Could not save the theme list. Try again.";
 }
 
-// A label on the left with a muted line of help under it.
+// A label on the left with a muted line of help under it, Substack's settings row.
 function Fact(props: { label: string; help: string; children: ReactNode }) {
   return <div className="appearance-fact">
     <dt><span className="appearance-label">{props.label}</span><span className="appearance-help">{props.help}</span></dt>
@@ -258,8 +280,8 @@ export function WebCommunityAppearanceSettings(props: Props) {
   const mode = schemeMode(shown);
 
   const hasDraft = dirty || state.hasUnpublishedChanges;
-  // A card that sums up the look and links out to the visual editor instead
-  // of repeating its controls here.
+  // Like Substack's Settings → Website: a card that sums up the look and links
+  // out to the visual editor instead of repeating its controls here.
   return <div ref={pane} className="settings-section community-look appearance-pane">
     <style>{previewCss}</style>
     {fontUrl ? <link rel="stylesheet" href={fontUrl} /> : null}
@@ -294,7 +316,7 @@ export function WebCommunityAppearanceSettings(props: Props) {
     {customizing ? <AppearanceEditor
       theme={theme} scheme={scheme} setScheme={setScheme} set={set} busy={busy} problems={problems} uid={uid}
       canSave={Boolean(check?.ok)} savedThemes={savedThemes} savedBusy={savedBusy} savedError={savedError} savedActions={savedActions}
-      previewTheme={previewTheme} communityId={props.communityId} communitySlug={props.communitySlug} pane={pane}
+      previewTheme={previewTheme} communityId={props.communityId} communitySlug={props.communitySlug} hasBanner={Boolean(props.hasBanner)} pane={pane}
       status={status} actions={actions} footer={<>{problemList}{errorLine}</>}
       onClose={() => openCustomize(false)}
     /> : null}
@@ -304,8 +326,8 @@ export function WebCommunityAppearanceSettings(props: Props) {
 function SampleContent() {
   return <div className="community-look-sample">
     <small>Preview</small>
-    <h2>Welcome to the community</h2>
-    <p>Lessons, events and conversation in one place. This is how text reads at the size you picked.</p>
+    <h2>Build your first AI employee</h2>
+    <p>Lessons, check-ins and your community in one place. This is how text reads at the size you picked.</p>
     <div className="community-look-card"><strong>Module 1 · Foundations</strong><span>3 of 5 lessons done</span></div>
     <button type="button" className="settings-primary-action" tabIndex={-1}>Continue lesson</button>
   </div>;
@@ -335,6 +357,7 @@ type EditorProps = {
   previewTheme: CommunityThemeV1 | null;
   communityId: string;
   communitySlug: string | null;
+  hasBanner: boolean;
   // The Settings pane the editor opened from: the editor wears the same community colours.
   pane: { current: HTMLElement | null };
   status: ReactNode;
@@ -343,8 +366,8 @@ type EditorProps = {
   onClose: () => void;
 };
 
-// A group of inspector rows under a small uppercase label: label on the
-// left, control on the right.
+// A group of inspector rows under a small uppercase label, like Substack's
+// website editor: label on the left, control on the right.
 function Group(props: { title: string; children: ReactNode }) {
   const id = useId();
   return <section className="appearance-group" aria-labelledby={id}>
@@ -353,7 +376,8 @@ function Group(props: { title: string; children: ReactNode }) {
   </section>;
 }
 
-// One band of the inspector, with its title and a line saying where it applies.
+// One band of the inspector: the selected page's own settings, or the
+// site-wide look every page shares.
 function InspectorScope(props: { title: string; hint: string; children: ReactNode }) {
   const id = useId();
   return <section className="appearance-scope" aria-labelledby={id}>
@@ -371,7 +395,7 @@ function Row(props: { label: ReactNode; htmlFor?: string; children: ReactNode; w
 
 const HEX = /^#?[0-9a-f]{6}$/i;
 
-// A colour as a swatch that opens the picker, and the hex.
+// A colour as Substack shows it: a swatch that opens the picker, and the hex.
 function ColorField(props: { id: string; label: string; value: string; disabled: boolean; describedBy?: string; invalid?: boolean; onChange: (value: string) => void }) {
   const [text, setText] = useState(props.value);
   useEffect(() => setText(props.value), [props.value]);
@@ -466,7 +490,42 @@ function PaletteGallery(props: { theme: CommunityThemeV1; scheme: CommunityTheme
         </li>;
       })}
     </ul>
-    <p className="appearance-hint">Changes colours only: fonts and shapes stay. Each comes in light and dark.</p>
+    <p className="appearance-hint">Changes colours only: fonts, shapes and course cards stay. Each comes in light and dark.</p>
+  </div>;
+}
+
+// A tiny catalog drawn in the look's layout: cards, rows, picture cards or text.
+function CardLookSample(props: { look: CourseCardLook }) {
+  const { course_card_style: style, course_card_edge: edge, course_card_size: size } = props.look.tokens;
+  const count = style === "list" || style === "text" ? 3 : size === "small" ? 3 : 2;
+  return <span className={`appearance-cardlook-sample is-${style} edge-${edge}`} style={{ "--cardlook-columns": style === "list" || style === "text" ? 1 : count } as CSSProperties}>
+    {Array.from({ length: count }, (_, index) => <i key={index}>{style === "text" ? null : <b />}<em /><em /></i>)}
+  </span>;
+}
+
+// Ready-made course card looks: one click sets the card style, edge, size,
+// cover shape, spacing, pills and progress together (undo until published).
+function CardLookGallery(props: { theme: CommunityThemeV1; disabled: boolean; onPick: (look: CourseCardLook) => void }) {
+  const current = matchingCourseCardLook({ ...DEFAULT_COMMUNITY_THEME, ...props.theme });
+  const id = useId();
+  return <div className="appearance-palettes appearance-cardlooks">
+    <div className="appearance-palettes-head"><span id={`${id}-label`}>Card looks</span></div>
+    <ul className="appearance-palette-grid" aria-labelledby={`${id}-label`}>
+      {COURSE_CARD_LOOKS.map((look) => {
+        const selected = look === current;
+        return <li key={look.id}>
+          <button type="button" className={`appearance-palette${selected ? " is-selected" : ""}`} disabled={props.disabled} aria-pressed={selected}
+            title={look.description} onClick={() => props.onPick(look)}>
+            <span className="appearance-cardlook-frame" aria-hidden="true">
+              <CardLookSample look={look} />
+              {selected ? <span className="appearance-palette-check"><Check size={12} /></span> : null}
+            </span>
+            <span className="appearance-palette-name">{look.name}</span>
+          </button>
+        </li>;
+      })}
+    </ul>
+    <p className="appearance-hint">Sets the card style, edge, size and details below in one go. Colours and fonts stay.</p>
   </div>;
 }
 
@@ -548,11 +607,15 @@ function SavedThemes(props: {
   </Group>;
 }
 
-// Full-screen editor: pages on the left, the real community in the middle wearing the unsaved draft, and the
+// Full-screen editor laid out like Substack's website editor: pages on the
+// left, the real community in the middle wearing the unsaved draft, and the
 // design settings on the right.
 function AppearanceEditor(props: EditorProps) {
   const { theme, scheme, set, busy } = props;
   const [page, setPage] = useState("resources");
+  const inspector = useRef<HTMLElement>(null);
+  // Another page brings its own settings: start the inspector at the top.
+  useEffect(() => { inspector.current?.scrollTo?.({ top: 0 }); }, [page]);
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const frame = useRef<HTMLIFrameElement>(null);
   const canvas = useRef<HTMLElement>(null);
@@ -666,6 +729,55 @@ function AppearanceEditor(props: EditorProps) {
     ? `${device === "phone" ? "/m" : ""}/c/${encodeURIComponent(props.communitySlug)}/${page}?${APPEARANCE_PREVIEW_PARAM}=1`
     : null;
 
+  // Settings that only show on one page sit with that page in the Pages list.
+  const pageLabel = PREVIEW_PAGES.find(([key]) => key === page)?.[1] ?? "This";
+  const pageGroups = page === "chat" ? <>
+    <Group title="Classroom posts">
+      {choice("classroom_chat")}
+      <p className="appearance-hint">In Classroom, members see posts as cards by default. Pick a chat to show a chat timeline instead. Channels always shows the full-width chat.</p>
+    </Group>
+    <Group title="Pods">
+      {choice("pods_place")}
+      <p className="appearance-hint">Classroom shows each invite-only channel as a pod, with the faces of everyone who can see it. Pick where members find them.</p>
+    </Group>
+    <Group title="Members panel">
+      {choice("sibling_communities")}
+      <p className="appearance-hint">"More from this creator" at the foot of the chat's member list. Your profile lists your communities either way.</p>
+    </Group>
+  </> : page === "resources" ? <>
+    <Group title="Course grid">
+      {/* Picking a size goes back to fitting the screen, even if an agent set fixed columns. */}
+      {choice("course_card_size", { course_columns: "auto" })}
+      {theme.course_columns === "auto" ? null : choice("course_columns")}
+      {choice("course_columns_phone")}
+      {choice("course_gap")}
+      {choice("course_cover_ratio")}
+      <p className="appearance-hint">{theme.course_columns === "auto" ? "Cards keep the size you pick, and each row fits as many as the screen has room for." : "Rows wrap sooner on narrow screens, so cards stay readable."}</p>
+    </Group>
+    <Group title="Course cards">
+      <CardLookGallery theme={theme} disabled={busy} onPick={(look) => set({ ...look.tokens })} />
+      {choice("course_card_style")}
+      {theme.course_card_style === "list" || theme.course_card_style === "text" ? null : choice("course_card_edge")}
+      {/* The panel under the cover: boxed cards with a cover on top only. */}
+      {theme.course_card_style === "list" || theme.course_card_style === "text" || theme.course_card_style === "overlay" || theme.course_card_edge === "none" ? null : <>
+        {/* Custom starts from a shade that suits the scheme being previewed. */}
+        {choice("course_card_panel", theme.course_card_panel_color ? {} : { course_card_panel_color: scheme === "dark" ? "#333333" : "#EFEFEC" })}
+        {(theme.course_card_panel ?? DEFAULT_COMMUNITY_THEME.course_card_panel) === "custom" ? <Row label="Panel colour" htmlFor={fieldId("course_card_panel_color")}>
+          <ColorField id={fieldId("course_card_panel_color")} label="Panel colour" value={theme.course_card_panel_color || (scheme === "dark" ? "#333333" : "#EFEFEC")} disabled={busy}
+            invalid={Boolean(problemFor("course_card_panel_color")["aria-invalid"])} onChange={(value) => set({ course_card_panel_color: value })} /></Row> : null}
+      </>}
+      {choice("course_card_pills")}
+      {choice("course_card_description")}
+      {choice("course_card_progress")}
+      <p className="appearance-hint">Corners follow Shape → Corner radius.</p>
+    </Group>
+    <Group title="Course covers">
+      {choice("course_cover_fit")}
+      {choice("course_cover_plate")}
+      {choice("media_plate")}
+    </Group>
+  </> : <p className="appearance-hint appearance-scope-empty">This page has no settings of its own. It follows the site-wide look below.</p>;
+
   const editor = <div className="appearance-editor" role="dialog" aria-modal="true" aria-labelledby={`${props.uid}-editor-title`}>
     <header className="appearance-editor-bar">
       <div className="appearance-editor-bar-start">
@@ -697,7 +809,11 @@ function AppearanceEditor(props: EditorProps) {
         : src ? <iframe ref={frame} key={src} src={src} title="Your community with the draft look" className="appearance-frame" />
           : <div className="community-look-preview" data-community-theme={PREVIEW_SCOPE}><SampleContent /></div>}
       </section>
-      <aside className="appearance-inspector community-look" aria-label="Design settings">
+      <aside ref={inspector} className="appearance-inspector community-look" aria-label="Design settings">
+        {/* The page being previewed comes first; the site-wide look stays below it. */}
+        <InspectorScope title={`${pageLabel} page`} hint="Only on this page.">
+          {pageGroups}
+        </InspectorScope>
         <InspectorScope title="Site-wide" hint="Every page of your community.">
           <Group title="Theme">
             <Row label="Starting point" wide><PresetPicker theme={theme} disabled={busy} onPick={applyPreset} /></Row>
@@ -705,6 +821,10 @@ function AppearanceEditor(props: EditorProps) {
           </Group>
           <SavedThemes theme={theme} canSave={props.canSave} saved={props.savedThemes} busy={props.savedBusy || busy} error={props.savedError}
             actions={props.savedActions} onApply={applyTheme} />
+          {props.hasBanner ? <Group title="Banner">
+            {choice("banner_name")}
+            <p className="appearance-hint">Hide the name when your banner artwork already spells it out.</p>
+          </Group> : null}
           <Group title="Colors">
             <PaletteGallery theme={theme} scheme={scheme} disabled={busy} onPick={applyPalette} />
             <Row label="Light or dark" htmlFor={fieldId("mode")}>
@@ -744,8 +864,14 @@ function AppearanceEditor(props: EditorProps) {
             {choice("edges")}
             <p className="appearance-hint">How panels and cards stand apart in the light scheme. Dark keeps its own look.</p>
           </Group>
-          <Group title="Images">
-            {choice("media_plate")}
+          <Group title="Channels look · draft">
+            {choice("channels_look")}
+            <p className="appearance-hint">Substack-style pages for the Channels layout. Classroom keeps its own look.</p>
+          </Group>
+          <Group title="Left rail · draft">
+            {choice("rail_size")}
+            {choice("rail_color")}
+            <p className="appearance-hint">The column of community icons on the far left, while members are in your community.</p>
           </Group>
         </InspectorScope>
         {props.footer}

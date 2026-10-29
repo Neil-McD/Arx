@@ -1,10 +1,10 @@
 {
   "name": "@polynet/cli",
   "version": "0.4.0",
-  "description": "Put a community site live on Polynet: polynet deploy",
+  "description": "Put a community site live on Polynet, with its courses, lessons and theme: polynet deploy",
   "type": "module",
   "bin": { "polynet": "bin/polynet.mjs" },
-  "files": ["bin", "lib.mjs", "checks.mjs", "guide"],
+  "files": ["bin", "lib.mjs", "checks.mjs", "content.mjs", "design.mjs", "mcp.mjs", "project.mjs", "review.mjs", "ui-audit.mjs", "contracts", "guide", "templates"],
   "engines": { "node": ">=20" },
   "keywords": ["polynet", "community", "deploy"],
   "homepage": "https://polynet.ai",

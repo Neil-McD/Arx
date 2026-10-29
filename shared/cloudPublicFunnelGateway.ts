@@ -126,6 +126,7 @@ export async function startCloudPublicFunnelCheckout<SessionT>(
     billingPeriod: CommunityBillingPeriod;
     successUrl: string;
     cancelUrl: string;
+    offerKey?: string | null;
   },
 ): Promise<{ checkout_url?: unknown }> {
   let client = createConvexClient();
@@ -140,6 +141,7 @@ export async function startCloudPublicFunnelCheckout<SessionT>(
     billingPeriod: params.billingPeriod,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
+    ...(params.offerKey ? { offerKey: params.offerKey } : null),
     ...(authSubject ? { authSubject } : null),
   })) as {
     checkout_url?: unknown;

@@ -35,6 +35,7 @@ const RAW_PRESETS: { id: string; name: string; description: string; theme: Recor
         },
       },
       font_body: "DM Sans", font_heading: "Excalifont", heading_weight: 400, radius: 10,
+      course_cover_ratio: "16:9", course_card_size: "medium", course_cover_plate: "tint",
     },
   },
   {
@@ -54,12 +55,14 @@ const RAW_PRESETS: { id: string; name: string; description: string; theme: Recor
         },
       },
       font_body: "DM Sans", font_heading: "Excalifont", heading_weight: 400, radius: 10, media_plate: "light",
+      course_cover_ratio: "16:9", course_card_size: "medium", course_cover_fit: "whole",
     },
   },
   {
-    id: "calm",
+    id: "classroom",
+    // "Classroom" names the layout only (2026-10-28 review #19); the id stays for saved themes.
     name: "Calm",
-    description: "One confident sans, calm neutrals, and soft depth.",
+    description: "One confident sans, calm neutrals, soft depth and big course covers.",
     theme: {
       version: 1,
       schemes: {
@@ -73,6 +76,7 @@ const RAW_PRESETS: { id: string; name: string; description: string; theme: Recor
         },
       },
       font_body: "Inter", font_heading: "Manrope", heading_weight: 700, radius: 12, shadow: "soft",
+      course_cover_ratio: "16:9", course_card_size: "medium",
     },
   },
   {
@@ -92,6 +96,7 @@ const RAW_PRESETS: { id: string; name: string; description: string; theme: Recor
         },
       },
       font_body: "Inter", font_heading: "Fraunces", heading_weight: 600, radius: 6, density: "roomy", type_scale: 1.05,
+      course_cover_ratio: "3:2", course_card_size: "medium",
     },
   },
   {
@@ -112,6 +117,7 @@ const RAW_PRESETS: { id: string; name: string; description: string; theme: Recor
       },
       font_body: "IBM Plex Sans", font_heading: "Barlow Condensed", heading_weight: 600, heading_case: "upper",
       numerals: "tabular", radius: 3, button_shape: "square", density: "compact", media_plate: "light",
+      course_cover_ratio: "16:9", course_card_size: "medium",
     },
   },
 ];

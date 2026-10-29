@@ -261,8 +261,8 @@ require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
   'const canChangeRole = Boolean\([\s\S]*props\.canManageMembers[\s\S]*!memberIsOwner[\s\S]*\(props\.isActiveCommunityOwner \|\| !memberIsAdmin\)' \
   "member settings dialog prevents non-owners from role-changing owners or admins"
 require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
-  'props\.isActiveCommunityOwner[\s\S]*\(\["member", "moderator", "admin"\] as const\)[\s\S]*memberIsAdmin[\s\S]*\(\["admin"\] as const\)[\s\S]*\(\["member", "moderator"\] as const\)' \
-  "member settings dialog reserves admin role controls for owners"
+  'props\.isActiveCommunityOwner[\s\S]*\(\["member", "moderator", "admin", "co_creator"\] as const\)[\s\S]*memberIsAdmin[\s\S]*\(\[memberRole\] as const\)[\s\S]*\(\["member", "moderator"\] as const\)' \
+  "member settings dialog reserves admin and co-creator role controls for owners"
 require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
   'disabled=\{!canChangeRole\}[\s\S]*roleOptions\.map' \
   "member settings dialog disables admin role changes for non-owner admins"

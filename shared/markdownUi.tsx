@@ -6,6 +6,11 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import { parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed } from "./linkEmbedUi";
+import { COMMUNITY_EMBED_LANGUAGE, parseCommunityEmbedBlock } from "./communityEmbed";
+import { LESSON_ELEMENT_LANGUAGE_PREFIX } from "./communityLessonElementMarkdown";
+import { CommunityEmbedFrame, CommunityEmbedPlaceholder, type CommunityEmbedContext } from "./communityEmbedUi";
+import { lessonCallout, lessonCalloutType, LESSON_CALLOUT_MARKER } from "./lessonCallouts";
+import { LessonCalloutIcon } from "./lessonCalloutUi";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -76,9 +81,25 @@ const CODE_BLOCK_LANGUAGES = new Set([
 
 export type MarkdownRenderOptions = {
   embedStandaloneMedia?: boolean;
+  // Lessons: `polynet-embed` blocks show widgets from this community's site.
+  // Without it they show their fallback image, so other surfaces stay inert.
+  communityEmbeds?: CommunityEmbedContext | null;
+  // Lessons: follow-along blocks (marked by markCommunityLessonElementBlocks)
+  // render through this; null keeps the block as plain code.
+  renderLessonElement?: ((id: string) => ReactNode | null) | null;
   headingLevelOffset?: number;
   onCopyCode?: (text: string) => Promise<void> | void;
+  // Lessons: every fenced block is a code card with a Copy button, even a
+  // one-line command, so a member can always copy what the lesson shows.
+  codeCards?: boolean;
 };
+
+/** How owner-written content reads everywhere it shows (lessons, the welcome
+ * page and its setup cards): media plays inline and code is a card with Copy.
+ * Wrap it in CONTENT_PROSE_CLASS so it wears the same type, callouts and code
+ * colours. */
+export const CONTENT_MARKDOWN_OPTIONS = { embedStandaloneMedia: true, codeCards: true } as const satisfies MarkdownRenderOptions;
+export const CONTENT_PROSE_CLASS = "resource-viewer-prose";
 
 type MarkdownHeadingProps = {
   children: ReactNode;
@@ -107,6 +128,7 @@ function getEmbedProviderLabel(provider: ParsedEmbed["provider"]): string {
   if (provider === "wistia") return "Wistia";
   if (provider === "vimeo") return "Vimeo";
   if (provider === "loom") return "Loom";
+  if (provider === "descript") return "Descript";
   return "Video";
 }
 
@@ -277,11 +299,16 @@ function ArtifactBlock({
       <div className="md-artifact-toolbar">
         <span className="md-artifact-label">{label}</span>
         <div className="md-artifact-actions">
-          <button className="md-artifact-action" type="button" onClick={() => void handleCopy()}>
-            {copied ? "Copied" : "Copy"}
-          </button>
-          <button className="md-artifact-action" type="button" onClick={handleDownload}>
+          <button className="md-artifact-action md-artifact-download" type="button" onClick={handleDownload}>
             .{extension}
+          </button>
+          <button className={`md-artifact-action md-artifact-copy${copied ? " is-copied" : ""}`} type="button" onClick={() => void handleCopy()} aria-live="polite">
+            {copied ? (
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            )}
+            {copied ? "Copied" : "Copy"}
           </button>
         </div>
       </div>
@@ -359,6 +386,16 @@ function MarkdownMediaEmbed({ embed, href }: { embed: ParsedEmbed; href: string 
   );
 }
 
+function renderCommunityEmbed(raw: string, context: CommunityEmbedContext | null): ReactNode {
+  const parsed = parseCommunityEmbedBlock(raw);
+  if (!parsed.ok) return <CommunityEmbedPlaceholder title="Interactive" message={parsed.message} />;
+  const { block } = parsed;
+  if (!context) {
+    return <CommunityEmbedPlaceholder title={block.title} message="Open this lesson in the community to use it." />;
+  }
+  return <CommunityEmbedFrame block={block} context={context} />;
+}
+
 function MarkdownTable({
   children,
   onCopyText,
@@ -407,6 +444,19 @@ function MarkdownTable({
   );
 }
 
+/** The highlighted HTML for a code block, as the reader shows it. The lesson
+ * editor colours its code blocks from this too, so both look the same. */
+export function highlightCodeHtml(code: string, language?: string | null): string | null {
+  const normalizedLanguage = normalizeCodeLanguage(language ?? undefined);
+  if (normalizedLanguage && PLAIN_TEXT_LANGUAGES.has(normalizedLanguage)) return null;
+  try {
+    if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) return hljs.highlight(code, { language: normalizedLanguage }).value;
+    return hljs.highlightAuto(code).value;
+  } catch {
+    return null;
+  }
+}
+
 function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const normalizedLanguage = useMemo(() => {
@@ -441,8 +491,13 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
     <div className={`code-block-wrapper code-block-variant-${variant}`}>
       <div className="code-block-header">
         {language && <span className="code-block-lang">{language}</span>}
-        <button className="code-block-copy" type="button" onClick={() => void handleCopy()}>
-          {copied ? "Copied!" : "Copy"}
+        <button className={`code-block-copy${copied ? " is-copied" : ""}`} type="button" onClick={() => void handleCopy()} aria-live="polite">
+          {copied ? (
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+          )}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
       <pre className="md-code-block">
@@ -586,6 +641,36 @@ function normalizeMathMarkdown(text: string): string {
   return nextLines.join("\n");
 }
 
+type MdNode = { type: string; value?: string; children?: MdNode[]; data?: { hProperties?: Record<string, unknown> } };
+
+// "> [!TIP]" quotes become callouts: the marker is taken off the text and
+// kept as data-callout for the blockquote renderer below.
+function remarkLessonCallouts() {
+  const visit = (node: MdNode) => {
+    node.children?.forEach(visit);
+    if (node.type !== "blockquote") return;
+    const paragraph = node.children?.[0];
+    const first = paragraph?.type === "paragraph" ? paragraph.children?.[0] : undefined;
+    if (!paragraph || first?.type !== "text") return;
+    const match = LESSON_CALLOUT_MARKER.exec(first.value ?? "");
+    const type = match ? lessonCalloutType(match[1]) : null;
+    if (!match || !type) return;
+    let rest = (first.value ?? "").slice(match[0].length);
+    // "> [!TIP] Title": the rest of the marker's line is the title.
+    let title = "";
+    const lineEnd = rest.indexOf("\n");
+    if (lineEnd > 0 || (lineEnd < 0 && rest && paragraph.children?.length === 1)) {
+      title = (lineEnd < 0 ? rest : rest.slice(0, lineEnd)).trim();
+      rest = lineEnd < 0 ? "" : rest.slice(lineEnd);
+    }
+    first.value = rest.replace(/^\n/, "");
+    if (!first.value) paragraph.children?.shift();
+    if (!paragraph.children?.length) node.children?.shift();
+    node.data = { ...node.data, hProperties: { ...node.data?.hProperties, dataCallout: type, dataCalloutTitle: title || undefined } };
+  };
+  return (tree: MdNode) => visit(tree);
+}
+
 export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
   const requestedHeadingLevelOffset = options?.headingLevelOffset ?? 0;
   const headingLevelOffset = Number.isFinite(requestedHeadingLevelOffset)
@@ -608,7 +693,21 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
         </a>
       );
     },
-    blockquote({ children }) {
+    blockquote({ node, children }) {
+      const type = lessonCalloutType(node?.properties?.dataCallout);
+      const rawTitle = node?.properties?.dataCalloutTitle;
+      const title = typeof rawTitle === "string" ? rawTitle : "";
+      if (type) {
+        return (
+          <aside className={`md-callout is-${type}`} role="note" aria-label={title || lessonCallout(type).label}>
+            <span className="md-callout-icon" aria-hidden="true"><LessonCalloutIcon type={type} /></span>
+            <div className="md-callout-main">
+              {title ? <p className="md-callout-title">{title}</p> : null}
+              <div className="md-callout-body">{children}</div>
+            </div>
+          </aside>
+        );
+      }
       return <blockquote className="md-blockquote">{children}</blockquote>;
     },
     code(props) {
@@ -620,6 +719,17 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
       }
       const match = className.match(/language-([\w-]+)/);
       const language = match?.[1];
+      if (language?.startsWith(LESSON_ELEMENT_LANGUAGE_PREFIX) && options?.renderLessonElement) {
+        const element = options.renderLessonElement(language.slice(LESSON_ELEMENT_LANGUAGE_PREFIX.length));
+        if (element) return <>{element}</>;
+      }
+      if (language === COMMUNITY_EMBED_LANGUAGE) {
+        return renderCommunityEmbed(raw, options?.communityEmbeds ?? null);
+      }
+      // Words to copy (a prompt for an AI, or a name to paste): never a diagram or code, whatever arrows they hold.
+      if (language === "prompt" || language === "copy") {
+        return <ArtifactBlock label={language === "prompt" ? "Prompt" : "Paste this"} text={raw} extension="txt" onCopyText={options?.onCopyCode} />;
+      }
       if (!hasExplicitCodeLanguage(language) && looksLikeDiagram(raw)) {
         return (
           <ArtifactBlock
@@ -630,7 +740,7 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
           />
         );
       }
-      if (!shouldRenderCodeCard(raw, language)) {
+      if (!options?.codeCards && !shouldRenderCodeCard(raw, language)) {
         return <PlainTextBlock text={raw} onCopyText={options?.onCopyCode} />;
       }
       return (
@@ -662,8 +772,9 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     hr() {
       return <hr className="md-hr" />;
     },
-    ol({ children }) {
-      return <ol className="md-list">{children}</ol>;
+    ol({ children, start }) {
+      // A list that picks up after a paragraph ("2. …") keeps its number.
+      return <ol className="md-list" start={typeof start === "number" && start !== 1 ? start : undefined}>{children}</ol>;
     },
     p({ children }) {
       if (options?.embedStandaloneMedia) {
@@ -714,7 +825,7 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     <ReactMarkdown
       components={components}
       rehypePlugins={[rehypeKatex]}
-      remarkPlugins={[remarkGfm, remarkMath]}
+      remarkPlugins={[remarkGfm, remarkMath, remarkLessonCallouts]}
       skipHtml
     >
       {normalizeMathMarkdown(text)}

@@ -25,6 +25,29 @@ test("implicit General works without a stored channel and returns canonical pres
   expect(result.agents).toHaveLength(1);
 });
 
+test("a member held by the welcome flow is left off the roster without failing it", async () => {
+  const { t, f, owner } = await fixture();
+  const now = Date.now();
+  await t.run(async ctx => {
+    await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId, welcomeGate: true, welcomeGateEnabledAt: 0,
+      revision: 1, createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: 1, updatedAt: 1,
+      milestones: [{ key: "onboarding", name: "Onboarding", automations: [{
+        key: "welcome", trigger: { type: "member_joined" }, action: { key: "intake", type: "request_form", formKey: "intake" } }] }] });
+    await ctx.db.patch(f.membershipId, { activatedAt: now });
+    await ctx.db.insert("communityPresence", { communityId: f.communityId, userId: f.memberId,
+      lastSeenAt: now, activeUntil: now + 90000, createdAt: now, updatedAt: now });
+  });
+  const rows: any[] = [];
+  let cursor = null;
+  for (let i = 0; i < 5; i++) {
+    const result: any = await owner.query(roster, { communityId: f.communityId, paginationOpts: { numItems: 50, cursor } });
+    rows.push(...result.page);
+    if (result.isDone) break;
+    cursor = result.continueCursor;
+  }
+  expect(rows.map(row => row.user_id)).toEqual(["owner"]);
+});
+
 test("roster pages newest activity first, includes unknowns last, and reorders after activity changes", async () => {
   const { t, f, owner } = await fixture();
   const ids = await t.run(async ctx => {

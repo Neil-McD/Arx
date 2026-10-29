@@ -27,7 +27,7 @@ export function deriveCommunityFunnelUiMode(params: {
   return "private";
 }
 
-function formatPublicPlanJoinPrice(plan: import("./communityTypes").PublicPlanSummary | null | undefined) {
+export function formatPublicPlanJoinPrice(plan: import("./communityTypes").PublicPlanSummary | null | undefined) {
   if (!plan) return null;
   const amount = Number(plan.amount_base_units);
   const decimals = Number(plan.currency_decimals);

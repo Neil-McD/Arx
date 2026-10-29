@@ -51,6 +51,7 @@ import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentSe
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { requireServiceWorkflowDestination, publishServiceWorkflowPost, readServiceMemberContext } from "./communityAgentServiceWorkflowCore";
+import { composeWorkflowAgentInputsBlock, readWorkflowAgentExtraInputs } from "./communityWorkflowAgentInputs";
 import {
   ensureReplyChannelMatchesRoot,
   interactionIsChannelAddressable,
@@ -1149,6 +1150,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       }
       // Context is taken from this admitted run, never from later milestone edits.
       resolvedWorkflowPrompt = composeWorkflowAgentPrompt(request.workflowPromptSnapshot, workflowRun.milestoneContextSnapshot);
+      const pickedInputs = workflowRun.actionSnapshot.type === "prompt_agent" ? workflowRun.actionSnapshot.sees : undefined;
       // Bind the historical action to the exact canonical membership, not the
       // sponsor, a model-selected user, or a replacement membership row.
       const membership = await getUniqueCommunityMembershipByPair({
@@ -1190,6 +1192,9 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
           completedAt: current.completedAt,
         } : null,
       };
+      // The owner's chosen inputs (progress, properties, lessons, guide channel), read now.
+      if (pickedInputs) resolvedWorkflowPrompt += composeWorkflowAgentInputsBlock(
+        await readWorkflowAgentExtraInputs(ctx, { communityId: request.communityId, membership: membership as any, sees: pickedInputs }));
     }
 
     const canonicalContext = await readCanonicalCommunityAgentContext(

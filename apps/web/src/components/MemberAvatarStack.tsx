@@ -1,4 +1,5 @@
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { AVATAR_INITIALS_INK } from "../../../../shared/chatUi";
 
 export type MemberAvatarStackFace = {
   user_id: string;
@@ -55,7 +56,7 @@ export function MemberAvatarStack(props: {
           focusY={face.avatar_focus_y}
           zoom={face.avatar_zoom}
           fallback={face.initials ?? "?"}
-          fallbackStyle={face.avatar_color ? { color: face.avatar_color } : undefined}
+          fallbackStyle={face.avatar_color ? { backgroundColor: face.avatar_color, color: AVATAR_INITIALS_INK } : undefined}
           style={{ zIndex: visibleFaces.length - index }}
           title={props.decorative ? undefined : face.display_name ?? undefined}
           alt=""

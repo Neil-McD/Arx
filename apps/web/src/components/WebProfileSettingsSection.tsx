@@ -3,10 +3,22 @@ import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/s
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
+import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
+import type { ProfileCommunityContext, UserProfile } from "../../../../shared/communityTypes";
 import {
   PROFILE_BIO_MAX_CHARS,
   PROFILE_DISPLAY_NAME_MAX_CHARS,
 } from "../../../../shared/profileText";
+
+// The preview shows the profile itself; communities come from the server.
+const PREVIEW_CONTEXT: ProfileCommunityContext = {
+  owned_communities: [],
+  mutual_communities: [],
+  is_self: false,
+  can_message: true,
+  message_context_community_id: null,
+  message_unavailable_reason: null,
+};
 
 type SessionLike = {
   user: {
@@ -16,6 +28,8 @@ type SessionLike = {
 } | null;
 
 type WebProfileSettingsSectionProps = {
+  // Your settings shows the links in a fold of their own.
+  hideLinks?: boolean;
   profileLoadStatus?: "idle" | "loading" | "ready" | "missing" | "error";
   reloadProfile?: () => void;
   session: SessionLike;
@@ -86,136 +100,162 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
   const isInitialLoad = Boolean(session && !cloudProfile && (props.profileLoadStatus === "idle" || props.profileLoadStatus === "loading"));
   const syncLabel = !session ? "Sign in to sync" : isSavingProfile ? "Saving…" : props.profileLoadStatus === "error" ? "Could not refresh profile" : isInitialLoad ? "Loading profile…" : isProfileDirty ? "Unsaved changes" : cloudProfile ? "Saved" : "Not saved yet";
 
+  const shownName = (profileName.trim() || session?.user.email || "Your name").replace(/^@/, "");
+  const linksDisabled = !session || isSavingProfile || isInitialLoad || (!cloudProfile && props.profileLoadStatus === "error");
+  // What people see when they click your name, with the edits not yet saved.
+  const previewProfile = {
+    handle: profileHandle,
+    bio: profileBio,
+    avatar_url: profileAvatarUrl,
+    avatar_focus_x: profileAvatarFocusX,
+    avatar_focus_y: profileAvatarFocusY,
+    avatar_zoom: profileAvatarZoom,
+    social_links: profileSocialLinks,
+  } as unknown as UserProfile;
+
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">
-        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-        Profile
-      </div>
-      <div className="settings-section-desc">
-        {session
-          ? "Profile details shown in communities. Save to sync across devices."
-          : "Local profile details shown in communities on this device."}
-      </div>
-      <div className="profile-block">
-        <div
-          className={`profile-avatar-drop${isProfileAvatarDragOver ? " drag-over" : ""}`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsProfileAvatarDragOver(true);
-          }}
-          onDragLeave={() => setIsProfileAvatarDragOver(false)}
-          onDrop={handleProfileAvatarDrop}
-        >
-          {session ? (
+    <section className="settings-section pn-settings-card pn-profile-editor" aria-labelledby="profile-editor-title">
+      <header className="pn-settings-card-header">
+        <h2 className="settings-section-title" id="profile-editor-title">About you</h2>
+        <p className="settings-section-desc">
+          {session ? "How you appear when people click your name, in every community." : "Shown in communities on this device."}
+        </p>
+      </header>
+      <div className="pn-profile-editor-body">
+        <div className="pn-profile-editor-form">
+          <div
+            className={`pn-profile-editor-photo${isProfileAvatarDragOver ? " is-drag-over" : ""}`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsProfileAvatarDragOver(true);
+            }}
+            onDragLeave={() => setIsProfileAvatarDragOver(false)}
+            onDrop={handleProfileAvatarDrop}
+          >
             <UserAvatar
               identityPending={isInitialLoad && !profileAvatarUrl}
-              className="profile-avatar-drop-avatar"
+              className="pn-profile-editor-avatar"
               readyClassName="has-image"
-              name={(profileName || session.user.email || "AR").replace(/^@/, "")}
+              name={shownName}
               imageUrl={profileAvatarUrl}
               focusX={profileAvatarFocusX}
               focusY={profileAvatarFocusY}
               zoom={profileAvatarZoom}
-              alt="Profile avatar"
-              fallback={
-                <span>
-                  {getInitials(
-                    (profileName || session.user.email || "AR").replace(/^@/, ""),
-                  )}
-                </span>
-              }
+              alt="Profile photo"
+              fallback={<span>{getInitials(shownName)}</span>}
             />
-          ) : (
-            <span className="profile-avatar-placeholder" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="8" r="4.2" />
-                <path d="M4.5 20c1.8-4 5-6 7.5-6s5.7 2 7.5 6" />
-              </svg>
+            <div className="pn-profile-editor-photo-text">
+              <span className="pn-settings-label">Profile photo</span>
+              <span className="pn-settings-help">A square picture works best. Drop one here or upload.</span>
+              <div className="pn-profile-editor-photo-actions">
+                <label className="pn-settings-button pn-profile-editor-upload">
+                  {profileAvatarUrl ? "Change" : "Upload photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {session && profileAvatarUrl ? (
+                  <>
+                    <button className="pn-settings-button" type="button" onClick={() => setIsProfileAvatarFocusModalOpen(true)}>Adjust</button>
+                    <button className="pn-settings-button is-danger" type="button" onClick={onRemoveProfileAvatar}>Remove</button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <label className="pn-profile-editor-field">
+            <span className="pn-profile-editor-field-head">
+              <span className="pn-settings-label">Name</span>
             </span>
-          )}
-        </div>
-        <div className="profile-avatar-actions">
-          <label className="create-avatar-btn">
-            Upload photo
             <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
+              className="pn-settings-input"
+              type="text"
+              placeholder="Your name"
+              value={profileName}
+              onChange={(event) => setProfileName(event.target.value)}
+              maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
             />
           </label>
-          {session && profileAvatarUrl && (
-            <>
-              <button
-                className="create-avatar-btn"
-                type="button"
-                onClick={() => setIsProfileAvatarFocusModalOpen(true)}
-              >
-                Adjust
-              </button>
-              <button className="create-avatar-remove" type="button" onClick={onRemoveProfileAvatar}>
-                Remove
-              </button>
-            </>
+
+          <label className="pn-profile-editor-field">
+            <span className="pn-profile-editor-field-head">
+              <span className="pn-settings-label">Handle</span>
+              <span className="pn-settings-help">How people mention you</span>
+            </span>
+            <span className="pn-settings-affix">
+              <span aria-hidden="true">@</span>
+              <input
+                className="pn-settings-input"
+                type="text"
+                placeholder="handle"
+                value={profileHandle}
+                onChange={(event) => setProfileHandle(event.target.value)}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+            </span>
+          </label>
+
+          <label className="pn-profile-editor-field">
+            <span className="pn-profile-editor-field-head">
+              <span className="pn-settings-label">Bio</span>
+              <span className="pn-settings-help" aria-live="polite">{profileBio.length}/{PROFILE_BIO_MAX_CHARS}</span>
+            </span>
+            <textarea
+              className="pn-settings-input pn-profile-editor-bio"
+              placeholder="A line or two about you and what you're working on"
+              value={profileBio}
+              onChange={(event) => setProfileBio(event.target.value)}
+              rows={4}
+              maxLength={PROFILE_BIO_MAX_CHARS}
+            />
+          </label>
+
+          {props.hideLinks ? null : (
+            <WebSocialProfileLinksFields
+              values={profileSocialLinks}
+              disabled={linksDisabled}
+              variant="settings"
+              onChange={setProfileSocialLink}
+              onSave={(nextLinks) => saveProfileToCloud({ socialLinks: nextLinks })}
+            />
           )}
         </div>
-      </div>
-      <div className="profile-row">
-        <input
-          type="text"
-          placeholder="Name"
-          aria-label="Name"
-          value={profileName}
-          onChange={(event) => setProfileName(event.target.value)}
-          maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
-        />
-      </div>
-      <div className="profile-row profile-handle-row">
-        <span className="profile-handle-prefix" aria-hidden="true">@</span>
-        <input
-          type="text"
-          placeholder="handle"
-          aria-label="Handle"
-          value={profileHandle}
-          onChange={(event) => setProfileHandle(event.target.value)}
-          autoCapitalize="none"
-          autoCorrect="off"
-        />
-      </div>
-      <textarea
-        className="profile-bio"
-        placeholder="Bio"
-        aria-label="Bio"
-        value={profileBio}
-        onChange={(event) => setProfileBio(event.target.value)}
-        rows={3}
-        maxLength={PROFILE_BIO_MAX_CHARS}
-      />
-      <div className="account-row">
-        <div className="account-identity">
-          <span>Sync</span>
-          <strong role="status">{syncLabel}</strong>
-        </div>
-        <div className="auth-actions">
-          <button
-            className={profileNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
-            type="button"
-            onClick={() => void saveProfileToCloud()}
-            disabled={!session || isSavingProfile || !profileNeedsSave}
-          >
-            {isSavingProfile ? "Saving…" : "Save"}
-          </button>
+
+        <div className="pn-profile-editor-preview" aria-label="Preview of your profile">
+          <span className="pn-profile-editor-preview-label">How people see you</span>
+          <div className="pn-profile-editor-preview-card" {...({ inert: "" } as object)}>
+            <WebCommunityProfilePanel
+              profile={previewProfile}
+              displayName={shownName}
+              avatarColor="var(--bg-button)"
+              communityContext={PREVIEW_CONTEXT}
+              isSelfProfile={false}
+              onMessage={() => undefined}
+              getInitials={getInitials}
+              docked
+            />
+          </div>
         </div>
       </div>
-      <WebSocialProfileLinksFields
-        values={profileSocialLinks}
-        disabled={!session || isSavingProfile || isInitialLoad || (!cloudProfile && props.profileLoadStatus === "error")}
-        variant="settings"
-        onChange={setProfileSocialLink}
-        onSave={(nextLinks) => saveProfileToCloud({ socialLinks: nextLinks })}
-      />
-      {props.profileLoadStatus === "error" && <div className="auth-error" role="alert">Your profile could not be loaded. Your edits are preserved. <button type="button" onClick={props.reloadProfile}>Retry</button></div>}
-      {profileSaveError && <div className="auth-error" role="alert">{profileSaveError}</div>}
+
+      {props.profileLoadStatus === "error" ? <div className="pn-settings-inline-error pn-profile-editor-error" role="alert">Your profile could not be loaded. Your edits are kept. <button type="button" className="pn-settings-link" onClick={props.reloadProfile}>Retry</button></div> : null}
+      {profileSaveError ? <div className="pn-settings-inline-error pn-profile-editor-error" role="alert">{profileSaveError}</div> : null}
+
+      <footer className="pn-settings-card-footer">
+        <span className={`pn-profile-editor-status${isProfileDirty ? " is-dirty" : ""}`} role="status">{syncLabel}</span>
+        <button
+          className="pn-settings-button is-primary platform-save-button"
+          type="button"
+          onClick={() => void saveProfileToCloud()}
+          disabled={!session || isSavingProfile || !profileNeedsSave}
+        >
+          {isSavingProfile ? "Saving…" : "Save"}
+        </button>
+      </footer>
       <WebUserAvatarEditorModal
         isOpen={isProfileAvatarFocusModalOpen}
         avatarUrl={profileAvatarUrl}
@@ -231,6 +271,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         onDirty={() => undefined}
         onClose={() => setIsProfileAvatarFocusModalOpen(false)}
       />
-    </div>
+    </section>
   );
 }

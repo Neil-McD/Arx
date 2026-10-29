@@ -1,4 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
+import { CalendarDays, Globe, Lock, MapPin, Plus, Repeat, Users, X } from "lucide-react";
 import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
@@ -13,6 +15,8 @@ import type {
   CommunityEventsCapabilities,
   CommunityEventsState,
 } from "./communityEventsContracts";
+import type { CloudCommunityEventSavePayload } from "../../../../shared/cloudCommunityEventsGateway";
+import { useWebCommunityFrame } from "../controllers/useWebCommunityFrame";
 
 type WebCommunityEventsSectionProps = {
   capabilities: CommunityEventsCapabilities;
@@ -20,7 +24,7 @@ type WebCommunityEventsSectionProps = {
   actions: CommunityEventsActions;
 };
 
-type EventDraft = {
+export type EventDraft = {
   title: string;
   description_md: string;
   starts_at: string;
@@ -31,6 +35,8 @@ type EventDraft = {
   url: string;
   recurrence_frequency: "none" | "daily" | "weekly" | "monthly";
   recurrence_until: string;
+  /** The pod this is a call for; "" for everyone. */
+  channel_id: string;
 };
 
 type EventDayGroup = {
@@ -157,7 +163,7 @@ function formatRecurrenceLabel(event: CommunityEvent): string | null {
   return `Repeats ${event.recurrence_frequency}${until}`;
 }
 
-function makeDraft(dayKey: string | null): EventDraft {
+export function makeDraft(dayKey: string | null, channelId = ""): EventDraft {
   const timezone = getCommunityEventViewerTimeZone();
   const base = dayKey ? new Date(`${dayKey}T12:00:00`) : new Date(Date.now() + DAY_MS);
   return {
@@ -171,10 +177,11 @@ function makeDraft(dayKey: string | null): EventDraft {
     url: "",
     recurrence_frequency: "none",
     recurrence_until: "",
+    channel_id: channelId,
   };
 }
 
-function makeDraftFromEvent(event: CommunityEvent): EventDraft {
+export function makeDraftFromEvent(event: CommunityEvent): EventDraft {
   const timezone = normalizeCommunityEventTimeZone(event.timezone);
   return {
     title: event.title,
@@ -189,6 +196,46 @@ function makeDraftFromEvent(event: CommunityEvent): EventDraft {
     recurrence_until: event.recurrence_until
       ? toCommunityEventDateTimeInputValue(new Date(event.recurrence_until), timezone)
       : "",
+    channel_id: event.channel_id ?? "",
+  };
+}
+
+/** The save payload for a draft, or what's wrong with it. */
+export function eventDraftPayload(draft: EventDraft): { payload: CloudCommunityEventSavePayload } | { error: string } {
+  const title = draft.title.trim();
+  if (!title) return { error: "Title is required." };
+  const timezone = normalizeCommunityEventTimeZone(draft.timezone);
+  const startsAt = communityEventDateTimeInputToIso(draft.starts_at, timezone);
+  if (!startsAt) {
+    return { error: draft.starts_at ? "Start time is invalid in the selected timezone." : "Start time is required." };
+  }
+  const endsAt = draft.ends_at ? communityEventDateTimeInputToIso(draft.ends_at, timezone) : null;
+  if (draft.ends_at && !endsAt) return { error: "End time is invalid." };
+  const recurrenceUntil =
+    draft.recurrence_frequency === "none"
+      ? null
+      : draft.recurrence_until
+        ? communityEventDateTimeInputToIso(draft.recurrence_until, timezone)
+        : null;
+  if (draft.recurrence_frequency !== "none" && draft.recurrence_until && !recurrenceUntil) {
+    return { error: "Repeat end date is invalid." };
+  }
+  return {
+    payload: {
+      title,
+      description_md: draft.description_md.trim() || null,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      timezone,
+      location_type: draft.location_type,
+      location_label: draft.location_label.trim() || null,
+      url: draft.url.trim() || null,
+      visibility: "members",
+      channel_id: draft.channel_id || null,
+      recurrence_frequency: draft.recurrence_frequency,
+      recurrence_interval: 1,
+      recurrence_until: recurrenceUntil,
+    },
   };
 }
 
@@ -215,11 +262,15 @@ function isRecurringCommunityEvent(event: CommunityEvent | null): boolean {
   return !!event && event.recurrence_frequency !== "none";
 }
 
-function EventModal(props: {
+// Notion-style event sheet: the title is the heading, then one row per property with
+// its icon and label on the left, choices as pills, and notes at the bottom.
+export function EventModal(props: {
   draft: EventDraft;
   isSaving: boolean;
   error: string | null;
   title: string;
+  /** Pods the call can be for; left out, there's no choice to make. */
+  pods?: Array<{ id: string; name: string }>;
   onChange: (draft: EventDraft) => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -230,11 +281,18 @@ function EventModal(props: {
     event.preventDefault();
     onSubmit();
   };
+  const set = (patch: Partial<EventDraft>) => onChange({ ...draft, ...patch });
+  const pill = (selected: boolean) => `community-event-pill${selected ? " is-selected" : ""}`;
+  const pods = props.pods ?? [];
+  // On the body the community's theme scope doesn't reach, so the sheet carries it.
+  const themeScope = typeof document === "undefined" ? null
+    : document.querySelector<HTMLElement>("[data-community-theme]")?.dataset.communityTheme ?? null;
 
-  return (
-    <div className="modal-overlay" role="presentation" onMouseDown={onClose}>
+  // On the body, so nothing in the page (a pod's composer, say) paints over it.
+  return createPortal(
+    <div className="modal-overlay community-event-sheet-overlay" role="presentation" onMouseDown={onClose} data-community-theme={themeScope ?? undefined}>
       <form
-        className="modal community-event-modal"
+        className="modal community-event-modal community-event-sheet"
         role="dialog"
         aria-modal="true"
         aria-labelledby="community-event-modal-title"
@@ -242,137 +300,134 @@ function EventModal(props: {
         onSubmit={handleSubmit}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="modal-header">
-          <div className="modal-title" id="community-event-modal-title">{title}</div>
-          <button className="modal-close" type="button" onClick={onClose} aria-label="Close event editor">
-            ×
+        <div className="community-event-sheet-head">
+          <span className="community-event-sheet-eyebrow" id="community-event-modal-title">{title}</span>
+          <button className="community-event-sheet-close" type="button" onClick={onClose} aria-label="Close event editor">
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <div className="modal-body community-event-form">
-          <label>
-            <span>Title</span>
-            <input
-              value={draft.title}
-              onChange={(event) => onChange({ ...draft, title: event.target.value })}
-              placeholder="Weekly call"
-              autoFocus
-            />
-          </label>
-          <label>
-            <span>Description</span>
-            <textarea
-              value={draft.description_md}
-              onChange={(event) => onChange({ ...draft, description_md: event.target.value })}
-              placeholder="What members should know before joining."
-              rows={4}
-            />
-          </label>
-          <div className="community-event-form-grid">
-            <label>
-              <span>Starts</span>
-              <input
-                type="datetime-local"
-                value={draft.starts_at}
-                onChange={(event) => onChange({ ...draft, starts_at: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Ends</span>
-              <input
-                type="datetime-local"
-                value={draft.ends_at}
-                onChange={(event) => onChange({ ...draft, ends_at: event.target.value })}
-              />
-            </label>
-          </div>
-          <label>
-            <span>Event timezone</span>
-            <select
-              value={normalizeCommunityEventTimeZone(draft.timezone)}
-              onChange={(event) => onChange({ ...draft, timezone: normalizeCommunityEventTimeZone(event.target.value) })}
-            >
-              {timezoneOptions.map((timeZone) => (
-                <option key={timeZone} value={timeZone}>
-                  {formatTimeZoneLabel(timeZone)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Location</span>
-            <select
-              value={draft.location_type}
-              onChange={(event) =>
-                onChange({ ...draft, location_type: event.target.value as EventDraft["location_type"] })
-              }
-            >
-              <option value="online">Online</option>
-              <option value="physical">In person</option>
-              <option value="tbd">TBD</option>
-            </select>
-          </label>
-          <label>
-            <span>Location label</span>
-            <input
-              value={draft.location_label}
-              onChange={(event) => onChange({ ...draft, location_label: event.target.value })}
-              placeholder="Zoom, Discord, NYC, or TBD"
-            />
-          </label>
-          <label>
-            <span>Link</span>
-            <input
-              value={draft.url}
-              onChange={(event) => onChange({ ...draft, url: event.target.value })}
-              placeholder="https://..."
-            />
-          </label>
-          <div className="community-event-form-grid">
-            <label>
-              <span>Repeats</span>
+        <div className="community-event-sheet-body">
+          <input
+            className="community-event-sheet-title"
+            value={draft.title}
+            onChange={(event) => set({ title: event.target.value })}
+            placeholder="Untitled call"
+            aria-label="Title"
+            autoFocus
+          />
+          <div className="community-event-props">
+            {pods.length > 0 ? (
+              <div className="community-event-prop" role="group" aria-label="Who's invited">
+                <span className="community-event-prop-label"><Users size={15} aria-hidden="true" /> Invited</span>
+                <div className="community-event-pills">
+                  <button type="button" className={pill(!draft.channel_id)} aria-pressed={!draft.channel_id} onClick={() => set({ channel_id: "" })}>
+                    Everyone
+                  </button>
+                  {pods.map((pod) => (
+                    <button key={pod.id} type="button" className={pill(draft.channel_id === pod.id)} aria-pressed={draft.channel_id === pod.id} onClick={() => set({ channel_id: pod.id })}>
+                      <Lock size={12} aria-hidden="true" /> {pod.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className="community-event-prop">
+              <span className="community-event-prop-label"><CalendarDays size={15} aria-hidden="true" /> When</span>
+              <div className="community-event-when">
+                <input type="datetime-local" aria-label="Starts" value={draft.starts_at} onChange={(event) => set({ starts_at: event.target.value })} />
+                <span aria-hidden="true">→</span>
+                <input type="datetime-local" aria-label="Ends" value={draft.ends_at} onChange={(event) => set({ ends_at: event.target.value })} />
+              </div>
+            </div>
+            <label className="community-event-prop">
+              <span className="community-event-prop-label"><Globe size={15} aria-hidden="true" /> Time zone</span>
               <select
-                value={draft.recurrence_frequency}
-                onChange={(event) =>
-                  onChange({
-                    ...draft,
-                    recurrence_frequency: event.target.value as EventDraft["recurrence_frequency"],
-                  })
-                }
+                className="community-event-quiet-field"
+                value={normalizeCommunityEventTimeZone(draft.timezone)}
+                onChange={(event) => set({ timezone: normalizeCommunityEventTimeZone(event.target.value) })}
               >
-                <option value="none">Does not repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                {timezoneOptions.map((timeZone) => (
+                  <option key={timeZone} value={timeZone}>{formatTimeZoneLabel(timeZone)}</option>
+                ))}
               </select>
             </label>
-            {draft.recurrence_frequency !== "none" ? (
-              <label>
-                <span>Repeats until</span>
-                <input
-                  type="datetime-local"
-                  value={draft.recurrence_until}
-                  onChange={(event) => onChange({ ...draft, recurrence_until: event.target.value })}
-                />
-              </label>
-            ) : null}
+            <div className="community-event-prop" role="group" aria-label="Location">
+              <span className="community-event-prop-label"><MapPin size={15} aria-hidden="true" /> Where</span>
+              <div className="community-event-where">
+                <div className="community-event-pills">
+                  {([["online", "Online"], ["physical", "In person"], ["tbd", "TBD"]] as const).map(([value, label]) => (
+                    <button key={value} type="button" className={pill(draft.location_type === value)} aria-pressed={draft.location_type === value} onClick={() => set({ location_type: value })}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {draft.location_type !== "tbd" ? (
+                  <input
+                    className="community-event-quiet-field"
+                    aria-label="Location label"
+                    value={draft.location_label}
+                    onChange={(event) => set({ location_label: event.target.value })}
+                    placeholder={draft.location_type === "online" ? "Zoom, Google Meet…" : "Address or venue"}
+                  />
+                ) : null}
+                {draft.location_type === "online" ? (
+                  <input
+                    className="community-event-quiet-field"
+                    aria-label="Link"
+                    value={draft.url}
+                    onChange={(event) => set({ url: event.target.value })}
+                    placeholder="Paste the meeting link"
+                  />
+                ) : null}
+              </div>
+            </div>
+            <div className="community-event-prop" role="group" aria-label="Repeats">
+              <span className="community-event-prop-label"><Repeat size={15} aria-hidden="true" /> Repeats</span>
+              <div className="community-event-where">
+                <div className="community-event-pills">
+                  {([["none", "Never"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]] as const).map(([value, label]) => (
+                    <button key={value} type="button" className={pill(draft.recurrence_frequency === value)} aria-pressed={draft.recurrence_frequency === value} onClick={() => set({ recurrence_frequency: value })}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {draft.recurrence_frequency !== "none" ? (
+                  <label className="community-event-until">
+                    <span>Until</span>
+                    <input type="datetime-local" value={draft.recurrence_until} onChange={(event) => set({ recurrence_until: event.target.value })} />
+                  </label>
+                ) : null}
+              </div>
+            </div>
           </div>
-          {error ? <div className="community-event-error">{error}</div> : null}
+          <textarea
+            className="community-event-sheet-notes"
+            aria-label="Description"
+            value={draft.description_md}
+            onChange={(event) => set({ description_md: event.target.value })}
+            placeholder="Add a note: what to prepare, the agenda, who it's for."
+            rows={4}
+          />
+          {error ? <div className="community-event-error" role="alert">{error}</div> : null}
         </div>
-        <div className="modal-footer">
-          <button type="button" className="secondary" onClick={onClose} disabled={isSaving}>
+        <div className="community-event-sheet-footer">
+          <button type="button" className="community-event-sheet-cancel" onClick={onClose} disabled={isSaving}>
             Cancel
           </button>
-          <button type="submit" className="primary" disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save event"}
+          <button type="submit" className="community-event-sheet-save" disabled={isSaving}>
+            {isSaving ? "Saving…" : "Save"}
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps) {
   const { capabilities, state, actions } = props;
+  // An owner can make any event one pod's own call.
+  const pods = useWebCommunityFrame().pods?.pods.map((pod) => ({ id: pod.id, name: pod.name })) ?? [];
   const [draft, setDraft] = useState<EventDraft | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -457,53 +512,15 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
   const submitDraft = async () => {
     if (!draft) return;
-    const title = draft.title.trim();
-    if (!title) {
-      setLocalError("Title is required.");
-      return;
-    }
-    const timezone = normalizeCommunityEventTimeZone(draft.timezone);
-    const startsAt = communityEventDateTimeInputToIso(draft.starts_at, timezone);
-    if (!startsAt) {
-      setLocalError(
-        draft.starts_at
-          ? "Start time is invalid in the selected timezone."
-          : "Start time is required.",
-      );
-      return;
-    }
-    const endsAt = draft.ends_at ? communityEventDateTimeInputToIso(draft.ends_at, timezone) : null;
-    if (draft.ends_at && !endsAt) {
-      setLocalError("End time is invalid.");
-      return;
-    }
-    const recurrenceUntil =
-      draft.recurrence_frequency === "none"
-        ? null
-        : draft.recurrence_until
-          ? communityEventDateTimeInputToIso(draft.recurrence_until, timezone)
-          : null;
-    if (draft.recurrence_frequency !== "none" && draft.recurrence_until && !recurrenceUntil) {
-      setLocalError("Repeat end date is invalid.");
+    const checked = eventDraftPayload(draft);
+    if ("error" in checked) {
+      setLocalError(checked.error);
       return;
     }
     setIsSaving(true);
     const didSave = await actions.saveEvent(
       editingEventId,
-      {
-        title,
-        description_md: draft.description_md.trim() || null,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        timezone,
-        location_type: draft.location_type,
-        location_label: draft.location_label.trim() || null,
-        url: draft.url.trim() || null,
-        visibility: "members",
-        recurrence_frequency: draft.recurrence_frequency,
-        recurrence_interval: 1,
-        recurrence_until: recurrenceUntil,
-      },
+      checked.payload,
       currentRange,
     );
     setIsSaving(false);
@@ -529,7 +546,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
             type="button"
             onClick={() => openNewEvent(getDefaultEventDayForMonth(monthDate))}
           >
-            New event
+            <Plus size={16} aria-hidden="true" /> New event
           </button>
         ) : null}
       </div>
@@ -569,16 +586,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         {showInitialEventsLoading ? (
           <div className="community-events-state" role="status">Loading events…</div>
         ) : eventDayGroups.length === 0 && state.eventsError ? null : eventDayGroups.length === 0 ? (
+          // One "New event" button is enough: the header already has it.
           <div className="community-events-state">
             <div>No events in {formatMonthLabel(monthDate)}.</div>
-            {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
-              <button
-                type="button"
-                onClick={() => openNewEvent(getDefaultEventDayForMonth(monthDate))}
-              >
-                New event
-              </button>
-            ) : null}
           </div>
         ) : (
           <div className="community-events-list">
@@ -680,6 +690,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       {draft ? (
         <EventModal
           draft={draft}
+          pods={pods}
           isSaving={isSaving}
           error={localError}
           title={eventModalTitle}

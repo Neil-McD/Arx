@@ -48,6 +48,7 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "communityAiFeedReactions", index: "by_actorUser", field: "actorUserId" },
   { table: "communityMemberSettings", index: "by_user", field: "userId" },
   { table: "communityReadCursors", index: "by_user", field: "userId" },
+  { table: "communityResourceProgress", index: "by_user", field: "userId" },
   { table: "communityResources", index: "by_createdBy", field: "createdByUserId" },
   { table: "communityResourceModules", index: "by_createdBy", field: "createdByUserId" },
   { table: "communityEvents", index: "by_createdBy", field: "createdByUserId" },

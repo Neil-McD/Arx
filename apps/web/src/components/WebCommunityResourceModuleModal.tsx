@@ -1,4 +1,5 @@
 import type { DragEvent } from "react";
+import { Check } from "lucide-react";
 
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
@@ -13,6 +14,7 @@ type WebCommunityResourceModuleModalProps = {
   moduleBannerFocusX: number;
   moduleBannerFocusY: number;
   moduleBannerZoom: number;
+  moduleLessonStyleInput: "article" | "video";
   isModuleBannerDragOver: boolean;
   isProcessingModuleBanner: boolean;
   moduleBannerUploadError: string | null;
@@ -28,6 +30,7 @@ type WebCommunityResourceModuleModalProps = {
   onChangeBannerFocusX: (value: number) => void;
   onChangeBannerFocusY: (value: number) => void;
   onChangeBannerZoom: (value: number) => void;
+  onChangeLessonStyle: (value: "article" | "video") => void;
   onSetBannerDragOver: (value: boolean) => void;
   onBannerDrop: (event: DragEvent<HTMLDivElement>) => void;
   onBannerUpload: (file: File | null) => Promise<void> | void;
@@ -35,6 +38,25 @@ type WebCommunityResourceModuleModalProps = {
   onCloseBannerFocusModal: () => void;
   onRemoveBanner: () => void;
 };
+
+// Owners pick per course how its lessons read.
+const LESSON_STYLES: { id: "article" | "video"; name: string; description: string }[] = [
+  { id: "article", name: "Article", description: "A clean reading page, like a newsletter post." },
+  { id: "video", name: "Video course", description: "Video on top, the lesson text on a card below." },
+];
+
+function LessonStyleSketch(props: { id: "article" | "video" }) {
+  return (
+    <span className={`resource-lesson-style-sketch is-${props.id}`} aria-hidden="true">
+      {props.id === "video" ? <span className="sketch-video" /> : <span className="sketch-title" />}
+      <span className="sketch-text">
+        <span />
+        <span />
+        <span />
+      </span>
+    </span>
+  );
+}
 
 export function WebCommunityResourceModuleModal(props: WebCommunityResourceModuleModalProps) {
   const {
@@ -47,6 +69,7 @@ export function WebCommunityResourceModuleModal(props: WebCommunityResourceModul
     moduleBannerFocusX,
     moduleBannerFocusY,
     moduleBannerZoom,
+    moduleLessonStyleInput,
     isModuleBannerDragOver,
     isProcessingModuleBanner,
     moduleBannerUploadError,
@@ -62,6 +85,7 @@ export function WebCommunityResourceModuleModal(props: WebCommunityResourceModul
     onChangeBannerFocusX,
     onChangeBannerFocusY,
     onChangeBannerZoom,
+    onChangeLessonStyle,
     onSetBannerDragOver,
     onBannerDrop,
     onBannerUpload,
@@ -127,6 +151,33 @@ export function WebCommunityResourceModuleModal(props: WebCommunityResourceModul
                   disabled={!hasActiveCommunity}
                 />
               </label>
+
+              <div className="resource-form-section">
+                <div className="resource-field-label" id="resource-lesson-style-label">Lesson style</div>
+                <div className="resource-lesson-styles" role="radiogroup" aria-labelledby="resource-lesson-style-label">
+                  {LESSON_STYLES.map((style) => {
+                    const selected = style.id === moduleLessonStyleInput;
+                    return (
+                      <button
+                        key={style.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        className={`resource-lesson-style${selected ? " is-selected" : ""}`}
+                        disabled={!hasActiveCommunity}
+                        onClick={() => onChangeLessonStyle(style.id)}
+                      >
+                        <LessonStyleSketch id={style.id} />
+                        <span className="resource-lesson-style-text">
+                          <strong>{style.name}</strong>
+                          <small>{style.description}</small>
+                        </span>
+                        {selected ? <Check className="resource-lesson-style-check" size={16} strokeWidth={2.5} aria-hidden="true" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="resource-form-section">
                 <div className="resource-field-label">Course cover</div>

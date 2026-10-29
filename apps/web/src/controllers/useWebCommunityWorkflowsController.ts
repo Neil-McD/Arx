@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AuthSession } from "../auth";
 import { useWebCommunityFormsGateway } from "./useWebCommunityFormsGateway";
+import { useWebCommunityAccessGateway } from "./useWebCommunityAccessGateway";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
   createCloudCommunityMemberWorkflowLiveClient,
@@ -13,15 +14,29 @@ import {
   subscribeCloudCommunityMemberSuccessDossier,
   updateCloudCommunityMemberWorkflowMilestone,
   setCloudCommunityMemberServiceChannel,
+  setCloudCommunityWelcomeGate,
+  setCloudCommunityWelcomeDisplay,
+  saveCloudCommunityWelcomePage,
+  type CloudCommunityWelcomePageDraft,
   forceCloudCommunityMemberMilestone,
   approveCloudCommunityMemberMilestone,
   retryCloudCommunityMemberGoalReview,
+  retryCloudCommunityMemberWorkflowAction,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
   type CloudCommunityMemberSuccessDossier,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 import type { CommunityMemberWorkflowAutomation } from "../../../../shared/communityMemberWorkflow";
+import { withJourneyPropertyKey, type AgentLedJourneyPlan } from "../../../../shared/agentLedJourneyTemplate";
+import { ensureCloudCommunitySelectProperty } from "../../../../shared/cloudCommunityFormsGateway";
+import { listCloudCommunityResourceModuleRows, listCloudCommunityResourceRows } from "../../../../shared/cloudCommunityAdminGateway";
+import { fetchCloudCommunityLessonTracks } from "../../../../shared/cloudCommunityLessonTracksGateway";
+import { fetchCloudCommunityOffers } from "../../../../shared/cloudCommunityOffersGateway";
+import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
+
+/** A lesson page in a live course, for welcome steps and lesson triggers. */
+export type WelcomeLessonOption = { id: string; title: string; course: string; courseId: string };
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -42,6 +57,29 @@ function workflowErrorMessage(error: unknown): string {
     return "A selected channel is unavailable. Choose another channel or remove that automation.";
   }
   if (message.includes("workflow_delay_invalid")) return "Choose a duration from 1 minute to 365 days.";
+  if (message.includes("welcome_gate_requires_join_form")) return "Add a Member joins rule that requests a form to the first milestone, or a welcome lesson, then turn on the welcome flow.";
+  if (message.includes("client_property_not_found")) return "That member property no longer exists. Choose another one.";
+  if (message.includes("client_property_value_invalid")) return "That value doesn't fit the member property. Pick one of its options or enter the right kind of value.";
+  if (message.includes("client_property_required")) return "Choose the member property to set.";
+  if (message.includes("lesson_trigger_action_invalid")) return "When a lesson or course is done, a rule can request a form or set a member property.";
+  if (message.includes("welcome_lesson_unavailable")) return "A chosen lesson is no longer published. Pick another lesson.";
+  if (message.includes("welcome_lessons_too_many")) return "Choose up to 5 welcome lessons.";
+  if (message.includes("welcome_media_url_invalid")) return "Enter a full video or image link, starting with https://.";
+  if (message.includes("welcome_title_too_long")) return "Keep the welcome headline to 120 characters.";
+  if (message.includes("welcome_message_too_long")) return "Keep the welcome message to 4,000 characters.";
+  if (message.includes("welcome_layout_too_long")) return "The welcome page holds up to 40 blocks. Join some text together or remove a block.";
+  if (message.includes("welcome_text_too_long")) return "Keep each text block to 4,000 characters, and the whole page to 12,000.";
+  if (message.includes("welcome_forms_too_many")) return "The welcome page holds up to 5 forms.";
+  if (message.includes("welcome_step_duplicate")) return "Each form or lesson can be on the welcome page once.";
+  if (message.includes("welcome_step_invalid")) return "A form or lesson on the welcome page is missing. Remove it and add it again.";
+  if (message.includes("welcome_choices_too_many")) return "The welcome page holds up to 3 choices.";
+  if (message.includes("welcome_choice_invalid")) return "Each choice needs a name of up to 40 characters on every card, at most 4 cards, and a short question. A card icon must be an https image link.";
+  if (message.includes("welcome_choice_too_long")) return "Keep each card's steps to 8,000 characters, and all cards together to 30,000.";
+  if (message.includes("form_not_published")) return "Publish that form in Forms first.";
+  if (message.includes("workflow_previous_action_invalid")) return "A \"then\" rule in Workflows runs after a form that is no longer asked. Change that rule in Workflows first.";
+  if (message.includes("milestone_cleanup_incomplete")) {
+    return "This milestone is still clearing out members who left. Delete it again to finish.";
+  }
   if (message.includes("milestone_has_members")) {
     return "Move members out of this milestone before deleting it.";
   }
@@ -134,6 +172,7 @@ export function useWebCommunityWorkflowsController(params: {
   session: AuthSession | null;
 }) {
   const forms = useWebCommunityFormsGateway(params);
+  const access = useWebCommunityAccessGateway(params);
   const [board, setBoard] = useState<CloudCommunityMemberWorkflowBoard | null>(null);
   const [members, setMembers] = useState<CloudCommunityMemberWorkflowMember[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -432,8 +471,44 @@ export function useWebCommunityWorkflowsController(params: {
     ],
   );
 
+  // Stable, so lists that load it on mount don't reload on every render.
+  const loadWelcomeLessonOptions = useCallback(async (): Promise<WelcomeLessonOption[]> => {
+    const usableSession = params.activeCommunityId ? await params.ensureSession(params.session, "community_workflows_welcome_lessons") : null;
+    if (!usableSession || !params.activeCommunityId) return [];
+    const [resources, modules] = await Promise.all([
+      listCloudCommunityResourceRows<AuthSession, CommunityResource>({ session: usableSession, communityId: params.activeCommunityId, limit: 1000 }),
+      listCloudCommunityResourceModuleRows<AuthSession, CommunityResourceModule>({ session: usableSession, communityId: params.activeCommunityId, limit: 200 }),
+    ]);
+    const liveModules = modules.filter((module) => module.module_status === "live");
+    const live = new Map(liveModules.map((module) => [module.id, module.name]));
+    // Courses in the order Knowledge shows them; lessons keep the server's order within each.
+    const courseOrder = new Map([...liveModules].sort((a, b) => ((a.sort_order ?? 0) - (b.sort_order ?? 0)) || a.name.localeCompare(b.name))
+      .map((module, index) => [module.id, index]));
+    return resources
+      .filter((resource) => resource.resource_role === "page" && resource.module_id && live.has(resource.module_id))
+      .sort((a, b) => courseOrder.get(a.module_id!)! - courseOrder.get(b.module_id!)!)
+      .map((resource) => ({ id: resource.id, title: resource.title, course: live.get(resource.module_id!) ?? "", courseId: resource.module_id! }));
+  }, [params.activeCommunityId, params.ensureSession, params.session]);
+
+  // Roadmap tracks a "When they finish a track" rule can name.
+  const loadTrackOptions = useCallback(async (): Promise<Array<{ key: string; title: string }>> => {
+    const usableSession = params.activeCommunityId ? await params.ensureSession(params.session, "community_workflows_tracks") : null;
+    if (!usableSession || !params.activeCommunityId) return [];
+    const result = await fetchCloudCommunityLessonTracks({ session: usableSession, communityId: params.activeCommunityId });
+    return result.tracks.map((track) => ({ key: track.key, title: track.title }));
+  }, [params.activeCommunityId, params.ensureSession, params.session]);
+
+  // Offers a "When they start / leave an offer" rule can name (Settings › Offers).
+  const loadOfferOptions = useCallback(async (): Promise<Array<{ key: string; name: string }>> => {
+    const usableSession = params.activeCommunityId ? await params.ensureSession(params.session, "community_workflows_offers") : null;
+    if (!usableSession || !params.activeCommunityId) return [];
+    const result = await fetchCloudCommunityOffers({ session: usableSession, communityId: params.activeCommunityId });
+    return result.offers.filter((offer) => !offer.archived).map((offer) => ({ key: offer.key, name: offer.name }));
+  }, [params.activeCommunityId, params.ensureSession, params.session]);
+
   return {
     forms,
+    access,
     board,
     members,
     hasMore,
@@ -461,6 +536,13 @@ export function useWebCommunityWorkflowsController(params: {
       const session = await params.ensureSession(params.session, "community_workflow_retry_goal_review");
       if (!session || scope !== serviceChannelScopeRef.current) throw new Error("Session changed. Reopen the member panel.");
       await retryCloudCommunityMemberGoalReview({ session, dossier: snapshot });
+    },
+    retryAction: async (snapshot: CloudCommunityMemberSuccessDossier, automationKey: string) => {
+      const scope = serviceChannelScopeRef.current;
+      if (!params.canManageMembers || snapshot.community_id !== params.activeCommunityId || snapshot.membership_id !== selectedMembershipId) throw new Error("Member changed. Reopen the member panel.");
+      const session = await params.ensureSession(params.session, "community_workflow_retry_action");
+      if (!session || scope !== serviceChannelScopeRef.current) throw new Error("Session changed. Reopen the member panel.");
+      return await retryCloudCommunityMemberWorkflowAction({ session, dossier: snapshot, automationKey });
     },
     forceMove: async (snapshot: CloudCommunityMemberSuccessDossier) => {
       const scope = serviceChannelScopeRef.current;
@@ -551,10 +633,10 @@ export function useWebCommunityWorkflowsController(params: {
       setServiceChannelError(null);
       setDossierRefreshNonce((value) => value + 1);
     },
-    createMilestone: (name: string, instructions?: string, goal?: string, requireHumanApproval?: boolean) =>
+    createMilestone: (name: string, instructions?: string, goal?: string, requireHumanApproval?: boolean, color?: string) =>
       mutateMilestone("community_workflows_create_milestone", (session, communityId, revision) =>
         createCloudCommunityMemberWorkflowMilestone({
-          instructions, goal, requireHumanApproval,
+          instructions, goal, requireHumanApproval, color,
           session,
           communityId,
           expectedRevision: revision,
@@ -568,10 +650,11 @@ export function useWebCommunityWorkflowsController(params: {
       instructions?: string,
       goal?: string,
       requireHumanApproval?: boolean,
+      color?: string,
     ) =>
       mutateMilestone("community_workflows_update_milestone", (session, communityId, revision) =>
         updateCloudCommunityMemberWorkflowMilestone({
-          instructions, goal, requireHumanApproval,
+          instructions, goal, requireHumanApproval, color,
           session,
           communityId,
           expectedRevision: revision,
@@ -580,6 +663,37 @@ export function useWebCommunityWorkflowsController(params: {
           automations,
         }),
       ),
+    // The agent-led journey template: one stage at a time with the same calls
+    // the stage editor uses, each on the revision the last one returned.
+    applyAgentLedJourney: (plan: AgentLedJourneyPlan) =>
+      mutateMilestone("community_workflows_apply_agent_led_journey", async (session, communityId, startRevision) => {
+        let revision = startRevision;
+        const propertyKey = await ensureCloudCommunitySelectProperty(session, communityId, plan.property);
+        const withNewKeys = (automations: Array<Omit<CommunityMemberWorkflowAutomation, "key">>) =>
+          withJourneyPropertyKey(automations, propertyKey).map((automation) => ({ ...automation, key: "" }) as CommunityMemberWorkflowAutomation);
+        const first = board?.milestones[0];
+        if (plan.firstStageAdditions.length && first) {
+          revision = (await updateCloudCommunityMemberWorkflowMilestone({
+            session, communityId, expectedRevision: revision, milestoneKey: first.key, name: first.name,
+            automations: [...first.automations, ...withNewKeys(plan.firstStageAdditions),
+              ...(first.pausedAutomations ?? []).map((rule) => ({ ...rule, paused: true }))],
+            instructions: first.instructions, goal: first.goal, requireHumanApproval: first.requireHumanApproval,
+          })).revision;
+        }
+        for (const stage of plan.stages) {
+          const created = await createCloudCommunityMemberWorkflowMilestone({
+            session, communityId, expectedRevision: revision, name: stage.name,
+            instructions: stage.instructions, goal: stage.goal, requireHumanApproval: stage.requireHumanApproval,
+          });
+          revision = created.revision;
+          if (!stage.automations.length || !created.milestone) continue;
+          revision = (await updateCloudCommunityMemberWorkflowMilestone({
+            session, communityId, expectedRevision: revision, milestoneKey: created.milestone.key, name: stage.name,
+            automations: withNewKeys(stage.automations),
+            instructions: stage.instructions, goal: stage.goal, requireHumanApproval: stage.requireHumanApproval,
+          })).revision;
+        }
+      }),
     deleteMilestone: (milestoneKey: string) =>
       mutateMilestone("community_workflows_delete_milestone", (session, communityId, revision) =>
         deleteCloudCommunityMemberWorkflowMilestone({
@@ -589,6 +703,18 @@ export function useWebCommunityWorkflowsController(params: {
           milestoneKey,
         }),
       ),
+    setWelcomeGate: (enabled: boolean) =>
+      mutateMilestone("community_workflows_welcome_gate", (session, communityId, revision) =>
+        setCloudCommunityWelcomeGate({ session, communityId, expectedRevision: revision, enabled })),
+    setWelcomeDisplay: (display: "page" | "popup") =>
+      mutateMilestone("community_workflows_welcome_display", (session, communityId, revision) =>
+        setCloudCommunityWelcomeDisplay({ session, communityId, expectedRevision: revision, display })),
+    loadWelcomeLessonOptions,
+    loadTrackOptions,
+    loadOfferOptions,
+    saveWelcomePage: (page: CloudCommunityWelcomePageDraft) =>
+      mutateMilestone("community_workflows_welcome_page", (session, communityId, revision) =>
+        saveCloudCommunityWelcomePage({ session, communityId, expectedRevision: revision, page })),
     clearActionError: () => setActionError(null),
   };
 }

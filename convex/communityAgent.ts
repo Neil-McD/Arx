@@ -14,6 +14,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import { normalizeCommunityLensAuthority } from "../shared/communityLensAuthority";
+import { readCommunityAgentProfile } from "./communityAgentContext";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
@@ -185,6 +186,70 @@ export const saveCommunityAgentConfig = mutation({
     const created = (await ctx.db.get(id as any)) as CommunityAgentConfigLike | null;
     if (!created) throw new Error("community_agent_config_create_failed");
     return mapCommunityAgentConfigRow(created);
+  },
+});
+
+const AGENT_NAME_MAX = 60;
+
+function normalizeAgentName(raw: unknown): string | undefined {
+  const name = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!name) return undefined;
+  if (name.length > AGENT_NAME_MAX) throw new Error("community_agent_name_too_long");
+  return name;
+}
+
+function normalizeAgentAvatarUrl(raw: unknown): string | undefined {
+  const url = String(raw ?? "").trim();
+  if (!url) return undefined;
+  if (!/^https:\/\/\S+$/i.test(url) || url.length > 2_000) throw new Error("community_agent_avatar_url_invalid");
+  return url;
+}
+
+// The agent's name and photo, shown wherever it appears. Public, like the
+// community's own name and icon.
+export const getCommunityAgentProfile = query({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => readCommunityAgentProfile(ctx, args.communityId),
+});
+
+// Settings > Agent > Profile, and community.agent.profile.save for agents.
+// Leave a field out to keep it; null puts the community's name or icon back.
+export const saveCommunityAgentProfile = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    displayName: v.optional(v.union(v.string(), v.null())),
+    avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    avatarUrl: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    if (args.avatarStorageId && args.avatarUrl) throw new Error("community_agent_avatar_ambiguous");
+    const nowMs = args.nowMs ?? Date.now();
+    const patch: Record<string, unknown> = { updatedAt: nowMs };
+    if (args.displayName !== undefined) patch.agentDisplayName = normalizeAgentName(args.displayName);
+    if (args.avatarStorageId !== undefined || args.avatarUrl !== undefined) {
+      // One photo at a time: setting either replaces the other.
+      patch.agentAvatarStorageId = args.avatarStorageId ?? undefined;
+      patch.agentAvatarUrl = normalizeAgentAvatarUrl(args.avatarUrl);
+    }
+    const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
+    const existing = selectPrimaryCommunityAgentConfigRow(rows) as (CommunityAgentConfigLike & { agentAvatarStorageId?: any }) | null;
+    if (existing) {
+      const previousStorageId = existing.agentAvatarStorageId;
+      await ctx.db.patch(existing._id as any, patch);
+      await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
+      if (previousStorageId && "agentAvatarStorageId" in patch && String(patch.agentAvatarStorageId ?? "") !== String(previousStorageId)) {
+        await ctx.storage.delete(previousStorageId);
+      }
+    } else {
+      await ctx.db.insert("communityAgentConfigs" as any, {
+        communityId: args.communityId, landingJson: null, systemPrompt: "", createdAt: nowMs, ...patch,
+      });
+    }
+    return readCommunityAgentProfile(ctx, args.communityId);
   },
 });
 

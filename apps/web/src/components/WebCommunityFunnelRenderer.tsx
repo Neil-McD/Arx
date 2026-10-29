@@ -12,6 +12,8 @@ import {
   type CommunityFunnelSurfaceAction,
 } from "./CommunityFunnelSurface";
 import { CommunityFunnelMemberProof } from "./CommunityFunnelMemberProof";
+import { WebCommunityCreators } from "./WebCommunityCreators";
+import "./WebCommunityCreators.css";
 import { WebCommunityBridgeCard, type WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 import "./WebCommunityFunnelRenderer.css";
@@ -72,6 +74,8 @@ export type WebCommunityFunnelRendererProps = {
   action: CommunityFunnelSurfaceAction;
   bridge?: WebCommunityBridgeCardProps | null;
   alertMessages?: string[];
+  /** "Choose your offer" cards, shown above the first join button when there are 2+ offers. */
+  offers?: ReactNode;
 };
 
 export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProps) {
@@ -110,6 +114,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           />
           <span>{props.communityName}</span>
         </header>
+        {props.communityId ? <WebCommunityCreators communityId={props.communityId} readOnly className="community-funnel-creators community-funnel-reveal" /> : null}
 
         <section className="community-funnel-hero community-funnel-reveal">
           <h1 id={titleId}>{props.renderModel.headline}</h1>
@@ -128,6 +133,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
 
         {props.renderModel.mode === "default" ? (
           <>
+            {props.offers ? <div className="community-funnel-offers">{props.offers}</div> : null}
             <FunnelAction action={props.action} position="primary" />
             <ActionStatusCards action={props.action} />
           </>
@@ -135,6 +141,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
 
         {props.renderModel.mode === "custom" ? (
           <>
+            {props.offers ? <div className="community-funnel-offers">{props.offers}</div> : null}
             <FunnelAction action={props.action} position="primary" />
             {memberProof}
           </>

@@ -23,7 +23,7 @@ export function useWebCommunityMemberManagementController(params: {
   banMember: (membershipId: string) => Promise<unknown>;
   setMemberRole: (
     membershipId: string,
-    role: "admin" | "moderator" | "member",
+    role: "co_creator" | "admin" | "moderator" | "member",
   ) => Promise<unknown>;
   setCommunities: (
     updater: (current: WebCommunityRecord[]) => WebCommunityRecord[],
@@ -64,7 +64,7 @@ export function useWebCommunityMemberManagementController(params: {
 
   const setMemberRole = useCallback(async (
     membershipId: string,
-    role: "admin" | "moderator" | "member",
+    role: "co_creator" | "admin" | "moderator" | "member",
   ) => {
     await params.setMemberRole(membershipId, role);
     await reloadDirectory();

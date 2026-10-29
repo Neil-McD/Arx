@@ -1,0 +1,18 @@
+/* Sales page › Choose your offer: stacked plan cards, the picked one outlined. */
+.pn-offer-chooser { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pn-offer-chooser legend { padding: 0; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.pn-offer-choice { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid var(--border-default); border-radius: 10px; cursor: pointer; background: var(--bg-surface, transparent); }
+.pn-offer-choice.is-selected { border-color: var(--pn-button, var(--accent-brand)); box-shadow: 0 0 0 1px var(--pn-button, var(--accent-brand)); }
+/* Drawn here rather than left to the browser: in dark themes the native dot
+   showed the same grey checked or not (2026-10-28). */
+.pn-offer-choice input { appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 2px 0 0; border: 1.5px solid var(--text-muted); border-radius: 50%; background: transparent; cursor: pointer; }
+.pn-offer-choice input:checked, .pn-offer-choice.is-selected input { border-color: var(--pn-button, var(--accent-brand)); background: radial-gradient(circle, var(--pn-button, var(--accent-brand)) 0 3.5px, transparent 4px); }
+.pn-offer-choice input:focus-visible { outline: 2px solid var(--pn-button, var(--accent-brand)); outline-offset: 2px; }
+.pn-offer-choice-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.pn-offer-choice-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.pn-offer-choice-head { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; font-size: 15px; line-height: 1.3; color: var(--text-primary); }
+.pn-offer-choice-tag { padding: 0 8px; border-radius: 999px; font-size: 11px; line-height: 18px; font-weight: 600; background: var(--hover-overlay); color: var(--text-secondary); }
+.pn-offer-choice-plus { font-size: 12px; font-weight: 600; color: var(--pn-button, var(--accent-brand)); }
+.pn-offer-choice-blurb { font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
+.pn-offer-choice-price { flex-shrink: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pn-offer-choice-period { margin-left: 1px; font-weight: 500; font-size: 0.86em; color: var(--text-secondary); }

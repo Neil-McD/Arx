@@ -1405,7 +1405,7 @@
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="pn-settings"]):not([class*="pn-sales"]) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -1417,12 +1417,12 @@
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]):hover:not(:disabled) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="pn-settings"]):not([class*="pn-sales"]):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]):disabled {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="pn-settings"]):not([class*="pn-sales"]):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1526,7 +1526,8 @@
 }
 
 .analytics-kpi-value-big {
-  font-family: var(--font-mono);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   font-size: 28px;
   line-height: 1;
   font-weight: 600;
@@ -1605,7 +1606,8 @@
 }
 
 .analytics-chart-stat {
-  font-family: var(--font-mono);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   font-size: 14px;
   color: var(--text-primary);
 }
@@ -1701,7 +1703,8 @@
 }
 
 .analytics-chart-tooltip-value {
-  font-family: var(--font-mono);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   font-size: 18px;
   font-weight: 600;
   color: var(--text-terminal);
@@ -2922,6 +2925,14 @@
   padding: clamp(2px, 0.8vh, 10px) 0 clamp(28px, 3vh, 44px);
 }
 
+/* Settings → Community: the way to the welcome page, which lives in Workflows. */
+.community-settings-welcome-link {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px;
+  padding: 14px 16px; border: 1px solid var(--border-default); border-radius: calc(12px * var(--pn-radius-scale, 1));
+}
+.community-settings-welcome-link > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.community-settings-welcome-link small { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+
 .community-general-settings-grid,
 .community-general-settings-secondary,
 .community-settings-identity-fields {
@@ -4099,6 +4110,12 @@ button.settings-primary-action svg {
   padding: calc(var(--mobile-topbar-clearance) + 14px) 14px 18px;
 }
 
+/* Classroom's post cards start below the floating top bar too, so the
+   "Write something" bar isn't under the channel pill. */
+.app-root.mobile-shell .community-chat .community-posts-feed {
+  padding: calc(var(--mobile-topbar-clearance) + 8px) 12px 32px;
+}
+
 .app-root.mobile-shell .community-chat .community-channel-header {
   flex: 0 0 var(--mobile-topbar-clearance);
   height: var(--mobile-topbar-clearance);
@@ -5100,6 +5117,8 @@ button.settings-primary-action svg {
   align-items: flex-start;
 }
 
+.community-events-new-btn { display: inline-flex; align-items: center; gap: 6px; }
+
 .community-events-new-btn,
 .community-events-state button,
 .community-event-error button {
@@ -5485,6 +5504,346 @@ button.settings-primary-action svg {
 .community-event-modal .modal-footer .primary:hover:not(:disabled) {
   border-color: var(--bg-button-hover, var(--bg-button));
   background: var(--bg-button-hover, var(--bg-button));
+}
+
+/* Event sheet (2026-10-27): Notion-style. The title is the heading, each
+   property is a row (icon + label | value), choices are pills in the
+   community's accent, notes sit at the bottom. Carries the community theme
+   itself because it renders on the body. */
+.modal-overlay.community-event-sheet-overlay {
+  background: rgba(15, 18, 16, 0.38);
+  backdrop-filter: blur(3px);
+  color: var(--text-primary);
+}
+
+.modal.community-event-sheet {
+  --sheet-accent: var(--pn-accent, var(--accent-brand, var(--bg-button)));
+  --sheet-on-accent: var(--pn-on-accent, var(--text-on-accent, white));
+  --sheet-hairline: color-mix(in srgb, var(--border-default) 70%, transparent);
+  width: min(600px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(88vh, 760px);
+  border: 1px solid var(--sheet-hairline);
+  border-radius: 16px;
+  background: var(--surface-card, var(--bg-card-solid, var(--bg-card)));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--pn-font-body, inherit);
+}
+
+.community-event-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 0 28px;
+}
+
+.community-event-sheet-eyebrow {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-event-sheet-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.community-event-sheet-close:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-event-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  padding: 6px 28px 20px;
+  overflow-y: auto;
+}
+
+.community-event-sheet-title {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--pn-font-heading, inherit);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.community-event-sheet-title::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+.community-event-props {
+  display: flex;
+  flex-direction: column;
+}
+
+.community-event-prop {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--sheet-hairline);
+}
+
+.community-event-prop:last-child {
+  border-bottom: 1px solid var(--sheet-hairline);
+}
+
+.community-event-prop-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.community-event-prop-label svg {
+  flex: none;
+  opacity: 0.85;
+}
+
+.community-event-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.community-event-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--sheet-hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.community-event-pill:hover {
+  border-color: color-mix(in srgb, var(--sheet-accent) 40%, var(--sheet-hairline));
+  color: var(--text-primary);
+}
+
+.community-event-pill.is-selected {
+  border-color: var(--sheet-accent);
+  background: color-mix(in srgb, var(--sheet-accent) 12%, transparent);
+  color: var(--sheet-accent);
+  font-weight: 600;
+}
+
+.community-event-pill:focus-visible,
+.community-event-sheet-close:focus-visible {
+  outline: 2px solid var(--sheet-accent);
+  outline-offset: 2px;
+}
+
+.community-event-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.community-event-where {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Fields read as text until hovered or focused, like a Notion property. */
+.community-event-sheet input[type="datetime-local"],
+.community-event-quiet-field {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.community-event-quiet-field {
+  width: 100%;
+}
+
+.community-event-sheet input[type="datetime-local"]:hover,
+.community-event-quiet-field:hover {
+  background: var(--hover-overlay);
+}
+
+.community-event-sheet input[type="datetime-local"]:focus,
+.community-event-quiet-field:focus,
+.community-event-sheet-notes:focus {
+  outline: none;
+  border-color: var(--sheet-accent);
+  background: var(--surface-card, var(--bg-card));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sheet-accent) 16%, transparent);
+}
+
+.community-event-quiet-field::placeholder,
+.community-event-sheet-notes::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+.community-event-until {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.community-event-sheet-notes {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--sheet-hairline);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-workspace) 50%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.community-event-sheet-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--sheet-hairline);
+}
+
+.community-event-sheet-footer button {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.community-event-sheet-cancel {
+  border: 1px solid var(--sheet-hairline);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.community-event-sheet-cancel:hover:not(:disabled) {
+  background: var(--hover-overlay);
+}
+
+.community-event-sheet-save {
+  border: 1px solid var(--sheet-accent);
+  background: var(--sheet-accent);
+  color: var(--sheet-on-accent);
+}
+
+.community-event-sheet-save:hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.community-event-sheet-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Phone: the sheet rises from the bottom, labels sit above their values. */
+@media (max-width: 640px) {
+  .modal-overlay.community-event-sheet-overlay {
+    align-items: flex-end;
+  }
+
+  .modal.community-event-sheet {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .community-event-sheet-head {
+    padding: 12px 12px 0 20px;
+  }
+
+  .community-event-sheet-body {
+    padding: 4px 20px 16px;
+  }
+
+  .community-event-sheet-title {
+    font-size: 24px;
+  }
+
+  .community-event-prop {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .community-event-prop-label {
+    min-height: 26px;
+    font-size: 13px;
+  }
+
+  .community-event-when input[type="datetime-local"] {
+    flex: 1 1 100%;
+  }
+
+  .community-event-when > span {
+    display: none;
+  }
+
+  .community-event-sheet-footer {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .community-event-sheet-footer button {
+    flex: 1;
+  }
 }
 
 @media (max-width: 900px) {

@@ -206,7 +206,7 @@ try {
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No overflow at ${width}/${theme}`);
       const frames = await page.locator(".deferred-youtube").evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height, y: r.y }; }));
       assert(frames.every((r) => r.width >= 200 && r.height >= 200), "YouTube minimum player dimensions");
-      assert(await page.locator(".deferred-youtube").evaluateAll((els) => els.every((el) => { const style = getComputedStyle(el); return style.borderRadius === "8px" && style.overflow === "hidden"; })), "Native players have subtly rounded, clipped outer frames");
+      assert(await page.locator(".deferred-youtube").evaluateAll((els) => els.every((el) => { const style = getComputedStyle(el); return style.borderRadius === "12px" && style.overflow === "hidden"; })), "Native players have subtly rounded, clipped outer frames");
       const groupWidth = (await page.locator(".message-youtube-grid").boundingBox()).width;
       assert.equal(frames[0].y === frames[1].y, groupWidth >= 728, "Stack according to container width");
       await page.screenshot({ path: join(out, `community-${width}-${theme}.png`) });

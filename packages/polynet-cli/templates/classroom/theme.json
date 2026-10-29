@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "schemes": {
+    "light": {
+      "background": "#F5F6F8",
+      "surface": "#FFFFFF",
+      "text": "#1C1D21",
+      "muted": "#5E6270",
+      "border": "#E3E5EA",
+      "accent": "#2E5BDA",
+      "on_accent": "#FFFFFF",
+      "button": "#2E5BDA",
+      "on_button": "#FFFFFF"
+    },
+    "dark": {
+      "background": "#16171B",
+      "surface": "#202127",
+      "text": "#F1F2F5",
+      "muted": "#A4A8B3",
+      "border": "#33353D",
+      "accent": "#8FA9F5",
+      "on_accent": "#16171B",
+      "button": "#8FA9F5",
+      "on_button": "#16171B"
+    }
+  },
+  "font_body": "Inter",
+  "font_heading": "Inter",
+  "heading_weight": 700,
+  "heading_case": "none",
+  "type_scale": 1,
+  "numerals": "proportional",
+  "radius": 10,
+  "corner_style": "even",
+  "button_shape": "rounded",
+  "border_width": 1,
+  "shadow": "soft",
+  "density": "comfortable",
+  "media_plate": "none",
+  "course_cover_ratio": "16:9",
+  "course_card_size": "medium"
+}

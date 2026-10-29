@@ -118,6 +118,40 @@
   border-radius: var(--pn-radius-button);
 }
 
+/* Course catalog: card size and cover shape */
+[data-community-theme] .resource-course-grid {
+  grid-template-columns: var(--pn-course-columns);
+  gap: var(--pn-course-gap-owner, 24px);
+}
+/* Page layouts (shared/communityLayout.ts) keep flat, hairline cards and a
+   sans title on the feed whatever the theme's card style: only the corner
+   size follows the theme. */
+[data-community-theme] :is(.community-post-card, .community-posts-composer, .community-aside-card, .community-about-main) {
+  border-radius: min(var(--pn-radius), 14px);
+}
+[data-community-theme] .community-post-card-title {
+  font-family: var(--pn-font-body);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: -0.005em;
+}
+
+/* Phones get one or two cards per row, whatever the card size. */
+@media (max-width: 640px) {
+  [data-community-theme] .resource-course-grid {
+    grid-template-columns: var(--pn-course-columns-phone, minmax(0, 1fr));
+    gap: var(--pn-course-gap-owner, 14px);
+  }
+}
+[data-community-theme] .resource-course-card-cover {
+  position: relative;
+  aspect-ratio: var(--pn-course-cover-ratio);
+  height: var(--pn-course-cover-height);
+  background: var(--pn-cover-plate, var(--bg-card-alt));
+}
+[data-community-theme] .resource-course-card-cover-image {
+  mix-blend-mode: var(--pn-cover-blend, normal);
+}
 /* Cards line up row by row: two-line titles, three-line descriptions. */
 [data-community-theme] .resource-course-card-heading > strong {
   display: -webkit-box;
@@ -132,7 +166,7 @@
 
 /* Text roles: every size below is one of --pn-type-*, so the text-size setting
    moves all community text together and nothing drifts to a one-off size. */
-[data-community-theme] .resource-viewer-title {
+[data-community-theme] :is(.resource-viewer-title, .community-welcome-intro h1) {
   font-size: var(--pn-type-display);
 }
 [data-community-theme] .community-knowledge-header h1 {
@@ -178,7 +212,8 @@
   .community-interaction-body,
   .resource-course-outline-header,
   .community-nav-identity-name,
-  .member-form-dialog header h2
+  .member-form-dialog header h2,
+  .community-welcome-intro p
 ) {
   font-size: var(--pn-type-body);
 }
@@ -197,9 +232,14 @@
 [data-community-theme] :is(
   .community-interaction-meta-row,
   .resource-viewer-prose .md-media-embed-caption,
+  .resource-course-card-lock,
   .resource-course-card-meta,
+  .resource-course-card-progress-label,
   .resource-course-outline-count,
-  .resources-back-btn
+  .resource-course-outline-progress,
+  .resources-back-btn,
+  .community-welcome-intro small,
+  .community-welcome-step
 ) {
   font-size: var(--pn-type-label);
 }
@@ -222,6 +262,17 @@
 /* Code */
 [data-community-theme] :is(code, pre, kbd) {
   font-family: var(--pn-font-mono);
+}
+
+/* Slides drawn on white sit on the light plate in dark themes, like lesson images. */
+[data-community-theme] .lesson-slide-deck-stage img {
+  background: var(--pn-media-plate);
+}
+[data-community-theme] .lesson-slide-deck-note {
+  font-size: var(--pn-type-reading);
+}
+[data-community-theme] .lesson-slide-deck-count {
+  font-size: var(--pn-type-small);
 }
 
 /* Buttons and fields take the community's text face. Browsers give them their

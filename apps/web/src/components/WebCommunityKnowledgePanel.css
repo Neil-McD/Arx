@@ -1,5 +1,94 @@
 .community-knowledge-page { min-width: 0; }
 .community-knowledge-graph { display: flex; height: max(360px, calc(100dvh - 200px)); margin: 20px 24px 24px; }
-.community-knowledge-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 64px 0 24px; }
-.community-knowledge-header h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--text-ink-secondary); }
+.community-knowledge-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 28px 64px 4px 24px; }
+/* The page title is a clear step above the navigation. */
+.community-knowledge-header h1 { margin: 0; font-size: 30px; font-weight: 650; line-height: 1.2; letter-spacing: -0.01em; color: var(--text-primary); }
 .community-knowledge-page .resources-header { display: none; }
+/* Reading a lesson: the lesson title is the heading, so the page title steps
+   aside (kept for screen readers) and the switcher shares the back link's row. */
+.community-knowledge-page[data-reading] .community-knowledge-header { position: relative; z-index: 1; justify-content: flex-end; height: 0; padding-top: 0; padding-bottom: 0; overflow: visible; pointer-events: none; }
+.community-knowledge-page[data-reading] .community-knowledge-header > * { pointer-events: auto; transform: translateY(36px); }
+.community-knowledge-page[data-reading] .community-knowledge-header h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.community-knowledge-page[data-reading] .resources-panel { padding-top: 28px; }
+/* Owners have Preview mode on the back link's row, so the switcher keeps its own row. */
+.community-knowledge-page[data-reading]:has(.resources-header-actions.has-preview-mode) .community-knowledge-header { height: auto; padding: 20px 64px 0 24px; }
+.community-knowledge-page[data-reading]:has(.resources-header-actions.has-preview-mode) .community-knowledge-header > * { transform: none; }
+.community-knowledge-page[data-reading]:has(.resources-header-actions.has-preview-mode) .resources-panel { padding-top: 12px; }
+/* The panel's single column never grows past the page: the owner's header row
+   and long lesson content wrap inside it instead of widening it. */
+.community-knowledge-page .resources-panel { grid-template-columns: minmax(0, 1fr); }
+.community-knowledge-page .resources-panel > * { min-width: 0; }
+.community-knowledge-page .feed-header-row { flex-wrap: wrap; min-width: 0; }
+@media (max-width: 640px) {
+  .community-knowledge-header { flex-wrap: wrap; gap: 12px; padding: 20px 16px 0; }
+  .community-knowledge-header .community-knowledge-views { flex: 1 1 100%; min-width: 0; }
+  .community-knowledge-page .resources-panel { padding-inline: 16px; }
+  /* On phones the switcher stays above the lesson, in the normal flow. */
+  /* While reading, the switcher is the header's first row, so it leaves room on
+     the right for the shell's floating top-right buttons (direct messages). */
+  .community-knowledge-page[data-reading] .community-knowledge-header { height: auto; padding: 16px 56px 0 16px; }
+  .community-knowledge-page[data-reading] .community-knowledge-header > * { transform: none; }
+  .community-knowledge-page[data-reading] .resources-panel { padding-top: 12px; }
+  .community-knowledge-page[data-reading]:has(.resources-header-actions.has-preview-mode) .community-knowledge-header { padding: 16px 56px 0 16px; }
+  /* Preview mode starts at the left edge and shrinks to fit, so it never runs off the screen. */
+  .community-knowledge-page .resources-header-actions.has-preview-mode { justify-content: flex-start; }
+  .community-knowledge-page .resources-header-view-actions { margin-left: 0; min-width: 0; max-width: 100%; }
+  .community-knowledge-page .resources-preview-mode-control { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+  .community-knowledge-page .resources-preview-mode-switcher { width: 132px; min-width: 0; }
+  .community-knowledge-page .resource-course-catalog { padding-inline: 0; }
+  .community-knowledge-graph { margin: 12px 12px 16px; }
+}
+/* Too narrow for the switcher beside those buttons: it moves below them instead. */
+@media (max-width: 380px) {
+  .community-knowledge-page[data-reading] .community-knowledge-header,
+  .community-knowledge-page[data-reading]:has(.resources-header-actions.has-preview-mode) .community-knowledge-header { padding: 56px 16px 0; }
+}
+/* Resources · Roadmap · Graph as chips, the same as the channel chips in Classroom:
+   separate rounded pills, the active one filled with the text colour. */
+.community-knowledge-views { display: flex; flex-wrap: wrap; gap: 8px; }
+.community-knowledge-views .community-category-chip.is-active { background: var(--text-primary); color: var(--bg-workspace); }
+.community-knowledge-views .community-category-chip:focus-visible { outline: 2px solid var(--focus-ring, var(--accent-brand)); outline-offset: 2px; }
+/* Resources · Roadmap · Graph as one segmented control: a soft track with the open view
+   raised on it, the way Substack's dashboard switches views. Replaces the
+   three loose chips above. */
+.community-knowledge-views {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.community-knowledge-views .community-category-chip {
+  min-height: 0;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.community-knowledge-views .community-category-chip:hover { color: var(--text-primary); }
+.community-knowledge-views .community-category-chip:is(.is-active, .is-selected, [aria-selected="true"]) {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 18%, transparent), 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+@media (max-width: 640px) {
+  .community-knowledge-header .community-knowledge-views { flex: 0 1 auto; max-width: 100%; }
+}
+/* Focus mode shares its row with the shell's floating icons on desktop
+   (Messages, Display, Settings…), so it keeps clear of them. */
+.app-root:not(.mobile-shell) .community-knowledge-page[data-reading] .community-knowledge-header {
+  padding-right: max(64px, var(--web-topbar-right-action-safe-inset, 0px));
+}
+/* Phone app, inside a course: "All courses" and "View as member" share one
+   row, so the lesson title sits near the top instead of halfway down. */
+.app-root.mobile-shell .community-knowledge-page .resources-panel > .feed-header-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.app-root.mobile-shell .community-knowledge-page .resources-panel > .feed-header-row .resources-header-actions { width: auto; margin-left: auto; }
+/* The owner's Lesson style switch folds away with the course outline. */
+.resource-course-outline:not(.is-open) .resource-course-style-switch.is-outline { display: none; }

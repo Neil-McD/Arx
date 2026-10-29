@@ -1,7 +1,9 @@
 export type SettingsPage =
   | "profile"
   | "account"
+  | "memberships"
   | "billing"
+  | "apps"
   | "appearance";
 
 export type SettingsGroup = SettingsPage;
@@ -48,21 +50,45 @@ export const COMMUNITY_TABS = [
   "agent",
   "resources",
   "events",
+  "members",
+  "about",
   "settings",
   "workflows",
+  "people",
   "analytics",
 ] as const;
 
 export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 
+// Tabs drawn by the community chat surface: Members is the chat's member list
+// shown as a page, so it loads the same channel, directory and presence.
+export function isCommunityChatBackedTab(tab: CommunityTab): boolean {
+  return tab === "chat" || tab === "members";
+}
+
 export const COMMUNITY_SETTINGS_PANES = [
   "community",
+  "sales_page",
+  "offers",
   "appearance",
   "agent",
+  "creators",
+  "access",
   "danger",
 ] as const;
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
+
+const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
+  "settings",
+  "workflows",
+  "people",
+  "analytics",
+]);
+
+export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
+  return COMMUNITY_ROUTE_MANAGED_TAB_SET.has(tab);
+}
 
 export type CommunityTabAccess = {
   canViewSettings: boolean;
@@ -78,6 +104,7 @@ export function isCommunityTabAllowedForAccess(
     case "settings":
       return access.canViewSettings;
     case "workflows":
+    case "people":
       return access.canManageMembers;
     case "analytics":
       return access.canViewAnalytics;
@@ -85,6 +112,8 @@ export function isCommunityTabAllowedForAccess(
     case "agent":
     case "resources":
     case "events":
+    case "members":
+    case "about":
       return true;
   }
 }
@@ -122,6 +151,14 @@ export function parseCommunityTab(
       return "workflows";
     case "agent":
       return "agent";
+    case "members":
+      return "members";
+    // The owner's members database (the directory every member sees is "members").
+    case "people":
+    case "clients":
+      return "people";
+    case "about":
+      return "about";
     case "ai_agent":
       return "settings";
     case "funnel":
@@ -142,9 +179,23 @@ export function parseCommunitySettingsPane(
       return "agent";
     case "danger":
       return "danger";
+    case "sales_page":
+    case "sales-page":
+    case "sales":
+      return "sales_page";
+    // "look" is the pane's earlier name; old links still open it.
     case "appearance":
     case "look":
       return "appearance";
+    case "access":
+      return "access";
+    case "creators":
+    case "co-creators":
+      return "creators";
+    case "offers":
+    case "plans":
+    case "tiers":
+      return "offers";
     case "community":
     default:
       return "community";
@@ -165,9 +216,22 @@ export function isCommunitySettingsPaneAllowedForAccess(
   switch (pane) {
     case "community":
       return access.canViewSettings;
-    case "appearance":
-      return access.canManageSettings;
     case "agent":
+      return access.canManageMembers;
+    // The public About page: its layout draft is managers' to edit.
+    case "sales_page":
+      return access.canManageMembers;
+    // Fonts, sizing and colours: the theme draft, which managers may edit.
+    case "appearance":
+      return access.canManageMembers;
+    // Connected services (such as a paid MCP server) and access given by hand.
+    case "access":
+      return access.canManageMembers;
+    // Who builds the community with its owner; only the owner changes it.
+    case "creators":
+      return access.canManageMembers;
+    // The packages the community sells; the owner changes them, managers see them.
+    case "offers":
       return access.canManageMembers;
     case "danger":
       return access.isOwner;
@@ -200,9 +264,13 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Profile";
     case "account":
       return "Account";
+    case "memberships":
+      return "Memberships";
     case "billing":
       return "Billing";
+    case "apps":
+      return "Connected apps";
     case "appearance":
-      return "Appearance";
+      return "Display";
   }
 }
