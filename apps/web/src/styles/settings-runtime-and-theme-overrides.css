@@ -1405,7 +1405,7 @@
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -1417,12 +1417,12 @@
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):hover:not(:disabled) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):disabled {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):not([class*="appearance-"]):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

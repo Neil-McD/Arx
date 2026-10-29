@@ -16,6 +16,7 @@ import { buildStripeConnectPresentation } from "../controllers/buildStripeConnec
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
+import { WebCommunityAppearanceSettings } from "./WebCommunityAppearanceSettings";
 import {
   platformTabId,
   platformTabPanelId,
@@ -143,6 +144,7 @@ type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "act
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "General",
+  appearance: "Appearance",
   agent: "Agent",
   danger: "Danger",
 };
@@ -943,6 +945,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : null}
                 </div>
               </div>
+              ) : null}
+              {selectedSettingsPane === "appearance" ? (
+              <WebCommunityAppearanceSettings
+                communityId={resolvedActiveCommunity.id}
+                communitySlug={resolvedActiveCommunity.slug}
+                session={props.session}
+                ensureSession={props.ensureSession}
+              />
               ) : null}
               {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />
