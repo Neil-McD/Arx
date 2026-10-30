@@ -21,6 +21,7 @@ const ALLOWED = new Map<string, string>([
   ["communityApps:registerCommunityDomainInternal", "operator tool: registers a site domain by hand"],
   ["communityApps:removeCommunityDomainInternal", "operator tool: removes a site domain by hand"],
   ["communitySites:registerSitePrivateTwinsInternal", "operator tool: one-off backfill of site private twins, run by hand"],
+  ["communitySites:registerCommunitySiteAddressesInternal", "operator tool: one-off backfill of every community's site addresses, run by hand"],
   ["communityChannelAudit:listGeneralChannelAuditCommunitiesInternal", "hand-run: General channel migration audit (residue map R-009)"],
   ["communityChannelAudit:auditGeneralChannelMigrationBatchInternal", "hand-run: General channel migration audit (residue map R-009)"],
   ["communityChannelBackfill:backfillGeneralChannelBatch", "hand-run: General channel migration (residue map R-009)"],
