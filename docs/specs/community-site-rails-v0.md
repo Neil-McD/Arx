@@ -97,6 +97,29 @@ any page without one. It grows into the rails:
 
 - **`<polynet-online>`**: a compact "who's here now" strip.
 
+## On its own site by default (Oct 30)
+
+Approved by Neil: every community lives on its own site; Studio is the back
+office. **A community's addresses exist from creation, and Polynet's default
+site serves them until the founder deploys.**
+
+- **Addresses at creation.** `createCommunity` registers the site
+  (`<slug><suffix>.<sites domain>`) and its private twin as the community's
+  (`registerCommunitySiteAddresses`); a slug with no valid address, or one
+  already taken, leaves it without one and never blocks creation. Older
+  communities: `communitySites:registerCommunitySiteAddressesInternal`
+  (dry run first, paged).
+- **The default site.** An address on the sites domain with no deployed route
+  but a community registered to it is served by `defaultSite.ts`, which
+  answers the edge as a founder's Worker would: `/` (the front door, rendered
+  on the server with link previews), `/frame`, `/site.css` and `/site.js`,
+  nothing else. Every standard page, the twin and joining work unchanged
+  because they only ever ask the site's Worker for files. It wears the
+  community's name, tagline, about, member count, avatar and banner (https
+  only, never inside CSS) and one colour per community.
+- **A deploy wins.** A deployed site's route always comes first; the address
+  never changes.
+
 ## Its own world (Oct 28)
 
 Approved by Neil: nothing a member presses on a community site drops them

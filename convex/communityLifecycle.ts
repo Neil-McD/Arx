@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { registerCommunitySiteAddresses } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
@@ -753,6 +754,8 @@ export const createCommunity = mutation({
       baselineAt: nowMs,
     });
     await ensureGeneralChannel({ ctx, communityId, nowMs });
+    // On its own site from the start (Polynet's default until the founder deploys one).
+    await registerCommunitySiteAddresses(ctx, { _id: communityId, slug });
     await ctx.scheduler.runAfter(
       0,
       internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,

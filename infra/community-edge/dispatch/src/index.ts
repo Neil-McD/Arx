@@ -15,7 +15,8 @@
 //                      which draws the site's frame with every script removed, so
 //                      only Polynet's code runs there. The site sends them there.
 //   /__polynet/me/*    personal data, settings, messages and joining, on the twin only, for its own session
-//   everything else    the community's own front end (a user Worker with static assets);
+//   everything else    the community's own front end (a user Worker with static assets),
+//                      or Polynet's default site (defaultSite.ts) until it deploys one;
 //                      on the twin, a redirect to the site
 //
 // The member session lives only in an HttpOnly cookie on the community's domain.
@@ -23,6 +24,7 @@
 // Workers for Platforms dispatch namespace; local dev uses a service binding.
 
 import { SDK_SOURCE } from "./sdk";
+import { defaultSiteWorker } from "./defaultSite";
 import { LLMS_TXT } from "./llms";
 import { UI_CSS, UI_SOURCE } from "./ui";
 import { KIT_SOURCE } from "./blocks/kit";
@@ -100,7 +102,8 @@ export interface Env {
   DEV_USER_WORKER?: Fetcher;
 }
 
-type Route = { script: string; community: string };
+// script null: the community hasn't deployed a site, so Polynet's default serves it.
+type Route = { script: string | null; community: string };
 
 // Where a request landed: the community's site, or its private twin. Both know
 // each other's origin (privateOrigin is null where there's no twin, as off the
@@ -171,9 +174,22 @@ export async function resolveRoute(hostname: string, env: Env): Promise<Route | 
   return route && typeof route.script === "string" && typeof route.community === "string" ? route : null;
 }
 
-function userWorker(scriptName: string, env: Env): Fetcher | null {
-  if (env.DISPATCHER) return env.DISPATCHER.get(scriptName);
+function userWorker(route: Route, place: Place, env: Env): Fetcher | null {
+  if (route.script === null) return defaultSiteWorker(() => publicIdentity(env, place.siteOrigin));
+  if (env.DISPATCHER) return env.DISPATCHER.get(route.script);
   return env.DEV_USER_WORKER ?? null;
+}
+
+// Every community is on its own site: an address on the sites domain that
+// belongs to a community with nothing deployed is served by Polynet's default.
+// The community comes from the backend (by the registered origin), cached
+// briefly, a miss included.
+async function defaultRoute(siteHost: string, protocol: string, env: Env): Promise<Route | null> {
+  const sites = sitesOf(env);
+  const ending = sites ? `${sites.suffix}.${sites.domain}` : "";
+  if (!sites || !siteHost.endsWith(ending) || siteHost.length === ending.length) return null;
+  const identity = await publicIdentity(env, `${protocol}//${siteHost}`);
+  return identity?.slug ? { script: null, community: identity.slug } : null;
 }
 
 function json(status: number, body: Record<string, unknown>, headers: HeadersInit = {}): Response {
@@ -336,7 +352,10 @@ export function safeReturnPath(raw: string | null): string {
   return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
 }
 
-type PublicIdentity = { name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean };
+type PublicIdentity = {
+  slug?: string; name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean;
+  avatar_url?: string | null; banner_url?: string | null;
+};
 const IDENTITY_CACHE_MS = 60_000;
 const identityCache = new Map<string, { identity: PublicIdentity | null; until: number }>();
 
@@ -989,7 +1008,8 @@ export default {
     if (frontDoorResponse) return frontDoorResponse;
     // A private twin is found through its site's route: it never has one of its own.
     const twinOf = siteHostForTwin(url.hostname, env);
-    const route = await resolveRoute(twinOf ?? url.hostname, env);
+    const siteHost = (twinOf ?? url.hostname).toLowerCase();
+    const route = (await resolveRoute(siteHost, env)) ?? (await defaultRoute(siteHost, url.protocol, env));
     if (!route) return twinOf ? new Response("Community not found", { status: 404 }) : noSiteYet(url, env);
     const twinHost = twinOf ? null : twinHostFor(url.hostname, env);
     const place: Place = twinOf
@@ -1041,7 +1061,7 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (url.pathname === UPLOAD_PATH || url.pathname.startsWith(FILES_PREFIX)) {
     return await proxyFile(request, url, env);
   }
-  const worker = userWorker(route.script, env);
+  const worker = userWorker(route, place, env);
   if (!worker) return new Response("Community front end unavailable", { status: 503 });
   const read = request.method === "GET" || request.method === "HEAD";
   const personal = read ? personalPage(url.pathname) : null;

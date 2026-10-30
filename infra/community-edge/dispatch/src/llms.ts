@@ -17,6 +17,11 @@ below brings everything else.
 You draw the community's world once, as a frame; Polynet fills every
 standard page into it.
 
+Every community is on its own site from the day it's created: until you
+deploy, its address shows Polynet's default design (a front door and a
+frame, in the community's name, avatar and banner). Your deploy replaces
+that design; the address, members and pages stay the same.
+
 Non-negotiables:
 - Two files at the site's root: index.html (the front door) and
   frame.html (the world's header, navigation and footer around exactly one

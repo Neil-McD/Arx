@@ -4,6 +4,7 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { normalizeCommunityAppOrigin } from "../shared/communityAppSession";
+import { communityIsActive } from "../shared/communityLifecycle";
 import { privateTwinHost, siteSlugShapeOk } from "../packages/polynet-cli/checks.mjs";
 
 // Hostnames that never belong to a community, even if a slug matches.
@@ -135,6 +136,56 @@ async function registerSiteOrigins(ctx: any, communityId: any, hostname: string,
   }
   return { origin, privateOrigin, added };
 }
+
+// This environment's sites domain and staging suffix, or null where sites
+// aren't set up (local dev without them).
+function sitesEnv(): { domain: string; suffix: string } | null {
+  const domain = (process.env.POLYNET_SITES_DOMAIN ?? "").trim().toLowerCase();
+  const suffix = (process.env.POLYNET_SITES_HOST_SUFFIX ?? "").trim().toLowerCase();
+  return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
+}
+
+// Every community is on its own site from the start: its site address and
+// private twin are registered when it's created, and Polynet's default site
+// serves them until the founder deploys their own. A slug with no valid site
+// address, or an address already taken, just leaves the community without one;
+// it never stops the community being created.
+export async function registerCommunitySiteAddresses(ctx: any, community: { _id: any; slug?: unknown }) {
+  const sites = sitesEnv();
+  const host = sites ? siteHostname(String(community.slug ?? ""), sites.domain, sites.suffix) : null;
+  if (!sites || !host) return null;
+  try {
+    return await registerSiteOrigins(ctx, community._id, host, sites.domain, sites.suffix);
+  } catch {
+    return null;
+  }
+}
+
+// Communities created before every community had a site: register theirs, a
+// page at a time, until done:
+//   npx convex run communitySites:registerCommunitySiteAddressesInternal '{"dryRun":true}'
+export const registerCommunitySiteAddressesInternal = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const sites = sitesEnv();
+    if (!sites) return { registered: [], skipped: 0, continueCursor: null, isDone: true, sitesConfigured: false };
+    const page = await ctx.db.query("communities").paginate({ cursor: args.cursor ?? null, numItems: 50 });
+    const registered: string[] = [];
+    let skipped = 0;
+    for (const community of page.page) {
+      const host = communityIsActive(community as any) ? siteHostname(String(community.slug ?? ""), sites.domain, sites.suffix) : null;
+      if (!host) { skipped += 1; continue; }
+      if (args.dryRun) {
+        const taken = await ctx.db.query("communityDomains").withIndex("by_origin", (q: any) => q.eq("origin", `https://${host}`)).first();
+        if (!taken) registered.push(`https://${host}`);
+        continue;
+      }
+      const result = await registerCommunitySiteAddresses(ctx, community);
+      if (result) registered.push(...result.added); else skipped += 1;
+    }
+    return { registered, skipped, continueCursor: page.continueCursor, isDone: page.isDone, sitesConfigured: true };
+  },
+});
 
 // Publishing makes the site's origin (and its private twin's) the community's,
 // so sign-in may return there, and records the deploy.
