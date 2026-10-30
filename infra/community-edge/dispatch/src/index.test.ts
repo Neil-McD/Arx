@@ -438,7 +438,12 @@ function deployedSite(files: Record<string, string>) {
 const FRAME = '<!doctype html><html lang="en"><head><title>Apps Club</title></head><body><header>Apps</header><main><polynet-page></polynet-page></main></body></html>';
 const browse = (path: string, headers: Record<string, string> = {}) =>
   request(path, { headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", ...headers } });
-const identity = (name: string) => vi.fn(async () => Response.json({ ok: true, community: { slug: "apps-community", name, one_liner: null, about: null, member_count: 3 } }));
+// The backend's public identity: Apps Club's, at any of its addresses; an address no community has (nobody-*) is unknown.
+const identity = (name: string) => vi.fn(async (_url: string, init?: RequestInit) => {
+  const origin = String(JSON.parse(String(init?.body ?? "{}")).origin ?? "");
+  if (origin.includes("//nobody")) return Response.json({ ok: false, code: "community_unavailable" }, { status: 404 });
+  return Response.json({ ok: true, community: { slug: "apps-community", name, one_liner: null, about: null, member_count: 3 } });
+});
 
 test("standard pages: the site's frame is served at each standard page and the addresses under it, titled, with the shell", async () => {
   resetEdgeCaches();
@@ -716,6 +721,72 @@ const at = (origin: string, path: string, init: RequestInit = {}) => {
   if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin");
   return new Request(`${origin}${path}`, { ...init, headers });
 };
+
+// A community with nothing deployed: its addresses are registered (the backend
+// knows them), and Polynet's default site serves them.
+function undeployed() {
+  const e = sitesEnv();
+  return { ...e, DEV_ROUTES_JSON: "{}" };
+}
+const defaultIdentity = (community: Record<string, unknown>) => vi.fn(async (_url: string, init?: RequestInit) => {
+  const origin = String(JSON.parse(String(init?.body ?? "{}")).origin ?? "");
+  if (!origin.includes("//apps-community")) return Response.json({ ok: false, code: "community_unavailable" }, { status: 404 });
+  return Response.json({ ok: true, community: { slug: "apps-community", one_liner: null, about: null, member_count: 3, ...community } });
+});
+
+test("default site: a community with nothing deployed is on its own site, Polynet's design, every word escaped", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({
+    name: "Apps <Club>", one_liner: "We build \"apps\".", about: "Tuesdays & Thursdays.", member_count: 1,
+    banner_url: "https://cdn.example.com/b.png", avatar_url: "javascript:alert(1)",
+  }));
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  const e = undeployed();
+  const home = await edge.fetch(at(SITE, "/", { headers: { "sec-fetch-mode": "navigate" } }), e);
+  expect(home.status).toBe(200);
+  const html = await home.text();
+  expect(html).toContain("<title>Apps &#60;Club&#62;</title>");
+  expect(html).toContain('<h1 class="name">Apps &#60;Club&#62;</h1>');
+  expect(html).toContain('<p class="tagline">We build &#34;apps&#34;.</p>');
+  expect(html).toContain("Tuesdays &#38; Thursdays.");
+  expect(html).toContain("<span>1 member</span>");
+  expect(html).toContain('<meta property="og:image" content="https://cdn.example.com/b.png">');
+  expect(html).toContain('<a class="btn go" href="/join">Join the community</a>');
+  expect(html).not.toContain("javascript:");
+  // The shell is added, as on any site.
+  expect(html).toContain('<script type="module" src="/__polynet/ui.js"></script>');
+  // A standard page is drawn in the default frame.
+  const chat = await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), e);
+  const frame = await chat.text();
+  expect([chat.status, frame]).toEqual([200, expect.stringContaining("<title>Chat · Apps &lt;Club&gt;</title>")]);
+  expect(frame).toContain("<polynet-page></polynet-page>");
+  expect(frame).toContain('<link rel="stylesheet" href="/site.css">');
+  // Its stylesheet carries the community's own colour.
+  const css = await edge.fetch(at(SITE, "/site.css"), e);
+  expect([css.status, css.headers.get("content-type")]).toEqual([200, "text/css; charset=utf-8"]);
+  expect(await css.text()).toMatch(/^:root \{ --accent: #[0-9a-f]{6}; \}/);
+  // Anything else on the default site is simply not found.
+  expect((await edge.fetch(at(SITE, "/secret.html"), e)).status).toBe(404);
+  // An address no community has still says nothing is published there.
+  const nobody = await edge.fetch(at("https://nobody-staging.polynet.page", "/"), e);
+  expect([nobody.status, await nobody.text()]).toEqual([404, expect.stringContaining("No site is published at nobody-staging.polynet.page yet.")]);
+  expect((await edge.fetch(at("https://nobody--me-staging.polynet.page", "/communities"), e)).status).toBe(404);
+});
+
+test("default site: the member's own pages on the twin draw the default frame, with its styles as a file", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club" }));
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  const e = undeployed();
+  const res = await edge.fetch(at(TWIN, "/communities", { headers: { "sec-fetch-mode": "navigate", cookie: `__Host-polynet_session=${TOKEN}` } }), e);
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("<title>Your communities · Apps Club</title>");
+  expect(html).not.toContain("/site.js");
+  // Its stylesheet is the site's: the twin sends it there.
+  const css = await edge.fetch(at(TWIN, "/site.css", { headers: { "sec-fetch-dest": "style" } }), e);
+  expect([css.status, css.headers.get("location")]).toEqual([302, `${SITE}/site.css`]);
+});
 
 test("twin: one label beside the site's, mapped both ways by the shared helper, never a slug's own site", async () => {
   const { privateTwinHost, siteHostOfTwin, siteSlugShapeOk, personalPage } = await import("../../../../packages/polynet-cli/checks.mjs");

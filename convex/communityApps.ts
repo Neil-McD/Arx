@@ -107,6 +107,7 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
     const community = domain ? await ctx.db.get(domain.communityId) : null;
     if (!community || !communityIsActive(community as any)) return null;
     const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+    const branding = await resolveCommunityBrandingFields(ctx, community as any);
     return {
       slug: String(community.slug ?? ""),
       name: text(community.name, 120) ?? String(community.slug ?? ""),
@@ -114,6 +115,9 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
       about: text((community as any).about, 4000),
       member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
       agent_on: await communityAgentIsOn(ctx, community._id),
+      // The look Polynet's default site wears: the same avatar and banner its join page shows.
+      avatar_url: branding.avatar_url,
+      banner_url: branding.banner_url,
     };
   },
 });
