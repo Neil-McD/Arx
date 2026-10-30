@@ -231,7 +231,7 @@ const baseCss = [
   read("apps/web/src/styles/community-and-content.css"),
   read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
 ].join("\n");
-const appearance = read("apps/web/src/components/WebAppearanceSettingsSection.tsx");
+const appearance = read("apps/web/src/components/WebYourDisplaySection.tsx");
 const main = read("apps/web/src/main.tsx");
 const app = read("apps/web/src/App.tsx");
 const shellState = read("apps/web/src/controllers/useWebShellState.ts");
@@ -564,8 +564,8 @@ assert.doesNotMatch(
   "the retired overloaded glass background and border roles must not reappear",
 );
 
-assert.match(appearance, /role="group" aria-label="Theme"/);
-assert.match(appearance, /aria-pressed=\{appTheme === theme\.id\}/);
+assert.match(appearance, /role="radiogroup" aria-label="Light or dark"/);
+assert.match(appearance, /aria-checked=\{selected\}/);
 assert.match(baseCss, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/);
 assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);

@@ -1,3 +1,5 @@
+import { isTestMemberAuthSubject, resolveTestMemberStandIn } from "./communityTestMemberCore";
+
 function normalizeSubject(raw: unknown): string {
   return String(raw ?? "").trim();
 }
@@ -136,6 +138,11 @@ export async function resolveAuthenticatedSubject(args: {
   const allowUnverified = allowUnverifiedAuthSubjectFallback();
 
   if (verifiedSubject && explicitSubject && verifiedSubject !== explicitSubject) {
+    // An owner's test-run tab asks as the test member they made.
+    if (isTestMemberAuthSubject(explicitSubject)) {
+      await resolveTestMemberStandIn(args.ctx, verifiedSubject, explicitSubject);
+      return explicitSubject;
+    }
     throw new Error("auth_subject_mismatch");
   }
 
@@ -160,6 +167,18 @@ export async function resolveAuthenticatedIdentityProfile(args: {
   const allowUnverified = allowUnverifiedAuthSubjectFallback();
 
   if (verifiedIdentity && explicitSubject && verifiedIdentity.authSubject !== explicitSubject) {
+    if (isTestMemberAuthSubject(explicitSubject)) {
+      // The test member's own profile: none of the owner's email or name.
+      const row = await resolveTestMemberStandIn(args.ctx, verifiedIdentity.authSubject, explicitSubject);
+      return {
+        authSubject: explicitSubject,
+        email: null,
+        emailVerified: false,
+        emailVerificationSource: null,
+        displayName: row.label,
+        avatarUrl: null,
+      };
+    }
     throw new Error("auth_subject_mismatch");
   }
 

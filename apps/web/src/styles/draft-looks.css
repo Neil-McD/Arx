@@ -1,0 +1,1312 @@
+/* DRAFT EXPERIMENT (2026-10-25), see controllers/useDraftLook.ts.
+   Rail looks and three Substack-feel looks for the Channels layout, to compare
+   with the current look before anything is kept. Sizes are in rem so the
+   community theme map leaves them alone. Nothing here applies unless the
+   owner picked a draft look in Settings → Appearance → Customize (or the
+   address sets one with ?feel=, ?rail_size=, ?rail_color=). */
+
+/* The Display menu grew: let it scroll instead of running off short screens. */
+.community-display-panel {
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
+}
+
+/* ───────── Left rail: bigger icons ───────── */
+@media (min-width: 721px) {
+  html:root[data-rail-size="large"] {
+    --web-rail-width: 5.25rem;
+    --web-rail-control-size: 3.25rem;
+  }
+  html:root[data-rail-size="large"] .rail .community-rail-button {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 0.75rem;
+  }
+  html:root[data-rail-size="large"] .rail .community-rail-icon {
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+  html:root[data-rail-size="large"] .rail .community-rail-list {
+    gap: 0.5rem;
+  }
+}
+
+/* ───────── Left rail: community colours ─────────
+   --rail-feel-* are the community theme's colours, copied onto the root by
+   WebShellChromeHost onto <html> while a draft rail colour is on. */
+html:root[data-rail-color] {
+  --rail-feel-ink: var(--rail-feel-text-primary, var(--text-ink-primary));
+}
+html:root[data-rail-color="blend"] {
+  --surface-rail: var(--rail-feel-bg-workspace, var(--surface-rail));
+  --community-shell-stroke: color-mix(in srgb, var(--rail-feel-ink) 10%, transparent);
+}
+html:root[data-rail-color="tint"] {
+  --surface-rail: color-mix(in srgb, var(--rail-feel-pn-accent, transparent) 14%, var(--rail-feel-bg-workspace, var(--surface-rail)));
+  --community-shell-stroke: color-mix(in srgb, var(--rail-feel-pn-accent, var(--rail-feel-ink)) 22%, transparent);
+}
+html:root[data-rail-color="brand"] {
+  --surface-rail: var(--rail-feel-pn-accent, var(--surface-rail));
+  --rail-feel-ink: var(--rail-feel-pn-on-accent, #fff);
+  --community-shell-stroke: transparent;
+}
+html:root[data-rail-color] .rail {
+  --text-ink-primary: var(--rail-feel-ink);
+  --community-rail-control-bg: color-mix(in srgb, var(--rail-feel-ink) 8%, transparent);
+  --community-rail-button-border: 1px solid color-mix(in srgb, var(--rail-feel-ink) 12%, transparent);
+  --surface-card-hover: color-mix(in srgb, var(--rail-feel-ink) 14%, transparent);
+  color: var(--rail-feel-ink);
+}
+html:root[data-rail-color] .rail .community-rail-divider {
+  background: color-mix(in srgb, var(--rail-feel-ink) 16%, transparent);
+}
+/* On a page-coloured rail the community card needs its edge to stay visible. */
+html:root[data-rail-color="blend"] .product-shell-surface {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rail-feel-ink) 6%, transparent);
+}
+
+/* ═════════ Channels: Substack-feel looks (shared by all three) ═════════
+   Substack's discipline: one quiet nav with no panel of its own, 36px items,
+   grey fill for the active item, UPPERCASE group labels, hairlines instead of
+   boxes. The community's colours and fonts still apply. */
+.product-shell-surface[data-channels-feel] {
+  --feel-hairline: var(--border-default, color-mix(in srgb, var(--text-primary) 10%, transparent));
+  --feel-fill: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --feel-fill-hover: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.product-shell-surface[data-channels-feel] > .community-nav {
+  background: var(--bg-workspace);
+  box-shadow: none;
+  border-right: 1px solid var(--feel-hairline);
+  padding: 0.75rem 0.75rem 0.75rem;
+}
+/* The banner moves out of the nav (Publication shows the mark in a masthead). */
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-header {
+  display: none;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-identity {
+  position: relative;
+  margin: -0.75rem -0.75rem 0.5rem;
+  padding: 0 0.75rem 0 1.375rem;
+  box-sizing: border-box;
+  height: 3.5rem;
+  min-height: 3.5rem;
+  flex: 0 0 3.5rem;
+  background: transparent;
+  border-bottom: 1px solid var(--feel-hairline);
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-identity::before,
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-identity::after {
+  display: none;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-identity-name {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-shadow: none;
+  letter-spacing: 0;
+  text-transform: none;
+  font-family: var(--pn-font-body, inherit);
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-settings {
+  color: var(--text-secondary);
+  background: transparent;
+  border-radius: 0.5rem;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-settings:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] > .community-nav .nav-item {
+  min-height: 2.25rem;
+  padding: 0 0.625rem;
+  margin-bottom: 0.125rem;
+  border: 0;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  gap: 0.625rem;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .nav-item .nav-icon {
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .nav-item:hover {
+  background: var(--feel-fill-hover);
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel] > .community-nav .nav-item.active {
+  background: var(--feel-fill);
+  border: 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .nav-item.active .nav-icon {
+  color: var(--text-primary);
+  opacity: 1;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-channel-add {
+  color: var(--text-muted);
+}
+/* Group labels drawn from the existing structure: channels, the community's
+   pages, then the owner's tools. */
+.product-shell-surface[data-channels-feel] > .community-nav .community-channel-list::before,
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-divider {
+  display: block;
+  height: auto;
+  background: none;
+  margin: 1rem 0.625rem 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--pn-font-body, inherit);
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-channel-list::before {
+  /* The list draws its own Channels label, with its + (CommunityNav). */
+  content: none;
+  display: none;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-channel-list + .community-nav-divider::before {
+  content: "Community";
+}
+.product-shell-surface[data-channels-feel] > .community-nav .nav-item + .community-nav-divider::before {
+  content: "Manage";
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-invite {
+  justify-content: center;
+  min-height: 2.5rem;
+  border: 1px solid var(--feel-hairline);
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.product-shell-surface[data-channels-feel] > .community-nav .community-nav-invite .nav-icon {
+  color: var(--text-primary);
+}
+
+/* Shared page chrome: a plain title bar on a hairline, as tall as the side
+   column's title row. One type scale across the page: 11px labels, 12px
+   times, 13px notes, 14px names and menu items, 15px messages, 16px titles. */
+.product-shell-surface[data-channels-feel] .community-channel-header {
+  box-sizing: border-box;
+  height: 3.5rem;
+  min-height: 3.5rem;
+  padding-inline: 1.5rem 1rem;
+  border-bottom: 1px solid var(--feel-hairline);
+  box-shadow: none;
+  background: var(--bg-workspace);
+}
+.product-shell-surface[data-channels-feel] .community-channel-header h1 {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.product-shell-surface[data-channels-feel] .community-channel-header-identity svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-muted);
+}
+
+/* Chat: one reading rhythm. 36px avatars, 15px messages at 1.6, a quiet name
+   line, and notices (joins, days) a step smaller and greyer than talk. */
+.product-shell-surface[data-channels-feel] .community-interaction-group {
+  padding-block: 0.625rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-group-gutter .community-interaction-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-meta-row {
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.125rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-author {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-meta-row > span:not(.community-interaction-author):not(.community-interaction-badge) {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-badge {
+  font-size: 0.625rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 0.375rem;
+  border-radius: 0.25rem;
+  background: var(--feel-fill);
+  color: var(--text-secondary);
+  border: 0;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-day {
+  margin-block: 1rem 0.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-day::before,
+.product-shell-surface[data-channels-feel] .community-interaction-day::after {
+  background: var(--feel-hairline);
+  opacity: 1;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-member-arrivals {
+  min-height: 1.75rem;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-member-arrivals > span {
+  font-size: 0.8125rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-member-arrival-faces {
+  --member-avatar-stack-face-size: 1.25rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-member-arrival-faces .member-avatar-stack-face {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.5625rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-day span {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* The thread panel: its title row is as tall as "# General" beside it, on
+   the same hairline, in the same type. The band and the space under it both
+   follow --web-topbar-height. */
+.product-shell-surface[data-channels-feel] .community-interaction-thread-drawer {
+  --web-topbar-height: 3.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-thread-drawer .community-interaction-drawer-back {
+  box-sizing: border-box;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--feel-hairline);
+  background: var(--bg-workspace);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-drawer-back .back-to-workspace {
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem 0.375rem 0.375rem;
+  border-radius: 0.5rem;
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-drawer-back .back-to-workspace:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-drawer-back .back-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-muted);
+}
+/* Replies: a quiet toolbar on a hairline, Reply first; the thread row in the
+   page's own type. */
+.product-shell-surface[data-channels-feel] .community-interaction-msg-actions {
+  top: -1rem;
+  border: 1px solid var(--feel-hairline);
+  border-radius: 0.5rem;
+  background: var(--surface-card, var(--bg-card-solid));
+  box-shadow: 0 0.25rem 0.75rem color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-msg-action {
+  border-radius: 0.375rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-msg-action:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-msg-reply {
+  font-size: 0.8125rem;
+}
+.product-shell-surface[data-channels-feel] .community-interaction-message:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-thread-row:hover {
+  border-color: var(--feel-hairline);
+  background: var(--surface-card, var(--bg-card-solid));
+}
+.product-shell-surface[data-channels-feel] .community-interaction-reply-pill {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pn-link, var(--pn-accent, var(--accent-attention)));
+}
+.product-shell-surface[data-channels-feel] :is(.community-interaction-thread-time, .community-interaction-thread-open) {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-interaction-main-composer {
+  padding: 0 1.5rem 1.25rem;
+}
+.product-shell-surface[data-channels-feel] .chat-input-bar {
+  border-radius: 0.75rem;
+  border: 1px solid var(--feel-hairline);
+  background: var(--surface-card, var(--bg-card));
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel] .chat-input {
+  font-size: 0.9375rem;
+}
+
+/* The member panel: Substack's subscriber list. No panel colour of its own,
+   a hairline edge, a "Members" title row level with the channel title, plain
+   rows with the last-seen date on the right, and no boxes. */
+.product-shell-surface[data-channels-feel] .community-context-panel {
+  background: var(--bg-workspace);
+  border-left: 1px solid var(--feel-hairline);
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel] .community-context-rail-head {
+  box-sizing: border-box;
+  height: 3.5rem;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--feel-hairline);
+}
+/* The community's name is already in the masthead and the side column. */
+.product-shell-surface[data-channels-feel] .community-context-rail-name {
+  font-size: 0;
+}
+.product-shell-surface[data-channels-feel] .community-context-rail-name::before {
+  content: "Members";
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+/* The Online list below shows the same faces. */
+.product-shell-surface[data-channels-feel] .community-context-facepile {
+  display: none;
+}
+.product-shell-surface[data-channels-feel] .community-context-panel :is(.community-context-section, .community-context-presence-heading h4) {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-context-memory {
+  padding: 1rem 1.25rem 1.125rem;
+  border-bottom: 1px solid var(--feel-hairline);
+}
+.product-shell-surface[data-channels-feel] .community-context-memory-summary {
+  margin-top: 0.625rem;
+  gap: 0.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-context-memory-preview {
+  height: 7.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--feel-hairline);
+  background: transparent;
+}
+.product-shell-surface[data-channels-feel] .community-context-memory-status {
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-context-members {
+  padding: 0.5rem 0.75rem 1rem;
+}
+.product-shell-surface[data-channels-feel] .community-context-members .community-context-section,
+.product-shell-surface[data-channels-feel] .community-context-presence-heading {
+  margin: 1rem 0 0.375rem;
+  padding: 0 0.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-context-members .community-context-presence-heading .community-context-section {
+  margin: 0;
+  padding: 0;
+}
+.product-shell-surface[data-channels-feel] .community-context-agent-list {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.product-shell-surface[data-channels-feel] .community-context-agent-list .community-context-member + .community-context-member {
+  border-top: 0;
+}
+.product-shell-surface[data-channels-feel] .community-context-member {
+  min-height: 2.5rem;
+  box-sizing: border-box;
+  padding: 0.25rem 0.5rem;
+  gap: 0.75rem;
+  border-radius: 0.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-context-member:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] .community-context-member-trigger {
+  gap: 0.75rem;
+}
+.product-shell-surface[data-channels-feel] .community-context-member-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 0.625rem;
+}
+.product-shell-surface[data-channels-feel] .community-context-member-name {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel] .community-context-member-name.is-admin {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.product-shell-surface[data-channels-feel] .community-context-member.is-offline .community-context-member-name {
+  color: var(--text-secondary);
+}
+/* The last-seen date sits on the right; the row's actions take its place
+   on hover, so names keep their width. */
+.product-shell-surface[data-channels-feel] .community-context-member-last-active {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  opacity: 1;
+}
+.product-shell-surface[data-channels-feel] .community-context-member-action {
+  display: none;
+}
+.product-shell-surface[data-channels-feel] .community-context-member:is(:hover, :focus-within) .community-context-member-action {
+  display: grid;
+}
+.product-shell-surface[data-channels-feel] .community-context-member:is(:hover, :focus-within):has(.community-context-member-action) .community-context-member-last-active {
+  display: none;
+}
+.product-shell-surface[data-channels-feel] .members-view-all {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  color: var(--text-secondary);
+}
+.product-shell-surface[data-channels-feel] .members-view-all:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] .community-context-members-footer {
+  margin: 0.75rem 0.5rem 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-siblings {
+  margin: 0;
+  padding: 1rem 1.25rem 1.125rem;
+  border-top: 1px solid var(--feel-hairline);
+}
+.product-shell-surface[data-channels-feel] .community-siblings h2 {
+  margin: 0 0 0.375rem;
+  font-family: var(--pn-font-body, inherit);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel] .community-sibling {
+  gap: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  margin-inline: -0.5rem;
+  border-radius: 0.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-sibling:hover {
+  background: var(--feel-fill-hover);
+}
+.product-shell-surface[data-channels-feel] .community-sibling :is(img, .community-sibling-initial) {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+}
+.product-shell-surface[data-channels-feel] .community-sibling strong {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+.product-shell-surface[data-channels-feel] .community-sibling small {
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--text-muted);
+}
+/* Buttons: Substack's 8px corners, 40px primary. */
+.product-shell-surface[data-channels-feel] :is(.community-events-new-btn, .community-events-state button, .settings-primary-action) {
+  border-radius: 0.5rem;
+  min-height: 2.5rem;
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel] .platform-switcher {
+  border-radius: 0.5rem;
+  background: var(--feel-fill-hover);
+  border: 0;
+  padding: 0.1875rem;
+}
+.product-shell-surface[data-channels-feel] .platform-switcher-btn {
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+}
+/* The flat switch draws its own active pill, so the sliding one is hidden;
+   its edge used to show as a stray mark beside the active option. */
+.product-shell-surface[data-channels-feel] .platform-switcher::before { display: none; }
+.product-shell-surface[data-channels-feel] .analytics-title-stack .panel-title {
+  font-size: 1.5rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel] .platform-switcher-btn.is-active,
+.product-shell-surface[data-channels-feel] .platform-switcher-btn.active {
+  background: var(--bg-workspace);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
+}
+.product-shell-surface[data-channels-feel] .resources-preview-mode-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* ───────── Quiet: Substack's admin. One centred column, plain titles. ───────── */
+.product-shell-surface[data-channels-feel="quiet"] .community-interaction-feed,
+.product-shell-surface[data-channels-feel="quiet"] .community-interaction-main-composer .chat-input-bar {
+  max-width: 47.5rem;
+  margin-inline: auto;
+  width: calc(100% - 2rem);
+  box-sizing: border-box;
+}
+.product-shell-surface[data-channels-feel="quiet"] .community-knowledge-page,
+.product-shell-surface[data-channels-feel="quiet"] .community-events-panel {
+  max-width: 54.25rem;
+  margin-inline: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+/* A picked card size widens the course catalog page to fit more per row. */
+.product-shell-surface[data-channels-feel="quiet"] .community-knowledge-page:has(.resource-course-catalog) {
+  max-width: var(--pn-course-catalog-max-owner, 54.25rem);
+}
+.product-shell-surface[data-channels-feel="quiet"] .community-knowledge-header {
+  padding: 2rem 1.5rem 0.5rem;
+  border-bottom: 0;
+}
+.product-shell-surface[data-channels-feel="quiet"] :is(.community-knowledge-header h1) {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1.5rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Columns and spacing the owner picked in Customize win over the look's own. */
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-grid {
+  grid-template-columns: var(--pn-course-columns-owner, repeat(2, minmax(0, 1fr)));
+  gap: var(--pn-course-gap-owner, 1rem);
+}
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-card {
+  border: 1px solid var(--feel-hairline);
+  border-radius: 0.75rem;
+  box-shadow: none;
+  background: var(--bg-workspace);
+}
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-card:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+}
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-card-cover {
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-card-heading strong {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-card-description {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+.product-shell-surface[data-channels-feel="quiet"] .resource-course-create-card {
+  border-radius: 0.75rem;
+  min-height: 6rem;
+}
+.product-shell-surface[data-channels-feel="quiet"] .community-events-panel {
+  padding-top: 2rem;
+}
+.product-shell-surface[data-channels-feel="quiet"] .community-events-panel .resources-header {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1.5rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel="quiet"] .community-events-panel .feed-header-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+.product-shell-surface[data-channels-feel] .community-events-month-nav {
+  border-color: var(--feel-hairline);
+}
+.product-shell-surface[data-channels-feel] .community-events-month-copy h2 {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ───────── Reader: Substack's reading view. Narrow column, post lists. ───────── */
+.product-shell-surface[data-channels-feel="reader"] .community-interaction-feed,
+.product-shell-surface[data-channels-feel="reader"] .community-interaction-main-composer .chat-input-bar {
+  max-width: 42.5rem;
+  margin-inline: auto;
+  width: calc(100% - 2rem);
+  box-sizing: border-box;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-interaction-message {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-interaction-meta-row {
+  font-size: 0.8125rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-interaction-group {
+  padding-block: 0.75rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-interaction-main-composer .chat-input-bar {
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-workspace));
+}
+.product-shell-surface[data-channels-feel="reader"] .community-channel-header h1 {
+  font-family: var(--pn-font-heading, inherit);
+  font-size: 1.25rem;
+  font-weight: var(--pn-heading-weight, 700);
+  text-transform: var(--pn-heading-case, none);
+}
+.product-shell-surface[data-channels-feel="reader"] .community-knowledge-page,
+.product-shell-surface[data-channels-feel="reader"] .community-events-panel {
+  max-width: 46rem;
+  margin-inline: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-knowledge-header {
+  padding: 2.5rem 1.5rem 0.25rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-knowledge-header h1,
+.product-shell-surface[data-channels-feel="reader"] .community-events-panel .resources-header {
+  font-family: var(--pn-font-heading, inherit);
+  font-size: 2rem;
+  line-height: 2.25rem;
+  font-weight: var(--pn-heading-weight, 700);
+  text-transform: var(--pn-heading-case, none);
+  letter-spacing: var(--pn-heading-tracking, 0);
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel="reader"] .community-events-panel {
+  padding-top: 2.5rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .community-events-panel .feed-header-subtitle {
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+/* Courses as a post list: text on the left, a small cover on the right. */
+.product-shell-surface[data-channels-feel="reader"] .resource-course-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--feel-hairline);
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-grid::before {
+  content: "Courses";
+  display: block;
+  padding: 1rem 0 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card {
+  border: 0;
+  border-bottom: 1px solid var(--feel-hairline);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card,
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-main {
+  min-height: 0;
+  height: auto;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10rem;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.25rem 0;
+  background: transparent;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-cover {
+  grid-column: 2;
+  grid-row: 1;
+  width: 10rem;
+  height: 6.25rem;
+  aspect-ratio: auto;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  position: relative;
+}
+/* The small cover can't use the framed crop computed for a full card. */
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-cover img {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  object-fit: cover;
+  transform: none !important;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-body {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 0;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-heading strong {
+  font-family: var(--pn-font-body, inherit);
+  font-size: 1.1875rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-description {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-progress-track {
+  max-width: 10rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-progress {
+  justify-content: flex-start;
+  gap: 0.75rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-lock {
+  left: auto;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-drag {
+  left: -2.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card-menu {
+  right: 11rem;
+  top: 1rem;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-create-card {
+  min-height: 3.5rem;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* ───────── Publication: Substack's site. Masthead and editorial pages. ───────── */
+.product-shell-surface[data-channels-feel="publication"] > .channels-feel-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.product-shell-surface[data-channels-feel="publication"] > .channels-feel-body main.workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.channels-feel-masthead {
+  flex: 0 0 auto;
+  position: relative;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--feel-hairline);
+  background: var(--bg-workspace);
+  color: var(--text-primary);
+}
+.channels-feel-masthead p {
+  margin: 0;
+}
+.channels-feel-masthead-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.25rem 1.5rem 2rem;
+  max-width: 46rem;
+  margin: 0 auto;
+}
+/* The mark and the name share one line, centred on each other. */
+.channels-feel-masthead-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  min-width: 0;
+}
+.channels-feel-masthead-mark {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--feel-fill);
+  flex: 0 0 auto;
+  position: relative;
+}
+.channels-feel-masthead-mark img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.channels-feel-masthead-mark-fallback {
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+.channels-feel-masthead-name {
+  font-family: var(--pn-font-heading, inherit);
+  font-weight: var(--pn-heading-weight, 700);
+  text-transform: var(--pn-heading-case, none);
+  letter-spacing: var(--pn-heading-tracking, 0);
+  font-size: 2.125rem;
+  line-height: 2.5rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.channels-feel-masthead-text {
+  max-width: 36rem;
+  margin-top: 0.875rem;
+}
+.channels-feel-masthead-line {
+  font-size: 1.0625rem;
+  line-height: 1.625rem;
+  color: var(--text-secondary);
+}
+.channels-feel-masthead-meta {
+  margin-top: 0.375rem !important;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: var(--text-muted);
+}
+.channels-feel-masthead-invite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  margin-top: 1.25rem;
+  padding: 0 1.125rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--pn-button, var(--pn-accent, var(--text-primary)));
+  color: var(--pn-on-button, var(--pn-on-accent, var(--bg-workspace)));
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+/* Slim (chat): one bar exactly as tall as the side column's title row, so the
+   two titles and their hairlines line up across the top. */
+.channels-feel-masthead.is-slim {
+  height: 3.5rem;
+}
+.channels-feel-masthead.is-slim .channels-feel-masthead-inner {
+  flex-direction: row;
+  justify-content: flex-start;
+  height: 100%;
+  /* Left edge matches the channel header below; the right stays clear of the
+     top bar's own icons. */
+  padding: 0 var(--web-topbar-right-action-safe-inset, 9rem) 0 1.5rem;
+  max-width: none;
+}
+.channels-feel-masthead.is-slim .channels-feel-masthead-title {
+  gap: 0.625rem;
+}
+.channels-feel-masthead.is-slim .channels-feel-masthead-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4375rem;
+}
+.channels-feel-masthead.is-slim .channels-feel-masthead-name {
+  font-size: 1.1875rem;
+  line-height: 1.5rem;
+}
+.product-shell-surface[data-channels-feel="publication"] .community-interaction-feed,
+.product-shell-surface[data-channels-feel="publication"] .community-interaction-main-composer .chat-input-bar {
+  max-width: 45rem;
+  margin-inline: auto;
+  width: calc(100% - 2rem);
+  box-sizing: border-box;
+}
+.product-shell-surface[data-channels-feel="publication"] .community-knowledge-page,
+.product-shell-surface[data-channels-feel="publication"] .community-events-panel {
+  max-width: 60rem;
+  margin-inline: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.product-shell-surface[data-channels-feel="publication"] .community-knowledge-page:has(.resource-course-catalog) {
+  max-width: var(--pn-course-catalog-max-owner, 60rem);
+}
+.product-shell-surface[data-channels-feel="publication"] .community-knowledge-header {
+  padding: 1.75rem 1.5rem 0.75rem;
+  margin: 0 1.5rem;
+  border-bottom: 1px solid var(--feel-hairline);
+  padding-inline: 0;
+}
+.product-shell-surface[data-channels-feel="publication"] .community-knowledge-header h1,
+.product-shell-surface[data-channels-feel="publication"] .community-events-panel .resources-header {
+  font-family: var(--pn-font-heading, inherit);
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  font-weight: var(--pn-heading-weight, 700);
+  text-transform: var(--pn-heading-case, none);
+  letter-spacing: var(--pn-heading-tracking, 0);
+  color: var(--text-primary);
+}
+.product-shell-surface[data-channels-feel="publication"] .community-events-panel {
+  padding-top: 1.75rem;
+  max-width: 46rem;
+}
+/* Courses as editorial cards: open covers, no boxes, heading-font titles. */
+.product-shell-surface[data-channels-feel="publication"] .resource-course-grid {
+  grid-template-columns: var(--pn-course-columns-owner, repeat(2, minmax(0, 1fr)));
+  gap: var(--pn-course-gap-owner, 2rem 1.75rem);
+}
+/* Phones keep the owner's phone columns (one by default) in either look. */
+@media (max-width: 640px) {
+  .product-shell-surface:is([data-channels-feel="quiet"], [data-channels-feel="publication"]) .resource-course-grid {
+    grid-template-columns: var(--pn-course-columns-phone, minmax(0, 1fr));
+  }
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card-main {
+  background: transparent;
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card-cover {
+  border-radius: 0.625rem;
+  overflow: hidden;
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card-body {
+  padding: 0.875rem 0 0;
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card-heading strong {
+  font-family: var(--pn-font-heading, inherit);
+  font-weight: var(--pn-heading-weight, 700);
+  text-transform: var(--pn-heading-case, none);
+  letter-spacing: var(--pn-heading-tracking, 0);
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card-description {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+.product-shell-surface[data-channels-feel="publication"] .resource-course-create-card {
+  border-radius: 0.625rem;
+}
+.product-shell-surface[data-channels-feel]:is([data-channels-feel="reader"], [data-channels-feel="publication"]) .resource-course-card:is(:hover, :focus-within) {
+  transform: none;
+  box-shadow: none;
+}
+.product-shell-surface[data-channels-feel="reader"] .resource-course-card:hover .resource-course-card-heading strong,
+.product-shell-surface[data-channels-feel="publication"] .resource-course-card:hover .resource-course-card-heading strong {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+/* ═════════ Lessons: one reading layout in every look ═════════
+   Each look capped Knowledge at its catalog width (46–60rem). With the course
+   outline beside it, a lesson then had about 200px left, and while editing the
+   title squeezed to one letter per line. A lesson now gets the same room in
+   every look and in Classroom: the outline, then a centred ~680px reading
+   column (about 70 characters) with even margins. */
+.community-knowledge-page[data-reading] {
+  --knowledge-reading-measure: 42.5rem;
+  --knowledge-reading-gutter: clamp(1rem, 3vw, 2.5rem);
+}
+.product-shell-surface[data-channels-feel] .community-knowledge-page[data-reading],
+.product-shell-surface .community-knowledge-page[data-reading] {
+  max-width: none;
+  margin-inline: auto;
+  width: 100%;
+}
+.community-knowledge-page[data-reading] .resources-panel {
+  container-type: inline-size;
+  container-name: lesson-page;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  padding-inline: var(--knowledge-reading-gutter);
+}
+.community-knowledge-page[data-reading] .knowledge-resource-reader {
+  --lesson-reading-measure: var(--knowledge-reading-measure);
+}
+.community-knowledge-page[data-reading] .knowledge-resource-reader .resource-viewer-content {
+  padding-inline: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+/* The lesson never sizes itself past the page (on a phone it ran 16px wide). */
+.community-knowledge-page[data-reading] .knowledge-resource-reader :is(.resource-viewer-body, .resource-viewer-column, .lesson-done-row) { min-width: 0; }
+.community-knowledge-page[data-reading] .knowledge-resource-reader .resource-viewer-column { grid-template-columns: minmax(0, 1fr); }
+/* Too narrow for the outline beside a full column: it moves above the lesson
+   as a collapsible bar, whatever the window or look. */
+@container (max-width: 58rem) {
+  .community-knowledge-page[data-reading] .resource-course-workspace { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  .community-knowledge-page[data-reading] .resource-course-outline { position: static; max-height: none; }
+}
+/* Editing: Saved · Preview · Done get their own row above the title, so the
+   title always has the full column. */
+.resource-viewer-title-row:has(.resource-viewer-edit-actions) {
+  flex-wrap: wrap;
+}
+.resource-viewer-title-row:has(.resource-viewer-edit-actions) .resource-viewer-header-aside {
+  order: -1;
+  width: 100%;
+  justify-content: flex-end;
+}
+.resource-viewer-title-row:has(.resource-viewer-edit-actions) .resource-viewer-title {
+  flex: 1 1 100%;
+}
+.resource-viewer-title {
+  min-width: min(100%, 12rem);
+}
+/* The Resources · Roadmap · Graph switcher keeps clear of the shell's top-right
+   icons (messages, display, view as member, settings, your picture) in every
+   look: it sits beside the Knowledge title, on the left, and the header keeps
+   the icons' width free on the right whatever is in the bar. Reading a lesson, the switcher
+   stays on the back link's row at the right, inside that same clearance. */
+@media (min-width: 641px) {
+  .product-shell-surface .community-knowledge-page .community-knowledge-header,
+  .product-shell-surface[data-channels-feel] .community-knowledge-page .community-knowledge-header,
+  .product-shell-surface .community-knowledge-page[data-reading]:has(.resources-header-actions.has-preview-mode) .community-knowledge-header {
+    padding-right: calc(var(--web-topbar-right-action-safe-inset, 11.5rem) + 1rem);
+  }
+  .product-shell-surface .community-knowledge-page:not([data-reading]) .community-knowledge-header {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    column-gap: 1.75rem;
+  }
+}
+
+/* ═════════ Lessons in three columns ═════════
+   Like a Substack post, the lesson sits in the middle of the page, not in the
+   middle of what the course outline leaves over. The outline is pinned to the
+   left edge and Contents · Files to the right; the reader is padded on the
+   right by the outline's width, so its centre is the page's centre, and the
+   side column reaches back into that padding. On a narrower page the outline
+   stays beside the lesson and Contents folds into the menu above the text;
+   narrower still, the outline becomes the bar above the lesson. */
+.community-knowledge-page[data-reading] {
+  --lesson-outline-width: 14rem;
+  --lesson-side-gap: 2rem;
+  --lesson-outline-span: calc(var(--lesson-outline-width) + var(--lesson-side-gap));
+}
+/* The page decides the layout here, not the reader's own width. */
+.community-knowledge-page[data-reading] .knowledge-resource-reader { container-name: none; }
+/* From 70rem the three columns fit: the text column gives up width (down to
+   about 34rem) before the contents column folds away. */
+@container lesson-page (min-width: 70rem) {
+  .community-knowledge-page[data-reading] .knowledge-resource-reader {
+    --lesson-reading-measure: min(var(--knowledge-reading-measure), calc(100cqi - 2 * var(--lesson-outline-span)));
+    container-type: normal;
+  }
+  .community-knowledge-page[data-reading] .resource-course-workspace {
+    grid-template-columns: var(--lesson-outline-width) minmax(0, 1fr);
+    gap: var(--lesson-side-gap);
+  }
+  .community-knowledge-page[data-reading] .knowledge-resource-reader .resource-viewer-content {
+    padding-right: var(--lesson-outline-span);
+  }
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--lesson-reading-measure)) minmax(0, 1fr);
+    gap: 0;
+  }
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail > .resource-viewer-column {
+    grid-column: 2;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail > .lesson-rail {
+    grid-column: 3;
+    grid-row: 1;
+    display: block;
+    justify-self: start;
+    align-self: start;
+    box-sizing: border-box;
+    width: calc(100% + var(--lesson-outline-span) - var(--lesson-side-gap));
+    max-width: var(--lesson-outline-width);
+    margin: 0 0 0 var(--lesson-side-gap);
+    position: sticky;
+    top: 1.5rem;
+    max-height: calc(100dvh - 3rem);
+    overflow-y: auto;
+    padding-top: 0.25rem;
+  }
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-rail-section { display: block; }
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-rail-section + .lesson-rail-section { margin-top: 1.5rem; }
+  /* Chapters are as tall as the video beside them and scroll inside, so
+     Contents starts level with the video's bottom, not below the fold. */
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail .lesson-rail nav.lesson-chapters-section {
+    display: flex;
+    flex-direction: column;
+    max-height: var(--lesson-hero-height, none);
+  }
+  .community-knowledge-page[data-reading] .lesson-rail nav.lesson-chapters-section .lesson-chapter-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .community-knowledge-page[data-reading] .resource-viewer-body.has-lesson-rail .lesson-toc-compact { display: none; }
+}
+
+/* The course outline reads more easily: an 18rem column
+   and titles at the body size, wrapping to three lines before they're cut. */
+.community-knowledge-page[data-reading] { --lesson-outline-width: 18rem; }
+@container lesson-page (min-width: 58.0625rem) and (max-width: 69.9375rem) {
+  .community-knowledge-page[data-reading] .resource-course-workspace { grid-template-columns: var(--lesson-outline-width) minmax(0, 1fr); }
+}
+.community-knowledge-page[data-reading] .resource-course-outline .knowledge-resource-item-main { gap: 0.75rem; padding: 0.5rem 0.75rem; min-height: 2.5rem; }
+.community-knowledge-page[data-reading] .resource-course-outline .knowledge-resource-item-title {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.community-knowledge-page[data-reading] .resource-course-outline .resource-course-outline-title { font-size: 1rem; }
+.community-knowledge-page[data-reading] .resource-course-outline .knowledge-resource-item-status { width: 1.125rem; height: 1.125rem; }
+
+/* Lesson style, chosen per course by its owner.
+   Article (the default) is the clean newsletter page above. Video course
+   reads like a classic course: the same clean page with a bigger video. */
+/* Video course: the title, then the video, then the text, all one width
+   with the same margins. The column is
+   wider than an article's so the video stays big. */
+.community-knowledge-page[data-reading][data-lesson-style="video"] { --knowledge-reading-measure: 48rem; }
+.community-knowledge-page[data-reading][data-lesson-style="video"] .resource-viewer-hero .resource-viewer-embed {
+  overflow: hidden;
+  border-radius: min(var(--pn-radius, 0.875rem), 0.875rem);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+/* A lesson uses the whole page in every look. The
+   community's centred pane capped it (1080px under the publication look),
+   below the 70rem the three columns need, so Contents never showed. */
+.web-community-centered-pane:has(> .community-knowledge-page[data-reading]) {
+  width: 100%;
+  max-width: none;
+}
+
+/* Focus mode: one button in a lesson clears everything
+   but the lesson itself. The page lifts over the community's bars, the
+   outline and Contents step aside, and Esc or the button brings them back. */
+.community-knowledge-page[data-reading][data-focus] {
+  position: fixed;
+  inset: 0;
+  /* Starts under the bar with Messages, Display and Settings (measured in
+     WebCommunityKnowledgePanel), so focus never covers them. */
+  top: var(--lesson-focus-top, 0px);
+  /* Above the community rail, below dialogs (9999). */
+  z-index: 1000;
+  overflow-y: auto;
+  background: var(--bg-workspace);
+}
+.community-knowledge-page[data-focus] .resource-course-outline,
+.community-knowledge-page[data-focus] .lesson-rail,
+.community-knowledge-page[data-focus] .lesson-toc-compact,
+.community-knowledge-page[data-focus] .resources-header-actions,
+.community-knowledge-page[data-focus] .resources-back-btn {
+  display: none !important;
+}
+.community-knowledge-page[data-focus] .resource-course-workspace { grid-template-columns: minmax(0, 1fr) !important; }
+.community-knowledge-page[data-focus] .knowledge-resource-reader .resource-viewer-content { padding-right: 0 !important; }
+.community-knowledge-page[data-focus] .resource-viewer-body.has-lesson-rail { display: block !important; }
+/* The lesson keeps its reading width, centred under its title: the wide
+   page's three-column measure doesn't apply once the outline is gone (it had
+   let the text run the full width, under the rail, 2026-10-27). */
+.community-knowledge-page[data-focus] .knowledge-resource-reader {
+  --lesson-reading-measure: var(--knowledge-reading-measure, 46rem);
+}
+.community-knowledge-page[data-focus] .knowledge-resource-reader .resource-viewer-content {
+  padding-inline: clamp(16px, 5vw, 64px) !important;
+}
+.community-knowledge-page[data-focus] .resource-viewer-body > .resource-viewer-column,
+.community-knowledge-page[data-focus] .resource-viewer-body.has-lesson-rail > .resource-viewer-column {
+  width: 100%;
+  max-width: var(--lesson-reading-measure) !important;
+  margin-inline: auto !important;
+}
+html[data-lesson-focus] .community-agent-launcher { display: none; }
+.community-knowledge-focus-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.community-knowledge-focus-button:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-card)); }
+.community-knowledge-focus-button svg { width: 1rem; height: 1rem; }
+.community-knowledge-page[data-focus] .community-knowledge-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: auto;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+}
+.community-knowledge-page[data-focus] .community-knowledge-header > * { transform: none; }
+
+/* The lesson's video sits at the top of the text column, as wide as the text,
+   so the side column (Chapters, then Contents) starts level with it. */
+.knowledge-resource-reader .resource-viewer-column > .resource-viewer-hero,
+.knowledge-resource-reader:has(.has-lesson-rail) .resource-viewer-column > .resource-viewer-hero {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}

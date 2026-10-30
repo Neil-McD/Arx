@@ -17,3 +17,8 @@ paths = [
   '''^docs/receipts/''',
   '''^artifacts/''',
 ]
+
+[[allowlists]]
+description = "The licence-key alphabet in shared/communityAccess.ts is a public character set, not a secret"
+targetRules = ["generic-api-key"]
+regexes = ['''ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789''']

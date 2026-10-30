@@ -1,0 +1,270 @@
+/* Workflows → Welcome: the page is edited where it reads, in the member's own
+   type, one column wide. Sizes and corners read the community theme's tokens,
+   with Polynet's defaults outside a themed community. */
+.welcome-settings { overflow: auto; display: flex; flex-direction: column; padding: 0 24px; box-sizing: border-box; }
+
+/* One column, lined up with the page's text below: the bar (title and the
+   page's actions, kept in reach while it scrolls), then who sees it and how. */
+.welcome-settings-column { width: min(832px, 100%); margin: 0 auto; padding: 0 40px 0 80px; box-sizing: border-box; }
+.welcome-settings-bar { position: sticky; top: 0; z-index: 3; background: var(--surface-workspace, var(--bg-workspace)); border-bottom: 1px solid var(--border-default); }
+.welcome-settings-bar-inner { display: flex; align-items: center; gap: 12px 24px; flex-wrap: wrap; padding-top: 14px; padding-bottom: 14px; }
+.welcome-settings-bar-title { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.welcome-settings-bar-title h1 { margin: 0; font-size: var(--pn-type-title, 22px); line-height: 1.2; }
+.welcome-settings-bar-title p, .welcome-settings-help { margin: 0; color: var(--text-secondary); font-size: var(--pn-type-ui, 14px); line-height: 1.5; }
+.welcome-settings-bar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.welcome-settings-bar-actions :is(.workflow-secondary-button, .platform-save-button) { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+.welcome-settings .welcome-settings-bar-actions .platform-save-button {
+  background: var(--bg-button, var(--accent-brand)); color: var(--bg-button-text, #fff); border-color: transparent;
+}
+.welcome-settings .welcome-settings-bar-actions .platform-save-button:hover:not(:disabled) { background: var(--bg-button-hover, var(--bg-button)); }
+.welcome-settings .welcome-settings-bar-actions .platform-save-button:disabled { opacity: 0.45; transform: none; cursor: not-allowed; }
+.welcome-settings-options { margin-top: 20px; }
+.welcome-settings-options > .welcome-settings-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--border-default); background: var(--bg-card, transparent); }
+.welcome-settings-options > .welcome-settings-option:first-child { border-radius: 12px 12px 0 0; }
+.welcome-settings-options > .welcome-settings-option + .welcome-settings-option { border-top: 0; border-radius: 0 0 12px 12px; }
+.welcome-settings-option > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: var(--pn-type-body, 15px); }
+.welcome-settings-option > span strong { font-weight: 600; }
+.welcome-settings-option > span small { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); line-height: 1.45; }
+.welcome-settings-saved { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.welcome-settings-error { margin: 12px auto 0; width: min(720px, 100%); }
+
+/* The on/off control is a switch, with its words beside it. */
+.welcome-settings-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.welcome-settings-switch span { order: -1; display: flex; flex-direction: column; gap: 4px; font-size: var(--pn-type-body, 15px); }
+.welcome-settings-switch strong { font-weight: 600; }
+.welcome-settings-switch input {
+  appearance: none; flex-shrink: 0; position: relative; width: 40px; height: 24px; margin: 0; cursor: pointer;
+  border-radius: 999px; background: var(--border-strong, var(--border-default)); transition: background 0.15s ease;
+}
+.welcome-settings-switch input::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 999px;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s ease;
+}
+/* The track's edge uses the faint text colour, so the off switch is visible (3:1) on any theme. */
+.welcome-settings-switch input:not(:checked) { box-shadow: inset 0 0 0 1px var(--text-faint, var(--text-secondary)); }
+.welcome-settings-switch input:checked { background: var(--accent-brand, var(--accent-primary)); }
+.welcome-settings-switch input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.welcome-settings-switch input:checked::after { transform: translateX(16px); }
+.welcome-settings-switch input:disabled { opacity: 0.5; cursor: not-allowed; }
+.welcome-settings-switch small { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); line-height: 1.45; }
+
+
+/* The page itself: the member's welcome page, with editing controls in its margins. */
+.welcome-settings-canvas { display: flex; justify-content: center; padding: 8px 0 64px; }
+.welcome-settings-page.community-welcome { flex: none; width: 100%; min-height: 0; overflow: visible; justify-content: flex-start; padding: 40px 0 0; gap: 16px; }
+.welcome-settings-page .community-welcome-intro { padding-left: 80px; padding-right: 40px; box-sizing: border-box; width: min(832px, 100%); }
+.welcome-settings-headline {
+  display: block; width: 100%; margin: 0; padding: 0; resize: none; overflow: hidden; border: 0; outline: 0; background: transparent;
+  color: var(--text-primary); font-family: var(--pn-font-heading, inherit); font-size: var(--pn-type-display, 28px); font-weight: 700; line-height: 1.2;
+}
+.welcome-settings-headline::placeholder, .welcome-settings-text::placeholder { color: var(--text-faint, var(--text-secondary)); opacity: 1; }
+.welcome-settings-blocks { width: min(832px, 100%); margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.welcome-settings-block {
+  position: relative; display: grid; grid-template-columns: 72px minmax(0, 1fr) 40px; align-items: start;
+  border-radius: calc(10px * var(--pn-radius-scale, 1));
+}
+.welcome-settings-block-body { position: relative; min-width: 0; }
+.welcome-settings-gutter { display: flex; justify-content: flex-end; gap: 2px; padding: 2px 6px 0 0; }
+.welcome-settings-block-end { padding-top: 2px; }
+/* Controls stay out of the way until the pointer or keyboard is on their block. */
+.welcome-settings-block :is(.welcome-settings-gutter, .welcome-settings-block-end) .welcome-settings-icon-button { opacity: 0; transition: opacity .12s ease; }
+.welcome-settings-block:is(:hover, :focus-within) :is(.welcome-settings-gutter, .welcome-settings-block-end) .welcome-settings-icon-button { opacity: 1; }
+.welcome-settings-block .welcome-settings-icon-button:focus-visible { opacity: 1; }
+.welcome-settings-handle { cursor: grab; }
+.welcome-settings-block.is-dragging { opacity: 0.4; }
+.welcome-settings-block.drop-before::before, .welcome-settings-block.drop-after::after {
+  content: ""; position: absolute; left: 72px; right: 40px; height: 3px; border-radius: 2px; background: var(--accent-brand, var(--accent-primary));
+}
+.welcome-settings-block.drop-before::before { top: -4px; }
+.welcome-settings-block.drop-after::after { bottom: -4px; }
+
+/* Text: typed in place, and read back the way members see it. */
+.welcome-settings-text, .welcome-settings-text-view {
+  display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 6px 8px; border-radius: 8px;
+  font-family: inherit; font-size: var(--pn-type-reading, 17px); line-height: 1.65; color: var(--text-primary);
+}
+.welcome-settings-text { resize: none; overflow: hidden; border: 0; outline: 0; background: transparent; }
+/* No box around the line being typed, but a soft ring so keyboard focus is still easy to see. */
+.welcome-settings .welcome-settings-text:focus-visible, .welcome-settings .welcome-settings-headline:focus-visible {
+  outline: 0; box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 55%, transparent);
+}
+.welcome-settings-headline { border-radius: 6px; }
+.welcome-settings-text:focus { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+.welcome-settings-text-view { width: 100%; cursor: text; }
+.welcome-settings-text-view:hover { background: color-mix(in srgb, var(--text-primary) 3%, transparent); }
+.welcome-settings-text-view:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* A step: what the member does on that screen. */
+.welcome-settings-step {
+  display: flex; gap: 14px; margin: 6px 0 6px 8px; padding: 16px 18px; outline: 0;
+  border: 1px solid var(--border-default); border-radius: calc(12px * var(--pn-radius-scale, 1)); background: var(--bg-card, transparent);
+}
+.welcome-settings-step:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.welcome-settings-step-icon {
+  flex-shrink: 0; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
+  color: var(--text-link, var(--accent-brand, var(--text-primary))); background: color-mix(in srgb, var(--accent-brand, var(--text-primary)) 12%, transparent);
+}
+.welcome-settings-step-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.welcome-settings-step-copy small { color: var(--text-secondary); font-size: var(--pn-type-meta, 11px); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.welcome-settings-step-copy strong { font-size: var(--pn-type-body, 16px); font-weight: 600; overflow-wrap: anywhere; }
+.welcome-settings-step-detail { color: var(--text-secondary); font-size: var(--pn-type-small, 13px); overflow-wrap: anywhere; }
+.welcome-settings-step-note { margin-top: 4px; color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.welcome-settings-step.is-unavailable strong { color: var(--accent-error); }
+
+/* A "Next page" break: where one screen ends and the next begins. */
+.welcome-settings-break { display: flex; align-items: center; gap: 12px; padding: 18px 0 18px 8px; outline: 0; color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.welcome-settings-break::before, .welcome-settings-break::after { content: ""; flex: 1; border-top: 1px dashed var(--border-strong, var(--border-default)); }
+.welcome-settings-break span { order: 0; padding: 4px 12px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-workspace, var(--bg-workspace)); font-weight: 600; color: var(--text-primary); }
+.welcome-settings-break-first { width: min(832px, 100%); padding: 0 40px 0 80px; box-sizing: border-box; }
+.welcome-settings-break:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 8px; }
+
+.welcome-settings-add { position: relative; width: min(832px, 100%); padding: 8px 40px 0 80px; box-sizing: border-box; }
+.welcome-settings-add-button {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px dashed var(--border-default); border-radius: 999px;
+  background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--pn-type-ui, 14px); cursor: pointer;
+}
+.welcome-settings-add-button:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-strong, var(--border-default)); }
+.welcome-settings-add-button:disabled { opacity: .6; cursor: not-allowed; }
+.welcome-settings-page > .welcome-settings-help { width: min(832px, 100%); padding: 24px 40px 0 80px; box-sizing: border-box; font-size: var(--pn-type-small, 13px); }
+
+/* The block menu, opened under the line it adds to. */
+.welcome-settings-menu {
+  position: absolute; z-index: 4; top: calc(100% + 4px); left: 0; width: min(340px, calc(100vw - 48px)); max-height: 360px; overflow: auto;
+  padding: 6px; box-sizing: border-box; outline: 0; border: 1px solid var(--border-default); border-radius: 12px;
+  background: var(--bg-popover, var(--bg-card, var(--surface-workspace))); color: var(--text-primary); box-shadow: 0 16px 40px -12px rgb(0 0 0 / .28);
+}
+.welcome-settings-add .welcome-settings-menu { left: 80px; }
+.welcome-settings-menu-head { display: flex; align-items: center; gap: 8px; padding: 4px 4px 6px 8px; font-size: var(--pn-type-small, 13px); }
+.welcome-settings-menu-head strong { flex: 1; color: var(--text-secondary); font-weight: 600; }
+.welcome-settings-menu-head .welcome-settings-icon-button { width: 26px; height: 26px; }
+.welcome-settings-menu ul { margin: 0; padding: 0; list-style: none; }
+.welcome-settings-menu li button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.welcome-settings-menu li[aria-selected="true"] button, .welcome-settings-menu li button:hover { background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 6%, transparent)); }
+.welcome-settings-menu li button > span:last-child { min-width: 0; display: flex; flex-direction: column; }
+.welcome-settings-menu li strong { font-size: var(--pn-type-ui, 14px); font-weight: 600; }
+.welcome-settings-menu li small { color: var(--text-secondary); font-size: var(--pn-type-small, 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-settings-menu-icon { flex-shrink: 0; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border-default); border-radius: 8px; color: var(--text-secondary); }
+.welcome-settings-menu-empty, .welcome-settings-menu-hint { margin: 0; padding: 8px; color: var(--text-secondary); font-size: var(--pn-type-small, 12px); }
+.welcome-settings-menu-hint { border-top: 1px solid var(--border-default); margin-top: 4px; }
+.welcome-settings-menu-link { display: flex; gap: 8px; padding: 4px; }
+.welcome-settings-menu-link input {
+  flex: 1; min-width: 0; min-height: 36px; padding: 6px 10px; box-sizing: border-box; font: inherit; font-size: 14px;
+  color: var(--text-primary); background: var(--bg-input, transparent); border: 1px solid var(--border-default); border-radius: 8px;
+}
+.welcome-settings-menu-link .platform-save-button { background: var(--bg-button, var(--accent-brand)); color: var(--bg-button-text, #fff); border-color: transparent; }
+.welcome-settings :is(button, input, textarea):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.welcome-settings-icon-button {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: calc(8px * var(--pn-radius-scale, 1)); cursor: pointer;
+}
+.welcome-settings-icon-button:hover:not(:disabled) { color: var(--text-primary); background: var(--hover-overlay); }
+.welcome-settings-icon-button:disabled { opacity: 0.3; cursor: not-allowed; }
+.welcome-settings-link { padding: 0; border: 0; background: none; color: var(--text-link, var(--accent-brand, var(--text-primary))); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+
+/* Preview: the member's page, played screen by screen in a frame the size of a real screen. */
+.welcome-settings-preview-overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding: 32px 24px; overflow: auto;
+  background: rgb(0 0 0 / .45);
+}
+.welcome-settings-preview-panel {
+  width: min(1040px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 20px; box-sizing: border-box;
+  border-radius: 16px; background: var(--surface-workspace, var(--bg-workspace)); color: var(--text-primary); box-shadow: 0 24px 64px -16px rgb(0 0 0 / .4);
+}
+.welcome-settings-preview-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.welcome-settings .welcome-settings-preview-bar h2 {
+  margin: 0; font-family: var(--pn-font-body, inherit); font-size: var(--pn-type-reading, 16px); font-weight: 600; letter-spacing: 0; text-transform: none;
+}
+.welcome-settings-preview-where { flex: 1; color: var(--text-secondary); font-size: var(--pn-type-small, 13px); }
+.welcome-settings-preview-bar .workflow-secondary-button { display: inline-flex; align-items: center; gap: 6px; }
+.welcome-settings-device { display: inline-flex; padding: 2px; border: 1px solid var(--border-default); border-radius: 8px; }
+.welcome-settings-device button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.welcome-settings-device button[aria-pressed="true"] { background: var(--hover-overlay); color: var(--text-primary); }
+.welcome-settings-device button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+/* A screen-sized frame: the member page is laid out at the real width and scaled down to fit. */
+.welcome-settings-preview-frame { position: relative; width: 100%; margin-inline: auto; overflow: hidden; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-workspace); box-shadow: 0 12px 32px -20px rgb(0 0 0 / 0.3); }
+.welcome-settings-preview-screen { transform-origin: top left; container: welcome-screen / inline-size; }
+.welcome-settings-preview-screen .community-welcome { min-height: 0; justify-content: flex-start; }
+.welcome-settings-preview-lesson { margin: 0; padding: 24px; border: 1px dashed var(--border-default); border-radius: 12px; color: var(--text-secondary); }
+/* The phone screen gets the member page's small-screen layout, which otherwise follows the window. */
+@container welcome-screen (max-width: 600px) {
+  .community-welcome { justify-content: flex-start; padding: 32px 16px; }
+  .member-form-dialog section { padding: 20px 0 0; }
+  .member-form-dialog section h2 { font-size: 22px; }
+}
+
+@container workflow-sections (max-width: 720px) {
+  .welcome-settings { padding: 0 12px; }
+  .welcome-settings-page .community-welcome-intro, .welcome-settings-add, .welcome-settings-page > .welcome-settings-help { padding-left: 8px; padding-right: 8px; }
+  .welcome-settings-block { grid-template-columns: minmax(0, 1fr) 36px; }
+  .welcome-settings-gutter { position: absolute; right: 0; top: 34px; flex-direction: column; padding: 0; }
+  .welcome-settings-bar-title p { display: none; }
+  .welcome-settings-column, .welcome-settings-break-first { padding: 0 8px; }
+  .welcome-settings-options > .welcome-settings-option:not(.welcome-settings-switch) { flex-wrap: wrap; }
+  .welcome-settings-block-body { grid-column: 1; }
+  .welcome-settings-add .welcome-settings-menu { left: 8px; }
+  .welcome-settings-preview-overlay { padding: 8px; }
+  .welcome-settings-preview-panel { padding: 12px; }
+}
+/* Controls line up with the middle of a break and the top line of a step card. */
+.welcome-settings-block.is-next :is(.welcome-settings-gutter, .welcome-settings-block-end) { padding-top: 16px; }
+.welcome-settings-block:is(.is-form, .is-lesson) :is(.welcome-settings-gutter, .welcome-settings-block-end) { padding-top: 16px; }
+
+/* A choice block: the question, a tab per card, then the open card's fields. */
+.welcome-settings-choice { display: flex; flex-direction: column; gap: 12px; margin: 6px 0 6px 8px; padding: 16px 18px; border: 1px solid var(--border-default); border-radius: calc(12px * var(--pn-radius-scale, 1)); background: var(--bg-card, transparent); }
+.welcome-settings-choice:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.welcome-settings-choice-head { display: flex; align-items: center; gap: 12px; }
+.welcome-settings-choice-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.welcome-settings-choice-field > span { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.welcome-settings-choice-field input, .welcome-settings-choice-text { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-workspace); color: var(--text-primary); font: inherit; font-size: 14px; }
+.welcome-settings-choice-text { resize: none; font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 13px; line-height: 1.55; min-height: 96px; }
+.welcome-settings-choice-field input:focus, .welcome-settings-choice-text:focus { outline: none; border-color: var(--accent-brand, var(--accent-primary)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 18%, transparent); }
+.welcome-settings-choice-icon-row { display: flex; align-items: center; gap: 10px; }
+.welcome-settings-choice-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 12%, var(--surface-workspace)); color: var(--accent-brand, var(--accent-primary)); }
+.welcome-settings-choice-icon-note { flex: 1; color: var(--text-secondary); font-size: 13px; }
+.welcome-settings-choice-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.welcome-settings-choice-tabs button { padding: 6px 12px; border: 1px solid var(--border-default); border-radius: 999px; background: transparent; color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.welcome-settings-choice-tabs button.is-active { border-color: var(--accent-brand, var(--accent-primary)); background: color-mix(in srgb, var(--accent-brand, var(--accent-primary)) 10%, transparent); }
+.welcome-settings-choice-tabs .welcome-settings-choice-add { display: inline-flex; align-items: center; gap: 4px; border-style: dashed; color: var(--text-secondary); }
+.welcome-settings-choice-card { display: flex; flex-direction: column; gap: 10px; }
+.welcome-settings-choice-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.welcome-settings-choice-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; }
+
+/* Full page or pop-up: a two-way segmented control beside the on/off switch. */
+.welcome-settings-display { display: inline-flex; flex: none; align-items: center; }
+.welcome-settings-display button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--border-default); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--pn-type-ui, 14px); font-weight: 600; cursor: pointer; }
+.welcome-settings-display button:first-of-type { border-radius: 8px 0 0 8px; }
+.welcome-settings-display button:last-of-type { border-left: 0; border-radius: 0 8px 8px 0; }
+.welcome-settings-display button[aria-checked="true"] { border-color: var(--accent-brand, var(--text-primary)); background: color-mix(in srgb, var(--accent-brand, var(--text-primary)) 10%, transparent); color: var(--text-primary); }
+.welcome-settings-display button[aria-checked="true"] + button { border-left: 1px solid var(--accent-brand, var(--text-primary)); }
+.welcome-settings-display button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; position: relative; }
+.welcome-settings-display button:disabled { cursor: not-allowed; opacity: .6; }
+/* On/off and how it shows stay together, the choice under the switch. */
+/* A disabled Discard or Preview fades like Save, so it doesn't read as ready to press. */
+.welcome-settings .welcome-settings-bar-actions .workflow-secondary-button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.welcome-settings-choice-agent { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.welcome-settings-choice-agent input { margin-top: 3px; accent-color: var(--accent-brand, var(--accent-primary)); }
+.welcome-settings-choice-agent span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.welcome-settings-choice-agent small { color: var(--text-secondary); font-size: 12px; }
+
+/* Text blocks and card steps open the lesson editor in place (2026-10-27). */
+.welcome-settings-text-editor { min-width: 0; padding: 2px 0; border-radius: 8px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-default) 70%, transparent); }
+.welcome-settings-text-editor .lesson-editor { padding: 0 8px 8px; }
+.welcome-settings-text-editor .lesson-editor-content { font-size: var(--pn-type-reading, 17px); }
+.welcome-settings-text-empty {
+  display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 6px 8px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text-faint, var(--text-secondary)); font: inherit; font-size: var(--pn-type-reading, 17px);
+  line-height: 1.65; text-align: left; cursor: text;
+}
+.welcome-settings-text-empty:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+.welcome-settings-text-empty:focus-visible { outline: 0; box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 55%, transparent); }
+.welcome-settings-text-editor { display: grid; }
+.welcome-settings-text-done {
+  justify-self: end; margin: 0 8px 6px; padding: 4px 12px; border: 1px solid var(--border-default); border-radius: 999px;
+  background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.welcome-settings-text-done:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-card)); }

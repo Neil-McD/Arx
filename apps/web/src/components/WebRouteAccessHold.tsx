@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentProps } from "react";
 
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 import { WebShellChromeHost } from "./WebShellChromeHost";
+import { readCommunityBootLook } from "../controllers/communityBootLook";
 
 type WebShellChromeHostProps = ComponentProps<typeof WebShellChromeHost>;
 
@@ -24,6 +25,8 @@ export function WebRouteAccessHold(props: {
   onRetry: () => void;
 }) {
   const [showProgress, setShowProgress] = useState(false);
+  // A community visited before opens in its own colours and name (index.html).
+  const [bootLook] = useState(() => readCommunityBootLook());
   const shellChromeHostProps = props.shellChromeHostProps;
   const mobileTopBarProps = shellChromeHostProps.mobileTopBarProps;
   const communityShell = shellChromeHostProps.communityShell;
@@ -118,9 +121,16 @@ export function WebRouteAccessHold(props: {
           </button>
         </div>
       ) : showProgress ? (
-        <p className="web-route-access-hold-progress" role="status" aria-live="polite">
-          Opening Polynet…
-        </p>
+        bootLook ? (
+          <div className="web-route-access-hold-community" role="status" aria-live="polite">
+            {bootLook.logo ? <img src={bootLook.logo} alt="" /> : null}
+            <p>Opening {bootLook.name}…</p>
+          </div>
+        ) : (
+          <p className="web-route-access-hold-progress" role="status" aria-live="polite">
+            Opening Polynet…
+          </p>
+        )
       ) : null}
     </div>
   );

@@ -148,7 +148,15 @@ function hasName(tag, inner) {
   return Boolean(text.trim() || attr(tag, "aria-label")?.trim() || attr(tag, "aria-labelledby")?.trim() || attr(tag, "title")?.trim());
 }
 
-function checkPage(path, html, problem) {
+// Lesson widgets (pages under /embeds/, or named by a lesson's polynet-embed
+// block) run in a sandboxed frame inside Polynet, not as site pages: they load
+// /__polynet/embed.js instead of the shell, and Polynet's page around them
+// carries the account menu.
+export function isEmbedPage(path, embeds) {
+  return path.startsWith("/embeds/") || Boolean(embeds?.has(path));
+}
+
+function checkPage(path, html, problem, embed = false) {
   const source = html.replace(/<!--[\s\S]*?-->/g, "");
   // A fragment (a verification file, a partial) isn't a page; index.html always is.
   if (path !== "/index.html" && !/<(html|head|body|title)\b/i.test(source)) return;
@@ -163,6 +171,12 @@ function checkPage(path, html, problem) {
     const maxScale = /maximum-scale\s*=\s*([\d.]+)/.exec(content);
     if (/user-scalable\s*=\s*(no|0)\b/.test(content) || (maxScale && Number(maxScale[1]) < 2)) {
       problem("error", path, "The viewport blocks zooming. Remove user-scalable=no and maximum-scale.");
+    }
+  }
+  if (embed) {
+    const scripts = [...source.matchAll(/<script\b[^>]*>/gi)].map((m) => attr(m[0], "src") ?? "");
+    if (!scripts.some((src) => /^\/__polynet\/embed\.js(\?.*)?$/.test(src))) {
+      problem("warning", path, 'The widget doesn\'t load /__polynet/embed.js, so it can\'t resize to fit or keep a member\'s answers. Add <script src="/__polynet/embed.js"></script>.');
     }
   }
   for (const m of source.matchAll(/<img\b[^>]*>/gi)) {
@@ -311,7 +325,8 @@ function placesBlock(name, pages, scripts) {
 }
 
 // files: [{ path: "/index.html", text }] (other files may be passed; they're ignored).
-export function checkSite(files) {
+// options.embeds: extra paths that are lesson widgets (see isEmbedPage).
+export function checkSite(files, options = {}) {
   const errors = [];
   const warnings = [];
   const problem = (level, path, message) => (level === "error" ? errors : warnings).push({ path, message });
@@ -326,7 +341,7 @@ export function checkSite(files) {
   }
   // The shell isn't checked: the edge adds /__polynet/ui.js to every page, and
   // ui.js shows <polynet-account> on any page that doesn't place one.
-  for (const page of pages) checkPage(page.path, page.text, problem);
+  for (const page of pages) checkPage(page.path, page.text, problem, isEmbedPage(page.path, options.embeds));
   checkFrame(pages, problem);
   // A site's own version of a standard page wins over Polynet's, so it must
   // carry the same blocks (a framework build may create them from a script).

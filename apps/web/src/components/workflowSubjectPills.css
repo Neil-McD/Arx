@@ -1,0 +1,11 @@
+/* Subject pills in rule sentences: one colour per kind of subject (Member blue,
+   Agent green). Mixed with the card and text colours so they hold in dark mode. */
+.pn-pill { display: inline-block; padding: 0 0.375rem; border-radius: 0.3125rem; font-weight: 600; line-height: 1.45; white-space: nowrap;
+  color: color-mix(in srgb, var(--pill) 82%, var(--text-primary)); background: color-mix(in srgb, var(--pill) 14%, var(--bg-card)); }
+.pn-pill-member { --pill: #2f6fe0; }
+.pn-pill-agent { --pill: #1f9a52; }
+.pn-pill-owner { --pill: #8a4fd6; }
+.pn-pill-stage { --pill: #12909e; }
+.pn-pill-form { --pill: #c7790e; }
+.pn-pill-offer { --pill: #cf3f7f; }
+.pn-pill-field { --pill: #6b7280; }

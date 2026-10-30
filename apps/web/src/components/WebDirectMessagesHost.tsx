@@ -136,6 +136,9 @@ function friendlyDirectMessageSendError(error: unknown, fallback: string): strin
   if (normalized.includes("dm_message_payload_required")) {
     return "Write a message or attach a file first.";
   }
+  if (normalized.includes("failed to fetch") || normalized.includes("networkerror") || normalized.includes("network request failed")) {
+    return "Couldn't reach Polynet. Check your connection and try again.";
+  }
   if (normalized.includes("dm_attachment")) {
     return "One of the attachments couldn't be sent. Remove it and try again.";
   }

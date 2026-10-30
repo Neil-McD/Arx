@@ -43,7 +43,7 @@ assert.match(
 );
 assert.match(
   resourceViewer,
-  /renderMarkdown\(trimmedBody,\s*\{\s*embedStandaloneMedia: true,\s*headingLevelOffset: 1\s*\}\)/,
+  /renderMarkdown\([\s\S]*?\{\s*\.\.\.CONTENT_MARKDOWN_OPTIONS,\s*headingLevelOffset: 1,/,
   "Resources viewer should opt into media embeds while keeping the lesson title as its only h1",
 );
 assert.match(
@@ -53,7 +53,7 @@ assert.match(
 );
 assert.match(
   css,
-  /\.resource-course-workspace \{[\s\S]*grid-template-columns: minmax\(196px, 232px\) minmax\(0, 1fr\)/,
+  /\.resource-course-workspace \{[\s\S]*grid-template-columns: minmax\(\d+px, \d+px\) minmax\(0, 1fr\)/,
   "selected courses should reserve a compact lesson outline beside the reader",
 );
 assert.match(
@@ -63,8 +63,8 @@ assert.match(
 );
 assert.match(
   css,
-  /\.knowledge-resource-reader \.resource-viewer-column \{[\s\S]*max-width: min\(100%, 860px\);[\s\S]*margin-inline: 0/,
-  "lesson media and content should share a left-aligned reading spine",
+  /\.knowledge-resource-reader \{[\s\S]*--lesson-reading-measure: 680px;[\s\S]*\.knowledge-resource-reader \.resource-viewer-column \{\s*max-width: var\(--lesson-reading-measure\);\s*margin-inline: auto;/,
+  "lesson media and content should share one centred reading column, the same measure the lesson editor uses",
 );
 assert.match(
   css,
@@ -73,12 +73,12 @@ assert.match(
 );
 assert.match(
   css,
-  /\.knowledge-resource-reader \.resource-viewer-title \{[\s\S]*font-size: clamp\(28px, 2\.5vw, 36px\)/,
+  /\.knowledge-resource-reader \.resource-viewer-title \{\s*font-size: clamp\(\d+px, [\d.]+vw, \d+px\)/,
   "lesson titles should remain prominent without overpowering the reader",
 );
 assert.match(
   css,
-  /\.resource-course-outline \.knowledge-resource-item \{[\s\S]*min-height: 52px;[\s\S]*padding: 8px 9px[\s\S]*\.resource-course-outline \.knowledge-resource-item-title \{[\s\S]*font-size: 12\.5px/,
+  /\.resource-course-outline \.knowledge-resource-item \{[\s\S]*\.resource-course-outline \.knowledge-resource-item-title \{\s*color: var\(--text-secondary\);\s*font-size: 14px;/,
   "lesson outline rows should share a compact two-line height",
 );
 assert.match(

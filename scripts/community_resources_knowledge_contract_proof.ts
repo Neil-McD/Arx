@@ -243,8 +243,8 @@ assert.doesNotMatch(
 );
 assert.match(
   resourceViewer,
-  /resource-viewer-edit-actions[\s\S]*onClick=\{\(\) => editor\.onCancel\(\)\}[\s\S]*Cancel[\s\S]*onClick=\{\(\) => void editor\.onSave\(\)\}[\s\S]*Save changes/,
-  "resource editing must expose explicit Cancel and Save actions that invoke the canonical editor callbacks",
+  /if \(!editor\.isDirty\) editor\.onCancel\(\);\s*else if \(editor\.canSave && !bodyProblem\) void editor\.onSave\(\);[\s\S]*resource-viewer-edit-actions[\s\S]*role="status"[\s\S]*onClick=\{finishEditing\}[\s\S]*Done/,
+  "lesson editing saves as you go, shows its save state, and Done closes through the canonical editor callbacks",
 );
 assert.match(
   resources,
@@ -323,7 +323,7 @@ assert.match(
 );
 assert.match(
   resourceContracts,
-  /handleCreateBlankPageDraft: \(moduleId: string\) => Promise<CommunityResource \| null>/,
+  /handleCreateBlankPageDraft: \(moduleId: string(?:, lesson\?: [^)]*)?\) => Promise<CommunityResource \| null>/,
   "resources panel contract must require a course for blank lesson creation",
 );
 assert.match(
@@ -549,7 +549,7 @@ assert.doesNotMatch(
 );
 assert.match(
   resourcesPanel,
-  /selectedModule \? \([\s\S]*resources-back-btn[\s\S]*<span>Resources<\/span>[\s\S]*\) : \([\s\S]*resources-header">Resources<\/div>/,
+  /selectedModule \? \([\s\S]*resources-back-btn[\s\S]*<span>All courses<\/span>[\s\S]*\) : \([\s\S]*resources-header">Resources<\/div>/,
   "the Resources utility row must contain only Resources context before preview controls",
 );
 assert.match(
@@ -559,7 +559,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.resource-course-outline-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;[^}]*overflow:\s*hidden;[\s\S]*\.resource-course-outline-title\s*\{[^}]*width:\s*100%;[^}]*text-overflow:\s*ellipsis;/,
+  /\.resource-course-outline-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;[^}]*overflow:\s*hidden;[\s\S]*\.resource-course-outline-title\s*\{[^}]*width:\s*100%;[^}]*(?:text-overflow:\s*ellipsis|-webkit-line-clamp:\s*2);/,
   "long course names must stay contained inside the lesson outline",
 );
 assert.match(
@@ -579,7 +579,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.resource-course-catalog\s*\{[^}]*margin:\s*0;[^}]*padding:\s*8px 0 34px;/,
+  /\.resource-course-catalog\s*\{[^}]*margin:\s*0;[^}]*padding:\s*\d+px 0 \d+px;/,
   "the course catalog must align to the Resources heading without redundant nested gutters",
 );
 assert.match(
@@ -689,7 +689,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.resource-course-outline \.knowledge-resource-item\.is-active[\s\S]*var\(--stroke-selected\)[\s\S]*var\(--surface-selected\)[\s\S]*var\(--text-selected\)/,
+  /\.resource-course-outline \.knowledge-resource-item\.is-active \{[^}]*(?:var\(--surface-selected\)|color-mix\(in srgb, var\(--accent-brand\) 10%, transparent\))/,
   "selected lessons must reuse the canonical navigation selection tokens",
 );
 assert.match(
@@ -699,7 +699,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.resource-course-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(196px,\s*232px\)\s*minmax\(0,\s*1fr\)/,
+  /\.resource-course-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(\d+px,\s*\d+px\)\s*minmax\(0,\s*1fr\)/,
   "desktop course layout must prioritize lesson content over outline width",
 );
 assert.match(

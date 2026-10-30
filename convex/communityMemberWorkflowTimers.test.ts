@@ -68,7 +68,26 @@ test("revoked membership makes a pending timed action obsolete", async () => {
   expect(rows.runs).toHaveLength(0);
 });
 
-test.each([0, -1, 0.5, 525601])("invalid duration %s is rejected for a timed action", async delayMinutes => {
+test("a zero wait runs the moment they reach the stage", async () => {
+  const s = await setup();
+  const rule = s.updated.milestone.automations[0];
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { communityId: s.f.communityId, expectedRevision: 3, milestoneKey: s.first.milestone.key, name: "New", automations: [{ key: rule.key, trigger: { type: "milestone_elapsed", delayMinutes: 0 }, action: rule.action }] });
+  const userId = await s.t.run(ctx => ctx.db.insert("users", { authSubject: "timer-arrival", displayName: "Arrival", createdAt: epoch, updatedAt: epoch }));
+  await s.t.run(ctx => activateCommunityMembershipCore({ ctx, communityId: s.f.communityId, userId, accessSource: "manual_grant", activationReason: "test", nowMs: Date.now() }));
+  await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+  const rows = await s.rows();
+  const arrival = rows.timers.filter(timer => timer.dueAt === epoch && timer.membershipId !== s.membership.membership._id);
+  expect(arrival).toHaveLength(1);
+  expect(arrival[0].status).toBe("consumed");
+  expect(rows.runs.filter(run => run.membershipId !== s.membership.membership._id)).toHaveLength(1);
+});
+
+test("a nudge still needs a real wait", async () => {
+  const s = await setup();
+  await expect(s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { communityId: s.f.communityId, expectedRevision: 3, milestoneKey: s.first.milestone.key, name: "New", automations: [{ trigger: { type: "milestone_elapsed", delayMinutes: 0, nudge: true }, action: { type: "prompt_agent", prompt: "Check in" } }] })).rejects.toThrow("community_member_workflow_delay_invalid");
+});
+
+test.each([-1, 0.5, 525601])("invalid duration %s is rejected for a timed action", async delayMinutes => {
   const s = await setup();
   await expect(s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { communityId: s.f.communityId, expectedRevision: 3, milestoneKey: s.first.milestone.key, name: "New", automations: [{ trigger: { type: "milestone_elapsed", delayMinutes }, action: { type: "prompt_agent", prompt: "Check in" } }] })).rejects.toThrow("community_member_workflow_delay_invalid");
 });

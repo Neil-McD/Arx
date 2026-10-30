@@ -8,6 +8,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "event_reminder",
   "mention_notification",
   "dm_message_notification",
+  "community_workflow_email",
   "founder_daily_brief",
 ] as const;
 
@@ -320,6 +321,35 @@ export function renderEmailTemplate(params: {
         "Open message",
       );
     }
+    case "community_workflow_email": {
+      // An owner's own words, so it reads as a letter: their paragraphs, a
+      // way back to the community, and the unsubscribe line every one carries.
+      const subject = readString(payload.subject) || `A message from ${communityName}`;
+      const body = readString(payload.body);
+      const unsubscribe = readString(payload.unsubscribeUrl);
+      const testNote = readString(payload.testNote);
+      const paragraphs = body.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+      const bodyHtml = paragraphs.map((part) =>
+        `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#d6d0c6;">${escapeHtml(part).replace(/\n/g, "<br />")}</p>`).join("");
+      const footer = `You get this because you're a member of ${communityName}.`;
+      const shell = buildEmailShell({
+        title: subject,
+        subtitle: testNote || communityName,
+        bodyHtml,
+        ctaLabel: `Open ${communityName}`,
+        ctaUrl: readString(payload.actionUrl),
+        footerNote: footer,
+      });
+      const unsubscribeHtml = unsubscribe
+        ? `<div style="max-width:640px;margin:12px auto 0;font-size:12px;color:#9c968a;text-align:center;"><a href="${escapeHtml(unsubscribe)}" style="color:#9c968a;">Unsubscribe from ${escapeHtml(communityName)} emails</a></div>`
+        : "";
+      return {
+        subject,
+        html: shell.html.replace(/<\/div>\s*$/, `${unsubscribeHtml}</div>`),
+        text: [subject, paragraphs.join("\n\n"), shell.text.split("\n\n").filter((part) => part.startsWith(`Open ${communityName}`)).join(""), footer,
+          unsubscribe ? `Unsubscribe: ${unsubscribe}` : ""].filter(Boolean).join("\n\n"),
+      };
+    }
     case "founder_daily_brief": {
       const sections = readArray(payload.sections)
         .map((section) => asRecord(section))
@@ -391,8 +421,11 @@ export async function sendRenderedEmail(params: {
     templateKey: params.templateKey,
     payload: params.payload,
   });
+  const unsubscribe = readString(asRecord(params.payload).unsubscribeUrl);
   const response = await resend.emails.send(
     {
+      // One-click unsubscribe (RFC 8058) for emails that carry a link.
+      ...(unsubscribe ? { headers: { "List-Unsubscribe": `<${unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : null),
       from: readEmailFromAddress(),
       to: params.to,
       subject: rendered.subject,

@@ -14,6 +14,8 @@ type WebCommunityAiAgentSectionProps = {
   onRequireSignIn: () => void;
   instructionsEditorProps: WebCommunityAiAgentInstructionsEditorProps;
   embedded?: boolean;
+  // Settings > Agent > Profile (name and photo), above the instructions.
+  profileCard?: ReactNode;
 };
 
 export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProps) {
@@ -26,6 +28,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     onRequireSignIn,
     instructionsEditorProps,
     embedded = false,
+    profileCard = null,
   } = props;
 
   let content: ReactNode = null;
@@ -52,12 +55,15 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
   } else if (communityAgentConfigError) {
     content = <div className="auth-error">{communityAgentConfigError}</div>;
   } else {
-    content = <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />;
+    content = <>
+      {profileCard}
+      <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />
+    </>;
   }
 
   return (
     <div className={embedded ? "community-settings-embedded-pane" : "settings-panel community-settings-panel"}>
-      <div className="settings-section-title">Community Agent</div>
+      {embedded ? null : <div className="settings-section-title">Community Agent</div>}
       {content}
     </div>
   );

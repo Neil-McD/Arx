@@ -19,6 +19,16 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("lesson and course triggers take a form or a client property, and a property rule needs its property", () => {
+    const lessonDone = toWorkflowAutomationDraft({ ...automation, trigger: { type: "lesson_completed", resourceId: "lesson-1" } });
+    expect(workflowAutomationIssue(lessonDone, [], false)).toBe("Choose Request form, Send an email, Update member record or a pod step");
+    const setTier = replaceWorkflowDraftAction(lessonDone, "set_client_property");
+    expect(setTier.action).toEqual({ key: "action-1", type: "set_client_property", propertyKey: "", value: null });
+    expect(workflowAutomationIssue(setTier, [], false)).toBe("Choose a member property");
+    expect(workflowAutomationIssue({ ...setTier, action: { key: "action-1", type: "set_client_property", propertyKey: "tier", value: "VIP" } }, [], false)).toBeNull();
+    // Switching away keeps the prompt the builder had typed.
+    expect(replaceWorkflowDraftAction(setTier, "prompt_agent").action).toMatchObject({ type: "prompt_agent", prompt: "Help the member prepare." });
+  });
   it("tracks and reverts human approval without changing action definitions", () => {
     const drafts = [toWorkflowAutomationDraft(automation)];
     expect(isWorkflowMilestoneDraftDirty(snapshot, "New", drafts, "", "", true)).toBe(true);
@@ -31,7 +41,9 @@ describe("workflow milestone editor drafts", () => {
     expect(workflowAutomationIssue(draft, [], false)).toBe("Add agent instructions");
     expect(workflowTriggerIssue({ ...draft, trigger: { type: "form_submitted", formKey: "" } }, [], false)).toBe("Choose a published form");
     expect(workflowTriggerIssue({ ...draft, trigger: { type: "form_submitted", formKey: "intake" } }, [], false)).toBeNull();
-    expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: 0 } }, [], false)).toContain("duration");
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: 0 } }, [], false)).toBeNull();
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: 0, nudge: true } }, [], false)).toContain("duration");
+    expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: -1 } }, [], false)).toContain("duration");
     expect(workflowTriggerIssue({ ...draft, trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }, [], false)).toBeNull();
     expect(workflowTriggerIssue({ ...draft, trigger: { type: "member_joined" } }, [], false)).toBeNull();
     expect(workflowTriggerIssue(automation, [], true)).toBe("Waiting for channels");
@@ -149,8 +161,8 @@ it("sequential dependencies remain explicit when actions are deleted or reordere
   const next: CommunityMemberWorkflowAutomation = { key: "next", trigger: { type: "previous_action_completed", predecessorActionKey: automation.action.key },
     action: { key: "next-action", type: "request_form", formKey: "intake" } };
   expect(workflowSequenceIssue([automation, next])).toBeNull();
-  expect(workflowSequenceIssue([next])).toContain("immediately before");
-  expect(workflowSequenceIssue([next, automation])).toContain("immediately before");
+  expect(workflowSequenceIssue([next])).toContain("earlier step");
+  expect(workflowSequenceIssue([next, automation])).toContain("earlier step");
   expect(workflowTriggerIssue({ ...next, trigger: { type: "previous_action_completed", predecessorActionKey: "" } }, [], false)).toContain("preceding action");
   expect(workflowAutomationIssue(next, [], false)).toBeNull();
 });

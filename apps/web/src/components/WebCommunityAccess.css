@@ -1,0 +1,136 @@
+/* Who can use what, and until when: Clients, the Access panel, Settings → Access. */
+
+.access-muted { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.access-notice { margin: 0; color: var(--text-primary); font-size: 13px; }
+.access-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* The main action wears the community's button colour, like every other primary button. */
+.access-primary { background: var(--bg-button, var(--text-primary)) !important; border-color: transparent !important; color: var(--bg-button-text, var(--surface-workspace)) !important; }
+.access-primary:hover:not(:disabled) { opacity: .88; }
+.access-danger { color: var(--accent-error) !important; }
+
+.access-badge {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-default);
+  font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.access-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint, var(--text-muted)); flex: 0 0 auto; }
+.access-badge.is-good::before { background: var(--accent-success, #45a86f); }
+.access-badge.is-warn::before { background: #d39b2a; }
+.access-badge.is-off { color: var(--text-secondary); }
+
+.access-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; }
+.access-facts > div { min-width: 0; }
+.access-facts dt { color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.access-facts dd { margin: 2px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.access-facts code, .access-panel code, .access-my-card code, .access-integration code { font-size: 12px; padding: 1px 5px; border-radius: 4px; background: var(--hover-overlay); }
+
+.access-uses, .access-services { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.access-uses li, .access-services li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.access-uses li small, .access-services li small { margin-left: auto; color: var(--text-secondary); font-size: 12px; text-align: right; }
+.access-uses .is-included svg, .access-services .is-included svg { color: var(--accent-success, #45a86f); }
+.access-uses .is-excluded, .access-services .is-excluded { color: var(--text-secondary); }
+.access-services li > span { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+
+.access-panel { display: grid; gap: 12px; }
+.access-panel h4, .access-client-body > h4, .access-key-block h4 { margin: 10px 0 0; font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.access-panel p { margin: 0; font-size: 13px; line-height: 1.55; }
+.access-panel-summary { display: grid; gap: 10px; justify-items: start; padding: 14px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card, transparent); }
+.access-confirm { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent-error) 40%, transparent); border-radius: 10px; }
+.access-confirm p { margin: 0; font-size: 13px; }
+.access-history summary { cursor: pointer; font-size: 13px; color: var(--text-secondary); }
+.access-history ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+
+.access-grant-form, .access-integration-form { display: grid; gap: 12px; max-width: 520px; }
+.access-field { display: grid; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.access-field small { font-weight: 400; line-height: 1.5; }
+.access-field :is(input, select) {
+  width: 100%; box-sizing: border-box; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border-default); border-radius: 8px;
+  background: var(--surface-workspace); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 400;
+}
+.access-field select { cursor: pointer; }
+.access-field :is(input, select):disabled { opacity: .5; }
+.access-field :is(input, select):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.access-field-row { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; }
+.access-field-row .access-field { flex: 0 1 200px; }
+.access-check { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
+.access-fieldset { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; }
+.access-fieldset legend { padding: 0; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.access-plan-picks { display: grid; padding-left: 24px; }
+
+/* Workflows → Clients */
+.access-clients-page { flex-direction: column; gap: 16px; overflow: auto; padding: 4px 24px 32px; box-sizing: border-box; width: 100%; }
+.access-clients-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.access-clients-header h2 { margin: 0 0 4px; font-size: 22px; line-height: 1.25; letter-spacing: -.02em; }
+.access-give-card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-card, transparent); }
+.access-table-wrap { display: grid; gap: 12px; min-width: 0; overflow-x: auto; }
+.access-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.access-table th, .access-table td { padding: 10px 12px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border-default); }
+.access-table thead th { color: var(--text-muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.access-table tbody tr { cursor: pointer; transition: background-color 120ms ease; }
+.access-table tbody tr:hover { background: var(--hover-overlay); }
+.access-table tbody th { font-weight: 400; }
+.access-client-name { display: flex; align-items: center; gap: 10px; min-width: 180px; padding: 0; border: 0; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.access-avatar { background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-primary) !important; }
+.access-client-name .community-interaction-avatar { width: 32px; height: 32px; }
+.access-client-name span { display: grid; min-width: 0; }
+.access-client-name strong { font-weight: 600; overflow-wrap: anywhere; }
+.access-client-name small { color: var(--text-secondary); font-size: 12px; }
+.access-table tr.is-stuck .access-client-name small { color: #b7791f; }
+.access-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 200px; }
+.access-service-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.access-service-chips > span { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 6px; background: var(--hover-overlay); font-size: 11px; font-weight: 600; }
+.access-service-chips .is-included svg { color: var(--accent-success, #45a86f); }
+.access-service-chips .is-excluded { color: var(--text-secondary); }
+.access-more { justify-self: start; }
+
+.modal-overlay.access-client-overlay { background: rgba(0, 0, 0, .35); backdrop-filter: none; }
+.resource-modal.access-client-modal { width: min(620px, 100%); max-height: calc(100dvh - 48px); background: var(--surface-panel); backdrop-filter: none; display: flex; flex-direction: column; }
+.access-client-modal.resource-modal .modal-header { align-items: center; flex-shrink: 0; padding: 16px 20px 12px; }
+.access-client-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.access-client-identity span { color: var(--text-secondary); font-size: 13px; }
+.access-client-modal .modal-title { font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; }
+.access-client-modal .modal-close { flex-shrink: 0; width: 40px; height: 40px; display: grid; place-items: center; }
+.access-client-body { display: grid; gap: 12px; overflow: auto; padding: 4px 20px 24px; }
+.access-client-modal :is(button, summary, input):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.access-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.access-timeline li { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; font-size: 13px; line-height: 1.5; }
+.access-timeline time { color: var(--text-muted); font-size: 12px; }
+
+/* Settings → Access */
+.access-settings { display: grid; gap: 24px; }
+.access-card h2.settings-section-title { margin: 0; }
+.access-card .pn-settings-card-header { display: grid; gap: 4px; }
+.access-card .pn-settings-card-header p { margin: 0; }
+.access-card-body { display: grid; gap: 12px; }
+.access-card-body > .workflow-secondary-button { justify-self: start; }
+/* The Substack-style settings page draws each card with its own padding. */
+.pn-settings .access-card-body { padding: 1rem 1.25rem 1.25rem; }
+.pn-settings .access-settings { gap: 1rem; }
+.access-integration { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border-default); border-radius: 12px; }
+.access-integration header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.access-integration header strong { font-size: 15px; }
+.access-integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.access-events ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.access-events li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border-default); font-size: 13px; }
+.access-events li.is-needs_attention > span { color: var(--accent-error); }
+.access-secrets { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-card, transparent); }
+.access-copy-field { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 12px; }
+.access-copy-field > span { color: var(--text-secondary); font-weight: 600; }
+.access-copy-field code { overflow-wrap: anywhere; font-size: 12px; padding: 6px 8px; border-radius: 6px; background: var(--hover-overlay); }
+.access-key-block { display: grid; gap: 10px; }
+.access-key-block p { margin: 0; font-size: 13px; }
+
+@container workflow-sections (max-width: 760px) {
+  .access-clients-page { padding: 4px 14px 24px; }
+  .access-table thead th:nth-child(2), .access-table td:nth-child(2),
+  .access-table thead th:nth-child(3), .access-table td:nth-child(3) { display: none; }
+}
+@media (max-width: 600px) {
+  .access-client-name, .access-cell { min-width: 0; }
+  .access-badge { white-space: normal; }
+  .access-copy-field { grid-template-columns: minmax(0, 1fr) auto; }
+  .access-copy-field > span { grid-column: 1 / -1; }
+  .access-timeline li { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .access-table thead th:nth-child(4), .access-table td:nth-child(4) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .access-table tbody tr { transition: none; } }

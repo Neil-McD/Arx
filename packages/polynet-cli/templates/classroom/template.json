@@ -1,0 +1,14 @@
+{
+  "name": "classroom",
+  "label": "Classroom",
+  "description": "A classroom community: tabs across the top, a post feed as home, a course grid with progress, a calendar, members and an About page. Built only from systems Polynet already has. Light and neutral; keeps your own colours if you have them.",
+  "contract": 1,
+  "apply": {
+    "layout": "replace",
+    "theme": "keep_existing"
+  },
+  "wanted_tokens": {
+    "tab_indicator": "underline",
+    "card_hover": "soft"
+  }
+}

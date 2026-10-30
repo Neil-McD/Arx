@@ -755,3 +755,71 @@ test("markdown builds safe DOM: no markup from Polynet text gets through", async
   expect(html("")).toBe("");
   expect(html(null as any)).toBe("");
 });
+
+test("lessons, lesson, progress and setProgress read one set of resources for any view", async () => {
+  const course = "/communities/run-club/resources/map~m1/";
+  const page = `${course}set-up~r1.md`;
+  const calls = stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": (_url, init) => {
+      const { tool, input } = JSON.parse(String(init.body));
+      if (tool === "polynet_list" && input.path === "/communities/run-club/") return ok({ community: { slug: "run-club", name: "Run Club" } });
+      if (tool === "polynet_list" && input.path === "/communities/run-club/resources/") {
+        return ok({ entries: [{ kind: "directory", name: "Map the business", path: course }] });
+      }
+      if (tool === "polynet_list" && input.path === course) {
+        return ok({ entries: [
+          { kind: "document", name: "Set up Draw.io", ref: "resource:r1", path: page, lesson: { stage: "Map the business", gate: true } },
+          { kind: "document", name: "Notes", ref: "resource:r2", path: `${course}notes~r2.md` },
+        ] });
+      }
+      if (tool === "polynet_read" && input.path === page) {
+        return ok({ path: page, ref: "resource:r1", body: "Intro", lesson: { stage: "Map the business", variants: [{ key: "cowork", label: "Cowork", body_md: "x" }] } });
+      }
+      if (tool === "polynet_read" && input.path === "/communities/run-club/members/me/progress.json") {
+        return ok({ body: JSON.stringify({ journey: null, stages: [{ name: "Map the business", locked: false }], lessons: [] }) });
+      }
+      if (tool === "polynet_list" && input.path === "/communities/run-club/members/me/forms/") {
+        return ok({ entries: [{ kind: "document", form_key: "map-checkpoint", path: "/communities/run-club/members/me/forms/f1.json" }] });
+      }
+      if (tool === "polynet_read" && input.path === "/communities/run-club/members/me/forms/f1.json") {
+        return ok({ body: JSON.stringify({ ref: "form-request:f1", form_version_ref: "form-version:v1", revision: 2, questions: [], answers: {} }) });
+      }
+      if (tool === "polynet_call") return ok({ ok: true, ref: input.input.ref, status: input.input.status });
+      return Response.json({ ok: false, code: "unexpected" });
+    },
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+
+  expect(await polynet.lessonForm({ type: "form", form_key: "other" })).toBeNull();
+  const form = await polynet.lessonForm({ type: "form", form_key: "map-checkpoint" });
+  expect(form).toMatchObject({ ref: "form-request:f1", revision: 2 });
+  await polynet.submitLessonForm(form, { goal: "Ship it" });
+  expect(calls.filter((call) => call.body?.tool === "polynet_call").at(-1)!.body.input).toMatchObject({
+    operation: "community.form.submit",
+    input: { form_request_ref: "form-request:f1", form_version_ref: "form-version:v1", expected_revision: 2, answers: { goal: "Ship it" } },
+  });
+
+  const all = await polynet.lessons();
+  expect(all).toEqual([
+    { title: "Set up Draw.io", ref: "resource:r1", path: page, course: "Map the business", course_path: course, lesson: { stage: "Map the business", gate: true } },
+    { title: "Notes", ref: "resource:r2", path: `${course}notes~r2.md`, course: "Map the business", course_path: course, lesson: null },
+  ]);
+  expect(await polynet.lesson(all[0])).toMatchObject({ title: "Set up Draw.io", body: "Intro", lesson: { variants: [{ key: "cowork" }] } });
+  expect(await polynet.progress()).toMatchObject({ journey: null, stages: [{ name: "Map the business" }] });
+  await polynet.setProgress(all[0], "done");
+  const progressCall = calls.filter((call) => call.body?.tool === "polynet_call").at(-1)!.body.input;
+  expect(progressCall).toMatchObject({
+    target: "/communities/run-club/capabilities/community.resource.progress.set.json",
+    operation: "community.resource.progress.set", version: 1, input: { ref: "resource:r1", status: "done" },
+  });
+  await polynet.answer(all[0], "pick-tool", ["claude-code"]);
+  const answerCall = calls.filter((call) => call.body?.tool === "polynet_call").at(-1)!.body.input;
+  expect(answerCall).toMatchObject({
+    target: "/communities/run-club/capabilities/community.resource.response.set.json",
+    operation: "community.resource.response.set", input: { ref: "resource:r1", element: "pick-tool", value: ["claude-code"] },
+  });
+  await polynet.answer("resource:r1", "pick-tool");
+  expect(calls.filter((call) => call.body?.tool === "polynet_call").at(-1)!.body.input.input.value).toBeNull();
+});

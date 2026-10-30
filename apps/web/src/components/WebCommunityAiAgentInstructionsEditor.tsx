@@ -16,53 +16,61 @@ export function WebCommunityAiAgentInstructionsEditor(
 ) {
   const isDirty = props.communityAgentConfigDirtyRef.current;
 
+  // The same card and row anatomy as the rest of Settings: a header, one
+  // full-width field, and a footer whose status reads "Saved" until something
+  // changes. Instructions are long, so they save on the button, not on blur.
   return (
-    <div className="settings-section">
-      <div className="model-note agent-editor-intro">
-        Set the community-specific instructions used by this community's agent.
-      </div>
-
-      <div className="agent-preview-actions">
-        {isDirty ? (
-          <button
-            type="button"
-            onClick={props.handleResetCommunityAgentConfig}
-            disabled={props.isSavingCommunityAgentConfig}
-          >
-            Cancel
-          </button>
+    <section className="settings-section pn-settings-card pn-agent-instructions" aria-labelledby="agent-instructions-title">
+      <header className="pn-settings-card-header">
+        <h2 className="settings-section-title" id="agent-instructions-title">Instructions</h2>
+        <p className="settings-section-desc">How the agent should help in this community. Polynet's own safety and identity rules always come first.</p>
+      </header>
+      <div className="pn-settings-card-body">
+        <div className="pn-settings-row">
+          <div className="pn-settings-row-field">
+            <textarea
+              id="agent-instructions"
+              className="pn-settings-input"
+              aria-labelledby="agent-instructions-title"
+              placeholder="For example: answer in a friendly, direct tone and point people to the right lesson."
+              value={props.communityAgentConfigCommunitySystemPrompt}
+              onChange={(event) => {
+                props.setCommunityAgentConfigCommunitySystemPrompt(event.target.value);
+                props.markCommunityAgentConfigDirty();
+              }}
+              rows={8}
+            />
+          </div>
+        </div>
+        {props.communityAgentConfigSaveError ? (
+          <p className="pn-settings-help" role="alert">{props.communityAgentConfigSaveError}</p>
         ) : null}
-        <button
-          type="button"
-          className={`platform-save-button ${isDirty ? "is-dirty" : "is-saved"}`}
-          onClick={() => void props.handleSaveCommunityAgentConfig()}
-          disabled={props.isSavingCommunityAgentConfig || !isDirty}
-        >
-          {props.isSavingCommunityAgentConfig ? "Saving..." : isDirty ? "Save changes" : "Saved"}
-        </button>
       </div>
-
-      {props.communityAgentConfigSaveError ? (
-        <div className="auth-error">{props.communityAgentConfigSaveError}</div>
-      ) : null}
-
-      <label className="agent-canvas-target-card agent-canvas-target-card-editable">
-        <span className="agent-canvas-target-kicker">Community instructions</span>
-        <span className="agent-canvas-target-title">How should the agent help here?</span>
-        <span className="model-note">
-          These instructions augment the platform's locked identity, security, and authority rules.
+      <footer className="pn-settings-card-footer">
+        <span className="pn-settings-status" role="status" aria-live="polite">
+          {props.isSavingCommunityAgentConfig ? "Saving…" : isDirty ? "Unsaved changes" : "Saved"}
         </span>
-        <textarea
-          className="system-prompt-input"
-          placeholder="Optional instructions specific to this community."
-          value={props.communityAgentConfigCommunitySystemPrompt}
-          onChange={(event) => {
-            props.setCommunityAgentConfigCommunitySystemPrompt(event.target.value);
-            props.markCommunityAgentConfigDirty();
-          }}
-          rows={8}
-        />
-      </label>
-    </div>
+        {isDirty ? (
+          <span className="pn-settings-actions">
+            <button
+              type="button"
+              className="pn-settings-button"
+              onClick={props.handleResetCommunityAgentConfig}
+              disabled={props.isSavingCommunityAgentConfig}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="pn-settings-button is-primary"
+              onClick={() => void props.handleSaveCommunityAgentConfig()}
+              disabled={props.isSavingCommunityAgentConfig}
+            >
+              {props.isSavingCommunityAgentConfig ? "Saving…" : "Save"}
+            </button>
+          </span>
+        ) : null}
+      </footer>
+    </section>
   );
 }

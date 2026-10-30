@@ -26,3 +26,15 @@ test("popup resets scope and restores focus without resetting the mounted conver
   expect(roster).toContain('event.key !== "Tab"');
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain('memberDetailOpen={hasDetailPanel}');
 });
+
+test("side panel shows a short list, online first, and View all opens the directory from the right", () => {
+  expect(roster).toContain("export const ROSTER_SIDE_PANEL_LIMIT = 10;");
+  expect(roster).toContain("let sideRowsLeft = props.directory ? Infinity : ROSTER_SIDE_PANEL_LIMIT;");
+  expect(roster).toContain('(["online", "offline", "unknown"] as const).map(group =>');
+  expect(roster).toContain('className="members-view-all members-view-all-footer" onClick={props.onOpenMembers}');
+  expect(roster).toContain("props.directory ? !complete : false");
+  expect(roster).toContain('className="modal members-directory-modal members-directory-drawer"');
+  expect(roster).toContain('className="members-directory-filter" role="group" aria-label="Show members"');
+  const css = read("apps/web/src/styles/community-and-content.css");
+  expect(css).toContain(".modal-overlay.members-directory-overlay { justify-content: flex-end;");
+});

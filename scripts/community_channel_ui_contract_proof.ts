@@ -30,8 +30,8 @@ const nav = read(navPath);
 [
   '"Add Channel"',
   "canManageMembersActiveCommunity && onCreateChannel",
-  "Choose who can access this channel.",
-  "Invite-only",
+  "Everyone in the community can read and post here.",
+  "Next you pick who's in it; owners and admins always are.",
   "channelAccessMode",
   'className="community-channel-loading-row web-skeleton-row"',
   'className="community-channel-loading-row is-short web-skeleton-row"',
@@ -291,8 +291,8 @@ assertNotMatches(
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
 [
-  "Pin to channel",
-  "Unpin from channel",
+  "Pin to {pinPlace}",
+  "Unpin from {pinPlace}",
   "props.canManagePinnedRoot",
 ].forEach((required) => assertIncludes(interactionFeedPath, interactionFeed, required));
 

@@ -1,12 +1,15 @@
-import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent } from "react";
+import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { MessageCircle, MoreHorizontal, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import { WebCommunityCreators } from "./WebCommunityCreators";
 import { useMemberScrollPagination } from "./useMemberScrollPagination";
 import { CommunityJoinRequestReview } from "./CommunityJoinRequestReview";
 import { CommunityAutoJoinControl, type CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { ActorAvatar } from "./communityInteractionFeed";
+import { useCommunityAgentProfile } from "../../../../shared/CommunityAgentIcon";
+import { AVATAR_INITIALS_INK } from "../../../../shared/chatUi";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
@@ -16,13 +19,33 @@ import { communityPresenceLeaseIsActive, COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_M
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
-import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
+import { useCommunityThemeScope } from "./useCommunityThemeScope";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOverview, type CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
+
+// The side panel shows a short list, online people first, and "View all" opens
+// the full directory as a panel from the right.
+export const ROSTER_SIDE_PANEL_LIMIT = 10;
+
+// The memory card's one-line agent status, in plain words. A run that failed
+// on AI funding says so, because "Error" alone gives the owner nothing to act on.
+// The stored reason can carry a prefix ("Uncaught Error: founder_inference_…").
+// Members never see the failure: it's the owner's to fix, so they see "Resting".
+export function memoryAgentStatus(overview: Pick<CloudCommunityPolynetOverview, "agent">, options: { canManage?: boolean } = {}): string {
+  const state = overview.agent.activity_state || overview.agent.status;
+  if (state === "error" && options.canManage === false) return "Resting";
+  if (state === "error") {
+    return /\bfounder_inference_/.test(overview.agent.recent_runs[0]?.stop_reason ?? "")
+      ? "Couldn't run: AI usage isn't set up or has run out"
+      : "Couldn't run last time";
+  }
+  const labels: Record<string, string> = { running: "Working", resting: "Resting", updated_directory: "Updated memory", not_started: "Not started yet" };
+  return labels[state] ?? state.replace(/_/g, " ").replace(/\b\w/g, value => value.toUpperCase());
+}
 
 function trapTab(event: KeyboardEvent, container: HTMLElement | null) {
   if (event.key !== "Tab") return;
@@ -34,11 +57,16 @@ function trapTab(event: KeyboardEvent, container: HTMLElement | null) {
 }
 
 type RosterProps = {
+  // The community's Members page: the full directory (search, join requests,
+  // auto-join) shown in the page as member cards instead of in a dialog.
+  page?: boolean;
   memberDetailOpen?: boolean;
   narrowOpen?: boolean;
   onCloseNarrow?: () => void;
   joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
   admission?: CommunityAdmissionControl;
+  /** Shown below the members list in the side panel, never in the directory. */
+  footer?: ReactNode;
   communityName: string;
   presenceSummary?: CommunityPresenceSummary | null;
   isLoadingPresence?: boolean;
@@ -58,6 +86,11 @@ export function ChannelRosterPanel(props: RosterProps) {
 }
 
 function ChannelRosterWorkspace(props: RosterProps) {
+  if (props.page) return <RosterSurface {...props} channelId={undefined} narrowOpen={false} onCloseNarrow={undefined} directory />;
+  return <ChannelRosterSidebar {...props} />;
+}
+
+function ChannelRosterSidebar(props: RosterProps) {
   const [membersOpen, setMembersOpen] = useState(false);
   const [channel, setChannel] = useState(props.channelId);
   if (channel !== props.channelId) {
@@ -79,6 +112,8 @@ function RosterSurface(props: RosterProps & {
   onCloseMembers?: () => void;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
+  const agentName = useCommunityAgentProfile()?.name || "Community agent";
+  const themeScope = useCommunityThemeScope();
   const dialogRef = useRef<HTMLElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -89,6 +124,7 @@ function RosterSurface(props: RosterProps & {
     return () => { if (opener?.isConnected) opener.focus(); };
   }, [props.directory, props.memberDetailOpen]);
   const [search, setSearch] = useState("");
+  const [onlineOnly, setOnlineOnly] = useState(false);
   const searching = Boolean(search.trim());
   const searchResult = useWebMemberDirectorySearch({
     session: scope?.session,
@@ -178,7 +214,7 @@ function RosterSurface(props: RosterProps & {
     return () => { disposed = true; paginationRef.current = null; stop?.(); };
   }, [liveState, scope?.communityId, props.channelId, retry]);
   const { membersViewportRef, loadMoreSentinelRef, handleMembersScroll } = useMemberScrollPagination({
-    membersHasMore: searching ? searchResult.hasMore && !searchResult.paused : !complete,
+    membersHasMore: searching ? searchResult.hasMore && !searchResult.paused : props.directory ? !complete : false,
     isLoadingMembers: searching ? false : !pages.length,
     isLoadingMoreMembers: searching ? searchResult.loading : loadingMore,
     membersLoadError: searching ? searchResult.error : error,
@@ -186,7 +222,7 @@ function RosterSurface(props: RosterProps & {
   }, searching ? searchResult.progress : pages.length);
   const rosterMembers = [...new Map(pages.flatMap(page => page.page).map(member => [member.user_id, member])).values()];
   const members = searching ? searchResult.rows.map(member => ({
-    user_id: member.user_id, role: member.role,
+    user_id: member.user_id, role: member.role, co_creator: member.co_creator,
     membership_id: member.id.startsWith("owner:") ? undefined : member.id,
     membership_created_at: member.created_at,
     profile: member, last_seen_at: null, active_until: null,
@@ -205,10 +241,15 @@ function RosterSurface(props: RosterProps & {
     : communityPresenceLeaseIsActive({ lastSeenAt: member.last_seen_at, activeUntil: member.active_until ?? undefined }, now) ? "online" : "offline";
   const ready = pages.length > 0;
   const firstPresenceGroup = (["online", "offline", "unknown"] as const).find(group => members.some(member => status(member) === group));
+  // Rows the side panel shows, online first, up to the limit.
+  let sideRowsLeft = props.directory ? Infinity : ROSTER_SIDE_PANEL_LIMIT;
+  const onlineCount = members.filter(member => status(member) === "online").length;
+  // The roster loads a page at a time, so a count shows only once it's whole.
+  const peopleTotal = complete ? String(rosterMembers.length) : "";
   const settings = <CommunityMemberSettingsDialog {...props.memberSettings}
-    member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role, created_at: selectedMember.membership_created_at } : null}
+    member={selectedMember ? { ...selectedMember.profile, id: selectedMember.membership_id!, user_id: selectedMember.user_id, role: selectedMember.role, co_creator: selectedMember.co_creator, created_at: selectedMember.membership_created_at } : null}
     onClose={() => setSelectedMembershipId(null)} />;
-  const content = <><aside className={props.directory ? "members-directory-content" : "community-context-panel channel-roster-panel"} aria-label={props.directory ? "Community members" : "Channel people and agents"}
+  const content = <><aside className={props.page ? "members-directory-content members-page" : props.directory ? "members-directory-content" : "community-context-panel channel-roster-panel"} aria-label={props.directory ? "Community members" : "Channel people and agents"}
     style={!props.directory && props.memberDetailOpen ? { display: "none" } : undefined}
     onKeyDown={event => {
       if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
@@ -223,26 +264,26 @@ function RosterSurface(props: RosterProps & {
       </div> : null}
       <span className="community-context-rail-name">{props.communityName}</span>
     </div>
-    <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
-      onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />
+    {/* The Online list below names who's here, so no separate face row (it read as a second, nameless "R"). */}
+    <WebCommunityCreators communityId={scope?.communityId} onOpenProfile={props.onOpenProfile} variant="rail" getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} onMessageUser={props.onMessageUser} currentUserId={props.currentUserId} />
     <div className="community-context-memory">
-      <div className="community-context-memory-head"><div className="community-context-section">Memory{memory ? ` — ${memory.memory.total_visible_nodes}${memory.memory.node_counts_are_lower_bound ? "+" : ""}` : ""}</div></div>
+      <div className="community-context-memory-head"><div className="community-context-section">Memory{memory ? ` · ${memory.memory.total_visible_nodes}${memory.memory.node_counts_are_lower_bound ? "+" : ""}` : ""}</div></div>
       {memoryError ? <div role="status">Could not load memory. <button type="button" onClick={() => setMemoryRetry(value => value + 1)}>Retry</button></div>
         : memory ? <div className="community-context-memory-summary">
           <div className="community-context-memory-preview"><CommunityMemoryGraphPreview overview={memory} /></div>
-          <div className="community-context-memory-status"><span>{(memory.agent.activity_state || memory.agent.status).replace(/_/g, " ").replace(/\b\w/g, value => value.toUpperCase())}</span></div>
+          <div className="community-context-memory-status"><span>{memoryAgentStatus(memory, { canManage: props.memberSettings.canManageMembers })}</span></div>
         </div> : <div className="community-context-memory-summary" aria-label="Loading memory"><div className="community-context-memory-preview web-skeleton-block" /><div className="community-context-memory-loading-status web-skeleton-row" /></div>}
     </div></> : null}
     <div className="community-context-members" ref={membersViewportRef} onScroll={handleMembersScroll}>
       {rebuilding ? <p role="status">Updating members…</p> : null}
       {error ? <p role="status">Channel roster unavailable. <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>
         : !ready ? <p role="status">Loading channel roster…</p> : <>
-          {!props.directory ? <><h3 className="community-context-section">Agents — {pages[0].agents.length}</h3>
+          {!props.directory ? <><h3 className="community-context-section">Agents · {pages[0].agents.length}</h3>
           {pages[0].agents.length ? <div className="community-context-agent-list">
             {pages[0].agents.map(agent => <div className="community-context-member" key={agent.key}>
-              <ActorAvatar seed={agent.key} label="Community agent" className="community-context-member-avatar"
+              <ActorAvatar seed={agent.key} label={agentName} className="community-context-member-avatar"
                 getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
-              <span className="community-context-member-copy"><span className="community-context-member-name">Community agent</span></span>
+              <span className="community-context-member-copy"><span className="community-context-member-name">{agentName}</span></span>
             </div>)}
           </div> : <p className="community-context-members-status">No agents in this channel.</p>}</> : null}
         </>}
@@ -251,6 +292,10 @@ function RosterSurface(props: RosterProps & {
             <CommunityAutoJoinControl admission={props.admission} />
           </div> : !ready || error || !firstPresenceGroup ? <div className="community-context-members-total">
             <button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>
+          </div> : null}
+          {props.directory && !searching && ready && !error ? <div className="members-directory-filter" role="group" aria-label="Show members">
+            <button type="button" aria-pressed={!onlineOnly} onClick={() => setOnlineOnly(false)}>All{peopleTotal ? <span>{peopleTotal}</span> : null}</button>
+            <button type="button" aria-pressed={onlineOnly} onClick={() => setOnlineOnly(true)}>Online<span>{onlineCount}</span></button>
           </div> : null}
           {props.directory ? <>{props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
@@ -261,13 +306,14 @@ function RosterSurface(props: RosterProps & {
           </> : null}
       {(searching || (!error && ready)) ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
-            const rows = members.filter(member => status(member) === group);
-            if (!rows.length) return null;
-            const heading = <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>;
+            const groupRows = members.filter(member => status(member) === group);
+            if (!groupRows.length || (props.directory && onlineOnly && !searching && group !== "online")) return null;
+            if (sideRowsLeft <= 0) return null;
+            const rows = groupRows.slice(0, sideRowsLeft);
+            sideRowsLeft -= rows.length;
+            const heading = <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} · {groupRows.length}{!searching && !complete ? "+" : ""}</h4>;
             return <Fragment key={group}>
-              {!props.directory && group === firstPresenceGroup ? <div className="community-context-presence-heading">
-                {heading}<button type="button" className="members-view-all" onClick={props.onOpenMembers}>View all</button>
-              </div> : heading}
+              {heading}
               {rows.map(member => {
                 const name = member.profile.display_name || "Member";
                 const lastActive = group === "online" ? "Last active: now"
@@ -275,7 +321,7 @@ function RosterSurface(props: RosterProps & {
                   : `Last active: ${formatRelativeTimeFromIso(new Date(member.last_seen_at).toISOString())}`;
                 return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
                   <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
-                    <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}>
+                    <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { backgroundColor: props.getAvatarColor(member.user_id), color: AVATAR_INITIALS_INK } : undefined}>
                       <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
                         name={name} imageUrl={member.profile.avatar_url}
                         focusX={member.profile.avatar_focus_x} focusY={member.profile.avatar_focus_y} zoom={member.profile.avatar_zoom}
@@ -292,23 +338,28 @@ function RosterSurface(props: RosterProps & {
             </Fragment>;
           })}
           {!searching && !members.length && complete ? <p>No people in this channel.</p> : null}
+          {props.directory && onlineOnly && !searching && complete && !onlineCount ? <p className="community-context-members-status">No one is online right now.</p> : null}
           {searching ? <div className="community-context-members-footer" role="status" ref={loadMoreSentinelRef}>
             {searchResult.loading ? "Searching members…" : searchResult.error ?? `${members.length} matches${searchResult.hasMore ? " so far" : ""}`}
             {!searchResult.loading && searchResult.error ? <button type="button" className="btn-secondary" onClick={searchResult.loadMore}>Retry search</button> : null}
             {!searchResult.loading && !searchResult.error && searchResult.paused ? <><span> Search paused to limit scanning.</span> <button type="button" className="btn-secondary" onClick={searchResult.continueSearch}>Continue search</button></> : null}
-          </div> : <div className="community-context-members-footer" ref={loadMoreSentinelRef}>
-            {complete ? `Showing ${members.length} of ${members.length}` : "Loading more..."}
+          </div> : !props.directory ? members.length ? <button type="button" className="members-view-all members-view-all-footer" onClick={props.onOpenMembers}>
+            {peopleTotal ? `View all ${peopleTotal} ${rosterMembers.length === 1 ? "member" : "members"}` : "View all members"}
+          </button> : null : <div className="community-context-members-footer" ref={loadMoreSentinelRef}>
+            {complete ? `Showing ${onlineOnly ? onlineCount : members.length} of ${members.length}` : "Loading more..."}
           </div>}
         </> : null}
     </div>
+    {!props.directory ? props.footer : null}
   </aside>
   </>;
   // The chat shell isolates its stacking context beneath the community rail.
   // Keep overlays outside that shell, as the directory already does below.
-  if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
+  if (!props.directory || props.page) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
+  // The drawer is portaled out of the page, so it carries the community's look along.
   // Keep search and pagination mounted while the existing profile inspector is open.
-  return createPortal(<><div className="modal-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>
-    <section ref={dialogRef} className="modal members-directory-modal" role="dialog" aria-modal="true"
+  return <>{themeScope.marker}{createPortal(themeScope.scope(<><div className="modal-overlay members-directory-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>
+    <section ref={dialogRef} className="modal members-directory-modal members-directory-drawer" role="dialog" aria-modal="true"
       aria-labelledby="members-directory-title" onMouseDown={event => event.stopPropagation()}
       onKeyDown={event => {
         if (event.defaultPrevented) return;
@@ -328,5 +379,5 @@ function RosterSurface(props: RosterProps & {
   </div><div ref={settingsRef} onKeyDown={event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
     trapTab(event, settingsRef.current);
-  }}>{settings}</div></>, document.body);
+  }}>{settings}</div></>), document.body)}</>;
 }

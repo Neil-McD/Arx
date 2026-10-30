@@ -131,46 +131,57 @@ export const reserveCanonicalOperationReceiptInternal = internalMutation({
   },
 });
 
+const receiptScopeArgs = {
+  communityId: v.id("communities"),
+  userId: v.id("users"),
+  principalKind: principalKindValidator,
+  toolName: mutatingToolNameValidator,
+  idempotencyKey: v.string(),
+  requestFingerprint: v.string(),
+  attemptToken: v.string(),
+};
+
+/** The reserved attempt a write completes in its own transaction, so the write and its receipt commit together. */
+export const canonicalReceiptAttemptValidator = v.object(receiptScopeArgs);
+
+export async function completeCanonicalOperationReceipt(ctx: any, args: {
+  communityId: any; userId: any;
+  principalKind: "community_agent_for_member" | "external_mcp" | "community_agent" | "community_app";
+  toolName: "polynet_write" | "polynet_call";
+  idempotencyKey: string; requestFingerprint: string; attemptToken: string; result: unknown;
+}) {
+  const existing = await findReceipt(ctx, args);
+  if (!existing) {
+    throw new Error("polynet_operation_receipt_reservation_missing");
+  }
+  if (existing.requestFingerprint !== args.requestFingerprint) {
+    throw new Error("idempotency_key_conflict");
+  }
+  if (existing.attemptToken !== args.attemptToken) {
+    throw new Error("polynet_operation_attempt_not_owner");
+  }
+  if (existing.status === "completed") {
+    return {
+      ok: true,
+      deduped: true,
+      result: existing.result ?? null,
+    };
+  }
+  if (existing.status !== "executing") {
+    throw new Error("polynet_operation_attempt_not_active");
+  }
+  await ctx.db.patch(existing._id, {
+    status: "completed",
+    result: args.result,
+    leaseExpiresAt: undefined,
+    updatedAt: Date.now(),
+  });
+  return { ok: true, deduped: false, result: args.result };
+}
+
 export const completeCanonicalOperationReceiptInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    userId: v.id("users"),
-    principalKind: principalKindValidator,
-    toolName: mutatingToolNameValidator,
-    idempotencyKey: v.string(),
-    requestFingerprint: v.string(),
-    attemptToken: v.string(),
-    result: v.any(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await findReceipt(ctx, args);
-    if (!existing) {
-      throw new Error("polynet_operation_receipt_reservation_missing");
-    }
-    if (existing.requestFingerprint !== args.requestFingerprint) {
-      throw new Error("idempotency_key_conflict");
-    }
-    if (existing.attemptToken !== args.attemptToken) {
-      throw new Error("polynet_operation_attempt_not_owner");
-    }
-    if (existing.status === "completed") {
-      return {
-        ok: true,
-        deduped: true,
-        result: existing.result ?? null,
-      };
-    }
-    if (existing.status !== "executing") {
-      throw new Error("polynet_operation_attempt_not_active");
-    }
-    await ctx.db.patch(existing._id, {
-      status: "completed",
-      result: args.result,
-      leaseExpiresAt: undefined,
-      updatedAt: Date.now(),
-    });
-    return { ok: true, deduped: false, result: args.result };
-  },
+  args: { ...receiptScopeArgs, result: v.any() },
+  handler: (ctx, args) => completeCanonicalOperationReceipt(ctx, args),
 });
 
 export const failCanonicalOperationReceiptInternal = internalMutation({

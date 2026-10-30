@@ -459,7 +459,7 @@ function useProfileHarness(props: any) {
     assert(ensures === 1 && pending.length === 2, "initial read was duplicated or serial");
     pending.find((r)=>r.kind === "listCloudCommunityResourceModuleRows")!.resolve([courseFixture]);
     await tick();
-    assert(document.body.textContent?.includes("Lessons not loaded") && !document.body.textContent?.includes("0 lessons"), "pending lessons reported as zero");
+    assert(document.body.textContent?.includes("Loading lessons…") && !document.body.textContent?.includes("0 lessons"), "pending lessons reported as zero");
     flushSync(()=>hook.value.setSelected("course"));
     pending.find((r)=>r.kind === "listCloudCommunityResourceRows")!.reject(new Error("Read unavailable"));
     await tick();

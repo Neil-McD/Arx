@@ -1,4 +1,5 @@
-import { House, MessageCircle, Sparkles } from "lucide-react";
+import { House, MessageCircle } from "lucide-react";
+import { CommunityAgentIcon } from "../../../../shared/CommunityAgentIcon";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebMobileBottomRailProps = {
@@ -58,7 +59,7 @@ export function WebMobileBottomRail({
           onClick={() => communityShell.onSelectMobileRootPage("agent")}
         >
           <span className="mobile-bottom-rail-ai-icon">
-            <Sparkles aria-hidden="true" />
+            <CommunityAgentIcon />
           </span>
         </button>
 

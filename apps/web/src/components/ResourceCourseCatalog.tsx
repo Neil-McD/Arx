@@ -1,11 +1,11 @@
-import { useState, type DragEvent, type MouseEvent } from "react";
+import { useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  BookOpen,
   Eye,
   EyeOff,
   GripVertical,
+  Lock,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -13,13 +13,38 @@ import {
 } from "lucide-react";
 
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
+import { courseCoverFallback } from "../../../../shared/courseCoverFallback";
+import type { CommunityThemeV1 } from "../../../../shared/communityTheme";
 import type { CommunityResourceModule } from "./communityResourcesContracts";
 
+// The theme's course card choices as words for <html data-course-cards>, which
+// styles/course-cards.css reads. Only choices that differ from Polynet's own
+// card are listed, so an unset theme leaves the catalog as it was.
+export function courseCardLookWords(theme: CommunityThemeV1 | null): string | null {
+  if (!theme) return null;
+  const words = [
+    theme.course_card_style && theme.course_card_style !== "cover" ? theme.course_card_style : "",
+    theme.course_card_pills === "show" ? "pills" : "",
+    theme.course_card_description === "hide" ? "no-description" : "",
+    theme.course_card_progress && theme.course_card_progress !== "bar" ? theme.course_card_progress : "",
+    `edge-${theme.course_card_edge ?? "border"}`,
+  ].filter(Boolean);
+  return words.length ? words.join(" ") : null;
+}
+
 type ReorderDirection = "up" | "down";
+
+// A member's place in a course: lessons done, and why it is locked if it is.
+export type ResourceCourseProgress = {
+  done: number;
+  total: number;
+  lockedReason?: string | null;
+};
 
 export type ResourceCourseCatalogItem = {
   module: CommunityResourceModule;
   lessonCount: number | null;
+  progress?: ResourceCourseProgress | null;
 };
 
 type ResourceCourseCatalogProps = {
@@ -79,9 +104,17 @@ function ResourceCourseCard(props: {
     onDrop,
     onDragEnd,
   } = props;
-  const { module, lessonCount } = item;
+  const { module, lessonCount, progress } = item;
+  const coverFallback = courseCoverFallback(module.id, module.name);
+  const lockedReason = progress?.lockedReason?.trim() || null;
+  const percent = progress && progress.total > 0
+    ? Math.min(100, Math.round((progress.done / progress.total) * 100))
+    : null;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const isDraft = module.module_status !== "live";
+  const lessonsText = lessonCount === null ? null : `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"}`;
+  // A pill for where the member is, shown when the theme turns pills on.
+  const stage = lockedReason ? "locked" : percent === 100 ? "done" : percent ? "progress" : null;
 
   const closeAndRun = (event: MouseEvent<HTMLButtonElement>, action: () => void) => {
     event.stopPropagation();
@@ -96,6 +129,7 @@ function ResourceCourseCard(props: {
         canReorder ? "can-reorder" : "",
         isDragging ? "is-dragging" : "",
         isDropTarget ? "is-drop-target" : "",
+        lockedReason ? "is-locked" : "",
       ].filter(Boolean).join(" ")}
       draggable={canReorder}
       onDragStart={onDragStart}
@@ -171,11 +205,19 @@ function ResourceCourseCard(props: {
             zoom: module.banner_zoom,
           }}
           alt=""
-          fallback={<BookOpen aria-hidden="true" />}
+          fallback={<span className="resource-course-card-cover-fallback" style={coverFallback.style} aria-hidden="true">
+            {/* The letter stands in for a missing cover only; while a cover loads, the plain colour shows. */}
+            {coverFallback.initial && !module.banner_url ? <span className="resource-course-card-cover-initial">{coverFallback.initial}</span> : null}
+          </span>}
           loading="lazy"
           fetchPriority="low"
           aria-hidden
         />
+        {lockedReason ? (
+          <span className="resource-course-card-lock" role="img" aria-label="Locked">
+            <Lock aria-hidden="true" />
+          </span>
+        ) : null}
         <span className="resource-course-card-body">
           <span className="resource-course-card-heading">
             <strong>{module.name}</strong>
@@ -184,9 +226,36 @@ function ResourceCourseCard(props: {
           <span className="resource-course-card-description">
             {module.description_md?.trim() || "A guided collection of community lessons."}
           </span>
-          <span className="resource-course-card-meta">
-            {lessonCount === null ? "Lessons not loaded" : `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"}`}
-          </span>
+          {lessonsText || stage ? (
+            <span className="resource-course-card-pills">
+              {lessonsText ? <span className="resource-course-card-pill">{lessonsText}</span> : null}
+              {stage ? <span className={`resource-course-card-pill is-${stage}`}>
+                {stage === "locked" ? "Locked" : stage === "done" ? "Done" : "In progress"}</span> : null}
+            </span>
+          ) : null}
+          {percent !== null && !lockedReason ? (
+            <span
+              // The Classroom bar prints the % inside it: on the fill once
+              // there is room, on the empty track before that.
+              className={`resource-course-card-progress${percent >= 20 ? " is-label-on-fill" : ""}`}
+              role="progressbar"
+              aria-label={`${module.name} progress`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+            >
+              <span className="resource-course-card-progress-track">
+                <span style={{ width: `${percent}%` }} />
+              </span>
+              <span className="resource-course-card-progress-ring" style={{ "--course-progress": `${percent}%` } as CSSProperties} />
+              <span className="resource-course-card-progress-label">{percent}%</span>
+              <span className="resource-course-card-progress-fraction">{progress?.done}/{progress?.total} lessons</span>
+            </span>
+          ) : (
+            <span className={`resource-course-card-meta ${lockedReason ? "is-locked" : "is-count"}`}>
+              {lockedReason ? lockedReason : lessonsText ?? "Loading lessons…"}
+            </span>
+          )}
         </span>
       </button>
     </article>

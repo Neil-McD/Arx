@@ -113,6 +113,7 @@ export async function readCheckedFiles(files) {
 const GUIDE = fileURLToPath(new URL("./guide/", import.meta.url));
 // Claude Code reads .claude/skills; Codex and other agents read .agents/skills.
 export const SKILL_DIRS = [".agents/skills", ".claude/skills"];
+export const AGENT_DIR = ".claude/agents";
 
 // Put Polynet's skills in a site folder (replacing older copies), and the agent
 // guides (AGENTS.md, CLAUDE.md) when the folder has none. Returns what it wrote.
@@ -123,6 +124,14 @@ export async function installGuide(dir) {
     await cp(join(GUIDE, name), join(dir, name));
     written.push(name);
   }
+  written.push(...await installSkills(dir));
+  return written;
+}
+
+// Put Polynet's skills in any folder (a site, or a community design from
+// `polynet init`), replacing older copies. Returns what it wrote.
+export async function installSkills(dir) {
+  const written = [];
   const skills = (await readdir(join(GUIDE, "skills"), { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
   for (const skillDir of SKILL_DIRS) {
     for (const skill of skills) {
@@ -132,6 +141,13 @@ export async function installGuide(dir) {
       await cp(join(GUIDE, "skills", skill), target, { recursive: true });
     }
     written.push(`${skillDir}/ (${skills.length} skills)`);
+  }
+  // Claude Code's subagents, such as the fresh-eyes UI reviewer.
+  const agents = (await readdir(join(GUIDE, "agents")).catch(() => [])).filter((name) => name.endsWith(".md"));
+  if (agents.length) {
+    await mkdir(join(dir, AGENT_DIR), { recursive: true });
+    for (const agent of agents) await cp(join(GUIDE, "agents", agent), join(dir, AGENT_DIR, agent));
+    written.push(`${AGENT_DIR}/ (${agents.length} agent${agents.length === 1 ? "" : "s"})`);
   }
   return written;
 }

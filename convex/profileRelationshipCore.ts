@@ -1,4 +1,5 @@
 import {
+  communityMembershipIsCoCreator,
   communityMembershipRowIsActive,
   requireCommunityChatAccess,
   resolveCommunityBrandingFields,
@@ -8,6 +9,7 @@ import {
 } from "./communityCore";
 import type { CommunityAvatarSummary, ProfileCommunityContext } from "../shared/communityTypes";
 import { communityIsActive } from "../shared/communityLifecycle";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 const MAX_PROFILE_RELATIONSHIP_OWNED_ROWS = 24;
 const MAX_PROFILE_RELATIONSHIP_MEMBERSHIP_ROWS = 96;
@@ -259,23 +261,68 @@ export async function resolveViewerDirectMessageRelationship(
   };
 }
 
+// Communities the person co-creates and the published ones they've joined,
+// for their profile. Their owner-side list is resolveVisibleOwnedCommunities.
+async function listTargetCommunityMemberships(args: { ctx: any; targetUserId: any; ownedIds: Set<string> }) {
+  const memberships = await listActiveCommunityMembershipsByUserId(args.ctx, args.targetUserId);
+  const coCreated: CommunityLike[] = [];
+  const joined: CommunityLike[] = [];
+  for (const row of memberships) {
+    if (args.ownedIds.has(String(row.communityId))) continue;
+    const community = (await args.ctx.db.get(row.communityId)) as CommunityLike | null;
+    if (!community || !communityIsActive(community)) continue;
+    if (communityMembershipIsCoCreator(row)) coCreated.push(community);
+    else joined.push(community);
+  }
+  return { coCreated, joined };
+}
+
 export async function resolveViewerProfileRelationship(
   args: ResolveViewerProfileRelationshipArgs,
 ): Promise<ProfileCommunityContext> {
   const bundle = await resolveViewerRelationshipCommunityBundle(args);
-  const visibleOwnedCommunities = await resolveVisibleOwnedCommunities({
+  const detail = (await getUniqueUserProfileDetailByUserId(args.ctx, args.targetUserId)) as
+    { hideOwnedCommunities?: boolean; hideJoinedCommunities?: boolean } | null;
+  // Each person chooses what their profile lists; they always see their own.
+  const showOwned = bundle.viewerIsTarget || detail?.hideOwnedCommunities !== true;
+  const showJoined = bundle.viewerIsTarget || detail?.hideJoinedCommunities !== true;
+  const { coCreated, joined } = await listTargetCommunityMemberships({
     ctx: args.ctx,
-    viewerUserId: args.viewerUserId,
     targetUserId: args.targetUserId,
-    viewerIsTarget: bundle.viewerIsTarget,
-    viewerCommunityIds: bundle.viewerCommunityIds,
-    ownedCommunities: bundle.ownedCommunities,
+    ownedIds: new Set(bundle.ownedCommunities.map((community) => String(community._id))),
   });
+  const visibleOwnedCommunities = showOwned
+    ? await resolveVisibleOwnedCommunities({
+        ctx: args.ctx,
+        viewerUserId: args.viewerUserId,
+        targetUserId: args.targetUserId,
+        viewerIsTarget: bundle.viewerIsTarget,
+        viewerCommunityIds: bundle.viewerCommunityIds,
+        ownedCommunities: [...bundle.ownedCommunities, ...coCreated],
+      })
+    : [];
+  const listedIds = new Set([
+    ...visibleOwnedCommunities.map((community) => String(community._id)),
+    ...bundle.mutualCommunities.map((community) => String(community._id)),
+  ]);
+  // Joined: published communities only, so a private one never shows up.
+  const visibleJoinedCommunities = showJoined
+    ? joined
+        .filter((community) => (community.visibility === "published" || bundle.viewerIsTarget) && !listedIds.has(String(community._id)))
+        .sort((left, right) => left.name.localeCompare(right.name))
+    : [];
+  const coCreatedIds = new Set(coCreated.map((community) => String(community._id)));
   const canMessage = Boolean(bundle.messageContextCommunity);
 
   return {
     owned_communities: await Promise.all(
-      visibleOwnedCommunities.map((community) => mapCommunityAvatarSummary(args.ctx, community)),
+      visibleOwnedCommunities.map(async (community) => ({
+        ...(await mapCommunityAvatarSummary(args.ctx, community)),
+        ...(coCreatedIds.has(String(community._id)) ? { co_creator: true } : {}),
+      })),
+    ),
+    joined_communities: await Promise.all(
+      visibleJoinedCommunities.map((community) => mapCommunityAvatarSummary(args.ctx, community)),
     ),
     mutual_communities: await Promise.all(
       bundle.mutualCommunities.map((community) => mapCommunityAvatarSummary(args.ctx, community)),

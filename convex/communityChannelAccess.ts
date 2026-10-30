@@ -28,6 +28,8 @@ export type ChannelActor = {
 
 export async function resolveCommunityChannelActor(args: {
   ctx: any; communityId: any; userId: any; kind?: ChannelActorKind;
+  /** Destination and audience checks only: judge the member as they will be once the welcome flow ends. */
+  allowWelcome?: boolean;
 }): Promise<ChannelActor> {
   const kind = args.kind ?? "human";
   if (!["human", "community_agent_for_member", "external_mcp", "community_agent"].includes(kind)) {

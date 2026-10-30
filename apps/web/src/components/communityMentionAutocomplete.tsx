@@ -1,6 +1,7 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
+import { CommunityAgentIcon } from "../../../../shared/CommunityAgentIcon";
 import { useCallback, useMemo, useState } from "react";
-import { Sparkles, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import {
   splitBodyIntoMentionSegments,
   textContainsMentionToken,
@@ -417,7 +418,7 @@ export function MentionAutocompleteMenu(props: {
             {candidate.avatarUrl ? null : candidate.kind === "role" ? (
               <Users size={16} aria-hidden="true" />
             ) : candidate.kind === "community_agent" ? (
-              <Sparkles size={16} aria-hidden="true" />
+              <CommunityAgentIcon size={16} />
             ) : (
               getInitials(candidate.displayName)
             )}

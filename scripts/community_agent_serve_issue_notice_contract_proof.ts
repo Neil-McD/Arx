@@ -159,7 +159,7 @@ assert.match(
 );
 assert.match(
   app,
-  /isCommunityChatActive:\s*activePage === "community" &&\s*activeView === "home" &&\s*communityTab === "chat"/,
+  /isCommunityChatActive:\s*activePage === "community" &&\s*activeView === "home" &&\s*(?:communityTab === "chat"|isCommunityChatBackedTab\(communityTab\))/,
   "App composition must pass an explicit active-community-chat scope into the interaction owner",
 );
 assert.match(

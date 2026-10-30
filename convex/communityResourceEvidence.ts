@@ -1,3 +1,4 @@
+import { readCommunityPaidLockedLessonIds } from "./communityLessonTracks";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
@@ -171,8 +172,10 @@ export const searchRecentCommunityResourceEvidenceInternal = internalQuery({
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
       .order("desc")
       .take(RECENT_RESOURCE_SCAN_LIMIT)) as CommunityResourceLike[];
+    // Lessons sold through an offer the member doesn't have stay out of answers.
+    const paid = await readCommunityPaidLockedLessonIds(ctx, args.communityId, args.userId);
     const visible = recent.filter((row) =>
-      communityResourceIsLiveModulePage(row, new Set(moduleById.keys())),
+      communityResourceIsLiveModulePage(row, new Set(moduleById.keys())) && !paid.has(normalizeIdValue(row._id)),
     );
     const hydrated = await Promise.all(
       visible.map(async (row) => (await hydrateCommunityResourceBody(ctx, row)) ?? row),

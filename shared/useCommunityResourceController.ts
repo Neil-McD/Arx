@@ -7,14 +7,18 @@ import {
   deleteCloudCommunityResourceModule,
   ingestCloudCommunitySources,
   listCloudCommunityResourceModuleRows,
+  listCloudCommunityResourceRevisions,
   listCloudCommunityResourceRows,
   moveCloudCommunityResourceToModule,
   prepareCloudCommunityBrandingField,
   reorderCloudCommunityResourceModules,
   reorderCloudCommunityResources,
+  restoreCloudCommunityResourceRevision,
   saveCloudCommunityResource,
   saveCloudCommunityResourceModule,
+  uploadCloudCommunityResourceImage,
   uploadCloudCommunityResourceSourceFile,
+  type CloudCommunityResourceRevision,
   type CloudCommunitySourceIngestionResult,
 } from "./cloudCommunityAdminGateway";
 
@@ -49,6 +53,7 @@ type ResourceModuleLike = {
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
+  lesson_style?: "article" | "video" | null;
   sort_order?: number;
 };
 
@@ -159,6 +164,7 @@ type UseCommunityResourceControllerArgs<
   moduleBannerFocusX: number;
   moduleBannerFocusY: number;
   moduleBannerZoom: number;
+  moduleLessonStyleInput?: "article" | "video";
   editingResourceId: string | null;
   editingResourceModuleId: string | null;
   editingResourceModuleBannerStorageId: string | null;
@@ -189,6 +195,7 @@ type UseCommunityResourceControllerArgs<
   setModuleBannerFocusX: Dispatch<SetStateAction<number>>;
   setModuleBannerFocusY: Dispatch<SetStateAction<number>>;
   setModuleBannerZoom: Dispatch<SetStateAction<number>>;
+  setModuleLessonStyleInput?: Dispatch<SetStateAction<"article" | "video">>;
 };
 
 export function useCommunityResourceController<
@@ -242,6 +249,7 @@ export function useCommunityResourceController<
     current.setModuleBannerFocusX(0.5);
     current.setModuleBannerFocusY(0.5);
     current.setModuleBannerZoom(1);
+    current.setModuleLessonStyleInput?.("article");
     if (clearError) {
       current.setResourceModuleError(null);
     }
@@ -305,7 +313,10 @@ export function useCommunityResourceController<
   const loadCommunityResources = useCallback((communityId: string, session: SessionT) =>
     refreshCommunityResources(communityId, session), [refreshCommunityResources]);
 
-  const handleSaveCommunityResource = useCallback(async () => {
+  // keepEditing saves in place (the lesson editor's autosave): the editor stays
+  // open on the same inputs and the list reloads with the saved page.
+  const handleSaveCommunityResource = useCallback(async (options?: { keepEditing?: boolean }) => {
+    const keepEditing = options?.keepEditing === true;
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return false;
@@ -374,7 +385,7 @@ export function useCommunityResourceController<
         payload,
       });
 
-      resetResourceEditor(true);
+      if (!keepEditing) resetResourceEditor(true);
       await loadCommunityResources(current.activeCommunityId, session);
       return true;
     } catch (error) {
@@ -383,12 +394,55 @@ export function useCommunityResourceController<
         : error instanceof Error
           ? error.message
           : current.saveFailureMessage;
-      current.setResourceError(message);
+      // A body that's too long comes back with what to change; show just that.
+      const tooLong = /community_resource_body_too_long: ([^\n]+)/.exec(message);
+      current.setResourceError(tooLong ? tooLong[1] : message);
       return false;
     } finally {
       current.setIsSavingResource(false);
     }
   }, [loadCommunityResources, resetResourceEditor]);
+
+  // Version history: a lesson's earlier versions, and putting one back.
+  // Undo after Done puts back the text the editing began with.
+  const handleListCommunityResourceRevisions = useCallback(async (resourceId: string): Promise<CloudCommunityResourceRevision[]> => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session) throw new Error("Sign in again to see earlier versions.");
+    return listCloudCommunityResourceRevisions({ session, resourceId });
+  }, []);
+
+  const handleRestoreCommunityResource = useCallback(async (
+    target: { revisionId: string } | { resourceId: string; title: string; bodyMd: string | null },
+  ): Promise<boolean> => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return false;
+    try {
+      if ("revisionId" in target) {
+        await restoreCloudCommunityResourceRevision({ session, revisionId: target.revisionId });
+      } else {
+        await saveCloudCommunityResource({
+          session,
+          resourceId: target.resourceId,
+          isPatch: true,
+          payload: { title: target.title, body_md: target.bodyMd },
+        });
+      }
+      await loadCommunityResources(current.activeCommunityId, session);
+      return true;
+    } catch (error) {
+      current.setResourceError(error instanceof Error ? error.message : "Couldn't restore that version.");
+      return false;
+    }
+  }, [loadCommunityResources]);
+
+  const handleUploadCommunityResourceImage = useCallback(async (file: File | Blob) => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) throw new Error("Sign in again to upload images.");
+    return uploadCloudCommunityResourceImage({ session, communityId: current.activeCommunityId, file });
+  }, []);
 
   const handleSaveCommunityResourceModule = useCallback(async () => {
     const current = argsRef.current;
@@ -425,6 +479,7 @@ export function useCommunityResourceController<
           banner_focus_x: current.moduleBannerFocusX,
           banner_focus_y: current.moduleBannerFocusY,
           banner_zoom: current.moduleBannerZoom,
+          ...(current.moduleLessonStyleInput ? { lesson_style: current.moduleLessonStyleInput } : {}),
         },
       });
       current.setShowResourceModuleModal(false);
@@ -503,6 +558,43 @@ export function useCommunityResourceController<
       }
     },
     [loadCommunityResources],
+  );
+
+  // Article or Video course, switched from the lesson page.
+  const handleSetCommunityResourceModuleLessonStyle = useCallback(
+    async (module: ResourceModuleT, lessonStyle: "article" | "video") => {
+      const current = argsRef.current;
+      const session = await resolveUsableSession(current.session, current.ensureSession);
+      if (!session || !current.activeCommunityId) return false;
+      const previousModules: ResourceModuleT[] = [];
+      current.setCommunityResourceModules((modules) => {
+        previousModules.splice(0, previousModules.length, ...modules);
+        return modules.map((candidate) =>
+          candidate.id === module.id
+            ? ({ ...candidate, lesson_style: lessonStyle } as ResourceModuleT)
+            : candidate,
+        );
+      });
+      try {
+        await saveCloudCommunityResourceModule({
+          session,
+          moduleId: module.id,
+          isPatch: true,
+          payload: { lesson_style: lessonStyle },
+        });
+        return true;
+      } catch (error) {
+        current.setCommunityResourceModules(previousModules);
+        const message = typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to update the lesson style.";
+        current.setResourceModuleError(message);
+        return false;
+      }
+    },
+    [],
   );
 
   const handleReorderCommunityResourceModules = useCallback(async (moduleIds: string[]) => {
@@ -648,7 +740,10 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResources, resetResourceEditor]);
 
-  const handleCreateBlankPageDraft = useCallback(async (moduleId: string): Promise<ResourceT | null> => {
+  const handleCreateBlankPageDraft = useCallback(async (
+    moduleId: string,
+    lesson?: { order: number; stage?: string; stage_order?: number },
+  ): Promise<ResourceT | null> => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return null;
@@ -665,6 +760,7 @@ export function useCommunityResourceController<
         url: null,
         pinned: false,
         module_id: moduleId,
+        ...(lesson ? { lesson } : {}),
       };
       if (current.includeFileKeyOnSave) {
         payload.file_key = null;
@@ -851,11 +947,15 @@ export function useCommunityResourceController<
     loadCommunityResources,
     handleSaveCommunityResourceModule,
     handleSetCommunityResourceModuleStatus,
+    handleSetCommunityResourceModuleLessonStyle,
+    handleListCommunityResourceRevisions,
+    handleRestoreCommunityResource,
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
     handleReorderCommunityResources,
     handleMoveCommunityResourceToModule,
     handleSaveCommunityResource,
+    handleUploadCommunityResourceImage,
     handleDeleteResource,
     handleCreateBlankPageDraft,
     handleAddCommunitySources,

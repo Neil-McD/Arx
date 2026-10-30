@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "schemes": {
+    "dark": {
+      "background": "#0B0B0B",
+      "surface": "#151515",
+      "text": "#F2F2EF",
+      "muted": "#9C9C96",
+      "border": "#2B2B2B",
+      "accent": "#3FD15A",
+      "on_accent": "#0B0B0B",
+      "button": "#3FD15A",
+      "on_button": "#0B0B0B"
+    }
+  },
+  "font_body": "IBM Plex Sans",
+  "font_heading": "Barlow Condensed",
+  "heading_weight": 600,
+  "heading_case": "upper",
+  "numerals": "tabular",
+  "radius": 3,
+  "button_shape": "square",
+  "density": "compact",
+  "media_plate": "light",
+  "course_cover_ratio": "16:9",
+  "course_card_size": "medium"
+}

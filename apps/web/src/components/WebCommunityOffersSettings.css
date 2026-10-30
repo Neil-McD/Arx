@@ -1,0 +1,32 @@
+/* Settings › Offers. Built on the shared settings card, row and control styles. */
+.pn-offer-name { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.9375rem; font-weight: 600; color: var(--text-primary); }
+.pn-offer-includes { font-size: 0.8125rem; font-weight: 600; color: var(--accent-selection, var(--text-secondary)); }
+.pn-offer-chip { display: inline-block; padding: 0 0.5rem; border-radius: 999px; font-size: 0.75rem; line-height: 1.25rem; font-weight: 500; }
+.pn-offer-chip.is-muted { background: var(--hover-overlay); color: var(--text-secondary); }
+
+.pn-offer-editor { display: flex; flex-direction: column; gap: 0.875rem; }
+.pn-offer-field { display: flex; flex-direction: column; gap: 0.375rem; }
+.pn-offer-price { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.pn-offer-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.pn-offer-row.is-new { background: var(--hover-overlay); }
+
+.pn-offer-channel { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.pn-offer-ticks { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.pn-offer-check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-primary); cursor: pointer; }
+.pn-offer-ticks .pn-offer-check { padding: 0.375rem 0.75rem; border: 1px solid var(--border-default); border-radius: 999px; }
+.pn-offer-ticks .pn-offer-check.is-on { border-color: var(--border-active, var(--accent-selection)); }
+.pn-offer-check input { margin: 0; accent-color: var(--accent-selection); }
+.pn-offer-check input:disabled { cursor: default; }
+
+.pn-offer-more { margin: 0; padding: 1rem 1.25rem 1rem 2.5rem; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.875rem; line-height: 1.4; color: var(--text-secondary); }
+.pn-offer-more strong { color: var(--text-primary); }
+
+@media (max-width: 640px) {
+  .pn-offer-channel { align-items: flex-start; }
+}
+
+/* "On your sales page": the offer cards as visitors see them. */
+.pn-offer-sales-preview { max-width: 420px; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 10px; }
+.pn-offer-sales-preview-button { width: 100%; min-height: 40px; border: 0; border-radius: 8px; background: var(--pn-button, var(--accent-brand)); color: var(--pn-on-button, var(--text-on-accent, #fff)); font: inherit; font-weight: 700; pointer-events: none; }
+
+.pn-offer-audience { display: flex; flex-direction: column; gap: 0.25rem; min-width: 14rem; }

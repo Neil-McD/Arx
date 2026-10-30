@@ -1,0 +1,1513 @@
+/* Lesson editor. Sizes are the community's type roles (--pn-type-*) and
+   corners follow --pn-radius-scale, so a community's Look reaches the editor.
+   The text itself uses the reader's classes (.resource-viewer-prose
+   and .md-*), so these rules only add what editing needs: the block handle,
+   menus, and the cards for media and lesson blocks. Colours and corners come
+   from the app and community theme tokens. */
+
+.lesson-editor,
+.lesson-editor-save-state,
+.lesson-editor-menu {
+  /* The same red as the app's form errors (.auth-error). */
+  --lesson-editor-danger: #b64b3a;
+}
+
+.lesson-editor {
+  /* The editor sits in the reader's column, so it takes the same measure
+     (--lesson-reading-measure), line height and block spacing; what the owner
+     edits lines up with what members read. */
+  width: 100%;
+  max-width: var(--lesson-reading-measure, none);
+  margin-inline: auto;
+  --lesson-editor-surface: var(--bg-card-solid, var(--web-popover-surface, #fff));
+  --lesson-editor-line: color-mix(in srgb, var(--border-default) 72%, transparent);
+  --lesson-editor-soft: color-mix(in srgb, var(--bg-card-alt, #f4f4f2) 70%, transparent);
+  --lesson-editor-focus: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 55%, transparent);
+  --lesson-editor-radius: var(--pn-radius-card, 12px);
+  position: relative;
+  min-width: 0;
+}
+
+.lesson-editor-content {
+  min-height: 240px;
+  outline: none;
+  padding-bottom: 96px;
+  caret-color: var(--text-primary);
+}
+
+.lesson-editor-content > * + * {
+  scroll-margin: 96px;
+}
+
+.lesson-editor-content p.is-empty::before,
+.lesson-editor-content :is(h1, h2, h3, h4, h5, h6).is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--text-faint);
+}
+
+.lesson-editor-content ::selection {
+  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 22%, transparent);
+}
+
+.lesson-editor-content .ProseMirror-selectednode {
+  outline: none;
+}
+
+.lesson-editor-content > .ProseMirror-selectednode:not(.react-renderer) {
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  box-shadow: 0 0 0 2px var(--lesson-editor-focus);
+}
+
+.lesson-editor-content .ProseMirror-gapcursor::after {
+  border-top-color: var(--text-primary);
+}
+
+/* Pictures, videos and lesson blocks get the reader's 2em space above and
+   below, measured in the text size (the cards themselves use the UI size). */
+.lesson-editor-content > .react-renderer:not(:has(> .md-blockquote)) {
+  margin-block: 2em;
+}
+
+/* Media inside the editor's cards (thumbnails, previews) don't take the
+   reader's 2em media spacing; the cards themselves do. */
+.lesson-editor .lesson-editor-content.resource-viewer-prose.ProseMirror :is(img, figure, iframe, video, .md-media-embed, .md-video) {
+  margin-block: 0;
+}
+
+.lesson-editor-dropcursor {
+  background: var(--accent-primary, var(--accent, #2f7d5b));
+  border-radius: calc(2px * var(--pn-radius-scale, 1));
+}
+
+/* Code and prompts */
+.lesson-editor-code {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--lesson-editor-line);
+  border-radius: var(--lesson-editor-radius);
+  background: var(--lesson-editor-soft);
+  font-family: var(--pn-font-mono, var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace));
+  font-size: 0.88em;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lesson-editor-code code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+
+/* Block handle */
+.lesson-editor-handle {
+  position: absolute;
+  left: -60px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding-right: 8px;
+}
+
+.lesson-editor-handle-button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.lesson-editor-handle-button.is-grip {
+  cursor: grab;
+}
+
+.lesson-editor-handle-button:hover,
+.lesson-editor-handle-button:focus-visible,
+.lesson-editor-handle-button[aria-expanded="true"] {
+  outline: none;
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 8%, transparent));
+  color: var(--text-secondary, var(--text-primary));
+}
+
+.lesson-editor-handle-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Menus: "/" blocks, block options, turn into */
+.lesson-editor-menu {
+  z-index: 1000;
+  display: grid;
+  gap: 1px;
+  padding: 6px;
+  min-width: 220px;
+  border: 1px solid var(--web-popover-border, var(--lesson-editor-line));
+  border-radius: calc(12px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-surface, var(--bg-card, #fff));
+  box-shadow: var(--web-popover-shadow, 0 12px 32px rgba(15, 23, 20, 0.14), 0 2px 6px rgba(15, 23, 20, 0.08));
+  color: var(--text-primary);
+  font-size: var(--pn-type-ui, 14px);
+  line-height: 1.3;
+}
+
+.lesson-editor-slash {
+  position: fixed;
+  width: 320px;
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Portalled out of the editor, so it carries its own surface. */
+  --lesson-editor-surface: var(--bg-card-solid, var(--web-popover-surface, #fff));
+}
+
+.lesson-editor-menu-group {
+  padding: 8px 8px 4px;
+  color: var(--text-muted);
+  font-size: var(--pn-type-meta, 11px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lesson-editor-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lesson-editor-menu-item.is-compact {
+  padding: 6px 8px;
+}
+
+.lesson-editor-menu-item:hover,
+.lesson-editor-menu-item:focus-visible,
+.lesson-editor-menu-item[aria-selected="true"] {
+  outline: none;
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
+}
+
+.lesson-editor-menu-item.is-danger {
+  color: var(--lesson-editor-danger);
+}
+
+.lesson-editor-menu-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--lesson-editor-line, var(--border-default));
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: var(--bg-card, #fff);
+  color: var(--text-secondary, var(--text-primary));
+}
+
+.is-compact .lesson-editor-menu-icon {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: none;
+}
+
+.lesson-editor-menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.lesson-editor-menu-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.lesson-editor-menu-text strong {
+  font-weight: 500;
+}
+
+.lesson-editor-menu-text small {
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+}
+
+.lesson-editor-menu-empty {
+  padding: 10px 8px;
+  color: var(--text-muted);
+}
+
+.lesson-editor-block-menu {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  min-width: 180px;
+}
+
+/* Formatting bar on a selection */
+.lesson-editor-format {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px;
+}
+
+.lesson-editor-format-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: calc(7px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: var(--text-secondary, var(--text-primary));
+  font: inherit;
+  font-size: var(--pn-type-small, 13px);
+  cursor: pointer;
+}
+
+.lesson-editor-format-button:hover,
+.lesson-editor-format-button:focus-visible {
+  outline: none;
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
+}
+
+.lesson-editor-format-button.is-active {
+  color: var(--accent-primary, var(--accent, #2f7d5b));
+}
+
+.lesson-editor-format-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.lesson-editor-turn {
+  position: relative;
+}
+
+.lesson-editor-turn-button {
+  padding: 0 8px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lesson-editor-turn-menu {
+  position: absolute;
+  top: 36px;
+  left: -4px;
+  min-width: 190px;
+}
+
+.lesson-editor-format-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--lesson-editor-line, var(--border-default));
+}
+
+.lesson-editor-link-form {
+  display: flex;
+  gap: 6px;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+}
+
+/* Shared field and button styles */
+.lesson-editor-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--lesson-editor-line, var(--border-default));
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: var(--bg-input, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--pn-type-ui, 14px);
+  line-height: 1.45;
+}
+
+.lesson-editor-field::placeholder {
+  color: var(--text-faint);
+}
+
+.lesson-editor-field:focus {
+  outline: none;
+  border-color: var(--lesson-editor-focus, var(--border-active));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 14%, transparent);
+}
+
+select.lesson-editor-field {
+  appearance: auto;
+}
+
+.lesson-editor-code-field {
+  font-family: var(--pn-font-mono, var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace));
+  font-size: var(--pn-type-small, 13px);
+  line-height: 1.55;
+  resize: vertical;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.lesson-editor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--lesson-editor-line, var(--border-default));
+  border-radius: var(--pn-radius-button, 8px);
+  background: var(--bg-card, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--pn-type-small, 13px);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lesson-editor-button.is-primary {
+  border-color: transparent;
+  background: var(--bg-button, var(--accent-primary, #1f5c43));
+  color: var(--bg-button-text, #fff);
+}
+
+.lesson-editor-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lesson-editor-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.lesson-editor-icon-button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(7px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.lesson-editor-icon-button:hover,
+.lesson-editor-icon-button:focus-visible {
+  outline: none;
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
+  color: var(--text-primary);
+}
+
+.lesson-editor-icon-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.lesson-editor-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--pn-type-label, 12px);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lesson-editor-text-button:hover,
+.lesson-editor-text-button:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
+}
+
+.lesson-editor-text-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.lesson-editor-inline-form {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lesson-editor-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+  line-height: 1.5;
+}
+
+.lesson-editor-hint code {
+  font-size: 0.95em;
+}
+
+/* Cards: video, raw Markdown, lesson blocks and widgets */
+.lesson-editor-block {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: var(--pn-border-width, 1px) solid var(--lesson-editor-line);
+  border-radius: var(--lesson-editor-radius);
+  background: var(--surface-card, var(--bg-card, transparent));
+  font-size: var(--pn-type-ui, 14px);
+  line-height: 1.5;
+  white-space: normal;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.lesson-editor-block.is-selected,
+.lesson-editor-block:focus-within {
+  border-color: var(--lesson-editor-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 10%, transparent);
+}
+
+.lesson-editor-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.lesson-editor-block-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 12%, transparent);
+  color: var(--accent-primary, var(--accent, #2f7d5b));
+}
+
+.lesson-editor-block-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.lesson-editor-block-label {
+  color: var(--text-secondary, var(--text-primary));
+  text-transform: uppercase;
+}
+
+.lesson-editor-block-aside {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.lesson-editor-card-id {
+  padding: 2px 6px;
+  border-radius: calc(5px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-soft);
+  color: var(--text-muted);
+  font-family: var(--pn-font-mono, var(--font-mono, ui-monospace, monospace));
+  font-size: var(--pn-type-meta, 11px);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.lesson-editor-block-problem {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: color-mix(in srgb, var(--lesson-editor-danger) 9%, transparent);
+  color: var(--lesson-editor-danger);
+  font-size: var(--pn-type-small, 13px);
+}
+
+.lesson-editor-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.lesson-editor-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 128px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: var(--pn-type-small, 13px);
+}
+
+.lesson-editor-prompt {
+  min-height: 40px;
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+  font-size: var(--pn-type-reading, 16px);
+  font-weight: 600;
+}
+
+.lesson-editor-prompt:hover {
+  border-color: var(--lesson-editor-line);
+  padding-left: 10px;
+}
+
+.lesson-editor-prompt:focus {
+  padding-left: 10px;
+}
+
+.lesson-editor-button-preview {
+  justify-self: start;
+  width: auto;
+  min-width: 220px;
+  max-width: 100%;
+  border-radius: var(--pn-radius-button, 999px);
+  font-weight: 600;
+  text-align: center;
+}
+
+.lesson-editor-choices {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lesson-editor-choices li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lesson-editor-choice-mark,
+.lesson-editor-choice-box {
+  flex: none;
+  align-self: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 70%, transparent);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.lesson-editor-choice-box {
+  border-radius: calc(5px * var(--pn-radius-scale, 1));
+}
+
+.lesson-editor-choice-mark {
+  cursor: pointer;
+}
+
+.lesson-editor-choice-mark:focus-visible {
+  outline: 2px solid var(--lesson-editor-focus);
+  outline-offset: 2px;
+}
+
+.lesson-editor-choices li.is-correct .lesson-editor-choice-mark {
+  border-color: var(--accent-primary, #2f7d5b);
+  background: var(--accent-primary, #2f7d5b);
+  box-shadow: inset 0 0 0 3px var(--surface-card, var(--bg-card, #fff));
+}
+
+.lesson-editor-choices li.is-correct .lesson-editor-field {
+  border-color: color-mix(in srgb, var(--accent-primary, #2f7d5b) 45%, transparent);
+}
+
+.lesson-editor-add {
+  justify-self: start;
+}
+
+.lesson-editor-explanation {
+  resize: vertical;
+}
+
+.lesson-editor-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--text-primary);
+  font-size: var(--pn-type-small, 13px);
+  cursor: pointer;
+}
+
+.lesson-editor-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lesson-editor-toggle-track {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  transition: background 140ms ease;
+}
+
+.lesson-editor-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 140ms ease;
+}
+
+.lesson-editor-toggle input:checked + .lesson-editor-toggle-track {
+  background: var(--accent-primary, #2f7d5b);
+}
+
+.lesson-editor-toggle input:checked + .lesson-editor-toggle-track::after {
+  transform: translateX(12px);
+}
+
+.lesson-editor-toggle input:focus-visible + .lesson-editor-toggle-track {
+  outline: 2px solid var(--lesson-editor-focus);
+  outline-offset: 2px;
+}
+
+.lesson-editor-toggle small {
+  flex-basis: 100%;
+  padding-left: 40px;
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+}
+
+/* Video */
+.lesson-editor-video-poster {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: calc(var(--lesson-editor-radius) - 4px);
+  background: #0b0d0c;
+}
+
+.lesson-editor-video-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
+}
+
+.lesson-editor-video-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+
+.lesson-editor-video-play svg {
+  width: 56px;
+  height: 56px;
+  padding: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  fill: currentColor;
+}
+
+/* Raw Markdown (tables and the like) */
+.lesson-editor-raw-preview {
+  overflow-x: auto;
+  cursor: text;
+}
+
+.lesson-editor-raw-preview .md-table-toolbar {
+  display: none;
+}
+
+/* Images */
+.lesson-editor-image {
+  position: relative;
+  margin: 0;
+}
+
+.lesson-editor-image figure {
+  position: relative;
+  margin: 0;
+}
+
+.lesson-editor-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: calc(var(--lesson-editor-radius) - 2px);
+}
+
+.lesson-editor-image.is-selected img {
+  box-shadow: 0 0 0 3px var(--lesson-editor-focus);
+}
+
+.lesson-editor-image.is-uploading img {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+.lesson-editor-image-status {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: var(--pn-type-label, 12px);
+}
+
+.lesson-editor-image-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.lesson-editor-image:hover .lesson-editor-image-bar,
+.lesson-editor-image.is-selected .lesson-editor-image-bar,
+.lesson-editor-image:focus-within .lesson-editor-image-bar {
+  opacity: 1;
+}
+
+.lesson-editor-image-alt {
+  min-height: 30px;
+  font-size: var(--pn-type-small, 13px);
+}
+
+.lesson-editor-media-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--lesson-editor-line);
+  border-radius: var(--lesson-editor-radius);
+  background: var(--lesson-editor-soft);
+  color: var(--text-muted);
+}
+
+.lesson-editor-media-empty.is-selected,
+.lesson-editor-media-empty:focus-within {
+  border-color: var(--lesson-editor-focus);
+}
+
+.lesson-editor-media-empty > svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.lesson-editor-media-empty-actions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lesson-editor-media-empty-actions .lesson-editor-inline-form {
+  flex: 1 1 240px;
+}
+
+/* Status */
+.lesson-editor-notice {
+  position: sticky;
+  bottom: 16px;
+  z-index: 4;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--text-primary);
+  color: var(--bg-app, #fff);
+  font-size: var(--pn-type-small, 13px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.lesson-editor-save-state {
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+  white-space: nowrap;
+}
+
+.lesson-editor-save-state.is-blocked {
+  color: var(--lesson-editor-danger);
+}
+
+/* Narrow screens: no hover handle, and the block menu opens inline. */
+@media (max-width: 900px), (hover: none) {
+  .lesson-editor-handle {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .lesson-editor-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .lesson-editor-slash {
+    width: min(320px, calc(100vw - 16px));
+  }
+
+  .lesson-editor-media-empty {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lesson-editor *,
+  .lesson-editor-menu * {
+    transition: none !important;
+  }
+}
+
+/* The toolbar above the page: centred, sticky while the lesson scrolls. */
+.lesson-editor-toolbar {
+  position: sticky;
+  /* Sticks below the app's top-right buttons (messages, display), not under them. */
+  top: 56px;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  margin: 0 0 20px;
+  pointer-events: none;
+}
+
+.lesson-editor-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 4px;
+  overflow-x: auto;
+  border: 1px solid var(--lesson-editor-line);
+  border-radius: calc(10px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-surface);
+  box-shadow: 0 6px 20px rgba(15, 23, 20, 0.07), 0 1px 3px rgba(15, 23, 20, 0.05);
+  pointer-events: auto;
+  scrollbar-width: none;
+}
+
+.lesson-editor-toolbar-row::-webkit-scrollbar {
+  display: none;
+}
+
+.lesson-editor-tool {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: var(--text-secondary, var(--text-primary));
+  font: inherit;
+  font-size: var(--pn-type-small, 13px);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lesson-editor-tool svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9;
+}
+
+.lesson-editor-tool.is-labelled {
+  padding: 0 8px;
+}
+
+.lesson-editor-tool .lesson-editor-tool-caret {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+}
+
+.lesson-editor-tool:hover:not(:disabled),
+.lesson-editor-tool:focus-visible,
+.lesson-editor-tool.is-open {
+  outline: none;
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
+  color: var(--text-primary);
+}
+
+.lesson-editor-tool.is-active {
+  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 12%, transparent);
+  color: var(--accent-primary, var(--accent, #2f7d5b));
+}
+
+.lesson-editor-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lesson-editor-tool-label {
+  white-space: nowrap;
+}
+
+.lesson-editor-tool-divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--lesson-editor-line);
+}
+
+.lesson-editor-toolbar-menu {
+  position: fixed;
+  width: 260px;
+}
+
+.lesson-editor-menu-check {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--accent-primary, var(--accent, #2f7d5b));
+}
+
+/* "• Saved": the autosave state beside the editing actions. */
+.lesson-editor-save-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-secondary, var(--text-muted));
+  font-size: var(--pn-type-label, 12px);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lesson-editor-save-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-success, #147a4b);
+}
+
+.lesson-editor-save-pill.is-pending::before {
+  background: color-mix(in srgb, var(--text-muted) 70%, transparent);
+}
+
+.lesson-editor-save-pill.is-blocked {
+  color: #b64b3a;
+}
+
+.lesson-editor-save-pill.is-blocked::before {
+  background: #b64b3a;
+}
+
+.lesson-editor-header-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--pn-type-small, 13px);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lesson-editor-header-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.lesson-editor-header-button:hover:not(:disabled) {
+  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
+}
+
+.lesson-editor-header-button.is-primary {
+  border-color: transparent;
+  background: var(--bg-button, var(--accent-primary, #1f5c43));
+  color: var(--bg-button-text, #fff);
+}
+
+.lesson-editor-header-button.is-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-button, var(--accent-primary, #1f5c43)) 88%, #000);
+}
+
+.lesson-editor-header-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lesson-editor-preview-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 9%, transparent);
+  color: var(--text-secondary, var(--text-primary));
+  font-size: var(--pn-type-small, 13px);
+}
+
+.lesson-editor-preview-note svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+@media (max-width: 640px) {
+  .lesson-editor-toolbar {
+    top: 4px;
+    justify-content: flex-start;
+    padding: 0 var(--web-topbar-right-action-safe-inset, 66px) 0 0;
+  }
+
+  .lesson-editor-header-button .lesson-editor-header-label {
+    display: none;
+  }
+
+  /* While editing on a phone, the actions get their own line under the title. */
+  .resource-viewer-title-row:has(.resource-viewer-edit-actions) {
+    flex-wrap: wrap;
+  }
+
+  .resource-viewer-title-row:has(.resource-viewer-edit-actions) .resource-viewer-header-aside {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* Slides: one row per slide, the picture beside its title and note. */
+.lesson-editor-block-meta {
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+  white-space: nowrap;
+}
+
+.lesson-editor-slides {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.lesson-editor-slide {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--lesson-editor-line);
+  border-radius: calc(10px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-surface);
+}
+
+.lesson-editor-slide:focus-within {
+  border-color: var(--lesson-editor-focus);
+}
+
+.lesson-editor-slide-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--lesson-editor-line);
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-soft);
+}
+
+.lesson-editor-slide-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.lesson-editor-slide-thumb.is-empty {
+  align-items: center;
+  border: 1px dashed var(--lesson-editor-line);
+  aspect-ratio: auto;
+  min-height: 94px;
+  padding: 8px;
+}
+
+.lesson-editor-slide-empty {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.lesson-editor-slide-empty .lesson-editor-button {
+  justify-content: center;
+}
+
+.lesson-editor-slide-empty .lesson-editor-field {
+  width: 100%;
+  min-height: 30px;
+  font-size: var(--pn-type-label, 12px);
+}
+
+.lesson-editor-slide-number {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(17, 19, 18, 0.72);
+  color: #fff;
+  font-size: var(--pn-type-label, 11px);
+  font-weight: 600;
+}
+
+.lesson-editor-slide-replace {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  background: rgba(17, 19, 18, 0.72);
+  color: #fff;
+  font: inherit;
+  font-size: var(--pn-type-label, 11px);
+  font-weight: 500;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.lesson-editor-slide-thumb:hover .lesson-editor-slide-replace,
+.lesson-editor-slide-replace:focus-visible {
+  opacity: 1;
+}
+
+.lesson-editor-slide-fields {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lesson-editor-slide-title {
+  font-weight: 600;
+}
+
+.lesson-editor-slide-fields textarea {
+  resize: none;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+.lesson-editor-slide-actions {
+  display: grid;
+  gap: 2px;
+}
+
+.lesson-editor-deck-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.lesson-editor-deck-hint {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: var(--pn-type-label, 12px);
+}
+
+@media (max-width: 640px) {
+  .lesson-editor-slide {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .lesson-editor-slide-thumb {
+    grid-column: 1 / -1;
+  }
+
+  .lesson-editor-slide-actions {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+@media (hover: none) {
+  .lesson-editor-slide-replace {
+    opacity: 1;
+  }
+}
+
+/* A slide note reads as formatted text until it is clicked. */
+.lesson-editor-slide-note {
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid var(--lesson-editor-line);
+  border-radius: calc(8px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-surface);
+  cursor: text;
+}
+
+.lesson-editor-slide-note:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+}
+
+.lesson-editor-slide-note > :first-child {
+  margin-top: 0;
+}
+
+.lesson-editor-slide-note > :last-child {
+  margin-bottom: 0;
+}
+
+.lesson-editor-slide-note.is-empty {
+  color: var(--text-muted);
+}
+
+/* Callouts: the label is a button that switches the type. */
+.lesson-editor-callout-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -3px -8px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.lesson-editor-callout-type:hover,
+.lesson-editor-callout-type[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--md-callout-tone) 14%, transparent);
+}
+
+.lesson-editor-callout-type:focus-visible {
+  outline: 2px solid var(--lesson-editor-focus);
+  outline-offset: 1px;
+}
+
+.lesson-editor-callout-type svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.lesson-editor-callout-type .lesson-editor-callout-caret {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+}
+
+
+/* Markdown kept as text (tables, task lists, lists the editor can't round-trip)
+   reads like the rest of the lesson: no card, and its "Markdown · Edit as text"
+   bar shows only when the owner points at it or selects it (2026-10-26). */
+.lesson-editor-block.lesson-editor-raw {
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  gap: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+.lesson-editor-raw .lesson-editor-block-head {
+  position: absolute;
+  top: -0.25rem;
+  right: 0;
+  z-index: 2;
+  min-height: 0;
+  padding: 0.125rem 0.25rem 0.125rem 0.375rem;
+  border: 1px solid var(--lesson-editor-line);
+  border-radius: calc(6px * var(--pn-radius-scale, 1));
+  background: var(--lesson-editor-surface);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.lesson-editor-raw { position: relative; }
+.lesson-editor-raw:is(:hover, .is-selected, :focus-within) .lesson-editor-block-head { opacity: 1; pointer-events: auto; }
+.lesson-editor-raw:is(:hover, .is-selected) {
+  box-shadow: 0 0 0 0.375rem color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border-radius: calc(4px * var(--pn-radius-scale, 1));
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+.lesson-editor-raw .lesson-editor-block-icon { display: none; }
+.lesson-editor-raw .lesson-editor-raw-preview > :first-child { margin-top: 0; }
+.lesson-editor-raw .lesson-editor-raw-preview > :last-child { margin-bottom: 0; }
+
+/* Code reads clearly: a plain system monospace in the text colour, never a
+   community's display or light-weight face. */
+.lesson-editor-code,
+.lesson-editor-code-field {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+  font-weight: 450;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+/* "### In Cowork": where one platform's steps begin (members get tabs). */
+.lesson-editor-content h3.lesson-editor-platform-heading,
+.lesson-editor-content h4.lesson-editor-platform-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 2.25em;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--lesson-editor-line);
+  color: var(--accent-primary, var(--accent, #2f7d5b));
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.lesson-editor-content .lesson-editor-platform-heading::before {
+  content: attr(data-platform-label);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Callouts in the editor match the read view: the icon (a button that
+   switches the type) in its own column, then the typed title and the text.
+   The type's name lives in the button's menu only. */
+.lesson-editor .md-callout > .md-callout-label { display: contents; }
+.lesson-editor .md-callout > .md-callout-label .lesson-editor-callout-type {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin: 0;
+  padding: 4px;
+  gap: 2px;
+  color: color-mix(in srgb, var(--md-callout-tone) 80%, var(--text-primary));
+}
+.lesson-editor .md-callout > .md-callout-label .lesson-editor-callout-type > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.lesson-editor .md-callout > .md-callout-label .lesson-editor-callout-caret { width: 12px; height: 12px; opacity: 0.7; }
+.lesson-editor-callout-title {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 4px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.7;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.lesson-editor-callout-title::placeholder { color: var(--text-faint, var(--text-muted)); font-weight: 600; }
+.lesson-editor .md-callout > .md-callout-body { grid-column: 2; }
+
+/* Code blocks read like the lesson shows them: grey card, colours, Copy at
+   the top right (colours come from .resource-viewer-prose in
+   community-and-content.css). */
+.lesson-editor-content .lesson-editor-code {
+  position: relative;
+  padding: 36px 16px 16px;
+  border-color: var(--lesson-code-line);
+  background: var(--lesson-code-bg);
+  color: var(--lesson-code-text);
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+.lesson-editor-content .lesson-editor-code .lesson-editor-code-copy {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-family: var(--pn-font-body, inherit);
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--lesson-code-line);
+  background: color-mix(in srgb, var(--bg-card, transparent) 70%, transparent);
+  color: var(--lesson-code-muted);
+  cursor: pointer;
+  user-select: none;
+  opacity: 1;
+}
+.lesson-editor-content .lesson-editor-code .lesson-editor-code-copy:hover { color: var(--text-primary); }
+.lesson-editor-content .lesson-editor-code .lesson-editor-code-copy.is-copied { color: var(--lesson-code-blue); border-color: currentColor; }
+.lesson-editor-content .lesson-editor-code .hljs-comment, .lesson-editor-content .lesson-editor-code .hljs-quote { color: var(--lesson-code-muted); font-style: italic; }
+.lesson-editor-content .lesson-editor-code .hljs-keyword, .lesson-editor-content .lesson-editor-code .hljs-selector-tag, .lesson-editor-content .lesson-editor-code .hljs-literal, .lesson-editor-content .lesson-editor-code .hljs-built_in, .lesson-editor-content .lesson-editor-code .hljs-type, .lesson-editor-content .lesson-editor-code .hljs-section, .lesson-editor-content .lesson-editor-code .hljs-link { color: var(--lesson-code-blue); }
+.lesson-editor-content .lesson-editor-code .hljs-string, .lesson-editor-content .lesson-editor-code .hljs-regexp, .lesson-editor-content .lesson-editor-code .hljs-addition, .lesson-editor-content .lesson-editor-code .hljs-bullet { color: var(--lesson-code-yellow); }
+.lesson-editor-content .lesson-editor-code .hljs-title, .lesson-editor-content .lesson-editor-code .hljs-name, .lesson-editor-content .lesson-editor-code .hljs-attr, .lesson-editor-content .lesson-editor-code .hljs-attribute, .lesson-editor-content .lesson-editor-code .hljs-selector-class, .lesson-editor-content .lesson-editor-code .hljs-deletion, .lesson-editor-content .lesson-editor-code .hljs-variable, .lesson-editor-content .lesson-editor-code .hljs-template-variable { color: var(--lesson-code-red); }
+.lesson-editor-content .lesson-editor-code .hljs-number, .lesson-editor-content .lesson-editor-code .hljs-symbol, .lesson-editor-content .lesson-editor-code .hljs-meta, .lesson-editor-content .lesson-editor-code .hljs-params, .lesson-editor-content .lesson-editor-code .hljs-subst { color: var(--lesson-code-purple); }

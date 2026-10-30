@@ -1,3 +1,4 @@
+import { newPostCardReadCache, readPostCardForRoot } from "./communityPostCardRead";
 import { presentInteractionActorType } from "../shared/communityAgentIdentity";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
@@ -241,10 +242,25 @@ async function chatPresentationFields(args: {
         kind: file.attachmentKind ?? "file", mime: file.mimeType ?? "application/octet-stream", size: Number(file.sizeBytes) || 0,
       })),
       edited_at: row.editedAt ? toIsoString(row.editedAt) : null,
+      // A poll or shared Form on the post: vote with community.interaction.poll.vote,
+      // answer with community.interaction.form.answer (ref = this post's ref).
+      card: args.objectType === "root" ? await agentPostCard(args.ctx, row, args.presentation.viewerUserId) : null,
       text,
       snippet_truncated: text.replace(/\s+/g, " ").trim().length > EVIDENCE_SNIPPET_CHARS,
     },
   };
+}
+
+async function agentPostCard(ctx: any, row: any, viewerUserId: any) {
+  const card = await readPostCardForRoot(ctx, row, viewerUserId, newPostCardReadCache());
+  if (!card || card.kind !== "form") return card;
+  const share = await ctx.db.query("communityInteractionFormShares").withIndex("by_root", (q: any) => q.eq("rootId", row._id)).first();
+  const version = share ? await ctx.db.get(share.versionId) : null;
+  return { ...card, questions: (version?.questions ?? []).map((question: any) => ({
+    key: question.key, title: question.title, type: question.type, required: question.required,
+    // Choice answers are option indexes as strings ("0", "1", ...).
+    options: question.options,
+  })) };
 }
 
 async function mapEvidenceSearchItem(args: {

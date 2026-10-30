@@ -1,3 +1,4 @@
+import { readCommunityReferral } from "./communityReferralCapture";
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
@@ -246,8 +247,10 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
       }
     | null = null;
   if (slug) {
+    const ref = readCommunityReferral(slug);
     result = ((await client.mutation("communityPublic:joinPublicCommunityBySlug" as any, {
       communitySlug: slug,
+      ...(ref ? { ref } : {}),
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
       community_id: string;

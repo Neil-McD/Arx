@@ -206,57 +206,63 @@ export function WebCommunityChannelHeader({
           {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
           <h1>{channel.name}</h1>
         </div>
-        {trailingAction}
-        {canOpenChannelMenu ? (
+        {/* The people button shares the actions group so the phone's floating
+            top-right chrome shows both side by side instead of stacked. */}
+        {trailingAction || canOpenChannelMenu ? (
           <div className="community-channel-header-actions" ref={menuRef}>
-            <button
-              ref={menuTriggerRef}
-              className="community-channel-header-menu-trigger"
-              type="button"
-              aria-label={`Channel options for ${channel.name}`}
-              aria-haspopup="menu"
-              aria-expanded={isMenuOpen}
-              disabled={Boolean(managingChannelId)}
-              onClick={() => setIsMenuOpen((open) => !open)}
-            >
-              <Ellipsis size={19} strokeWidth={1.9} aria-hidden="true" />
-            </button>
-            {isMenuOpen ? (
-              <div
-                className="community-channel-header-menu"
-                role="menu"
-                aria-label={`Channel options for ${channel.name}`}
-              >
-                {channel.is_general ? (
+            {trailingAction}
+            {canOpenChannelMenu ? (
+              <>
+                <button
+                  ref={menuTriggerRef}
+                  className="community-channel-header-menu-trigger"
+                  type="button"
+                  aria-label={`Channel options for ${channel.name}`}
+                  aria-haspopup="menu"
+                  aria-expanded={isMenuOpen}
+                  disabled={Boolean(managingChannelId)}
+                  onClick={() => setIsMenuOpen((open) => !open)}
+                >
+                  <Ellipsis size={19} strokeWidth={1.9} aria-hidden="true" />
+                </button>
+                {isMenuOpen ? (
                   <div
-                    className="community-channel-header-menu-system-note"
-                    role="menuitem"
-                    aria-disabled="true"
+                    className="community-channel-header-menu"
+                    role="menu"
+                    aria-label={`Channel options for ${channel.name}`}
                   >
-                    <LockKeyhole size={15} aria-hidden="true" />
-                    <span>
-                      <strong>Default channel</strong>
-                      <small>Can’t be renamed or deleted</small>
-                    </span>
+                    {channel.is_general ? (
+                      <div
+                        className="community-channel-header-menu-system-note"
+                        role="menuitem"
+                        aria-disabled="true"
+                      >
+                        <LockKeyhole size={15} aria-hidden="true" />
+                        <span>
+                          <strong>Default channel</strong>
+                          <small>Can’t be renamed or deleted</small>
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
+                          <Pencil size={15} aria-hidden="true" />
+                          {sessionScope ? "Channel settings" : "Rename channel"}
+                        </button>
+                        <button
+                          className="is-danger"
+                          type="button"
+                          role="menuitem"
+                          onClick={() => openManagement("delete")}
+                        >
+                          <Trash2 size={15} aria-hidden="true" />
+                          Delete channel
+                        </button>
+                      </>
+                    )}
                   </div>
-                ) : (
-                  <>
-                    <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
-                      <Pencil size={15} aria-hidden="true" />
-                      {sessionScope ? "Channel settings" : "Rename channel"}
-                    </button>
-                    <button
-                      className="is-danger"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => openManagement("delete")}
-                    >
-                      <Trash2 size={15} aria-hidden="true" />
-                      Delete channel
-                    </button>
-                  </>
-                )}
-              </div>
+                ) : null}
+              </>
             ) : null}
           </div>
         ) : null}

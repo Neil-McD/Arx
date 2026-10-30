@@ -74,11 +74,18 @@ const uiOnlyIntervalFiles = [
   "apps/web/src/components/RuntimeLiveTimeline.tsx",
   "shared/useCommunityTypingPresence.ts",
   "shared/useDirectMessageTypingPresence.ts",
+  "apps/web/src/components/WebTestRunBar.tsx",
 ] as const;
 const costBearingIntervalFiles = [
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
   "apps/web/src/controllers/useWebPublicCommunityRouteController.ts",
   "convex/runtimeCancellation.ts",
+  "apps/web/src/components/WebCommunityPods.tsx",
+  "apps/web/src/components/WebCommunitySettingProposals.tsx",
+  "apps/web/src/components/WebCommunityWelcome.tsx",
+  "apps/web/src/components/WebTestRunBar.tsx",
+  "apps/web/src/components/WebCommunityWorkflowChanges.tsx",
+  "apps/web/src/components/WebCommunityWorkflowsSection.tsx",
 ] as const;
 const expectedIntervalFiles = [...uiOnlyIntervalFiles, ...costBearingIntervalFiles].sort();
 const actualIntervalCallSites = listSetIntervalCallSites();

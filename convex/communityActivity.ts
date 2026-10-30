@@ -1,6 +1,7 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  listActiveTestMemberUserIds,
   normalizeIdValue,
   requireCommunityChatAccess,
   resolvePublicUserId,
@@ -169,8 +170,13 @@ export const listCommunityActivityEvents = query({
           )
           .order("desc")
           .take(safeLimit)) as CommunityActivityEventRow[];
+    // Test members' joins stay out of chat (they still show in Test runs).
+    const testUserIds = await listActiveTestMemberUserIds(ctx, args.communityId, { includeEnded: true });
+    const visibleRows = testUserIds.size
+      ? rows.filter((row) => !(row.type === "member_joined" && row.actorUserId && testUserIds.has(String(row.actorUserId))))
+      : rows;
     const userIdCache = new Map<string, string | null>();
-    const mapped = await Promise.all(rows.map((row) => mapCommunityActivityEventRow(ctx, row, userIdCache)));
+    const mapped = await Promise.all(visibleRows.map((row) => mapCommunityActivityEventRow(ctx, row, userIdCache)));
     return mapped.reverse();
   },
 });

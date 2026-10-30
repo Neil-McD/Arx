@@ -3,7 +3,9 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   communityMembershipRowIsActive,
+  getCommunityAndMembership,
   normalizeSlug,
+  readCommunityWelcomeGate,
   requireCommunityChatAccess,
 } from "./communityCore";
 import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
@@ -97,23 +99,36 @@ export const resolveMemberEntryDestinationInternal = internalQuery({
     }
 
     if (!targetCommunityId) {
+      // An unfinished welcome flow outranks the usual order, so a member who
+      // left halfway comes back to it on their next sign-in.
+      let fallback: any = null;
       for (const candidateId of await resolveDefaultCommunityCandidates(ctx, args.userId)) {
+        let community: any;
         try {
-          const { community } = await requireCommunityChatAccess({
+          ({ community } = await requireCommunityChatAccess({
             ctx,
             communityId: candidateId,
             userId: args.userId,
-          });
-          return {
-            page: "community" as const,
-            reason: "default_community",
-            community_id: normalizeText(community._id),
-            community_slug: normalizeSlug(community.slug),
-            community_name: normalizeText(community.name) || null,
-          };
+            // A member owing a welcome form still lands here; the community shows the form.
+            allowWelcome: true,
+          }));
         } catch {
           // Archived, unfunded, blocked, or revoked: try the next candidate.
+          continue;
         }
+        fallback ??= community;
+        const { membership } = await getCommunityAndMembership({ ctx, communityId: candidateId, userId: args.userId });
+        const welcome = await readCommunityWelcomeGate({ ctx, community, membership, userId: args.userId });
+        if (welcome.required) { fallback = community; break; }
+      }
+      if (fallback) {
+        return {
+          page: "community" as const,
+          reason: "default_community",
+          community_id: normalizeText(fallback._id),
+          community_slug: normalizeSlug(fallback.slug),
+          community_name: normalizeText(fallback.name) || null,
+        };
       }
       return {
         page: "discover" as const,
@@ -128,6 +143,8 @@ export const resolveMemberEntryDestinationInternal = internalQuery({
       ctx,
       communityId: targetCommunityId,
       userId: args.userId,
+      // A member owing a welcome form still lands here; the community shows the form.
+      allowWelcome: true,
     });
     const resolvedSlug = normalizeSlug(community.slug);
     if (requestedSlug && resolvedSlug !== requestedSlug) {

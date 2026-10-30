@@ -15,8 +15,7 @@ const packageJson = read("package.json");
 
 assert.match(contract, /founder_welcome:v\$\{FOUNDER_WELCOME_VERSION\}:\$\{normalizedCommunityId\}/);
 assert.match(contract, /I’m your community concierge/);
-assert.match(contract, /Reply to me in this thread using Reply/);
-assert.match(contract, /mention @\$\{communityName\} anywhere in chat/);
+assert.match(contract, /Reply to me in this thread, or type @ and pick my name anywhere in chat/);
 
 assert.match(
   interactions,

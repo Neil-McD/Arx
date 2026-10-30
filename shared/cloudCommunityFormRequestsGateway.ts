@@ -1,10 +1,11 @@
+import type { WelcomeBlock } from "./communityWelcomeLayout";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 import { acquireAuthenticatedConvexRealtimeClient, type ConvexRealtimeEnsureSession } from "./convexRealtimeAuth";
 import type { CommunityFormQuestion } from "./communityForms";
 import type { FormAnswers } from "./communityFormAnswers";
-export type MemberFormSummary = { id: string; name: string; answered: number; total: number; createdAt: number };
+export type MemberFormSummary = { id: string; form_key?: string; name: string; answered: number; total: number; createdAt: number };
 export type MemberFormRequest = { id: string; name: string; questions: CommunityFormQuestion[]; answers: FormAnswers; revision: number };
 export function subscribeMemberForms<S>(session: S, communityId: string, ensureSession: ConvexRealtimeEnsureSession<S>, update: (rows: MemberFormSummary[], hasMore?: boolean) => void, error: () => void) {
   const lease = acquireAuthenticatedConvexRealtimeClient({ session, convexUrl: requireConvexUrl(), ensureSession });
@@ -52,4 +53,17 @@ export async function saveMemberForm(session: unknown, communityId: string, requ
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
   return client.mutation(api.communityFormRequests.saveMyAnswers, { communityId: communityId as Id<"communities">, requestId: request.id as Id<"communityFormRequests">,
     authSubject, answers, expectedRevision: request.revision, submit });
+}
+/** The member's pending request for one form (by its key), if a Workflow has assigned it. Lessons use it to show the form in place. */
+export async function findMyPendingFormByKey(session: unknown, communityId: string, formKey: string): Promise<MemberFormSummary | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
+  const rows = await client.query(api.communityFormRequests.listMyRequests, { communityId: communityId as Id<"communities">, authSubject }) as Array<MemberFormSummary & { form_key?: string }>;
+  return (Array.isArray(rows) ? rows : []).find(row => row.form_key === formKey) ?? null;
+}
+
+/** What the held member's welcome page shows: the builder's words and its lesson steps. */
+export type MemberWelcomePage<TLesson> = { title: string | null; message: string | null; media_url: string | null; layout?: WelcomeBlock[] | null; lessons: TLesson[] };
+export async function getMemberWelcomePage<S, TLesson>(session: S, communityId: string): Promise<MemberWelcomePage<TLesson>> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
+  return await client.query(api.communityResources.getMyWelcomePage, { authSubject, communityId: communityId as Id<"communities"> }) as MemberWelcomePage<TLesson>;
 }

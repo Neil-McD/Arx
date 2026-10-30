@@ -382,6 +382,7 @@ assert.match(dmPanel, /canSendDirectMessage =[\s\S]*!props\.isSending && hasComp
 assert.match(dmPanel, /community-dm-attachment-state-overlay/, "DM image composer previews must surface queued, uploading, and failed states");
 assert.match(dmPanel, /hasDragFiles[\s\S]*getDragFiles/, "DM panel must detect dropped files without depending only on populated FileList during dragenter");
 assert.match(dmPanel, /onDrop=\{canAcceptAttachmentDrop \? onAttachmentDrop : undefined\}/, "DM panel must accept file drops across the panel");
+assert.match(dmPanel, /onPaste=\{onComposerPaste\}/, "DM composer must attach pasted images and files");
 assert.match(dmPanel, /community-dm-attachment-drop-surface[\s\S]*community-dm-drop-overlay/, "DM panel must expose a scoped drag-over surface and overlay");
 assert.match(dmPanel, /community-dm-panel-file-input[\s\S]*type="file"[\s\S]*multiple/, "DM composer must use a real multi-file input");
 assert.match(dmPanel, /Paperclip/, "DM composer must expose an attachment button");

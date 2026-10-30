@@ -66,9 +66,12 @@ export type WebDestination =
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
+  | { kind: "community_members"; slug: string }
+  | { kind: "community_about"; slug: string }
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_workflows"; slug: string }
+  | { kind: "community_people"; slug: string }
   | { kind: "community_analytics"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
@@ -197,6 +200,26 @@ export function applyShellVariantToKnownPath(path: string, shellVariant: AppShel
   return applyShellVariantToPublicPath(raw, shellVariant);
 }
 
+// A phone that opens a plain community or settings link gets the phone
+// layout (/m/...) instead of the desktop one squeezed to 390px. Embedded
+// previews (Customize, Sales page) pick their own layout and are left alone.
+export function resolvePhoneShellRedirect(params: {
+  path: string;
+  narrowViewport: boolean;
+  embedded: boolean;
+}): string | null {
+  if (!params.narrowViewport || params.embedded) return null;
+  const raw = String(params.path ?? "").trim();
+  if (!raw.startsWith("/")) return null;
+  const parsed = new URL(raw, "http://local.arx");
+  if (readShellVariantFromPathname(parsed.pathname) === "mobile") return null;
+  if (parsed.searchParams.get("embed") === "1") return null;
+  const segments = splitPathSegments(parsed.pathname);
+  if (segments[0] !== "c" && segments[0] !== "settings") return null;
+  const next = applyShellVariantToKnownPath(raw, "mobile");
+  return next !== raw ? next : null;
+}
+
 export function buildSettingsPath(settingsPage: SettingsPage): string {
   return `/settings/${encodeURIComponent(settingsPage)}`;
 }
@@ -238,6 +261,13 @@ export function buildCommunityHomePath(
   return `/c/${encodeURIComponent(slug)}/home`;
 }
 
+
+// The public page in a preview frame. The app rewrites it to /c/<slug>, but the
+// page reads its preview parameters before that.
+export function buildCommunityFunnelPreviewPath(communitySlug: string | null | undefined): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  return slug ? `/c/${encodeURIComponent(slug)}/preview` : null;
+}
 
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
@@ -312,10 +342,15 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
     case "partner":
     case "partners":
       return "billing";
+    case "memberships":
+    case "communities":
+      return "memberships";
+    case "apps":
     case "agent":
     case "integrations":
     case "skills":
-      return "account";
+      return "apps";
+    case "display":
     case "appearance":
       return "appearance";
     default:
@@ -468,21 +503,6 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     };
   }
 
-  if (segments[0] === "c" && segments.length === 3 && segments[2] === "members") {
-    const slug = String(segments[1] ?? "").trim() || null;
-    if (!slug) return null;
-    return {
-      page: "community",
-      view: "home",
-      settingsPage: "profile",
-      communitySlug: slug,
-      communityTab: "chat",
-      communityChannelSlug: null,
-      communityResourceModuleId: null,
-      communitySettingsPane: null,
-    };
-  }
-
   if (segments[0] === "c" && segments.length >= 3) {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
@@ -563,6 +583,10 @@ export function deriveWebDestinationFromAppRoute(
           };
         case "events":
           return { kind: "community_events", slug };
+        case "members":
+          return { kind: "community_members", slug };
+        case "about":
+          return { kind: "community_about", slug };
         case "agent":
           return { kind: "community_agent", slug };
         case "settings":
@@ -573,6 +597,8 @@ export function deriveWebDestinationFromAppRoute(
           };
         case "workflows":
           return { kind: "community_workflows", slug };
+        case "people":
+          return { kind: "community_people", slug };
         case "analytics":
           return { kind: "community_analytics", slug };
       }
@@ -621,9 +647,12 @@ export function isWebCommunityDetailDestination(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_members":
+    case "community_about":
     case "community_agent":
     case "community_settings":
     case "community_workflows":
+    case "community_people":
     case "community_analytics":
       return true;
     default:
@@ -648,9 +677,12 @@ export function webDestinationHasCommunityNavSelection(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_members":
+    case "community_about":
     case "community_agent":
     case "community_settings":
     case "community_workflows":
+    case "community_people":
     case "community_analytics":
       return true;
     default:

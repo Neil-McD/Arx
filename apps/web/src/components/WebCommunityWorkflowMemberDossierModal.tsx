@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useCommunityThemeScope } from "./useCommunityThemeScope";
 
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CloudCommunityMemberSuccessDossier } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
@@ -30,10 +31,10 @@ function workflowActivityLabel(
 ): string {
   if (activity.action_type === "request_form") return `Form · ${readableLabel(activity.status)}`;
   if (activity.action_type === "evaluate_goal") return `${activity.milestone_name} · Goal evaluation · ${activity.status === "responded" ? "Assessed" : readableLabel(activity.status)}`;
-  if (activity.action_type === "create_service_channel") return `Private channel setup · ${readableLabel(activity.status)}`;
+  if (activity.action_type === "create_service_channel") return `Personal pod setup · ${readableLabel(activity.status)}`;
   if (activity.status === "requirement_satisfied") return `Requirement satisfied in ${activity.milestone_name}`;
   if (activity.status === "unavailable") {
-    return `${activity.action_type === "prompt_agent" ? "Community agent" : "Milestone move"} · Status unavailable`;
+    return `${activity.action_type === "prompt_agent" ? "Community agent" : "Stage move"} · Status unavailable`;
   }
   if (activity.action_type === "prompt_agent") {
     return `Community agent · ${readableLabel(activity.status)}`;
@@ -56,6 +57,9 @@ function ActivityTime({ value }: { value: string }) {
 
 export function WebCommunityWorkflowMemberDossierModal(props: {
   formResponses?: ReactNode;
+  courseProgress?: ReactNode;
+  /** Plan, what they can use and until when (Members shows the same). */
+  access?: ReactNode;
   isOpen: boolean;
   dossier: CloudCommunityMemberSuccessDossier | null;
   isLoading: boolean;
@@ -70,8 +74,10 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   onForceMove: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onApproveMilestone?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
   onRetryGoalReview?: (snapshot: CloudCommunityMemberSuccessDossier) => Promise<void>;
+  onRetryAction?: (snapshot: CloudCommunityMemberSuccessDossier, automationKey: string) => Promise<{ status: string; error_code?: string }>;
   onOpenServiceChannel: (channelId: string) => void;
 }) {
+  const themeScope = useCommunityThemeScope();
   const dialogRef = useRef<HTMLElement | null>(null);
   const [approving, setApproving] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
@@ -81,6 +87,32 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   const [goalReviewRetryError, setGoalReviewRetryError] = useState<string | null>(null);
   const [submittedGoalReviewReceipt, setSubmittedGoalReviewReceipt] = useState<string | null>(null);
   const goalReviewRetryPending = useRef(false);
+  const [retryingAction, setRetryingAction] = useState<string | null>(null);
+  const [actionRetryError, setActionRetryError] = useState<{ key: string; message: string } | null>(null);
+  const actionRetryPending = useRef(false);
+  const actionRows = useRef(new Map<string, HTMLLIElement>());
+  const actionsHeading = useRef<HTMLHeadingElement | null>(null);
+  // The action whose Run again was pressed. When its button goes (the write
+  // worked), focus goes to its row; when the row goes too (the member moved on
+  // or finished), to Actions, else the dialog. It keeps following through each
+  // update until the builder moves focus somewhere else.
+  const refocusAction = useRef<{ membershipId: string; key: string } | null>(null);
+  const refocusTarget = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const tracked = refocusAction.current;
+    if (!tracked) return;
+    const active = document.activeElement;
+    if (!props.isOpen || (props.dossier && props.dossier.membership_id !== tracked.membershipId)
+      || (refocusTarget.current && active && active !== refocusTarget.current && active !== document.body)) {
+      refocusAction.current = null; refocusTarget.current = null;
+      return;
+    }
+    const row = actionRows.current.get(tracked.key);
+    if (row?.querySelector("button")) return;
+    const target = row ?? actionsHeading.current ?? dialogRef.current;
+    if (target && target !== active) target.focus();
+    refocusTarget.current = target;
+  }, [props.dossier, props.isOpen]);
   useEffect(() => {
     approvalGeneration.current += 1;
     approvalPending.current = false;
@@ -90,6 +122,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     setRetryingGoalReview(false);
     setGoalReviewRetryError(null);
     setSubmittedGoalReviewReceipt(null);
+    actionRetryPending.current = false;
+    setRetryingAction(null);
+    setActionRetryError(null);
   }, [props.isOpen, props.dossier?.membership_id, props.dossier?.workflow?.current_milestone_entered_at,
     props.dossier?.workflow?.goal_review?.receipt_ref]);
   const [view, setView] = useState("progress");
@@ -124,7 +159,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     };
   }, [props.isOpen]);
 
-  if (!props.isOpen) return null;
+  if (!props.isOpen) return themeScope.marker;
   const dossier = props.dossier;
   const factsByKind = new Map<string, string[]>();
   for (const fact of dossier?.approved_community_context ?? []) {
@@ -149,7 +184,8 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    // The dialog itself can hold focus (after its content changed), so Shift+Tab from it wraps too.
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -158,7 +194,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     }
   };
 
-  return createPortal(
+  return <>{themeScope.marker}{createPortal(themeScope.scope(
     <div
       className="modal-overlay workflow-member-dossier-overlay"
       onMouseDown={props.onClose}
@@ -166,6 +202,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
       <section
         ref={dialogRef}
         className="modal resource-modal workflow-member-dossier-modal"
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="workflow-member-dossier-title"
@@ -221,16 +258,16 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
         </div>
 
         {dossier && !props.isLoading && !props.error && !confirmation ? <div className="workflow-member-dossier-tabs">
-          <WebPlatformTabList tabs={[{ id: "progress", label: "Progress" }, { id: "responses", label: "Responses" }, { id: "details", label: "Details" }]}
+          <WebPlatformTabList tabs={[{ id: "progress", label: "Progress" }, { id: "courses", label: "Courses" }, { id: "responses", label: "Responses" }, { id: "access", label: "Access" }, { id: "details", label: "Details" }]}
             activeTab={view} onSelectTab={setView} ariaLabel="Member workflow" idPrefix="member-workflow"
             className="platform-switcher platform-switcher-compact"
-            style={buildPlatformSwitcherStyle(3, ["progress", "responses", "details"].indexOf(view))} />
+            style={buildPlatformSwitcherStyle(5, ["progress", "courses", "responses", "access", "details"].indexOf(view))} />
         </div> : null}
         <div className="modal-body workflow-member-dossier-body">
           {confirmation ? <section className="workflow-member-dossier-section" role="alertdialog" aria-labelledby="force-move-title" aria-describedby="force-move-warning">
-            <h3 id="force-move-title">Force {confirmation.workflow?.override_state?.next_milestone_name ? "move to next milestone" : "workflow completion"}?</h3>
+            <h3 id="force-move-title">Force {confirmation.workflow?.override_state?.next_milestone_name ? "move to next stage" : "workflow completion"}?</h3>
             <p><strong>{confirmation.display_name}</strong>: {confirmation.workflow?.current_milestone_name} → {confirmation.workflow?.override_state?.next_milestone_name ?? "Workflow complete"}</p>
-            <p id="force-move-warning">This bypasses unfinished actions or an unmet goal. Pending forms for this milestone will close. Your override will be recorded.</p>
+            <p id="force-move-warning">This bypasses unfinished actions or an unmet goal. Pending forms for this stage will close. Your override will be recorded.</p>
             {forceError ? <p role="alert" className="workflow-error">{forceError}</p> : null}
             <div className="resource-modal-actions">
               <button type="button" className="secondary" data-override-cancel disabled={forcing} onClick={() => setConfirmation(null)}>Cancel</button>
@@ -268,24 +305,55 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               <div role="tabpanel" id={platformTabPanelId("member-workflow", view)} aria-labelledby={platformTabId("member-workflow", view)}>
               <div hidden={view !== "progress"}>
               {dossier.workflow ? <section className="workflow-member-dossier-section">
-                <h3>Milestone goal</h3>
+                <h3>Stage goal</h3>
                 <p>{dossier.workflow.goal || "No goal specified."}</p>
               </section> : null}
               {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
-                <h3>Actions</h3>
+                <h3 ref={actionsHeading} tabIndex={-1}>Actions</h3>
                 {!dossier.workflow.action_progress ? <p>Action completion unavailable.</p> : <>
                   {dossier.workflow.action_progress.actions.length ? <ul className="workflow-member-action-progress">
-                    {dossier.workflow.action_progress.actions.map(action => <li key={action.automation_key}>
+                    {dossier.workflow.action_progress.actions.map(action => <li key={action.automation_key} tabIndex={-1}
+                      ref={(node) => { if (node) actionRows.current.set(action.automation_key, node); else actionRows.current.delete(action.automation_key); }}>
                       <div><strong>{action.label}</strong>
-                        <span>{action.status === "complete" ? action.action_type === "request_form" ? "Form submitted" : action.action_type === "prompt_agent" ? "Response delivered" : "Channel ready"
+                        <span>{action.status === "complete" ? action.action_type === "request_form" ? "Form submitted" : action.action_type === "prompt_agent" ? "Response delivered" : action.action_type === "set_client_property" || action.action_type === "set_pod_member" ? "Done" : action.action_type === "send_email" ? "Sent" : "Channel ready"
                           : action.status === "pending" ? action.action_type === "request_form" ? "Awaiting submission" : "Queued"
                           : action.status === "waiting" ? `Waiting for ${action.waiting_for ?? "previous action"}`
+                          : action.retryable && action.status === "unavailable" ? "Changed since it ran"
                           : action.status === "unavailable" ? "Completion unavailable" : readableLabel(action.status)}</span></div>
                       {action.evidence ? <small>Verified <ActivityTime value={new Date(action.evidence.completed_at).toISOString()} /></small> : null}
+                      {action.retryable && props.onRetryAction ? <>
+                        <button type="button" className="workflow-secondary-button" aria-label={`Run again: ${action.label}`}
+                          // The pressed button stays enabled (and focused) while it runs; the guard stops a second press.
+                          disabled={retryingAction !== null && retryingAction !== action.automation_key}
+                          aria-disabled={retryingAction === action.automation_key || undefined} onClick={async (event) => {
+                            if (actionRetryPending.current || !props.onRetryAction) return;
+                            const generation = approvalGeneration.current;
+                            actionRetryPending.current = true; setRetryingAction(action.automation_key); setActionRetryError(null);
+                            refocusAction.current = { membershipId: dossier.membership_id, key: action.automation_key };
+                            // Followed from the button itself, so moving off it while it runs stops the follow.
+                            refocusTarget.current = event.currentTarget;
+                            try {
+                              const result = await props.onRetryAction(dossier, action.automation_key);
+                              if (result.status === "action_failed") refocusAction.current = null;
+                              if (generation === approvalGeneration.current && result.status === "action_failed")
+                                setActionRetryError({ key: action.automation_key, message: "It failed again. Check this property's type and options in Members, then run it again." });
+                            } catch (error) {
+                              refocusAction.current = null;
+                              if (generation === approvalGeneration.current) {
+                                const stale = String(error instanceof Error ? error.message : error).includes("evidence_changed");
+                                setActionRetryError({ key: action.automation_key, message: stale ? "The member moved on. Refresh and check their current stage."
+                                  : "Could not run it again. Refresh the member panel and try again." });
+                              }
+                            } finally {
+                              if (generation === approvalGeneration.current) { actionRetryPending.current = false; setRetryingAction(null); }
+                            }
+                          }}>{retryingAction === action.automation_key ? "Running…" : "Run again"}</button>
+                        {actionRetryError?.key === action.automation_key ? <p role="alert" className="workflow-error">{actionRetryError.message}</p> : null}
+                      </> : null}
                     </li>)}
                   </ul> : <p>No actions configured.</p>}
                   {dossier.workflow.action_progress.scan_truncated ? <p>Only a bounded set of recent receipts was checked. Unproven actions remain unavailable.</p> : null}
-                  {dossier.workflow.action_progress.actions.some(action => action.action_type === "prompt_agent") ? <p>A delivered response does not prove the milestone goal was achieved.</p> : null}
+                  {dossier.workflow.action_progress.actions.some(action => action.action_type === "prompt_agent") ? <p>A delivered response does not prove the stage goal was achieved.</p> : null}
                 </>}
               </section> : null}
               {dossier.workflow && !dossier.workflow.completed_at ? <section className="workflow-member-dossier-section">
@@ -318,8 +386,8 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 </> : dossier.workflow.goal?.trim() ? <>
                   <p>{dossier.workflow.goal_review?.status === "reviewing" ? "The agent is reviewing the goal against verified action evidence."
                     : dossier.workflow.goal_review?.status === "achieved" ? "Goal met. Advancement is being validated."
-                    : dossier.workflow.goal_review?.status === "not_yet" ? "Goal not met. The member remains in this milestone."
-                    : dossier.workflow.goal_review?.status === "insufficient_evidence" ? "More proof is needed. The member remains in this milestone."
+                    : dossier.workflow.goal_review?.status === "not_yet" ? "Goal not met. The member remains in this stage."
+                    : dossier.workflow.goal_review?.status === "insufficient_evidence" ? "More proof is needed. The member remains in this stage."
                     : dossier.workflow.goal_review?.status === "failed" ? "Goal review could not complete. No advancement was made."
                     : dossier.workflow.goal_review?.status === "not_started" ? "No review has started for this evidence. Existing work is not automatically backfilled."
                     : "Once all actions are verified complete, the agent reviews the goal before advancing."}</p>
@@ -327,7 +395,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 </>
                   : !dossier.workflow.action_progress ? <p>Action completion information unavailable.</p>
                   : dossier.workflow.action_progress?.actions.length ? <p>Advances when all actions are verified complete. Existing completed work is not automatically backfilled.</p>
-                  : <p>No actions configured. This milestone will not advance automatically.</p>}
+                  : <p>No actions configured. This stage will not advance automatically.</p>}
                 {dossier.workflow.goal_review?.retryable && props.onRetryGoalReview
                   && dossier.workflow.goal_review.receipt_ref !== submittedGoalReviewReceipt ? <>
                   <button type="button" className="workflow-secondary-button" disabled={retryingGoalReview} onClick={async () => {
@@ -352,7 +420,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 </> : null}
               </section> : null}
               </div>
+              <div hidden={view !== "courses"}>{view === "courses" ? props.courseProgress ?? <p>Course progress unavailable.</p> : null}</div>
               <div hidden={view !== "responses"}>{props.formResponses ?? <p>Form responses unavailable.</p>}</div>
+              <div hidden={view !== "access"}>{view === "access" ? props.access ?? <p>Access unavailable.</p> : null}</div>
               <div hidden={view !== "details"}>
               <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}
                 channels={props.channels} channelsUnavailable={props.channelsUnavailable}
@@ -419,7 +489,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               </div>
               <div hidden={view !== "details"}>
               <details className="workflow-member-dossier-section workflow-member-milestone-history">
-                <summary>Recent milestone history</summary>
+                <summary>Recent stage history</summary>
                 {dossier.milestone_history.length > 0 ? (
                   <ol className="workflow-member-history">
                     {dossier.milestone_history.map((entry) => (
@@ -436,7 +506,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                     ))}
                   </ol>
                 ) : (
-                  <p>No recorded milestone changes.</p>
+                  <p>No recorded stage changes.</p>
                 )}
               </details>
               {dossier.workflow && !dossier.workflow.completed_at && dossier.workflow.override_state ? <section className="workflow-member-dossier-section">
@@ -452,6 +522,5 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
         </div>
       </section>
     </div>,
-    document.body,
-  );
+    ), document.body)}</>;
 }

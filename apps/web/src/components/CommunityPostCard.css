@@ -1,0 +1,763 @@
+/* Polls and shared Forms on posts: quiet frames in the community's own colours,
+   one accent for "yours" and the result bars, nothing louder than the post. */
+.post-card {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card, transparent);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.post-card-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.post-card-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.post-card-note {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.post-card-options {
+  display: grid;
+  gap: 8px;
+}
+
+.post-card-option {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.post-card-option-choice {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+
+.post-card-option-choice:hover:not(:disabled) {
+  border-color: var(--border-strong, var(--border-default));
+}
+
+.post-card-option-choice:disabled {
+  cursor: default;
+}
+
+.post-card-option-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--accent-primary, var(--bg-button)) 12%, transparent);
+  transition: width 240ms ease;
+  pointer-events: none;
+}
+
+.post-card-option.is-mine .post-card-option-choice {
+  border-color: var(--accent-primary, var(--bg-button));
+}
+
+.post-card-option.is-mine .post-card-option-bar {
+  background: color-mix(in srgb, var(--accent-primary, var(--bg-button)) 22%, transparent);
+}
+
+.post-card-option-mark {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-strong, var(--text-secondary));
+  border-radius: 999px;
+  color: var(--bg-button-text, #fff);
+}
+
+.post-card-option-mark.is-box {
+  border-radius: 5px;
+}
+
+.post-card-option.is-mine .post-card-option-mark {
+  border-color: var(--accent-primary, var(--bg-button));
+  background: var(--accent-primary, var(--bg-button));
+}
+
+.post-card-option-label {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.post-card-option-percent {
+  position: relative;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-card-option-voters,
+.post-card-voters-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.post-card-option-voters {
+  flex: 0 0 auto;
+  /* Fixed so every option bar is the same width. */
+  width: 112px;
+  justify-content: flex-end;
+}
+
+.post-card-option-voters:hover:not(:disabled),
+.post-card-voters-button:hover:not(:disabled) {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.post-card-option-voters:disabled,
+.post-card-voters-button:disabled {
+  cursor: default;
+}
+
+.post-card-faces {
+  display: inline-flex;
+  align-items: center;
+}
+
+.post-card-face {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  box-shadow: 0 0 0 2px var(--bg-card-solid, var(--surface-workspace, #fff));
+}
+
+.post-card-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-card-faces .post-card-face + .post-card-face {
+  margin-left: -4px;
+}
+
+.post-card-face-more {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.post-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.post-card-voters-button {
+  margin-left: -6px;
+  min-height: 30px;
+}
+
+.post-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.post-card-link:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--hover-overlay);
+}
+
+.post-card-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.post-card-form-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.post-card-form-name span,
+.post-card-muted {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.post-card-muted {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.post-card-primary,
+.post-card-secondary {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.post-card-primary {
+  flex: 0 0 auto;
+  border: 0;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+.post-card-primary:hover:not(:disabled) {
+  background: var(--bg-button-hover, var(--bg-button));
+}
+
+.post-card-secondary {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.post-card-secondary:hover {
+  background: var(--hover-overlay);
+}
+
+.post-card-primary:disabled,
+.post-card-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.post-card-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.post-card-error {
+  margin: 0;
+  color: var(--accent-error);
+  font-size: 13px;
+}
+
+.post-card :focus-visible,
+.post-card-dialog :focus-visible,
+.community-composer-add-popover :focus-visible,
+.post-reactors-card :focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent-primary));
+  outline-offset: 2px;
+}
+
+/* Dialogs: one column, the community's surface, like the member Forms. */
+.post-card-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--overlay-backdrop, rgba(0, 0, 0, 0.45));
+}
+
+.post-card-dialog {
+  width: min(480px, 100%);
+  max-height: 90dvh;
+  overflow: auto;
+  padding: 20px 24px 24px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface-workspace, var(--bg-card-solid));
+  color: var(--text-primary);
+  box-shadow: 0 24px 48px rgb(0 0 0 / 0.18);
+}
+
+.post-card-dialog.is-wide {
+  width: min(640px, 100%);
+}
+
+.post-card-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.post-card-dialog > header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.post-card-dialog-close,
+.post-card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.post-card-dialog-close:hover,
+.post-card-icon:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.post-card-compose {
+  display: grid;
+  gap: 16px;
+}
+
+.post-card-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.post-card-field > span,
+.post-card-field > legend {
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.post-card-field > legend {
+  margin-bottom: 8px;
+}
+
+.post-card-field small {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.post-card-compose textarea,
+.post-card-compose input:not([type="checkbox"]):not([type="radio"]) {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+
+.post-card-compose textarea:hover,
+.post-card-compose input:not([type="checkbox"]):not([type="radio"]):hover {
+  border-color: var(--border-strong, var(--border-default));
+}
+
+.post-card-option-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.post-card-option-input + .post-card-option-input {
+  margin-top: 8px;
+}
+
+.post-card-field > .post-card-link {
+  justify-self: start;
+  margin-top: 8px;
+}
+
+.post-card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.post-card-toggle input,
+.post-card-form-pick input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent-primary, var(--bg-button));
+}
+
+.post-card-form-picks {
+  display: grid;
+  gap: 8px;
+}
+
+.post-card-form-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.post-card-form-pick.is-picked {
+  border-color: var(--accent-primary, var(--border-strong));
+}
+
+.post-card-form-pick span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.post-card-form-pick small {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.post-card-compose > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* People lists: who voted, answered or reacted. */
+.post-card-people {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post-card-people button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.post-card-people button:hover:not(:disabled) {
+  background: var(--hover-overlay);
+}
+
+.post-card-people button:disabled {
+  cursor: default;
+}
+
+.post-card-people .post-card-face {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.post-card-responses {
+  display: grid;
+  gap: 16px;
+}
+
+.post-card-response {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.post-card-response:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.post-card-response dl {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 0 48px;
+}
+
+.post-card-response dt {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.post-card-response dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The composer "+": files, a poll, a form. */
+.community-composer-add-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.community-composer-add-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 45;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card-solid, var(--bg-card));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.community-composer-add-popover button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-composer-add-popover button:hover:not(:disabled) {
+  background: var(--hover-overlay);
+}
+
+.community-composer-add-popover button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Who reacted. */
+.post-reactors {
+  position: relative;
+  display: inline-flex;
+}
+
+.post-reactors-tip {
+  position: absolute;
+  /* Starts at the chip: chips sit at the left of a message, so centring clips. */
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--text-primary);
+  color: var(--surface-workspace, #fff);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.post-reactors-tip-emoji {
+  font-size: 20px;
+}
+
+.post-reactors-card {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 60;
+  display: grid;
+  gap: 4px;
+  width: 240px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card-solid, var(--surface-workspace));
+  color: var(--text-primary);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.post-reactors-card-head {
+  padding: 2px 8px 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.post-reactors-card .post-card-muted {
+  padding: 4px 8px;
+}
+
+@media (max-width: 600px) {
+  .post-card {
+    padding: 12px;
+  }
+
+  .post-card-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .post-card-dialog {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+    padding: 16px 16px 24px;
+  }
+
+  .post-reactors-card {
+    width: min(240px, 80vw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-card-option-bar,
+  .post-card-option-choice {
+    transition: none;
+  }
+}
+
+/* Classroom post cards: the like button and its count are two targets, so the
+   count can show who liked the post. */
+.community-post-card-like {
+  display: inline-flex;
+  align-items: center;
+}
+
+.community-post-card-like > .community-post-card-action {
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.community-post-card-like-count {
+  min-width: 28px;
+  padding: 6px 6px 6px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted, var(--text-secondary));
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-post-card-like-count:hover:not(:disabled) {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.community-post-card-like-count:disabled {
+  cursor: default;
+}
+
+.community-post-card > .post-card {
+  max-width: none;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .post-card-option-voters {
+    width: 40px;
+  }
+
+  .post-card-option-voters .post-card-faces {
+    display: none;
+  }
+}

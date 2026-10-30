@@ -1,6 +1,7 @@
 import { api } from "../convex/_generated/api";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
+import type { PostCard } from "./communityPostCards";
 
 type CloudCommunityInteractionsGatewayParams<SessionT> = {
   session: SessionT;
@@ -134,6 +135,8 @@ export type CommunityInteractionRootBundle = {
   embeds: CommunityInteractionEmbed[];
   mentions: CommunityInteractionMention[];
   attachments: CommunityInteractionAttachment[];
+  /** A poll or shared Form on the post (shared/communityPostCards.ts). */
+  post_card?: PostCard | null;
   /** Client-only: present on optimistic (not-yet-confirmed) messages. */
   pending?: CommunityInteractionPendingStatus;
 };

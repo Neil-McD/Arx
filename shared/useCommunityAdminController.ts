@@ -326,7 +326,7 @@ export function useCommunityAdminController<
 
   const handleSetCommunityMemberRole = useCallback(async (
     membershipId: string,
-    role: "admin" | "moderator" | "member",
+    role: "co_creator" | "admin" | "moderator" | "member",
   ) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;

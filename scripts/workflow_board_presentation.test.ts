@@ -16,7 +16,7 @@ test("automation editor reuses compact form selectors instead of radio banks", (
   expect(css).not.toContain('.workflow-action-choice span');
 });
 
-test("milestone editor reuses resource styles while retaining bounded scrolling", () => {
+test("stage editor reuses resource styles while retaining bounded scrolling", () => {
   expect(editor).toContain('className="resource-form workflow-milestone-form"');
   expect(editor).toContain('className="resource-field-label"');
   expect(css).toContain("max-height: calc(100dvh - 2 * var(--workflow-editor-inset))");
@@ -25,11 +25,11 @@ test("milestone editor reuses resource styles while retaining bounded scrolling"
   expect(css).toContain(".workflow-milestone-modal .resource-form textarea:focus");
   expect(css).toContain("field-sizing: content");
   expect(css).not.toContain(".workflow-milestone-modal input:focus-visible,");
-  expect(editor).toContain('"New milestone"');
+  expect(editor).toContain('"New stage"');
 });
 
 test("creation presents one trigger-to-action path", () => {
-  expect(editor).toContain("Save this milestone to configure actions.");
+  expect(editor).toContain("Save this stage to configure actions.");
   expect(editor).not.toContain("Automatic advancement (existing system)");
   expect(editor).not.toContain("Add condition");
   expect(automation).not.toContain("Evaluate goal</option>");
@@ -37,7 +37,7 @@ test("creation presents one trigger-to-action path", () => {
   expect(automation).toContain("<small>→ {actionLabel}</small>");
 });
 
-test("milestone views share the draft and progressive creation does not preselect choices", () => {
+test("stage views share the draft and progressive creation does not preselect choices", () => {
   expect(editor).toContain('WebPlatformTabList');
   expect(editor).toContain('label: "Overview"');
   expect(editor).toContain('label: "Automations"');
@@ -45,10 +45,10 @@ test("milestone views share the draft and progressive creation does not preselec
   expect(editor).toContain('setSelection({ triggerSelected: false, actionSelected: false })');
   expect(editor).toContain('>Done</button>');
   expect(editor).toContain('dependent actions wait for the preceding action to complete');
-  expect(automation).toContain('Previous action completed');
+  expect(automation).toContain('After an earlier step');
   expect(automation).toContain('value={triggerSelected ? automation.trigger.type : ""}');
   expect(automation).toContain('value={actionSelected ? automation.action.type : ""}');
-  expect(automation).toContain('triggerReady ? <label>Then');
+  expect(automation).toContain('triggerReady && !props.hideTypeSelects ? <label>Then');
   expect(editor).not.toContain('Automatic advancement (existing system)');
 });
 
@@ -60,16 +60,14 @@ test("board keeps fixed lanes and uses defined canonical surfaces", () => {
   expect(css).not.toContain("--surface-raised");
 });
 
-test("board actions remain discoverable without hover", () => {
-  expect(css).not.toContain(".workflow-milestone-column:hover .workflow-milestone-edit-button");
-  expect(component).toContain('<MoreHorizontal size={18} aria-hidden="true" />');
-  expect(component).not.toContain("<Pencil");
-  expect(component).toMatch(/\}\)\}\s*<\/div>\s*<button\s+className="workflow-add-milestone-button"/);
-  expect(css).toContain("border-bottom: 1px solid var(--stroke-divider-accent)");
-  expect(css).toContain(".workflow-board-stage");
-  expect(css).toContain("padding-inline: 8px");
-  expect(css).toContain("background: var(--community-rail-control-bg)");
-  expect(css).toContain("border: var(--community-rail-button-border)");
-  expect(component).toContain('aria-label="Add milestone"');
-  expect(component).toContain("aria-label={`Edit ${milestone.name}`}");
+test("Workflows has one row of tabs and stages are set up from the automations list", () => {
+  // The old Automations | Members switch under the tabs is gone: Members is the Members database tab.
+  expect(component).not.toContain("pn-wf-view-switch");
+  expect(component).toContain('workflows: "Automations", runs: "Run history", changes: "Recent changes", forms: "Forms", welcome: "Welcome page"');
+  const automations = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowAutomations.tsx", import.meta.url), "utf8");
+  expect(automations).toContain("aria-label={`Stage settings for ${milestone.name}`}");
+  expect(automations).toContain("onClick={props.onAddStage}");
+  // One accent, no colour per kind of trigger (polynet-ui/airtable-study).
+  const page = readFileSync(new URL("../apps/web/src/components/WebCommunityWorkflowsPage.css", import.meta.url), "utf8");
+  expect(page).not.toContain("--au-people");
 });

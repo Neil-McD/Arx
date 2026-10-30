@@ -7,7 +7,8 @@ export type ParsedEmbed =
   | { provider: "youtube"; id: string; src: string; thumbnailUrl: string; thumbnailUrls: string[] }
   | { provider: "vimeo"; id: string; src: string }
   | { provider: "loom"; id: string; src: string }
-  | { provider: "wistia"; id: string; src: string };
+  | { provider: "wistia"; id: string; src: string }
+  | { provider: "descript"; id: string; src: string };
 
 function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
   let url = candidate;
@@ -169,6 +170,16 @@ function parseVimeoId(url: URL): string | null {
   return null;
 }
 
+// Descript share links (/view/ID) and embeds (/embed/ID) both play in its
+// embed player; plenty of course lessons are recorded there.
+function parseDescriptId(url: URL): string | null {
+  if (url.hostname.toLowerCase() !== "share.descript.com") return null;
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length < 2 || (parts[0] !== "view" && parts[0] !== "embed")) return null;
+  const id = (parts[1] ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
+  return id.length >= 6 ? id : null;
+}
+
 function parseLoomId(url: URL): string | null {
   const host = url.hostname.toLowerCase();
   if (host !== "loom.com" && host !== "www.loom.com") return null;
@@ -203,6 +214,11 @@ export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   if (loomId) {
     const src = `https://www.loom.com/embed/${loomId}`;
     return { provider: "loom", id: loomId, src };
+  }
+
+  const descriptId = parseDescriptId(url);
+  if (descriptId) {
+    return { provider: "descript", id: descriptId, src: `https://share.descript.com/embed/${descriptId}` };
   }
 
   return null;

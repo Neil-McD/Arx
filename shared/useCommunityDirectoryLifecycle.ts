@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { AppPage, CommunityTab } from "./appShellNavigation";
+import { isCommunityChatBackedTab, type AppPage, type CommunityTab } from "./appShellNavigation";
 import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 import { useResumeEpochEffect } from "./useResumeEpochEffect";
 
@@ -8,7 +8,7 @@ function needsCommunityDirectory(
   communityTab: CommunityTab,
 ): boolean {
   return activePage === "community" &&
-    communityTab === "chat";
+    isCommunityChatBackedTab(communityTab);
 }
 
 export function useCommunityDirectoryLifecycle<SessionT>(params: {

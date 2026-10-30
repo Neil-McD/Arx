@@ -8,6 +8,8 @@ import {
   normalizeCommunityEventRecurrenceInterval,
 } from "../shared/communityEventTime";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
+import { resolveAuthorizedCommunityChannel } from "./communityChannelCore";
+import { resolveCommunityChannelActor } from "./communityChannelAccess";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -40,6 +42,7 @@ type CommunityEventRow = {
   startsAt: number;
   endsAt?: number;
   timezone: string;
+  channelId?: any;
   status: "live" | "cancelled";
   recurrenceFrequency?: "none" | "daily" | "weekly" | "monthly";
   recurrenceInterval?: number;
@@ -157,6 +160,20 @@ export const buildEventReminderBatchesInternal = internalQuery({
         nowMs,
         limit: limitRecipientsPerEvent,
       });
+      // A pod's call reminds only the people who can open the pod.
+      if (event.channelId) {
+        const allowed = [];
+        for (const userId of recipientUserIds) {
+          try {
+            const actor = await resolveCommunityChannelActor({ ctx, communityId: community._id, userId });
+            await resolveAuthorizedCommunityChannel({ ctx, communityId: community._id, channelId: event.channelId, actor, capability: "canRead" });
+            allowed.push(userId);
+          } catch {
+            // Not in the pod.
+          }
+        }
+        recipientUserIds.splice(0, recipientUserIds.length, ...allowed);
+      }
       if (recipientUserIds.length === 0) continue;
 
       for (const occurrenceStartsAt of occurrenceStarts) {

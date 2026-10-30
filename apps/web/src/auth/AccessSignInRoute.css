@@ -1,0 +1,14 @@
+/* "Continue with Polynet": one quiet card in the middle of the page. */
+.access-signin { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; box-sizing: border-box; background: var(--bg-workspace, #fafafa); color: var(--text-primary, #21211e); }
+.access-signin-card { width: min(440px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 28px; border: 1px solid var(--border-default, #e2e2dc); border-radius: 16px; background: var(--surface-workspace, #fff); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08); }
+.access-signin-card h1 { margin: 0; font-size: 22px; line-height: 1.25; }
+.access-signin-card p { margin: 0; color: var(--text-secondary, #5f5f57); font-size: 14px; line-height: 1.5; }
+.access-signin-kicker { font-size: 12px !important; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent-brand, var(--accent-primary, #256f30)) !important; }
+.access-signin-shares { margin: 4px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.45; }
+.access-signin-note { font-size: 13px !important; }
+.access-signin-warn { padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, #b7791f 12%, transparent); color: var(--text-primary, #21211e) !important; }
+.access-signin-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.access-signin-primary { display: inline-flex; justify-content: center; align-items: center; min-height: 44px; width: 100%; text-decoration: none; box-sizing: border-box; }
+.access-signin-cancel { min-height: 40px; border: 0; background: none; color: var(--text-secondary, #5f5f57); font: inherit; font-size: 14px; cursor: pointer; }
+.access-signin-cancel:hover { color: var(--text-primary, #21211e); text-decoration: underline; }
+.access-signin button:disabled { opacity: .55; cursor: not-allowed; }

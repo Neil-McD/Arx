@@ -9,6 +9,7 @@ import {
   listPlatformLegalAcceptancesForUser,
 } from "./legalAcceptances";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import { isTestMemberAuthSubject } from "./communityTestMemberCore";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -44,6 +45,19 @@ export type AccountSetupLegalAcceptanceRow = {
   documentVersion?: string;
 };
 
+// A test member is a stand-in its owner set up: it has no photo or legal
+// acceptance of its own, and needs no profile step before the community.
+function testMemberSetupInput(user: AccountSetupUserRow) {
+  return {
+    displayName: user.displayName ?? "Test member",
+    handle: user.handle ?? null,
+    avatarUrl: "test-member",
+    avatarStorageId: null,
+    hasAcceptedPlatformLegal: true,
+    bio: null,
+  };
+}
+
 export function buildAccountSetupStatusForRows(params: {
   user: AccountSetupUserRow;
   detail: AccountSetupProfileDetailRow | null;
@@ -51,6 +65,7 @@ export function buildAccountSetupStatusForRows(params: {
 }): AccountSetupStatus {
   // Account setup requires first-party identity and legal evidence. Community
   // inference is community-owned and never a member-provided setup dependency.
+  if (isTestMemberAuthSubject(params.user.authSubject)) return buildAccountSetupStatus(testMemberSetupInput(params.user));
   return buildAccountSetupStatus({
     displayName: params.detail?.displayName ?? null,
     handle: params.user.handle ?? null,
@@ -66,6 +81,7 @@ export function isProfileSetupCompleteForRows(
   detail: AccountSetupProfileDetailRow | null,
   legalAcceptances: AccountSetupLegalAcceptanceRow[] = [],
 ): boolean {
+  if (user && isTestMemberAuthSubject(user.authSubject)) return true;
   return isAccountSetupIdentityComplete({
     displayName: detail?.displayName ?? null,
     handle: user?.handle ?? null,

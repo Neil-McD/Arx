@@ -8,18 +8,8 @@
 }
 
 .workflow-sections { flex-direction: column; overflow: hidden; container-type: inline-size; container-name: workflow-sections; }
-.workflow-section-tabs { flex-shrink: 0; margin: 16px 24px 12px; margin-right: var(--web-topbar-right-action-safe-inset, 62px); }
 .workflow-section-content { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .workflow-section-content > .community-forms-page { padding-top: 0; }
-@media (max-width: 600px) {
-  .workflow-section-tabs { margin-left: 12px; margin-bottom: 16px; }
-  .workflow-section-tabs .platform-switcher-btn { padding-inline: 4px; font-size: 12px; }
-}
-@container workflow-sections (max-width: 380px) {
-  .workflow-section-tabs { margin: 52px 12px 16px; }
-  .workflow-section-tabs .platform-switcher-btn { padding-inline: 2px; font-size: 11px; }
-}
-
 .workflow-page button,
 .workflow-page input {
   font: inherit;
@@ -469,16 +459,28 @@
 .workflow-member-action-progress strong { overflow-wrap: anywhere; }
 .workflow-member-action-progress span, .workflow-member-action-progress small { color: var(--text-muted); }
 .workflow-member-action-progress small { display: block; margin-top: 4px; }
+.workflow-member-action-progress li > button { margin-top: 8px; }
 
 .workflow-member-dossier-section {
   padding: 20px 0;
   border-bottom: 1px solid var(--border-default);
 }
-.workflow-form-responses dl { margin: 16px 0 0; }
-.workflow-form-responses dl > div + div { margin-top: 16px; }
-.workflow-form-responses dt { font-size: 12px; color: var(--text-secondary); }
-.workflow-form-responses dd { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.workflow-form-responses summary { cursor: pointer; font-size: 13px; }
+/* Each submitted form is a card: a 44px summary row that opens to the answers,
+   question over answer. Sizes are in rem so community-theme-map.css doesn't
+   rescale them (owner chrome, see polynet-ui-design references/owner-screens.md). */
+.workflow-form-responses details { margin-top: 0.5rem; border: 1px solid var(--border-default); border-radius: 0.5rem; background: var(--bg-card, transparent); overflow: hidden; }
+.workflow-form-responses summary { display: flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; padding: 0 0.875rem; cursor: pointer; font-size: 0.875rem; font-weight: 600; list-style: none; }
+.workflow-form-responses summary::-webkit-details-marker { display: none; }
+.workflow-form-responses summary::before { content: ""; flex-shrink: 0; width: 0.4375rem; height: 0.4375rem; margin-right: 0.25rem; border-right: 2px solid var(--text-secondary); border-bottom: 2px solid var(--text-secondary); transform: rotate(-45deg); transition: transform 140ms; }
+.workflow-form-responses details[open] summary::before { transform: rotate(45deg); }
+.workflow-form-responses summary:hover { background: var(--hover-overlay); }
+.workflow-form-responses summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.workflow-form-responses dl { margin: 0; padding: 0.25rem 0.875rem 0.875rem; border-top: 1px solid var(--border-default); }
+.workflow-form-responses dl > div { padding: 0.75rem 0 0; }
+.workflow-form-responses dl > div + div { margin-top: 0.75rem; border-top: 1px solid var(--border-default); }
+.workflow-form-responses dt { font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); }
+.workflow-form-responses dd { margin: 0.25rem 0 0; font-size: 0.9375rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .workflow-form-responses summary::before { transition: none; } }
 
 .workflow-member-dossier-section:last-child {
   border-bottom: 0;
@@ -979,4 +981,94 @@
   gap: 8px;
   margin-top: 12px;
   max-width: 360px;
+}
+.workflow-welcome-gate { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px 16px; margin:0 0 12px; color:var(--text-primary); }
+.workflow-welcome-gate span { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.workflow-welcome-gate small { color:var(--text-secondary); }
+
+/* Time in milestone → "Only a nudge". */
+.workflow-nudge-toggle { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.workflow-nudge-toggle input { margin-top: 2px; }
+.workflow-nudge-toggle span { display: flex; flex-direction: column; gap: 2px; }
+.workflow-nudge-toggle small { font-weight: 400; color: var(--text-secondary); line-height: 1.4; }
+
+/* "Only if…" on any step */
+.workflow-step-extra { display: grid; gap: 2px; }
+.workflow-step-extra-add {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.workflow-step-extra-add:disabled { color: var(--text-muted); cursor: not-allowed; }
+
+/* "What the agent sees" on an Ask-the-agent step */
+.workflow-agent-inputs {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.workflow-agent-inputs-title {
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.workflow-agent-inputs > .secondary,
+.workflow-agent-inputs-reset {
+  justify-self: start;
+}
+
+.workflow-agent-inputs-reset {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.workflow-agent-input-group {
+  display: grid;
+  gap: 6px;
+}
+
+.workflow-agent-input-group > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workflow-agent-input {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.workflow-agent-input input {
+  margin-top: 2px;
+}
+
+.workflow-agent-input small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
 }

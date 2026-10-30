@@ -53,6 +53,8 @@ import {
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
 import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
+import { syncCommunityAccessForUser } from "./communityAccessSync";
+import { resolveCommunityOfferCheckoutPricePoint } from "./communityOfferAccessCore";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -340,6 +342,20 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
 
     let pricePointId = args.pricePointId ?? current?.pricePointId ?? membership.pricePointId ?? undefined;
     const providerPriceId = String(args.providerPriceId ?? "").trim();
+    // The price Stripe bills decides the price point, so a plan switched in
+    // Stripe (an offer upgrade) moves the member to that offer.
+    if (pricePointId && providerPriceId && source === "stripe") {
+      const known = (await ctx.db.get(pricePointId)) as CommunityPricePointLike | null;
+      if (known && String(known.providerPriceId ?? "").trim() !== providerPriceId) {
+        const pricePoints = (await ctx.db
+          .query("communityPricePoints" as any)
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+          .collect()) as CommunityPricePointLike[];
+        const switched = pricePoints.find((row) => String(row.providerPriceId ?? "").trim() === providerPriceId
+          && String(row.providerAccountId ?? "").trim() === providerAccountId);
+        if (switched) pricePointId = switched._id;
+      }
+    }
     if (!pricePointId && providerPriceId) {
       const pricePoints = (await ctx.db
         .query("communityPricePoints" as any)
@@ -472,6 +488,15 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         nowMs,
       });
     }
+    // Access integrations (a paid MCP server) learn about the change in this same
+    // transaction; this adds an outbox write and never changes the decision above.
+    await syncCommunityAccessForUser(ctx, {
+      communityId: args.communityId,
+      userId: args.userId,
+      nowMs,
+      reason: `subscription_${status}`,
+    });
+
 
     return {
       ok: true,
@@ -488,6 +513,8 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
   args: {
     communitySlug: v.string(),
     billingPeriod: v.string(),
+    // A higher offer on the ladder; left out (or the base offer) buys the membership.
+    offerKey: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -506,7 +533,10 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     if (entryPolicy !== "paid_subscription") {
       throw new Error("paid_plan_required");
     }
-    const pricePoint = await resolveCheckoutPricePoint({
+    const offer = await resolveCommunityOfferCheckoutPricePoint(ctx, {
+      communityId: community._id, offerKey: args.offerKey, billingPeriod,
+    });
+    const pricePoint = offer ? offer.pricePoint : await resolveCheckoutPricePoint({
       ctx,
       community,
       billingPeriod,
@@ -540,6 +570,8 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       providerAccountId,
       platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
       oneLiner: typeof community.oneLiner === "string" ? community.oneLiner : null,
+      offerKey: offer?.offerKey ?? null,
+      offerName: offer?.offerName ?? null,
     };
   },
 });
@@ -998,110 +1030,12 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
   },
 });
 
-export const startPublicCommunityCheckout = action({
-  args: {
-    communitySlug: v.string(),
-    billingPeriod: v.string(),
-    successUrl: v.string(),
-    cancelUrl: v.string(),
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
-    // Studio's funnel: both return addresses on Studio's own origin.
-    const cancelUrl = requireCanonicalCheckoutReturnUrl(
-      args.cancelUrl,
-      "checkout_cancel_url_invalid",
-    );
-    const successUrl = requireCanonicalCheckoutReturnUrl(
-      args.successUrl,
-      "checkout_success_url_invalid",
-    );
-    return await startCommunityJoinCheckoutCore(ctx, {
-      communitySlug: args.communitySlug,
-      billingPeriod: args.billingPeriod,
-      successUrl,
-      cancelUrl,
-      authSubject: args.authSubject,
-    });
-  },
-});
-
-// The one checkout for a community's paid plan, for Studio's funnel and for
-// Join on the community site's private twin. Each caller validates its own
-// return addresses first (Studio's origin; the twin's own /join). Access comes
-// only from the provider's verified webhook, never from the return.
-export async function startCommunityJoinCheckoutCore(
-  ctx: any,
-  args: {
-    communitySlug: string;
-    billingPeriod: string;
-    successUrl: string;
-    cancelUrl: string;
-    authSubject?: string;
-    // Set only by a caller that verified the session itself (the twin's edge
-    // session, in an http action that has no Convex identity of its own).
-    trustedUserId?: string;
-  },
-): Promise<{ ok: true; session_id: string; checkout_url: string }> {
-  const nowMs = Date.now();
-  const cancelUrl = args.cancelUrl;
-  const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
-  const checkoutConfig = (await ctx.runQuery(
-    internal.communityCommerce.resolvePublicCommunityCheckoutConfigInternal as any,
-    {
-      communitySlug: args.communitySlug,
-      billingPeriod,
-      nowMs,
-    },
-  )) as {
-    communityId: any;
-    communitySlug: string;
-    communityName: string;
-    billingPeriod: "monthly" | "annual";
-    pricePointId: any;
-    amountBaseUnits: number;
-    currency: string;
-    currencyDecimals: number;
-    providerPriceId: string | null;
-    providerAccountId: string;
-    platformFeeBps: number;
-    oneLiner: string | null;
-    communityLifecycleGeneration: number;
-  };
-  requireStripeConnectWebhookConfiguration();
-  const sessionId = newOpaqueToken("chk");
-  const claimToken = newOpaqueToken("claim");
-  const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-  if (!args.authSubject) {
-    throw new Error("auth_subject_required");
-  }
-  // Studio: the caller's verified Polynet identity. The twin: the member its
-  // edge-verified session belongs to.
-  const actor = (args.trustedUserId
-    ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
-      authSubject: args.authSubject, userId: args.trustedUserId,
-    })
-    : await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
-      authSubject: args.authSubject,
-    })) as { dbUserId?: unknown; email?: string | null } | null;
-  const ownerUserId: unknown = actor?.dbUserId;
-  const ownerEmail: string | null = actor?.email ?? null;
-  if (!ownerUserId) throw new Error("auth_subject_required");
-  await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
-    communityId: checkoutConfig.communityId,
-    userId: ownerUserId,
-  });
-  const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
-    ctx,
-    userId: ownerUserId,
-    email: ownerEmail,
-    providerAccountId: checkoutConfig.providerAccountId,
-    nowMs,
-  });
+/** The Stripe price for a price point on the owner's connected account, made the first time it is sold. */
+export async function ensureCommunityProviderPriceId(ctx: any, checkoutConfig: {
+  communityId: any; communitySlug: string; communityName: string; billingPeriod: "monthly" | "annual";
+  pricePointId: any; amountBaseUnits: number; currency: string; providerPriceId: string | null;
+  providerAccountId: string; oneLiner: string | null; offerName?: string | null;
+}, nowMs: number): Promise<string> {
   let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
   if (!providerPriceId) {
     const existingProviderPrice = (await ctx.runQuery(
@@ -1119,7 +1053,9 @@ export async function startCommunityJoinCheckoutCore(
     const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
     const priceIdempotencyKey = `community-price:${checkoutConfig.providerAccountId}:${pricePointId}`;
     const product = await stripe.products.create({
-      name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
+      name: checkoutConfig.offerName
+        ? `${checkoutConfig.communityName} · ${checkoutConfig.offerName} (${checkoutConfig.billingPeriod})`
+        : `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
       description: checkoutConfig.oneLiner ?? undefined,
       metadata: {
         community_id: String(checkoutConfig.communityId),
@@ -1160,6 +1096,121 @@ export async function startCommunityJoinCheckoutCore(
     providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
     if (!providerPriceId) throw new Error("provider_price_id_required");
   }
+  return providerPriceId;
+}
+
+export const startPublicCommunityCheckout = action({
+  args: {
+    communitySlug: v.string(),
+    billingPeriod: v.string(),
+    offerKey: v.optional(v.string()),
+    successUrl: v.string(),
+    cancelUrl: v.string(),
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
+    // Studio's funnel: both return addresses on Studio's own origin.
+    const cancelUrl = requireCanonicalCheckoutReturnUrl(
+      args.cancelUrl,
+      "checkout_cancel_url_invalid",
+    );
+    const successUrl = requireCanonicalCheckoutReturnUrl(
+      args.successUrl,
+      "checkout_success_url_invalid",
+    );
+    return await startCommunityJoinCheckoutCore(ctx, {
+      communitySlug: args.communitySlug,
+      billingPeriod: args.billingPeriod,
+      offerKey: args.offerKey,
+      successUrl,
+      cancelUrl,
+      authSubject: args.authSubject,
+    });
+  },
+});
+
+// The one checkout for a community's paid plan, for Studio's funnel and for
+// Join on the community site's private twin. Each caller validates its own
+// return addresses first (Studio's origin; the twin's own /join). Access comes
+// only from the provider's verified webhook, never from the return.
+export async function startCommunityJoinCheckoutCore(
+  ctx: any,
+  args: {
+    communitySlug: string;
+    billingPeriod: string;
+    // A higher offer on the ladder; left out buys the membership.
+    offerKey?: string;
+    successUrl: string;
+    cancelUrl: string;
+    authSubject?: string;
+    // Set only by a caller that verified the session itself (the twin's edge
+    // session, in an http action that has no Convex identity of its own).
+    trustedUserId?: string;
+  },
+): Promise<{ ok: true; session_id: string; checkout_url: string }> {
+  const nowMs = Date.now();
+  const cancelUrl = args.cancelUrl;
+  const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
+  const checkoutConfig = (await ctx.runQuery(
+    internal.communityCommerce.resolvePublicCommunityCheckoutConfigInternal as any,
+    {
+      communitySlug: args.communitySlug,
+      billingPeriod,
+      offerKey: args.offerKey,
+      nowMs,
+    },
+  )) as {
+    communityId: any;
+    communitySlug: string;
+    communityName: string;
+    billingPeriod: "monthly" | "annual";
+    pricePointId: any;
+    amountBaseUnits: number;
+    currency: string;
+    currencyDecimals: number;
+    providerPriceId: string | null;
+    providerAccountId: string;
+    platformFeeBps: number;
+    oneLiner: string | null;
+    communityLifecycleGeneration: number;
+    offerKey: string | null;
+    offerName: string | null;
+  };
+  requireStripeConnectWebhookConfiguration();
+  const sessionId = newOpaqueToken("chk");
+  const claimToken = newOpaqueToken("claim");
+  const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
+  if (!args.authSubject) {
+    throw new Error("auth_subject_required");
+  }
+  // Studio: the caller's verified Polynet identity. The twin: the member its
+  // edge-verified session belongs to.
+  const actor = (args.trustedUserId
+    ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
+      authSubject: args.authSubject, userId: args.trustedUserId,
+    })
+    : await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+      authSubject: args.authSubject,
+    })) as { dbUserId?: unknown; email?: string | null } | null;
+  const ownerUserId: unknown = actor?.dbUserId;
+  const ownerEmail: string | null = actor?.email ?? null;
+  if (!ownerUserId) throw new Error("auth_subject_required");
+  await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
+    communityId: checkoutConfig.communityId,
+    userId: ownerUserId,
+  });
+  const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
+    ctx,
+    userId: ownerUserId,
+    email: ownerEmail,
+    providerAccountId: checkoutConfig.providerAccountId,
+    nowMs,
+  });
+  const providerPriceId = await ensureCommunityProviderPriceId(ctx, checkoutConfig, nowMs);
   await ctx.runMutation(
     internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
     {
@@ -1202,6 +1253,7 @@ export async function startCommunityJoinCheckoutCore(
         community_slug: checkoutConfig.communitySlug,
         community_price_point_id: String(checkoutConfig.pricePointId),
         billing_period: billingPeriod,
+        ...(checkoutConfig.offerKey ? { offer_key: checkoutConfig.offerKey } : {}),
       },
       subscription_data: {
         application_fee_percent: checkoutConfig.platformFeeBps / 100,
@@ -1316,6 +1368,21 @@ export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
       communityId: args.communityId,
       userId: args.userId,
     });
+    // A member who already pays moves up with Upgrade, which switches their
+    // plan; a second checkout would bill them for two.
+    const membership = (await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
+      .first()) as CommunityMembershipLike | null;
+    if (membership && communityMembershipRowIsActive(membership)) {
+      const subscriptions = (await ctx.db
+        .query("communitySubscriptions" as any)
+        .withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id))
+        .take(20)) as Array<Record<string, any>>;
+      if (subscriptions.some((row) => ["active", "past_due", "cancel_at_period_end"].includes(String(row.status)))) {
+        throw new Error("offer_checkout_already_paying");
+      }
+    }
     return { ok: true };
   },
 });

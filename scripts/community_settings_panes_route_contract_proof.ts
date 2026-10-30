@@ -91,12 +91,12 @@ assert.doesNotMatch(
 );
 assert.match(
   settingsSection,
-  /selectedSettingsPane === "danger" && isOwnerSettingsLayer[\s\S]*CommunityDangerSettingsSection/,
+  /selectedSettingsPane === "danger" && isOwnerSettingsLayer[\s\S]*CommunityArchiveCard/,
   "Danger must be an owner-only archive surface",
 );
 assert.match(
   settingsSection,
-  /Archive freezes this community[\s\S]*Restoring it later[\s\S]*\$79\/month/,
+  /Freezes the community, removes member access[\s\S]*Restoring it later[\s\S]*\$79\/month/,
   "the archive confirmation must state the frozen and paid-restoration consequences",
 );
 assert.doesNotMatch(
@@ -246,7 +246,7 @@ assert.match(
 );
 assert.doesNotMatch(
   settingsSection,
-  /workflows|WebCommunityOnboardingWorkflowSection/,
+  /WebCommunityOnboardingWorkflowSection|selectedSettingsPane === "workflows"/,
   "retired deterministic onboarding must not survive as a settings pane",
 );
 assert.match(
@@ -271,7 +271,7 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /if \(activePane !== pane\) \{[\s\S]*onSelectPane\(pane, source === "keyboard" \? \{ replace: true \} : undefined\);[\s\S]*\}/,
+  /if \(pane !== selectedSettingsPane\) onSelectPane\(pane\)/,
   "clicking the active pane must not add duplicate history entries",
 );
 assert.match(
@@ -281,7 +281,7 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /function CommunityMemberSettingsSection[\s\S]*Member settings[\s\S]*Mute community[\s\S]*Leave community/,
+  /function CommunityMemberSettings\b[\s\S]*Mute this community[\s\S]*Leave community/,
   "non-managers should see member-level community settings without owner/admin panes",
 );
 assert.match(

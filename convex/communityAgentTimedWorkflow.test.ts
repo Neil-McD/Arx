@@ -6,6 +6,7 @@ import schema from "./schema";
 import type { Id } from "./_generated/dataModel";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
+import { runWorkflowTimerNow } from "./communityMemberWorkflows";
 import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 import { executeConciergeTool } from "./communityAgentServeWorker";
 import * as serviceChannelCore from "./communityMemberServiceChannelCore";
@@ -243,6 +244,21 @@ test("each automation enrolls once; timer queues without fake posts and never mo
   const [request] = await s.requests();
   expect(request).toMatchObject({ status: "queued", serviceChannelId: s.f.channelId, serviceChannelRevision: 1 });
   expect(request.sourceRootId).toBeUndefined();
+});
+
+test("a wait the owner skips still lets its agent step run before the due time", async () => {
+  const s = await setup();
+  await s.t.run(async ctx => {
+    const timer = (await ctx.db.query("communityMemberWorkflowTimers").first())!;
+    expect(timer.dueAt).toBeGreaterThan(Date.now());
+    expect(await runWorkflowTimerNow(ctx, timer)).toBe(true);
+  });
+  expect((await s.requests())[0]).toMatchObject({ status: "queued" });
+  const claim = await s.claim();
+  expect(claim.requestId).toBeTruthy();
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal,
+    { requestId: claim.requestId!, expectedAttempt: claim.attempt! });
+  expect(context.ok).toBe(true);
 });
 
 test("missing destination is recorded, with no fallback or later replay", async () => {

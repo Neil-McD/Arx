@@ -1,12 +1,18 @@
+import type { ReactNode } from "react";
 import type { WebDesktopShellHeaderProps } from "./webShellChromeShared";
 import { isDesktopShellContextualBackPage } from "../../../../shared/appShellNavigation";
 
-export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
+// Inside a community (Channels layout) the bar's buttons float over the
+// community's page, so they take its theme; trailing is its Display menu, at
+// the far right after Messages.
+export function WebDesktopShellHeader(
+  props: WebDesktopShellHeaderProps & { trailing?: ReactNode; communityTheme?: string | null },
+) {
   const hasPublicFunnelBack =
     props.isPublicCommunityFunnel && props.hasBackTargetSnapshot;
   const hasTopbarRightActions =
     !props.isPublicCommunityFunnel &&
-    Boolean(props.directMessagesButton);
+    Boolean(props.directMessagesButton || props.trailing);
   const hasContextualAppBack =
     !props.isPublicCommunityFunnel &&
     (isDesktopShellContextualBackPage(props.activePage) ||
@@ -59,7 +65,17 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
       </div>
 
       <div className={topbarRightClassName}>
-        {props.isPublicCommunityFunnel ? null : props.directMessagesButton}
+        {props.communityTheme && !props.isPublicCommunityFunnel ? (
+          <div className="community-theme-scope" data-community-theme={props.communityTheme}>
+            {props.directMessagesButton}
+            {props.trailing}
+          </div>
+        ) : (
+          <>
+            {props.isPublicCommunityFunnel ? null : props.directMessagesButton}
+            {props.isPublicCommunityFunnel ? null : props.trailing}
+          </>
+        )}
       </div>
     </header>
   );

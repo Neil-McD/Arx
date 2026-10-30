@@ -1,0 +1,215 @@
+{
+  "page": "<path to clo-course/business-x-ray.html>",
+  "outDir": "<embeds dir>/xray",
+  "inlineCss": [
+    "tokens.css",
+    "shell.css",
+    "excalifont.css"
+  ],
+  "dropScripts": [
+    "nav.js",
+    "toc.js",
+    "shell.js",
+    "session-chip.js"
+  ],
+  "bootCall": "goToLesson",
+  "storageKeys": [
+    "bxr-scores"
+  ],
+  "themeMap": {
+    "--accent": [
+      "--pn-accent",
+      "#2D8C3C"
+    ],
+    "--accent-ink": [
+      "--pn-on-accent",
+      "#FFFFFF"
+    ],
+    "--font-body": [
+      "--pn-font-body",
+      "\"Segoe UI\",system-ui,sans-serif"
+    ],
+    "--font-accent": [
+      "--pn-font-heading",
+      "'Excalifont',\"Segoe UI\",system-ui,sans-serif"
+    ],
+    "--bg-400": [
+      "--pn-background",
+      "#FAFAFA"
+    ],
+    "--bg-300": [
+      "--pn-background",
+      "#FAFAFA"
+    ],
+    "--bg-100": [
+      "--pn-surface",
+      "#FFFFFF"
+    ],
+    "--bg-000": [
+      "--pn-surface",
+      "#FFFFFF"
+    ],
+    "--text-100": [
+      "--pn-text",
+      "#21211E"
+    ],
+    "--text-200": [
+      "--pn-text",
+      "#3D3D38"
+    ],
+    "--text-300": [
+      "--pn-muted",
+      "#5F5F57"
+    ],
+    "--text-400": [
+      "--pn-muted",
+      "#6B6B63"
+    ],
+    "--border-100": [
+      "--pn-border",
+      "#ECECE6"
+    ]
+  },
+  "widgets": [
+    {
+      "id": "business-map",
+      "title": "The Business Map, 7 columns",
+      "lesson": "biz-map",
+      "keep": [
+        [
+          ".svg-wrap",
+          "#mapInfo"
+        ]
+      ],
+      "height": 640
+    },
+    {
+      "id": "bowtie",
+      "title": "The Bow-Tie Funnel, 7 stages",
+      "lesson": "bowtie",
+      "keep": [
+        [
+          ".svg-wrap",
+          "#bowtieInfo"
+        ]
+      ],
+      "height": 420
+    },
+    {
+      "id": "levels",
+      "title": "The 3 levels",
+      "lesson": "level3",
+      "keep": [
+        [
+          "#levelCards"
+        ]
+      ],
+      "height": 560
+    },
+    {
+      "id": "level3-drilldown",
+      "title": "Level 3 drill-down",
+      "lesson": "level3",
+      "keep": [
+        [
+          ".toggle-wrap",
+          ".level3-grid"
+        ]
+      ],
+      "height": 480
+    },
+    {
+      "id": "annotations",
+      "title": "The annotation system",
+      "lesson": "annotations",
+      "keep": [
+        [
+          ".ann-grid",
+          ".svg-wrap"
+        ]
+      ],
+      "height": 780
+    },
+    {
+      "id": "swimlanes",
+      "title": "Process swim lanes",
+      "lesson": "swimlanes",
+      "keep": [
+        [
+          ".swim-tabs",
+          ".signals"
+        ]
+      ],
+      "height": 560
+    },
+    {
+      "id": "asset-map",
+      "title": "The 24 digital assets",
+      "lesson": "asset-map",
+      "keep": [
+        [
+          "#assetMap"
+        ]
+      ],
+      "height": 980
+    },
+    {
+      "id": "asset-explorer",
+      "title": "Asset explorer",
+      "lesson": "asset-map",
+      "keep": [
+        [
+          "#assetsWalkthrough"
+        ]
+      ],
+      "height": 1000
+    },
+    {
+      "id": "asset-scorecard",
+      "title": "Score your 24 assets",
+      "lesson": "assets-score",
+      "keep": [
+        [
+          "#archPills",
+          ".assets-layout"
+        ]
+      ],
+      "also": [
+        "#drawerOverlay",
+        "#drawer"
+      ],
+      "height": 1200
+    }
+  ],
+  "dump": {
+    "MAP_COLS": "MAP_COLS",
+    "BOWTIE_STAGES": "BOWTIE_STAGES",
+    "SWIM_DATA": "SWIM_DATA",
+    "CATEGORIES": "CATEGORIES",
+    "TIERS": "TIERS",
+    "ARCHETYPES": "ARCHETYPES",
+    "ASSETS": "ASSETS"
+  },
+  "dumpLessons": [
+    {
+      "name": "levelTips",
+      "lesson": "level3",
+      "expr": "[...document.querySelectorAll('[id^=levelTip]')].map(e => e.innerText.trim())"
+    },
+    {
+      "name": "level3Views",
+      "lesson": "level3",
+      "expr": "(() => { const a = document.querySelector('.level3-grid').innerText.trim(); toggleLevel3View(); const b = document.querySelector('.level3-grid').innerText.trim(); return [a, b]; })()"
+    },
+    {
+      "name": "annCards",
+      "lesson": "annotations",
+      "expr": "[...document.querySelectorAll('.ann-card')].map(e => e.innerText.trim())"
+    },
+    {
+      "name": "signals",
+      "lesson": "swimlanes",
+      "expr": "[...document.querySelectorAll('.signal-card')].map(e => e.innerText.trim())"
+    }
+  ]
+}

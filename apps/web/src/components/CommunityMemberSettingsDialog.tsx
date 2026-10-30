@@ -16,6 +16,7 @@ export type CommunityMemberSettingsMember = {
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
   role: string;
+  co_creator?: boolean;
   created_at?: string | null;
 };
 
@@ -43,7 +44,7 @@ type CommunityMemberSettingsDialogProps = {
   displayName: (userId: string) => string;
   getInitials: (value: string) => string;
   communityInitials: (value: string) => string;
-  handleSetCommunityMemberRole: (membershipId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
+  handleSetCommunityMemberRole: (membershipId: string, role: "co_creator" | "admin" | "moderator" | "member") => Promise<void> | void;
   handleRemoveCommunityMember: (membershipId: string) => Promise<void> | void;
   handleBanCommunityMember: (membershipId: string) => Promise<void> | void;
   loadMemberBillingHistory: (membershipId: string) => Promise<CloudCommunityMemberBillingHistory | null>;
@@ -185,11 +186,22 @@ function formatBillingEventDetail(event: CloudCommunityMemberBillingHistoryEvent
   ].filter(Boolean).join(" • ");
 }
 
-function normalizeRole(roleRaw: string | null | undefined): "admin" | "moderator" | "member" {
+type RoleChoice = "co_creator" | "admin" | "moderator" | "member";
+
+// A co-creator is an admin the owner made one of the community's creators.
+function normalizeRole(roleRaw: string | null | undefined, coCreator?: boolean): RoleChoice {
   const role = String(roleRaw ?? "").trim().toLowerCase();
+  if (role === "admin" && coCreator) return "co_creator";
   if (role === "admin" || role === "moderator" || role === "member") return role;
   return "member";
 }
+
+const ROLE_LABEL: Record<RoleChoice, string> = {
+  co_creator: "Co-creator",
+  admin: "Admin",
+  moderator: "Moderator",
+  member: "Member",
+};
 
 export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDialogProps) {
   const [memberBillingHistoryByMemberId, setMemberBillingHistoryByMemberId] =
@@ -205,7 +217,7 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
   const activeCommunityId = props.activeCommunity?.id ?? "";
   const canViewMemberPlanDetails = props.canViewMemberPlanDetails;
   const loadMemberBillingHistory = props.loadMemberBillingHistory;
-  const memberRole = normalizeRole(member?.role);
+  const memberRole = normalizeRole(member?.role, member?.co_creator);
   const memberIsOwner = Boolean(
     member &&
       (
@@ -214,7 +226,7 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
         member.id.startsWith("owner:")
       ),
   );
-  const memberIsAdmin = memberRole === "admin";
+  const memberIsAdmin = memberRole === "admin" || memberRole === "co_creator";
   const displayName = member
     ? String(
       profile?.display_name ??
@@ -251,9 +263,9 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
   );
   const roleOptions = member
     ? props.isActiveCommunityOwner
-      ? (["member", "moderator", "admin"] as const)
+      ? (["member", "moderator", "admin", "co_creator"] as const)
       : memberIsAdmin
-        ? (["admin"] as const)
+        ? ([memberRole] as const)
         : (["member", "moderator"] as const)
     : (["member", "moderator"] as const);
 
@@ -352,7 +364,7 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
                 <div className="member-settings-summary-name-row">
                   <span className="member-settings-summary-name">{displayName}</span>
                   <span className="member-settings-role-badge">
-                    {memberIsOwner ? "Owner" : memberRole}
+                    {memberIsOwner ? "Owner" : ROLE_LABEL[memberRole]}
                   </span>
                 </div>
                 <div className="member-settings-summary-meta">
@@ -367,14 +379,14 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
                 value={memberRole}
                 disabled={!canChangeRole}
                 onChange={(event) => {
-                  const next = event.target.value as "admin" | "moderator" | "member";
+                  const next = event.target.value as RoleChoice;
                   if (next === memberRole) return;
                   void props.handleSetCommunityMemberRole(member.id, next);
                 }}
               >
                 {roleOptions.map((role) => (
                   <option key={role} value={role}>
-                    {role}
+                    {ROLE_LABEL[role]}
                   </option>
                 ))}
               </select>

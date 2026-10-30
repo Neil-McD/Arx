@@ -202,3 +202,51 @@ describe("last-visited default entry", () => {
     });
   });
 });
+
+describe("welcome flow entry", () => {
+  async function holdForWelcome(ctx: any, communityId: any, ownerId: any, membershipId: any) {
+    const workflowId = await ctx.db.insert("communityMemberWorkflows", {
+      communityId, welcomeGate: true, revision: 1, createdByUserId: ownerId, updatedByUserId: ownerId,
+      milestones: [{ key: "onboarding", name: "Onboarding", automations: [{
+        key: "welcome", trigger: { type: "member_joined" }, action: { key: "intake", type: "request_form", formKey: "intake" },
+      }] }],
+      createdAt: nowMs, updatedAt: nowMs,
+    });
+    const formId = await ctx.db.insert("communityForms", {
+      communityId, key: "intake", name: "Intake", questions: [], revision: 1, publishedRevision: 1, createdAt: nowMs, updatedAt: nowMs,
+    });
+    const versionId = await ctx.db.insert("communityFormVersions", {
+      communityId, formId, revision: 1, name: "Intake", questions: [], publishedBy: ownerId, publishedAt: nowMs,
+    });
+    const workflowRunId = await ctx.db.insert("communityMemberWorkflowRuns", {
+      communityId, workflowId, membershipId, activationSequence: 1, milestoneKey: "onboarding", milestoneName: "Onboarding",
+      milestoneEnteredAt: nowMs, workflowRevision: 1, automationKey: "welcome", triggerType: "member_joined",
+      triggerReceiptRef: `member_joined:${membershipId}:1`, actionSnapshot: { key: "intake", type: "request_form", formKey: "intake" },
+      status: "finished", createdAt: nowMs, updatedAt: nowMs,
+    });
+    return await ctx.db.insert("communityFormRequests", {
+      communityId, membershipId, workflowId, workflowRunId, automationKey: "welcome", milestoneKey: "onboarding",
+      milestoneEnteredAt: nowMs, activationSequence: 1, formKey: "intake", versionId, status: "pending",
+      answers: {}, revision: 1, createdAt: nowMs, updatedAt: nowMs,
+    });
+  }
+
+  test("a member who left the welcome flow halfway lands back on it", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, requestId } = await t.run(async (ctx) => {
+      const ownerId = await insertCompletedUser(ctx, "welcome-owner");
+      const userId = await insertCompletedUser(ctx, "welcome-member");
+      const held = await insertCommunity(ctx, ownerId, "held");
+      const other = await insertCommunity(ctx, ownerId, "other");
+      const heldMembership = await insertMembership(ctx, held, userId, nowMs + 1);
+      // The other community is newer, so it would win without the welcome flow.
+      await insertMembership(ctx, other, userId, nowMs + 2);
+      const requestId = await holdForWelcome(ctx, held, ownerId, heldMembership);
+      return { userId, requestId };
+    });
+    await expect(resolve(t, userId)).resolves.toMatchObject({ page: "community", community_slug: "held" });
+
+    await t.run(async (ctx) => ctx.db.patch(requestId, { status: "submitted", submittedAt: nowMs + 3 }));
+    await expect(resolve(t, userId)).resolves.toMatchObject({ page: "community", community_slug: "other" });
+  });
+});

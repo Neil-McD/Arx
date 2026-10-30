@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowLeft, Hash, Settings } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
@@ -33,6 +34,8 @@ type WebMobileTopBarProps = {
   onOpenMembers: () => void;
   canOpenCommunitySettings?: boolean;
   onOpenCommunitySettings?: (() => void) | null;
+  /** The member's Display menu (light/dark, Classroom/Channels); shown on the community home. */
+  displayMenu?: ReactNode;
 };
 
 function formatMemberCount(value: number | null): string | null {
@@ -70,6 +73,7 @@ export function WebMobileTopBar({
   onOpenMembers,
   canOpenCommunitySettings = false,
   onOpenCommunitySettings = null,
+  displayMenu = null,
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
   const isAgent = mode === "agent";
@@ -190,6 +194,7 @@ export function WebMobileTopBar({
       </div>
 
       <div className="mobile-topbar-right">
+        {isCommunityHome ? displayMenu : null}
         {isCommunityHome && canOpenCommunitySettings && onOpenCommunitySettings ? (
           <button
             type="button"

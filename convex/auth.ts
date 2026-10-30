@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { isTestMemberAuthSubject } from "./communityTestMemberCore";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -66,7 +67,8 @@ function seedAuthenticatedProfile(args: {
   displayName: string | null;
   avatarUrl: string | null;
 } {
-  const hintedEmail = normalizeOptionalString(args.email);
+  // A test member never takes an email, not even the owner's from the browser.
+  const hintedEmail = isTestMemberAuthSubject(args.identity.authSubject) ? null : normalizeOptionalString(args.email);
   const email = args.identity.email ?? hintedEmail;
   const identityVerifiedForEmail = Boolean(
     args.identity.emailVerified &&

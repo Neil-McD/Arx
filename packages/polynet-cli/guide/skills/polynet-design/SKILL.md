@@ -160,6 +160,9 @@ Port Wren Lantern Guild (made up), from one sentence of brief:
 
 Match that specificity, then go further.
 
+For the craft underneath every choice (type, colour, space, hierarchy,
+polish, and the tells of a generic AI look), read `polynet-ui-design`.
+
 Bold design and accessible design are the same craft: strong contrast and
 confident type help everyone. `polynet-accessibility` is the last pass, not
 the first constraint.

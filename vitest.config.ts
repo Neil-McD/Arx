@@ -11,7 +11,7 @@ export default defineConfig({
   }],
   test: {
     environment: "edge-runtime",
-    include: ["convex/**/*.test.ts", "scripts/**/*.test.ts", "infra/**/src/**/*.test.ts"],
+    include: ["convex/**/*.test.ts", "scripts/**/*.test.ts", "infra/**/src/**/*.test.ts", "apps/web/src/**/*.test.ts"],
     server: { deps: { inline: [/\.bundle\.js$/] } },
   },
 });

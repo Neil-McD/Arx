@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -6,10 +7,11 @@ import {
   type DragEvent,
   type MouseEvent,
 } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronsDown, ChevronsUp, GripVertical, Plus } from "lucide-react";
-import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronsDown, ChevronsUp, Eye, EyeOff, GripVertical, Plus } from "lucide-react";
+import { buildCommunityResourceEvidenceRef } from "../../../../shared/communityEvidenceContract";
 import type {
   CommunityResource,
+  CommunityResourceVersion,
   CommunityResourceModule,
   CommunityResourcesActions,
   CommunityResourcesCapabilities,
@@ -17,15 +19,29 @@ import type {
 } from "./communityResourcesContracts";
 import {
   WebCommunityResourceViewerContent,
+  type WebLessonCoursePlace,
   type WebCommunityResourceInlineEditorField,
+  type WebLessonActivity,
 } from "./WebCommunityResourceViewerContent";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
-import { ResourceCourseCatalog } from "./ResourceCourseCatalog";
+import { WebLessonVersionHistory } from "./WebLessonVersionHistory";
+import { ResourceCourseCatalog, type ResourceCourseProgress } from "./ResourceCourseCatalog";
+import { setMemberViewOn, useMemberView, useOfferMemberView } from "./memberViewStore";
+import { createBrowserCommunityEmbedStorage, type CommunityEmbedContext } from "../../../../shared/communityEmbedUi";
 
 type CommunityResourcesPanelProps = {
   capabilities: CommunityResourcesCapabilities;
   state: CommunityResourcesState;
   actions: CommunityResourcesActions;
+  // The viewing member's progress per course (module id), when known.
+  courseProgress?: Readonly<Record<string, ResourceCourseProgress>>;
+  // The member's answers to lesson buttons, checklists, quizzes and forms.
+  lessonActivity?: WebLessonActivity | null;
+  // Open this lesson in the editor (from the Roadmap's "Edit lesson"); a new key asks again.
+  editRequest?: { resourceId: string; key: number } | null;
+  // False while this panel is mounted but hidden (another Knowledge tab is open),
+  // so the top bar doesn't offer a member view this page can't show.
+  memberViewOffered?: boolean;
 };
 
 const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
@@ -87,6 +103,15 @@ function moveOrderedId(ids: string[], id: string, direction: ReorderDirection): 
   return nextIds;
 }
 
+// Below this width the lesson outline sits above the lesson, so it starts folded.
+function isNarrowViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
+}
+
+function lessonCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "lesson" : "lessons"}`;
+}
+
 function PinIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -131,6 +156,10 @@ function MoreIcon() {
 function ResourceRailItem(props: {
   resource: CommunityResource;
   isActive: boolean;
+  // The member finished this lesson (null when progress isn't known).
+  isDone: boolean | null;
+  // Opened but not finished: a half-filled circle, so it reads apart from not started.
+  isStarted?: boolean;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -150,6 +179,8 @@ function ResourceRailItem(props: {
   const {
     resource,
     isActive,
+    isDone,
+    isStarted = false,
     onSelect,
     onEdit,
     onDelete,
@@ -209,6 +240,11 @@ function ResourceRailItem(props: {
         aria-current={isActive ? "page" : undefined}
         onClick={onSelect}
       >
+        {isDone !== null ? (
+          <span className={`knowledge-resource-item-status${isDone ? " is-done" : isStarted ? " is-started" : ""}`} aria-label={isDone ? "Done" : isStarted ? "In progress" : "Not started"} role="img">
+            {isDone ? <Check aria-hidden="true" /> : null}
+          </span>
+        ) : null}
         <span className="knowledge-resource-item-copy">
           <span className="knowledge-resource-item-topline">
             <span className="knowledge-resource-item-title" title={resource.title}>
@@ -313,8 +349,21 @@ function ResourceRailItem(props: {
 
 
 export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
-  const { capabilities, state, actions } = props;
+  const { capabilities, state, actions, courseProgress } = props;
   const selectedModuleId = state.selectedModuleId;
+  // Widget answers are kept per member on the server when signed in, and in
+  // this browser otherwise.
+  const embedStorage = props.lessonActivity?.embedStorage ?? null;
+  const communityEmbeds = useMemo<CommunityEmbedContext | null>(
+    () =>
+      capabilities.activeCommunityId && capabilities.activeCommunitySiteOrigin
+        ? {
+            siteOrigin: capabilities.activeCommunitySiteOrigin,
+            storage: embedStorage ?? createBrowserCommunityEmbedStorage(capabilities.activeCommunityId),
+          }
+        : null,
+    [capabilities.activeCommunityId, capabilities.activeCommunitySiteOrigin, embedStorage],
+  );
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [pendingDeleteResourceId, setPendingDeleteResourceId] = useState<string | null>(null);
   const [isDeletingResource, setIsDeletingResource] = useState(false);
@@ -328,12 +377,15 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const draggingResourceModuleIdRef = useRef<string | null>(null);
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [isCourseOutlineOpen, setIsCourseOutlineOpen] = useState(true);
+  // View as member lives in the top bar; this page offers it to owners.
+  const memberView = useMemberView();
+  useOfferMemberView(capabilities.canOperateResources && props.memberViewOffered !== false);
+  const isPreviewMode = capabilities.canOperateResources && memberView.on;
+  const setIsPreviewMode = setMemberViewOn;
+  const [isCourseOutlineOpen, setIsCourseOutlineOpen] = useState(() => !isNarrowViewport());
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
   const pageDraftCreationInFlightRef = useRef(false);
   const canManageResources = capabilities.canOperateResources && !isPreviewMode;
-  const previewSwitcherStyle = buildPlatformSwitcherStyle(2, isPreviewMode ? 1 : 0);
 
   const pendingDeleteResource = useMemo(
     () => state.resources.find((resource) => resource.id === pendingDeleteResourceId) ?? null,
@@ -397,8 +449,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       .map((section) => ({
         module: section.module,
         lessonCount: state.resourceRead.hasData ? section.lessonResources.length : null,
+        progress: courseProgress?.[section.module.id] ?? null,
       })),
-    [moduleSections, state.resourceRead.hasData],
+    [moduleSections, state.resourceRead.hasData, courseProgress],
   );
   const allLessonResources = useMemo(
     () => moduleSections.flatMap((section) => section.lessonResources),
@@ -408,6 +461,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!selectedModuleId) return null;
     return moduleViews.find((module) => module.id === selectedModuleId) ?? null;
   }, [moduleViews, selectedModuleId]);
+  const selectedModuleProgress = selectedModule ? courseProgress?.[selectedModule.id] ?? null : null;
+  const selectedCourseProgress =
+    selectedModuleProgress && selectedModuleProgress.total > 0 && !selectedModuleProgress.lockedReason ? selectedModuleProgress : null;
   const selectedModuleSection = useMemo(
     () => selectedModule
       ? moduleSections.find((section) => section.module.id === selectedModule.id) ?? null
@@ -460,7 +516,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [capabilities.activeCommunityId]);
 
   useEffect(() => {
-    setIsCourseOutlineOpen(true);
+    setIsCourseOutlineOpen(!isNarrowViewport());
   }, [selectedModuleId]);
 
   useEffect(() => {
@@ -686,9 +742,91 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       actions.handleSelectModule(resource.module_id);
     }
     setSelectedLessonId(resource.id);
-    if (window.matchMedia("(max-width: 900px)").matches) {
+    if (isNarrowViewport()) {
       setIsCourseOutlineOpen(false);
     }
+  };
+
+  // Where the open lesson sits in its course, for the line over its title
+  // and the Next button under it.
+  const selectedLessonPlace = useMemo<WebLessonCoursePlace | null>(() => {
+    const lessons = selectedModuleSection?.lessonResources ?? [];
+    const index = selectedResource ? lessons.findIndex((resource) => resource.id === selectedResource.id) : -1;
+    if (!selectedModule || index < 0) return null;
+    const next = lessons[index + 1] ?? null;
+    return {
+      name: selectedModule.name,
+      position: index + 1,
+      total: lessons.length,
+      next: next ? { title: next.title, open: () => handleSelectResource(next) } : null,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedModule, selectedModuleSection, selectedResource]);
+
+  // Undo after Done: the lesson as it stood when editing began. Autosave keeps
+  // saving while the owner types, so once editing ends the saved lesson is
+  // compared with this, and if it changed a toast offers to put it back.
+  type EditSessionStart = { resourceId: string; title: string; bodyMd: string | null };
+  const editSessionStartRef = useRef<EditSessionStart | null>(null);
+  const [undoCheck, setUndoCheck] = useState<EditSessionStart | null>(null);
+  const [undoOffer, setUndoOffer] = useState<EditSessionStart | null>(null);
+  const [undoNote, setUndoNote] = useState<string | null>(null);
+  const [historyResourceId, setHistoryResourceId] = useState<string | null>(null);
+  const editingResourceId = actions.resourceEditor.editingResourceId;
+  const wasEditingRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = wasEditingRef.current;
+    wasEditingRef.current = editingResourceId;
+    if (!previous || editingResourceId === previous) return;
+    const start = editSessionStartRef.current;
+    editSessionStartRef.current = null;
+    if (start?.resourceId === previous) setUndoCheck(start);
+  }, [editingResourceId]);
+  // The list reloads after the last save; compare once it has.
+  useEffect(() => {
+    if (!undoCheck) return;
+    const saved = state.resources.find((resource) => resource.id === undoCheck.resourceId);
+    if (saved && (saved.title !== undoCheck.title || (saved.body_md ?? "") !== (undoCheck.bodyMd ?? ""))) {
+      setUndoOffer(undoCheck);
+      setUndoNote(null);
+      setUndoCheck(null);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setUndoCheck(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [undoCheck, state.resources]);
+  useEffect(() => {
+    if (!undoOffer && !undoNote) return;
+    const timeoutId = window.setTimeout(() => {
+      setUndoOffer(null);
+      setUndoNote(null);
+    }, undoOffer ? 15000 : 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [undoOffer, undoNote]);
+  const undoLastEdit = async () => {
+    const offer = undoOffer;
+    if (!offer || !actions.resourceEditor.restoreVersion) return;
+    setUndoOffer(null);
+    const ok = await actions.resourceEditor.restoreVersion({ resourceId: offer.resourceId, title: offer.title, bodyMd: offer.bodyMd });
+    setUndoNote(ok ? "Changes undone." : "Couldn't undo. Open History to restore an earlier version.");
+  };
+  const historyResource = historyResourceId ? state.resources.find((resource) => resource.id === historyResourceId) ?? null : null;
+  const listVersions = actions.resourceEditor.listVersions;
+  const loadHistory = useCallback(
+    () => (historyResourceId && listVersions ? listVersions(historyResourceId) : Promise.resolve([])),
+    [historyResourceId, listVersions],
+  );
+  const restoreHistoryVersion = async (version: CommunityResourceVersion) => {
+    if (!actions.resourceEditor.restoreVersion) return false;
+    // The editor's text would be saved over the restored version, so editing stops first.
+    if (actions.resourceEditor.editingResourceId === version.resource_id) {
+      editSessionStartRef.current = null;
+      actions.resourceEditor.cancelInlineEditResource();
+      setActiveResourceEditField(null);
+    }
+    const ok = await actions.resourceEditor.restoreVersion({ revisionId: version.id });
+    if (ok) setUndoNote("Earlier version restored. The one it replaced is in History.");
+    return ok;
   };
 
   const startResourceInlineEdit = (
@@ -696,9 +834,20 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     field: WebCommunityResourceInlineEditorField,
   ) => {
     handleSelectResource(resource);
+    if (actions.resourceEditor.editingResourceId !== resource.id) {
+      editSessionStartRef.current = { resourceId: resource.id, title: resource.title, bodyMd: resource.body_md };
+    }
     actions.resourceEditor.beginInlineEditResource(resource);
     setActiveResourceEditField(field);
   };
+
+  const editRequestKey = props.editRequest?.key ?? null;
+  useEffect(() => {
+    const resource = props.editRequest ? state.resources.find((item) => item.id === props.editRequest?.resourceId) : null;
+    if (resource && capabilities.canOperateResources) startResourceInlineEdit(resource, "body");
+    // Only a new request opens the editor, not a refreshed resource list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequestKey]);
 
   const runPageDraftCreation = async (
     createDraft: () => Promise<CommunityResource | null>,
@@ -715,8 +864,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleAddPageDraft = async (moduleId: string) => {
+    // A new lesson goes last, in the order the lesson board uses too.
+    const siblings = moduleSections.find((section) => section.module.id === moduleId)?.lessonResources ?? [];
+    const order = siblings.reduce((max, resource) => Math.max(max, resource.lesson?.order ?? 0), 0) + 1;
     const created = await runPageDraftCreation(
-      () => actions.handleCreateBlankPageDraft(moduleId),
+      () => actions.handleCreateBlankPageDraft(moduleId, { order: Math.min(order, 9_999) }),
     );
     if (!created) return;
     actions.handleSelectModule(created.module_id);
@@ -736,6 +888,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     return didSave;
   };
 
+  const lessonProgress = props.lessonActivity?.progress;
+  const lessonStatusByRef = lessonProgress?.loaded ? lessonProgress.statusByRef : null;
   const renderResourceRailItem = (resource: CommunityResource) => {
     const moduleSelectionId = resource.module_id;
     if (!moduleSelectionId) return null;
@@ -752,6 +906,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         key={resource.id}
         resource={resource}
         isActive={selectedResource?.id === resource.id}
+        isDone={lessonStatusByRef ? lessonStatusByRef[buildCommunityResourceEvidenceRef(resource.id)] === "done" : null}
+        isStarted={lessonStatusByRef?.[buildCommunityResourceEvidenceRef(resource.id)] === "in_progress"}
         onSelect={() => handleSelectResource(resource)}
         onEdit={() => startResourceInlineEdit(resource, "body")}
         onDelete={() => setPendingDeleteResourceId(resource.id)}
@@ -795,6 +951,39 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       ) &&
       !actions.resourceEditor.isSaving,
   );
+  // The course's lesson style, for owners only: in the outline, and in the
+  // lesson editor's bar. Members see
+  // the style the owner picked.
+  const lessonStyleSwitch = (place: "outline" | "editor") => {
+    if (!canManageResources || !actions.handleSetModuleLessonStyle || !selectedModule) return null;
+    const current = selectedModule.lesson_style === "video" ? "video" : "article";
+    const labelId = `resource-course-style-label-${place}`;
+    return (
+      <div className={`resource-course-style-switch is-${place}`}>
+        <span className="resource-course-style-label" id={labelId}>{place === "editor" ? "Course style" : "Lesson style"}</span>
+        <div className="resource-course-style-options" role="radiogroup" aria-labelledby={labelId}>
+          {([["article", "Article"], ["video", "Video course"]] as const).map(([style, label]) => {
+            const selected = current === style;
+            return (
+              <button
+                key={style}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={selected ? "is-selected" : undefined}
+                title={style === "video" ? "Every lesson in this course opens with its video, large, above the title" : "Every lesson in this course reads as a clean page, like a newsletter post"}
+                onClick={() => {
+                  if (!selected) void actions.handleSetModuleLessonStyle?.(selectedModule, style);
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
   const selectedResourceInlineEditor =
     canManageResources && selectedResource
       ? {
@@ -816,6 +1005,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           onChangeBody: actions.resourceEditor.onChangeBody,
           onChangePinned: actions.resourceEditor.onChangePinned,
           onSave: saveResourceInlineEdit,
+          onSaveInPlace: () => actions.resourceEditor.saveInlineEditResource({ keepEditing: true }),
+          onUploadImage: actions.resourceEditor.uploadImage ?? null,
+          styleControl: lessonStyleSwitch("editor"),
+          onOpenVersions: actions.resourceEditor.listVersions && actions.resourceEditor.restoreVersion
+            ? () => setHistoryResourceId(selectedResource.id)
+            : null,
           onCancel: cancelResourceInlineEdit,
         }
       : null;
@@ -823,12 +1018,20 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   return (
     <>
       <div className="community-panel community-utility-panel resources-panel">
-        <div className="feed-header-row">
+        {isPreviewMode && memberView.inTopBar ? (
+          <div className="resources-member-view-banner" role="status">
+            <EyeOff aria-hidden="true" />
+            <span><strong>Member view.</strong> You're seeing this page as your members do.</span>
+            <button type="button" className="resources-preview-pill" onClick={() => setIsPreviewMode(false)}>Exit member view</button>
+          </div>
+        ) : null}
+        {/* Members on the catalog have nothing here, so the row isn't drawn. */}
+        {selectedModule || (capabilities.canOperateResources && !memberView.inTopBar) ? <div className="feed-header-row">
           <div className="feed-header-copy">
             {selectedModule ? (
               <button className="resources-back-btn" type="button" onClick={handleBackToCatalog}>
                 <ArrowLeft aria-hidden="true" />
-                <span>Resources</span>
+                <span>All courses</span>
               </button>
             ) : (
               <div className="resources-header">Resources</div>
@@ -839,43 +1042,29 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               capabilities.canOperateResources ? " has-preview-mode" : ""
             }`}
           >
-            {capabilities.canOperateResources ? (
+            {capabilities.canOperateResources && !memberView.inTopBar ? (
               <div className="resources-header-view-actions">
-                <div className="resources-preview-mode-control">
-                  <span className="resources-preview-mode-label">Preview mode</span>
-                  <div
-                    className="platform-switcher platform-switcher-compact resources-preview-mode-switcher"
-                    aria-label="Preview mode"
-                    style={previewSwitcherStyle}
-                  >
-                    <button
-                      className={`platform-switcher-btn${!isPreviewMode ? " is-active" : ""}`}
-                      type="button"
-                      aria-pressed={!isPreviewMode}
-                      onClick={() => setIsPreviewMode(false)}
-                    >
-                      Off
-                    </button>
-                    <button
-                      className={`platform-switcher-btn${isPreviewMode ? " is-active" : ""}`}
-                      type="button"
-                      aria-pressed={isPreviewMode}
-                      onClick={() => setIsPreviewMode(true)}
-                    >
-                      On
-                    </button>
-                  </div>
-                </div>
+                {/* The owner's look at the page as members see it: one small pill. */}
+                <button
+                  type="button"
+                  className={`resources-preview-pill${isPreviewMode ? " is-on" : ""}`}
+                  aria-pressed={isPreviewMode}
+                  title={isPreviewMode ? "Exit member view" : "See this page as members see it"}
+                  onClick={() => setIsPreviewMode(!isPreviewMode)}
+                >
+                  {isPreviewMode ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                  <span>{isPreviewMode ? "Exit member view" : "View as member"}</span>
+                </button>
               </div>
             ) : null}
           </div>
-        </div>
+        </div> : null}
 
         {readErrors.map(({ collection, message }) => <div className="resource-read-error" role="alert" key={collection}>
           <span>{collection === "modules" ? "Courses" : "Lessons"} could not be refreshed. {message}</span>{" "}
           <button type="button" onClick={() => void actions.retryRead(collection)}>Retry {collection === "modules" ? "courses" : "lessons"}</button>
         </div>)}
-        {isRefreshingResources && hasResourceContent ? <div role="status">Refreshing resources…</div> : null}
+        {isRefreshingResources && hasResourceContent ? <div role="status">Refreshing…</div> : null}
         {showInitialResourceLoading ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
@@ -927,7 +1116,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         ) : (
           <div className="knowledge-workspace resource-course-workspace" aria-busy={isRefreshingResources}>
             <aside
-              className={`knowledge-resource-rail resource-course-outline${isCourseOutlineOpen ? " is-open" : ""}`}
+              className={["knowledge-resource-rail", "resource-course-outline", isCourseOutlineOpen && "is-open"].filter(Boolean).join(" ")}
               aria-label={`${selectedModule.name} lessons`}
             >
               <button
@@ -941,10 +1130,25 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   {selectedModule.name}
                 </span>
                 <span className="resource-course-outline-count">
-                  {state.resourceRead.hasData ? selectedModuleSection?.lessonResources.length ?? 0 : <span aria-label="Lesson count not loaded">—</span>}
+                  {state.resourceRead.hasData ? lessonCountLabel(selectedModuleSection?.lessonResources.length ?? 0) : <span aria-label="Lesson count not loaded">—</span>}
                   <ChevronDown aria-hidden="true" />
                 </span>
               </button>
+              {selectedCourseProgress ? (
+                <div className="resource-course-outline-progress">
+                  <span
+                    className="resource-course-card-progress-track"
+                    role="progressbar"
+                    aria-label={`${selectedModule.name} progress`}
+                    aria-valuemin={0}
+                    aria-valuemax={selectedCourseProgress.total}
+                    aria-valuenow={selectedCourseProgress.done}
+                  >
+                    <span style={{ width: `${Math.round((selectedCourseProgress.done / selectedCourseProgress.total) * 100)}%` }} />
+                  </span>
+                  <span>{selectedCourseProgress.done} of {selectedCourseProgress.total} done</span>
+                </div>
+              ) : null}
               <div
                 id="resource-course-lesson-navigation"
                 className="resource-course-outline-scroll"
@@ -968,12 +1172,18 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   ) : null}
                 </nav>
               </div>
+              {/* Owners switch how this course reads, right where they see it
+                 ; Edit course has the same choice. */}
+              {lessonStyleSwitch("outline")}
             </aside>
             <div className="knowledge-resource-reader">
               {selectedResource ? (
                 <WebCommunityResourceViewerContent
                   resource={selectedResource}
                   editor={selectedResourceInlineEditor}
+                  communityEmbeds={communityEmbeds}
+                  lessonActivity={props.lessonActivity ?? null}
+                  course={selectedLessonPlace}
                 />
               ) : (
                 <div className="community-panel-state-shell">
@@ -984,7 +1194,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                         <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
                       </svg>
                     </div>
-                    <div className="chat-empty-title">{state.resourceRead.hasData ? "No lessons yet" : "Lessons not loaded"}</div>
+                    <div className="chat-empty-title">{state.resourceRead.hasData ? "No lessons yet" : "Loading lessons…"}</div>
                     <div className="chat-empty-text">
                       {!state.resourceRead.hasData ? "Lessons will appear once loading succeeds." : canManageResources
                         ? "Add the first lesson to begin building this course."
@@ -998,6 +1208,33 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         )}
       </div>
 
+      {historyResourceId ? (
+        <WebLessonVersionHistory
+          resourceTitle={historyResource?.title ?? ""}
+          load={loadHistory}
+          onRestore={restoreHistoryVersion}
+          onClose={() => setHistoryResourceId(null)}
+        />
+      ) : null}
+      {undoOffer || undoNote ? (
+        <div className="lesson-undo-toast" role="status" aria-live="polite">
+          <span>{undoOffer ? "Lesson saved." : undoNote}</span>
+          {undoOffer ? (
+            <button type="button" onClick={() => void undoLastEdit()}>Undo changes</button>
+          ) : null}
+          <button
+            type="button"
+            className="lesson-undo-toast-close"
+            aria-label="Dismiss"
+            onClick={() => {
+              setUndoOffer(null);
+              setUndoNote(null);
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <WebDeleteResourceModal
         isOpen={Boolean(pendingDeleteResource)}
         resourceTitle={pendingDeleteResource?.title ?? null}

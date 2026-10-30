@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { readWorkflowActionProgress } from "./communityWorkflowCompletionCore";
-import { workflowSequenceCompletionIsNew, workflowSequenceReceipt, workflowSequenceIssue } from "../shared/communityMemberWorkflow";
+import { workflowAgentSeesFacts, workflowAgentSeesFormKeys, workflowSequenceCompletionIsNew, workflowSequenceReceipt, workflowSequenceIssue } from "../shared/communityMemberWorkflow";
 import { resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import { resolveMemberServiceChannel, requireMemberFormServiceAudience } from "./communityMemberServiceChannelCore";
 import { getUniqueCommunityMembershipByPair, communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
@@ -25,12 +25,20 @@ export async function readServiceMemberContext(ctx: QueryCtx, request: any) {
   if (!membership) throw new Error("workflow_member_context_unavailable");
   const predecessor = request.workflowPreviousRunId ? await ctx.db.get(request.workflowPreviousRunId as Id<"communityMemberWorkflowRuns">) : null;
   const formSourceId = request.workflowFormRequestId ?? predecessor?.actionResult?.formRequestId;
-  const evidence = projectSubmittedFormEvidence(await readSubmittedFormRecords(ctx, membership, formSourceId));
+  // The step's picked inputs narrow today's bundle: facts only when ticked, and
+  // forms limited to the ones it names (the form that started the step always stays).
+  const run = request.workflowRunId ? await ctx.db.get(request.workflowRunId as Id<"communityMemberWorkflowRuns">) : null;
+  const sees = run?.actionSnapshot?.type === "prompt_agent" ? run.actionSnapshot.sees : undefined;
+  const formKeys = workflowAgentSeesFormKeys(sees);
+  const page = await readSubmittedFormRecords(ctx, membership, formSourceId);
+  if (formKeys) page.records = page.records.filter((record, index) =>
+    (index === 0 && formSourceId && record.request._id === formSourceId) || formKeys.includes(record.request.formKey));
+  const evidence = projectSubmittedFormEvidence(page);
   const audience = evidence.submissions.length
     ? await requireMemberFormServiceAudience({ ctx, membership }) : null;
-  const { facts, truncated } = await readBoundedMemberOrientationFacts(ctx, {
-    subjectUserId: request.requesterUserId, communityId: request.communityId,
-  });
+  const { facts, truncated } = workflowAgentSeesFacts(sees)
+    ? await readBoundedMemberOrientationFacts(ctx, { subjectUserId: request.requesterUserId, communityId: request.communityId })
+    : { facts: [], truncated: false };
   const identity = await readCanonicalUserIdentityProjection(ctx, request.requesterUserId);
   return JSON.stringify({
     display_name: String(identity?.displayName || "the member").slice(0, 120),
@@ -89,10 +97,10 @@ export async function requireServiceWorkflowDestination(ctx: any, request: any) 
       || (milestone.goal ?? "") !== (run.milestoneContextSnapshot?.goal ?? "")) throw new Error("workflow_sequence_authority_stale");
     const progress = await readWorkflowActionProgress(ctx, { workflow, membership, milestone,
       milestoneEnteredAt: run.milestoneEnteredAt, transitionSeq: run.transitionSeq });
-    const source = progress.actions.find(a => a.evidence?.run_id === String(predecessor._id));
+    const source = [...progress.actions, ...(progress.reactive_actions ?? [])].find(a => a.evidence?.run_id === String(predecessor._id));
     if (progress.scan_truncated || !source || !workflowSequenceCompletionIsNew(automation, source.evidence!.completed_at, predecessor.workflowRevision))
       throw new Error("workflow_sequence_source_stale");
-    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId });
+    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId, allowWelcome: true });
     resolved = { membership, workflow, automation };
   } else if (request.workflowFormRequestId) {
     const formRequest = await ctx.db.get(request.workflowFormRequestId);
@@ -105,7 +113,7 @@ export async function requireServiceWorkflowDestination(ctx: any, request: any) 
       || membership.communityId !== request.communityId || workflow.communityId !== request.communityId
       || (membership.activationSequence ?? 0) !== formRequest.activationSequence
       || (!request._id && !await requestIsCurrent(ctx, formRequest))) throw new Error("workflow_form_source_stale");
-    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId });
+    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId, allowWelcome: true });
     const matches = workflow.milestones.find((m: any) => m.key === formRequest.milestoneKey)?.automations.filter((a: any) =>
       a.key === run?.automationKey && a.action.type === "prompt_agent"
       && a.trigger.type === "form_submitted" && a.trigger.formKey === formRequest.formKey) ?? [];
@@ -126,7 +134,7 @@ export async function requireServiceWorkflowDestination(ctx: any, request: any) 
     await readServiceMemberContext(ctx, request);
     resolved = { membership, workflow, automation };
   } else if (!resolved || !run || timer.status === "obsolete"
-    || resolved.dueAt > Date.now()
+    || (resolved.dueAt > Date.now() && timer.runEarlyAt === undefined)
     || run.communityId !== request.communityId || run.workflowId !== timer.workflowId
     || run.membershipId !== timer.membershipId || run.automationKey !== timer.automationKey
     || run.triggerReceiptRef !== `workflow-timer:${timer._id}`

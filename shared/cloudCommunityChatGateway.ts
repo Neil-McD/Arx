@@ -193,15 +193,42 @@ export async function uploadCloudCommunityChatAttachmentFile<SessionT>(
 
 export async function downloadCloudCommunityChatAttachment<SessionT>(params: {
   session: SessionT; attachmentId: string; signal?: AbortSignal;
+  /** Give up when no bytes arrive for this long (a body that stalls after its
+   *  headers), while a slow download that keeps moving carries on. */
+  idleTimeoutMs?: number;
 }): Promise<Blob> {
   await bootstrapConvexAuthenticatedClient(params.session);
   const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
   const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
   if (!token || !baseUrl) throw new Error("Sign in to open this attachment.");
-  const response = await fetch(`${baseUrl}${COMMUNITY_ATTACHMENT_DOWNLOAD_PATH}`, {
-    method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Polynet-Attachment-Id": params.attachmentId },
-    signal: params.signal,
-  });
-  if (!response.ok) throw new Error("This attachment is unavailable or you no longer have access.");
-  return response.blob();
+  const idle = params.idleTimeoutMs ? new AbortController() : null;
+  const abortIdle = () => idle?.abort(new Error("attachment_download_idle"));
+  params.signal?.addEventListener("abort", abortIdle, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const kick = () => {
+    if (!idle) return;
+    clearTimeout(timer);
+    timer = setTimeout(abortIdle, params.idleTimeoutMs);
+  };
+  try {
+    kick();
+    const response = await fetch(`${baseUrl}${COMMUNITY_ATTACHMENT_DOWNLOAD_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Polynet-Attachment-Id": params.attachmentId },
+      signal: idle?.signal ?? params.signal,
+    });
+    if (!response.ok) throw new Error("This attachment is unavailable or you no longer have access.");
+    if (!idle || !response.body) return await response.blob();
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      kick();
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    return new Blob(chunks as BlobPart[], { type: response.headers.get("content-type") ?? "" });
+  } finally {
+    clearTimeout(timer);
+    params.signal?.removeEventListener("abort", abortIdle);
+  }
 }

@@ -36,10 +36,16 @@ assert.match(
   /contextKey=\{`main:\$\{activeCommunity\?\.id \?\? "none"\}:\$\{activeCommunityChannelSlug \|\| "general"\}`\}/,
   "main composer transient controls should reset across community and channel contexts",
 );
+// The "+" lives in the add menu (file, poll, form); it keeps the same icon.
 assert.match(
   controls,
-  /<Plus size=\{17\} strokeWidth=\{1\.8\}[\s\S]*<AtSign size=\{17\} strokeWidth=\{1\.8\}[\s\S]*<Smile size=\{17\} strokeWidth=\{1\.8\}/,
+  /<ComposerAddMenu[\s\S]*<AtSign size=\{17\} strokeWidth=\{1\.8\}[\s\S]*<Smile size=\{17\} strokeWidth=\{1\.8\}/,
   "visible insertion actions should use one icon family, size, and stroke weight",
+);
+assert.doesNotMatch(
+  read("apps/web/src/components/CommunityPostCard.tsx").match(/export function ComposerAddMenu[\s\S]*?\n\}/)?.[0] ?? "",
+  /<Plus (?!size=\{17\} strokeWidth=\{1\.8\})/,
+  "the add menu's + must match the other insertion icons",
 );
 assert.match(
   controls,

@@ -32,7 +32,16 @@ export function useWebCommunityAgentSurfaceController(params: {
           version: 1,
           kind: "community",
           community_slug: community.slug,
-          section: params.communityTab,
+          // Members and About are layout tabs the agent's context doesn't
+          // name; they read as the community itself and its public page.
+          section: params.communityTab === "members"
+            ? "chat"
+            : params.communityTab === "about"
+              ? "funnel"
+              // The members database is an owner page beside Workflows.
+              : params.communityTab === "people"
+                ? "workflows"
+                : params.communityTab,
         }
       : null;
   const isVisible =

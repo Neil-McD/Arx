@@ -33,6 +33,8 @@ export type CloudProfileAvatarFieldInput = {
 
 export type CloudProfileDetailRow = CloudProfileBase & {
   bio: string | null;
+  show_owned_communities?: boolean;
+  show_joined_communities?: boolean;
   social_links?: SocialProfileLinks | null;
   onboarding_completed_at?: string | null;
   account_setup?: AccountSetupStatus | null;
@@ -188,7 +190,8 @@ export async function fetchCloudProfileCommunityContext<SessionT>(
     preferredCommunityId,
   })) as Partial<ProfileCommunityContext> | null;
   return {
-    owned_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.owned_communities ?? []),
+    owned_communities: coerceGatewayRows<CommunityAvatarSummary & { co_creator?: boolean }>(payload?.owned_communities ?? []),
+    joined_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.joined_communities ?? []),
     mutual_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.mutual_communities ?? []),
     is_self: Boolean(payload?.is_self),
     can_message: Boolean(payload?.can_message),
@@ -300,6 +303,17 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
 
 /* Silent deterministic capture: the browser's IANA timezone for the member
    ontology's account context. Fire-and-forget from the client. */
+export async function setCloudProfileCommunityVisibility<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & { showOwned?: boolean; showJoined?: boolean },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  await client.mutation("profiles:setMyProfileCommunityVisibility" as any, {
+    authSubject,
+    ...(params.showOwned === undefined ? {} : { showOwned: params.showOwned }),
+    ...(params.showJoined === undefined ? {} : { showJoined: params.showJoined }),
+  });
+}
+
 export async function recordMemberTimezoneRpc<SessionT>(
   params: CloudProfilesGatewayParams<SessionT> & { timezone: string },
 ): Promise<void> {
@@ -308,4 +322,25 @@ export async function recordMemberTimezoneRpc<SessionT>(
     authSubject,
     timezone: params.timezone,
   });
+}
+
+// The member's own Light/Dark pick, kept on their account (null: not set there).
+export type CloudDisplayPreferences = { theme: "light" | "dark" | null; look_everywhere: boolean | null };
+
+export async function fetchCloudMyDisplayPreferences<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT>,
+): Promise<CloudDisplayPreferences> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  return await client.query("profiles:getMyDisplayPreferences" as any, { authSubject }) as CloudDisplayPreferences;
+}
+
+export async function setCloudMyDisplayPreferences<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & { theme?: "light" | "dark"; lookEverywhere?: boolean },
+): Promise<CloudDisplayPreferences> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  return await client.mutation("profiles:setMyDisplayPreferences" as any, {
+    authSubject,
+    ...(params.theme === undefined ? {} : { theme: params.theme }),
+    ...(params.lookEverywhere === undefined ? {} : { lookEverywhere: params.lookEverywhere }),
+  }) as CloudDisplayPreferences;
 }

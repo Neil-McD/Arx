@@ -1,5 +1,5 @@
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { CommunityMembershipLike } from "./communityCore";
 type WorkflowRow = Doc<"communityMemberWorkflows">;
 type MemberMilestoneRow = Doc<"communityMemberWorkflowMemberMilestones">;
@@ -56,4 +56,21 @@ export function resolveCurrentMilestone(args: {
       args.membership.createdAt,
     completedAt: args.state?.completedAt ?? null,
   };
+}
+
+/** A deleted membership's stage position goes with it; a rejoin starts a new membership. */
+export async function deleteMemberWorkflowPosition(args: {
+  ctx: Pick<MutationCtx, "db">;
+  communityId: Id<"communities">;
+  membershipId: Id<"communityMemberships">;
+}): Promise<void> {
+  const workflow = await getCommunityMemberWorkflowByCommunity(args);
+  if (!workflow) return;
+  const rows = await args.ctx.db
+    .query("communityMemberWorkflowMemberMilestones")
+    .withIndex("by_workflow_membership", (q) =>
+      q.eq("workflowId", workflow._id).eq("membershipId", args.membershipId),
+    )
+    .take(8);
+  for (const row of rows) await args.ctx.db.delete(row._id);
 }

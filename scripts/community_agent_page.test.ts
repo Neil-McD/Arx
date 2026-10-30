@@ -38,15 +38,19 @@ test("DM overlays preserve the desktop Agent page while retaining mobile and voi
   expect(controller).toContain('!params.isOnboardingModalOpen');
 });
 
-test("floating controls and their exclusive styles stay retired", () => {
+test("the old floating controls stay retired; only the Classroom layout floats the agent", () => {
   const read = (path: string) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
   const component = read("apps/web/src/components/WebCommunityAgentDock.tsx");
   expect(component).not.toMatch(/setIsOpen|community-agent-dock-launcher/);
   expect(component).toContain("Boolean(props.mobileShellActive && props.mobileRoot)");
   expect(component).toContain("props.onRequestOpen?.()");
   expect(component).toContain("Start fresh conversation");
+  // The one floating mode is opt-in from the shell, for a top-nav (Classroom) layout.
+  expect(component).toContain("props.floating && !props.floating.open");
+  expect(read("apps/web/src/App.tsx")).toContain('const floatingCommunityAgent = !showMobileShell && communityLayoutPosition === "top";');
   const styles = read("apps/web/src/components/WebCommunityAgentDock.css");
-  expect(styles).not.toMatch(/launcher|working-pulse/);
+  expect(styles).not.toMatch(/community-agent-dock-launcher|working-pulse/);
+  expect(styles).toContain(".community-agent-launcher");
   expect(styles).toContain(".community-agent-dock.mobile-root");
   expect(styles).toContain(".community-agent-dock.community-agent-page");
   expect(styles).toMatch(/prefers-reduced-motion[\s\S]*animation: none/);

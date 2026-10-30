@@ -440,7 +440,7 @@ assert.match(
 );
 assert.match(
   projection,
-  /canManageCommunityMembers\?: boolean;[\s\S]*onSetCommunityMemberRole\?: \(membershipId: string, role: "admin" \| "moderator" \| "member"\) => Promise<void> \| void;[\s\S]*loadMemberBillingHistory\?: \(membershipId: string\) => Promise<CloudCommunityMemberBillingHistory \| null>;/,
+  /canManageCommunityMembers\?: boolean;[\s\S]*onSetCommunityMemberRole\?: \(membershipId: string, role: "co_creator" \| "admin" \| "moderator" \| "member"\) => Promise<void> \| void;[\s\S]*loadMemberBillingHistory\?: \(membershipId: string\) => Promise<CloudCommunityMemberBillingHistory \| null>;/,
   "interaction projection should accept the existing member-management controller contract explicitly",
 );
 assert.match(projection, /handleSetCommunityMemberRole: \(id, role\) => props\.onSetCommunityMemberRole\?\.\(id, role\)/);
@@ -522,7 +522,7 @@ assert.match(
 );
 assert.match(
   app,
-  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*communityTab === "chat";[\s\S]*shouldLoad: shouldHydrateCommunityContextPanel/,
+  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*(?:communityTab === "chat"|isCommunityChatBackedTab\(communityTab\));[\s\S]*shouldLoad: shouldHydrateCommunityContextPanel/,
   "join request review data should load from the community chat context rail",
 );
 assert.doesNotMatch(
@@ -601,7 +601,7 @@ assert.match(
 );
 assert.match(
   memberSettingsDialog,
-  /props\.isActiveCommunityOwner[\s\S]*\(\["member", "moderator", "admin"\] as const\)[\s\S]*memberIsAdmin[\s\S]*\(\["admin"\] as const\)[\s\S]*\(\["member", "moderator"\] as const\)/,
+  /props\.isActiveCommunityOwner[\s\S]*\(\["member", "moderator", "admin", "co_creator"\] as const\)[\s\S]*memberIsAdmin[\s\S]*\(\[memberRole\] as const\)[\s\S]*\(\["member", "moderator"\] as const\)/,
   "member settings dialog should expose owner/admin role options according to the existing management split",
 );
 assert.match(

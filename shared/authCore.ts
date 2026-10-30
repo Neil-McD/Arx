@@ -3,6 +3,7 @@ import {
   type ConvexAuthenticatedSessionProbeResult,
 } from "./convexAuthSessionProbe";
 import { APP_ADMISSION_TIMEOUT_MS } from "./asyncDeadline";
+import { applyTestMemberRun } from "./testMemberRun";
 
 export type AuthUser = {
   id: string;
@@ -370,12 +371,12 @@ function coerceAuthSession(
 ): AuthSession | null {
   const record = toPersistedAuthSessionRecord(payload, options);
   if (!record) return null;
-  return {
+  return applyTestMemberRun({
     access_token: record.access_token,
     ...(record.id_token ? { id_token: record.id_token } : null),
     expires_at: record.expires_at,
     user: record.user,
-  };
+  });
 }
 
 function coerceAuthBridgeBootstrapTrace(payload: unknown): AuthBridgeBootstrapTrace | null {

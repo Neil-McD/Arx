@@ -15,6 +15,10 @@ function hashCode(str: string): number {
   return hash;
 }
 
+// The avatar tints below are light pastels, so initials on them use dark ink
+// (4.6:1 or better on every tint; white measured under 3:1).
+export const AVATAR_INITIALS_INK = "#1c1c1e";
+
 export function getAvatarColor(id: string): string {
   const colors = [
     "#e57373",
@@ -40,8 +44,12 @@ export function getAvatarColor(id: string): string {
   return colors[index];
 }
 
+// "Test member 1" is TM everywhere, like the member list, not TE. A single
+// word (or an id) keeps its first two letters.
 export function getInitials(id: string): string {
-  return id.slice(0, 2).toUpperCase();
+  const words = String(id ?? "").trim().split(/\s+/).filter((word) => /^[\p{L}]/u.test(word));
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  return String(id ?? "").trim().slice(0, 2).toUpperCase();
 }
 
 export function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8"): void {

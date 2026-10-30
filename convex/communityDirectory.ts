@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { readCommunityAgentProfile } from "./communityAgentContext";
 import {
   type CommunityLike,
   type CommunityMembershipLike,
@@ -8,6 +9,7 @@ import {
   listCanonicalCommunityMemberMembershipRows,
   normalizeCommunityRoleForOutput,
   readCommunityActiveMemberCount,
+  communityMembershipIsCoCreator,
   requireCommunityChatAccess,
   requireCommunityManager,
   resolvePublicUserId,
@@ -133,6 +135,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
       String(args.row.userId),
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.row.userId)),
     role: normalizeCommunityRoleForOutput(args.row.role) || "member",
+    co_creator: communityMembershipIsCoCreator(args.row),
     created_at: toIsoString(args.row.createdAt),
     last_active_at: args.lastSeenAt === null ? "" : toIsoString(args.lastSeenAt),
   };
@@ -183,12 +186,16 @@ export const searchCommunityMentionCandidates = query({
     const out: any[] = [];
     const userIdCache = new Map<string, string | null>();
 
+    // The agent goes by its profile name (Settings > Agent), else the community's.
+    const agentProfile = await readCommunityAgentProfile(ctx, community._id);
     const pushAgentCandidate = () => {
       if (out.length >= limit) return;
       const communityName = String(community.name ?? "").trim();
-      if (!communityName) return;
+      const agentName = String(agentProfile?.name ?? "").trim() || communityName;
+      if (!agentName) return;
       if (
         queryText &&
+        !textMatchesMentionSearch(agentName, queryText) &&
         !textMatchesMentionSearch(communityName, queryText) &&
         !textMatchesMentionSearch("community agent", queryText)
       ) {
@@ -198,7 +205,7 @@ export const searchCommunityMentionCandidates = query({
         kind: "community_agent",
         community_id: String(community._id),
         user_id: "community_agent",
-        display_name: communityName,
+        display_name: agentName,
         handle: null,
         avatar_url: null,
         agent_key: "community_agent",

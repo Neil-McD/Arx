@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { AtSign, Plus, Smile } from "lucide-react";
+import { AtSign, Smile } from "lucide-react";
 import { QUICK_EMOJIS } from "./communityInteractionRowParts";
+import { ComposerAddMenu } from "./CommunityPostCard";
 
 type CommunityComposerControlsProps = {
   contextKey: string;
@@ -13,6 +14,9 @@ type CommunityComposerControlsProps = {
   toolsDisabled: boolean;
   attachDisabled: boolean;
   onAttach: () => void;
+  /** The "+" also starts a poll, and for the community's team shares a Form. */
+  onPoll?: () => void;
+  onForm?: () => void;
   onMention?: () => void;
   onEmoji?: (emoji: string) => void;
   voiceControl: ReactNode;
@@ -48,16 +52,14 @@ export function CommunityComposerControls(props: CommunityComposerControlsProps)
   return (
     <div className="community-composer-toolbar">
       <div className="community-composer-tools" role="group" aria-label={props.groupLabel}>
-        <button
-          className="ask-icon-btn community-composer-add"
-          type="button"
-          onClick={props.onAttach}
-          disabled={props.attachDisabled}
-          aria-label={props.attachLabel}
-          title={props.attachLabel}
-        >
-          <Plus size={17} strokeWidth={1.8} aria-hidden="true" />
-        </button>
+        <ComposerAddMenu
+          disabled={props.toolsDisabled}
+          attachDisabled={props.attachDisabled}
+          attachLabel={props.attachLabel}
+          onAttach={props.onAttach}
+          onPoll={props.onPoll}
+          onForm={props.onForm}
+        />
         {props.onMention ? <button
           className="ask-icon-btn ask-mention"
           type="button"

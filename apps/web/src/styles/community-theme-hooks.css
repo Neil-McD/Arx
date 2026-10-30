@@ -1,0 +1,284 @@
+/* Where Polynet's components use a community theme's shape and type tokens
+   (--pn-*, compiled by shared/communityTheme.ts). Colours need no rules here:
+   the compiled theme sets Polynet's own colour variables. These rules live with
+   Polynet's components, so themes never name Polynet's classes, and a renamed
+   class is fixed here once for every community. Applies only inside an
+   element with data-community-theme; without one, nothing changes. */
+
+/* Polynet's own display face for themes (the others load from Google Fonts). */
+@font-face {
+  font-family: "Excalifont";
+  src: url("/fonts/excalifont.woff2") format("woff2");
+  font-display: swap;
+}
+
+/* Mobile and single-pane pages: the wrapper only carries the theme, it adds no box. */
+.community-theme-scope {
+  display: contents;
+}
+
+[data-community-theme] {
+  font-family: var(--pn-font-body);
+  font-variant-numeric: var(--pn-numerals);
+  color: var(--text-primary);
+  background: var(--bg-workspace);
+}
+
+/* Polynet derives its panel, popover and code-block colours at :root (index.css),
+   and a custom property keeps the colour it resolved to there. Derived again
+   here, Messages, menus and code blocks take the community's colours instead of
+   Polynet's own light or dark ones. Same formulas as index.css. */
+[data-community-theme] {
+  --community-shell-stroke: var(--stroke-panel-edge);
+  --web-floating-chrome-surface: var(--surface-workspace, var(--bg-workspace));
+  --web-context-panel-surface: var(--surface-panel, var(--bg-panel));
+  --web-context-panel-border: var(--stroke-strong, var(--border-default));
+  --web-popover-surface: var(--surface-card, var(--bg-card));
+  --web-popover-border: var(--stroke-default, var(--border-default));
+
+  --snippet-code-bg: color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%);
+  --snippet-code-header-bg: color-mix(in srgb, var(--bg-card-alt) 78%, var(--bg-workspace) 22%);
+  --snippet-code-border: color-mix(in srgb, var(--border-default) 78%, var(--bg-workspace) 22%);
+  --snippet-code-text: var(--text-primary);
+  --snippet-code-muted: var(--text-faint);
+  --snippet-code-accent: color-mix(in srgb, var(--accent-gold) 44%, var(--text-primary) 56%);
+
+  --snippet-artifact-bg: color-mix(in srgb, var(--bg-panel) 74%, var(--bg-card) 26%);
+  --snippet-artifact-header-bg: color-mix(in srgb, var(--bg-card-alt) 62%, var(--bg-panel) 38%);
+  --snippet-artifact-border: color-mix(in srgb, var(--border-muted) 84%, var(--bg-workspace) 16%);
+  --snippet-artifact-text: color-mix(in srgb, var(--text-primary) 92%, var(--text-secondary) 8%);
+  --snippet-artifact-muted: color-mix(in srgb, var(--text-muted) 82%, var(--text-faint) 18%);
+  --snippet-artifact-accent: color-mix(in srgb, var(--accent-gold) 40%, var(--text-primary) 60%);
+
+  --snippet-terminal-bg: color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-workspace) 12%);
+  --snippet-terminal-header-bg: color-mix(in srgb, var(--bg-terminal) 72%, var(--bg-card-alt) 28%);
+  --snippet-terminal-border: color-mix(in srgb, var(--border-default) 56%, var(--bg-terminal) 44%);
+  --snippet-terminal-muted: color-mix(in srgb, var(--text-faint) 88%, var(--text-secondary) 12%);
+  --snippet-terminal-accent: color-mix(in srgb, var(--accent-gold) 30%, var(--text-terminal) 70%);
+
+  --snippet-diff-bg: color-mix(in srgb, var(--bg-card) 74%, var(--bg-workspace) 26%);
+  --snippet-diff-header-bg: color-mix(in srgb, var(--bg-card-alt) 78%, var(--bg-workspace) 22%);
+  --snippet-diff-border: color-mix(in srgb, var(--border-default) 72%, var(--bg-workspace) 28%);
+  --snippet-diff-text: color-mix(in srgb, var(--text-primary) 94%, var(--text-secondary) 6%);
+  --snippet-diff-muted: color-mix(in srgb, var(--text-muted) 80%, var(--text-faint) 20%);
+  --snippet-diff-accent: color-mix(in srgb, #38a169 52%, var(--text-primary) 48%);
+}
+
+@supports (background: color-mix(in srgb, #000 50%, transparent)) {
+  [data-community-theme] {
+    --web-floating-chrome-surface: color-mix(in srgb, var(--surface-workspace, var(--bg-workspace)) 88%, transparent);
+  }
+}
+
+@supports (color: rgb(from #000 r g b)) {
+  [data-community-theme] {
+    --web-context-panel-surface: rgb(from var(--surface-panel, var(--bg-panel)) r g b / 1);
+  }
+}
+
+/* Headings */
+[data-community-theme] :is(
+  h1, h2, h3,
+  .community-knowledge-header h1,
+  .resource-viewer-title
+) {
+  font-family: var(--pn-font-heading);
+  font-weight: var(--pn-heading-weight);
+  text-transform: var(--pn-heading-case);
+  letter-spacing: var(--pn-heading-tracking);
+}
+
+/* Cards */
+[data-community-theme] :is(
+  .workflow-member-stub
+) {
+  border-width: var(--pn-border-width);
+  border-radius: var(--pn-radius-card);
+  box-shadow: var(--pn-shadow-card);
+}
+/* Repeated cards stay flat with a hairline (one card among many shouldn't
+   shout); the theme sets their corners. */
+[data-community-theme] :is(.resource-course-card, .resource-course-create-card, .resource-course-outline.knowledge-resource-rail) {
+  border-radius: var(--pn-radius-card);
+}
+[data-community-theme] .resource-course-card-cover {
+  border-radius: var(--pn-radius-card-top);
+}
+
+/* Buttons */
+[data-community-theme] :is(.settings-primary-action, .community-events-primary-link, .knowledge-source-intake-primary, .platform-save-button) {
+  border-radius: var(--pn-radius-button);
+  box-shadow: var(--pn-shadow-button);
+}
+/* Payment setup uses the community's button colour, not a fixed indigo. */
+[data-community-theme] .stripe-setup-button {
+  --stripe-setup-bg: var(--pn-button);
+  --stripe-setup-bg-hover: color-mix(in srgb, var(--pn-button) 88%, var(--pn-on-button));
+  color: var(--pn-on-button);
+  border-radius: var(--pn-radius-button);
+}
+
+/* Course catalog: card size and cover shape */
+[data-community-theme] .resource-course-grid {
+  grid-template-columns: var(--pn-course-columns);
+  gap: var(--pn-course-gap-owner, 24px);
+}
+/* Page layouts (shared/communityLayout.ts) keep flat, hairline cards and a
+   sans title on the feed whatever the theme's card style: only the corner
+   size follows the theme. */
+[data-community-theme] :is(.community-post-card, .community-posts-composer, .community-aside-card, .community-about-main) {
+  border-radius: min(var(--pn-radius), 14px);
+}
+[data-community-theme] .community-post-card-title {
+  font-family: var(--pn-font-body);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: -0.005em;
+}
+
+/* Phones get one or two cards per row, whatever the card size. */
+@media (max-width: 640px) {
+  [data-community-theme] .resource-course-grid {
+    grid-template-columns: var(--pn-course-columns-phone, minmax(0, 1fr));
+    gap: var(--pn-course-gap-owner, 14px);
+  }
+}
+[data-community-theme] .resource-course-card-cover {
+  position: relative;
+  aspect-ratio: var(--pn-course-cover-ratio);
+  height: var(--pn-course-cover-height);
+  background: var(--pn-cover-plate, var(--bg-card-alt));
+}
+[data-community-theme] .resource-course-card-cover-image {
+  mix-blend-mode: var(--pn-cover-blend, normal);
+}
+/* Cards line up row by row: two-line titles, three-line descriptions. */
+[data-community-theme] .resource-course-card-heading > strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+[data-community-theme] .resource-course-card-description {
+  -webkit-line-clamp: 2;
+  min-height: calc(2 * 1.5em);
+}
+
+/* Text roles: every size below is one of --pn-type-*, so the text-size setting
+   moves all community text together and nothing drifts to a one-off size. */
+[data-community-theme] :is(.resource-viewer-title, .community-welcome-intro h1) {
+  font-size: var(--pn-type-display);
+}
+[data-community-theme] .community-knowledge-header h1 {
+  font-size: var(--pn-type-display);
+}
+/* A lesson title is the loudest thing on its page. */
+[data-community-theme] .knowledge-resource-reader .resource-viewer-title {
+  font-size: calc(var(--pn-type-display) * 1.25);
+}
+/* On a phone the display face at that size breaks a title into one word per
+   line, so it steps down to the title role. */
+@media (max-width: 640px) {
+  [data-community-theme] .knowledge-resource-reader .resource-viewer-title {
+    font-size: var(--pn-type-title);
+  }
+}
+/* Inside a lesson, section headings are reading text: the theme's display
+   face stays on the lesson title. */
+[data-community-theme] .resource-viewer-prose :is(h1, h2, h3, h4, h5, h6).md-header {
+  font-family: var(--pn-font-body);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+[data-community-theme] .resource-course-card-heading > strong {
+  font-size: var(--pn-type-reading);
+}
+[data-community-theme] :is(.resource-viewer-prose h1.md-header, .member-form-dialog section h2) {
+  font-size: var(--pn-type-title);
+}
+[data-community-theme] .resource-viewer-prose h2.md-header {
+  font-size: var(--pn-type-heading);
+}
+[data-community-theme] .resource-viewer-prose h3.md-header {
+  font-size: var(--pn-type-subheading);
+}
+[data-community-theme] .resource-viewer-prose {
+  font-size: var(--pn-type-reading);
+}
+[data-community-theme] :is(
+  .resource-viewer-prose :is(h4, h5, h6).md-header,
+  .community-interaction-author,
+  .community-interaction-body,
+  .resource-course-outline-header,
+  .community-nav-identity-name,
+  .member-form-dialog header h2,
+  .community-welcome-intro p
+) {
+  font-size: var(--pn-type-body);
+}
+[data-community-theme] :is(
+  .knowledge-resource-item-title,
+  .resource-course-card-description
+) {
+  font-size: var(--pn-type-ui);
+}
+[data-community-theme] :is(
+  .nav-item,
+  .community-channel-participant
+) {
+  font-size: var(--pn-type-small);
+}
+[data-community-theme] :is(
+  .community-interaction-meta-row,
+  .resource-viewer-prose .md-media-embed-caption,
+  .resource-course-card-lock,
+  .resource-course-card-meta,
+  .resource-course-card-progress-label,
+  .resource-course-outline-count,
+  .resource-course-outline-progress,
+  .resources-back-btn,
+  .community-welcome-intro small,
+  .community-welcome-step
+) {
+  font-size: var(--pn-type-label);
+}
+[data-community-theme] :is(
+  .resource-course-card-status
+) {
+  font-size: var(--pn-type-meta);
+}
+
+/* Images drawn on white sit on a light plate in dark themes, so they don't glare. */
+[data-community-theme] :is(.resource-course-card-cover-image, .resource-viewer-prose img) {
+  background: var(--pn-media-plate);
+  padding: var(--pn-media-plate-pad);
+  box-sizing: border-box;
+}
+[data-community-theme] .resource-viewer-prose img {
+  object-fit: contain;
+}
+
+/* Code */
+[data-community-theme] :is(code, pre, kbd) {
+  font-family: var(--pn-font-mono);
+}
+
+/* Slides drawn on white sit on the light plate in dark themes, like lesson images. */
+[data-community-theme] .lesson-slide-deck-stage img {
+  background: var(--pn-media-plate);
+}
+[data-community-theme] .lesson-slide-deck-note {
+  font-size: var(--pn-type-reading);
+}
+[data-community-theme] .lesson-slide-deck-count {
+  font-size: var(--pn-type-small);
+}
+
+/* Buttons and fields take the community's text face. Browsers give them their
+   own font (Arial on Windows), so a card that is a button, like a course card,
+   otherwise sets its title and description in Arial. Zero specificity, so any
+   component that picks a face still wins. */
+:where([data-community-theme]) :where(button, input, select, textarea) {
+  font-family: inherit;
+}

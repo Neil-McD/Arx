@@ -1,5 +1,5 @@
 import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
-import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
+import type { ChangeEvent, ClipboardEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   DirectMessage,
@@ -568,6 +568,18 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     }
   };
 
+  // Ctrl+V / Cmd+V of a screenshot or copied file attaches it, the same as channels do.
+  const onComposerPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!canAcceptAttachmentDrop) return;
+    const files = Array.from(event.clipboardData?.items ?? [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file instanceof File);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void props.onAttachmentFilesSelected?.(files);
+  };
+
   useEffect(() => {
     const conversationChanged = previousConversationIdRef.current !== props.conversation.id;
     const messageChanged = previousLastMessageIdRef.current !== lastMessageId;
@@ -882,6 +894,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             className="community-dm-panel-input"
             value={props.input}
             onChange={(event) => props.onInputChange(event.target.value)}
+            onPaste={onComposerPaste}
             onBlur={() => {
               void props.onComposerBlur?.();
             }}

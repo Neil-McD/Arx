@@ -85,8 +85,8 @@ Object.defineProperty(globalThis, "window", {
 });
 assert.equal(
   readAppRouteFromLocation().settingsPage,
-  "account",
-  "legacy Agent routes must canonicalize to Account",
+  "apps",
+  "legacy Agent routes must canonicalize to Apps, where agents connect",
 );
 
 if (originalWindow === undefined) {

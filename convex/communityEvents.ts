@@ -12,6 +12,8 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { resolveAuthorizedCommunityChannel } from "./communityChannelCore";
+import { resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
   formatCommunityEventZonedDateTime,
   getCommunityEventOccurrenceStartsInRange,
@@ -34,6 +36,7 @@ type CommunityEventLike = {
   locationLabel?: string;
   url?: string;
   visibility: "members" | "public";
+  channelId?: any;
   status: "live" | "cancelled";
   recurrenceFrequency?: "none" | "daily" | "weekly" | "monthly";
   recurrenceInterval?: number;
@@ -111,6 +114,7 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
     location_label: row.locationLabel ?? null,
     url: row.url ?? null,
     visibility: row.visibility,
+    channel_id: row.channelId ? normalizeIdValue(row.channelId) : null,
     status: row.status,
     recurrence_frequency: recurrenceFrequency,
     recurrence_interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
@@ -170,6 +174,48 @@ function dedupeCommunityEventRows(rows: CommunityEventLike[]): CommunityEventLik
     rowsById.set(normalizeIdValue(row._id), row);
   }
   return [...rowsById.values()];
+}
+
+// A pod's call is seen only by people who can open the pod; everyone else's
+// list leaves it out. One check per pod per request.
+async function eventReadFilter(ctx: any, communityId: any, userId: any) {
+  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
+  const readable = new Map<string, boolean>();
+  return async (row: CommunityEventLike) => {
+    if (!row.channelId) return true;
+    const key = normalizeIdValue(row.channelId);
+    if (!readable.has(key)) {
+      try {
+        await resolveAuthorizedCommunityChannel({ ctx, communityId, channelId: row.channelId, actor, capability: "canRead" });
+        readable.set(key, true);
+      } catch {
+        readable.set(key, false);
+      }
+    }
+    return readable.get(key)!;
+  };
+}
+
+async function filterReadableEvents(ctx: any, communityId: any, userId: any, rows: CommunityEventLike[], channelId?: any) {
+  const canRead = await eventReadFilter(ctx, communityId, userId);
+  const kept: CommunityEventLike[] = [];
+  for (const row of rows) {
+    if (channelId && normalizeIdValue(row.channelId) !== normalizeIdValue(channelId)) continue;
+    if (await canRead(row)) kept.push(row);
+  }
+  return kept;
+}
+
+// channel_id on save: a pod (invite-only channel) in this community, or null.
+async function resolveEventChannel(ctx: any, communityId: any, raw: unknown) {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const channelId = ctx.db.normalizeId("communityChannels", String(raw));
+  const channel = channelId ? await ctx.db.get(channelId) : null;
+  if (!channel || normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId)
+    || channel.status !== "active" || channel.accessMode !== "restricted") {
+    throw new Error("community_event_channel_invalid");
+  }
+  return channel._id;
 }
 
 async function listCommunityEventExpansionCandidates(params: {
@@ -253,13 +299,13 @@ export const listCommunityEventsForSemanticRepositoryInternal = internalQuery({
     if (!Number.isSafeInteger(cursorStartMs) || cursorStartMs < 0) {
       throw new Error("community_event_list_cursor_invalid");
     }
-    const rows = await listCommunityEventExpansionCandidates({
+    const rows = await filterReadableEvents(ctx, args.communityId, args.userId, await listCommunityEventExpansionCandidates({
       ctx,
       communityId: args.communityId,
       startMs: cursorStartMs,
       endMs: Number.MAX_SAFE_INTEGER,
       includeCancelled: false,
-    });
+    }));
     const expanded = expandCommunityEventRows({
       rows,
       startMs: cursorStartMs,
@@ -302,7 +348,8 @@ export const readCommunityEventForSemanticRepositoryInternal = internalQuery({
       : null;
     if (
       !row ||
-      normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)
+      normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId) ||
+      !(await (await eventReadFilter(ctx, args.communityId, args.userId))(row))
     ) {
       throw new Error("community_event_not_found");
     }
@@ -338,6 +385,8 @@ export const listCommunityEvents = query({
     includeCancelled: v.optional(v.boolean()),
     overlap: v.optional(v.boolean()),
     limit: v.optional(v.number()),
+    /** Only this pod's calls. */
+    channelId: v.optional(v.id("communityChannels")),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -360,14 +409,14 @@ export const listCommunityEvents = query({
       throw new Error("Event display range must be between one instant and 62 days.");
     }
 
-    const rows = await listCommunityEventExpansionCandidates({
+    const rows = await filterReadableEvents(ctx, args.communityId, userId, await listCommunityEventExpansionCandidates({
       ctx,
       communityId: args.communityId,
       startMs,
       endMs,
       includeCancelled,
       overlap,
-    });
+    }), args.channelId);
 
     return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit, overlap });
   },
@@ -377,6 +426,9 @@ export const saveCommunityEvent = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    // Set by an owner's agent, which is mounted on one community: events are
+    // created there, and only that community's events can be changed.
+    communityId: v.optional(v.id("communities")),
     eventId: v.optional(v.union(v.string(), v.null())),
     payload: v.any(),
   },
@@ -395,7 +447,9 @@ export const saveCommunityEvent = mutation({
 
     if (eventId) {
       const existing = (await ctx.db.get(eventId as any)) as CommunityEventLike | null;
-      if (!existing) throw new Error("community_event_not_found");
+      if (!existing || (args.communityId && normalizeIdValue(existing.communityId) !== normalizeIdValue(args.communityId))) {
+        throw new Error("community_event_not_found");
+      }
       await requireCommunityManager({
         ctx,
         communityId: existing.communityId,
@@ -424,8 +478,12 @@ export const saveCommunityEvent = mutation({
       if (recurrenceFrequency !== "none" && typeof recurrenceUntil === "number" && recurrenceUntil < startsAt) {
         throw new Error("community_event_recurrence_until_invalid");
       }
+      const channelId = Object.prototype.hasOwnProperty.call(payload, "channel_id")
+        ? await resolveEventChannel(ctx, existing.communityId, payload.channel_id)
+        : existing.channelId ?? null;
       await ctx.db.patch(existing._id as any, {
         title,
+        channelId: channelId ?? undefined,
         descriptionMd: normalizeOptionalText(
           Object.prototype.hasOwnProperty.call(payload, "description_md")
             ? payload.description_md
@@ -451,7 +509,8 @@ export const saveCommunityEvent = mutation({
         url: normalizeOptionalUrl(
           Object.prototype.hasOwnProperty.call(payload, "url") ? payload.url : existing.url,
         ),
-        visibility: normalizeVisibility(
+        // A pod's call is never public.
+        visibility: channelId ? "members" : normalizeVisibility(
           Object.prototype.hasOwnProperty.call(payload, "visibility") ? payload.visibility : existing.visibility,
         ),
         status: normalizeStatus(
@@ -474,8 +533,11 @@ export const saveCommunityEvent = mutation({
       return mapCommunityEventRow(updated);
     }
 
-    const communityId = payload.community_id as any;
+    const communityId = (args.communityId ?? payload.community_id) as any;
     if (!communityId) throw new Error("community_id_required");
+    if (args.communityId && payload.community_id && normalizeIdValue(payload.community_id) !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_forbidden");
+    }
     const { community } = await requireCommunityManager({
       ctx,
       communityId,
@@ -493,8 +555,10 @@ export const saveCommunityEvent = mutation({
       throw new Error("community_event_recurrence_until_invalid");
     }
 
+    const channelId = await resolveEventChannel(ctx, community._id, payload.channel_id);
     const id = await ctx.db.insert("communityEvents" as any, {
       communityId: community._id,
+      ...(channelId ? { channelId } : {}),
       createdByUserId: userId,
       title,
       descriptionMd: normalizeOptionalText(payload.description_md, 10_000),
@@ -504,7 +568,7 @@ export const saveCommunityEvent = mutation({
       locationType: normalizeLocationType(payload.location_type),
       locationLabel: normalizeOptionalText(payload.location_label, 500),
       url: normalizeOptionalUrl(payload.url),
-      visibility: normalizeVisibility(payload.visibility),
+      visibility: channelId ? "members" : normalizeVisibility(payload.visibility),
       status: "live",
       recurrenceFrequency,
       recurrenceInterval: recurrenceFrequency === "none" ? 1 : normalizeCommunityEventRecurrenceInterval(payload.recurrence_interval),
@@ -522,6 +586,7 @@ export const cancelCommunityEvent = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    communityId: v.optional(v.id("communities")),
     eventId: v.string(),
   },
   handler: async (ctx, args) => {
@@ -532,6 +597,9 @@ export const cancelCommunityEvent = mutation({
     });
     const event = (await ctx.db.get(args.eventId as any)) as CommunityEventLike | null;
     if (!event) return { ok: true };
+    if (args.communityId && normalizeIdValue(event.communityId) !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_event_not_found");
+    }
     await requireCommunityManager({
       ctx,
       communityId: event.communityId,

@@ -234,7 +234,7 @@ assert.match(
 );
 assert.match(
   builderListBody,
-  /truncated: resources\.length > limit/,
+  /truncated: resources\.length > (?:offset \+ )?limit/,
   "builder directory list should report truncation",
 );
 assert.match(
