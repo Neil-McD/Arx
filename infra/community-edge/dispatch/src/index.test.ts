@@ -753,6 +753,9 @@ test("default site: a community with nothing deployed is on its own site, Polyne
   expect(html).toContain('<meta property="og:image" content="https://cdn.example.com/b.png">');
   expect(html).toContain('<a class="btn go" href="/join">Join the community</a>');
   expect(html).not.toContain("javascript:");
+  // The colour field is always under the banner, and the initial under the avatar, for when a picture doesn't load.
+  expect(html).toContain('<div class="field" aria-hidden="true"><span>A</span></div><img class="art" src="https://cdn.example.com/b.png" alt="">');
+  expect(html).toContain('<span class="emblem">A</span>');
   // The shell is added, as on any site.
   expect(html).toContain('<script type="module" src="/__polynet/ui.js"></script>');
   // A standard page is drawn in the default frame.
@@ -765,6 +768,8 @@ test("default site: a community with nothing deployed is on its own site, Polyne
   const css = await edge.fetch(at(SITE, "/site.css"), e);
   expect([css.status, css.headers.get("content-type")]).toEqual([200, "text/css; charset=utf-8"]);
   expect(await css.text()).toMatch(/^:root \{ --accent: #[0-9a-f]{6}; \}/);
+  const script = await (await edge.fetch(at(SITE, "/site.js"), e)).text();
+  expect(script).toContain('img.addEventListener("error", () => img.remove()');
   // Anything else on the default site is simply not found.
   expect((await edge.fetch(at(SITE, "/secret.html"), e)).status).toBe(404);
   // An address no community has still says nothing is published there.
