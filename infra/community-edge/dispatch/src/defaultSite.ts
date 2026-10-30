@@ -72,7 +72,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .mark { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font: 800 18px/1.1 var(--display); letter-spacing: .02em; text-transform: uppercase; min-width: 0; }
 .mark span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .emblem { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); font: 800 17px/1 var(--display); flex: none; overflow: hidden; }
-.emblem img { width: 100%; height: 100%; object-fit: cover; }
+.emblem { position: relative; }
+.emblem img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .nav { display: flex; gap: 18px; margin-left: auto; font-size: 14px; font-weight: 500; }
 .nav a { color: inherit; text-decoration: none; opacity: .82; }
 .nav a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 2px; text-decoration-color: var(--accent); }
@@ -124,8 +125,14 @@ export function defaultStylesheet(identity: DefaultSiteIdentity): string {
   return `:root { --accent: ${accentFor(identity.slug || identity.name)}; }${STYLE}${HOME_STYLE}${FRAME_STYLE}`;
 }
 
-// The front door's one script: a member already signed in goes straight in.
+// The front door's one script. An image that doesn't load goes, so the
+// community's colour and initial show instead of a broken picture; a member
+// already signed in goes straight in.
 export const DEFAULT_SITE_SCRIPT = `import polynet from "/__polynet/sdk.js";
+for (const img of document.querySelectorAll("img.art, .emblem img")) {
+  if (img.complete && !img.naturalWidth) img.remove();
+  else img.addEventListener("error", () => img.remove(), { once: true });
+}
 polynet.session().then((session) => {
   const actions = document.getElementById("actions");
   if (!actions || !session.signed_in || !session.member) return;
@@ -146,9 +153,9 @@ const ROOMS: Array<[string, string, string]> = [
 function header(identity: DefaultSiteIdentity): string {
   const name = escapeHtml(identity.name);
   const avatar = imageUrl(identity.avatar_url);
-  const emblem = avatar
-    ? `<img src="${escapeHtml(avatar)}" alt="">`
-    : escapeHtml((identity.name.trim()[0] ?? "P").toUpperCase());
+  // The initial always sits under the avatar, so a missing picture still shows something.
+  const emblem = escapeHtml((identity.name.trim()[0] ?? "P").toUpperCase())
+    + (avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : "");
   const nav = NAV.map(([href, label]) => `<a href="${href}">${label}</a>`).join("");
   return `<header class="top wrap"><div class="inner">
   <a class="mark" href="/"><span class="emblem">${emblem}</span><span>${name}</span></a>
@@ -178,9 +185,9 @@ function head(identity: DefaultSiteIdentity, title: string, description: string 
 export function defaultHome(identity: DefaultSiteIdentity): string {
   const name = escapeHtml(identity.name);
   const banner = imageUrl(identity.banner_url);
-  const art = banner
-    ? `<img class="art" src="${escapeHtml(banner)}" alt="">`
-    : `<div class="field" aria-hidden="true"><span>${escapeHtml((identity.name.trim()[0] ?? "").toUpperCase())}</span></div>`;
+  // The community's colour field is always there; a banner, when it loads, covers it.
+  const art = `<div class="field" aria-hidden="true"><span>${escapeHtml((identity.name.trim()[0] ?? "").toUpperCase())}</span></div>`
+    + (banner ? `<img class="art" src="${escapeHtml(banner)}" alt="">` : "");
   const count = identity.member_count === 1 ? "1 member" : `${identity.member_count.toLocaleString("en-US")} members`;
   const long = identity.name.length > 18 ? " long" : "";
   const tagline = identity.one_liner ? `<p class="tagline">${escapeHtml(identity.one_liner)}</p>` : "";
