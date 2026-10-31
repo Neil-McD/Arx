@@ -16,6 +16,8 @@ export type DefaultSiteIdentity = {
   member_count: number;
   avatar_url?: string | null;
   banner_url?: string | null;
+  // false: unlisted (link-only), so search engines are asked not to index it.
+  listed?: boolean;
 };
 
 // One strong colour per community until it chooses its own: the same slug always gets the same one.
@@ -78,7 +80,13 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .nav a { color: inherit; text-decoration: none; opacity: .82; }
 .nav a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 2px; text-decoration-color: var(--accent); }
 polynet-account { flex: none; }
-@media (max-width: 860px) { .nav { display: none; } polynet-account { margin-left: auto; } }
+@media (max-width: 860px) {
+  .top .inner { flex-wrap: wrap; row-gap: 10px; }
+  polynet-account { margin-left: auto; }
+  .nav { order: 3; flex: 1 0 100%; margin: 0; overflow-x: auto; scrollbar-width: none; gap: 20px; padding-block: 2px; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; }
+}
 .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 999px; font: 600 15px/1 var(--body); text-decoration: none; }
 .btn.go { background: var(--accent); color: var(--on-accent); }
 .btn.ghost { color: inherit; box-shadow: inset 0 0 0 1.5px currentColor; }
@@ -150,9 +158,13 @@ const ROOMS: Array<[string, string, string]> = [
   ["/ask", "Ask", "The community's own agent, answering from what the community knows."],
 ];
 
-function header(identity: DefaultSiteIdentity): string {
+// avatarHost: in the frame, which the twin draws under a policy that loads
+// images only from Polynet's own storage, the avatar shows only when it's
+// stored there; anywhere else the initial stands in.
+function header(identity: DefaultSiteIdentity, avatarHost: string | null = null): string {
   const name = escapeHtml(identity.name);
-  const avatar = imageUrl(identity.avatar_url);
+  const candidate = imageUrl(identity.avatar_url);
+  const avatar = candidate && (avatarHost === null || new URL(candidate).host === avatarHost) ? candidate : null;
   // The initial always sits under the avatar, so a missing picture still shows something.
   const emblem = escapeHtml((identity.name.trim()[0] ?? "P").toUpperCase())
     + (avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : "");
@@ -178,7 +190,7 @@ function head(identity: DefaultSiteIdentity, title: string, description: string 
   ].join("");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>${escapeHtml(title)}</title>${meta}
+<title>${escapeHtml(title)}</title>${identity.listed === false ? '<meta name="robots" content="noindex">' : ""}${meta}
 <link rel="stylesheet" href="/site.css"></head>`;
 }
 
@@ -213,16 +225,18 @@ ${footer(identity)}
 </body></html>`;
 }
 
-export function defaultFrame(identity: DefaultSiteIdentity): string {
+export function defaultFrame(identity: DefaultSiteIdentity, avatarHost = ""): string {
+  // site.js only tidies a picture that doesn't load; the twin strips it, as it strips every script.
   return `${head(identity, identity.name, identity.one_liner)}
 <body class="framed">
-${header(identity)}
+${header(identity, avatarHost)}
 <main class="wrap"><div class="inner"><polynet-page></polynet-page></div></main>
 ${footer(identity)}
+<script type="module" src="/site.js"></script>
 </body></html>`;
 }
 
-const FILES: Record<string, { type: string; body: (identity: DefaultSiteIdentity) => string }> = {
+const FILES: Record<string, { type: string; body: (identity: DefaultSiteIdentity, avatarHost: string) => string }> = {
   "/": { type: "text/html", body: defaultHome },
   "/index.html": { type: "text/html", body: defaultHome },
   "/frame": { type: "text/html", body: defaultFrame },
@@ -233,7 +247,7 @@ const FILES: Record<string, { type: string; body: (identity: DefaultSiteIdentity
 
 // Answers the edge as a founder's site Worker would: the front door, the
 // frame, their stylesheet and script, and nothing else.
-export function defaultSiteWorker(identity: () => Promise<DefaultSiteIdentity | null>): Fetcher {
+export function defaultSiteWorker(identity: () => Promise<DefaultSiteIdentity | null>, avatarHost = ""): Fetcher {
   return {
     async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -243,9 +257,9 @@ export function defaultSiteWorker(identity: () => Promise<DefaultSiteIdentity | 
       if (!file || (request.method !== "GET" && request.method !== "HEAD")) return notFound();
       const found = await identity();
       if (!found) return notFound();
-      return new Response(request.method === "HEAD" ? null : file.body(found), {
-        headers: { "Content-Type": `${file.type}; charset=utf-8`, "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" },
-      });
+      const headers: Record<string, string> = { "Content-Type": `${file.type}; charset=utf-8`, "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" };
+      if (found.listed === false) headers["X-Robots-Tag"] = "noindex";
+      return new Response(request.method === "HEAD" ? null : file.body(found, avatarHost), { headers });
     },
     connect() { throw new Error("not supported"); },
   } as unknown as Fetcher;

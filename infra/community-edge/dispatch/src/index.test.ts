@@ -787,10 +787,75 @@ test("default site: the member's own pages on the twin draw the default frame, w
   expect(res.status).toBe(200);
   const html = await res.text();
   expect(html).toContain("<title>Your communities · Apps Club</title>");
-  expect(html).not.toContain("/site.js");
+  // (Its scripts, /site.js included, are stripped by the twin's real rewriter: twin.test.ts.)
   // Its stylesheet is the site's: the twin sends it there.
   const css = await edge.fetch(at(TWIN, "/site.css", { headers: { "sec-fetch-dest": "style" } }), e);
   expect([css.status, css.headers.get("location")]).toEqual([302, `${SITE}/site.css`]);
+});
+
+test("default site: a backend blip is never remembered; only 'no community here' is, and made-up hosts never reach the backend", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  let failing = true;
+  const backend = vi.fn(async (_url: string, init?: RequestInit) => {
+    const origin = String(JSON.parse(String(init?.body ?? "{}")).origin ?? "");
+    if (failing) return new Response("upstream", { status: 503 });
+    if (!origin.includes("//apps-community")) return Response.json({ ok: false, code: "community_unavailable" }, { status: 404 });
+    return Response.json({ ok: true, community: { slug: "apps-community", name: "Apps Club", one_liner: null, about: null, member_count: 3 } });
+  });
+  vi.stubGlobal("fetch", backend);
+  const e = undeployed();
+  expect((await edge.fetch(at(SITE, "/"), e)).status).toBe(404);
+  failing = false;
+  // Back at once, not a minute later.
+  expect((await edge.fetch(at(SITE, "/"), e)).status).toBe(200);
+  // A real "no community here" is remembered: asked once.
+  backend.mockClear();
+  await edge.fetch(at("https://nobody-staging.polynet.page", "/"), e);
+  await edge.fetch(at("https://nobody-staging.polynet.page", "/"), e);
+  expect(backend).toHaveBeenCalledTimes(1);
+  // Hosts that can't be a community's address are answered without asking.
+  backend.mockClear();
+  for (const host of ["a.b-staging.polynet.page", "x-staging.polynet.page", "under_score-staging.polynet.page", "-dash-staging.polynet.page"]) {
+    expect((await edge.fetch(at(`https://${host}`, "/"), e)).status).toBe(404);
+  }
+  expect(backend).not.toHaveBeenCalled();
+});
+
+test("default site: an unlisted community asks search engines not to index it, whoever built its site; the twin never is", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", listed: false }));
+  const home = await edge.fetch(at(SITE, "/"), undeployed());
+  expect(home.headers.get("x-robots-tag")).toBe("noindex");
+  expect(await home.text()).toContain('<meta name="robots" content="noindex">');
+  // A founder's own site for an unlisted community: the same.
+  const deployed = await edge.fetch(at(SITE, "/", { headers: { "sec-fetch-mode": "navigate" } }), sitesEnv());
+  expect(deployed.headers.get("x-robots-tag")).toBe("noindex");
+  // The default site marks its files as well.
+  expect((await edge.fetch(at(SITE, "/site.css"), undeployed())).headers.get("x-robots-tag")).toBe("noindex");
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", listed: true }));
+  const listed = await edge.fetch(at(SITE, "/"), undeployed());
+  expect(listed.headers.get("x-robots-tag")).toBeNull();
+  expect(await listed.text()).not.toContain('name="robots"');
+  const twin = await edge.fetch(at(TWIN, "/join"), undeployed());
+  expect(twin.headers.get("x-robots-tag")).toBe("noindex");
+});
+
+test("default site: the frame shows the avatar only from Polynet's storage (the twin loads nothing else); the front door, any https avatar", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", avatar_url: "https://cdn.example.com/a.png" }));
+  const e = undeployed();
+  const frame = await (await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), e)).text();
+  expect(frame).toContain('<span class="emblem">A</span>');
+  expect(frame).toContain('<script type="module" src="/site.js"></script>');
+  expect(await (await edge.fetch(at(SITE, "/"), e)).text()).toContain('<span class="emblem">A<img src="https://cdn.example.com/a.png" alt=""></span>');
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", avatar_url: "https://live.example.convex.cloud/api/storage/abc" }));
+  const stored = await (await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), e)).text();
+  expect(stored).toContain('<span class="emblem">A<img src="https://live.example.convex.cloud/api/storage/abc" alt=""></span>');
 });
 
 test("twin: one label beside the site's, mapped both ways by the shared helper, never a slug's own site", async () => {

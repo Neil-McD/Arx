@@ -119,6 +119,23 @@ site serves them until the founder deploys.**
   only, never inside CSS) and one colour per community.
 - **A deploy wins.** A deployed site's route always comes first; the address
   never changes.
+- **Renames move the address** (`moveCommunitySiteAddresses`, before the slug
+  is saved): the old site and twin addresses are released and the new ones
+  registered. A community with a deployed site can't rename
+  (`community_slug_locked_by_site`) until a deploy can move with it; a new
+  address another community holds refuses the rename (`community_slug_taken`).
+- **Unlisted is link-only.** An unlisted community's site pages, default or
+  deployed, carry `X-Robots-Tag: noindex` (and the default's `<meta
+  name="robots">`); the twin's pages always do.
+- **The edge asks only about real candidates.** Only a host shaped like a
+  community's address reaches the backend; the backend's "no community here"
+  is remembered for a minute apart from real identities, and a failure is not
+  remembered at all.
+- **Pictures.** The colour field sits under the banner and the initial under
+  the avatar; `/site.js` removes a picture that fails. The frame (which the
+  twin draws under a policy loading images only from Polynet's storage) shows
+  the avatar only when it's stored there. Below tablet width the frame's
+  navigation becomes a scrolling row.
 
 ## Its own world (Oct 28)
 

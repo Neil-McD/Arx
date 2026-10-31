@@ -161,6 +161,38 @@ export async function registerCommunitySiteAddresses(ctx: any, community: { _id:
   }
 }
 
+// A new slug moves the community's site addresses with it: the old site and
+// twin addresses are released (another community may take that slug next)
+// and the new ones registered. A site the founder has deployed lives at the
+// old address, so its slug stays put until a deploy can move with it; and a
+// new address another community already holds refuses the rename. Runs before
+// the slug is saved, so a refusal changes nothing.
+export async function moveCommunitySiteAddresses(ctx: any, community: { _id: any; slug?: unknown }, nextSlug: string) {
+  const previous = String(community.slug ?? "");
+  const sites = sitesEnv();
+  if (!sites || previous === nextSlug) return;
+  const origins = (slug: string) => {
+    const host = siteHostname(slug, sites.domain, sites.suffix);
+    const twin = host ? privateTwinHost(host, sites.domain, sites.suffix) : null;
+    return [host, twin].filter(Boolean).map((name) => `https://${name}`);
+  };
+  const byOrigin = (origin: string) => ctx.db.query("communityDomains").withIndex("by_origin", (q: any) => q.eq("origin", origin)).first();
+  const held = [];
+  for (const origin of origins(previous)) {
+    const row = await byOrigin(origin);
+    if (row && String(row.communityId) === String(community._id)) held.push(row);
+  }
+  if (held.length && await ctx.db.query("communitySiteDeploys").withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id)).first()) {
+    throw new Error("community_slug_locked_by_site");
+  }
+  for (const origin of origins(nextSlug)) {
+    const row = await byOrigin(origin);
+    if (row && String(row.communityId) !== String(community._id)) throw new Error("community_slug_taken");
+  }
+  for (const row of held) await ctx.db.delete(row._id);
+  await registerCommunitySiteAddresses(ctx, { _id: community._id, slug: nextSlug });
+}
+
 // Communities created before every community had a site: register theirs, a
 // page at a time, until done:
 //   npx convex run communitySites:registerCommunitySiteAddressesInternal '{"dryRun":true}'

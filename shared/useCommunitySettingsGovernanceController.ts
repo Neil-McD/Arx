@@ -107,6 +107,12 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   if (message.includes("community_publish_ready_required")) {
     return "Published communities need a name, one-liner, avatar, and banner.";
   }
+  if (message.includes("community_slug_taken")) {
+    return "That address is taken. Pick another.";
+  }
+  if (message.includes("community_slug_locked_by_site")) {
+    return "This community's site is published at its current address, so the address can't change yet.";
+  }
   if (message.includes("community_settings_conflict")) {
     return "Settings changed elsewhere. Reload the latest settings to continue.";
   }

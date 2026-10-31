@@ -40,7 +40,7 @@ test("a new community gets its site and private twin addresses when it's created
   ]);
   // Its public identity answers there, so the edge can serve it.
   const identity = await t.query(internal.communityApps.getCommunityPublicIdentityByOriginInternal, { origin: "https://night-swimmers-staging.polynet.page" });
-  expect(identity).toMatchObject({ slug: "night-swimmers", name: "Night Swimmers", avatar_url: null, banner_url: null });
+  expect(identity).toMatchObject({ slug: "night-swimmers", name: "Night Swimmers", avatar_url: null, banner_url: null, listed: false });
 });
 
 test("without a sites domain, or with a slug that can't be an address, a community is still created, just without one", async () => {
@@ -71,5 +71,54 @@ test("the backfill gives older communities their addresses, skips archived ones,
   expect(await addresses(t)).toEqual([
     ["https://old-club--me.polynet.page", "private"],
     ["https://old-club.polynet.page", "site"],
+  ]);
+});
+
+// A rename of the community's address, as Studio's settings save it.
+async function rename(asOwner: any, communityId: any, slug: string) {
+  const current = await asOwner.query(api.communityLifecycle.getCommunitySettings, { communityId });
+  return await asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
+    communityId, expectedSettingsRevision: current.settings_revision, name: current.name, slug,
+    oneLiner: current.one_liner ?? "", about: current.about ?? "", avatarStorageId: null, avatarUrl: null,
+    bannerStorageId: null, bannerUrl: null, visibility: "unlisted", monthlyAmountBaseUnits: null, annualAmountBaseUnits: null,
+  });
+}
+
+test("renaming a community's address moves its site with it, and frees the old address for someone else", async () => {
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "polynet.page");
+  const t = convexTest(schema, modules);
+  const asOwner = await founder(t);
+  const first = await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Night Swimmers", slug: "night-swimmers" });
+  await rename(asOwner, first.id, "night-owls");
+  expect(await addresses(t)).toEqual([
+    ["https://night-owls--me.polynet.page", "private"],
+    ["https://night-owls.polynet.page", "site"],
+  ]);
+  // The old name, taken by a new community, comes with its own addresses.
+  const second = await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Night Swimmers II", slug: "night-swimmers" });
+  const owners = await t.run(async (ctx) => Object.fromEntries((await ctx.db.query("communityDomains").collect()).map((row) => [row.origin, String(row.communityId)])));
+  expect(owners["https://night-swimmers.polynet.page"]).toBe(String(second.id));
+  expect(owners["https://night-owls.polynet.page"]).toBe(String(first.id));
+});
+
+test("a community with a deployed site keeps its address; a new address someone else holds is refused; neither changes anything", async () => {
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "polynet.page");
+  const t = convexTest(schema, modules);
+  const asOwner = await founder(t);
+  const built = await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Built Club", slug: "built-club" });
+  await t.run(async (ctx) => {
+    const userId = (await ctx.db.query("users").first())!._id;
+    await ctx.db.insert("communitySiteDeploys", { communityId: built.id as any, userId, hostname: "built-club.polynet.page", fileCount: 2, totalBytes: 10, createdAt: NOW });
+  });
+  await expect(rename(asOwner, built.id, "built-elsewhere")).rejects.toThrow("community_slug_locked_by_site");
+  const other = await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Other Club", slug: "other-club" });
+  // An address left registered to another community (before renames moved addresses).
+  await t.run((ctx) => ctx.db.insert("communityDomains", { communityId: built.id as any, origin: "https://claimed.polynet.page", createdAt: NOW }));
+  await expect(rename(asOwner, other.id, "claimed")).rejects.toThrow("community_slug_taken");
+  const slugs = await t.run(async (ctx) => (await ctx.db.query("communities").collect()).map((row) => row.slug).sort());
+  expect(slugs).toEqual(["built-club", "other-club"]);
+  expect((await addresses(t)).map(([origin]) => origin)).toEqual([
+    "https://built-club--me.polynet.page", "https://built-club.polynet.page", "https://claimed.polynet.page",
+    "https://other-club--me.polynet.page", "https://other-club.polynet.page",
   ]);
 });
