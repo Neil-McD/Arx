@@ -193,6 +193,8 @@ class PolynetChannels extends HTMLElement {
   }
 
   render() {
+    // One channel: the page can leave the list out on a phone (the chat names it).
+    this.toggleAttribute("single", this.status === "ready" && this.list.length === 1);
     const focused = this.root.activeElement && this.root.activeElement.getAttribute("data-slug");
     const nodes = styled(this.root, STYLE);
     if (this.status === "ready") {

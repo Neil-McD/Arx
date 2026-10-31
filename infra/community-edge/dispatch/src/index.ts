@@ -373,7 +373,7 @@ export function safeReturnPath(raw: string | null): string {
 
 type PublicIdentity = {
   slug?: string; name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean;
-  avatar_url?: string | null; banner_url?: string | null; listed?: boolean;
+  avatar_url?: string | null; banner_url?: string | null; listed?: boolean; join_gate?: string;
 };
 const IDENTITY_CACHE_MS = 60_000;
 const identityCache = new Map<string, { identity: PublicIdentity; until: number }>();

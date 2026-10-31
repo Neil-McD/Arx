@@ -5,12 +5,14 @@ import {
   pickMostRelevantCommunityMembership,
   requireCommunityChatAccess,
   resolveCommunityBrandingFields,
+  resolveCommunityEntryPolicy,
   resolveCommunityLens,
 } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { registeredSiteOrigin } from "./communitySites";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { deriveCommunityFunnelAction } from "../shared/communityJoinPolicy";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
@@ -120,6 +122,8 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
       banner_url: branding.banner_url,
       // Unlisted means link-only: its site asks search engines not to index it.
       listed: (community as any).visibility === "published",
+      // How someone gets in: join, ask to join (approval), or choose a plan.
+      join_gate: deriveCommunityFunnelAction({ entry_policy: resolveCommunityEntryPolicy(community as any) }),
     };
   },
 });
