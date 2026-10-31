@@ -18,6 +18,8 @@ export type DefaultSiteIdentity = {
   banner_url?: string | null;
   // false: unlisted (link-only), so search engines are asked not to index it.
   listed?: boolean;
+  // How someone gets in: "join", "request_access" (approval) or "checkout".
+  join_gate?: string;
 };
 
 // One strong colour per community until it chooses its own: the same slug always gets the same one.
@@ -213,7 +215,7 @@ ${header(identity)}
   <div class="kicker"><span>On Polynet</span><span>${count}</span></div>
   <h1 class="name${long}">${name}</h1>
   ${tagline}
-  <div class="actions" id="actions"><a class="btn go" href="/join">Join the community</a><a class="btn ghost" href="/__polynet/auth/start?return=%2Fchat">I'm a member</a></div>
+  <div class="actions" id="actions"><a class="btn go" href="/join">${identity.join_gate === "request_access" ? "Ask to join" : "Join the community"}</a><a class="btn ghost" href="/__polynet/auth/start?return=%2Fchat">I'm a member</a></div>
 </div></div>
 </div>
 <div class="below wrap"><div class="inner">

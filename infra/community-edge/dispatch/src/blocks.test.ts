@@ -1482,6 +1482,33 @@ test("<polynet-page> at an address with no page: a quiet not-found inside the fr
   await page.close();
 });
 
+test("the account chip: a picture that won't load becomes the initials; with no name yet, a silhouette, never '?'", async () => {
+  const broken = await open((fake) => { fake.session = { ...fake.session, member: { name: "Theo Brennan", handle: "theo", avatar_url: "https://broken.invalid/theo.png" } }; });
+  const chip = broken.locator("polynet-account [part=trigger] .avatar");
+  await expect.poll(() => chip.evaluate((el) => el.tagName + ":" + el.textContent)).toBe("SPAN:TB");
+  await broken.close();
+  const unnamed = await open((fake) => { fake.session = { ...fake.session, member: null }; });
+  const anon = unnamed.locator("polynet-account [part=trigger] .avatar");
+  await expect.poll(() => anon.count()).toBe(1);
+  expect(await anon.getAttribute("class")).toBe("avatar anon");
+  expect(await anon.textContent()).toBe("");
+  await unnamed.close();
+});
+
+test("chat on a phone: with a single channel the list steps aside (the chat names it); with more, it stays", async () => {
+  const phone = { viewport: { width: 390, height: 800 } };
+  const single = await open((fake) => { fake.channels = fake.channels.slice(0, 1); }, frame(), "/chat", phone);
+  const list = single.locator("polynet-channels");
+  await expect.poll(() => list.getAttribute("single")).toBe("");
+  expect(await list.isVisible()).toBe(false);
+  await single.close();
+  const several = await open(() => {}, frame(), "/chat", phone);
+  await expect.poll(() => several.locator("polynet-channels").getAttribute("state")).toBe("ready");
+  expect(await several.locator("polynet-channels").getAttribute("single")).toBeNull();
+  expect(await several.locator("polynet-channels").isVisible()).toBe(true);
+  await several.close();
+});
+
 test("the account menu: In this club links to the site's own pages, marking the current one; Manage goes to Studio's settings", async () => {
   const page = await open((fake) => {
     (fake as any).account = { member: { name: "Me" }, community: { role: "owner", studio_url: "https://polynet.test/c/run-club/settings/community" },

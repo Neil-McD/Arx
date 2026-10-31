@@ -752,6 +752,15 @@ test("default site: a community with nothing deployed is on its own site, Polyne
   expect(html).toContain("<span>1 member</span>");
   expect(html).toContain('<meta property="og:image" content="https://cdn.example.com/b.png">');
   expect(html).toContain('<a class="btn go" href="/join">Join the community</a>');
+  // A community that approves each member says so on its front door.
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", join_gate: "request_access" }));
+  expect(await (await edge.fetch(at(SITE, "/"), e)).text()).toContain('<a class="btn go" href="/join">Ask to join</a>');
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({
+    name: "Apps <Club>", one_liner: "We build \"apps\".", about: "Tuesdays & Thursdays.", member_count: 1,
+    banner_url: "https://cdn.example.com/b.png", avatar_url: "javascript:alert(1)",
+  }));
   expect(html).not.toContain("javascript:");
   // The colour field is always under the banner, and the initial under the avatar, for when a picture doesn't load.
   expect(html).toContain('<div class="field" aria-hidden="true"><span>A</span></div><img class="art" src="https://cdn.example.com/b.png" alt="">');

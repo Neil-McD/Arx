@@ -39,6 +39,10 @@ const STYLE = [
   ".trigger:hover { background: var(--pa-hover); }",
   ".chevron { width: 10px; height: 10px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); opacity: .7; margin: 0 4px; }",
   ".avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; background: var(--pa-accent); color: var(--pa-on-accent); font-weight: 700; font-size: 13px; }",
+  // Someone whose name isn't known yet (signed in to join): a plain silhouette, never "?".
+  ".avatar.anon { position: relative; overflow: hidden; }",
+  ".avatar.anon::before { content: ''; position: absolute; width: 36%; height: 36%; top: 20%; left: 32%; border-radius: 50%; background: currentColor; opacity: .85; }",
+  ".avatar.anon::after { content: ''; position: absolute; width: 70%; height: 46%; top: 62%; left: 15%; border-radius: 50% 50% 0 0; background: currentColor; opacity: .85; }",
   ".panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 2147483000; width: min(340px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 96px)); overflow: auto;",
   "  background: var(--pa-surface); color: var(--pa-text); border: 1px solid var(--pa-border); border-radius: var(--pa-radius); box-shadow: 0 12px 32px rgba(0,0,0,.24); padding: 8px; }",
   ":host([align=start]) .panel { right: auto; left: 0; }",
@@ -93,9 +97,16 @@ function initials(name) {
   return ((parts[0] || "?")[0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
+// A picture that doesn't load (the private twin loads none from other sites)
+// becomes the initials.
 function avatar(url, name) {
-  if (url) return h("img", { class: "avatar", src: url, alt: "" });
-  return h("span", { class: "avatar", "aria-hidden": "true", text: initials(name) });
+  const fallback = () => String(name || "").trim()
+    ? h("span", { class: "avatar", "aria-hidden": "true", text: initials(name) })
+    : h("span", { class: "avatar anon", "aria-hidden": "true" });
+  if (!url) return fallback();
+  const img = h("img", { class: "avatar", src: url, alt: "" });
+  img.addEventListener("error", () => img.replaceWith(fallback()), { once: true });
+  return img;
 }
 
 // The standard pages, on every site (the site's own address); network ones
@@ -422,6 +433,8 @@ export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defi
     ":where(polynet-page .pn-page-links) { display: flex; flex-wrap: wrap; gap: .5em 1.25em; list-style: none; margin: 0; padding: 0; }",
     "@media (max-width: 720px) {",
     "  :where(polynet-page .pn-page-chat) { grid-template-columns: minmax(0, 1fr); gap: .75rem; }",
+    // With a single channel the chat's own header names it; the list would only repeat it.
+    "  :where(polynet-page .pn-page-chat > polynet-channels[single]) { display: none; }",
     // :where() weighs nothing, so these come after the signed-out rules above unless they skip them.
     "  :where(polynet-page .pn-page-chat > polynet-chat:not([state=signed-out]), polynet-page .pn-page-ask > polynet-ask:not([state=signed-out])) { height: max(20rem, calc(100vh - 14rem)); height: max(20rem, calc(100dvh - 14rem)); }",
     "}",

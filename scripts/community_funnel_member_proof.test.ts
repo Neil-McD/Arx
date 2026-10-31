@@ -85,9 +85,16 @@ describe("community funnel member proof", () => {
     expect(buildCommunityFunnelPrimaryActionView({ mode: "join" }).label).toBe(
       "Join free",
     );
+    // A community that approves each member: pressing it asks, so it says so.
     expect(
       buildCommunityFunnelPrimaryActionView({ mode: "request_access" }).label,
-    ).toBe("Join free");
+    ).toBe("Ask to join");
+    expect(
+      buildCommunityFunnelPrimaryActionView({ mode: "request_access", approvalPending: true }).label,
+    ).toBe("Request pending");
+    expect(
+      buildCommunityFunnelPrimaryActionView({ mode: "request_access", approvalDenied: true, canRequestAgain: true }).label,
+    ).toBe("Request again");
     expect(
       buildCommunityFunnelPrimaryActionView({
         mode: "checkout",

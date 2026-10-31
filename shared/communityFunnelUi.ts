@@ -61,6 +61,8 @@ export function buildCommunityFunnelPrimaryActionView(params: {
   if (params.mode === "request_access") {
     if (params.approvalPending) return { label: "Request pending", hasValidPaidPlan: Boolean(paidPrice) };
     if (params.approvalDenied) return { label: params.canRequestAgain ? "Request again" : "Request denied", hasValidPaidPlan: Boolean(paidPrice) };
+    // Pressing it sends a request for approval, so it says so.
+    return { label: "Ask to join", hasValidPaidPlan: Boolean(paidPrice) };
   }
   if (params.mode === "checkout") return { label: paidPrice ? `Join ${paidPrice}` : "Join unavailable", hasValidPaidPlan: Boolean(paidPrice) };
   if (params.mode === "private") return { label: "Private community", hasValidPaidPlan: Boolean(paidPrice) };
