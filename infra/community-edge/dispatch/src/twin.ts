@@ -235,6 +235,8 @@ export const TWIN_HEADERS: Record<string, string> = {
   "Cross-Origin-Resource-Policy": "same-origin",
   "Origin-Agent-Cluster": "?1",
   "X-Content-Type-Options": "nosniff",
+  // A member's own pages never belong in search results.
+  "X-Robots-Tag": "noindex",
 };
 
 // Twin pages also can't be framed or cached, send their address only to

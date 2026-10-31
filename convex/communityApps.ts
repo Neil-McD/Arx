@@ -118,6 +118,8 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
       // The look Polynet's default site wears: the same avatar and banner its join page shows.
       avatar_url: branding.avatar_url,
       banner_url: branding.banner_url,
+      // Unlisted means link-only: its site asks search engines not to index it.
+      listed: (community as any).visibility === "published",
     };
   },
 });

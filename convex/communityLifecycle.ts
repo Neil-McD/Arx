@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { registerCommunitySiteAddresses } from "./communitySites";
+import { moveCommunitySiteAddresses, registerCommunitySiteAddresses } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
@@ -876,6 +876,8 @@ export const saveCommunitySettings = mutation({
 
     const previousAvatarStorageId = community.avatarStorageId;
     const previousBannerStorageId = community.bannerStorageId;
+    // Its site addresses move with the slug (or the rename is refused, before anything changes).
+    await moveCommunitySiteAddresses(ctx, community, settingsState.normalizedSlug);
 
     await ctx.db.patch(community._id as any, {
       name: settingsState.nextName,

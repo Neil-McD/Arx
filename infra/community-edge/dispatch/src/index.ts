@@ -175,9 +175,26 @@ export async function resolveRoute(hostname: string, env: Env): Promise<Route | 
 }
 
 function userWorker(route: Route, place: Place, env: Env): Fetcher | null {
-  if (route.script === null) return defaultSiteWorker(() => publicIdentity(env, place.siteOrigin));
+  if (route.script === null) return defaultSiteWorker(() => publicIdentity(env, place.siteOrigin), storageHost(env));
   if (env.DISPATCHER) return env.DISPATCHER.get(route.script);
   return env.DEV_USER_WORKER ?? null;
+}
+
+// An unlisted community is link-only: its pages, whoever built them, ask
+// search engines not to index them. Only pages; the identity is cached.
+async function unlistedNoIndex(response: Response, place: Place, env: Env): Promise<Response> {
+  if (!(response.headers.get("content-type") ?? "").includes("text/html") || response.headers.has("x-robots-tag")) return response;
+  const identity = await publicIdentity(env, place.siteOrigin);
+  if (identity?.listed !== false) return response;
+  const marked = new Response(response.body, response);
+  marked.headers.set("X-Robots-Tag", "noindex");
+  return marked;
+}
+
+// Where Polynet keeps uploaded files (the live client's host): the one image
+// host the twin's policy loads besides the site itself.
+function storageHost(env: Env): string {
+  try { return new URL(env.POLYNET_LIVE_URL).host; } catch { return ""; }
 }
 
 // Every community is on its own site: an address on the sites domain that
@@ -188,6 +205,8 @@ async function defaultRoute(siteHost: string, protocol: string, env: Env): Promi
   const sites = sitesOf(env);
   const ending = sites ? `${sites.suffix}.${sites.domain}` : "";
   if (!sites || !siteHost.endsWith(ending) || siteHost.length === ending.length) return null;
+  // Only a host that could be a community's address (one label, a slug's shape) is asked about.
+  if (!privateTwinHost(siteHost, sites.domain, sites.suffix)) return null;
   const identity = await publicIdentity(env, `${protocol}//${siteHost}`);
   return identity?.slug ? { script: null, community: identity.slug } : null;
 }
@@ -354,27 +373,39 @@ export function safeReturnPath(raw: string | null): string {
 
 type PublicIdentity = {
   slug?: string; name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean;
-  avatar_url?: string | null; banner_url?: string | null;
+  avatar_url?: string | null; banner_url?: string | null; listed?: boolean;
 };
 const IDENTITY_CACHE_MS = 60_000;
-const identityCache = new Map<string, { identity: PublicIdentity | null; until: number }>();
+const identityCache = new Map<string, { identity: PublicIdentity; until: number }>();
+// Addresses the backend says no community has, kept apart so a flood of
+// made-up ones never pushes a real community's identity out.
+const missCache = new Map<string, number>();
 
 // The community's public identity (name, one-liner, about, member count), cached
-// briefly per isolate. A failure just leaves the fields null.
+// briefly per isolate. Only the backend's "no community here" is remembered as
+// a miss; a failure (network, 5xx, bad JSON) is null for this request alone, so
+// a blip never takes a default site down for the cache's lifetime.
 async function publicIdentity(env: Env, origin: string): Promise<PublicIdentity | null> {
+  const now = Date.now();
   const cached = identityCache.get(origin);
-  if (cached && cached.until > Date.now()) return cached.identity;
-  let identity: PublicIdentity | null = null;
+  if (cached && cached.until > now) return cached.identity;
+  if ((missCache.get(origin) ?? 0) > now) return null;
   try {
     const res = await backend(env, "/runtime/community_edge/public", { origin }, origin);
-    const body = (await res.json().catch(() => null)) as { ok?: boolean; community?: PublicIdentity } | null;
-    identity = res.ok && body?.ok && body.community ? body.community : null;
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; code?: string; community?: PublicIdentity } | null;
+    if (res.ok && body?.ok && body.community) {
+      if (identityCache.size >= ROUTE_CACHE_MAX) identityCache.clear();
+      identityCache.set(origin, { identity: body.community, until: now + IDENTITY_CACHE_MS });
+      return body.community;
+    }
+    if (res.status === 404 && body?.code === "community_unavailable") {
+      if (missCache.size >= ROUTE_CACHE_MAX) missCache.clear();
+      missCache.set(origin, now + IDENTITY_CACHE_MS);
+    }
   } catch {
-    identity = null;
+    // Unreachable just now: not remembered.
   }
-  if (identityCache.size >= ROUTE_CACHE_MAX) identityCache.clear();
-  identityCache.set(origin, { identity, until: Date.now() + IDENTITY_CACHE_MS });
-  return identity;
+  return null;
 }
 
 // Discover: every published community's public card, the same for every site,
@@ -446,6 +477,7 @@ async function handleDiscover(request: Request, url: URL, route: Route, env: Env
 // Tests start each case with empty per-isolate caches.
 export function resetEdgeCaches(): void {
   identityCache.clear();
+  missCache.clear();
   routeCache.clear();
   discoverCache = null;
 }
@@ -1016,7 +1048,7 @@ export default {
       ? { twin: true, siteOrigin: `${url.protocol}//${twinOf}`, privateOrigin: url.origin }
       : { twin: false, siteOrigin: url.origin, privateOrigin: twinHost ? `${url.protocol}//${twinHost}` : null };
     const response = await serve(request, url, route, place, env);
-    return place.twin ? withTwinHeaders(response) : response;
+    return place.twin ? withTwinHeaders(response) : await unlistedNoIndex(response, place, env);
   },
 };
 
