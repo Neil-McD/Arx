@@ -137,6 +137,22 @@ site serves them until the founder deploys.**
   the avatar only when it's stored there. Below tablet width the frame's
   navigation becomes a scrolling row.
 
+## The front door (Oct 31)
+
+Studio points people at the community's site, its front door.
+
+- **Where the address comes from.** `communitySiteUrl` (communitySites.ts) is
+  the community's registered site on this environment, or null where sites
+  aren't set up (production until its sites run). Studio's community list
+  (`communityAdmin:listCommunityMemberships`) and the `/c/<slug>` page
+  (`communityPublic:resolvePublicFunnelBySlug`) both carry it as `site_url`.
+- **`/c/<slug>` sends visitors to the site.** The bare page (desktop or the
+  mobile shell's `/m/c/<slug>`) replaces itself with the site's front door
+  (`communitySiteRedirectTarget`, https only). Studio's own pages under
+  `/c/<slug>/...` stay. Joining, paid or not, happens on the site's twin `/join`.
+- **Studio's community menu** has "Visit site", and "Invite people" copies the
+  site's address.
+
 ## Its own world (Oct 28)
 
 Approved by Neil: nothing a member presses on a community site drops them

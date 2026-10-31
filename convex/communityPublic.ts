@@ -51,7 +51,7 @@ import {
   listSharedChannelReadableRows,
 } from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { registeredSiteOrigin } from "./communitySites";
+import { communitySiteUrl, registeredSiteOrigin } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
 import {
   requireCommunityBuilderAccess,
@@ -341,6 +341,8 @@ export const resolvePublicFunnelBySlug = query({
         visibility: community.visibility,
         entry_policy: entryPolicy,
         funnel: COMMUNITY_FUNNEL_PUBLIC_CONFIG,
+        // Its own site: the community's front door, so this page sends visitors there.
+        site_url: await communitySiteUrl(ctx, community),
       },
       active_plan: activePlan,
     };

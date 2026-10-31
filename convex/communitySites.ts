@@ -145,6 +145,13 @@ function sitesEnv(): { domain: string; suffix: string } | null {
   return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
 }
 
+// The community's own site on this environment (its registered address), for
+// Studio's links and the /c/<slug> hand-off; null where it has none.
+export async function communitySiteUrl(ctx: any, community: { _id: any; slug?: unknown }): Promise<string | null> {
+  const sites = sitesEnv();
+  return sites ? await registeredSiteOrigin(ctx, community, sites.domain, sites.suffix) : null;
+}
+
 // Every community is on its own site from the start: its site address and
 // private twin are registered when it's created, and Polynet's default site
 // serves them until the founder deploys their own. A slug with no valid site

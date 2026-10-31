@@ -239,6 +239,28 @@ export function buildCommunityHomePath(
 }
 
 
+// The bare /c/<slug> page was the community's funnel; a community with its own
+// site sends visitors there instead, since the site is its front door. Only that
+// exact page (Studio's own /c/<slug>/... pages stay), and only to an https site.
+export function communitySiteRedirectTarget(
+  pathname: string | null | undefined,
+  communitySlug: string | null | undefined,
+  siteUrl: unknown,
+): string | null {
+  const slug = String(communitySlug ?? "").trim().toLowerCase();
+  // The mobile shell's /m prefix too (/m/c/<slug>).
+  const path = String(pathname ?? "").replace(/\/+$/, "").replace(/^\/m(?=\/)/, "");
+  let here = "";
+  try { here = decodeURIComponent(path).toLowerCase(); } catch { return null; }
+  if (!slug || here !== `/c/${slug}` || typeof siteUrl !== "string") return null;
+  try {
+    const site = new URL(siteUrl);
+    return site.protocol === "https:" ? `${site.origin}/` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
