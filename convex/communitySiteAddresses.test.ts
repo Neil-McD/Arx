@@ -122,3 +122,18 @@ test("a community with a deployed site keeps its address; a new address someone 
     "https://other-club--me.polynet.page", "https://other-club.polynet.page",
   ]);
 });
+
+test("Studio's community list and the /c/<slug> page both carry the community's site, its front door", async () => {
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "polynet.page");
+  vi.stubEnv("POLYNET_SITES_HOST_SUFFIX", "-staging");
+  const t = convexTest(schema, modules);
+  const asOwner = await founder(t);
+  await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Night Swimmers", slug: "night-swimmers" });
+  const funnel = await t.query(api.communityPublic.resolvePublicFunnelBySlug, { communitySlug: "night-swimmers" });
+  expect((funnel as any).community.site_url).toBe("https://night-swimmers-staging.polynet.page");
+  const mine = await asOwner.query(api.communityAdmin.listCommunityMemberships, {});
+  expect((mine as any[]).map((row) => row.community?.site_url ?? row.communities?.site_url)).toEqual(["https://night-swimmers-staging.polynet.page"]);
+  // Where sites aren't set up, there's no site to send anyone to.
+  vi.unstubAllEnvs();
+  expect(((await t.query(api.communityPublic.resolvePublicFunnelBySlug, { communitySlug: "night-swimmers" })) as any).community.site_url).toBeNull();
+});

@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   GitFork,
   GripVertical,
   Hash,
@@ -21,6 +22,8 @@ import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./commun
 type CommunityNavCommunityLike = {
   slug?: string | null;
   name?: string | null;
+  // The community's own site, where members live (null where it has none).
+  site_url?: string | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -131,6 +134,16 @@ function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
   target.focus();
 }
 
+// The community's own site when it has one: its front door, and what an invite shares.
+function resolveCommunitySiteUrl(siteUrlRaw: string | null | undefined): string | null {
+  try {
+    const site = new URL(String(siteUrlRaw ?? ""));
+    return site.protocol === "https:" ? `${site.origin}/` : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
   const slug = String(slugRaw ?? "").trim();
   if (!slug) return null;
@@ -194,7 +207,8 @@ export const CommunityNav = memo(function CommunityNav({
     canViewActiveCommunityAnalytics;
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
-  const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
+  const siteUrl = resolveCommunitySiteUrl(activeCommunity?.site_url);
+  const joinUrl = siteUrl ?? resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelLoadingSkeleton =
@@ -642,8 +656,23 @@ export const CommunityNav = memo(function CommunityNav({
         <div className="community-nav-footer" aria-hidden="true">
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
-      ) : canCopyJoinLink ? (
+      ) : canCopyJoinLink || siteUrl ? (
         <div className="community-nav-footer">
+          {siteUrl ? (
+            <a
+              className="nav-item community-nav-site"
+              href={siteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Visit the community's site"
+            >
+              <span className="nav-icon">
+                <ExternalLink size={16} strokeWidth={1.9} aria-hidden="true" />
+              </span>
+              <span className="nav-item-label">Visit site</span>
+            </a>
+          ) : null}
+          {canCopyJoinLink ? (
           <button
             className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
             type="button"
@@ -660,6 +689,7 @@ export const CommunityNav = memo(function CommunityNav({
             </span>
             <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite people"}</span>
           </button>
+          ) : null}
         </div>
       ) : null}
       {isAddChannelOpen ? (

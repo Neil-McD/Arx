@@ -19,7 +19,7 @@ import {
   startCloudPublicFunnelCheckout,
 } from "../../../../shared/cloudPublicFunnelGateway";
 import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
-import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
+import { applyShellVariantToPublicPath, communitySiteRedirectTarget, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
 import type { AuthSession } from "../auth";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 
@@ -436,6 +436,14 @@ export function useWebPublicFunnelActions<
           communitySlug: requestedSlug,
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
+        // The community's site is its front door: the bare funnel page sends visitors there.
+        const siteTarget = typeof window === "undefined"
+          ? null
+          : communitySiteRedirectTarget(window.location.pathname, payload.community.slug, (payload.community as { site_url?: unknown }).site_url);
+        if (siteTarget) {
+          window.location.replace(siteTarget);
+          return;
+        }
 
         const revealImageUrls = [
           payload.community.avatar_url ?? null,
