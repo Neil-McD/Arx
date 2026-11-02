@@ -57,6 +57,7 @@ export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 
 export const COMMUNITY_SETTINGS_PANES = [
   "community",
+  "appearance",
   "agent",
   "danger",
 ] as const;
@@ -141,6 +142,9 @@ export function parseCommunitySettingsPane(
       return "agent";
     case "danger":
       return "danger";
+    case "appearance":
+    case "look":
+      return "appearance";
     case "community":
     default:
       return "community";
@@ -161,6 +165,8 @@ export function isCommunitySettingsPaneAllowedForAccess(
   switch (pane) {
     case "community":
       return access.canViewSettings;
+    case "appearance":
+      return access.canManageSettings;
     case "agent":
       return access.canManageMembers;
     case "danger":

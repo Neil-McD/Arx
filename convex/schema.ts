@@ -1533,6 +1533,47 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"]),
 
+  // A community's look (shared/communityTheme.ts). Members see the published
+  // theme; managers edit the draft. Both are stored normalized.
+  communityThemes: defineTable({
+    communityId: v.id("communities"),
+    draftTheme: v.any(),
+    draftRevision: v.number(),
+    draftUpdatedAt: v.number(),
+    draftUpdatedByUserId: v.id("users"),
+    publishedTheme: v.optional(v.any()),
+    publishedDraftRevision: v.optional(v.number()),
+    publishedAt: v.optional(v.number()),
+    publishedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"]),
+
+  // Looks an owner saved under a name, to switch back to later. Applying one
+  // copies it into communityThemes' draft; publishing stays a separate step.
+  communitySavedThemes: defineTable({
+    communityId: v.id("communities"),
+    name: v.string(),
+    theme: v.any(),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"]),
+
+  // A community's brand (shared/communityBrand.ts): what designs start from.
+  // Kept apart from communityThemes so changing the look never resets it.
+  communityBrands: defineTable({
+    communityId: v.id("communities"),
+    brand: v.any(),
+    revision: v.number(),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
     eventType: v.union(v.literal("funnel_visit")),

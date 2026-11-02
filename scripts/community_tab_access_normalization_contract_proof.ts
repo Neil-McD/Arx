@@ -67,7 +67,7 @@ assert.deepEqual(
     canManageMembers: true,
     isOwner: false,
   }),
-  ["community", "agent"],
+  ["community", "appearance", "agent"],
   "admins must receive configuration panes without the owner-only Danger pane",
 );
 

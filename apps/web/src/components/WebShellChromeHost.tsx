@@ -10,6 +10,7 @@ import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
 import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
+import { useWebCommunityThemeStyle } from "../controllers/useWebCommunityThemeStyle";
 import type {
   MobileOverlay,
   WebCommunityShellProps,
@@ -34,7 +35,27 @@ export type WebShellChromeHostProps = {
   globalOverlays: ReactNode;
 };
 
+// Where a community's own look applies (docs/community-theme-v1.md): its pages
+// and its settings, so the Appearance editor wears the community's colours.
+// The community rail and everything outside a community keep Polynet's look.
+const COMMUNITY_THEMED_DESTINATIONS = new Set([
+  "community_home",
+  "community_chat",
+  "community_resources",
+  "community_events",
+  "community_agent",
+  "community_workflows",
+  "community_settings",
+  "community_analytics",
+]);
+
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
+  const communityTheme = useWebCommunityThemeStyle(
+    COMMUNITY_THEMED_DESTINATIONS.has(props.communityShell.destination.kind)
+      ? props.communityShell.activeCommunity?.id ?? null
+      : null,
+  );
+  const communityThemeAttribute = communityTheme.attribute ?? undefined;
   const isMobileDedicatedRoot =
     props.showMobileAppShell &&
     (props.communityShell.mobileRootPage === "agent" ||
@@ -85,7 +106,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           : props.communityShell.destination.kind === "discover"
             ? "Discover"
             : "Polynet";
-  const mainSurface = showMobileGlobalShell ? (
+  const unthemedMainSurface = showMobileGlobalShell ? (
     <WebMobileGlobalShell
       communityShell={props.communityShell}
       isCommunityHome={isMobileCommunityHome}
@@ -94,6 +115,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       {mobileGlobalShellContent}
     </WebMobileGlobalShell>
   ) : props.mainSurface;
+  // On desktop the community surface below carries the theme. Elsewhere the
+  // page is wrapped without a box of its own, so layout is unchanged.
+  const mainSurface =
+    communityThemeAttribute && !desktopCommunityNav ? (
+      <div className="community-theme-scope" data-community-theme={communityThemeAttribute}>
+        {unthemedMainSurface}
+      </div>
+    ) : unthemedMainSurface;
   const desktopSettingsSidebar = (
     <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
   );
@@ -134,13 +163,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
         {props.communityShell.showDesktopCommunityRail ? (
           <div
             className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}
+            data-community-theme={desktopCommunityNav ? communityThemeAttribute : undefined}
           >
             {desktopFrameMode === "settings" ? desktopSettingsSidebar : null}
             {desktopCommunityNav}
             {mainSurface}
           </div>
         ) : desktopCommunityNav ? (
-          <div className="product-shell-surface product-shell-surface--community">
+          <div className="product-shell-surface product-shell-surface--community" data-community-theme={communityThemeAttribute}>
             {desktopCommunityNav}
             {mainSurface}
           </div>
@@ -152,7 +182,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
         )}
       </div>
 
-      {props.globalOverlays}
+      {communityThemeAttribute ? (
+        // Inside a community, Messages and other overlays take its look too.
+        <div className="community-theme-scope" data-community-theme={communityThemeAttribute}>
+          {props.globalOverlays}
+        </div>
+      ) : (
+        props.globalOverlays
+      )}
     </div>
   );
 }

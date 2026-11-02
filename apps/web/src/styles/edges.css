@@ -1,0 +1,35 @@
+/* Edges. The theme's Edges setting
+   (soft | sharp | clean | framed, see shared/communityTheme.ts) sets the
+   --pn-edge-* values and the line colours; these rules only read them, so
+   "soft" and dark schemes look as they did. Sizes are in rem so the theme
+   map leaves them alone. */
+
+/* Cards draw their line at full strength (soft keeps the old 72% line) and
+   take the setting's lift. */
+[data-community-theme] :is(
+  .community-events-month-nav,
+  .resource-course-outline
+) {
+  border-color: var(--pn-edge-card-line, color-mix(in srgb, var(--border-default) 72%, transparent));
+  box-shadow: var(--pn-edge-lift, none);
+}
+[data-community-theme] article.resource-course-card { border-color: var(--pn-edge-card-line, var(--border-default)); }
+[data-community-theme] .chat-input-bar { border-color: var(--composer-border); }
+
+/* Framed: each column is its own rounded panel with a gap around it, on the
+   tinted canvas. With the other settings the gap and radius are 0. */
+.product-shell-surface[data-community-theme] { background: var(--pn-edge-canvas, var(--bg-app)); }
+.product-shell-surface--community[data-community-theme] {
+  gap: var(--pn-edge-gap, 0rem);
+  padding: var(--pn-edge-gap, 0rem);
+}
+.product-shell-surface--community[data-community-theme] > :is(.community-nav, main.workspace) {
+  border-radius: var(--pn-edge-panel-radius, 0rem);
+  box-shadow: var(--pn-edge-frame, none);
+}
+
+/* Framed: the top-right buttons move in with the panels, so they sit inside
+   the top panel's bar instead of on its edge. */
+.app-topbar .topbar-right-island > [data-community-theme] > * {
+  translate: calc(-1 * var(--pn-edge-gap, 0rem)) var(--pn-edge-gap, 0rem);
+}
