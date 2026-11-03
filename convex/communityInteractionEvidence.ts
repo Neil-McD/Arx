@@ -1015,7 +1015,7 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     // unfiltered search that finds nothing falls back to the recent scan.
     // Only when the scan can search the same words: a query it can't tokenize
     // (non-Latin, one letter) would otherwise read as "browse recent".
-    if (indexed && !filtered && recent.results.length === 0 && tokenizeQuery(query).length > 0) {
+    if (indexed && !filtered && !args.sort && recent.results.length === 0 && tokenizeQuery(query).length > 0) {
       const indexTruncated = recent.truncated;
       recent = await recentScan();
       // An index search that was cut short stays marked incomplete.
