@@ -1,4 +1,5 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import {
@@ -135,6 +136,8 @@ export const setChannelAccess = mutation({
     if (!args.acknowledgeHistoryExposure) throw new Error("community_channel_history_acknowledgement_required");
     await requireCommunityChannelCapacity({ ctx, communityId: args.communityId, accessMode: args.accessMode });
     await ctx.db.patch(args.channelId, { accessMode: args.accessMode, updatedAt: Date.now() });
+    // The channel's search rows take the new access key.
+    await ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.relabelCommunitySearchChannelInternal, { channelId: args.channelId });
     return mapCommunityChannel({ ...channel, accessMode: args.accessMode });
   },
 });
@@ -294,6 +297,8 @@ export const deleteCommunityChannel = mutation({
       channelId: args.channelId,
       actorUserId: userId,
     });
+    // An archived channel's posts leave search.
+    await ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.relabelCommunitySearchChannelInternal, { channelId: args.channelId });
     return {
       deleted_channel_id: normalizeIdValue(archived._id),
       deleted_channel_slug: archived.slug,
