@@ -1,4 +1,5 @@
 import { normalizeSocialProfileLinks } from "./socialProfileLinks.ts";
+import { renderMemberStanding, type MemberStanding } from "./communityOntology.ts";
 import { validateProfileHandle } from "./profileHandle.ts";
 import {
   normalizeCommunityResourcePathSegment,
@@ -89,6 +90,8 @@ export type MemberProfileSemanticSource = {
   currentCommunity: SelfProfileCommunitySummary & {
     role: "owner" | "admin" | "moderator" | "member";
   };
+  // Counts and dates the platform keeps about them here (communityOntology).
+  standing?: MemberStanding | null;
 };
 
 export type PlatformUserProfileSemanticSource = {
@@ -794,6 +797,7 @@ export function renderMemberProfileMarkdown(
     `- Community: ${JSON.stringify(currentCommunity.name)} (\`${currentCommunity.slug}\`)`,
     `- Role: \`${currentRole}\``,
   ];
+  if (source.standing) lines.push("", renderMemberStanding(source.standing));
   return lines.join("\n");
 }
 

@@ -1211,7 +1211,9 @@ export default defineSchema({
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    // Who holds a role (the community card names its admins and moderators).
+    .index("by_community_role_active", ["communityId", "role", "active"]),
 
   communityOnboardingConfigs: defineTable({
     communityId: v.id("communities"),

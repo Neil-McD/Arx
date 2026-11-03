@@ -399,6 +399,7 @@ test("self-context query rechecks access after path resolution and refuses direc
 const modules = import.meta.glob([
   "./communityCompilerDigest.ts",
   "./communityPublic.ts",
+  "./communityOntologyCards.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3236,4 +3237,31 @@ test("a JSON document over the limit is shortened inside its longest text and st
   // Small documents are untouched.
   const small = JSON.stringify({ a: 1 }, null, 2);
   expect(fitJsonDocument({ a: 1 }, small, 24_000)).toBe(small);
+});
+
+test("community.md is the community card: the reader's restricted channels (from the directory's later page) appear, others' never", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  await t.run(async ctx => {
+    const now = Date.now();
+    const membership = (await ctx.db.query("communityMemberships")
+      .withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
+    const mine = await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "crew", name: "crew",
+      accessMode: "restricted", postingPolicy: "members", status: "active", position: 5, createdAt: now, updatedAt: now });
+    await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "founders-only", name: "founders-only",
+      accessMode: "restricted", postingPolicy: "members", status: "active", position: 6, createdAt: now, updatedAt: now });
+    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: mine,
+      principalKey: `user:${f.memberId}`, membershipId: membership._id,
+      membershipActivationSequence: membership.activationSequence, status: "active", createdByUserId: f.ownerId, createdAt: now, updatedAt: now });
+  });
+  const read = await executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), authSubject: f.memberSubject, userId: f.memberId,
+    principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", toolName: "polynet_read",
+    input: { path: "/communities/canonical-community/community.md" },
+  });
+  expect(read.ok).toBe(true);
+  const body = String((read as any).value.body);
+  expect(body).toContain("## People");
+  expect(body).toContain("- #crew (private: invited members only)");
+  expect(body).not.toContain("founders-only");
 });

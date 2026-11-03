@@ -62,6 +62,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
+  `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
   `memberEntryDestination`, `platformHomeCommunity`.
 - **Reached by:** Studio (`/c/<slug>`); community sites' `/join` (their private twin).
 - **Rules:** rejoining starts as `member` (an earlier role is never restored);
