@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import { hashSiteFile, publishSite, readSitesConfig, startSiteUpload, uploadSiteFiles } from "./communitySiteDeploy";
 import { siteFileMimeType, siteHostname, siteScriptName, validateSiteManifest } from "./communitySites";
@@ -17,6 +18,7 @@ import {
   POLYNET_MEMORY_DIRECTORY_PATH,
   POLYNET_MEMBERS_DIRECTORY_PATH,
   MEMBER_TIMELINE_PATH,
+  COMMUNITY_HANDBOOK_PATH,
   POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
@@ -1440,6 +1442,15 @@ async function executeCanonicalRead(args: {
   if (target.localPath === POLYNET_COMMUNITY_PROFILE_PATH) {
     const card = await readCommunityCard(args, target);
     if (card) return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: card, truncated: false } };
+  }
+
+  // The founder-approved handbook (members only; the approved text only).
+  if (target.localPath === COMMUNITY_HANDBOOK_PATH) {
+    if (args.evidenceSurface === "community_funnel_builder")
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const handbook = await args.ctx.runQuery((internal as any).communityHandbook.readApprovedCommunityHandbookInternal, { communityId: target.communityId });
+    if (!handbook) return canonicalError("semantic_not_found", "This community has no approved handbook yet.");
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: renderCommunityHandbook(handbook), truncated: false } };
   }
 
   // One member's activity, newest first, within what the reader may read.

@@ -965,6 +965,7 @@ async function executeRetrievalAgentLoop(
   // through the same door and lens as a model-issued polynet_read, so the agent
   // never has to choose to look. Failure never blocks the turn.
   let communityCardMd: string | null = null;
+  let communityHandbookMd: string | null = null;
   const communityCardSlug = String(params.communitySlug ?? "").trim();
   if (
     params.invocationSurface === "member_agent_dock" &&
@@ -990,14 +991,28 @@ async function executeRetrievalAgentLoop(
         communityCardMd = parseCommunityCardBody(card.outputText);
         cardStatus = communityCardMd ? "loaded" : "empty";
       }
+      // The founder-approved handbook joins the card when there is one.
+      const handbook = await executeRetrievalHarnessTool({
+        ctx: params.ctx,
+        userId: params.userId,
+        communityId: params.communityId,
+        authSubject: params.authSubject,
+        runId: params.runId,
+        toolCallId: `${params.runId}:community_handbook`,
+        toolName: "polynet_read",
+        args: { path: `/communities/${communityCardSlug}/handbook.md` },
+        evidenceSurface: "member_agent_dock",
+        communityBoundConversation: communityConversation,
+      });
+      if (handbook.status === "ok") communityHandbookMd = parseCommunityCardBody(handbook.outputText);
     } catch {
-      communityCardMd = null;
+      communityCardMd = communityCardMd ?? null;
     }
     try {
       await params.appendRunEvent({
         eventType: "community_card",
         eventKey: `${params.runId}:community_card:1`,
-        payload: { version: 1, run_id: params.runId, status: cardStatus, chars: communityCardMd?.length ?? 0 },
+        payload: { version: 1, run_id: params.runId, status: cardStatus, chars: communityCardMd?.length ?? 0, handbook_chars: communityHandbookMd?.length ?? 0 },
       });
     } catch {
       // Best-effort receipt; the prompt bundle receipt records the injected section.
@@ -1089,6 +1104,7 @@ async function executeRetrievalAgentLoop(
     memberIdentityContextMd,
     communityMemoryRecallMd,
     communityCardMd,
+    communityHandbookMd,
     promptExtensions: resolvedHarness.promptExtensions,
   });
   // One cache group per community and surface: they share the stable prefix.

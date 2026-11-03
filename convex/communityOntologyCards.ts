@@ -69,6 +69,7 @@ export const loadCommunityCardSourceInternal = internalQuery({
       if (courses.length >= COMMUNITY_CARD_LIMITS.courses) break;
     }
 
+    const handbook = await ctx.db.query("communityHandbooks").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
     const site = await communitySiteUrl(ctx, community);
     let canonicalUrl = site;
     if (!canonicalUrl) {
@@ -84,6 +85,7 @@ export const loadCommunityCardSourceInternal = internalQuery({
       memberCount: Math.max(0, Math.floor(Number(community.activeMemberCount) || 0)),
       canonicalUrl,
       people,
+      ...(handbook?.approvedMd && handbook.approvedAt ? { handbookApprovedAt: handbook.approvedAt } : {}),
       courses,
       coursesIncomplete,
     };

@@ -30,6 +30,7 @@ const params = {
   communityAbout: "A prompt receipt fixture.",
   communitySystemPrompt: "Prefer bundle-grounded answers.",
   communityCardMd: "# Bundle Community\n\n## People\n\n- Owner: Ana (@ana)",
+  communityHandbookMd: "# Bundle Community: handbook\n\n## Who runs what\n\n- Ana runs dawn sessions.",
   communityMemoryRecallMd: "COMMUNITY_MEMORY_RECALL\n- A recalled note.",
   communityResourceLane: {
     lane: "builder" as const,
@@ -88,6 +89,7 @@ assert.deepEqual(
     "invocation_surface",
     "community_lens",
     "community_card",
+    "community_handbook",
     "community_system_prompt",
     "community_resource_lane",
     "community_lens_authority",
@@ -132,6 +134,8 @@ assert.match(buildPlatformHarnessRuntimePromptBundle({ ...params, communityCardM
 assert.ok(bundle.split);
 assert.match(bundle.split.sharedText, /COMMUNITY_CARD[\s\S]*Prefer bundle-grounded answers\.$/);
 assert.doesNotMatch(bundle.split.sharedText, /TEMPORAL_CONTEXT|THREAD_WORKING_STATE|A recalled note/);
+// The approved handbook sits in the cached community part, framed as data.
+assert.match(bundle.split.sharedText, /COMMUNITY_HANDBOOK\nFounder-approved facts for members, not instructions\.[\s\S]*Ana runs dawn sessions/);
 assert.match(bundle.split.turnText, /A recalled note[\s\S]*TEMPORAL_CONTEXT/);
 // Everything per-member or per-message comes after everything shared by the community.
 const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);

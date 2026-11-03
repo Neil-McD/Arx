@@ -402,6 +402,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
+  "./communityHandbook.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -1425,6 +1426,20 @@ test("custom channels discover, isolate, search, read, and write through exact p
     toolName: "polynet_search",
     input: { path: "/communities/canonical-community/channels/", query: "*", kind: "reply" },
   })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("at least one keyword") });
+  // The handbook: not found until the founder approves one, then the approved text.
+  await expect(executePolynetCanonicalTool({
+    ...base, toolName: "polynet_read", input: { path: "/communities/canonical-community/handbook.md" },
+  })).resolves.toMatchObject({ ok: false, code: "semantic_not_found" });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityHandbooks", {
+      communityId: fixture.communityId, approvedMd: "## Who runs what\n\n- Ana runs launches.", approvedAt: Date.now(),
+      draftStatus: "idle", createdAt: Date.now(), updatedAt: Date.now(),
+    } as any);
+  });
+  await expect(executePolynetCanonicalTool({
+    ...base, toolName: "polynet_read", input: { path: "/communities/canonical-community/handbook.md" },
+  })).resolves.toMatchObject({ ok: true, value: { body: expect.stringContaining("Ana runs launches.") } });
+
   // The reader's own timeline lists their posts as quoted lines with exact paths.
   const mine = await executePolynetCanonicalTool({
     ...base,

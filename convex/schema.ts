@@ -1981,6 +1981,22 @@ export default defineSchema({
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
 
+  // The founder-approved handbook (communityHandbook.ts): facts members ask
+  // about. Only approvedMd reaches the agent; the draft waits for approval.
+  communityHandbooks: defineTable({
+    communityId: v.id("communities"),
+    approvedMd: v.optional(v.string()),
+    approvedAt: v.optional(v.number()),
+    approvedByUserId: v.optional(v.id("users")),
+    draftMd: v.optional(v.string()),
+    draftUpdatedAt: v.optional(v.number()),
+    draftStatus: v.union(v.literal("idle"), v.literal("drafting"), v.literal("failed")),
+    draftError: v.optional(v.string()),
+    draftRequestedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
   // One search row per live, community-visible post or reply: a projection
   // kept current in the same write as its source (communitySearchDocs.ts).
   // Search finds candidates; every result is re-checked against the source.

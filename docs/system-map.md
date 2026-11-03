@@ -244,6 +244,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes);
   `stagingSeedBriefLab` (hand-run staging seed).
 - **Tables:** `communityFounderBriefSettings`, `communityFounderBriefs`.
+- **Handbook:** `communityHandbook` (the founder-approved handbook: owners and admins
+  draft it with the agent, edit and approve it in Studio; members and the agent read
+  only the approved text at `handbook.md`). Table: `communityHandbooks`.
 - **Going:** member workflows and forms (Studio Workflows tab, rule editor, forms):
   `communityMemberWorkflow*`, `communityWorkflow*`, `communityForm*`,
   `communityAgentServiceWorkflowCore`, `communityMemberServiceChannelCore`; tables
