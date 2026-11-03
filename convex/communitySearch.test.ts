@@ -183,6 +183,26 @@ test("search keeps working past ten rooms in total (up to 100 can be private)", 
   expect(asTheo.results.map((r: any) => r.channel_slug)).toEqual(["general"]);
 });
 
+test("a member with many stale grants to archived rooms still searches (no second page in one query)", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await t.run(async (ctx: any) => {
+    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", f.maya)).unique();
+    for (let i = 0; i < 60; i += 1) {
+      const room = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, createdByUserId: f.owner, slug: `old-${i}`, name: `old-${i}`, normalizedName: `old-${i}`,
+        accessMode: "restricted", postingPolicy: "members", status: "archived", position: 50 + i, createdAt: NOW, updatedAt: NOW,
+      });
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId: room, principalKey: `user:${f.maya}`, membershipId: membership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.owner, createdAt: NOW, updatedAt: NOW,
+      });
+    }
+  });
+  const asMaya = await search(t, f, f.maya, "quokka");
+  expect(asMaya.results.map((r: any) => r.channel_slug).sort()).toEqual(["crew", "general"]);
+});
+
 test("a manager past the private-room bound: a miss falls back to the recent scan but stays marked incomplete", async () => {
   const t = convexTest(schema, modules);
   const f = await fixture(t);

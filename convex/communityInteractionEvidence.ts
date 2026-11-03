@@ -5,7 +5,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { resolveCommunityChannelActor, type ChannelActor, type ChannelActorKind } from "./communityChannelAccess";
+import { getCommunityChannelCapabilities, resolveCommunityChannelActor, type ChannelActor, type ChannelActorKind } from "./communityChannelAccess";
 import { channelActorKindValidator } from "./communityChannelValidators";
 import {
   normalizeIdValue,
@@ -41,7 +41,6 @@ import {
   interactionBelongsToChannel,
   listSharedChannelReadableRows,
   listChannelReadableRows,
-  listAuthorizedCommunityChannelPage,
   listSharedCommunityChannels,
   requireSharedChannelForAddressableRow,
   requireChannelFromAuthorizedSet,
@@ -535,6 +534,29 @@ function snippetAroundMatch(searchText: string, query: string): string | null {
   return `${start > 0 ? "…" : ""}${body.slice(start, end).trim()}${end < body.length ? "…" : ""}`;
 }
 
+const PRIVATE_ROOM_SCAN_BOUND = 200;
+
+// The private rooms an actor can read, by position: managers from the room
+// list, members from their grants (stale grants to archived rooms are skipped).
+// Returns at most one more than the search bound, so callers can tell.
+async function listReadablePrivateRoomsForSearch(ctx: any, communityId: any, actor: ChannelActor): Promise<CommunityChannelLike[]> {
+  const candidates: any[] = actor.isManager
+    ? await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", (q: any) =>
+      q.eq("communityId", communityId).eq("accessMode", "restricted").eq("status", "active")).take(PRIVATE_ROOM_SCAN_BOUND)
+    : await Promise.all((await ctx.db.query("communityChannelParticipants").withIndex("by_community_principal_status", (q: any) =>
+      q.eq("communityId", communityId).eq("principalKey", actor.principalKey).eq("status", "active")).take(PRIVATE_ROOM_SCAN_BOUND))
+      .map((grant: any) => ctx.db.get(grant.channelId)));
+  const rooms: CommunityChannelLike[] = [];
+  for (const channel of candidates) {
+    if (!channel || normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) || channel.status !== "active" ||
+      channel.accessMode !== "restricted") continue;
+    if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) continue;
+    rooms.push(channel);
+  }
+  rooms.sort((a, b) => a.position - b.position || normalizeIdValue(a._id).localeCompare(normalizeIdValue(b._id)));
+  return rooms.slice(0, MAX_RESTRICTED_SEARCH_KEYS + 1);
+}
+
 // Every live post and reply the reader may read, by words, across all history.
 // The index only proposes candidates: each is re-read and re-checked against
 // its post, thread and channel before it is returned.
@@ -572,20 +594,12 @@ async function searchIndexedCommunityInteractionEvidence(args: {
   } else {
     channels = await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
   }
-  // A member's private rooms, through the paged directory read (the community
-  // supports up to 100), until the search's private-room bound.
+  // A member's private rooms (a community may have up to 100), read with
+  // bounded takes, never paginate, which a query may call only once.
   let moreRestricted = false;
   if (memberActor && !(requestedChannelId || requestedChannelSlug)) {
-    let cursor: string | null = null;
-    const privateRooms: CommunityChannelLike[] = [];
-    for (;;) {
-      const page = await listAuthorizedCommunityChannelPage({ ctx: args.ctx, communityId: args.communityId, actor: memberActor,
-        section: "private", paginationOpts: { cursor, numItems: 50 } });
-      privateRooms.push(...page.page);
-      if (page.isDone) break;
-      if (privateRooms.length > MAX_RESTRICTED_SEARCH_KEYS) { moreRestricted = true; break; }
-      cursor = page.continueCursor;
-    }
+    const privateRooms = await listReadablePrivateRoomsForSearch(args.ctx, args.communityId, memberActor);
+    moreRestricted = privateRooms.length > MAX_RESTRICTED_SEARCH_KEYS;
     channels = [...channels, ...privateRooms];
   }
   const restricted = channels.filter((channel) => channel.accessMode === "restricted");
