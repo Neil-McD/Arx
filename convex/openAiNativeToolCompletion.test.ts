@@ -46,3 +46,13 @@ test("a billed response keeps its usage when the function-call envelope is inval
   expect(result).toMatchObject({ ok: false, code: "invalid_model_output",
     providerRequestUsage: { requestId: "resp_luna6" } });
 });
+
+test("a prompt cache key groups requests that share a prefix; none is sent without one", async () => {
+  const fetch = vi.fn(async (_url: any, _options: any) => new Response(JSON.stringify(payload), { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  const base = { modelId: "gpt-6-luna", apiKeyOverride: "test-key", messages: [{ role: "user" as const, content: "Synthetic test" }], maxTokens: 200, tools: [] };
+  await runOpenAiNativeToolCompletion({ ...base, promptCacheKey: "pn:community_1:member_agent_dock" });
+  await runOpenAiNativeToolCompletion(base);
+  expect(JSON.parse(fetch.mock.calls[0]![1].body).prompt_cache_key).toBe("pn:community_1:member_agent_dock");
+  expect(JSON.parse(fetch.mock.calls[1]![1].body)).not.toHaveProperty("prompt_cache_key");
+});

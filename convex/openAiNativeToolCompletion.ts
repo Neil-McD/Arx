@@ -304,6 +304,9 @@ export async function runOpenAiNativeToolCompletion(params: {
   apiKeyOverride?: string | null;
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
+  // Groups requests that share a prompt prefix (one community, one surface) so
+  // the provider's prompt cache hits more often. Never carries user content.
+  promptCacheKey?: string | null;
   // When set, the reply is streamed and its output text is passed on as it arrives.
   onTextDelta?: (delta: string) => void;
   signal?: AbortSignal;
@@ -349,6 +352,8 @@ export async function runOpenAiNativeToolCompletion(params: {
       requestBody.reasoning = { effort: "low" };
     }
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
+    const promptCacheKey = String(params.promptCacheKey ?? "").trim();
+    if (promptCacheKey) requestBody.prompt_cache_key = promptCacheKey.slice(0, 64);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
