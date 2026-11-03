@@ -999,7 +999,10 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     // Until a community's search rows are built (just after a release), an
     // unfiltered search that finds nothing falls back to the recent scan.
     if (indexed && !filtered && recent.results.length === 0) {
+      const indexTruncated = recent.truncated;
       recent = await recentScan();
+      // An index search that was cut short stays marked incomplete.
+      recent = { ...recent, truncated: recent.truncated || indexTruncated };
       strategy = "bounded_lexical_fallback";
     }
     const results = recent.results;

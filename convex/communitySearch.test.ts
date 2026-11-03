@@ -172,3 +172,20 @@ test("search keeps working past ten rooms in total (up to 100 can be private)", 
   const asTheo = await search(t, f, f.theo, "quokka");
   expect(asTheo.results.map((r: any) => r.channel_slug)).toEqual(["general"]);
 });
+
+test("a manager past the private-room bound: a miss falls back to the recent scan but stays marked incomplete", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await t.run(async (ctx: any) => {
+    for (let i = 0; i < 25; i += 1) {
+      await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, createdByUserId: f.owner, slug: `vault-${i}`, name: `vault-${i}`, normalizedName: `vault-${i}`,
+        accessMode: "restricted", postingPolicy: "members", status: "active", position: 10 + i, createdAt: NOW, updatedAt: NOW,
+      });
+    }
+  });
+  // The owner reads every private room; this word matches nothing searched.
+  const result = await search(t, f, f.owner, "zzznomatch");
+  expect(result.diagnostics.strategy).toBe("bounded_lexical_fallback");
+  expect(result.truncated).toBe(true);
+});
