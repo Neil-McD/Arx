@@ -47,6 +47,8 @@ export type CommunityCardSource = {
   channels: CommunityCardChannel[];
   events: CommunityCardEvent[];
   courses: CommunityCardCourse[];
+  // The course scan hit its bound: an empty list doesn't mean there are none.
+  coursesIncomplete?: boolean;
 };
 
 // Bounds: the card is read on many turns, so it stays small.
@@ -154,7 +156,7 @@ function renderSection(key: (typeof COMMUNITY_CARD_SECTIONS)[number]["key"], sou
     }
     case "offerings": {
       const courses = source.courses.slice(0, COMMUNITY_CARD_LIMITS.courses);
-      if (!courses.length) return "_No courses yet._";
+      if (!courses.length) return source.coursesIncomplete ? "_None found in a quick look. Read resources/ for the courses._" : "_No courses yet._";
       return courses.map((course) => `- ${inline(course.title) ?? "Course"} (${course.lessons}${course.lessonsCapped ? "+" : ""} ${course.lessons === 1 && !course.lessonsCapped ? "lesson" : "lessons"})`).join("\n")
         + "\n- Read resources/ for the lessons.";
     }

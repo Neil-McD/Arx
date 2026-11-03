@@ -70,6 +70,8 @@ async function fixture() {
     const course = (name: string, status?: string) => ctx.db.insert("communityResourceModules", {
       communityId, createdByUserId: owner, name, sortOrder: n++, ...(status ? { status } : {}), createdAt: NOW, updatedAt: NOW,
     } as any);
+    // Many drafts sort ahead of the live course: it is still found.
+    for (let i = 0; i < 20; i++) await course(`Draft ${i}`, "draft");
     const basics = await course("Board basics", "live");
     await course("Draft course", "draft");
     // Members see a page in a live course when it has content, whatever its own
@@ -99,6 +101,7 @@ test("the card's own facts: owner, active admins and moderators by name, live co
       { name: "Maya Chen", handle: "maya-crimps", role: "moderator" },
     ],
     courses: [{ title: "Board basics", lessons: 2 }],
+    coursesIncomplete: false,
   });
 });
 

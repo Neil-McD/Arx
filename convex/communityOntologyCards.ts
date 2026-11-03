@@ -12,6 +12,7 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 // canonical door adds the reader's own channels and the coming events (both
 // already filtered by its lens) and draws the card. Every read is bounded.
 const LESSON_SCAN_BOUND = 300;
+const MODULE_SCAN_BOUND = 200;
 
 export const loadCommunityCardSourceInternal = internalQuery({
   args: { communityId: v.id("communities") },
@@ -37,7 +38,10 @@ export const loadCommunityCardSourceInternal = internalQuery({
 
     const modules = await ctx.db.query("communityResourceModules")
       .withIndex("by_community_sortOrder", (q) => q.eq("communityId", args.communityId))
-      .take(COMMUNITY_CARD_LIMITS.courses * 2);
+      .take(MODULE_SCAN_BOUND);
+    // Draft courses are skipped; if the scan ran out before finding any live one,
+    // the card says it may be incomplete rather than "no courses".
+    const coursesIncomplete = modules.length >= MODULE_SCAN_BOUND;
     const courses = [];
     for (const module of modules) {
       // The same visibility rules as resources/: what members actually see.
@@ -71,6 +75,7 @@ export const loadCommunityCardSourceInternal = internalQuery({
       canonicalUrl,
       people,
       courses,
+      coursesIncomplete,
     };
   },
 });

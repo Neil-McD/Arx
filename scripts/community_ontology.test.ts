@@ -55,6 +55,8 @@ test("empty parts say so; bounds keep the card small", () => {
   expect(card).toContain("_No channels you can read._");
   expect(card).toContain("_Nothing on the calendar._");
   expect(card).toContain("_No courses yet._");
+  // A course scan that hit its bound never claims there are none.
+  expect(renderCommunityCard({ ...SOURCE, courses: [], coursesIncomplete: true }, "member")).toContain("_None found in a quick look. Read resources/ for the courses._");
   expect(card.match(/@mod\d+/g)?.length).toBe(12);
 });
 
