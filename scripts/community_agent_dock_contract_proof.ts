@@ -669,10 +669,17 @@ assert.doesNotMatch(
   /memberFacts|memberProfileSpines|personalMemoryItems|providerConnections|email/,
   "the deterministic identity projection must not mix ontology, memory, billing, or email",
 );
+// The turn contract owns the rule: a community-bound conversation is the
+// "ask_in_conversation" surface, which never loads the asker's global profile.
 assert.match(
   runtimeLoop,
-  /params\.invocationSurface === "member_agent_dock" && !\(params\.communityAgentSurfaceContext\?\.kind === "community" && params\.communityAgentSurfaceContext\.community_conversation\)[\s\S]*resolveCommunityAgentIdentityContextInternal[\s\S]*renderCommunityAgentIdentityContext[\s\S]*catch \{[\s\S]*memberIdentityContextMd = null;/,
+  /surface: communityConversation \? "ask_in_conversation" : "ask"[\s\S]*if \(turnContract\?\.uses\.askerProfile\)[\s\S]*resolveCommunityAgentIdentityContextInternal[\s\S]*renderCommunityAgentIdentityContext[\s\S]*catch \{[\s\S]*memberIdentityContextMd = null;/,
   "global personal identity loading must exclude community-bound conversations and fail soft",
+);
+assert.match(
+  read("shared/communityTurnContract.ts"),
+  /askerProfile: args\.surface === "ask",/,
+  "only a private Ask outside a community conversation may read the asker's global profile",
 );
 assert.match(
   runtimePrompt,
