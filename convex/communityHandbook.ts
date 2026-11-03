@@ -1,4 +1,6 @@
 import { v } from "convex/values";
+import { hydrateCommunityResourceBody } from "./communityResourceContent";
+import { canViewerReadNodeWithCurrentEvidence } from "./communityIntelligenceDirectory";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -181,12 +183,19 @@ export const loadCommunityHandbookSourcesInternal = internalQuery({
       const live = new Set([String(module._id)]);
       const pages = (await ctx.db.query("communityResources").withIndex("by_community_module", (q) => q.eq("communityId", args.communityId).eq("moduleId", module._id)).take(40))
         .filter((row: any) => communityResourceIsMemberVisiblePage(row, live)).slice(0, 4);
-      for (const page of pages) add(`Lesson: ${clip(module.name, 60)} › ${clip(page.title, 80)}`, `${page.title}. ${page.bodyMd ?? ""}`);
+      for (const page of pages) {
+        // Lesson text lives in the resource contents table, not on the row.
+        const hydrated: any = await hydrateCommunityResourceBody(ctx, page as any);
+        add(`Lesson: ${clip(module.name, 60)} › ${clip(page.title, 80)}`, `${page.title}. ${hydrated?.bodyMd ?? ""}`);
+      }
     }
 
     for (const status of ["canonical", "validated"] as const) {
       const notes = await ctx.db.query("communityIntelligenceNodes").withIndex("by_community_status", (q) => q.eq("communityId", args.communityId).eq("status", status)).take(12);
-      for (const note of notes.filter((row: any) => row.visibilityScope === "community" || row.visibilityScope === "public")) {
+      for (const note of notes) {
+        // The same member-level check the memory reader uses, including that
+        // its evidence is still readable: a note never outlives its sources.
+        if (!(await canViewerReadNodeWithCurrentEvidence({ ctx, node: note as any, isManager: false }))) continue;
         add(`Community memory: ${clip(note.title, 80)}`, `${note.title}. ${note.bodyMd}`);
       }
     }
