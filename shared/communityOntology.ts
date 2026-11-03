@@ -43,6 +43,8 @@ export type CommunityCardSource = {
   entryPolicy: "open" | "approval" | "paid_subscription";
   memberCount: number;
   canonicalUrl: string;
+  // Set when the founder has approved a handbook (handbook.md).
+  handbookApprovedAt?: number;
   people: CommunityCardPerson[];
   channels: CommunityCardChannel[];
   events: CommunityCardEvent[];
@@ -129,6 +131,7 @@ function renderSection(key: (typeof COMMUNITY_CARD_SECTIONS)[number]["key"], sou
         `- Joining: ${JOIN_WORDS[source.entryPolicy]}`,
         `- Listed in Discover: ${source.visibility === "published" ? "yes" : "no (link only)"}`,
         `- Address: ${source.canonicalUrl}`,
+        ...(source.handbookApprovedAt ? [`- Handbook: handbook.md (approved by the founder ${new Date(source.handbookApprovedAt).toISOString().slice(0, 10)}): who runs what, rhythms, where to start, what to bring, norms`] : []),
         "",
         "About:",
         "",
