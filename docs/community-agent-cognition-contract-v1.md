@@ -2483,7 +2483,16 @@ turns in one community reuse the provider's prompt cache.
   turn on one surface in one community comes before anything per member or per
   message.
 - Each OpenAI request carries `prompt_cache_key` `pn:<communityId>:<surface>`
-  (no user content), so turns sharing that prefix are routed to the same cache.
+  (no user content), for per-community cache accounting.
+- These models reuse the cache only at breakpoints and recent message ends,
+  and top-level `instructions` cannot hold a breakpoint. So the loop sends the
+  shared part (through the community instructions) as a developer message that
+  ends at an explicit `prompt_cache_breakpoint`, the conversation after it, and
+  this asker's and this message's context (resource lane, lens authority,
+  current page, identity, memory recall, turn context, clock) as a developer
+  message after the latest user message, with `prompt_cache_options` mode
+  `implicit`. A new question then reuses the shared prefix and the history.
+  Callers that mark no breakpoint keep plain `instructions`.
 - "Now" uses the asker's profile timezone when it is a valid zone, otherwise
   UTC. A community-bound conversation never loads the global profile, so it
   stays UTC.

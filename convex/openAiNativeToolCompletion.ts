@@ -51,9 +51,20 @@ function readEnv(name: string): string {
 export function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
   instructions: string | null;
   inputItems: unknown[];
+  usesCacheBreakpoints: boolean;
 } {
   const instructionsParts: string[] = [];
   const inputItems: unknown[] = [];
+  // Top-level instructions can't carry a cache breakpoint. When a caller marks
+  // one, system text goes out as developer messages instead: hoisted ones first,
+  // in order, then in-place ones where they sit.
+  const usesCacheBreakpoints = messages.some((message) => message.role === "system" && (message.cacheBreakpoint === true || message.inPlace === true));
+  const developerItem = (text: string, cacheBreakpoint: boolean) => ({
+    type: "message",
+    role: "developer",
+    content: [{ type: "input_text", text, ...(cacheBreakpoint ? { prompt_cache_breakpoint: { mode: "explicit" } } : {}) }],
+  });
+  const hoistedDeveloperItems: unknown[] = [];
 
   const mapUserContentParts = (parts: NativeToolInputContentPart[]): unknown[] => {
     const mapped: unknown[] = [];
@@ -84,9 +95,12 @@ export function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessag
     const role = String(message.role ?? "").trim().toLowerCase();
 
     if (role === "system") {
-      const content = String(message.content ?? "").trim();
+      const systemMessage = message as Extract<NativeToolAwareMessage, { role: "system" }>;
+      const content = String(systemMessage.content ?? "").trim();
       if (!content) continue;
-      instructionsParts.push(content);
+      if (!usesCacheBreakpoints) instructionsParts.push(content);
+      else if (systemMessage.inPlace === true) inputItems.push(developerItem(content, systemMessage.cacheBreakpoint === true));
+      else hoistedDeveloperItems.push(developerItem(content, systemMessage.cacheBreakpoint === true));
       continue;
     }
 
@@ -153,10 +167,11 @@ export function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessag
     throw new Error("messages_contain_unsupported_role");
   }
 
-  if (inputItems.length === 0) throw new Error("messages_must_include_user_or_assistant");
+  if (!inputItems.some((item) => (item as { role?: string }).role !== "developer")) throw new Error("messages_must_include_user_or_assistant");
   return {
     instructions: instructionsParts.length > 0 ? instructionsParts.join("\n\n") : null,
-    inputItems,
+    inputItems: [...hoistedDeveloperItems, ...inputItems],
+    usesCacheBreakpoints,
   };
 }
 
@@ -352,6 +367,9 @@ export async function runOpenAiNativeToolCompletion(params: {
       requestBody.reasoning = { effort: "low" };
     }
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
+    // Explicit breakpoints plus the implicit one at the latest message, so both
+    // the shared prefix and the conversation so far can be reused.
+    if (normalized.usesCacheBreakpoints) requestBody.prompt_cache_options = { mode: "implicit" };
     const promptCacheKey = String(params.promptCacheKey ?? "").trim();
     if (promptCacheKey) requestBody.prompt_cache_key = promptCacheKey.slice(0, 64);
   } catch (error) {
