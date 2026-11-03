@@ -2039,6 +2039,7 @@ export default function App() {
         setCommunityAgentConfigCommunitySystemPrompt,
         markCommunityAgentConfigDirty,
       },
+      aiAgentHandbookEditorProps: { communityId: activeCommunityId, session, ensureSession: ensureUsableAuthSession },
       workflows: {
         forms: communityWorkflows.forms,
         channels: activeCommunityChannels.filter((channel) => channel.id && channel.community_id === activeCommunityId),

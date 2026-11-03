@@ -71,6 +71,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   aiAgentInstructionsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["instructionsEditorProps"];
+  aiAgentHandbookEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["handbookEditorProps"];
   workflows: WebCommunitySecondaryPanelsProps["workflows"];
   canViewActiveCommunityAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewActiveCommunityAnalytics"];
   canViewPlatformAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewPlatformAnalytics"];
@@ -202,6 +203,7 @@ export function buildWebCommunitySurfaceProjection(
       communityAgentConfigError: params.communityAgentConfigError,
       onRequireSignIn: params.requireSignIn,
       instructionsEditorProps: params.aiAgentInstructionsEditorProps,
+      handbookEditorProps: params.aiAgentHandbookEditorProps,
     },
     workflows: params.workflows,
     analytics: {
