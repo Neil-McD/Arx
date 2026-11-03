@@ -41,7 +41,9 @@ export function WebCommunityHandbookEditor<SessionT>(props: WebCommunityHandbook
           className="system-prompt-input"
           placeholder="Draft with the agent, or write it yourself."
           value={handbook.text}
-          disabled={handbook.busy === "loading" || drafting}
+          // Locked while a load, save, approve or draft is in flight, so the
+          // response can't overwrite edits typed meanwhile.
+          disabled={handbook.busy !== null || drafting}
           onChange={(event) => handbook.setText(event.target.value)}
           rows={16}
         />
