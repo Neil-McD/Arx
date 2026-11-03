@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
+import { requireCommunityChatAccess } from "./communityCore";
 import { communityPrivatePageUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
@@ -28,9 +29,13 @@ function readMessageSnippet(contentJson: unknown): string {
 
 // Read-only suppression stack + payload build; the action enqueues on pass.
 // A conversation begun in a community with a site opens on that community's
-// private pages; any other opens Studio's inbox, on this environment's own app.
-export async function directMessageLink(ctx: any, community: Record<string, any> | null, conversationId: string): Promise<string> {
-  const onSite = community ? await communityPrivatePageUrl(ctx, community as any, `/messages/${encodeURIComponent(conversationId)}`) : null;
+// private pages, for a recipient still in it (Messages there is members only);
+// any other opens Studio's inbox, on this environment's own app.
+export async function directMessageLink(ctx: any, community: Record<string, any> | null, conversationId: string, recipientUserId: unknown): Promise<string> {
+  const stillIn = community
+    ? await requireCommunityChatAccess({ ctx, communityId: community._id, userId: recipientUserId as any }).then(() => true, () => false)
+    : false;
+  const onSite = stillIn ? await communityPrivatePageUrl(ctx, community as any, `/messages/${encodeURIComponent(conversationId)}`) : null;
   if (onSite) return onSite;
   let origin = "https://www.polynet.ai";
   try { origin = readCanonicalPublicAppOrigin(); } catch { /* the production app, as before */ }
@@ -109,7 +114,7 @@ export const evaluateDirectMessageEmailInternal = internalQuery({
         senderName,
         communityName: String(community?.name ?? "").trim() || null,
         snippet: readMessageSnippet(message.contentJson),
-        actionUrl: await directMessageLink(ctx, community, normalizeIdValue(args.conversationId)),
+        actionUrl: await directMessageLink(ctx, community, normalizeIdValue(args.conversationId), args.recipientUserId),
       },
     };
   },

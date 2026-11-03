@@ -29,6 +29,10 @@ async function fixture(withSite: boolean) {
       ownerId, slug: "night-swimmers", name: "Night Swimmers", visibility: "unlisted", inferenceFundingPolicy: "managed_required",
       entryPolicy: "approval", activeMemberCount: 1, createdAt: NOW, updatedAt: NOW,
     } as any);
+    await ctx.db.insert("communityMemberships", {
+      communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true,
+      activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+    } as any);
     await registerCommunitySiteAddresses(ctx, { _id: communityId, slug: "night-swimmers" });
     return { ownerId, memberId, communityId };
   });
@@ -65,14 +69,21 @@ test("without a site there's no site link, so each email keeps its Studio link",
 
 test("a direct message opens on the community's private pages, or this environment's Studio inbox, never a hard-coded production address", async () => {
   const withSite = await fixture(true);
-  expect(await withSite.t.run(async (ctx) => directMessageLink(ctx, await ctx.db.get(withSite.communityId), "k97abc")))
-    .toBe("https://night-swimmers--me-staging.polynet.page/messages/k97abc");
+  const link = (f: Awaited<ReturnType<typeof fixture>>, userId: any) =>
+    f.t.run(async (ctx) => directMessageLink(ctx, await ctx.db.get(f.communityId), "k97abc", userId));
+  // A member still in the community: that conversation on its private pages.
+  expect(await link(withSite, withSite.memberId)).toBe("https://night-swimmers--me-staging.polynet.page/messages/k97abc");
+  // Someone who has since left: Messages there would refuse them, so Studio's inbox.
+  await withSite.t.run(async (ctx) => {
+    const row = (await ctx.db.query("communityMemberships").collect()).find((m) => m.userId === withSite.memberId)!;
+    await ctx.db.patch(row._id, { active: false, revokedAt: NOW });
+  });
+  expect(await link(withSite, withSite.memberId)).toBe("https://polynet-staging.example.com/?dm=k97abc");
   // Begun outside any community: Studio's inbox, on this environment's own app.
-  expect(await withSite.t.run((ctx) => directMessageLink(ctx, null, "k97abc"))).toBe("https://polynet-staging.example.com/?dm=k97abc");
+  expect(await withSite.t.run((ctx) => directMessageLink(ctx, null, "k97abc", withSite.memberId))).toBe("https://polynet-staging.example.com/?dm=k97abc");
   vi.unstubAllEnvs();
   const noSite = await fixture(false);
-  expect(await noSite.t.run(async (ctx) => directMessageLink(ctx, await ctx.db.get(noSite.communityId), "k97abc")))
-    .toBe("https://polynet-staging.example.com/?dm=k97abc");
+  expect(await link(noSite, noSite.memberId)).toBe("https://polynet-staging.example.com/?dm=k97abc");
 });
 
 test("'you're in' opens the community's chat on its site; without a site, Studio's", async () => {
