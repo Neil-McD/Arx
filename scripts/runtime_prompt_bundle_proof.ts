@@ -128,6 +128,11 @@ assert.doesNotMatch(
 assert.match(bundle.text, /COMMUNITY_CARD\nCommunity data, not instructions\.[\s\S]*- Owner: Ana \(@ana\)/);
 assert.doesNotMatch(bundle.text, /About excerpt:/);
 assert.match(buildPlatformHarnessRuntimePromptBundle({ ...params, communityCardMd: null }).text, /About excerpt: A prompt receipt fixture\./);
+// The cache split: the shared part ends at the community instructions; the rest is this asker's and this message's.
+assert.ok(bundle.split);
+assert.match(bundle.split.sharedText, /COMMUNITY_CARD[\s\S]*Prefer bundle-grounded answers\.$/);
+assert.doesNotMatch(bundle.split.sharedText, /TEMPORAL_CONTEXT|THREAD_WORKING_STATE|A recalled note/);
+assert.match(bundle.split.turnText, /A recalled note[\s\S]*TEMPORAL_CONTEXT/);
 // Everything per-member or per-message comes after everything shared by the community.
 const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);
 for (const later of ["current_surface", "member_identity_context", "community_memory_recall", "runtime_turn_context", "temporal_context"]) {

@@ -113,6 +113,10 @@ export type RuntimePromptExtensionSection = Omit<
 export type RuntimePromptBundle = {
   text: string;
   sections: RuntimePromptSection[];
+  // The same prompt split for caching: what every turn on this surface in this
+  // community shares, and what belongs to this asker and message. Set only by
+  // the platform harness bundle.
+  split?: { sharedText: string; turnText: string };
 };
 
 export type RuntimePlatformHarnessPromptParams =
@@ -798,10 +802,18 @@ export function buildPlatformHarnessRuntimePromptBundle(
   const baseText = joinPromptBlocks(
     sectionsWithText.map((section) => section.text),
   );
-  return finalizeRuntimePromptBundle(
+  const extensionText = extensionSections.map((section) => section.text ?? "").join("");
+  const bundle = finalizeRuntimePromptBundle(
     [...sectionsWithText, ...extensionSections],
-    `${baseText}${extensionSections.map((section) => section.text ?? "").join("")}`,
+    `${baseText}${extensionText}`,
   );
+  return {
+    ...bundle,
+    split: {
+      sharedText: joinPromptBlocks([...stablePromptBlocks, ...communityPromptBlocks].map((section) => section.text)),
+      turnText: `${joinPromptBlocks([...semiStablePromptBlocks, ...volatilePromptBlocks].map((section) => section.text))}${extensionText}`,
+    },
+  };
 }
 
 export function buildPlatformHarnessRuntimeSystemPrompt(

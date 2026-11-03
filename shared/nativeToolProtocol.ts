@@ -25,6 +25,11 @@ export type NativeToolAwareMessage =
   | {
       role: "system";
       content: string;
+      // Marks the end of a reusable prompt prefix for the provider's cache.
+      cacheBreakpoint?: boolean;
+      // Sent where it sits in the conversation instead of hoisted to the top,
+      // so per-turn context doesn't break the cached history before it.
+      inPlace?: boolean;
     }
   | {
       role: "user";

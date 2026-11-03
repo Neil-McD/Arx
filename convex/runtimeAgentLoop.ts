@@ -1258,10 +1258,19 @@ async function executeRetrievalAgentLoop(
     memberIdentityContextMd,
     memberIdentityContextStatus,
   });
-  const nativeTranscript: NativeToolAwareMessage[] = [
-    { role: "system", content: systemPrompt },
-    ...conversationMessagesForProvider.map(toNativeInferenceMessage),
-  ];
+  // The shared prompt ends at a cache breakpoint; this asker's and this
+  // message's context follows the conversation, so the history stays cacheable.
+  const promptSplit = runtimePromptBundle.split;
+  const nativeTranscript: NativeToolAwareMessage[] = promptSplit?.sharedText
+    ? [
+        { role: "system", content: promptSplit.sharedText, cacheBreakpoint: true },
+        ...conversationMessagesForProvider.map(toNativeInferenceMessage),
+        ...(promptSplit.turnText.trim() ? [{ role: "system" as const, content: promptSplit.turnText, inPlace: true }] : []),
+      ]
+    : [
+        { role: "system", content: systemPrompt },
+        ...conversationMessagesForProvider.map(toNativeInferenceMessage),
+      ];
   try {
     await params.appendRunEvent({
       eventType: "runtime_prompt_bundle_resolved",

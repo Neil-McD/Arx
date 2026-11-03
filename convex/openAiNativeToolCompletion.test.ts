@@ -56,3 +56,33 @@ test("a prompt cache key groups requests that share a prefix; none is sent witho
   expect(JSON.parse(fetch.mock.calls[0]![1].body).prompt_cache_key).toBe("pn:community_1:member_agent_dock");
   expect(JSON.parse(fetch.mock.calls[1]![1].body)).not.toHaveProperty("prompt_cache_key");
 });
+
+test("a marked cache breakpoint sends the shared prompt as a developer message ending at an explicit breakpoint, and turn context in place", async () => {
+  const fetch = vi.fn(async (_url: any, _options: any) => new Response(JSON.stringify(payload), { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  await runOpenAiNativeToolCompletion({ modelId: "gpt-6-luna", apiKeyOverride: "test-key", maxTokens: 200, tools: [], messages: [
+    { role: "system", content: "Shared community prompt.", cacheBreakpoint: true },
+    { role: "user", content: "Earlier question" },
+    { role: "assistant", content: "Earlier answer" },
+    { role: "user", content: "Latest question" },
+    { role: "system", content: "This turn's context.", inPlace: true },
+  ] });
+  const body = JSON.parse(fetch.mock.calls[0]![1].body);
+  expect(body).not.toHaveProperty("instructions");
+  expect(body.prompt_cache_options).toEqual({ mode: "implicit" });
+  expect(body.input.map((item: any) => item.role)).toEqual(["developer", "user", "assistant", "user", "developer"]);
+  expect(body.input[0].content[0]).toEqual({ type: "input_text", text: "Shared community prompt.", prompt_cache_breakpoint: { mode: "explicit" } });
+  expect(body.input[4].content[0]).toEqual({ type: "input_text", text: "This turn's context." });
+});
+
+test("without a marked breakpoint, system text stays in instructions with no cache options", async () => {
+  const fetch = vi.fn(async (_url: any, _options: any) => new Response(JSON.stringify(payload), { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  await runOpenAiNativeToolCompletion({ modelId: "gpt-6-luna", apiKeyOverride: "test-key", maxTokens: 200, tools: [], messages: [
+    { role: "system", content: "Whole prompt." }, { role: "user", content: "Hi" },
+  ] });
+  const body = JSON.parse(fetch.mock.calls[0]![1].body);
+  expect(body.instructions).toBe("Whole prompt.");
+  expect(body).not.toHaveProperty("prompt_cache_options");
+  expect(body.input.map((item: any) => item.role)).toEqual(["user"]);
+});
