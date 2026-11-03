@@ -596,7 +596,16 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       MEMBER_TIMELINE_PATH.test(repositoryPath.localPath)) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: repositoryPath.localPath === "/members/me/forms/" ? POLYNET_JOIN_REQUESTS_DIRECTORY_PATH : "/community.md" });
-      return validated.ok ? { ...validated, path: repositoryPath.path } : validated;
+      if (!validated.ok) return validated;
+      // A timeline pages by offset (whole readable items, 0-500).
+      if (args.operation === "read" && MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) && args.offset !== undefined && args.offset !== null) {
+        const offset = Number(args.offset);
+        if (!Number.isInteger(offset) || offset < 0 || offset > 500) {
+          return { ok: false as const, code: "invalid_tool_args" as const, message: "Timeline offset must be a whole number from 0 to 500." };
+        }
+        return { ...validated, path: repositoryPath.path, offset };
+      }
+      return { ...validated, path: repositoryPath.path };
     }
     if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH) {
       const validated = validateCommunitySemanticOperationInput({

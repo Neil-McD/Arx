@@ -108,3 +108,23 @@ test("the rendered timeline: dates, rooms, quoted text, paths, and how to read m
   expect(body).toContain(`offset ${MEMBER_TIMELINE_PAGE}`);
   expect(renderMemberTimeline({ name: "Maya", handle: "maya", offset: 0, hasMore: false, items: [] })).toContain("_No posts or replies you can read._");
 });
+
+test("many unreadable rows don't hide readable activity: the scan widens until the page fills", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await t.run(async (ctx: any) => {
+    const crew = (await ctx.db.query("communityChannels").withIndex("by_community_slug", (q: any) => q.eq("communityId", f.communityId).eq("slug", "crew")).first())._id;
+    // 150 newer private posts the reader can't see.
+    for (let i = 0; i < 150; i += 1) {
+      await ctx.db.insert("communityInteractionRoots", {
+        communityId: f.communityId, channelId: crew, actorType: "human", actorUserId: f.maya, kind: "discussion", status: "live", visibilityScope: "community",
+        contentSummary: `Private ${i}`, replyCount: 0, reactionSummary: [], idempotencyKey: `p${i}`, createdAt: NOW + 1_000 + i, updatedAt: NOW,
+      });
+    }
+  });
+  const first = await timeline(t, f, f.theo, "maya");
+  expect(first.items).toHaveLength(MEMBER_TIMELINE_PAGE);
+  expect(first.items.every((item: any) => item.channelSlug === "general")).toBe(true);
+  const second = await timeline(t, f, f.theo, "maya", { offset: MEMBER_TIMELINE_PAGE });
+  expect(second.items.map((item: any) => item.snippet).at(-1)).toBe("General post 0");
+});

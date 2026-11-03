@@ -21,6 +21,8 @@ import { MEMBER_TIMELINE_PAGE } from "../shared/communityOntology";
 // community agent answering in public reads shared rooms only), and a reply
 // only while its thread is live. Paged by offset over bounded index reads.
 const TIMELINE_MAX_OFFSET = 500;
+// How far back one read may look, per table, to fill a page.
+const TIMELINE_SCAN_BOUND = 2_000;
 const SNIPPET_CHARS = 200;
 
 export const loadMemberTimelineInternal = internalQuery({
@@ -55,13 +57,9 @@ export const loadMemberTimelineInternal = internalQuery({
     }
 
     const offset = Math.max(0, Math.min(TIMELINE_MAX_OFFSET, Math.floor(Number(args.offset) || 0)));
-    // Unreadable rows (private rooms, deleted posts) also use the window, so
-    // read past the page; hasMore stays true when a window was full.
-    const window = offset + MEMBER_TIMELINE_PAGE * 3 + 50;
-    const byAuthor = (table: "communityInteractionRoots" | "communityInteractionReplies"): Promise<any[]> => ctx.db.query(table as any)
+    const byAuthor = (table: "communityInteractionRoots" | "communityInteractionReplies", take: number): Promise<any[]> => ctx.db.query(table as any)
       .withIndex("by_community_actorUser_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("actorUserId", member._id))
-      .order("desc").take(window);
-    const [roots, replies] = await Promise.all([byAuthor("communityInteractionRoots"), byAuthor("communityInteractionReplies")]);
+      .order("desc").take(take);
     const readable = (row: any) => row?.status === "live" && communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope);
     const channelFor = (root: any): CommunityChannelLike | null => {
       try {
@@ -70,7 +68,36 @@ export const loadMemberTimelineInternal = internalQuery({
         return null;
       }
     };
-    const items: Array<{ kind: "post" | "reply"; createdAt: number; ref: string; channelSlug: string; channelName: string; snippet: string; thread: string | null }> = [];
+    type Item = { kind: "post" | "reply"; createdAt: number; ref: string; channelSlug: string; channelName: string; snippet: string; thread: string | null };
+    // Rows the reader can't see (private rooms, deleted posts) share the scan
+    // with those they can: widen the scan until the requested page is filled
+    // with readable items, the history ends, or the scan bound is reached.
+    let window = offset + MEMBER_TIMELINE_PAGE * 3 + 50;
+    let roots: any[] = [];
+    let replies: any[] = [];
+    let items: Item[] = [];
+    for (;;) {
+      [roots, replies] = await Promise.all([byAuthor("communityInteractionRoots", window), byAuthor("communityInteractionReplies", window)]);
+      items = await collectReadable(roots, replies);
+      const exhausted = roots.length < window && replies.length < window;
+      if (items.length > offset + MEMBER_TIMELINE_PAGE || exhausted || window >= TIMELINE_SCAN_BOUND) break;
+      window = Math.min(TIMELINE_SCAN_BOUND, window * 2);
+    }
+    items.sort((a, b) => b.createdAt - a.createdAt);
+    const page = items.slice(offset, offset + MEMBER_TIMELINE_PAGE);
+    const scanCut = roots.length >= window || replies.length >= window;
+    const hasMore = items.length > offset + MEMBER_TIMELINE_PAGE || scanCut || privateRoomsCapped;
+    const detail = await ctx.db.query("userProfileDetails").withIndex("by_user", (q) => q.eq("userId", member._id)).first();
+    return {
+      name: String((detail as any)?.displayName ?? member.displayName ?? member.handle ?? "Member").trim() || "Member",
+      handle: typeof member.handle === "string" ? member.handle : null,
+      offset,
+      hasMore: hasMore && offset + MEMBER_TIMELINE_PAGE <= TIMELINE_MAX_OFFSET,
+      items: page,
+    };
+
+    async function collectReadable(roots: any[], replies: any[]): Promise<Item[]> {
+    const items: Item[] = [];
     for (const root of roots) {
       const channel = readable(root) ? channelFor(root) : null;
       if (!channel) continue;
@@ -86,16 +113,7 @@ export const loadMemberTimelineInternal = internalQuery({
         channelSlug: channel.slug, channelName: channel.name, snippet: String(reply.contentSummary ?? "").slice(0, SNIPPET_CHARS),
         thread: String((root as any).title ?? (root as any).contentSummary ?? "").slice(0, 80) || null });
     }
-    items.sort((a, b) => b.createdAt - a.createdAt);
-    const page = items.slice(offset, offset + MEMBER_TIMELINE_PAGE);
-    const hasMore = items.length > offset + MEMBER_TIMELINE_PAGE || roots.length >= window || replies.length >= window || privateRoomsCapped;
-    const detail = await ctx.db.query("userProfileDetails").withIndex("by_user", (q) => q.eq("userId", member._id)).first();
-    return {
-      name: String((detail as any)?.displayName ?? member.displayName ?? member.handle ?? "Member").trim() || "Member",
-      handle: typeof member.handle === "string" ? member.handle : null,
-      offset,
-      hasMore: hasMore && offset + MEMBER_TIMELINE_PAGE <= TIMELINE_MAX_OFFSET,
-      items: page,
-    };
+    return items;
+    }
   },
 });
