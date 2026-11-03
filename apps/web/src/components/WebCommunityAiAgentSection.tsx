@@ -4,6 +4,7 @@ import {
   WebCommunityAiAgentInstructionsEditor,
   type WebCommunityAiAgentInstructionsEditorProps,
 } from "./WebCommunityAiAgentInstructionsEditor";
+import { WebCommunityHandbookEditor, type WebCommunityHandbookEditorProps } from "./WebCommunityHandbookEditor";
 
 type WebCommunityAiAgentSectionProps = {
   activeCommunity: unknown | null;
@@ -13,6 +14,7 @@ type WebCommunityAiAgentSectionProps = {
   communityAgentConfigError: string | null;
   onRequireSignIn: () => void;
   instructionsEditorProps: WebCommunityAiAgentInstructionsEditorProps;
+  handbookEditorProps?: WebCommunityHandbookEditorProps<any>;
   embedded?: boolean;
 };
 
@@ -25,6 +27,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     communityAgentConfigError,
     onRequireSignIn,
     instructionsEditorProps,
+    handbookEditorProps,
     embedded = false,
   } = props;
 
@@ -52,7 +55,12 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
   } else if (communityAgentConfigError) {
     content = <div className="auth-error">{communityAgentConfigError}</div>;
   } else {
-    content = <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />;
+    content = (
+      <>
+        <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />
+        {handbookEditorProps ? <WebCommunityHandbookEditor {...handbookEditorProps} /> : null}
+      </>
+    );
   }
 
   return (
