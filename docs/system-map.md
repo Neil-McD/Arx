@@ -98,7 +98,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityChannelAccess`, `communityChannelParticipants`, `communityMention*`,
   `communityAttachmentUploads`, `communityAttachmentDownloads`,
   `communityInteractionAttachmentBridge`, `communityInteractionEvidence`, `communitySearchDocs`
-  (search rows, rebuilt in the same write as each post),
+  (search rows, rebuilt in the same write as each post), `communityMemberTimeline`
+  (one member's readable posts and replies, members/<handle>/timeline.md),
   `communityInteractionEvidenceCore`, `communityChannelValidators`,
   `communityComposerReplay`, `communityTypingPresenceCore`, `communityReadCursorCore`,
   `communityActivity`, `communityText`, `httpCommunityAttachments`, `communityAttention`,

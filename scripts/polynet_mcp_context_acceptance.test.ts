@@ -26,7 +26,7 @@ function mockReadCall(change?: (request: ContextRequest, value: Record<string, u
     const path = String(request.input.path);
     let value: Record<string, unknown>;
     if (request.expectedErrorCode) value = { error: "semantic_not_found" };
-    else if (path === "/users/me/profile.md") value = { body: `- User ref: \`user:${request.actor}Id\`` };
+    else if (path === "/users/me/profile.md") value = { ref: `user:${request.actor}Id`, body: "# User profile" };
     else if (request.name === "polynet_list") value = { authority: { lane: request.actor }, entries: [] };
     else if (path === root + "members/me/context.md") value = { body: `# Context\n${JSON.stringify({ user_id: request.actor + "Id", membership_id: "membershipId" })}` };
     else if (path.includes("builder/workflow-members/")) value = { context: { user_id: "memberId" }, body: "Private dossier" };
@@ -66,7 +66,7 @@ test.each(["/communities/other/resources/page.md", "/communities/context-fixture
 });
 
 test("different tokens for the same canonical actor cannot establish an independent control", async () => {
-  const { call } = mockReadCall((r, value) => r.input.path === "/users/me/profile.md" ? { body: "- User ref: `user:sameId`" } : value);
+  const { call } = mockReadCall((r, value) => r.input.path === "/users/me/profile.md" ? { ref: "user:sameId", body: "# User profile" } : value);
   await expect(runContextAcceptance(fixture, call)).rejects.toThrow("different canonical user");
 });
 
@@ -130,7 +130,7 @@ test.each(["runtime", "bearer", ...Object.keys(fixture)])("changed %s cannot reu
 
 test.each(["member", "builder"] as const)("a different canonical %s cannot pass even with matching supplied evidence", async actor => {
   const baseline = await positiveBaseline();
-  const { call, calls } = mockReadCall((r, value) => r.actor === actor && r.input.path === "/users/me/profile.md" ? { body: "- User ref: `user:neverAMember`" } : value);
+  const { call, calls } = mockReadCall((r, value) => r.actor === actor && r.input.path === "/users/me/profile.md" ? { ref: "user:neverAMember", body: "# User profile" } : value);
   await expect(runContextRevocation(fixture, call, { baseline, runtimeSha, memberBearerSha256 })).rejects.toThrow(`${actor} must match`);
   expect(calls.some(r => r.expectedErrorCode)).toBe(false);
 });
@@ -189,7 +189,7 @@ function cliFixture() {
       const denied = actor === 'member' && (path.startsWith('/communities/' + fixture.deniedCommunitySlug + '/') || path.includes('/builder/') || path.startsWith(privateDirectory) || (process.env.SYNTHETIC_REVOKED === '1' && path.startsWith(root)));
       if (denied) return response({ result: { isError: true, structuredContent: { error: process.env.SYNTHETIC_FAULT === 'wrong-denial' ? 'invalid_tool_args' : 'semantic_not_found' } } });
       let value;
-      if (path === '/users/me/profile.md') value = { body: '- User ref: \x60user:' + (actor === 'member' && process.env.SYNTHETIC_FAULT === 'wrong-member' ? 'unrelatedId' : actor + 'Id') + '\x60' };
+      if (path === '/users/me/profile.md') value = { ref: 'user:' + (actor === 'member' && process.env.SYNTHETIC_FAULT === 'wrong-member' ? 'unrelatedId' : actor + 'Id'), body: '# User profile' };
       else if (name === 'polynet_list') value = { authority: { lane: actor }, entries: [] };
       else if (path.endsWith('/members/me/context.md')) value = { body: '# Context\\n' + JSON.stringify({ user_id: actor + 'Id', membership_id: 'membershipId' }) };
       else if (path.includes('/builder/workflow-members/')) value = { context: { user_id: 'memberId' }, body: 'Synthetic dossier' };

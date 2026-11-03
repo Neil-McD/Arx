@@ -16,6 +16,7 @@ import {
   POLYNET_EVENTS_DIRECTORY_PATH,
   POLYNET_MEMORY_DIRECTORY_PATH,
   POLYNET_MEMBERS_DIRECTORY_PATH,
+  MEMBER_TIMELINE_PATH,
   POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
@@ -40,7 +41,7 @@ import {
   parsePolynetSemanticRepositoryPath,
 } from "../shared/polynetSemanticRepositoryContract.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
-import { COMMUNITY_CARD_LIMITS, renderCommunityCard } from "../shared/communityOntology.ts";
+import { COMMUNITY_CARD_LIMITS, renderCommunityCard, renderMemberTimeline } from "../shared/communityOntology.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import { checkSite, formatProblems, isCheckedFile } from "../packages/polynet-cli/checks.mjs";
 
@@ -1439,6 +1440,27 @@ async function executeCanonicalRead(args: {
   if (target.localPath === POLYNET_COMMUNITY_PROFILE_PATH) {
     const card = await readCommunityCard(args, target);
     if (card) return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: card, truncated: false } };
+  }
+
+  // One member's activity, newest first, within what the reader may read.
+  const timelineMatch = MEMBER_TIMELINE_PATH.exec(target.localPath);
+  if (timelineMatch) {
+    // The community agent has no "me": it never reads its sponsor's own context.
+    if (args.evidenceSurface === "community_funnel_builder" || (timelineMatch[1] === "me" && args.principalKind === "community_agent"))
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const timeline = await args.ctx.runQuery((internal as any).communityMemberTimeline.loadMemberTimelineInternal, {
+      userId: args.userId, actorKind: channelActorKind(args.principalKind), communityId: target.communityId,
+      handle: timelineMatch[1], ...(typeof args.input.offset === "number" ? { offset: args.input.offset } : {}),
+    }).catch(() => null) as any;
+    if (!timeline) return canonicalError("semantic_not_found", "No member with that handle here. List members/ for handles.");
+    const body = renderMemberTimeline({
+      ...timeline,
+      items: timeline.items.map((item: any) => ({
+        ...item,
+        path: evidencePath({ communitySlug: target.communitySlug, channelSlug: item.channelSlug, sourceType: "interaction", ref: item.ref }),
+      })),
+    });
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore } };
   }
 
   // Who is online, and one member's profile, as JSON for a member's site or

@@ -540,7 +540,7 @@ const PRIVATE_ROOM_SCAN_BOUND = 200;
 // list, members from their grants (stale grants to archived rooms are skipped).
 // Returns at most one more than the search bound, and whether the scan itself
 // hit its bound (then rooms past it may be missing: the search is incomplete).
-async function listReadablePrivateRoomsForSearch(ctx: any, communityId: any, actor: ChannelActor): Promise<{ rooms: CommunityChannelLike[]; scanCapped: boolean }> {
+export async function listReadablePrivateRoomsForSearch(ctx: any, communityId: any, actor: ChannelActor): Promise<{ rooms: CommunityChannelLike[]; scanCapped: boolean }> {
   const candidates: any[] = actor.isManager
     ? await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", (q: any) =>
       q.eq("communityId", communityId).eq("accessMode", "restricted").eq("status", "active")).take(PRIVATE_ROOM_SCAN_BOUND)

@@ -401,6 +401,7 @@ const modules = import.meta.glob([
   "./communityPublic.ts",
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
+  "./communityMemberTimeline.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -1424,6 +1425,24 @@ test("custom channels discover, isolate, search, read, and write through exact p
     toolName: "polynet_search",
     input: { path: "/communities/canonical-community/channels/", query: "*", kind: "reply" },
   })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("at least one keyword") });
+  // The reader's own timeline lists their posts as quoted lines with exact paths.
+  const mine = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_read",
+    input: { path: "/communities/canonical-community/members/me/timeline.md" },
+  });
+  expect(mine).toMatchObject({ ok: true, value: { body: expect.stringContaining(": activity") } });
+  await expect(executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_read",
+    input: { path: "/communities/canonical-community/members/nobody-here/timeline.md" },
+  })).resolves.toMatchObject({ ok: false, code: "semantic_not_found" });
+  await expect(executePolynetCanonicalTool({
+    ...base,
+    principalKind: "community_agent",
+    toolName: "polynet_read",
+    input: { path: "/communities/canonical-community/members/me/timeline.md" },
+  })).resolves.toMatchObject({ ok: false, code: "semantic_not_found" });
   const nothing = await executePolynetCanonicalTool({
     ...base,
     toolName: "polynet_search",
