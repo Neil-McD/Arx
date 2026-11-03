@@ -16,6 +16,7 @@ import type {
   MemberSemanticDirectorySource,
 } from "../shared/communitySemanticRepository";
 import { validateProfileHandle } from "../shared/profileHandle";
+import type { MemberStanding } from "../shared/communityOntology.ts";
 
 export const MEMBER_SEMANTIC_DIRECTORY_DEFAULT_LIMIT = 24;
 export const MEMBER_SEMANTIC_DIRECTORY_MAX_LIMIT = 50;
@@ -247,6 +248,7 @@ export async function resolveMemberSemanticProfile(args: {
       args.ctx,
       user._id,
     );
+  const standing = await readMemberStanding(args.ctx, community, user._id, membership);
   return {
     userRef: `user:${String(user._id)}`,
     profilePath: validatedHandle?.ok
@@ -264,5 +266,51 @@ export async function resolveMemberSemanticProfile(args: {
           ? "owner"
           : normalizeSemanticMemberRole(membership?.role),
     },
+    standing,
+  };
+}
+
+// Standing here: when they joined, how much they've said in shared channels
+// (never restricted ones), and when they were last around. Counts stop at a
+// bound so a busy member costs the same as a quiet one.
+const STANDING_COUNT_BOUND = 500;
+export async function readMemberStanding(ctx: any, community: any, userId: any, membership: any): Promise<MemberStanding> {
+  const shared = new Map<string, boolean>();
+  const isShared = async (channelId: any) => {
+    const key = String(channelId ?? "");
+    if (!key) return false;
+    if (!shared.has(key)) {
+      const channel = await ctx.db.get(channelId);
+      shared.set(key, Boolean(channel) && channel.accessMode !== "restricted" && channel.status !== "archived");
+    }
+    return shared.get(key)!;
+  };
+  const count = async (table: "communityInteractionRoots" | "communityInteractionReplies") => {
+    const rows = await ctx.db.query(table)
+      .withIndex("by_community_actorUser_createdAt", (q: any) => q.eq("communityId", community._id).eq("actorUserId", userId))
+      .order("desc").take(STANDING_COUNT_BOUND);
+    let total = 0;
+    let latest: number | null = null;
+    for (const row of rows) {
+      if (row.status !== "live" || !(await isShared(row.channelId))) continue;
+      total += 1;
+      latest = Math.max(latest ?? 0, Number(row.createdAt) || 0);
+    }
+    return { total, latest, capped: rows.length >= STANDING_COUNT_BOUND };
+  };
+  const posts = await count("communityInteractionRoots");
+  const replies = await count("communityInteractionReplies");
+  const presence = await ctx.db.query("communityPresence")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", userId)).first();
+  const lastActive = Math.max(Number(presence?.lastSeenAt) || 0, posts.latest ?? 0, replies.latest ?? 0);
+  const joined = String(community.ownerId) === String(userId)
+    ? community.createdAt
+    : membership?.activatedAt ?? membership?.createdAt;
+  return {
+    joinedAt: Number.isFinite(joined) ? new Date(joined).toISOString() : null,
+    sharedPosts: posts.total,
+    sharedReplies: replies.total,
+    countsCapped: posts.capped || replies.capped,
+    lastActiveAt: lastActive > 0 ? new Date(lastActive).toISOString() : null,
   };
 }

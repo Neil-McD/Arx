@@ -11,6 +11,7 @@ import {
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
   POLYNET_CHANNELS_DIRECTORY_PATH,
+  POLYNET_COMMUNITY_PROFILE_PATH,
   POLYNET_EVENTS_DIRECTORY_PATH,
   POLYNET_MEMORY_DIRECTORY_PATH,
   POLYNET_MEMBERS_DIRECTORY_PATH,
@@ -38,6 +39,7 @@ import {
   parsePolynetSemanticRepositoryPath,
 } from "../shared/polynetSemanticRepositoryContract.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
+import { COMMUNITY_CARD_LIMITS, renderCommunityCard } from "../shared/communityOntology.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import { checkSite, formatProblems, isCheckedFile } from "../packages/polynet-cli/checks.mjs";
 
@@ -418,6 +420,33 @@ function trustedMemberArgs(args: { principalKind: PolynetPrincipalKind; userId: 
   return args.principalKind === "community_app" || args.principalKind === "community_agent"
     ? { trustedUserId: args.userId }
     : {};
+}
+
+// The card's reader-dependent parts come through the same lens-filtered reads
+// as channels/ and events/; a part that can't be read is left out, never failed.
+async function readCommunityCard(
+  args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind },
+  target: { communityId: any },
+): Promise<string | null> {
+  const source = await args.ctx.runQuery((internal as any).communityOntologyCards.loadCommunityCardSourceInternal, { communityId: target.communityId });
+  if (!source) return null;
+  const channelPage = await args.ctx.runQuery((internal as any).communityChannels.listCommunityChannelPageInternal, {
+    userId: args.userId, communityId: target.communityId, actorKind: channelActorKind(args.principalKind),
+  }).catch(() => null) as { channels?: Array<Record<string, unknown>> } | null;
+  const eventPage = await args.ctx.runQuery((internal as any).communityEvents.listCommunityEventsForSemanticRepositoryInternal, {
+    userId: args.userId, communityId: target.communityId, limit: COMMUNITY_CARD_LIMITS.events,
+  }).catch(() => null) as { events?: Array<Record<string, unknown>> } | null;
+  return renderCommunityCard({
+    ...source,
+    channels: (channelPage?.channels ?? []).flatMap((channel) => {
+      const slug = requiredString(channel.slug, 64);
+      return slug ? [{ slug, name: requiredString(channel.name, 64) ?? slug, restricted: channel.access_mode === "restricted" }] : [];
+    }),
+    events: (eventPage?.events ?? []).flatMap((event) => {
+      const startsAt = requiredString(event.starts_at, 64);
+      return startsAt ? [{ title: requiredString(event.title, 120) ?? "Event", startsAt, timezone: requiredString(event.timezone, 64) }] : [];
+    }),
+  }, "member");
 }
 
 function channelActorKind(principalKind: PolynetPrincipalKind) {
@@ -1359,6 +1388,13 @@ async function executeCanonicalRead(args: {
       "semantic_not_found",
       "Repository path not found or not accessible.",
     );
+  }
+
+  // The community card (shared/communityOntology.ts): its shape, people, the
+  // reader's own channels and what's coming up, drawn for the reader.
+  if (target.localPath === POLYNET_COMMUNITY_PROFILE_PATH) {
+    const card = await readCommunityCard(args, target);
+    if (card) return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: card, truncated: false } };
   }
 
   // Who is online, and one member's profile, as JSON for a member's site or
