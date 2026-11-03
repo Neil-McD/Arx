@@ -1,20 +1,15 @@
 ---
-id: legal.terms_of_service_v4_draft
-title: Polynet Terms of Service v4 (draft)
+id: legal.terms_of_service_v4
+title: Polynet Terms of Service v4
 version: terms_of_service_v4
-effective_date: TBD
-last_updated: 2026-10-29
-status: draft
+effective_date: 2026-11-03
+last_updated: 2026-11-03
+status: active
 ---
 
-# Polynet Terms of Service v4 (draft)
+# Polynet Terms of Service v4
 
-> DRAFT for Neil's review (pricing v2: free communities, paid agent). Not registered in
-> `shared/legalDocuments.ts`, so nobody is asked to accept it. Changed from v3: the opening
-> scope line, the access line ("community-operation" instead of "Builder-access"), and the
-> section "Free Communities And The Agent Plan" (replacing "Builder Subscription And AI Usage").
-
-Effective date to be set on approval.
+Effective date: November 3, 2026.
 
 These Terms of Service govern your access to and use of Polynet, including accounts, communities, AI features, paid communities, Agent plans, and related services. By creating an account, completing account setup, using Polynet, or clicking to accept these terms, you agree to these terms.
 

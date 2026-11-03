@@ -39,7 +39,9 @@ const legalAcceptances = read("convex/legalAcceptances.ts");
 const legalContent = read("apps/web/src/docs/legalDocumentsContent.ts");
 const legacyTerms = read("docs/legal/terms-of-service-v1.md");
 const historicalTerms = read("docs/legal/terms-of-service-v2.md");
-const currentTerms = read("docs/legal/terms-of-service-v3.md");
+const previousTerms = read("docs/legal/terms-of-service-v3.md");
+const currentTerms = read("docs/legal/terms-of-service-v4.md");
+const v3SupersessionNotice = read("docs/legal/terms-of-service-v3-supersession-notice.md");
 const legacyTermsSupersessionNotice = read("docs/legal/terms-of-service-v1-supersession-notice.md");
 const termsSupersessionNotice = read("docs/legal/terms-of-service-v2-supersession-notice.md");
 const historicalBuilderPartnerTerms = read("docs/legal/builder-partner-terms-v2.md");
@@ -266,13 +268,20 @@ assert.equal(
   "accepted Terms v2 must remain byte-for-byte immutable",
 );
 assert.equal(
+  createHash("sha256").update(previousTerms).digest("hex"),
+  "6347eeb2dde52ba76aa22e789f6da62b2eb339042a4b1760a54f6279bf313a91",
+  "accepted Terms v3 must remain byte-for-byte immutable",
+);
+assert.equal(
   createHash("sha256").update(historicalBuilderPartnerTerms).digest("hex"),
   "63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a",
   "accepted Builder Partner terms must remain byte-for-byte immutable",
 );
-assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/);
+assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v4"/);
+assert.match(legalRegistry, /PREVIOUS_TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/);
 assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/);
 assert.match(legalRegistry, /LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/);
+assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v4\.md"/);
 assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v3\.md"/);
 assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v2\.md"/);
 assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v1\.md"/);
@@ -283,12 +292,22 @@ assert.match(
   /documentVersion: TERMS_OF_SERVICE_DOCUMENT\.version/,
   "new Terms acceptance writes must record only the current version",
 );
-assert.match(legalContent, /terms-of-service-v3\.md\?raw/);
+assert.match(legalContent, /terms-of-service-v4\.md\?raw/);
+assert.doesNotMatch(legalContent, /terms-of-service-v3\.md\?raw/);
 assert.doesNotMatch(legalContent, /terms-of-service-v2\.md\?raw/);
 assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/);
-assert.match(currentTerms, /newly created non-operator community requires its own current Builder subscription/);
-assert.match(currentTerms, /Existing communities that Polynet classifies as grandfathered/);
+// v4: communities are free; Polynet-hosted AI is the per-community Agent plan.
+assert.match(currentTerms, /status: active/);
+assert.match(currentTerms, /Creating and running a community on Polynet is free/);
+assert.match(currentTerms, /requires an Agent plan attached to that community/);
+assert.match(currentTerms, /\$79 USD per month for each community and includes up to \$20 in raw model cost/);
+assert.match(currentTerms, /Polynet-hosted AI for that community pauses; the community itself keeps operating/);
+assert.match(currentTerms, /Communities previously classified as grandfathered/);
 assert.match(currentTerms, /Archiving is a separate lifecycle action/);
+assert.doesNotMatch(currentTerms, /DRAFT|requires its own current Builder subscription/);
+assert.match(v3SupersessionNotice, /superseded_by: terms_of_service_v4/);
+assert.match(v3SupersessionNotice, /do not satisfy current v4\s+acceptance/);
+assert.match(v3SupersessionNotice, /New acceptance\s+writes require `terms_of_service_v4`/);
 assert.match(billingDocs, /Every community operates free: new communities are created `free`, grandfathered communities keep operating/);
 assert.doesNotMatch(billingDocs, /Newly created non-operator communities are subscription-required/);
 assert.match(billingDocs, /Hosted AI requires an Agent plan attached to that community/);
