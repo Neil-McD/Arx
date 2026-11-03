@@ -776,6 +776,31 @@ export async function executeRetrievalHarnessTool(params: {
   };
 }
 
+// The asker's profile timezone when it's a real IANA zone; otherwise UTC.
+export function resolveRuntimeTimeZone(value: unknown): string {
+  const zone = typeof value === "string" ? value.trim() : "";
+  if (!zone) return "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone }).format(0);
+    return zone;
+  } catch {
+    return "UTC";
+  }
+}
+
+const COMMUNITY_CARD_PROMPT_MAX_CHARS = 6_000;
+
+// The canonical read returns { path, body }; the card is its body, bounded.
+export function parseCommunityCardBody(outputText: string): string | null {
+  try {
+    const value = JSON.parse(outputText) as Record<string, unknown>;
+    const body = typeof value?.body === "string" ? value.body.trim() : "";
+    return body ? body.slice(0, COMMUNITY_CARD_PROMPT_MAX_CHARS) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runProviderNativeToolCompletion(params: {
   modelRef: string;
   messages: NativeToolAwareMessage[];
@@ -783,6 +808,7 @@ async function runProviderNativeToolCompletion(params: {
   tools: Parameters<typeof runOpenAiNativeToolCompletion>[0]["tools"];
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
+  promptCacheKey?: string | null;
   onTextDelta?: (delta: string) => void;
   signal?: AbortSignal;
 }): Promise<
@@ -804,6 +830,7 @@ async function runProviderNativeToolCompletion(params: {
     tools: params.tools,
     parallelToolCalls: params.parallelToolCalls,
     toolChoice: params.toolChoice,
+    promptCacheKey: params.promptCacheKey,
     onTextDelta: params.onTextDelta,
     signal: params.signal,
   });
@@ -844,13 +871,6 @@ async function executeRetrievalAgentLoop(
   },
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
   const now = new Date();
-  const runtimeTimeZone = "UTC";
-  const runtimeDateTimeIso = now.toISOString();
-  const runtimeDateLabel = new Intl.DateTimeFormat("en-US", {
-    dateStyle: "full",
-    timeStyle: "long",
-    timeZone: runtimeTimeZone,
-  }).format(now);
   const communityResourceLane = normalizeCommunityResourceRuntimeLaneState(
     await params.ctx.runQuery(
       internal.runtimeCommunityResourceLane.resolveRuntimeCommunityResourceLaneInternal,
@@ -904,6 +924,10 @@ async function executeRetrievalAgentLoop(
   ).packet;
   let memberIdentityContextMd: string | null = null;
   let memberIdentityContextStatus: MemberIdentityContextStatus = "not_applicable";
+  // A private Ask answers the asker, so "now" is in the asker's own timezone.
+  // A community-bound conversation never loads the global profile: UTC there.
+  let askerTimeZone: string | null = null;
+  const communityConversation = params.communityAgentSurfaceContext?.kind === "community" && params.communityAgentSurfaceContext.community_conversation === true;
   if (params.invocationSurface === "member_agent_dock" && !(params.communityAgentSurfaceContext?.kind === "community" && params.communityAgentSurfaceContext.community_conversation)) {
     memberIdentityContextStatus = "empty";
     try {
@@ -911,6 +935,7 @@ async function executeRetrievalAgentLoop(
         internal.profiles.resolveCommunityAgentIdentityContextInternal,
         { userId: params.userId as any },
       );
+      askerTimeZone = identity?.timezone ?? null;
       memberIdentityContextMd = renderCommunityAgentIdentityContext(
         identity
           ? {
@@ -927,6 +952,55 @@ async function executeRetrievalAgentLoop(
       // Identity context improves personalization but must never block a member turn.
       memberIdentityContextMd = null;
       memberIdentityContextStatus = "error";
+    }
+  }
+  const runtimeTimeZone = resolveRuntimeTimeZone(askerTimeZone);
+  const runtimeDateTimeIso = now.toISOString();
+  const runtimeDateLabel = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "full",
+    timeStyle: "long",
+    timeZone: runtimeTimeZone,
+  }).format(now);
+  // The community card (community.md) is part of every private Ask, read
+  // through the same door and lens as a model-issued polynet_read, so the agent
+  // never has to choose to look. Failure never blocks the turn.
+  let communityCardMd: string | null = null;
+  const communityCardSlug = String(params.communitySlug ?? "").trim();
+  if (
+    params.invocationSurface === "member_agent_dock" &&
+    params.communityId &&
+    communityCardSlug &&
+    effectiveAllowedToolNames.includes("polynet_read")
+  ) {
+    let cardStatus: "loaded" | "empty" | "error" = "error";
+    try {
+      const card = await executeRetrievalHarnessTool({
+        ctx: params.ctx,
+        userId: params.userId,
+        communityId: params.communityId,
+        authSubject: params.authSubject,
+        runId: params.runId,
+        toolCallId: `${params.runId}:community_card`,
+        toolName: "polynet_read",
+        args: { path: `/communities/${communityCardSlug}/community.md` },
+        evidenceSurface: "member_agent_dock",
+        communityBoundConversation: communityConversation,
+      });
+      if (card.status === "ok") {
+        communityCardMd = parseCommunityCardBody(card.outputText);
+        cardStatus = communityCardMd ? "loaded" : "empty";
+      }
+    } catch {
+      communityCardMd = null;
+    }
+    try {
+      await params.appendRunEvent({
+        eventType: "community_card",
+        eventKey: `${params.runId}:community_card:1`,
+        payload: { version: 1, run_id: params.runId, status: cardStatus, chars: communityCardMd?.length ?? 0 },
+      });
+    } catch {
+      // Best-effort receipt; the prompt bundle receipt records the injected section.
     }
   }
   // Accepted community memory reaches the turn by a server-run canonical search,
@@ -1014,8 +1088,11 @@ async function executeRetrievalAgentLoop(
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
     communityMemoryRecallMd,
+    communityCardMd,
     promptExtensions: resolvedHarness.promptExtensions,
   });
+  // One cache group per community and surface: they share the stable prefix.
+  const promptCacheKey = `pn:${String(params.communityId ?? "none")}:${params.invocationSurface}`;
   const systemPrompt = runtimePromptBundle.text;
   const promptSuffixChars = resolvedHarness.promptExtensions.reduce(
     (total, section) => total + String(section.text ?? "").length,
@@ -1480,6 +1557,7 @@ async function executeRetrievalAgentLoop(
                 parallelToolCalls:
                   providerToolChoice === "auto" && parallelReadToolsEnabled,
                 toolChoice: providerToolChoice,
+                promptCacheKey,
                 onTextDelta: onAssistantTextDelta
                   ? (delta) => onAssistantTextDelta(delta, completionIndex)
                   : undefined,

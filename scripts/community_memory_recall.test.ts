@@ -79,13 +79,15 @@ describe("community memory recall prompt section", () => {
     { path: memoryPath("a"), title: "Compare buildId before retrying", type: "playbook", grade: "B", appliesWhen: null },
   ]);
 
-  it("renders recalled memory as scoped community evidence for the community agent", () => {
+  it("renders recalled memory as per-message community evidence, after the cached community layer", () => {
     const bundle = buildPlatformHarnessRuntimePromptBundle({
       ...base, invocationSurface: "member_agent_dock", communityMemoryRecallMd: recall,
     } as any);
     expect(bundle.sections.find((section) => section.id === "community_memory_recall")).toMatchObject({
-      rendered: true, layer: "scoped", slot: "context", owner: "community", authority: "evidence",
+      rendered: true, layer: "volatile", slot: "context", owner: "community", authority: "evidence",
     });
+    const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);
+    expect(order("community_memory_recall")).toBeGreaterThan(order("community_lens"));
     expect(bundle.text).toContain(memoryPath("a"));
   });
 

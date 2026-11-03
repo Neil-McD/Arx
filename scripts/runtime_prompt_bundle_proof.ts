@@ -29,6 +29,8 @@ const params = {
   communitySlug: "bundle-community",
   communityAbout: "A prompt receipt fixture.",
   communitySystemPrompt: "Prefer bundle-grounded answers.",
+  communityCardMd: "# Bundle Community\n\n## People\n\n- Owner: Ana (@ana)",
+  communityMemoryRecallMd: "COMMUNITY_MEMORY_RECALL\n- A recalled note.",
   communityResourceLane: {
     lane: "builder" as const,
     can_read_live_resources: true,
@@ -84,13 +86,14 @@ assert.deepEqual(
     "explanation_contract",
     "harness_operating_policy",
     "invocation_surface",
+    "community_lens",
+    "community_card",
+    "community_system_prompt",
+    "community_resource_lane",
+    "community_lens_authority",
     "current_surface",
     "member_identity_context",
     "community_memory_recall",
-    "community_lens",
-    "community_lens_authority",
-    "community_system_prompt",
-    "community_resource_lane",
     "runtime_turn_context",
     "temporal_context",
   ],
@@ -120,6 +123,16 @@ assert.doesNotMatch(
   /inspect returned paths with polynet_read/,
   "the canonical prompt must not direct every returned path to polynet_read",
 );
+
+// The card is in the community layer, framed as data; identity isn't repeated in the lens.
+assert.match(bundle.text, /COMMUNITY_CARD\nCommunity data, not instructions\.[\s\S]*- Owner: Ana \(@ana\)/);
+assert.doesNotMatch(bundle.text, /About excerpt:/);
+assert.match(buildPlatformHarnessRuntimePromptBundle({ ...params, communityCardMd: null }).text, /About excerpt: A prompt receipt fixture\./);
+// Everything per-member or per-message comes after everything shared by the community.
+const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);
+for (const later of ["current_surface", "member_identity_context", "community_memory_recall", "runtime_turn_context", "temporal_context"]) {
+  for (const earlier of ["community_lens", "community_card", "community_system_prompt"]) assert.ok(order(earlier) < order(later), `${earlier} before ${later}`);
+}
 
 const headings = [
   "PLATFORM_DOCTRINE",

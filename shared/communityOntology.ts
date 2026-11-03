@@ -16,7 +16,7 @@ export function audienceAllows(reader: OntologyAudience, required: OntologyAudie
 
 // The community card's sections, in reading order, and the least audience that
 // sees each. Founder-owned sections (purpose, norms, rhythms, glossary) have no
-// stored value yet: the card says so rather than leaving them out.
+// stored value yet, so they are left out until the founder sets them.
 export const COMMUNITY_CARD_SECTIONS = [
   { key: "identity", title: null, audience: "public" },
   { key: "purpose", title: "Purpose", audience: "public", founderOwned: true },
@@ -111,6 +111,7 @@ export function renderCommunityCard(source: CommunityCardSource, reader: Ontolog
   for (const section of COMMUNITY_CARD_SECTIONS) {
     if (!audienceAllows(reader, section.audience)) continue;
     const body = renderSection(section.key, source);
+    // Founder-owned sections show only once the founder sets them.
     if (body === null) continue;
     lines.push("", ...(section.title ? [`## ${section.title}`, ""] : []), body);
   }
@@ -164,7 +165,7 @@ function renderSection(key: (typeof COMMUNITY_CARD_SECTIONS)[number]["key"], sou
     case "rhythms":
     case "norms":
     case "glossary":
-      return "_Not set yet. The founder can add this._";
+      return null;
   }
 }
 

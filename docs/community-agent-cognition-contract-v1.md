@@ -2451,7 +2451,7 @@ member's agent turn reliably sees it, reads it, and cites it.
   authority and mount. It writes the normal `member_agent_dock` retrieval
   receipt and a `community_memory_recall` run event (status, result count,
   memory paths, receipt id).
-- Results enter the prompt as the scoped `community_memory_recall` section with
+- Results enter the prompt as the `community_memory_recall` section with
   `evidence` authority: titles, type, grade, applies-when and exact paths only,
   framed as data, not instructions. The model must `polynet_read` an entry
   before relying on it and cite its path; the read writes its own receipt with
@@ -2460,3 +2460,30 @@ member's agent turn reliably sees it, reads it, and cites it.
   and non-member-agent surfaces render no section. The Concierge and external
   MCP keep model-initiated search for now.
 - Recall receipts carry no feedback, so they do not change metabolizer scores.
+
+## Thirty-Fifth Implementation Slice: Community Card In Every Ask
+
+Goal: the agent never has to choose to read the community card, and repeat
+turns in one community reuse the provider's prompt cache.
+
+- Before each `member_agent_dock` turn with an explicit community and
+  `polynet_read` available, the server reads `/communities/<slug>/community.md`
+  through the canonical door under the member's authority and mount (the same
+  read and receipt as a model-issued `polynet_read`) and records a
+  `community_card` run event (status, size). The body enters the prompt as the
+  `community_card` section with `evidence` authority, framed as community data,
+  bounded to 6,000 characters. A failed read never blocks the turn.
+- With the card loaded, the community lens no longer repeats the one-liner and
+  about excerpt. Founder-owned card sections (purpose, rhythms, norms, glossary)
+  are left out until the founder sets them.
+- Section order: platform doctrine, explanation and operating policy;
+  invocation surface; community lens, card and community instructions; resource
+  lane and lens authority; current page and member identity; then the
+  per-message memory recall, turn context and clock. Everything shared by every
+  turn on one surface in one community comes before anything per member or per
+  message.
+- Each OpenAI request carries `prompt_cache_key` `pn:<communityId>:<surface>`
+  (no user content), so turns sharing that prefix are routed to the same cache.
+- "Now" uses the asker's profile timezone when it is a valid zone, otherwise
+  UTC. A community-bound conversation never loads the global profile, so it
+  stays UTC.
