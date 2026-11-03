@@ -3,7 +3,7 @@ import { internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { COMMUNITY_CARD_LIMITS, type CommunityCardPerson } from "../shared/communityOntology.ts";
-import { resolveCommunityEntryPolicy } from "./communityCore";
+import { communityMembershipRowIsActive, resolveCommunityEntryPolicy } from "./communityCore";
 import { communitySiteUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
@@ -30,10 +30,20 @@ export const loadCommunityCardSourceInternal = internalQuery({
     };
     await named(community.ownerId, "owner");
     for (const role of ["admin", "moderator"] as const) {
-      const rows = await ctx.db.query("communityMemberships")
-        .withIndex("by_community_role_active", (q) => q.eq("communityId", args.communityId).eq("role", role).eq("active", true))
-        .take(COMMUNITY_CARD_LIMITS.people);
-      for (const row of rows) if (String(row.userId) !== String(community.ownerId)) await named(row.userId, role);
+      // Active, or older rows from before the field existed (absent reads as active),
+      // checked with the same predicate as everywhere else.
+      let shown = 0;
+      for (const active of [true, undefined]) {
+        const rows = await ctx.db.query("communityMemberships")
+          .withIndex("by_community_role_active", (q) => q.eq("communityId", args.communityId).eq("role", role).eq("active", active))
+          .take(COMMUNITY_CARD_LIMITS.people);
+        for (const row of rows) {
+          if (shown >= COMMUNITY_CARD_LIMITS.people) break;
+          if (!communityMembershipRowIsActive(row as any) || String(row.userId) === String(community.ownerId)) continue;
+          await named(row.userId, role);
+          shown += 1;
+        }
+      }
     }
 
     const modules = await ctx.db.query("communityResourceModules")

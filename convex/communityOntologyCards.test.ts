@@ -36,6 +36,12 @@ async function fixture() {
     await membership(moderator, "moderator");
     const memberRow = await membership(member, "member");
     await membership(former, "moderator", false);
+    // Older leaders: no active field at all (reads as active), unless revoked.
+    const legacyMod = await user("old-mod", "Old Mod");
+    const revokedMod = await user("revoked", "Revoked Mod");
+    for (const [userId, extra] of [[legacyMod, {}], [revokedMod, { revokedAt: NOW - 1 }]] as const) {
+      await ctx.db.insert("communityMemberships", { communityId, userId, role: "moderator", accessSource: "free_grant", createdAt: NOW - 60 * 86_400_000, updatedAt: NOW, ...extra } as any);
+    }
     const channel = (slug: string, accessMode: string) => ctx.db.insert("communityChannels", {
       communityId, slug, name: slug, normalizedName: slug, accessMode, postingPolicy: "members", status: "active", position: 0, createdAt: NOW, updatedAt: NOW,
     } as any);
@@ -99,6 +105,7 @@ test("the card's own facts: owner, active admins and moderators by name, live co
       { name: "Neil", handle: "neil", role: "owner" },
       { name: "Ana Ito", handle: "ana", role: "admin" },
       { name: "Maya Chen", handle: "maya-crimps", role: "moderator" },
+      { name: "Old Mod", handle: "old-mod", role: "moderator" },
     ],
     courses: [{ title: "Board basics", lessons: 2 }],
     coursesIncomplete: false,
