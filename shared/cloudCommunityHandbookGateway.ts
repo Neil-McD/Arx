@@ -6,21 +6,22 @@ import type { CommunityHandbookManagerView } from "./communityHandbookEditorStat
 
 type HandbookCall = { session: unknown; communityId: string };
 
-async function call(kind: "query" | "mutation", name: string, params: HandbookCall, extra: Record<string, unknown> = {}) {
+export async function fetchCommunityHandbook(params: HandbookCall): Promise<CommunityHandbookManagerView> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const args = { authSubject, communityId: params.communityId, ...extra };
-  const payload = kind === "query" ? await client.query(name as any, args) : await client.mutation(name as any, args);
-  return payload as CommunityHandbookManagerView;
+  return await client.query("communityHandbook:getCommunityHandbookForManager" as any, { authSubject, communityId: params.communityId });
 }
 
-export const fetchCommunityHandbook = (params: HandbookCall) =>
-  call("query", "communityHandbook:getCommunityHandbookForManager", params);
+export async function saveCommunityHandbookDraft(params: HandbookCall & { text: string }): Promise<CommunityHandbookManagerView> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityHandbook:saveCommunityHandbookDraft" as any, { authSubject, communityId: params.communityId, text: params.text });
+}
 
-export const saveCommunityHandbookDraft = (params: HandbookCall & { text: string }) =>
-  call("mutation", "communityHandbook:saveCommunityHandbookDraft", params, { text: params.text });
+export async function approveCommunityHandbook(params: HandbookCall & { text: string }): Promise<CommunityHandbookManagerView> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityHandbook:approveCommunityHandbook" as any, { authSubject, communityId: params.communityId, text: params.text });
+}
 
-export const approveCommunityHandbook = (params: HandbookCall & { text: string }) =>
-  call("mutation", "communityHandbook:approveCommunityHandbook", params, { text: params.text });
-
-export const requestCommunityHandbookDraft = (params: HandbookCall) =>
-  call("mutation", "communityHandbook:requestCommunityHandbookDraft", params);
+export async function requestCommunityHandbookDraft(params: HandbookCall): Promise<CommunityHandbookManagerView> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityHandbook:requestCommunityHandbookDraft" as any, { authSubject, communityId: params.communityId });
+}
