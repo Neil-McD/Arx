@@ -239,6 +239,32 @@ export function buildCommunityHomePath(
 }
 
 
+// Someone who starts on a community's site and has to set up their Polynet
+// account first comes to /onboarding?community=<slug> and, once set up, goes
+// back to that community's join page. Only a slug travels (never an address),
+// so the link can't send anyone anywhere else.
+const SETUP_RETURN_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+export const SETUP_RETURN_STORAGE_KEY = "polynet:setup-return-community";
+
+export function readSetupReturnCommunity(search: string | null | undefined): string | null {
+  let value = "";
+  try { value = new URLSearchParams(String(search ?? "")).get("community") ?? ""; } catch { return null; }
+  const slug = value.trim().toLowerCase();
+  return SETUP_RETURN_SLUG.test(slug) ? slug : null;
+}
+
+// Where they go back to: the site's join page (it hands over to the private
+// join page), marked so it can say they're set up. Only to an https site.
+export function communitySiteJoinUrl(siteUrl: unknown): string | null {
+  if (typeof siteUrl !== "string") return null;
+  try {
+    const site = new URL(siteUrl);
+    return site.protocol === "https:" ? `${site.origin}/join?setup=done` : null;
+  } catch {
+    return null;
+  }
+}
+
 // The bare /c/<slug> page was the community's funnel; a community with its own
 // site sends visitors there instead, since the site is its front door. Only that
 // exact page (Studio's own /c/<slug>/... pages stay), and only to an https site.

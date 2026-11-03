@@ -28,6 +28,7 @@ export const JOIN_MESSAGES: Record<string, string> = {
   community_unavailable: "{name} isn't taking new members right now.",
   community_user_blocked: "You can't join {name}.",
   account_setup_required: "Finish setting up your Polynet account to join {name}.",
+  setup_done: "You're all set. Now join {name}.",
   failed: "That didn't work. Try again.",
 };
 
@@ -35,7 +36,7 @@ export const JOIN_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block module: the Join page of <polynet-personal page="join">. Only
 // on a site's private twin. Style it with ::part() on <polynet-personal>:
 // join, pitch, join-avatar, join-name, join-one-liner, join-count, join-about,
-// gate, gate-title, gate-note, plans, plan, join-action, join-enter, join-cancel,
+// gate, gate-title, gate-note, setup-done, plans, plan, join-action, join-enter, join-cancel,
 // join-setup, join-status, join-error, retry.
 import { h, styled, avatar } from "/__polynet/blocks/kit.js";
 
@@ -200,6 +201,10 @@ class Join {
     if (viewer && viewer.state === "denied" && !viewer.can_request_again) {
       const date = viewer.reapply_at ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(viewer.reapply_at)) : null;
       return out.concat([h("h3", { part: "gate-title", text: say("denied_title") }), h("p", { text: say(date ? "denied_until" : "denied", name, date) })]);
+    }
+    // Back from setting up their Polynet account: say so, then the one step left.
+    if (viewer && viewer.state === "visitor" && new URLSearchParams(location.search).get("setup") === "done") {
+      out.push(h("p", { part: "setup-done", role: "status", text: say("setup_done", name) }));
     }
     if (data.gate === "checkout") return out.concat(this.checkoutGate());
     const action = h("button", { class: "primary", part: "join-action", type: "button", text: data.action_label });

@@ -668,6 +668,27 @@ test("Join: canceled at Stripe, the page says so and offers the plans again; an 
 // signing out, inside the same stripped frame, through the real edge.
 for (const [engine, type] of ENGINES) {
   const installed = engine === "chromium" || existsSync(type.executablePath());
+  test.runIf(installed)(`${engine}: Back from setting up their account (?setup=done), Join says so, then the one step left`, async () => {
+    resetJoin("join", "visitor");
+    const { browser, page } = await openTwin(type, "/join?setup=done", TOKEN);
+    try {
+      const personal = page.locator("polynet-personal");
+      await expect.poll(() => personal.locator("[part=setup-done]").textContent()).toBe("You're all set. Now join Sunrise Climbing Club.");
+      expect(await personal.locator("[part=join-action]").textContent()).toBe("Join free");
+    } finally {
+      await browser.close();
+    }
+    // Without the mark, no note.
+    resetJoin("join", "visitor");
+    const plain = await openTwin(type, "/join", TOKEN);
+    try {
+      await expect.poll(() => plain.page.locator("polynet-personal [part=join-action]").count()).toBe(1);
+      expect(await plain.page.locator("polynet-personal [part=setup-done]").count()).toBe(0);
+    } finally {
+      await plain.browser.close();
+    }
+  });
+
   test.runIf(installed)(`${engine}: Settings renders inside the stripped frame, saves with feedback, and keeps what was typed on a refusal`, async () => {
     resetSettings();
     const { browser, page } = await openTwin(type, "/settings", TOKEN);
