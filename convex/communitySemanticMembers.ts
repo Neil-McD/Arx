@@ -300,7 +300,10 @@ export async function readMemberStanding(ctx: any, community: any, userId: any, 
     let total = 0;
     let latest: number | null = null;
     for (const row of rows) {
-      if (row.status !== "live" || !(await isShared(row.channelId))) continue;
+      // Only what the whole community could read: community- or public-scoped,
+      // in a shared channel, or older posts from before channels (read as General).
+      if (row.status !== "live" || (row.visibilityScope !== "community" && row.visibilityScope !== "public")) continue;
+      if (row.channelId !== undefined && !(await isShared(row.channelId))) continue;
       if (table === "communityInteractionReplies" && !(await rootIsLive(row.rootId))) continue;
       total += 1;
       latest = Math.max(latest ?? 0, Number(row.createdAt) || 0);

@@ -51,6 +51,13 @@ async function fixture() {
     const deleted = await post(general, "deleted", NOW - 3_500);
     await post(general, "hidden", NOW - 3_000);
     await post(secret, "live", NOW - 1_000);
+    // From before channels: no channel stored, read as General. Counted when community-scoped; a private one never.
+    const legacy = (visibilityScope: string, at: number) => ctx.db.insert("communityInteractionRoots", {
+      communityId, actorType: "human", actorUserId: member, kind: "discussion", status: "live", visibilityScope,
+      contentSummary: "old", replyCount: 0, reactionSummary: [], idempotencyKey: `l${n++}`, createdAt: at, updatedAt: at,
+    } as any);
+    await legacy("community", NOW - 9_000);
+    await legacy("private", NOW - 100);
     await ctx.db.insert("communityInteractionReplies", {
       communityId, channelId: general, rootId: root, seq: 1, actorType: "human", actorUserId: member, status: "live", visibilityScope: "community",
       contentSummary: "reply", reactionSummary: [], idempotencyKey: "r1", createdAt: NOW - 2_000, updatedAt: NOW - 2_000,
@@ -104,7 +111,7 @@ test("a member's standing counts only live posts and replies in shared channels,
   });
   expect(standing).toEqual({
     joinedAt: new Date(NOW - 30 * 86_400_000).toISOString(),
-    sharedPosts: 2,
+    sharedPosts: 3,
     sharedReplies: 1,
     countsCapped: false,
     // The restricted channel's newer post doesn't move "last active" either.
