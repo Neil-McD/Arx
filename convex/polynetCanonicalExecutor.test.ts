@@ -400,6 +400,7 @@ const modules = import.meta.glob([
   "./communityCompilerDigest.ts",
   "./communityPublic.ts",
   "./communityOntologyCards.ts",
+  "./communitySearchDocs.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -1407,6 +1408,28 @@ test("custom channels discover, isolate, search, read, and write through exact p
   });
   expect(JSON.stringify(searched)).toContain(winsPath);
   expect(JSON.stringify(searched)).not.toContain(String(generalRootId));
+  // Filters steer: an unknown handle says how to find one; no match says how to retry.
+  await expect(executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: { path: "/communities/canonical-community/channels/", query: "marker", author: "nobody-here" },
+  })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("members/") });
+  await expect(executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: { path: "/communities/canonical-community/channels/", query: "marker", from: "June" },
+  })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("YYYY-MM-DD") });
+  await expect(executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: { path: "/communities/canonical-community/channels/", query: "*", kind: "reply" },
+  })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("at least one keyword") });
+  const nothing = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: { path: "/communities/canonical-community/channels/", query: "zzzunmatchedword" },
+  });
+  expect(nothing).toMatchObject({ ok: true, value: { results: [], hint: expect.stringContaining("whole words") } });
 
   const repositorySearch = await executePolynetCanonicalTool({
     ...base,

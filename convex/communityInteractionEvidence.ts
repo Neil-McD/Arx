@@ -1,10 +1,11 @@
 import { presentInteractionActorType } from "../shared/communityAgentIdentity";
-import { syncCommunitySearchDoc } from "./communitySearchDocs";
+import { SHARED_SEARCH_ACCESS_KEY, restrictedSearchAccessKey, syncCommunitySearchDoc } from "./communitySearchDocs";
+import { buildCommunitySearchQuery, searchWords, stemSearchWord } from "../shared/communitySearchText";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { resolveCommunityChannelActor, type ChannelActor, type ChannelActorKind } from "./communityChannelAccess";
+import { getCommunityChannelCapabilities, resolveCommunityChannelActor, type ChannelActor, type ChannelActorKind } from "./communityChannelAccess";
 import { channelActorKindValidator } from "./communityChannelValidators";
 import {
   normalizeIdValue,
@@ -256,9 +257,11 @@ async function mapEvidenceSearchItem(args: {
   root: InteractionRow;
   channel: CommunityChannelLike;
   score: number | null;
-  source: "recent" | "archive";
+  source: "recent" | "archive" | "index";
   userIdCache?: Map<string, string | null>;
   presentation?: ChatPresentation;
+  // From the search row's full text, around the match.
+  snippet?: string | null;
 }) {
   const publicActorUserId = args.row.actorUserId
     ? await resolvePublicUserId(args.ctx, args.row.actorUserId, args.userIdCache)
@@ -301,7 +304,7 @@ async function mapEvidenceSearchItem(args: {
     version: Math.max(1, Math.floor(Number(args.row.updatedAt) || 1)),
     visibility_scope: args.row.visibilityScope,
     title: normalizeOptionalText(args.root.title, 180),
-    snippet: truncateText(args.row.contentSummary, EVIDENCE_SNIPPET_CHARS),
+    snippet: args.snippet ?? truncateText(args.row.contentSummary, EVIDENCE_SNIPPET_CHARS),
     actor: {
       // One agent per community: older posts by the retired personal agent read as the community agent.
       type: chat ? presentInteractionActorType(args.row.actorType) : args.row.actorType,
@@ -505,6 +508,197 @@ async function searchRecentCommunityInteractionEvidence(args: {
     truncated: rankedCandidates.length > args.limit,
   };
 }
+
+// ---------- full-history search over the search rows ----------
+
+const INDEXED_CANDIDATES_PER_KEY = 60;
+// Date ranges and newest-first apply after the index ranks, so they read a
+// wider window; truncated says when even that was cut short.
+const INDEXED_CANDIDATES_PER_KEY_WIDE = 256;
+// A manager may read every private room; search the first ones by position.
+const MAX_RESTRICTED_SEARCH_KEYS = 20;
+const SNIPPET_RADIUS_CHARS = 220;
+
+// The body line of a search row (line two), around the first matching word.
+function snippetAroundMatch(searchText: string, query: string): string | null {
+  const body = String(searchText ?? "").split("\n")[1] ?? "";
+  if (!body) return null;
+  const terms = new Set(searchWords(query).map(stemSearchWord));
+  let at = -1;
+  for (const match of body.matchAll(/[\p{L}\p{N}]+/gu)) {
+    if (terms.has(stemSearchWord(match[0].toLowerCase()))) { at = match.index ?? -1; break; }
+  }
+  if (at < 0 || body.length <= SNIPPET_RADIUS_CHARS * 2) return truncateText(body, EVIDENCE_SNIPPET_CHARS);
+  const start = Math.max(0, at - SNIPPET_RADIUS_CHARS);
+  const end = Math.min(body.length, at + SNIPPET_RADIUS_CHARS);
+  return `${start > 0 ? "…" : ""}${body.slice(start, end).trim()}${end < body.length ? "…" : ""}`;
+}
+
+const PRIVATE_ROOM_SCAN_BOUND = 200;
+
+// The private rooms an actor can read, by position: managers from the room
+// list, members from their grants (stale grants to archived rooms are skipped).
+// Returns at most one more than the search bound, and whether the scan itself
+// hit its bound (then rooms past it may be missing: the search is incomplete).
+async function listReadablePrivateRoomsForSearch(ctx: any, communityId: any, actor: ChannelActor): Promise<{ rooms: CommunityChannelLike[]; scanCapped: boolean }> {
+  const candidates: any[] = actor.isManager
+    ? await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", (q: any) =>
+      q.eq("communityId", communityId).eq("accessMode", "restricted").eq("status", "active")).take(PRIVATE_ROOM_SCAN_BOUND)
+    : await Promise.all((await ctx.db.query("communityChannelParticipants").withIndex("by_community_principal_status", (q: any) =>
+      q.eq("communityId", communityId).eq("principalKey", actor.principalKey).eq("status", "active")).take(PRIVATE_ROOM_SCAN_BOUND))
+      .map((grant: any) => ctx.db.get(grant.channelId)));
+  const rooms: CommunityChannelLike[] = [];
+  for (const channel of candidates) {
+    if (!channel || normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) || channel.status !== "active" ||
+      channel.accessMode !== "restricted") continue;
+    if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) continue;
+    rooms.push(channel);
+  }
+  rooms.sort((a, b) => a.position - b.position || normalizeIdValue(a._id).localeCompare(normalizeIdValue(b._id)));
+  return { rooms: rooms.slice(0, MAX_RESTRICTED_SEARCH_KEYS + 1), scanCapped: candidates.length >= PRIVATE_ROOM_SCAN_BOUND };
+}
+
+// Every live post and reply the reader may read, by words, across all history.
+// The index only proposes candidates: each is re-read and re-checked against
+// its post, thread and channel before it is returned.
+async function searchIndexedCommunityInteractionEvidence(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  query: string;
+  limit: number;
+  actorKind?: ChannelActorKind;
+  channelId?: any | null;
+  channelSlug?: string | null;
+  authorUserId?: any | null;
+  kind?: "post" | "reply" | null;
+  fromMs?: number | null;
+  toMs?: number | null;
+  sort?: "relevant" | "newest" | null;
+}) {
+  await requireCommunityChatAccess({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
+  const community = (await args.ctx.db.get(args.communityId)) as CommunityRow | null;
+  if (!community) throw new Error("community_not_found");
+  // Members search the rooms they can read, private ones included; the
+  // community agent answering in public searches shared rooms only.
+  const memberActor = args.actorKind && args.actorKind !== "community_agent"
+    ? await resolveCommunityChannelActor({ ...args, kind: args.actorKind }) : undefined;
+  const requestedChannelId = normalizeIdValue(args.channelId);
+  const requestedChannelSlug = String(args.channelSlug ?? "").trim();
+  let channels: CommunityChannelLike[];
+  if (requestedChannelId || requestedChannelSlug) {
+    const scopedActor = memberActor ?? await resolveCommunityChannelActor({ ...args, kind: "community_agent" });
+    const selected = await resolveAuthorizedCommunityChannel({ ctx: args.ctx, communityId: args.communityId,
+      channelId: requestedChannelId || null, channelSlug: requestedChannelSlug || null, actor: scopedActor, capability: "canRead" });
+    if (!memberActor && selected.accessMode !== "all_members") throw new Error("community_channel_unavailable");
+    channels = [selected];
+  } else {
+    channels = await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
+  }
+  // A member's private rooms (a community may have up to 100), read with
+  // bounded takes, never paginate, which a query may call only once.
+  let moreRestricted = false;
+  if (memberActor && !(requestedChannelId || requestedChannelSlug)) {
+    const { rooms: privateRooms, scanCapped } = await listReadablePrivateRoomsForSearch(args.ctx, args.communityId, memberActor);
+    moreRestricted = privateRooms.length > MAX_RESTRICTED_SEARCH_KEYS || scanCapped;
+    channels = [...channels, ...privateRooms];
+  }
+  const restricted = channels.filter((channel) => channel.accessMode === "restricted");
+  const keys = [
+    ...(channels.some((channel) => channel.accessMode === "all_members") ? [SHARED_SEARCH_ACCESS_KEY] : []),
+    ...restricted.slice(0, MAX_RESTRICTED_SEARCH_KEYS).map((channel) => restrictedSearchAccessKey(channel._id)),
+  ];
+  const searchQuery = buildCommunitySearchQuery(args.query);
+  // One named room narrows the index to that room. General also owns the
+  // posts from before channels, which carry none: they get their own query, so
+  // other rooms never use up General's window.
+  const selected = channels.length === 1 && (requestedChannelId || requestedChannelSlug) ? channels[0] : null;
+  const lanes: Array<{ accessKey: string; channelId?: any }> = selected
+    ? [
+        ...(selected._id ? [{ accessKey: keys[0], channelId: selected._id }] : []),
+        ...(selected.systemRole === "general" ? [{ accessKey: SHARED_SEARCH_ACCESS_KEY, channelId: undefined }] : []),
+      ]
+    : keys.map((accessKey) => ({ accessKey }));
+  const window = args.fromMs || args.toMs || args.sort === "newest" ? INDEXED_CANDIDATES_PER_KEY_WIDE : INDEXED_CANDIDATES_PER_KEY;
+  const perKey = await Promise.all(lanes.map((lane) =>
+    args.ctx.db.query("communitySearchDocs").withSearchIndex("search_text", (q: any) => {
+      let search = q.search("searchText", searchQuery).eq("communityId", args.communityId).eq("accessKey", lane.accessKey);
+      if (args.authorUserId) search = search.eq("authorUserId", args.authorUserId);
+      if ("channelId" in lane) search = search.eq("channelId", lane.channelId);
+      if (args.kind) search = search.eq("kind", args.kind);
+      return search;
+    }).take(window)));
+  // Interleave by rank so one busy room can't crowd out the others.
+  const docs: any[] = [];
+  for (let rank = 0; rank < window; rank += 1) {
+    for (const list of perKey) if (list[rank]) docs.push(list[rank]);
+  }
+  const accepted: Array<{ objectType: "root" | "reply"; row: InteractionRow; root: InteractionRow; channel: CommunityChannelLike; doc: any; rank: number }> = [];
+  for (const [rank, doc] of docs.entries()) {
+    const objectType = doc.replyId ? "reply" as const : "root" as const;
+    const row = (await args.ctx.db.get(doc.replyId ?? doc.rootId)) as InteractionRow | null;
+    const root = objectType === "root" ? row : ((await args.ctx.db.get(doc.rootId)) as InteractionRow | null);
+    if (!row || !root || row.status !== "live" || root.status !== "live") continue;
+    if (!communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope) || !communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)) continue;
+    let channel: CommunityChannelLike;
+    try {
+      channel = requireChannelFromAuthorizedSet({ row: root, communityId: args.communityId, channels });
+    } catch {
+      continue;
+    }
+    if (objectType === "reply" && !interactionBelongsToChannel(row, channel)) continue;
+    if (args.fromMs && row.createdAt < args.fromMs) continue;
+    if (args.toMs && row.createdAt > args.toMs) continue;
+    accepted.push({ objectType, row, root, channel, doc, rank });
+  }
+  if (args.sort === "newest") accepted.sort((a, b) => b.row.createdAt - a.row.createdAt);
+  const page = accepted.slice(0, args.limit);
+  const userIdCache = new Map<string, string | null>();
+  return {
+    community: {
+      id: normalizeIdValue(community._id),
+      slug: String(community.slug ?? "").trim() || null,
+      name: String(community.name ?? "").trim() || "Community",
+    },
+    results: await Promise.all(page.map((entry) => mapEvidenceSearchItem({
+      ctx: args.ctx,
+      community,
+      objectType: entry.objectType,
+      row: entry.row,
+      root: entry.root,
+      channel: entry.channel,
+      // Rank order from the index, newer wins ties; higher is better.
+      score: Math.max(1, docs.length - entry.rank),
+      source: "index",
+      userIdCache,
+      snippet: snippetAroundMatch(entry.doc.searchText, args.query),
+    }))),
+    truncated: accepted.length > args.limit || perKey.some((list) => list.length >= window) ||
+      restricted.length > MAX_RESTRICTED_SEARCH_KEYS || moreRestricted,
+  };
+}
+
+const searchKindValidator = v.optional(v.union(v.literal("post"), v.literal("reply")));
+const searchSortValidator = v.optional(v.union(v.literal("relevant"), v.literal("newest")));
+
+export const searchIndexedCommunityInteractionEvidenceInternal = internalQuery({
+  args: {
+    actorKind: v.optional(channelActorKindValidator),
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    query: v.string(),
+    limit: v.number(),
+    channelId: v.optional(v.id("communityChannels")),
+    channelSlug: v.optional(v.string()),
+    authorUserId: v.optional(v.id("users")),
+    kind: searchKindValidator,
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+    sort: searchSortValidator,
+  },
+  handler: async (ctx, args) =>
+    await searchIndexedCommunityInteractionEvidence({ ctx, ...args, limit: normalizeCommunityEvidenceSearchLimit(args.limit) }),
+});
 
 export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
   args: {
@@ -768,6 +962,11 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     limit: v.optional(v.number()),
     channelId: v.optional(v.id("communityChannels")),
     channelSlug: v.optional(v.string()),
+    authorUserId: v.optional(v.id("users")),
+    kind: searchKindValidator,
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+    sort: searchSortValidator,
     surface: communityEvidenceSurfaceValidator,
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
@@ -779,8 +978,22 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     const query = truncateText(args.query, 240);
     if (!query) throw new Error("community_chat_search_query_required");
     const limit = normalizeCommunityEvidenceSearchLimit(args.limit);
-    const recent = (await ctx.runQuery(
+    // Words search the whole history through the search rows; a query with no
+    // searchable words browses recent activity as before.
+    const indexed = Boolean(buildCommunitySearchQuery(query));
+    const filtered = Boolean(args.authorUserId || args.kind || args.fromMs || args.toMs);
+    // Filters narrow a word search; browsing recent activity can't honor them.
+    if (!indexed && (filtered || args.sort)) throw new Error("community_search_filters_need_words");
+    type SearchPage = { community: Record<string, unknown>; results: Array<Record<string, unknown>>; truncated: boolean };
+    const recentScan = async () => (await ctx.runQuery(
       (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
+      { actorKind: args.actorKind, userId, communityId: args.communityId, query, limit, channelId: args.channelId, channelSlug: args.channelSlug },
+    )) as SearchPage;
+    let strategy = indexed ? "full_text_index" : "bounded_lexical";
+    let recent = (await ctx.runQuery(
+      indexed
+        ? (internal as any).communityInteractionEvidence.searchIndexedCommunityInteractionEvidenceInternal
+        : (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
       {
         actorKind: args.actorKind,
         userId,
@@ -789,12 +1002,26 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
         limit,
         channelId: args.channelId,
         channelSlug: args.channelSlug,
+        ...(indexed ? {
+          ...(args.authorUserId ? { authorUserId: args.authorUserId } : {}),
+          ...(args.kind ? { kind: args.kind } : {}),
+          ...(args.fromMs ? { fromMs: args.fromMs } : {}),
+          ...(args.toMs ? { toMs: args.toMs } : {}),
+          ...(args.sort ? { sort: args.sort } : {}),
+        } : {}),
       },
-    )) as {
-      community: Record<string, unknown>;
-      results: Array<Record<string, unknown>>;
-      truncated: boolean;
-    };
+    )) as SearchPage;
+    // Until a community's search rows are built (just after a release), an
+    // unfiltered search that finds nothing falls back to the recent scan.
+    // Only when the scan can search the same words: a query it can't tokenize
+    // (non-Latin, one letter) would otherwise read as "browse recent".
+    if (indexed && !filtered && !args.sort && recent.results.length === 0 && tokenizeQuery(query).length > 0) {
+      const indexTruncated = recent.truncated;
+      recent = await recentScan();
+      // An index search that was cut short stays marked incomplete.
+      recent = { ...recent, truncated: recent.truncated || indexTruncated };
+      strategy = "bounded_lexical_fallback";
+    }
     const results = recent.results;
     const resultRefs = results.map((result) => String(result.ref ?? "")).filter(Boolean);
     const retrievalId: any = await ctx.runMutation(
@@ -817,7 +1044,7 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
       diagnostics: {
         version: 2,
         source: "community_interactions",
-        strategy: "bounded_lexical",
+        strategy,
       },
     };
   },

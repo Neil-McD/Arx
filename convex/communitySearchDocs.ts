@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { buildCommunitySearchText } from "../shared/communitySearchText";
 
 // Search rows for posts and replies (schema: communitySearchDocs). One row per
@@ -244,5 +244,17 @@ export const backfillAllCommunitySearchDocsInternal = internalMutation({
       await ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.backfillAllCommunitySearchDocsInternal, { cursor: page.continueCursor });
     }
     return { communities: page.page.length, done: page.isDone };
+  },
+});
+
+// A search's author filter, by handle. Results are still re-checked, so a
+// handle outside the community simply matches nothing.
+export const resolveSearchAuthorInternal = internalQuery({
+  args: { handle: v.string() },
+  handler: async (ctx, args) => {
+    const handle = args.handle.trim().replace(/^@/, "").toLowerCase();
+    if (!handle) return null;
+    const user = await ctx.db.query("users").withIndex("by_normalizedHandle", (q) => q.eq("normalizedHandle", handle)).first();
+    return user?._id ?? null;
   },
 });

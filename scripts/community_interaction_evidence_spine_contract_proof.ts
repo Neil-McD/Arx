@@ -102,7 +102,11 @@ assert.doesNotMatch(redactionBlock, /query\("communityInteractionSourceTraceLink
 const retrievalAuditStart = evidence.indexOf("const retrievalId: any = await ctx.runMutation");
 assert.ok(retrievalAuditStart >= 0, "retrieval audit block must exist");
 assert.match(evidence, /const results = recent\.results/);
-assert.match(evidence, /strategy: "bounded_lexical"/);
+// Word queries run on the full-text search rows; queries with no searchable
+// words (and the empty-index fallback) keep the bounded lexical scan.
+assert.match(evidence, /let strategy = indexed \? "full_text_index" : "bounded_lexical"/);
+assert.match(evidence, /strategy = "bounded_lexical_fallback"/);
+assert.match(evidence, /withSearchIndex\("search_text"/);
 assert.doesNotMatch(evidence, /vectorSearch|embedGemini|archiveAvailable|archiveError|archive_error/);
 
 assert.match(

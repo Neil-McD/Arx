@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import { hashSiteFile, publishSite, readSitesConfig, startSiteUpload, uploadSiteFiles } from "./communitySiteDeploy";
 import { siteFileMimeType, siteHostname, siteScriptName, validateSiteManifest } from "./communitySites";
 import { renderCommunitySubmittedFormsMarkdown, renderCommunityMemberSuccessDossierMarkdown } from "../shared/communityMemberSuccessDossier";
@@ -457,6 +458,39 @@ async function readCommunityCard(
       return startsAt ? [{ title: requiredString(event.title, 120) ?? "Event", startsAt, timezone: requiredString(event.timezone, 64) }] : [];
     }),
   }, "member");
+}
+
+const POST_SEARCH_EMPTY_HINT =
+  "Nothing matched. Search matches whole words: try one or two keywords, another form of a word, or drop the author or date filters.";
+
+function parseSearchDate(value: unknown, endOfDay: boolean): number | null | "invalid" {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  const ms = /^\d{4}-\d{2}-\d{2}$/.test(text)
+    ? Date.parse(`${text}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`)
+    : Date.parse(text);
+  return Number.isFinite(ms) ? ms : "invalid";
+}
+
+// Search filters for channels/: an author handle, a date range, a kind and a sort.
+async function resolvePostSearchFilters(ctx: any, input: Record<string, unknown>): Promise<
+  { ok: true; value: Record<string, unknown> } | { ok: false; message: string }
+> {
+  const value: Record<string, unknown> = {};
+  const author = requiredString(input.author, 64);
+  if (author) {
+    const authorUserId = await ctx.runQuery((internal as any).communitySearchDocs.resolveSearchAuthorInternal, { handle: author });
+    if (!authorUserId) return { ok: false, message: `No member has the handle "${author}". List members/ for handles, e.g. author: "maya-crimps".` };
+    value.authorUserId = authorUserId;
+  }
+  const fromMs = parseSearchDate(input.from, false);
+  const toMs = parseSearchDate(input.to, true);
+  if (fromMs === "invalid" || toMs === "invalid") return { ok: false, message: 'Dates are YYYY-MM-DD or ISO times, e.g. from: "2026-06-01", to: "2026-06-30".' };
+  if (fromMs !== null) value.fromMs = fromMs;
+  if (toMs !== null) value.toMs = toMs;
+  if (input.kind === "post" || input.kind === "reply") value.kind = input.kind;
+  if (input.sort === "relevant" || input.sort === "newest") value.sort = input.sort;
+  return { ok: true, value };
 }
 
 function channelActorKind(principalKind: PolynetPrincipalKind) {
@@ -1794,12 +1828,18 @@ async function executeCanonicalSearch(args: {
           "Channel path not found or not accessible.",
         );
       }
+      const filters = await resolvePostSearchFilters(args.ctx, args.input);
+      if (!filters.ok) return canonicalError("invalid_tool_args", filters.message);
+      if (Object.keys(filters.value).length && !buildCommunitySearchQuery(String(args.input.query ?? ""))) {
+        return canonicalError("invalid_tool_args", 'Filters need at least one keyword, e.g. query: "circuit", author: "maya-crimps". To browse recent posts, use polynet_list on the channel.');
+      }
       const value = (await args.ctx.runAction(
         (internal as any).communityInteractionEvidence
           .searchCommunityInteractionEvidenceInternal,
         {
           actorKind: channelActorKind(args.principalKind),
           ...common,
+          ...filters.value,
           ...(channel
             ? {
                 channelSlug: channel.slug,
@@ -1808,17 +1848,21 @@ async function executeCanonicalSearch(args: {
             : {}),
         },
       )) as Record<string, unknown>;
+      const results = Array.isArray(value.results)
+        ? (value.results as Array<Record<string, unknown>>)
+        : [];
       return {
         ok: true,
-        value: mountSearchResults({
-          communitySlug: target.communitySlug,
-          path: mountedPath(target.communitySlug, target.localPath),
-          results: Array.isArray(value.results)
-            ? (value.results as Array<Record<string, unknown>>)
-            : [],
-          retrievalId: value.retrieval_id,
-          truncated: value.truncated,
-        }),
+        value: {
+          ...mountSearchResults({
+            communitySlug: target.communitySlug,
+            path: mountedPath(target.communitySlug, target.localPath),
+            results,
+            retrievalId: value.retrieval_id,
+            truncated: value.truncated,
+          }),
+          ...(results.length === 0 ? { hint: POST_SEARCH_EMPTY_HINT } : {}),
+        },
       };
     }
     if (target.localPath.startsWith(POLYNET_MEMORY_DIRECTORY_PATH)) {

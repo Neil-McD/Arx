@@ -770,11 +770,20 @@ export function normalizeToolArguments(
       1,
       20,
     );
+    // Post filters (channels/); the executor checks their values.
+    const author = normalizeString(args.author)?.slice(0, 64);
+    const from = normalizeString(args.from)?.slice(0, 40);
+    const to = normalizeString(args.to)?.slice(0, 40);
     return {
       path: parsedPath.path,
       query: query.slice(0, 500),
       ...(types.length ? { types } : {}),
       ...(limit ? { limit } : {}),
+      ...(author ? { author } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...(args.kind === "post" || args.kind === "reply" ? { kind: args.kind } : {}),
+      ...(args.sort === "relevant" || args.sort === "newest" ? { sort: args.sort } : {}),
     };
   }
   if (toolName === "polynet_write") {
