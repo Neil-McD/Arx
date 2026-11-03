@@ -1,4 +1,5 @@
-export const TERMS_OF_SERVICE_VERSION = "terms_of_service_v3";
+export const TERMS_OF_SERVICE_VERSION = "terms_of_service_v4";
+export const PREVIOUS_TERMS_OF_SERVICE_VERSION = "terms_of_service_v3";
 export const HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2";
 export const LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1";
 export const PRIVACY_AI_DATA_POLICY_VERSION = "privacy_ai_data_policy_v1";
@@ -18,6 +19,14 @@ export type LegalDocument = {
 export const TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
   key: "terms_of_service",
   version: TERMS_OF_SERVICE_VERSION,
+  title: "Polynet Terms of Service v4",
+  effectiveDate: "2026-11-03",
+  sourcePath: "docs/legal/terms-of-service-v4.md",
+};
+
+export const PREVIOUS_TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
+  key: "terms_of_service",
+  version: PREVIOUS_TERMS_OF_SERVICE_VERSION,
   title: "Polynet Terms of Service v3",
   effectiveDate: "2026-08-06",
   sourcePath: "docs/legal/terms-of-service-v3.md",

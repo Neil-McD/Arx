@@ -41,7 +41,7 @@ const createController = read("shared/useCommunityCreateController.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const webApp = read("apps/web/src/App.tsx");
 const historicalLegal = read("docs/legal/community-owner-inference-funding-v2.md");
-const activeLegal = read("docs/legal/terms-of-service-v3.md");
+const activeLegal = read("docs/legal/terms-of-service-v4.md");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 const billingContract = read("docs/product/reference/billing-entitlements.md");
 const packageJson = read("package.json");
@@ -429,8 +429,8 @@ assert.match(historicalLegal, /status: superseded/);
 assert.match(historicalLegal, /superseded_by: terms_of_service_v3/);
 assert.match(historicalLegal, /Historical acceptance evidence only/);
 assert.match(activeLegal, /status: active/);
-assert.match(activeLegal, /Builder for \$79 USD per month for each attached community/);
-assert.match(activeLegal, /Polynet-hosted AI for a grandfathered community still requires one current Builder subscription/);
+assert.match(activeLegal, /The Agent plan is \$79 USD per month for each community/);
+assert.match(activeLegal, /Polynet-hosted AI \(the community's agent, and any feature where Polynet runs an AI model or pays a provider per use\) requires an Agent plan/);
 assert.match(
   cognitionContract,
   /The community agent under an authorized community lens, direct Concierge chat,[\s\S]*autonomous cognition, and AI-assisted setup generation are[\s\S]*community-founder-funded/,

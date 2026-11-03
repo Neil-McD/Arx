@@ -118,12 +118,14 @@ assert.match(accountSetupForm, /Terms of Service[\s\S]*Privacy &amp; AI Data Pol
 assert.match(accountSetupForm, /platformLegalReady[\s\S]*?missing[\s\S]*?push\("terms"\)/, "account setup must require platform legal acceptance before submission");
 assert.match(accountSetupForm, /WebPlatformLegalReaderModal/, "account setup legal documents must render through the shared reader modal");
 assert.match(legalReaderModal, /polynet-onboarding-legal-reader message-text/, "the shared legal reader must render documents in the scrollable modal reader");
-assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/, "current account setup must present Terms v3");
+assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v4"/, "current account setup must present Terms v4");
+assert.match(legalRegistry, /PREVIOUS_TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/, "Terms v3 must remain explicitly historical");
 assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/, "Terms v2 must remain explicitly historical");
 assert.match(legalRegistry, /LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/, "Terms v1 must remain explicitly historical");
-assert.match(legalAcceptances, /row\.documentVersion === document\.version/, "material Terms v3 must require exact current-version acceptance");
+assert.match(legalAcceptances, /row\.documentVersion === document\.version/, "material Terms v4 must require exact current-version acceptance");
 assert.match(legalAcceptances, /args\.termsVersion !== TERMS_OF_SERVICE_DOCUMENT\.version/, "new setup acceptance must require the current Terms version");
-assert.match(legalContent, /terms-of-service-v3\.md\?raw/, "the legal reader must project current Terms v3");
+assert.match(legalContent, /terms-of-service-v4\.md\?raw/, "the legal reader must project current Terms v4");
+assert.doesNotMatch(legalContent, /terms-of-service-v3\.md\?raw/, "the legal reader must not project historical Terms v3 as current");
 assert.doesNotMatch(legalContent, /terms-of-service-v2\.md\?raw/, "the legal reader must not project historical Terms v2 as current");
 assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/, "the legal reader must not project historical Terms v1 as current");
 assert.doesNotMatch(`${onboardingPage}\n${accountSetupForm}`, /chatgpt\.onConnect|openai\.onConnect|OpenAI API key|Connect ChatGPT/, "onboarding must not ask members to bring inference");

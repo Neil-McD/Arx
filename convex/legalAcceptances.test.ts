@@ -8,23 +8,30 @@ const privacyAcceptance = {
 };
 
 describe("platform legal acceptance versioning", () => {
-  test("historical Terms v1 acceptance no longer satisfies the material v3 contract", () => {
+  test("historical Terms v1 acceptance no longer satisfies the material v4 contract", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_v1" },
       privacyAcceptance,
     ])).toBe(false);
   });
 
-  test("historical Terms v2 acceptance no longer satisfies the material v3 contract", () => {
+  test("historical Terms v2 acceptance no longer satisfies the material v4 contract", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_v2" },
       privacyAcceptance,
     ])).toBe(false);
   });
 
-  test("current Terms v3 acceptance is sufficient", () => {
+  test("Terms v3 acceptance (paid Builder model) no longer satisfies v4: members re-accept once", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_v3" },
+      privacyAcceptance,
+    ])).toBe(false);
+  });
+
+  test("current Terms v4 acceptance is sufficient", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v4" },
       privacyAcceptance,
     ])).toBe(true);
   });
@@ -38,7 +45,7 @@ describe("platform legal acceptance versioning", () => {
 
   test("privacy acceptance remains independently required", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
-      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v3" },
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v4" },
     ])).toBe(false);
   });
 });
