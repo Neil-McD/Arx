@@ -2,7 +2,7 @@
 // Production uses no suffix (<slug>.polynet.page); staging uses "-staging".
 // The HTTP routes and the Cloudflare calls live in httpCommunitySites.ts.
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { normalizeCommunityAppOrigin } from "../shared/communityAppSession";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { privateTwinHost, siteSlugShapeOk } from "../packages/polynet-cli/checks.mjs";
@@ -151,6 +151,30 @@ export async function communitySiteUrl(ctx: any, community: { _id: any; slug?: u
   const sites = sitesEnv();
   return sites ? await registeredSiteOrigin(ctx, community, sites.domain, sites.suffix) : null;
 }
+
+// Where an email sends a member: a page of the community's own site (its
+// members live there), or null where it has none and the email keeps its
+// Studio link. path is the site's own address, e.g. "/chat?channel=crew".
+export async function communitySitePageUrl(ctx: any, community: { _id: any; slug?: unknown }, path: string): Promise<string | null> {
+  const site = await communitySiteUrl(ctx, community);
+  return site ? new URL(path, `${site}/`).toString() : null;
+}
+
+// The same for the member's own pages (messages, settings): the site's private twin.
+export async function communityPrivatePageUrl(ctx: any, community: { _id: any; slug?: unknown }, path: string): Promise<string | null> {
+  const sites = sitesEnv();
+  const site = await communitySiteUrl(ctx, community);
+  const twin = sites && site ? privateTwinHost(new URL(site).host, sites.domain, sites.suffix) : null;
+  return twin ? new URL(path, `https://${twin}/`).toString() : null;
+}
+
+export const communitySitePageUrlBySlugInternal = internalQuery({
+  args: { slug: v.string(), path: v.string() },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", args.slug)).first();
+    return community && communityIsActive(community as any) ? await communitySitePageUrl(ctx, community, args.path) : null;
+  },
+});
 
 // Every community is on its own site from the start: its site address and
 // private twin are registered when it's created, and Polynet's default site

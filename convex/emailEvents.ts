@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
+import { communitySitePageUrl } from "./communitySites";
 
 function readEnv(name: string): string {
   try {
@@ -53,6 +54,8 @@ export async function enqueueCommunityAccessGrantedEmailInternal(params: {
     const communitySlug = String(community.slug ?? "").trim();
     const actionPath =
       buildCommunityTabPath(communitySlug || null, "chat") || "/discover";
+    // In: straight to the community's own site when it has one.
+    const siteUrl = await communitySitePageUrl(params.ctx, community, "/chat");
     return await params.ctx.runMutation(
       (internal as any).email.enqueueEmailJobInternal,
       {
@@ -61,7 +64,7 @@ export async function enqueueCommunityAccessGrantedEmailInternal(params: {
         templateKey: "community_access_granted",
         payload: {
           communityName,
-          actionUrl: buildAppUrl(actionPath),
+          actionUrl: siteUrl ?? buildAppUrl(actionPath),
         },
         dedupeKey: `community_access_granted:${String(params.communityId)}:${String(params.userId)}:${params.grantMarker}`,
         nowMs: params.nowMs,

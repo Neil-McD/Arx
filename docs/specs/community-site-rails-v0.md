@@ -152,6 +152,13 @@ Studio points people at the community's site, its front door.
   `/c/<slug>/...` stay. Joining, paid or not, happens on the site's twin `/join`.
 - **Studio's community menu** has "Visit site", and "Invite people" copies the
   site's address.
+- **Emails bring members back to the site** (`communitySitePageUrl`,
+  `communityPrivatePageUrl`): a mention opens the site's chat in that
+  channel, the weekly digest the site, "you're in" the site's chat, an event
+  reminder that occurrence's page, a direct message begun in the community
+  that conversation on the private pages. Without a site each keeps its Studio
+  link; a direct message begun elsewhere opens this environment's Studio
+  inbox. The founder brief and billing stay in Studio (the back office).
 
 ## Its own world (Oct 28)
 
