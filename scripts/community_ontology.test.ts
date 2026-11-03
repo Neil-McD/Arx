@@ -29,6 +29,7 @@ test("a member reads the whole card: identity, who holds which role, their chann
   expect(card).toMatch(/- Board reset: Fri, Nov 6, 5:30\s?AM EST/u);
   expect(card).toContain("- Board basics (4 lessons)");
   expect(card).toContain("- Footwork (1 lesson)");
+  expect(renderCommunityCard({ ...SOURCE, courses: [{ title: "Huge", lessons: 1, lessonsCapped: true }] }, "member")).toContain("- Huge (1+ lessons)");
   // Founder-owned sections say they're not set, rather than vanishing.
   expect(card.match(/_Not set yet\. The founder can add this\._/g)?.length).toBe(4);
   // Community-authored text is quoted, line by line, never loose instructions.

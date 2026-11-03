@@ -48,11 +48,17 @@ async function fixture() {
     } as any);
     const root = await post(general, "live", NOW - 5_000);
     await post(general, "live", NOW - 4_000);
+    const deleted = await post(general, "deleted", NOW - 3_500);
     await post(general, "hidden", NOW - 3_000);
     await post(secret, "live", NOW - 1_000);
     await ctx.db.insert("communityInteractionReplies", {
       communityId, channelId: general, rootId: root, seq: 1, actorType: "human", actorUserId: member, status: "live", visibilityScope: "community",
       contentSummary: "reply", reactionSummary: [], idempotencyKey: "r1", createdAt: NOW - 2_000, updatedAt: NOW - 2_000,
+    } as any);
+    // A live reply left on a deleted post: not counted, and not "last active".
+    await ctx.db.insert("communityInteractionReplies", {
+      communityId, channelId: general, rootId: deleted, seq: 1, actorType: "human", actorUserId: member, status: "live", visibilityScope: "community",
+      contentSummary: "orphan", reactionSummary: [], idempotencyKey: "r2", createdAt: NOW - 500, updatedAt: NOW - 500,
     } as any);
     const course = (name: string, status?: string) => ctx.db.insert("communityResourceModules", {
       communityId, createdByUserId: owner, name, sortOrder: n++, ...(status ? { status } : {}), createdAt: NOW, updatedAt: NOW,

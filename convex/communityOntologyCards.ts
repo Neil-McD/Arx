@@ -10,6 +10,8 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 // depend on who reads it: identity, who holds which role, the courses. The
 // canonical door adds the reader's own channels and the coming events (both
 // already filtered by its lens) and draws the card. Every read is bounded.
+const LESSON_SCAN_BOUND = 300;
+
 export const loadCommunityCardSourceInternal = internalQuery({
   args: { communityId: v.id("communities") },
   handler: async (ctx, args) => {
@@ -38,12 +40,14 @@ export const loadCommunityCardSourceInternal = internalQuery({
     const courses = [];
     for (const module of modules) {
       if ((module as any).status === "draft") continue;
-      const lessons = await ctx.db.query("communityResources")
+      // Bounded: a course with more rows than the scan says "N+" rather than a wrong exact count.
+      const rows = await ctx.db.query("communityResources")
         .withIndex("by_community_module", (q) => q.eq("communityId", args.communityId).eq("moduleId", module._id))
-        .take(100);
+        .take(LESSON_SCAN_BOUND);
       courses.push({
         title: String(module.name ?? "").trim() || "Course",
-        lessons: lessons.filter((row: any) => row.status === "published" && row.role !== "source").length,
+        lessons: rows.filter((row: any) => row.status === "published" && row.role !== "source").length,
+        lessonsCapped: rows.length >= LESSON_SCAN_BOUND,
       });
       if (courses.length >= COMMUNITY_CARD_LIMITS.courses) break;
     }

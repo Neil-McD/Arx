@@ -32,7 +32,7 @@ export const COMMUNITY_CARD_SECTIONS = [
 export type CommunityCardPerson = { name: string; handle: string | null; role: "owner" | "admin" | "moderator" };
 export type CommunityCardChannel = { name: string; slug: string; restricted: boolean };
 export type CommunityCardEvent = { title: string; startsAt: string; timezone: string | null };
-export type CommunityCardCourse = { title: string; lessons: number };
+export type CommunityCardCourse = { title: string; lessons: number; lessonsCapped?: boolean };
 
 export type CommunityCardSource = {
   name: string;
@@ -155,7 +155,7 @@ function renderSection(key: (typeof COMMUNITY_CARD_SECTIONS)[number]["key"], sou
     case "offerings": {
       const courses = source.courses.slice(0, COMMUNITY_CARD_LIMITS.courses);
       if (!courses.length) return "_No courses yet._";
-      return courses.map((course) => `- ${inline(course.title) ?? "Course"} (${course.lessons} ${course.lessons === 1 ? "lesson" : "lessons"})`).join("\n")
+      return courses.map((course) => `- ${inline(course.title) ?? "Course"} (${course.lessons}${course.lessonsCapped ? "+" : ""} ${course.lessons === 1 && !course.lessonsCapped ? "lesson" : "lessons"})`).join("\n")
         + "\n- Read resources/ for the lessons.";
     }
     case "purpose":

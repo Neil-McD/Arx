@@ -285,6 +285,14 @@ export async function readMemberStanding(ctx: any, community: any, userId: any, 
     }
     return shared.get(key)!;
   };
+  // A reply counts only while its thread is still live (deleting a post leaves its replies' own status).
+  const liveRoots = new Map<string, boolean>();
+  const rootIsLive = async (rootId: any) => {
+    const key = String(rootId ?? "");
+    if (!key) return false;
+    if (!liveRoots.has(key)) liveRoots.set(key, (await ctx.db.get(rootId))?.status === "live");
+    return liveRoots.get(key)!;
+  };
   const count = async (table: "communityInteractionRoots" | "communityInteractionReplies") => {
     const rows = await ctx.db.query(table)
       .withIndex("by_community_actorUser_createdAt", (q: any) => q.eq("communityId", community._id).eq("actorUserId", userId))
@@ -293,6 +301,7 @@ export async function readMemberStanding(ctx: any, community: any, userId: any, 
     let latest: number | null = null;
     for (const row of rows) {
       if (row.status !== "live" || !(await isShared(row.channelId))) continue;
+      if (table === "communityInteractionReplies" && !(await rootIsLive(row.rootId))) continue;
       total += 1;
       latest = Math.max(latest ?? 0, Number(row.createdAt) || 0);
     }
