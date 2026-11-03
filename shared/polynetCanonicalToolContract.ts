@@ -122,6 +122,34 @@ const SEARCH_INPUT_SCHEMA: PlatformOperationJsonSchema = {
       minimum: 1,
       maximum: 20,
     },
+    // Filters for searching channels/ (posts and replies).
+    author: {
+      type: "string",
+      minLength: 1,
+      maxLength: 64,
+      description: "Only posts by this member, by handle (e.g. maya-crimps).",
+    },
+    from: {
+      type: "string",
+      minLength: 10,
+      maxLength: 40,
+      description: "Only posts on or after this date (YYYY-MM-DD or ISO time).",
+    },
+    to: {
+      type: "string",
+      minLength: 10,
+      maxLength: 40,
+      description: "Only posts on or before this date (YYYY-MM-DD or ISO time).",
+    },
+    kind: {
+      type: "string",
+      enum: ["post", "reply"],
+    },
+    sort: {
+      type: "string",
+      enum: ["relevant", "newest"],
+      description: "relevant (default) ranks by match; newest puts the latest first.",
+    },
   },
 };
 
@@ -147,6 +175,8 @@ const SEARCH_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
       type: ["string", "null"],
       maxLength: 180,
     },
+    // How to search again when nothing matched.
+    hint: { type: "string", maxLength: 300 },
   },
 };
 
@@ -445,7 +475,7 @@ export const POLYNET_CANONICAL_TOOL_DEFINITIONS: Readonly<
     name: "polynet_search",
     title: "Search Polynet",
     description:
-      "Search one authorized Polynet repository subtree and return bounded snippets plus exact paths for follow-up reads.",
+      "Search one authorized Polynet repository subtree and return bounded snippets plus exact paths for follow-up reads. On channels/ it searches every post and reply you can read, across all history, by whole words: use one to three keywords, try another form of a word if nothing matches, and narrow with author (a member's handle), from/to dates, kind or sort newest. truncated means more matched than returned.",
     inputSchema: SEARCH_INPUT_SCHEMA,
     outputSchema: SEARCH_OUTPUT_SCHEMA,
     annotations: {
