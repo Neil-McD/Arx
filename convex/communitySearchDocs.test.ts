@@ -89,7 +89,7 @@ test("a channel turning private moves its rows to that channel's key; back again
   const f = await fixture(t);
   const asOwner = t.withIdentity({ subject: OWNER });
   await asOwner.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
-    communityId: f.communityId, channelId: f.betaId, idempotencyKey: "p1", text: "Secret beta for the yellow problem",
+    communityId: f.communityId, channelId: f.betaId, idempotencyKey: "p1", text: "Secret route for the yellow problem",
   });
   await asOwner.mutation(api.communityChannels.setChannelAccess, {
     communityId: f.communityId, channelId: f.betaId, accessMode: "restricted", expectedAccessMode: "all_members", acknowledgeHistoryExposure: true,
@@ -103,6 +103,12 @@ test("a channel turning private moves its rows to that channel's key; back again
   });
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(await search(t, f.communityId, "yellow")).toHaveLength(1);
+
+  // Renamed: found by the new name, no longer by the old.
+  await asOwner.mutation(api.communityChannels.renameCommunityChannel, { communityId: f.communityId, channelId: f.betaId, name: "Projects" });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await search(t, f.communityId, "projects")).toHaveLength(1);
+  expect(await search(t, f.communityId, "beta")).toHaveLength(0);
 });
 
 test("the backfill builds rows for posts written before search existed, and skips unreadable ones", async () => {

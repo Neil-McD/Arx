@@ -40,7 +40,18 @@ test("every file that patches a post's text, status, channel or visibility keeps
   expect(missing).toEqual([]);
 });
 
-test("channel access changes and channel deletion relabel the channel's rows", () => {
+test("channel access changes, renames and deletion relabel the channel's rows", () => {
   const text = readFileSync(join(CONVEX, "communityChannels.ts"), "utf8");
-  expect(text.match(/relabelCommunitySearchChannelInternal/g)?.length).toBe(2);
+  expect(text.match(/relabelCommunitySearchChannelInternal/g)?.length).toBe(3);
+});
+
+test("every file that hard-deletes posts or replies clears their search rows", () => {
+  const missing = sources().filter((name) => {
+    const text = readFileSync(join(CONVEX, name), "utf8");
+    // Deleting rows read from the post tables, e.g. seed cleanup.
+    const deletesPosts = /(query\(\s*table\s*\)|query\(\s*"communityInteraction(Roots|Replies)"\s*\))[\s\S]*\.delete\(/.test(text)
+      && /"communityInteraction(Roots|Replies)"/.test(text);
+    return deletesPosts && !SYNC.test(text);
+  });
+  expect(missing).toEqual([]);
 });

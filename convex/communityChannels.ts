@@ -163,12 +163,15 @@ export const renameCommunityChannel = mutation({
     });
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canManage" });
-    return mapCommunityChannel(await renameActiveCommunityChannel({
+    const renamed = await renameActiveCommunityChannel({
       ctx,
       communityId: args.communityId,
       channelId: args.channelId,
       name: args.name,
-    }));
+    });
+    // The channel's search rows are indexed under its name.
+    await ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.relabelCommunitySearchChannelInternal, { channelId: args.channelId });
+    return mapCommunityChannel(renamed);
   },
 });
 

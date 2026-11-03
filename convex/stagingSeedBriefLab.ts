@@ -55,6 +55,8 @@ export const seedBriefLabInternal = internalMutation({
           .filter((q: any) => q.eq(q.field(table === "communityInteractionRoots" ? "rootId" : "replyId"), row._id)).collect();
         for (const block of blocks) await ctx.db.delete(block._id);
         await ctx.db.delete(row._id);
+        // Its search row (and a post's replies' rows) go with it.
+        await syncCommunitySearchDoc(ctx, { communityId: args.communityId, objectType: table === "communityInteractionRoots" ? "root" : "reply", objectId: row._id });
       }
     }
     for (const event of await ctx.db.query("communityEvents").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect()) {
