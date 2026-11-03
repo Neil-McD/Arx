@@ -152,6 +152,12 @@ Studio points people at the community's site, its front door.
   `/c/<slug>/...` stay. Joining, paid or not, happens on the site's twin `/join`.
 - **Studio's community menu** has "Visit site", and "Invite people" copies the
   site's address.
+- **Setting up comes back to the community.** A brand-new person whose
+  Polynet account isn't set up gets "Finish setting up" on the join page,
+  which opens Studio's `/onboarding?community=<slug>` (only the slug travels).
+  Studio keeps it for the tab while they set up, then sends them to the site's
+  `/join?setup=done`, which says "You're all set. Now join <community>". No
+  site: Studio's page for the community.
 - **Emails bring members back to the site** (`communitySitePageUrl`,
   `communityPrivatePageUrl`): a mention opens the site's chat in that
   channel, the weekly digest the site, "you're in" the site's chat, an event

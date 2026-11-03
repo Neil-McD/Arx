@@ -18,7 +18,14 @@ import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { UserProfileDetail } from "../../../../shared/communityTypes";
 import { formatProfileMutationError } from "../../../../shared/profileMutationErrors";
 import type { AppPage } from "../../../../shared/appShellNavigation";
-import { isRootAppRoutePath } from "../../../../shared/webAppRouteState";
+import {
+  SETUP_RETURN_STORAGE_KEY,
+  buildCommunityFunnelPath,
+  communitySiteJoinUrl,
+  isRootAppRoutePath,
+  readSetupReturnCommunity,
+} from "../../../../shared/webAppRouteState";
+import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGateway";
 import { useWebProfileSettingsUiController } from "./useWebProfileSettingsUiController";
 import { readProfileDraftForUser } from "../../../../shared/profileDraftStorage";
 import { readAuthResumeState } from "../../../../shared/authResumeState";
@@ -42,6 +49,23 @@ type OnboardingActions = {
   }) => Promise<boolean>;
   resumePendingAuthIntent: () => Promise<boolean>;
 };
+
+// The community someone came from to join, kept for this tab while they set
+// up (redirects during setup drop the address's ?community=).
+function readStoredSetupReturnCommunity(): string | null {
+  if (typeof window === "undefined") return null;
+  const fromAddress = window.location.pathname.endsWith("/onboarding") ? readSetupReturnCommunity(window.location.search) : null;
+  try {
+    if (fromAddress) window.sessionStorage.setItem(SETUP_RETURN_STORAGE_KEY, fromAddress);
+    return fromAddress ?? readSetupReturnCommunity(`community=${window.sessionStorage.getItem(SETUP_RETURN_STORAGE_KEY) ?? ""}`);
+  } catch {
+    return fromAddress;
+  }
+}
+
+function clearStoredSetupReturnCommunity(): void {
+  try { window.sessionStorage.removeItem(SETUP_RETURN_STORAGE_KEY); } catch { /* nothing kept */ }
+}
 
 export function useWebOnboardingProfileController(params: {
   session: AuthSession | null;
@@ -73,6 +97,8 @@ export function useWebOnboardingProfileController(params: {
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  // Keep the community a site sent them from, before anything redirects away from ?community=.
+  useEffect(() => { readStoredSetupReturnCommunity(); }, []);
   const actionsRef = useRef<OnboardingActions>({
     navigateTo: () => undefined,
     enterDefaultDestination: async () => false,
@@ -327,6 +353,24 @@ export function useWebOnboardingProfileController(params: {
           if (resumed) return true;
           setOnboardingError("We could not continue where you left off. Try again.");
           return false;
+        }
+        // Came from a community's site to join it: back to its join page.
+        const returnCommunity = readStoredSetupReturnCommunity();
+        if (returnCommunity) {
+          clearStoredSetupReturnCommunity();
+          const funnel = await resolveCloudPublicFunnel<AuthSession, { site_url?: string | null }, unknown>({
+            communitySlug: returnCommunity,
+          }).catch(() => null);
+          const joinUrl = funnel?.ok ? communitySiteJoinUrl(funnel.community?.site_url) : null;
+          if (joinUrl) {
+            window.location.assign(joinUrl);
+            return true;
+          }
+          const funnelPath = funnel?.ok ? buildCommunityFunnelPath(returnCommunity) : null;
+          if (funnelPath) {
+            actionsRef.current.navigateTo(funnelPath, { replace: true });
+            return true;
+          }
         }
         const entered = await actionsRef.current.enterDefaultDestination({
           session: activeSession,

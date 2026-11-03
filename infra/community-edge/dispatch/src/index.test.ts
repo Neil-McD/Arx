@@ -1325,7 +1325,8 @@ const SHAPED_JOIN = {
   community: { name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, avatar_url: "https://live.example.convex.cloud/api/storage/av" },
   gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }],
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false },
-  enter_url: `${SITE}/__polynet/auth/start?return=%2Fchat`, setup_url: "https://polynet.example.com/onboarding",
+  // Setting up comes back: Studio's setup is told which community (by slug only).
+  enter_url: `${SITE}/__polynet/auth/start?return=%2Fchat`, setup_url: "https://polynet.example.com/onboarding?community=apps-community",
 };
 const JOIN_ACTIONS = ["/__polynet/me/join", "/__polynet/me/join/cancel", "/__polynet/me/join/checkout", "/__polynet/me/join/finish"];
 

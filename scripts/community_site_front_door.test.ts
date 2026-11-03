@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { communitySiteRedirectTarget } from "../shared/webAppRouteState";
+import { communitySiteJoinUrl, communitySiteRedirectTarget, readSetupReturnCommunity } from "../shared/webAppRouteState";
 
 // A community's site is its front door: Studio's bare /c/<slug> page sends visitors there.
 const SITE = "https://night-swimmers-staging.polynet.page";
@@ -18,5 +18,18 @@ test("Studio's own community pages, other communities and unsafe or missing site
   }
   for (const site of [null, undefined, "", "not a url", "http://night-swimmers-staging.polynet.page", "javascript:alert(1)"]) {
     expect(communitySiteRedirectTarget("/c/night-swimmers", "night-swimmers", site), String(site)).toBeNull();
+  }
+});
+
+test("someone setting up their account from a community's site comes back to its join page: only a slug travels, only to an https site", () => {
+  expect(readSetupReturnCommunity("?community=night-swimmers")).toBe("night-swimmers");
+  expect(readSetupReturnCommunity("?community=Night-Swimmers")).toBe("night-swimmers");
+  for (const search of ["", "?community=", "?community=https://evil.example.com", "?community=a/b", "?community=-x", "?community=%3Cscript%3E"]) {
+    expect(readSetupReturnCommunity(search), search).toBeNull();
+  }
+  expect(communitySiteJoinUrl(SITE)).toBe(`${SITE}/join?setup=done`);
+  expect(communitySiteJoinUrl(`${SITE}/chat`)).toBe(`${SITE}/join?setup=done`);
+  for (const site of [null, "", "http://night-swimmers-staging.polynet.page", "javascript:alert(1)"]) {
+    expect(communitySiteJoinUrl(site), String(site)).toBeNull();
   }
 });

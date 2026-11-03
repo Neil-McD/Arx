@@ -851,7 +851,12 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
     } : null,
     // Into the site: its own sign-in, which is silent for a member already signed in to Polynet.
     enter_url: `${place.siteOrigin}${AUTH_PREFIX}start?return=${encodeURIComponent("/chat")}`,
-    setup_url: new URL("/onboarding", env.POLYNET_AUTH_URL).toString(),
+    // Setting up comes back here: Studio's setup knows the community (by its slug) and returns to its join page.
+    setup_url: (() => {
+      const setup = new URL("/onboarding", env.POLYNET_AUTH_URL);
+      if (typeof community.slug === "string" && SLUG_PATTERN.test(community.slug)) setup.searchParams.set("community", community.slug);
+      return setup.toString();
+    })(),
   };
 }
 
