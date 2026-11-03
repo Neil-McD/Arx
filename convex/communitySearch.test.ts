@@ -201,6 +201,22 @@ test("a member with many stale grants to archived rooms still searches (no secon
   });
   const asMaya = await search(t, f, f.maya, "quokka");
   expect(asMaya.results.map((r: any) => r.channel_slug).sort()).toEqual(["crew", "general"]);
+  expect(asMaya.truncated).toBe(false);
+  // Past the grant scan's bound, rooms may be missing: the search says so.
+  await t.run(async (ctx: any) => {
+    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", f.maya)).unique();
+    for (let i = 0; i < 150; i += 1) {
+      const room = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, createdByUserId: f.owner, slug: `older-${i}`, name: `older-${i}`, normalizedName: `older-${i}`,
+        accessMode: "restricted", postingPolicy: "members", status: "archived", position: 200 + i, createdAt: NOW, updatedAt: NOW,
+      });
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId: room, principalKey: `user:${f.maya}`, membershipId: membership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.owner, createdAt: NOW, updatedAt: NOW,
+      });
+    }
+  });
+  expect((await search(t, f, f.maya, "quokka")).truncated).toBe(true);
 });
 
 test("a manager past the private-room bound: a miss falls back to the recent scan but stays marked incomplete", async () => {
