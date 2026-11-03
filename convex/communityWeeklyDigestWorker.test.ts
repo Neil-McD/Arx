@@ -12,6 +12,7 @@ import schema from "./schema";
 const modules = import.meta.glob([
   "./communityWeeklyDigestWorker.ts",
   "./communityWeeklyDigestSchedule.ts",
+  "./communitySites.ts",
   "./email.ts",
   "./_generated/**/*.*s",
 ]);

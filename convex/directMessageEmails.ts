@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
+import { communityPrivatePageUrl } from "./communitySites";
+import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const DM_EMAIL_SNIPPET_MAX_CHARS = 120;
 const DM_EMAIL_DEDUPE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -25,6 +27,16 @@ function readMessageSnippet(contentJson: unknown): string {
 }
 
 // Read-only suppression stack + payload build; the action enqueues on pass.
+// A conversation begun in a community with a site opens on that community's
+// private pages; any other opens Studio's inbox, on this environment's own app.
+export async function directMessageLink(ctx: any, community: Record<string, any> | null, conversationId: string): Promise<string> {
+  const onSite = community ? await communityPrivatePageUrl(ctx, community as any, `/messages/${encodeURIComponent(conversationId)}`) : null;
+  if (onSite) return onSite;
+  let origin = "https://www.polynet.ai";
+  try { origin = readCanonicalPublicAppOrigin(); } catch { /* the production app, as before */ }
+  return `${origin.replace(/\/+$/, "")}/?dm=${encodeURIComponent(conversationId)}`;
+}
+
 export const evaluateDirectMessageEmailInternal = internalQuery({
   args: {
     conversationId: v.id("dmConversations"),
@@ -97,7 +109,7 @@ export const evaluateDirectMessageEmailInternal = internalQuery({
         senderName,
         communityName: String(community?.name ?? "").trim() || null,
         snippet: readMessageSnippet(message.contentJson),
-        actionUrl: `https://www.polynet.ai/?dm=${normalizeIdValue(args.conversationId)}`,
+        actionUrl: await directMessageLink(ctx, community, normalizeIdValue(args.conversationId)),
       },
     };
   },

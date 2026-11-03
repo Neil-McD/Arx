@@ -346,7 +346,9 @@ export const processDueCommunityWeeklyDigestsInternal = internalAction({
           dateLabel: snapshot.dateLabel,
           intro: snapshot.intro,
           ctaLabel: "View community",
-          actionUrl: buildAbsoluteAppUrl(origin, actionPath),
+          // The community's own site when it has one: members live there.
+          actionUrl: (await ctx.runQuery(internal.communitySites.communitySitePageUrlBySlugInternal, { slug: snapshot.communitySlug, path: "/" }))
+            ?? buildAbsoluteAppUrl(origin, actionPath),
           footerNote: "You can change digest emails from account settings.",
           items: snapshot.items.map((item) => ({
             title: item.title,
