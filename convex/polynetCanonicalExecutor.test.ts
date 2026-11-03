@@ -1419,6 +1419,11 @@ test("custom channels discover, isolate, search, read, and write through exact p
     toolName: "polynet_search",
     input: { path: "/communities/canonical-community/channels/", query: "marker", from: "June" },
   })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("YYYY-MM-DD") });
+  await expect(executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: { path: "/communities/canonical-community/channels/", query: "*", kind: "reply" },
+  })).resolves.toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("at least one keyword") });
   const nothing = await executePolynetCanonicalTool({
     ...base,
     toolName: "polynet_search",

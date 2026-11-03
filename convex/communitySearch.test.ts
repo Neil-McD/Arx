@@ -120,3 +120,38 @@ test("person, date, kind and newest-first filters", async () => {
   expect((await search(t, f, f.maya, "session", { limit: 5 })).truncated).toBe(true);
   expect((await search(t, f, f.maya, "session", { kind: "reply" })).results).toHaveLength(0);
 });
+
+test("a General search isn't crowded out by other rooms, and finds posts from before channels", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await t.run(async (ctx: any) => {
+    const beta = await ctx.db.insert("communityChannels", {
+      communityId: f.communityId, createdByUserId: f.owner, slug: "beta", name: "beta", normalizedName: "beta",
+      accessMode: "all_members", postingPolicy: "members", status: "active", position: 2, createdAt: NOW, updatedAt: NOW,
+    });
+    for (let i = 0; i < 80; i += 1) {
+      await ctx.db.insert("communityInteractionRoots", {
+        communityId: f.communityId, channelId: beta, actorType: "human", actorUserId: f.maya, kind: "discussion", status: "live", visibilityScope: "community",
+        contentSummary: `quokka quokka beta ${i}`, replyCount: 0, reactionSummary: [], idempotencyKey: `b${i}`, createdAt: NOW - i, updatedAt: NOW - i,
+      });
+    }
+    await ctx.db.insert("communityInteractionRoots", {
+      communityId: f.communityId, actorType: "human", actorUserId: f.maya, kind: "discussion", status: "live", visibilityScope: "community",
+      contentSummary: "Legacy quokka note from before channels", replyCount: 0, reactionSummary: [], idempotencyKey: "legacy", createdAt: NOW - 500 * DAY, updatedAt: NOW,
+    });
+  });
+  await t.mutation(internal.communitySearchDocs.backfillCommunitySearchDocsInternal, { communityId: f.communityId });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const general = await search(t, f, f.theo, "quokka", { channelSlug: "general", authorUserId: f.maya, limit: 20 });
+  const snippets = general.results.map((r: any) => r.snippet);
+  expect(general.results.every((r: any) => r.channel_slug === "general")).toBe(true);
+  expect(snippets.some((s: string) => s.includes("quokka holds"))).toBe(true);
+  expect(snippets.some((s: string) => s.includes("Legacy quokka"))).toBe(true);
+});
+
+test("filters need words: a query with none can't silently drop them", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await expect(search(t, f, f.maya, "*", { authorUserId: f.maya })).rejects.toThrow("community_search_filters_need_words");
+  expect((await search(t, f, f.maya, "*")).diagnostics.strategy).toBe("bounded_lexical");
+});

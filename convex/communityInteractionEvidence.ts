@@ -580,16 +580,22 @@ async function searchIndexedCommunityInteractionEvidence(args: {
     ...restricted.slice(0, MAX_RESTRICTED_SEARCH_KEYS).map((channel) => restrictedSearchAccessKey(channel._id)),
   ];
   const searchQuery = buildCommunitySearchQuery(args.query);
-  // One named room narrows the index too, except General: its pre-channel
-  // posts carry no channel and are matched by the re-check below instead.
-  const selectedChannelId = channels.length === 1 && (requestedChannelId || requestedChannelSlug) && channels[0]._id &&
-    channels[0].systemRole !== "general" ? channels[0]._id : null;
+  // One named room narrows the index to that room. General also owns the
+  // posts from before channels, which carry none: they get their own query, so
+  // other rooms never use up General's window.
+  const selected = channels.length === 1 && (requestedChannelId || requestedChannelSlug) ? channels[0] : null;
+  const lanes: Array<{ accessKey: string; channelId?: any }> = selected
+    ? [
+        ...(selected._id ? [{ accessKey: keys[0], channelId: selected._id }] : []),
+        ...(selected.systemRole === "general" ? [{ accessKey: SHARED_SEARCH_ACCESS_KEY, channelId: undefined }] : []),
+      ]
+    : keys.map((accessKey) => ({ accessKey }));
   const window = args.fromMs || args.toMs || args.sort === "newest" ? INDEXED_CANDIDATES_PER_KEY_WIDE : INDEXED_CANDIDATES_PER_KEY;
-  const perKey = await Promise.all(keys.map((accessKey) =>
+  const perKey = await Promise.all(lanes.map((lane) =>
     args.ctx.db.query("communitySearchDocs").withSearchIndex("search_text", (q: any) => {
-      let search = q.search("searchText", searchQuery).eq("communityId", args.communityId).eq("accessKey", accessKey);
+      let search = q.search("searchText", searchQuery).eq("communityId", args.communityId).eq("accessKey", lane.accessKey);
       if (args.authorUserId) search = search.eq("authorUserId", args.authorUserId);
-      if (selectedChannelId) search = search.eq("channelId", selectedChannelId);
+      if ("channelId" in lane) search = search.eq("channelId", lane.channelId);
       if (args.kind) search = search.eq("kind", args.kind);
       return search;
     }).take(window)));
@@ -947,6 +953,8 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     // searchable words browses recent activity as before.
     const indexed = Boolean(buildCommunitySearchQuery(query));
     const filtered = Boolean(args.authorUserId || args.kind || args.fromMs || args.toMs);
+    // Filters narrow a word search; browsing recent activity can't honor them.
+    if (!indexed && (filtered || args.sort)) throw new Error("community_search_filters_need_words");
     type SearchPage = { community: Record<string, unknown>; results: Array<Record<string, unknown>>; truncated: boolean };
     const recentScan = async () => (await ctx.runQuery(
       (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,

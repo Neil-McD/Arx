@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import { hashSiteFile, publishSite, readSitesConfig, startSiteUpload, uploadSiteFiles } from "./communitySiteDeploy";
 import { siteFileMimeType, siteHostname, siteScriptName, validateSiteManifest } from "./communitySites";
 import { renderCommunitySubmittedFormsMarkdown, renderCommunityMemberSuccessDossierMarkdown } from "../shared/communityMemberSuccessDossier";
@@ -1829,6 +1830,9 @@ async function executeCanonicalSearch(args: {
       }
       const filters = await resolvePostSearchFilters(args.ctx, args.input);
       if (!filters.ok) return canonicalError("invalid_tool_args", filters.message);
+      if (Object.keys(filters.value).length && !buildCommunitySearchQuery(String(args.input.query ?? ""))) {
+        return canonicalError("invalid_tool_args", 'Filters need at least one keyword, e.g. query: "circuit", author: "maya-crimps". To browse recent posts, use polynet_list on the channel.');
+      }
       const value = (await args.ctx.runAction(
         (internal as any).communityInteractionEvidence
           .searchCommunityInteractionEvidenceInternal,
