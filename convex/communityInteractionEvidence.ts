@@ -41,7 +41,7 @@ import {
   interactionBelongsToChannel,
   listSharedChannelReadableRows,
   listChannelReadableRows,
-  listAuthorizedCommunityChannels,
+  listAuthorizedCommunityChannelPage,
   listSharedCommunityChannels,
   requireSharedChannelForAddressableRow,
   requireChannelFromAuthorizedSet,
@@ -570,9 +570,23 @@ async function searchIndexedCommunityInteractionEvidence(args: {
     if (!memberActor && selected.accessMode !== "all_members") throw new Error("community_channel_unavailable");
     channels = [selected];
   } else {
-    channels = memberActor
-      ? await listAuthorizedCommunityChannels({ ctx: args.ctx, communityId: args.communityId, actor: memberActor })
-      : await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
+    channels = await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
+  }
+  // A member's private rooms, through the paged directory read (the community
+  // supports up to 100), until the search's private-room bound.
+  let moreRestricted = false;
+  if (memberActor && !(requestedChannelId || requestedChannelSlug)) {
+    let cursor: string | null = null;
+    const privateRooms: CommunityChannelLike[] = [];
+    for (;;) {
+      const page = await listAuthorizedCommunityChannelPage({ ctx: args.ctx, communityId: args.communityId, actor: memberActor,
+        section: "private", paginationOpts: { cursor, numItems: 50 } });
+      privateRooms.push(...page.page);
+      if (page.isDone) break;
+      if (privateRooms.length > MAX_RESTRICTED_SEARCH_KEYS) { moreRestricted = true; break; }
+      cursor = page.continueCursor;
+    }
+    channels = [...channels, ...privateRooms];
   }
   const restricted = channels.filter((channel) => channel.accessMode === "restricted");
   const keys = [
@@ -645,7 +659,7 @@ async function searchIndexedCommunityInteractionEvidence(args: {
       snippet: snippetAroundMatch(entry.doc.searchText, args.query),
     }))),
     truncated: accepted.length > args.limit || perKey.some((list) => list.length >= window) ||
-      restricted.length > MAX_RESTRICTED_SEARCH_KEYS,
+      restricted.length > MAX_RESTRICTED_SEARCH_KEYS || moreRestricted,
   };
 }
 

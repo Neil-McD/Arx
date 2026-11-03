@@ -155,3 +155,20 @@ test("filters need words: a query with none can't silently drop them", async () 
   await expect(search(t, f, f.maya, "*", { authorUserId: f.maya })).rejects.toThrow("community_search_filters_need_words");
   expect((await search(t, f, f.maya, "*")).diagnostics.strategy).toBe("bounded_lexical");
 });
+
+test("search keeps working past ten rooms in total (up to 100 can be private)", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await t.run(async (ctx: any) => {
+    for (let i = 0; i < 12; i += 1) {
+      await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, createdByUserId: f.owner, slug: `room-${i}`, name: `room-${i}`, normalizedName: `room-${i}`,
+        accessMode: "restricted", postingPolicy: "members", status: "active", position: 10 + i, createdAt: NOW, updatedAt: NOW,
+      });
+    }
+  });
+  const asMaya = await search(t, f, f.maya, "quokka");
+  expect(asMaya.results.map((r: any) => r.channel_slug).sort()).toEqual(["crew", "general"]);
+  const asTheo = await search(t, f, f.theo, "quokka");
+  expect(asTheo.results.map((r: any) => r.channel_slug)).toEqual(["general"]);
+});
