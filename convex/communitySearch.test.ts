@@ -149,6 +149,16 @@ test("a General search isn't crowded out by other rooms, and finds posts from be
   expect(snippets.some((s: string) => s.includes("Legacy quokka"))).toBe(true);
 });
 
+test("a word search the old scan can't read stays empty instead of browsing", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  for (const query of ["登山", "x"]) {
+    const result = await search(t, f, f.maya, query);
+    expect(result.results, query).toHaveLength(0);
+    expect(result.diagnostics.strategy).toBe("full_text_index");
+  }
+});
+
 test("filters need words: a query with none can't silently drop them", async () => {
   const t = convexTest(schema, modules);
   const f = await fixture(t);
