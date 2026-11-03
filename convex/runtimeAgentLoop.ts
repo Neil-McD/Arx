@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 import {
   COMMUNITY_MEMORY_RECALL_LIMIT,
   buildCommunityMemoryRecallQuery,
@@ -928,7 +929,28 @@ async function executeRetrievalAgentLoop(
   // A community-bound conversation never loads the global profile: UTC there.
   let askerTimeZone: string | null = null;
   const communityConversation = params.communityAgentSurfaceContext?.kind === "community" && params.communityAgentSurfaceContext.community_conversation === true;
-  if (params.invocationSurface === "member_agent_dock" && !(params.communityAgentSurfaceContext?.kind === "community" && params.communityAgentSurfaceContext.community_conversation)) {
+  // The turn contract decides what this turn may use: who asked, who sees the
+  // answer, and which layers that allows. Recorded on the run for audit.
+  const turnContract = params.communityId && params.invocationSurface === "member_agent_dock"
+    ? buildCommunityTurnContract({
+      surface: communityConversation ? "ask_in_conversation" : "ask",
+      communityId: String(params.communityId),
+      speakerUserId: String(params.userId),
+    })
+    : null;
+  if (turnContract) {
+    try {
+      await params.appendRunEvent({
+        eventType: "turn_contract",
+        eventKey: `${params.runId}:turn_contract:1`,
+        payload: { run_id: params.runId, ...summarizeCommunityTurnContract(turnContract) },
+      });
+    } catch {
+      // Best-effort receipt; the prompt bundle receipt records what was injected.
+    }
+  }
+  // A community-bound conversation never loads the asker's global profile.
+  if (turnContract?.uses.askerProfile) {
     memberIdentityContextStatus = "empty";
     try {
       const identity = await params.ctx.runQuery(
@@ -968,7 +990,7 @@ async function executeRetrievalAgentLoop(
   let communityHandbookMd: string | null = null;
   const communityCardSlug = String(params.communitySlug ?? "").trim();
   if (
-    params.invocationSurface === "member_agent_dock" &&
+    turnContract?.uses.communityCard &&
     params.communityId &&
     communityCardSlug &&
     effectiveAllowedToolNames.includes("polynet_read")
@@ -992,7 +1014,7 @@ async function executeRetrievalAgentLoop(
         cardStatus = communityCardMd ? "loaded" : "empty";
       }
       // The founder-approved handbook joins the card when there is one.
-      const handbook = await executeRetrievalHarnessTool({
+      const handbook = !turnContract.uses.handbook ? null : await executeRetrievalHarnessTool({
         ctx: params.ctx,
         userId: params.userId,
         communityId: params.communityId,
@@ -1004,7 +1026,7 @@ async function executeRetrievalAgentLoop(
         evidenceSurface: "member_agent_dock",
         communityBoundConversation: communityConversation,
       });
-      if (handbook.status === "ok") communityHandbookMd = parseCommunityCardBody(handbook.outputText);
+      if (handbook?.status === "ok") communityHandbookMd = parseCommunityCardBody(handbook.outputText);
     } catch {
       communityCardMd = communityCardMd ?? null;
     }
@@ -1108,7 +1130,7 @@ async function executeRetrievalAgentLoop(
     promptExtensions: resolvedHarness.promptExtensions,
   });
   // One cache group per community and surface: they share the stable prefix.
-  const promptCacheKey = `pn:${String(params.communityId ?? "none")}:${params.invocationSurface}`;
+  const promptCacheKey = turnContract?.cacheKey ?? `pn:none:${params.invocationSurface}`;
   const systemPrompt = runtimePromptBundle.text;
   const promptSuffixChars = resolvedHarness.promptExtensions.reduce(
     (total, section) => total + String(section.text ?? "").length,

@@ -399,6 +399,7 @@ function buildExplanationContractPrompt(): string {
     "Separate verified facts, inferences, and unknowns. Do not present guesses as facts.",
     "Do not narrate raw tool noise unless the user asks for operational detail.",
     "Use concise prose by default. Use bullets, tables, diagrams, code blocks, or logs only when they make the answer clearer.",
+    "Speak in the community's own words: courses, lessons, posts, channels, events, the handbook, community notes. Never name internal machinery to people: no \"Resources\", \"live\", \"accepted memory\", \"evidence\", \"repository\", paths, refs or ids. Link a source by its title.",
     "After tool-backed work, summarize what was inspected, what changed, what was verified, and what remains.",
   ].join("\n");
 }
@@ -472,7 +473,7 @@ function buildCommunityResourceLanePrompt(params: {
       "Only use live member-visible Resources. Do not expose drafts, review items, private imports, source inbox state, builder health, hidden provenance, or builder-only metadata.",
       "Do not edit, stage, refactor, or apply changes from the member lane.",
       "Do not claim a resource exists or says something when the answer depends on resource content unless you listed, searched, or read it.",
-      "If no relevant live Resource exists, say that clearly, then answer from other available context only when appropriate.",
+      "If no relevant lesson or guide exists, say so plainly (\"I couldn't find a lesson on that\"), then answer from other available context only when appropriate.",
       "Be direct and practical. Prefer: here's the mental model, then here's what to do next. Name the resource/page used when helpful, and do not dump raw resource text unless the member asks for it.",
     ].join("\n");
   }
