@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
+import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { COMMUNITY_CARD_LIMITS, type CommunityCardPerson } from "../shared/communityOntology.ts";
 import { resolveCommunityEntryPolicy } from "./communityCore";
 import { communitySiteUrl } from "./communitySites";
@@ -39,14 +40,16 @@ export const loadCommunityCardSourceInternal = internalQuery({
       .take(COMMUNITY_CARD_LIMITS.courses * 2);
     const courses = [];
     for (const module of modules) {
-      if ((module as any).status === "draft") continue;
+      // The same visibility rules as resources/: what members actually see.
+      if (!communityResourceModuleIsMemberLive(module as any)) continue;
+      const live = new Set([String(module._id)]);
       // Bounded: a course with more rows than the scan says "N+" rather than a wrong exact count.
       const rows = await ctx.db.query("communityResources")
         .withIndex("by_community_module", (q) => q.eq("communityId", args.communityId).eq("moduleId", module._id))
         .take(LESSON_SCAN_BOUND);
       courses.push({
         title: String(module.name ?? "").trim() || "Course",
-        lessons: rows.filter((row: any) => row.status === "published" && row.role !== "source").length,
+        lessons: rows.filter((row: any) => communityResourceIsMemberVisiblePage(row, live)).length,
         lessonsCapped: rows.length >= LESSON_SCAN_BOUND,
       });
       if (courses.length >= COMMUNITY_CARD_LIMITS.courses) break;

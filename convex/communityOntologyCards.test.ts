@@ -65,9 +65,15 @@ async function fixture() {
     } as any);
     const basics = await course("Board basics", "live");
     await course("Draft course", "draft");
-    for (const [title, status, role] of [["One", "published", "page"], ["Two", "published", undefined], ["Draft", "draft", "page"], ["Upload", "published", "source"]] as const) {
+    // Members see a page in a live course when it has content, whatever its own
+    // status (publication belongs to the course); never a source upload or an empty page.
+    for (const [title, status, role, bodyMd] of [
+      ["One", "published", "page", "Warm up first."], ["Two", "draft", undefined, "Builder page, still draft status."],
+      ["Empty", "published", "page", ""], ["Upload", "published", "source", "raw notes"],
+    ] as const) {
       await ctx.db.insert("communityResources", {
-        communityId, moduleId: basics, type: "note", pinned: false, title, status, ...(role ? { role } : {}), sortOrder: n++, createdByUserId: owner, createdAt: NOW, updatedAt: NOW,
+        communityId, moduleId: basics, type: "note", pinned: false, title, status, ...(role ? { role } : {}), ...(bodyMd ? { bodyMd } : {}),
+        sortOrder: n++, createdByUserId: owner, createdAt: NOW, updatedAt: NOW,
       } as any);
     }
     return { communityId, member, memberRow };
@@ -75,7 +81,7 @@ async function fixture() {
   return { t, ...ids };
 }
 
-test("the card's own facts: owner, active admins and moderators by name, live courses with their published lessons", async () => {
+test("the card's own facts: owner, active admins and moderators by name, live courses with the lessons members actually see", async () => {
   const f = await fixture();
   const source = await f.t.query(internal.communityOntologyCards.loadCommunityCardSourceInternal, { communityId: f.communityId });
   expect(source).toMatchObject({
