@@ -1996,6 +1996,9 @@ export default defineSchema({
     authorUserId: v.optional(v.id("users")),
     sourceCreatedAt: v.number(),
     searchText: v.string(),
+    // On a post's row: the opening its replies are indexed under, so an edit
+    // that changes it can refresh them.
+    threadOpening: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_root_reply", ["rootId", "replyId"])

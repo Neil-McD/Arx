@@ -67,12 +67,15 @@ test("a post and its reply are searchable by every word, in the same write, and 
   expect((await search(t, f.communityId, "same")).map((row: any) => row.kind)).toEqual(["reply"]);
   expect((await search(t, f.communityId, "board reset")).map((row: any) => row.kind).sort()).toEqual(["post", "reply"]);
 
-  // Edit: the old words leave, the new ones arrive.
+  // Edit: the old words leave, the new ones arrive, and the reply follows its
+  // thread's new opening.
   await asOwner.mutation(api.communityInteractions.editCommunityInteractionMessage, {
     targetType: "root", targetId: String(rootId), text: "Moved to Friday, bring quokka gloves.",
   });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(await search(t, f.communityId, "zanzibar")).toHaveLength(0);
-  expect((await search(t, f.communityId, "quokka")).map((row: any) => row.kind)).toEqual(["post"]);
+  expect((await search(t, f.communityId, "quokka")).map((row: any) => row.kind).sort()).toEqual(["post", "reply"]);
+  expect((await search(t, f.communityId, "thursday")).map((row: any) => row.kind)).toEqual([]);
 
   // Delete the post: its row and its replies' rows go with it.
   await asOwner.mutation(api.communityInteractions.deleteCommunityInteractionMessage, { targetType: "root", targetId: String(rootId) });

@@ -13,6 +13,12 @@ type SearchObjectType = "root" | "reply";
 const THREAD_CLEAR_BATCH = 400;
 const BACKFILL_BATCH = 100;
 const CHANNEL_RELABEL_BATCH = 200;
+const THREAD_OPENING_MAX_CHARS = 160;
+
+// What a reply is indexed under: its thread's title, else its opening words.
+function threadOpeningOf(root: any): string {
+  return String(root.title ?? root.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, THREAD_OPENING_MAX_CHARS);
+}
 
 export const SHARED_SEARCH_ACCESS_KEY = "shared";
 export function restrictedSearchAccessKey(channelId: unknown): string {
@@ -92,6 +98,7 @@ export async function syncCommunitySearchDoc(
       return;
     }
     const channel = root.channelId ? await ctx.db.get(root.channelId) : null;
+    const threadOpening = threadOpeningOf(root);
     await writeDoc(ctx, existing, {
       communityId: root.communityId,
       kind: "post",
@@ -106,8 +113,13 @@ export async function syncCommunitySearchDoc(
         authorName: await authorName(ctx, root),
         body: await bodyText(ctx, "rootId", root._id, String(root.contentSummary ?? "")),
       }),
+      threadOpening,
       updatedAt: nowMs,
     });
+    // An edit that changes the opening refreshes the replies indexed under it.
+    if (existing && existing.threadOpening !== threadOpening && ctx.scheduler) {
+      await ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.resyncCommunitySearchRepliesInternal, { rootId: root._id });
+    }
     return;
   }
   const reply = await ctx.db.get(args.objectId);
@@ -135,13 +147,31 @@ export async function syncCommunitySearchDoc(
     searchText: buildCommunitySearchText({
       channelName: channel?.name ?? "General",
       // A short reply ("same here") is findable by the thread it answers.
-      threadOpening: root.title ?? root.contentSummary ?? null,
+      threadOpening: threadOpeningOf(root),
       authorName: await authorName(ctx, reply),
       body: await bodyText(ctx, "replyId", reply._id, String(reply.contentSummary ?? "")),
     }),
     updatedAt: nowMs,
   });
 }
+
+// Rebuilds a thread's reply rows, a page at a time.
+export const resyncCommunitySearchRepliesInternal = internalMutation({
+  args: { rootId: v.id("communityInteractionRoots"), cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communitySearchDocs")
+      .withIndex("by_root_reply", (q) => q.eq("rootId", args.rootId))
+      .paginate({ numItems: CHANNEL_RELABEL_BATCH, cursor: args.cursor ?? null });
+    for (const row of page.page) {
+      if (row.replyId) await syncCommunitySearchDoc(ctx, { communityId: row.communityId, objectType: "reply", objectId: row.replyId });
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.resyncCommunitySearchRepliesInternal, {
+        rootId: args.rootId, cursor: page.continueCursor,
+      });
+    }
+  },
+});
 
 export const clearCommunitySearchThreadInternal = internalMutation({
   args: { rootId: v.id("communityInteractionRoots") },
