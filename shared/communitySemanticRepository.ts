@@ -16,6 +16,7 @@ import { COMMUNITY_MEMBER_SELF_DIRECTORY, COMMUNITY_MEMBER_SELF_CONTEXT_PATH } f
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
+export const MEMBER_TIMELINE_PATH = /^\/members\/([A-Za-z0-9_.-]{1,64})\/timeline\.md$/;
 // Who is online now, as JSON (a member read; never the community agent).
 export const POLYNET_PRESENCE_DOCUMENT_PATH = "/presence.json";
 export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
@@ -590,7 +591,9 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     if (repositoryPath.localPath === "/members/me/forms/" || /^\/members\/me\/forms\/[A-Za-z0-9]+\.json$/.test(repositoryPath.localPath) ||
       // Who is online, and members' profiles as JSON, are executor documents too.
       repositoryPath.localPath === POLYNET_PRESENCE_DOCUMENT_PATH ||
-      /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath)) {
+      /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath) ||
+      // A member's activity (members/<handle>/timeline.md) too.
+      MEMBER_TIMELINE_PATH.test(repositoryPath.localPath)) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: repositoryPath.localPath === "/members/me/forms/" ? POLYNET_JOIN_REQUESTS_DIRECTORY_PATH : "/community.md" });
       return validated.ok ? { ...validated, path: repositoryPath.path } : validated;
@@ -789,8 +792,9 @@ export function renderMemberProfileMarkdown(
     "",
     `- Display name: ${displayName ? JSON.stringify(displayName) : "_Not provided._"}`,
     `- Handle: ${validatedHandle?.ok ? `@${validatedHandle.normalizedHandle}` : "_Not provided._"}`,
-    `- User ref: \`${userRef}\``,
+    // The user ref travels in the read's ref, not the text the agent reasons over.
     `- Profile: ${profilePath ? `\`${profilePath}\`` : "_Not provided._"}`,
+    `- Activity: ${validatedHandle?.ok ? `\`/communities/${currentCommunity.slug}/members/${validatedHandle.normalizedHandle}/timeline.md\`` : "_Not provided._"}`,
     "",
     "## Community relationship",
     "",
@@ -844,7 +848,6 @@ export function renderPlatformUserProfileMarkdown(
     "",
     "## Identity",
     "",
-    `- User ref: \`${userRef}\``,
     `- Display name: ${displayName ? JSON.stringify(displayName) : "_Not provided._"}`,
     `- Handle: ${validatedHandle?.ok ? `@${validatedHandle.normalizedHandle}` : "_Not provided._"}`,
     "",

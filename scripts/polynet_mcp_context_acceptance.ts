@@ -45,7 +45,8 @@ const body = (value: Record<string, unknown>) => String(value.body ?? "");
 const rows = (value: Record<string, unknown>) => Array.isArray(value.results) ? value.results as Array<Record<string, unknown>> : [];
 export const contextFingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
 function profileUserId(value: Record<string, unknown>) {
-  const id = /- User ref: `user:([^`\s]+)`/.exec(body(value))?.[1];
+  // The read's ref carries the server-resolved user, not the card text.
+  const id = /^user:([^\s:]+)$/.exec(String(value.ref ?? ""))?.[1];
   assert.ok(id, "self profile must identify the server-resolved canonical user");
   return id;
 }
