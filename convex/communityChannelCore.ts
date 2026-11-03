@@ -1,4 +1,5 @@
 import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
+import { syncCommunitySearchDoc } from "./communitySearchDocs";
 import { normalizeIdValue } from "./communityCore";
 import { getCommunityChannelCapabilities, requireCommunityChannelCapability, type ChannelActor, type ChannelCapabilities } from "./communityChannelAccess";
 
@@ -903,6 +904,7 @@ export async function requireChannelForAddressableRoot(args: {
   });
   await args.ctx.db.patch(args.root._id, { channelId: channel._id });
   args.root.channelId = channel._id;
+  await syncCommunitySearchDoc(args.ctx, { communityId: args.root.communityId, objectType: "root", objectId: args.root._id });
   return channel;
 }
 
@@ -935,6 +937,7 @@ export async function ensureReplyChannelMatchesRoot(args: {
   if (!args.reply.channelId) {
     await args.ctx.db.patch(args.reply._id, { channelId: channel._id });
     args.reply.channelId = channel._id;
+    await syncCommunitySearchDoc(args.ctx, { communityId: args.reply.communityId, objectType: "reply", objectId: args.reply._id });
   }
   return channel;
 }

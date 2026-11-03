@@ -3,6 +3,7 @@
 // an event tomorrow) so the founder brief has something real to read. Refuses
 // unless the deployment sets POLYNET_ALLOW_SEED=1. Running it again replaces
 // the previous seed, re-dated to now.
+import { syncCommunitySearchDoc } from "./communitySearchDocs";
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 
@@ -54,6 +55,8 @@ export const seedBriefLabInternal = internalMutation({
           .filter((q: any) => q.eq(q.field(table === "communityInteractionRoots" ? "rootId" : "replyId"), row._id)).collect();
         for (const block of blocks) await ctx.db.delete(block._id);
         await ctx.db.delete(row._id);
+        // Its search row (and a post's replies' rows) go with it.
+        await syncCommunitySearchDoc(ctx, { communityId: args.communityId, objectType: table === "communityInteractionRoots" ? "root" : "reply", objectId: row._id });
       }
     }
     for (const event of await ctx.db.query("communityEvents").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect()) {
@@ -93,6 +96,7 @@ export const seedBriefLabInternal = internalMutation({
         createdAt: at, updatedAt: lastReply ? ago(lastReply.hoursAgo) : at,
       } as any);
       await block({ rootId }, post.text, at);
+      await syncCommunitySearchDoc(ctx, { communityId: args.communityId, objectType: "root", objectId: rootId });
       for (const [index, reply] of post.replies.entries()) {
         const replyAt = ago(reply.hoursAgo);
         const replyId = await ctx.db.insert("communityInteractionReplies", {
@@ -101,6 +105,7 @@ export const seedBriefLabInternal = internalMutation({
           reactionSummary: [], idempotencyKey: `${PREFIX}${post.key}:${index}`, createdAt: replyAt, updatedAt: replyAt,
         } as any);
         await block({ replyId }, reply.text, replyAt);
+        await syncCommunitySearchDoc(ctx, { communityId: args.communityId, objectType: "reply", objectId: replyId });
       }
     }
 

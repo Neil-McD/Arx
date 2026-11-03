@@ -97,7 +97,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityInteractions`, `communityChannels`, `communityChannelCore`,
   `communityChannelAccess`, `communityChannelParticipants`, `communityMention*`,
   `communityAttachmentUploads`, `communityAttachmentDownloads`,
-  `communityInteractionAttachmentBridge`, `communityInteractionEvidence`,
+  `communityInteractionAttachmentBridge`, `communityInteractionEvidence`, `communitySearchDocs`
+  (search rows, rebuilt in the same write as each post),
   `communityInteractionEvidenceCore`, `communityChannelValidators`,
   `communityComposerReplay`, `communityTypingPresenceCore`, `communityReadCursorCore`,
   `communityActivity`, `communityText`, `httpCommunityAttachments`, `communityAttention`,
@@ -105,7 +106,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Tables:** `communityChannels`, `communityChannelParticipants`,
   `communityInteractionRoots`, `communityInteractionReplies`,
   `communityInteractionAttachments`, `communityInteractionEmbeds`,
-  `communityInteractionContentBlocks`, `communityInteractionMentions`,
+  `communityInteractionContentBlocks`, `communitySearchDocs`, `communityInteractionMentions`,
   `communityInteractionReactions`, `communityInteractionModerationEvents`,
   `communityMentionBroadcasts`, `communityTypingPresence`, `communityReadCursors`,
   `communityActivityEvents`.

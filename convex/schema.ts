@@ -1981,6 +1981,35 @@ export default defineSchema({
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
 
+  // One search row per live, community-visible post or reply: a projection
+  // kept current in the same write as its source (communitySearchDocs.ts).
+  // Search finds candidates; every result is re-checked against the source.
+  communitySearchDocs: defineTable({
+    communityId: v.id("communities"),
+    kind: v.union(v.literal("post"), v.literal("reply")),
+    rootId: v.id("communityInteractionRoots"),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    channelId: v.optional(v.id("communityChannels")),
+    // "shared" for channels every member reads, or "channel:<id>" for a
+    // restricted one: a reader's search only asks for keys they hold.
+    accessKey: v.string(),
+    authorUserId: v.optional(v.id("users")),
+    sourceCreatedAt: v.number(),
+    searchText: v.string(),
+    // On a post's row: the opening its replies are indexed under, so an edit
+    // that changes it can refresh them.
+    threadOpening: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_root_reply", ["rootId", "replyId"])
+    .index("by_reply", ["replyId"])
+    .index("by_channel", ["channelId"])
+    .index("by_community", ["communityId"])
+    .searchIndex("search_text", {
+      searchField: "searchText",
+      filterFields: ["communityId", "accessKey", "authorUserId", "channelId", "kind"],
+    }),
+
   communityInteractionContentBlocks: defineTable({
     communityId: v.id("communities"),
     rootId: v.optional(v.id("communityInteractionRoots")),

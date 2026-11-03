@@ -1,4 +1,5 @@
 import { presentInteractionActorType } from "../shared/communityAgentIdentity";
+import { syncCommunitySearchDoc } from "./communitySearchDocs";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -1147,12 +1148,19 @@ export const backfillCommunityInteractionEvidenceInternal = internalAction({
   },
 });
 
+// Every write to a post or reply calls this. The search row is rebuilt in the
+// same transaction (never stale); the compiler's evidence follows on a job.
 export async function scheduleCommunityInteractionEvidenceSync(args: {
-  ctx: { scheduler: { runAfter: (...args: any[]) => Promise<unknown> } };
+  ctx: { db: any; scheduler: { runAfter: (...args: any[]) => Promise<unknown> } };
   communityId: any;
   objectType: CommunityInteractionEvidenceObjectType;
   objectId: any;
 }): Promise<void> {
+  await syncCommunitySearchDoc(args.ctx, {
+    communityId: args.communityId,
+    objectType: args.objectType,
+    objectId: args.objectId,
+  });
   await args.ctx.scheduler.runAfter(
     0,
     (internal as any).communityInteractionEvidence.syncCommunityInteractionEvidenceInternal,
