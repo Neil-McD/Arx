@@ -112,14 +112,14 @@
    inset surface is the selected destination. Layout stays identical so the
    Appearance switcher compares palettes instead of comparing structures. */
 :root {
-  --bg-app: #111113;
-  --surface-app: #111113;
-  --surface-rail: #111113;
-  --bg-workspace: #1a1a1a;
-  --surface-workspace: #1a1a1a;
-  --bg-panel: #222222;
-  --surface-panel: #222222;
-  --surface-nav: #222222;
+  --bg-app: #08090a;
+  --surface-app: #08090a;
+  --surface-rail: #08090a;
+  --bg-workspace: #0e0f10;
+  --surface-workspace: #0e0f10;
+  --bg-panel: #141517;
+  --surface-panel: #141517;
+  --surface-nav: #141517;
 }
 
 :root[data-theme="light"] {

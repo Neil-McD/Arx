@@ -37,7 +37,7 @@ assert.match(
 );
 assert.match(
   webTheme,
-  /--bg-app: #111113;[\s\S]*--bg-workspace: #1a1a1a;[\s\S]*--bg-panel: #222222;/,
+  /--bg-app: #08090a;[\s\S]*--bg-workspace: #0e0f10;[\s\S]*--bg-panel: #141517;/,
   "the canonical default-dark shell palette must remain explicit",
 );
 assert.match(
