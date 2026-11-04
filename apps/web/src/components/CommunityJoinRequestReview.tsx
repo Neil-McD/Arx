@@ -36,8 +36,9 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
   // A selection: approve or deny several at once, one request at a time underneath.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkDeciding, setBulkDeciding] = useState(false);
-  // A selection belongs to the requests on screen: each step checks the request
-  // is still pending here, so switching community or closing the panel stops it.
+  // A selection belongs to the requests on screen: a request decided elsewhere
+  // meanwhile is skipped; switching community skips them all (none is pending
+  // here any more); closing the panel stops the batch.
   const pendingIdsRef = useRef<Set<string>>(new Set());
   pendingIdsRef.current = new Set(pendingJoinRequests.map((request) => request.id));
   const mountedRef = useRef(true);
@@ -90,7 +91,8 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
     setBulkDeciding(true);
     try {
       for (const id of [...selected]) {
-        if (!mountedRef.current || !pendingIdsRef.current.has(id)) break;
+        if (!mountedRef.current) break;
+        if (!pendingIdsRef.current.has(id)) continue;
         await decide(id);
       }
     } finally {
