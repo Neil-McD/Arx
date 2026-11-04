@@ -405,7 +405,9 @@ async function handleToolCall(args: {
   };
   toolName: string;
   toolArgs: Record<string, unknown>;
-}): Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; type: "tool"; message: string } | { ok: false; type: "protocol"; message: string }> {
+}): Promise<{ ok: true; result: Record<string, unknown> }
+  | { ok: false; type: "tool"; message: string; code?: string; details?: Record<string, unknown> }
+  | { ok: false; type: "protocol"; message: string }> {
   const { ctx, authSubject, actor, toolName, toolArgs } = args;
 
   if (
@@ -423,10 +425,16 @@ async function handleToolCall(args: {
       input: toolArgs,
     });
     if (!execution.ok) {
+      // The code and any machine-readable details (retry_after_ms, ...) travel
+      // with the message, so a client can back off without parsing text.
+      const details = execution.value && typeof execution.value === "object" && !Array.isArray(execution.value)
+        ? execution.value as Record<string, unknown> : undefined;
       return {
         ok: false,
         type: "tool",
         message: `${execution.code}: ${execution.message}`,
+        code: execution.code,
+        ...(details ? { details } : {}),
       };
     }
     const structuredContent = execution.value;
@@ -602,9 +610,10 @@ export async function handleMcpPost(args: {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32601, result.message);
     }
     if (!result.ok) {
+      const error = { error: result.message, ...(result.code ? { code: result.code } : {}), ...(result.details ?? {}) };
       const toolResult = {
-        content: buildToolTextContent({ error: result.message }),
-        structuredContent: { error: result.message },
+        content: buildToolTextContent(error),
+        structuredContent: error,
         isError: true,
       };
       return jsonRpcResultResponse(req, jsonResponse, id, toolResult);
