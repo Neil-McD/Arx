@@ -1,3 +1,4 @@
+import { COMMUNITY_HANDBOOK_MAX_CHARS } from "../shared/communityHandbook";
 import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
 import { api, internal } from "./_generated/api";
@@ -831,7 +832,7 @@ function capabilityDocument(args: {
       required: ["expected_revision"], optional: ["name", "slug", "one_liner", "about", "visibility"],
       expected_revision: "settings_revision from builder/community.json; a change made since is refused (community_settings_conflict)",
       who: "owners: name, slug and visibility; owners and admins: one_liner and about",
-      slug: "the community's address; its site moves with it", visibility: "published or unlisted (publishing needs a name, one-liner and picture)",
+      slug: "the community's address; its site moves with it. If the answer is lost, retry the same call at the new address: it replays", visibility: "published or unlisted (publishing needs a name, one-liner and picture)",
       result: "result: the community as builder/community.json shows it", effects: ["change_community_profile"],
       forbidden_effects: ["pricing", "pictures", "archive"] }
     : args.operation === JOIN_MODE_OPERATION ? {
@@ -842,10 +843,10 @@ function capabilityDocument(args: {
       result: "result: { instructions }", effects: ["set_community_agent_instructions"],
       forbidden_effects: ["platform_rules", "agent_permissions"] }
     : args.operation === HANDBOOK_DRAFT_OPERATION ? {
-      required: ["text"], text: "the handbook draft in markdown; members and the agent don't see it until approved",
+      required: ["text"], text: `the handbook draft in markdown, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; members and the agent don't see it until approved`,
       result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
     : {
-      required: ["text"], text: "exactly the handbook to publish to members and the agent; empty withdraws it",
+      required: ["text"], text: `exactly the handbook to publish to members and the agent, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; empty withdraws it`,
       result: "result: { approved_md, draft_md, ... }", effects: ["publish_handbook"] };
   } else if (isRemovePostsCapability) {
     operationDefinition.input = { required: ["refs"],
@@ -2659,13 +2660,20 @@ async function executeCommunityOperation(args: {
         (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
     : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
     : operation === AGENT_INSTRUCTIONS_OPERATION ? only(["text"]) && text("text", 40_000)
-    : only(["text"]) && text("text", 40_000));
+    // The handbook is published exactly as given, so a longer one is refused, never cut.
+    : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
   if (!valid) {
     return canonicalError("invalid_tool_args", operation === SETTINGS_UPDATE_OPERATION
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
-      : operation === JOIN_MODE_OPERATION ? "mode is open or approval." : "Give text.");
+      : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
+      : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
+      : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
-  const reservation = await reserveMutatingOperation({ ...args, toolName: "polynet_call" });
+  // The receipt is the community's (by id), not its address's: after a rename,
+  // the same call at the new address replays the answer.
+  const receiptArgs = { ...args, toolName: "polynet_call" as const,
+    input: { operation, version: 1, input: rawInput, idempotency_key: args.idempotencyKey } };
+  const reservation = await reserveMutatingOperation(receiptArgs);
   if (!reservation.ok) return reservation.result;
   if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
   const scope = { userId: args.userId, communityId: target.communityId };
@@ -2685,7 +2693,7 @@ async function executeCommunityOperation(args: {
         ? (internal as any).communityHandbook.saveCommunityHandbookDraftForTrustedUserInternal
         : (internal as any).communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: rawInput.text });
     return { ok: true, value: await completeMutatingOperation({
-      ...args, toolName: "polynet_call", requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+      ...receiptArgs, requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
       value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result }),
     }) };
   } catch (error) {
@@ -2694,7 +2702,7 @@ async function executeCommunityOperation(args: {
     const [code, message] = known ?? (raw.includes("community_publish") || raw.includes("publish_readiness")
       ? ["community_publish_not_ready", "Publishing needs a name, a one-liner and a picture."]
       : ["community_change_refused", "That change wasn't made."]);
-    await failMutatingOperation({ ...args, toolName: "polynet_call", requestFingerprint: reservation.requestFingerprint,
+    await failMutatingOperation({ ...receiptArgs, requestFingerprint: reservation.requestFingerprint,
       attemptToken: reservation.attemptToken, errorCode: code, errorMessage: message });
     return canonicalError(code, message);
   }

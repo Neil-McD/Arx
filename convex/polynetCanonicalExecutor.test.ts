@@ -3454,4 +3454,11 @@ test("owners and admins run the community itself through their own AI; owner-onl
   expect(await owner.call("community.settings.update", { expected_revision: latest.settings_revision, slug: "dawn-runners" }, "s3"))
     .toMatchObject({ ok: true, value: { result: { slug: "dawn-runners" } } });
   expect(JSON.parse(((await as(f.ownerSubject, f.ownerId, "dawn-runners").read("builder/community.json")) as any).value.body)).toMatchObject({ slug: "dawn-runners" });
+  // The rename's answer was lost: the same call at the new address replays it.
+  const moved = as(f.ownerSubject, f.ownerId, "dawn-runners");
+  expect(await moved.call("community.settings.update", { expected_revision: latest.settings_revision, slug: "dawn-runners" }, "s3"))
+    .toMatchObject({ ok: true, value: { result: { slug: "dawn-runners" } } });
+  // A handbook longer than the limit is refused, never cut.
+  expect(await moved.call("community.handbook.approve", { text: "x".repeat(6_001) }, "h-long")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(JSON.parse(((await moved.read("builder/community.json")) as any).value.body).handbook.approved_md).toBe("# Start here\nCome on Tuesday.");
 });
