@@ -2618,3 +2618,24 @@ and the metabolizer) is deleted. The sections above describe history.
   `ask_in_conversation` and `tag`. The engine switch covers `ask` and `tag`.
 - The one-time copy lives in `communityMemoryMigration` with the old reader's
   evidence check until slice 41 drops the old tables.
+
+## Forty-First Implementation Slice: The Agent Never Acts As The Member
+
+Goal: close the last ways the agent spoke or acted in a member's name, and
+let the founder see what the agent shares.
+
+- `community.interaction.react` and `community.form.submit` are offered only to
+  the member's own tools (`community_app`, `external_mcp`). The community agent
+  in an Ask no longer sees or calls them; its instructions say it drafts
+  posts and form answers and the member sends them. Marking a post read stays.
+- The founder's daily brief lists community notes the agent saved in the
+  window (not the founder's own or migrated ones), with where to edit or
+  delete them. The section is added in code after the brief is written, so a
+  model-written brief can't drop it, and new notes make the day not quiet.
+- A tag's refused tool call (`draft_only`, `notes_not_allowed`,
+  `private_source_read`) is logged with status `refused`, as an Ask logs
+  `tool_call_refused`.
+- The member card (`members/<handle>.md`) is plain text: the member's name and
+  handle as the title, role, joined, shared-channel counts, last active, and
+  links to their recent activity and profile; no quoting, code formatting or
+  "not provided" lines. The profile card shows About only when there is one.

@@ -114,6 +114,11 @@ export const PRIVATE_SOURCE_NOTE_REFUSAL_MESSAGE =
 // data (private_room) locks community notes for the rest of the turn.
 export type CommunityTurnToolState = { sawPrivateSource: boolean };
 
+// The codes checkCommunityTurnToolCall refuses with: logged as "refused".
+export function isCommunityTurnRefusalCode(code: unknown): boolean {
+  return code === "draft_only" || code === "notes_not_allowed" || code === "private_source_read";
+}
+
 export function toolOutputSawPrivateSource(outputText: string): boolean {
   return /"private_room"\s*:\s*true/.test(String(outputText ?? ""));
 }

@@ -3184,3 +3184,26 @@ test("the community agent saves community notes everyone reads; others can't wri
   const saved = await t.run(ctx => ctx.db.query("communityNotes").first());
   expect(saved!.bodyMd.match(/Bring your own on Saturdays\./g)).toHaveLength(1);
 });
+
+test("the Ask agent can't react or submit a form for the member; the member's own tools can", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
+  const list = (principalKind: "community_agent_for_member" | "external_mcp") => executePolynetCanonicalTool({
+    ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind,
+    evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock",
+    toolName: "polynet_list", input: { path: "/communities/canonical-community/capabilities/" },
+  });
+  const operations = (result: any) => (result.value.entries as any[]).map((entry) => String(entry.path).split("/").pop());
+  const agent = operations(await list("community_agent_for_member"));
+  expect(agent).not.toContain("community.interaction.react.json");
+  expect(agent).not.toContain("community.form.submit.json");
+  const harness = operations(await list("external_mcp"));
+  expect(harness).toEqual(expect.arrayContaining(["community.interaction.react.json", "community.form.submit.json"]));
+  await expect(executePolynetCanonicalTool({
+    ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind: "community_agent_for_member",
+    evidenceSurface: "member_agent_dock", toolName: "polynet_call",
+    input: { operation: "community.interaction.react", version: 1, target: "/communities/canonical-community/capabilities/community.interaction.react.json",
+      input: { ref: "interaction:root:abc", emoji: "🔥" }, idempotency_key: "react-1" },
+  })).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
+});

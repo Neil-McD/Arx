@@ -12,6 +12,7 @@ import {
   parseBrief,
   snapshotIsQuiet,
   type FounderBriefSnapshot,
+  withNewNotesSection,
 } from "./communityFounderBrief";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts", "./_generated/**/*.*s"]);
@@ -39,9 +40,23 @@ const quiet: FounderBriefSnapshot = {
   quietNewcomers: { count: 1, names: ["Sam"] },
   joinRequestsPending: 0,
   upcomingEvents: [],
+  newNotes: { count: 0, titles: [] },
 };
 
 describe("founder brief writing", () => {
+  it("always lists new community notes, whoever wrote the rest of the brief", () => {
+    const snapshot = { ...quiet, newNotes: { count: 2, titles: ["Borrowing spare shoes", "Row 12 LED is out"] } };
+    expect(snapshotIsQuiet(snapshot)).toBe(false);
+    const fromModel = { headline: "Busy day", sections: [1, 2, 3, 4, 5].map((n) => ({ title: `S${n}`, items: ["x"] })), nextStep: null };
+    const brief = withNewNotesSection(fromModel, snapshot);
+    expect(brief.sections).toHaveLength(5);
+    expect(brief.sections[4]).toEqual({ title: "New community notes", items: [
+      '"Borrowing spare shoes"', '"Row 12 LED is out"',
+      "The agent saved 2 notes for everyone. Edit or delete any of them in Studio, Knowledge → Notes.",
+    ] });
+    expect(withNewNotesSection(fromModel, quiet)).toBe(fromModel);
+  });
+
   it("reads the founder's local date and hour", () => {
     const nowMs = Date.parse("2026-10-26T13:30:00.000Z");
     expect(localDateAndHour(nowMs, "America/New_York")).toEqual({ date: "2026-10-26", hour: 9 });
@@ -195,10 +210,19 @@ describe("founder brief delivery", () => {
         await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant", active: true, createdAt: nowMs - 10 * DAY + index, updatedAt: nowMs } as any);
       }
     });
+    // Notes the agent saved in the window are listed; the founder's own and older ones aren't.
+    await t.run(async (ctx) => {
+      const note = (slug: string, source: string, at: number) => ctx.db.insert("communityNotes", {
+        communityId: f.communityId, slug, title: slug, bodyMd: "x", source, searchText: slug, createdAt: at, updatedAt: at } as any);
+      await note("new-from-ask", "ask", nowMs - HOUR_MS);
+      await note("founder-wrote-this", "founder", nowMs - HOUR_MS);
+      await note("older-note", "tag", nowMs - 3 * DAY);
+    });
     const read = await t.query(internalRefs.communityFounderBrief.readFounderBriefSnapshotInternal, {
       communityId: f.communityId, windowStartMs: nowMs - DAY, nowMs,
     });
     expect(read.snapshot.newMembers).toMatchObject({ count: 1, names: ["Ana"] });
+    expect(read.snapshot.newNotes).toEqual({ count: 1, titles: ["new-from-ask"] });
   });
 
   it("a sent brief isn't sent again, and the schedule moves on", async () => {

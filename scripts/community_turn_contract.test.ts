@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, toolOutputSawPrivateSource } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, toolOutputSawPrivateSource, isCommunityTurnRefusalCode } from "../shared/communityTurnContract";
 
 // Who speaks, who sees the answer, and what that allows.
 test("a private Ask: the member asks and sees the answer; their profile and the shared layers are in", () => {
@@ -71,4 +71,9 @@ test("a tool result marked private_room counts as a private source", () => {
   expect(toolOutputSawPrivateSource(JSON.stringify({ entries: [], private_room: true }))).toBe(true);
   expect(toolOutputSawPrivateSource(JSON.stringify({ results: [{ title: "x", private_room: true }] }))).toBe(true);
   expect(toolOutputSawPrivateSource(JSON.stringify({ results: [{ title: "private_room" }] }))).toBe(false);
+});
+
+test("the turn's refusals are named so both surfaces log them as refused", () => {
+  expect(["draft_only", "notes_not_allowed", "private_source_read"].every(isCommunityTurnRefusalCode)).toBe(true);
+  expect(isCommunityTurnRefusalCode("semantic_not_found")).toBe(false);
 });

@@ -184,18 +184,6 @@ export type MemberStanding = {
   lastActiveAt: string | null;
 };
 
-export function renderMemberStanding(standing: MemberStanding): string {
-  const date = (iso: string | null) => (iso ? iso.slice(0, 10) : "unknown");
-  const more = standing.countsCapped ? "+" : "";
-  return [
-    "## Standing",
-    "",
-    `- Joined: ${date(standing.joinedAt)}`,
-    `- In shared channels: ${standing.sharedPosts}${more} posts, ${standing.sharedReplies}${more} replies`,
-    `- Last active: ${date(standing.lastActiveAt)}`,
-  ].join("\n");
-}
-
 // members/<handle>/timeline.md — one member's posts and replies the reader may
 // read, newest first, a page at a time. Post text is quoted data.
 export const MEMBER_TIMELINE_PAGE = 25;
