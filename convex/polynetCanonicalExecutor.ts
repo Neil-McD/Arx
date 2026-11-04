@@ -729,10 +729,14 @@ function capabilityDocument(args: {
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
+  // Submitting a form and reacting speak for the member, so only the member's
+  // own tools do them (their site, their MCP harness); the community agent in
+  // an Ask helps fill a form or suggests a reaction, and the member acts.
+  const memberActs = args.principalKind === "external_mcp" || args.principalKind === "community_app";
   const isFormCapability = args.operation === FORM_SUBMIT_OPERATION &&
-    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+    args.evidenceSurface !== "community_funnel_builder" && memberActs;
   const isReactCapability = args.operation === REACT_OPERATION &&
-    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+    args.evidenceSurface !== "community_funnel_builder" && memberActs;
   const isMarkReadCapability = args.operation === MARK_READ_OPERATION &&
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
   const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&

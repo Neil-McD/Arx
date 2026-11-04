@@ -1,5 +1,5 @@
 import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
-import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, toolOutputSawPrivateSource, type CommunityTurnToolState } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, toolOutputSawPrivateSource, isCommunityTurnRefusalCode, type CommunityTurnToolState } from "../shared/communityTurnContract";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
@@ -2214,13 +2214,16 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             });
           },
           onToolStepFinish: async ({ step, toolResult }) => {
+            // A call the turn's rules refused (draft-only, a private source
+            // before a note) is logged as refused, as an Ask logs it.
+            const refused = isCommunityTurnRefusalCode(toolResult.errorCode);
             await eventRecorder.record({
               kind: "tool_result",
               toolName: String(step.toolName),
-              status: toolResult.status,
+              status: refused ? "refused" : toolResult.status,
               errorCode: toolResult.errorCode ?? undefined,
                 content:
-                  toolResult.status === "ok" ? "Tool completed" : "Tool failed",
+                  toolResult.status === "ok" ? "Tool completed" : refused ? "Tool call refused by the turn's rules" : "Tool failed",
             });
           },
           executeTool: async ({ toolName, rawArguments }) => {
