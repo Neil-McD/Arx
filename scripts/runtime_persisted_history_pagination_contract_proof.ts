@@ -35,7 +35,7 @@ assert.equal(
 );
 assert.match(
   runtimeLoop,
-  /while \(hasMore && !selection\.blockedByBudget\)[\s\S]*selectCommunityAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
+  /while \(hasMore && !selection\.blockedByBudget && !selection\.atTurnLimit\)[\s\S]*selectCommunityAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
   "the runtime must page until model budget or history exhaustion and persist selection lineage",
 );
 assert.doesNotMatch(
@@ -93,6 +93,41 @@ assert.equal(beyondSixty.selectedEpisodeCount, 32);
 assert.equal(beyondSixty.blockedByBudget, false);
 assert.equal(beyondSixty.selectedEntries[0]?.messageKey, "user-1");
 assert.equal(beyondSixty.selectedEntries.at(-1)?.messageKey, "user-current");
+
+// The turn cap (POL-38): the same 32 turns with a 20-turn cap keep the 20 most
+// recent (19 earlier turns plus the current one); the rest stay stored.
+const capped = selectCommunityAgentHistoryForBudget({
+  rows: beyondSixtyRows,
+  expectedUserMessageKey: "user-current",
+  systemPrompt: "You are a governed community agent.",
+  transport: "openai_responses",
+  modelRef: "openai/gpt-6-luna",
+  toolSchemas: [],
+  reservedOutputTokens: 4_096,
+  maxTurns: 20,
+});
+assert.equal(capped.ok, true);
+if (!capped.ok) throw new Error(capped.code);
+assert.equal(capped.selectedEpisodeCount, 20);
+assert.equal(capped.atTurnLimit, true);
+assert.equal(capped.blockedByBudget, false);
+assert.equal(capped.selectedEntries[0]?.messageKey, "user-13");
+assert.equal(capped.selectedEntries.at(-1)?.messageKey, "user-current");
+const underCap = selectCommunityAgentHistoryForBudget({
+  rows: beyondSixtyRows.slice(-5),
+  expectedUserMessageKey: "user-current",
+  systemPrompt: "You are a governed community agent.",
+  transport: "openai_responses",
+  modelRef: "openai/gpt-6-luna",
+  toolSchemas: [],
+  reservedOutputTokens: 4_096,
+  maxTurns: 20,
+});
+assert.equal(underCap.ok, true);
+if (!underCap.ok) throw new Error(underCap.code);
+assert.equal(underCap.atTurnLimit, false);
+assert.match(read("convex/runtimeAgentLoop.ts"), /maxTurns: turnContract\?\.historyTurns \?\? COMMUNITY_TURN_HISTORY_TURNS/);
+assert.match(read("convex/runtimeAgentLoop.ts"), /\? "turn_limit"/);
 
 const beyondFormerPageCeilingRows: CommunityAgentStoredMessage[] = [];
 seq = 1;

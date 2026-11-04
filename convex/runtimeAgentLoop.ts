@@ -1,6 +1,6 @@
 import { api, internal } from "./_generated/api";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
-import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 import {
   COMMUNITY_MEMORY_RECALL_LIMIT,
   buildCommunityMemoryRecallQuery,
@@ -1138,10 +1138,12 @@ async function executeRetrievalAgentLoop(
       ...inputBudgetIdentity,
       toolSchemas: resolvedProviderToolSchemas,
       reservedOutputTokens: params.maxTokens,
+      maxTurns: turnContract?.historyTurns ?? COMMUNITY_TURN_HISTORY_TURNS,
     });
     try {
       if (!selection.ok) throw new Error(selection.code);
-      while (hasMore && !selection.blockedByBudget) {
+      // Older pages load only until the budget or the turn cap is reached.
+      while (hasMore && !selection.blockedByBudget && !selection.atTurnLimit) {
         if (typeof nextBeforeSeq !== "number") {
           throw new Error("persisted_history_cursor_missing");
         }
@@ -1175,6 +1177,7 @@ async function executeRetrievalAgentLoop(
           ...inputBudgetIdentity,
           toolSchemas: resolvedProviderToolSchemas,
           reservedOutputTokens: params.maxTokens,
+          maxTurns: turnContract?.historyTurns ?? COMMUNITY_TURN_HISTORY_TURNS,
         });
         if (!selection.ok) throw new Error(selection.code);
       }
@@ -1183,7 +1186,9 @@ async function executeRetrievalAgentLoop(
           selection.budgetPlan.failureCode !== "context_window_exceeded"
           ? "budget_unavailable"
           : "input_budget"
-        : "history_exhausted";
+        : selection.atTurnLimit
+          ? "turn_limit"
+          : "history_exhausted";
       const selectedSeqs = selection.selectedEntries.map((entry) => entry.seq);
       conversationMessagesForProvider = selection.selectedEntries.map(
         (entry): InferenceMessage => ({

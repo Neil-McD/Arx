@@ -2496,3 +2496,22 @@ turns in one community reuse the provider's prompt cache.
 - "Now" uses the asker's profile timezone when it is a valid zone, otherwise
   UTC. A community-bound conversation never loads the global profile, so it
   stays UTC.
+
+## Thirty-Sixth Implementation Slice: Bounded Conversation History
+
+Goal: a long conversation stays fast and cheap, and the agent sees the recent
+exchange rather than everything ever said.
+
+- Each Ask (`ask` and `ask_in_conversation`) carries at most
+  `COMMUNITY_TURN_HISTORY_TURNS` (20) turns of history. The limit lives on the
+  turn contract as `historyTurns` and is recorded with the contract in the
+  `turn_contract` run event.
+- The current turn counts toward the limit, so the model sees the new question
+  plus at most 19 earlier turns.
+- History selection keeps the most recent turns that fit both the token budget
+  and the turn limit. Paging back through stored messages stops once the limit
+  is reached, and the history receipt records `stop_reason: "turn_limit"`.
+- Older messages stay stored and visible to the member. They are not
+  summarized and no summary call is made; the agent can still find older posts
+  through search.
+- Tags and steward turns are unaffected by this slice.

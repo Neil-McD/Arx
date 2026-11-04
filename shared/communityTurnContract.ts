@@ -39,7 +39,12 @@ export type CommunityTurnContract = {
   };
   // Groups requests that share a prompt prefix; never carries user content.
   cacheKey: string;
+  // How many recent conversation turns (the current one included) a turn may
+  // carry. Older turns stay stored; they just don't ride along.
+  historyTurns: number;
 };
+
+export const COMMUNITY_TURN_HISTORY_TURNS = 20;
 
 export function buildCommunityTurnContract(args: {
   surface: CommunityTurnSurface;
@@ -73,6 +78,7 @@ export function buildCommunityTurnContract(args: {
       askerProfile: args.surface === "ask",
     },
     cacheKey: `pn:${communityId}:${args.surface === "ask_in_conversation" ? "ask" : args.surface}`,
+    historyTurns: COMMUNITY_TURN_HISTORY_TURNS,
   };
 }
 
@@ -84,5 +90,6 @@ export function summarizeCommunityTurnContract(contract: CommunityTurnContract) 
     speaker: contract.speaker.kind,
     audience: contract.audience.kind,
     uses: contract.uses,
+    history_turns: contract.historyTurns,
   };
 }

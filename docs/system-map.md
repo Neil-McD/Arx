@@ -183,7 +183,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** the one community agent: Agent-page conversations, @mention replies,
   site conversations; tools, streaming, model calls, receipts.
-- **Code:** `communityTurnContract` (shared: who speaks, who sees the answer, which layers that allows), `runtimeAgentLoop`, `runtimeTurn*`, `runtimeContextIntegrity`,
+- **Code:** `communityTurnContract` (shared: who speaks, who sees the answer, which layers that allows, and how many recent turns an Ask carries: 20, current turn included; older messages stay stored, unsummarized), `runtimeAgentLoop`, `runtimeTurn*`, `runtimeContextIntegrity`,
   `runtimeHarnessShaping`, `runtimeHarnessComposition`, `polynetCanonicalExecutor`,
   `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
   `communityAgentFilesystem`,

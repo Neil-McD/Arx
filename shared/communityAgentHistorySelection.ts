@@ -21,6 +21,8 @@ export type CommunityAgentHistorySelectionResult =
       loadedCompleteEpisodeCount: number;
       ignoredLeadingMessageCount: number;
       blockedByBudget: boolean;
+      // The turn cap was reached: older turns stay out even if they'd fit.
+      atTurnLimit: boolean;
       budgetPlan: RuntimeInputBudgetPlan;
     }
   | {
@@ -81,7 +83,10 @@ export function selectCommunityAgentHistoryForBudget(params: {
   modelRef: string;
   toolSchemas: readonly unknown[];
   reservedOutputTokens: number;
+  // At most this many conversation turns (the current one included).
+  maxTurns?: number;
 }): CommunityAgentHistorySelectionResult {
+  const maxTurns = Math.max(1, Math.floor(Number(params.maxTurns ?? Number.POSITIVE_INFINITY)) || 1);
   const built = buildCommunityAgentConversationEntries({
     rows: params.rows,
     expectedUserMessageKey: params.expectedUserMessageKey,
@@ -114,7 +119,7 @@ export function selectCommunityAgentHistoryForBudget(params: {
 
   if (!blockedByBudget) {
     let lowestCandidateCount = 2;
-    let highestCandidateCount = grouped.episodes.length;
+    let highestCandidateCount = Math.min(grouped.episodes.length, maxTurns);
     while (lowestCandidateCount <= highestCandidateCount) {
       const candidateCount = Math.floor(
         (lowestCandidateCount + highestCandidateCount) / 2,
@@ -140,7 +145,7 @@ export function selectCommunityAgentHistoryForBudget(params: {
       budgetPlan = candidatePlan;
       lowestCandidateCount = candidateCount + 1;
     }
-    blockedByBudget = selectedEpisodes.length < grouped.episodes.length;
+    blockedByBudget = selectedEpisodes.length < Math.min(grouped.episodes.length, maxTurns);
   }
 
   return {
@@ -150,6 +155,7 @@ export function selectCommunityAgentHistoryForBudget(params: {
     loadedCompleteEpisodeCount: grouped.episodes.length,
     ignoredLeadingMessageCount: grouped.ignoredLeadingMessageCount,
     blockedByBudget,
+    atTurnLimit: !blockedByBudget && grouped.episodes.length >= maxTurns,
     budgetPlan,
   };
 }
