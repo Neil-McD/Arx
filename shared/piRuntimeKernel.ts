@@ -56,6 +56,11 @@ export async function runPiRuntimeKernel<TToolName extends string>(
   const run = new RuntimeKernelRun(params);
   let result: RuntimeKernelResult<TToolName> | null = null;
   let batch: PiBatch<TToolName> | null = null;
+  // What the native loop lets escape (a throw from the model call or from a
+  // caller's hook) escapes here too: Pi would otherwise turn it into a tool
+  // error or a model_error, and callers branch on the thrown code.
+  let thrown: { error: unknown } | null = null;
+  const capture = (error: unknown) => { thrown ??= { error }; };
 
   // Tools are declared to Pi by name as the model calls them; Pi never sees
   // their schemas or validates their arguments (normalizeToolArguments does).
@@ -72,6 +77,7 @@ export async function runPiRuntimeKernel<TToolName extends string>(
         execute: async (toolCallId: string) => {
           const prepared = batch?.byCallId.get(toolCallId);
           if (!batch || !prepared) throw new Error("pi_runtime_unadmitted_tool_call");
+          if (thrown) throw new Error("run_ended");
           const toolResult = await run.executeStep(prepared);
           batch.results.set(toolCallId, toolResult);
           return { content: [{ type: "text", text: toolResult.outputText }], details: {} };
@@ -123,13 +129,7 @@ export async function runPiRuntimeKernel<TToolName extends string>(
           })), "toolUse");
         }
       } catch (error) {
-        result = run.failure({
-          ok: false,
-          status: 500,
-          code: "model_error",
-          stopReason: "model_error",
-          message: error instanceof Error ? error.message : String(error),
-        });
+        capture(error);
         reply = message([], "error");
       }
       stream.push({ type: "start", partial: reply } as any);
@@ -148,29 +148,43 @@ export async function runPiRuntimeKernel<TToolName extends string>(
       const prepared = batch?.byCallId.get(toolCall.id);
       if (!batch || !prepared) return { block: true, reason: "pi_runtime_unadmitted_tool_call" };
       // A serial batch stops at the first step that ends the run.
-      if (batch.terminal) return { block: true, reason: "run_ended" };
-      await run.startStep(prepared);
+      if (batch.terminal || thrown) return { block: true, reason: "run_ended" };
+      try {
+        await run.startStep(prepared);
+      } catch (error) {
+        capture(error);
+        return { block: true, reason: "run_ended" };
+      }
       return undefined;
     },
     afterToolCall: async ({ toolCall }) => {
-      if (!batch || batch.parallel || batch.terminal) return undefined;
+      if (!batch || batch.parallel || batch.terminal || thrown) return undefined;
       const prepared = batch.byCallId.get(toolCall.id);
       const toolResult = batch.results.get(toolCall.id);
       if (!prepared || !toolResult) return undefined;
-      batch.terminal = await run.processResult(prepared, toolResult);
+      try {
+        batch.terminal = await run.processResult(prepared, toolResult);
+      } catch (error) {
+        capture(error);
+      }
       return undefined;
     },
     finishTurn: async () => {
-      if (result) return { action: "end" };
+      if (result || thrown) return { action: "end" };
       const current = batch;
       if (!current) return { action: "end" };
       batch = null;
       if (current.parallel) {
-        for (const prepared of current.prepared) {
-          const toolResult = current.results.get(prepared.step.providerCallId);
-          if (!toolResult) continue;
-          const terminal = await run.processResult(prepared, toolResult, { recordUserCancelledArtifacts: true });
-          if (!current.terminal && terminal) current.terminal = terminal;
+        try {
+          for (const prepared of current.prepared) {
+            const toolResult = current.results.get(prepared.step.providerCallId);
+            if (!toolResult) continue;
+            const terminal = await run.processResult(prepared, toolResult, { recordUserCancelledArtifacts: true });
+            if (!current.terminal && terminal) current.terminal = terminal;
+          }
+        } catch (error) {
+          capture(error);
+          return { action: "end" };
         }
       }
       if (current.terminal) {
@@ -186,16 +200,10 @@ export async function runPiRuntimeKernel<TToolName extends string>(
   try {
     await runAgentLoop([], context, config, async () => undefined, undefined, streamFn as any);
   } catch (error) {
-    if (!result) {
-      result = run.failure({
-        ok: false,
-        status: 500,
-        code: "model_error",
-        stopReason: "model_error",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
+    capture(error);
   }
+  const escaped = thrown as { error: unknown } | null;
+  if (escaped) throw escaped.error;
   return result ?? run.failure({
     ok: false,
     status: 502,

@@ -473,6 +473,13 @@ function coerceConciergeCompletion(
   return completion;
 }
 
+const SERVE_RATE_LIMITED_CODES = new Set([
+  "founder_inference_actor_rate_limited",
+  "founder_inference_community_rate_limited",
+]);
+export const SERVE_RATE_LIMITED_REPLY =
+  "I'm getting a lot of questions right now. Ask me again in a minute and I'll answer.";
+
 export async function executeConciergeTool(args: {
   ctx: any;
   context: any;
@@ -2195,6 +2202,18 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           errorCode: failureCode,
           content: "The community agent could not complete this turn.",
         });
+        // A tag over the AI rate limit still gets an answer in its thread, so
+        // the member isn't left waiting on silence. No model ran, so no receipt.
+        if (turnContract && SERVE_RATE_LIMITED_CODES.has(failureCode)) {
+          const busy = await ctx.runMutation(
+            internalRefs.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+            { requestId, expectedAttempt, content: SERVE_RATE_LIMITED_REPLY, nowMs: Date.now() },
+          ).catch(() => null);
+          if (busy?.ok) {
+            results.push({ request_id: normalizeIdValue(requestId), status: "rate_limited_reply", error_code: failureCode });
+            continue;
+          }
+        }
         await ctx.runMutation(
           internalRefs.communityAgentServeWorker
             .failCommunityAgentServeRequestInternal,

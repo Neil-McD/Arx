@@ -144,6 +144,7 @@ const SEARCH_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     kind: {
       type: "string",
       enum: ["post", "reply"],
+      description: "Only posts or only replies. Leave it unset unless the member asked for one: advice and answers are often replies.",
     },
     sort: {
       type: "string",

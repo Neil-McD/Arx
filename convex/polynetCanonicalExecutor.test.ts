@@ -1464,6 +1464,13 @@ test("custom channels discover, isolate, search, read, and write through exact p
     input: { path: "/communities/canonical-community/channels/", query: "zzzunmatchedword" },
   });
   expect(nothing).toMatchObject({ ok: true, value: { results: [], hint: expect.stringContaining("whole words") } });
+  // A kind filter that finds nothing says to search again without it.
+  const postsOnly = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: { path: "/communities/canonical-community/channels/", query: "zzzunmatchedword", kind: "post" },
+  });
+  expect(postsOnly).toMatchObject({ ok: true, value: { results: [], hint: expect.stringContaining("without kind to include replies") } });
 
   const repositorySearch = await executePolynetCanonicalTool({
     ...base,

@@ -2538,3 +2538,23 @@ never posts, replies, edits or deletes in a channel for a member.
   (`external_mcp`) and the community agent's own posts are unchanged.
 - Agent instructions on both surfaces state the rule. Posts written for
   members before this slice stay as they are.
+
+## Thirty-Eighth Implementation Slice: Eval Fixes Before Release
+
+Three fixes from the November 3 staging eval (24 live questions, both engines).
+
+- An empty channel search that used `kind` returns a hint to search again
+  without it (advice usually lives in replies), and the `kind` field says to
+  leave it unset unless the member asked for only posts or only replies.
+- An ordinary tag that hits the AI rate limit
+  (`founder_inference_actor_rate_limited` or
+  `founder_inference_community_rate_limited`) replies in its thread with a
+  short "ask me again in a minute" note instead of failing silently. No model
+  runs, so no receipt is written. Workflow and timed turns are unchanged.
+- The Ask instructions say the agent may tell the member anything its tools
+  return, private rooms they are in included; a "don't share" post is
+  addressed to people outside its room and is never withheld from a member
+  who can read it.
+- The Pi engine lets a throw from the model call or a caller's hook escape
+  unchanged, as the native loop does (callers branch on the thrown code, such
+  as the rate limit and the run budget); a kernel parity test covers it.

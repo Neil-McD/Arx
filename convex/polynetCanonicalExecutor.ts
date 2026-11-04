@@ -467,6 +467,14 @@ async function readCommunityCard(
 const POST_SEARCH_EMPTY_HINT =
   "Nothing matched. Search matches whole words: try one or two keywords, another form of a word, or drop the author or date filters.";
 
+// A kind filter is the easiest way to miss an answer: advice usually lives in
+// a reply, so an empty filtered search says to search again without it.
+function postSearchEmptyHint(kind: unknown): string {
+  return kind === "post" || kind === "reply"
+    ? `Nothing matched among ${kind === "post" ? "posts" : "replies"} only. Search again without kind to include ${kind === "post" ? "replies" : "posts"}.`
+    : POST_SEARCH_EMPTY_HINT;
+}
+
 function parseSearchDate(value: unknown, endOfDay: boolean): number | null | "invalid" {
   if (value === undefined || value === null || value === "") return null;
   const text = String(value).trim();
@@ -1895,7 +1903,7 @@ async function executeCanonicalSearch(args: {
             retrievalId: value.retrieval_id,
             truncated: value.truncated,
           }),
-          ...(results.length === 0 ? { hint: POST_SEARCH_EMPTY_HINT } : {}),
+          ...(results.length === 0 ? { hint: postSearchEmptyHint(filters.value.kind) } : {}),
         },
       };
     }
