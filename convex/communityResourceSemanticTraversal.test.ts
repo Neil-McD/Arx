@@ -5,6 +5,7 @@ import { expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
 import { executeConciergeTool } from "./communityAgentServeWorker";
+import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { listCommunityResourceSemanticDirectoryCore } from "./communityResources";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
@@ -13,6 +14,7 @@ import { selectRuntimePolynetSemanticMount } from "../shared/polynetSemanticRepo
 
 const modules = import.meta.glob([
   "./communityResources.ts",
+  "./communityLessonProgress.ts",
   "./communityAdmin.ts",
   "./communityCapabilityContext.ts",
   "./communityResourceEvidence.ts",
@@ -1434,4 +1436,47 @@ test("member directory skips a member with broken identity rows instead of faili
   expect(directory.result.entries.map((entry) => entry.path)).toContain(
     "/members/semantic-owner.md",
   );
+});
+
+test("a member marks a lesson done for themselves; only reads made for them show it", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const as = (subject: string) => {
+    const identity = t.withIdentity({ subject });
+    return { runQuery: identity.query, runAction: identity.action, runMutation: identity.mutation };
+  };
+  const run = (subject: string, userId: any, principalKind: "external_mcp" | "community_app" | "community_agent_for_member" | "community_agent", toolName: any, input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({ ctx: as(subject), authSubject: subject, userId: String(userId), principalKind,
+      evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : principalKind === "community_agent" ? "community_concierge" : "member_agent_dock",
+      ...(principalKind === "community_agent" ? { mountedCommunityId: fixture.communityId } : {}), toolName, input });
+  const course = `/communities/resource-semantic/resources/start-here~${fixture.firstModuleId}/`;
+  const lessonRef = `resource:${fixture.firstPageId}`;
+  const setDone = (principalKind: any, done: boolean, key: string) => run(fixture.memberSubject, fixture.memberId, principalKind, "polynet_call", {
+    operation: "community.lesson.set_done", version: 1, target: "/communities/resource-semantic/capabilities/community.lesson.set_done.json",
+    input: { ref: lessonRef, done }, idempotency_key: key });
+  const doneIn = async (subject: string, userId: any, principalKind: any) => {
+    const listed = await run(subject, userId, principalKind, "polynet_list", { path: course });
+    if (!listed.ok) throw new Error(listed.message);
+    return (listed.value.entries as any[]).find((entry) => entry.ref === lessonRef)?.done;
+  };
+
+  expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(false);
+  // The community agent in an Ask reads progress but can't change it.
+  expect(await setDone("community_agent_for_member", true, "agent-done")).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await setDone("external_mcp", true, "member-done")).toMatchObject({ ok: true, value: { ref: lessonRef, done: true } });
+  expect(await setDone("external_mcp", true, "member-done-again")).toMatchObject({ ok: true });
+  expect(await t.run((ctx) => ctx.db.query("communityLessonProgress").collect())).toHaveLength(1);
+  expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(true);
+  expect(await doneIn(fixture.memberSubject, fixture.memberId, "community_agent_for_member")).toBe(true);
+  const read = await run(fixture.memberSubject, fixture.memberId, "external_mcp", "polynet_read", { path: lessonRef });
+  expect(read).toMatchObject({ ok: true, value: { ref: lessonRef, done: true } });
+  // Another member, and the agent answering a channel, never see it.
+  expect(await doneIn("resource-semantic-peer", fixture.peerId, "external_mcp")).toBe(false);
+  expect(await doneIn(fixture.memberSubject, fixture.memberId, "community_agent")).toBeUndefined();
+  expect(await setDone("external_mcp", false, "member-undo")).toMatchObject({ ok: true, value: { done: false } });
+  expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(false);
+  expect(await run(fixture.memberSubject, fixture.memberId, "external_mcp", "polynet_call", {
+    operation: "community.lesson.set_done", version: 1, target: "/communities/resource-semantic/capabilities/community.lesson.set_done.json",
+    input: { ref: "resource:notalesson", done: true }, idempotency_key: "bad" })).toMatchObject({ ok: false, code: "lesson_not_found" });
 });

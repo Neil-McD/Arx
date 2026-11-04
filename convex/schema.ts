@@ -1981,6 +1981,17 @@ export default defineSchema({
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
 
+  // Lesson progress (communityLessonProgress.ts): the lessons a member has
+  // marked done. Only that member reads it.
+  communityLessonProgress: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    resourceId: v.id("communityResources"),
+    completedAt: v.number(),
+  })
+    .index("by_user_resource", ["userId", "resourceId"])
+    .index("by_resource", ["resourceId"]),
+
   // Community notes (communityNotes.ts): what the community agent learned
   // that is worth sharing with everyone, one short markdown note each.
   communityNotes: defineTable({

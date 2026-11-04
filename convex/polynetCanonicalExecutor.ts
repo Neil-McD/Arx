@@ -77,6 +77,8 @@ const SITE_DEPLOY_MAX_FILES = 200;
 const SITE_DEPLOY_MAX_BYTES = 5 * 1024 * 1024;
 const FORM_SUBMIT_OPERATION = "community.form.submit";
 const REACT_OPERATION = "community.interaction.react";
+// A member marks a lesson done or not done (their own progress).
+const LESSON_DONE_OPERATION = "community.lesson.set_done";
 const MARK_READ_OPERATION = "community.channel.mark_read";
 // Presence and typing say a person is here right now, so only a member's own
 // site (community_app) may set them, never an agent or harness acting for them.
@@ -737,6 +739,8 @@ function capabilityDocument(args: {
     args.evidenceSurface !== "community_funnel_builder" && memberActs;
   const isReactCapability = args.operation === REACT_OPERATION &&
     args.evidenceSurface !== "community_funnel_builder" && memberActs;
+  const isLessonDoneCapability = args.operation === LESSON_DONE_OPERATION &&
+    args.evidenceSurface !== "community_funnel_builder" && memberActs;
   const isMarkReadCapability = args.operation === MARK_READ_OPERATION &&
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
   const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&
@@ -747,7 +751,7 @@ function capabilityDocument(args: {
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability &&
+  if (!isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
     !isMarkReadCapability && !isPresenceCapability && !isSiteDeployCapability) {
     return null;
   }
@@ -764,6 +768,10 @@ function capabilityDocument(args: {
       ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
       emoji: "up to 32 characters", on: "true adds your reaction, false removes it",
       effects: ["set_own_reaction"], forbidden_effects: ["react_as_someone_else"] };
+  } else if (isLessonDoneCapability) {
+    operationDefinition.input = { required: ["ref", "done"],
+      ref: "resource:<id> of a lesson from a course listing under resources/", done: "true marks the lesson done, false undoes it",
+      result: "{ ref, done }", effects: ["set_own_lesson_progress"], forbidden_effects: ["progress_for_someone_else"] };
   } else if (isMarkReadCapability) {
     operationDefinition.input = { required: ["channel"], optional: ["through_at"],
       channel: "a channel slug from the channels listing",
@@ -1154,7 +1162,7 @@ async function executeCanonicalList(args: {
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
-      ...[REACT_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
+      ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
         APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
@@ -1919,6 +1927,25 @@ async function markPrivateSource(
   return isPrivate ? { ...result, value: { ...(result.value as Record<string, unknown>), private_room: true } } : result;
 }
 
+// Lessons in a course listing, and a lesson read, say whether the member
+// reading has marked them done. Only reads made for a member: the community
+// agent in a tag reads for the channel, not a member.
+async function markLessonProgress(
+  args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown> },
+  result: PolynetCanonicalExecutionResult,
+): Promise<PolynetCanonicalExecutionResult> {
+  if (!result.ok || args.principalKind === "community_agent") return result;
+  const path = String(args.input.path ?? "").trim();
+  if (!/^\/communities\/[a-z0-9-]+\/resources\//.test(path) && !path.startsWith("resource:")) return result;
+  const value = result.value as Record<string, any>;
+  const entries = Array.isArray(value.entries) ? value.entries : null;
+  const refs = (entries ?? [value]).map((row: any) => String(row?.ref ?? "")).filter((ref: string) => ref.startsWith("resource:"));
+  if (!refs.length) return result;
+  const done = new Set<string>(await args.ctx.runQuery((internal as any).communityLessonProgress.doneLessonRefsInternal, { userId: args.userId, refs }));
+  const mark = (row: any) => (typeof row?.ref === "string" && row.ref.startsWith("resource:") ? { ...row, done: done.has(row.ref) } : row);
+  return { ok: true, value: entries ? { ...value, entries: entries.map(mark) } : mark(value) };
+}
+
 async function executeCanonicalWrite(args: {
   ctx: any;
   authSubject: string;
@@ -2364,6 +2391,14 @@ async function executeCanonicalCall(args: {
       return { ok: true, value };
     } catch { return canonicalError("interaction_unavailable", "That post is not available to react to."); }
   }
+  if (operation === LESSON_DONE_OPERATION) {
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || typeof rawInput.ref !== "string" ||
+        typeof rawInput.done !== "boolean" || Object.keys(rawInput).some(key => !["ref", "done"].includes(key)))
+      return canonicalError("invalid_tool_args", "A lesson ref (resource:<id>) and done (true or false) are required.");
+    const value = await args.ctx.runMutation((internal as any).communityLessonProgress.setLessonDoneInternal,
+      { communityId: target.communityId, userId: args.userId, ref: rawInput.ref, done: rawInput.done });
+    return value.ok ? { ok: true, value } : canonicalError(value.code, value.message);
+  }
   if (operation === MARK_READ_OPERATION || operation === PRESENCE_HEARTBEAT_OPERATION || operation === TYPING_SET_OPERATION) {
     return await executeLiveMemberCall({ ...args, target, operation, input });
   }
@@ -2620,7 +2655,8 @@ export async function executePolynetCanonicalTool(args: {
     const result = args.toolName === "polynet_list"
       ? await executeCanonicalList(common)
       : await executeCanonicalRead(common);
-    return result.ok ? await markPrivateSource(args.ctx, args.input.path, result) : result;
+    if (!result.ok) return result;
+    return await markLessonProgress(args, await markPrivateSource(args.ctx, args.input.path, result));
   }
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);

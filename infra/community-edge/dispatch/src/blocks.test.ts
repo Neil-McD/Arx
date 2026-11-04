@@ -144,6 +144,14 @@ export default {
     return Object.assign({}, found);
   },
   resources: async (path) => { fail(); record("resources", [path || null]); return (fake.resources[path || ""] || []).map((e) => Object.assign({}, e)); },
+  // Your own progress: stored on the fake's lesson, so a fresh read shows it.
+  lessonDone: async (lesson, done) => {
+    fail();
+    record("lessonDone", [String(lesson.ref || lesson), done !== false]);
+    if (fake.failLessonDone) { const error = new Error("Nope."); error.code = "lesson_not_found"; throw error; }
+    for (const list of Object.values(fake.resources)) for (const e of list) if (e.ref === String(lesson.ref || lesson)) e.done = done !== false;
+    return { ok: true };
+  },
   readText: async (entry) => {
     fail();
     const path = entry.path || entry;
@@ -243,6 +251,7 @@ function fixture() {
     failEvents: false,
     resources: {} as Record<string, object[]>,
     texts: {} as Record<string, string>,
+    failLessonDone: false,
     failRead: false,
     memories: [] as Array<{ title: string } & Record<string, unknown>>,
     agent: { history: [] as object[], reply: "", fail: 0, hold: false } as Record<string, unknown>,
@@ -1804,9 +1813,9 @@ function courses(fake: ReturnType<typeof fixture>) {
       { path: COURSES + "Not.A.Course/", kind: "directory", name: "Odd" },
     ],
     [start]: [
-      { path: start + "first-steps~r1.md", kind: "document", name: "First steps" },
-      { path: start + "shoes~r2.md", kind: "document", name: "Shoes" },
-      { path: start + "your-first-5k~r3.md", kind: "document", name: "Your first 5k" },
+      { path: start + "first-steps~r1.md", kind: "document", name: "First steps", ref: "resource:r1" },
+      { path: start + "shoes~r2.md", kind: "document", name: "Shoes", ref: "resource:r2" },
+      { path: start + "your-first-5k~r3.md", kind: "document", name: "Your first 5k", ref: "resource:r3" },
     ],
     [COURSES + "pace-work~m2/"]: [],
   };
@@ -1849,6 +1858,45 @@ test("learn: the catalogue with lesson counts, a course's lessons in order, and 
   // Folders are read once a visit; each lesson once it opens.
   expect((await calls(page, "resources")).map((c: any) => c[1])).toEqual([null, COURSES + "start-here~m1/", COURSES + "pace-work~m2/"]);
   expect((await calls(page, "readText")).map((c: any) => c[1].split("/").pop())).toEqual(["shoes~r2.md", "your-first-5k~r3.md", "shoes~r2.md"]);
+  await page.close();
+});
+
+test("learn: a member marks lessons done and undoes one; ticks and 'n of m done' follow without reading again; a failed save says so", async () => {
+  const page = await open((fake) => { courses(fake); (fake.resources as any)[COURSES + "start-here~m1/"][0].done = true; }, frame(), "/learn");
+  const learn = learnOf(page);
+  await expect.poll(() => titles(learn.locator("[part=course-count]"))).toEqual(["1 of 3 done", "0 lessons"]);
+
+  await learn.locator("[part=course]").first().click();
+  await expect.poll(() => learn.locator("[part=course-heading]").textContent()).toBe("Start here");
+  expect(await titles(learn.locator("[part=lesson]"))).toEqual(["✓First steps", "2Shoes", "3Your first 5k"]);
+  expect(await learn.locator("[part=lesson]").first().getAttribute("aria-label")).toBe("First steps, done");
+  expect(await learn.locator("[part=course-count]").textContent()).toBe("1 of 3 done");
+
+  await learn.locator("[part=lesson]", { hasText: "Shoes" }).click();
+  const button = learn.locator("[part=lesson-done]");
+  await expect.poll(() => button.textContent()).toBe("Mark as done");
+  expect(await button.getAttribute("aria-pressed")).toBe("false");
+  await button.click();
+  await expect.poll(() => button.getAttribute("aria-pressed")).toBe("true");
+  expect(await button.textContent()).toBe("✓ Done");
+
+  await learn.locator("[part=back]").click();
+  await expect.poll(() => learn.locator("[part=course-count]").textContent()).toBe("2 of 3 done");
+  expect(await titles(learn.locator("[part=lesson]"))).toEqual(["✓First steps", "✓Shoes", "3Your first 5k"]);
+
+  await learn.locator("[part=lesson]", { hasText: "First steps" }).click();
+  await expect.poll(() => button.getAttribute("aria-pressed")).toBe("true");
+  await button.click();
+  await expect.poll(() => button.getAttribute("aria-pressed")).toBe("false");
+  await page.evaluate(() => { (window as any).fake.failLessonDone = true; });
+  await button.click();
+  await expect.poll(() => learn.locator("[part=lesson-done-status]").textContent()).toBe("Couldn't save that. Try again.");
+  expect(await button.getAttribute("aria-pressed")).toBe("false");
+  expect(await calls(page, "lessonDone")).toEqual([
+    ["lessonDone", "resource:r2", true], ["lessonDone", "resource:r1", false], ["lessonDone", "resource:r1", true],
+  ]);
+  // Folders were read once; marking never re-reads them.
+  expect((await calls(page, "resources")).map((c: any) => c[1])).toEqual([null, COURSES + "start-here~m1/", COURSES + "pace-work~m2/"]);
   await page.close();
 });
 

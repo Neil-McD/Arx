@@ -164,6 +164,9 @@ approval capability below does not make the queue writable.
   `community.typing.set`
 - human builder through external MCP only: `community.site.deploy` (see
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md))
+- a member's own tools (`external_mcp` / `community_app`):
+  `community.lesson.set_done` (`ref`, `done`); lessons read for the member
+  carry `done: true` once marked. Progress is private to the member.
 - human self (`community_agent_for_member` / `external_mcp` / `community_app`):
   `community.form.submit`, version 1. Forms are being removed with member
   workflows ([system-map.md](system-map.md), area 9).
