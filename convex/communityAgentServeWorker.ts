@@ -1,4 +1,6 @@
 import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
+import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { parseCommunityCardBody } from "./runtimeAgentLoop";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
@@ -133,6 +135,9 @@ const SERVE_PROMPT_SECTION_IDS = [
   "community_system_prompt",
 ] as const;
 const SERVE_WORKFLOW_PROMPT_SECTION_ID = "community_workflow_action";
+// A tag's shared layers (card and handbook), when present, sit between the
+// operating policy and the community instructions.
+const SERVE_SHARED_LAYERS_SECTION_ID = "community_shared_layers";
 
 function parseServeContextSnapshot(
   snapshotJson: string,
@@ -165,10 +170,15 @@ function parseServeContextSnapshot(
     }
 
     const promptSections = parsed.prompt_sections;
+    const hasSharedLayers = Array.isArray(promptSections) &&
+      (promptSections[2] as Record<string, unknown> | undefined)?.id === SERVE_SHARED_LAYERS_SECTION_ID;
+    const expectedIds: readonly string[] = hasSharedLayers
+      ? [SERVE_PROMPT_SECTION_IDS[0], SERVE_PROMPT_SECTION_IDS[1], SERVE_SHARED_LAYERS_SECTION_ID, SERVE_PROMPT_SECTION_IDS[2]]
+      : SERVE_PROMPT_SECTION_IDS;
     if (
       !Array.isArray(promptSections) ||
-      (promptSections.length !== SERVE_PROMPT_SECTION_IDS.length &&
-        promptSections.length !== SERVE_PROMPT_SECTION_IDS.length + 1) ||
+      (promptSections.length !== expectedIds.length &&
+        promptSections.length !== expectedIds.length + 1) ||
       JSON.stringify(promptSections).length >
         SERVE_CONTEXT_SNAPSHOT_PROMPT_SECTIONS_MAX_CHARS
     ) {
@@ -185,8 +195,8 @@ function parseServeContextSnapshot(
         Object.keys(record).sort().join("|") !==
           [...SERVE_PROMPT_SECTION_KEYS].sort().join("|") ||
         record.id !==
-          (index < SERVE_PROMPT_SECTION_IDS.length
-            ? SERVE_PROMPT_SECTION_IDS[index]
+          (index < expectedIds.length
+            ? expectedIds[index]
             : SERVE_WORKFLOW_PROMPT_SECTION_ID) ||
         !["stable", "scoped", "volatile"].includes(
           String(record.layer ?? ""),
@@ -1947,6 +1957,33 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         continue;
       }
 
+      // An ordinary tag answers to its channel (the turn contract): it gets the
+      // community card drawn for the channel and the approved handbook, read
+      // through the same checked door as its tools, and never anyone's
+      // private context. Timed check-ins and workflow turns keep their inputs.
+      const isTag = context.delivery !== "service_channel" && !context.privateAssessment && !String(context.workflowPrompt ?? "").trim();
+      const turnContract = isTag && context.request.communityId
+        ? buildCommunityTurnContract({
+          surface: "tag",
+          communityId: normalizeIdValue(context.request.communityId),
+          speakerUserId: normalizeIdValue(context.request.requesterUserId),
+          channelId: normalizeIdValue(context.request.channelId) || null,
+        })
+        : null;
+      if (turnContract) {
+        const slug = String(context.community?.slug ?? "").trim();
+        const readLayer = async (file: "community.md" | "handbook.md") => {
+          if (!slug) return null;
+          try {
+            const read = await executeConciergeTool({ ctx, context, requestId, toolName: "polynet_read", rawArguments: { path: `/communities/${slug}/${file}` } });
+            return read.status === "ok" ? parseCommunityCardBody(read.outputText) : null;
+          } catch {
+            return null;
+          }
+        };
+        if (turnContract.uses.communityCard) context.communityCardMd = await readLayer("community.md");
+        if (turnContract.uses.handbook) context.communityHandbookMd = await readLayer("handbook.md");
+      }
       const servePromptBundle = buildCommunityAgentServePromptBundle(context);
       const initialMessages = servePromptBundle.messages;
       const serializedMessages = JSON.stringify(initialMessages);
@@ -1955,6 +1992,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         sha256: await sha256HexText(serializedMessages),
         messages: initialMessages,
         prompt_sections: servePromptBundle.systemPromptBundle.sections,
+        ...(turnContract ? { turn_contract: summarizeCommunityTurnContract(turnContract) } : {}),
         ...(context.delivery === "service_channel" ? { timed_member_context: context.timedMemberContext } : {}),
       });
       const contextSnapshot = await ctx.runMutation(
@@ -2090,6 +2128,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                 tools: conciergeProviderTools,
                 ...(options?.toolChoice ? { toolChoice: options.toolChoice } : {}),
                 parallelToolCalls: false,
+                promptCacheKey: turnContract?.cacheKey ?? `pn:${normalizeIdValue(context.request.communityId)}:serve`,
               });
             } catch (error) {
               if (providerStarted && !founderInferenceBudgetFailureCode(error)) usage.complete = false;
