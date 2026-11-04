@@ -3280,7 +3280,11 @@ test("moderators remove a selection of posts through their own AI; members and t
   expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { ok: true, operation: "community.interaction.remove",
     receipt: { authority_lane: "moderator", relation: "moderator" }, result: { succeeded: 2, failed: 1, results: [
     { ref: refs[0], ok: true, removed: true }, { ref: refs[1], ok: true, removed: true }, { ref: "interaction:root:nosuchpost", ok: false } ] } } });
-  // Removing again is still removed.
+  // The same call replays its receipt; the same key with another selection is refused.
+  const replay = await remove(member, [refs[0], refs[1], "interaction:root:nosuchpost"]);
+  expect(replay).toMatchObject({ ok: true, value: { result: { succeeded: 2, failed: 1 } } });
+  expect(await remove(member, [refs[2]])).toMatchObject({ ok: false, code: "idempotency_key_conflict" });
+  // Removing again under a new key is still removed.
   expect(await remove(member, [refs[0]], "again")).toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ already_removed: true }] } } });
   const live = await t.run(async ctx => (await ctx.db.query("communityInteractionRoots").collect()).filter(r => r.status === "live").length);
   expect(live).toBe(1);

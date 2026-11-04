@@ -2538,7 +2538,12 @@ async function executeCanonicalCall(args: {
       return canonicalError("invalid_tool_args",
         `Give refs: 1 to ${SELECTION_MAX} different interaction:root:<id> or interaction:reply:<id> refs.`);
     }
-    // Removing is a state, not a toggle: a retry or an already removed post is still removed.
+    // One receipt for the call: a retry replays it, and the same key with a
+    // different selection is refused. Removing is a state, so a post already
+    // removed still counts as removed.
+    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_call", idempotencyKey });
+    if (!reservation.ok) return reservation.result;
+    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
     const results = [];
     for (const ref of refs as string[]) {
       try {
@@ -2549,7 +2554,11 @@ async function executeCanonicalCall(args: {
         results.push({ ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." });
       }
     }
-    return { ok: true, value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }) };
+    return { ok: true, value: await completeMutatingOperation({
+      ...args, target, toolName: "polynet_call", idempotencyKey,
+      requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+      value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }),
+    }) };
   }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
 }
