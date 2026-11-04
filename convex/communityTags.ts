@@ -3,7 +3,8 @@
 // them; members and the community agent never see them. Studio and a person's
 // own AI (the MCP) use the same functions here.
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { communityMembershipRowIsActive, requireCommunityManager, requireCommunityModerator } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
@@ -12,6 +13,8 @@ export const COMMUNITY_TAG_NAME_MAX = 40;
 // A tag on more people than this is untagged in pieces before it can be deleted.
 const TAG_DELETE_MAX_PEOPLE = 4_000;
 const TAG_MEMBERS_PAGE_MAX = 100;
+// Studio tags a page of people at once; the MCP a selection of up to 50.
+const TAG_PEOPLE_AT_ONCE = 50;
 
 export function communityTagSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, COMMUNITY_TAG_NAME_MAX);
@@ -193,5 +196,58 @@ export const setCommunityMemberTagForTrustedUserInternal = internalMutation({
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
     const tag = await requireTag(ctx, args.communityId, args.tag);
     return await setMemberTag(ctx, args.communityId, tag, args.targetUserId, args.on);
+  },
+});
+// Studio: owners, admins and moderators read tags; owners and admins change them.
+const viewerArgs = { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), communityId: v.id("communities") };
+const viewer = (ctx: any, args: { userId?: any; authSubject?: string }) =>
+  resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+
+export const listCommunityTags = query({
+  args: viewerArgs,
+  handler: async (ctx, args) => {
+    const userId = await viewer(ctx, args);
+    await requireCommunityModerator({ ctx, communityId: args.communityId, userId });
+    const canManage = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
+    return { can_manage: canManage, tags: await listTags(ctx, args.communityId) };
+  },
+});
+
+export const listCommunityMemberTags = query({
+  args: { ...viewerArgs, targetUserIds: v.array(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = await viewer(ctx, args);
+    await requireCommunityModerator({ ctx, communityId: args.communityId, userId });
+    return await tagsForUsers(ctx, args.communityId, args.targetUserIds);
+  },
+});
+
+export const createCommunityTag = mutation({
+  args: { ...viewerArgs, name: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await viewer(ctx, args);
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    return await createTag(ctx, userId, args.communityId, args.name);
+  },
+});
+
+// Tag or untag a page of people at once; each person stands on their own
+// (one who isn't a member is reported, the rest still change).
+export const setCommunityMemberTags = mutation({
+  args: { ...viewerArgs, tag: v.string(), targetUserIds: v.array(v.id("users")), on: v.boolean() },
+  handler: async (ctx, args) => {
+    const userId = await viewer(ctx, args);
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    if (args.targetUserIds.length > TAG_PEOPLE_AT_ONCE) throw new Error("community_tag_selection_too_large");
+    const tag = await requireTag(ctx, args.communityId, args.tag);
+    const skipped: string[] = [];
+    for (const target of args.targetUserIds) {
+      try {
+        await setMemberTag(ctx, args.communityId, tag, target, args.on);
+      } catch {
+        skipped.push(String(target));
+      }
+    }
+    return { changed: args.targetUserIds.length - skipped.length, skipped };
   },
 });
