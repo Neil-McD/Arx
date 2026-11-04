@@ -466,8 +466,8 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
       ?.body ?? "";
   assert.match(
     agentHighlightTokenRule,
-    /color:\s*#c4b5fd;/,
-    "community agent composer mention token must use the fixed agent purple, not the theme accent",
+    /color:\s*var\(--accent-agent-foreground\);/,
+    "community agent composer mention token must use the agent identity token, not the theme accent",
   );
   assert.doesNotMatch(
     agentHighlightTokenRule,

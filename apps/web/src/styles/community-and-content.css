@@ -597,7 +597,7 @@
 
 .public-funnel-input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent-gold) 58%, var(--border-default));
+  border-color: color-mix(in srgb, var(--stroke-focus) 58%, var(--border-default));
   background: color-mix(in srgb, var(--bg-card-hover) 92%, transparent);
 }
 
@@ -2329,8 +2329,8 @@
 }
 
 .community-mention-chip.is-agent {
-  background: rgba(167, 139, 250, 0.16);
-  color: #c4b5fd;
+  background: var(--accent-agent-surface);
+  color: var(--accent-agent-foreground);
 }
 
 .community-mention-chip.is-self,
@@ -2377,8 +2377,8 @@
   justify-content: center;
   flex: 0 0 auto;
   border-radius: 30%;
-  background: rgba(167, 139, 250, 0.16);
-  color: #a78bfa;
+  background: var(--accent-agent-surface);
+  color: var(--accent-agent-foreground);
   overflow: hidden;
 }
 .is-agent-avatar > svg {
@@ -3183,8 +3183,8 @@
   border-radius: 5px;
   /* Agent purple, fixed across both themes — matches the mention-picker AGENT
      badge rather than the active theme accent. */
-  background: rgba(167, 139, 250, 0.2);
-  color: #c4b5fd;
+  background: var(--accent-agent-surface);
+  color: var(--accent-agent-foreground);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -4699,8 +4699,8 @@
 .community-dm-inbox-icon-button:hover,
 .community-dm-inbox-icon-button:focus-visible {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-primary) 46%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--stroke-focus) 46%, var(--border-default));
+  background: color-mix(in srgb, var(--stroke-focus) 12%, var(--bg-card));
 }
 
 .community-dm-inbox-icon-button svg {
@@ -4771,8 +4771,8 @@
 }
 
 .community-dm-recipient-search input:focus {
-  border-color: color-mix(in srgb, var(--accent-primary) 52%, var(--border-default));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 24%, transparent);
+  border-color: color-mix(in srgb, var(--stroke-focus) 52%, var(--border-default));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--stroke-focus) 24%, transparent);
 }
 
 .community-dm-inbox-search {
@@ -5917,8 +5917,8 @@
 .resource-form textarea:focus,
 .resource-form select:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-default));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 42%, transparent);
+  border-color: color-mix(in srgb, var(--stroke-focus) 72%, var(--border-default));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stroke-focus) 42%, transparent);
 }
 
 .resource-form textarea {
@@ -6605,8 +6605,8 @@
 }
 
 .knowledge-source-link-field textarea:focus {
-  border-color: color-mix(in srgb, var(--accent-gold) 62%, var(--border-strong));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-gold) 10%, transparent);
+  border-color: color-mix(in srgb, var(--stroke-focus) 62%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--stroke-focus) 10%, transparent);
 }
 
 .knowledge-source-link-field small,
@@ -8356,8 +8356,8 @@
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.05em;
-  background: rgba(167, 139, 250, 0.2);
-  color: #c4b5fd;
+  background: var(--accent-agent-surface);
+  color: var(--accent-agent-foreground);
   border-radius: 4px;
   padding: 1.5px 5px;
 }
@@ -8367,8 +8367,8 @@
    round person avatar, never initials, never a gradient. */
 .mention-autocomplete-row.is-agent .mention-autocomplete-avatar {
   border-radius: 9px;
-  background: rgba(167, 139, 250, 0.16);
-  color: #a78bfa;
+  background: var(--accent-agent-surface);
+  color: var(--accent-agent-foreground);
 }
 
 /* The @everybody row: a squared tile with the theme accent — never a round
@@ -8628,7 +8628,7 @@
 }
 
 .mention-composer-highlight-token.is-agent {
-  color: #c4b5fd;
+  color: var(--accent-agent-foreground);
 }
 
 .chat-input::placeholder {
