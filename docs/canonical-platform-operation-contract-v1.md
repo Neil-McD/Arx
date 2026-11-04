@@ -346,6 +346,14 @@ door gives the caller the lens of their role there
 - **builder** (owners and admins who manage resources): also the rest of
   `builder/`, workflow decisions and `community.site.deploy`.
 
+A post or reply written through someone's own AI (`external_mcp`), like one
+from their site (`community_app`), is that person's own post: stored as a
+human post by them, with no marker, and theirs to edit or delete. A reply can
+be appended on the channel with `content.root_id` or on the post's own thread
+path (`channels/<slug>/interaction:root:<id>/`). Refusals carry the domain's
+own code and a plain sentence (for example `interaction_edit_forbidden`: "You
+can only edit your own posts."), never a raw server error.
+
 A community the caller isn't an entitled member of is `semantic_not_found`.
 Listing `/communities/` returns the communities the caller belongs to, with
 their role. There is no gate at the MCP entrance: the door's shared authority

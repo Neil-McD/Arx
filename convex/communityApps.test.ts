@@ -453,9 +453,9 @@ test("a front end runs a full chat: names, threads, reactions, and edits or dele
   expect((await list(member)).find((entry) => entry.ref === memberPost)).toMatchObject({ snippet: "Member post, edited" });
   expect((await list(member)).find((entry) => entry.ref === memberPost)!.edited_at).toBeTruthy();
   expect((await write(member, ownerPost, "update", { text: "hijack" }, "e-2")).body)
-    .toMatchObject({ ok: false, message: expect.stringContaining("interaction_edit_forbidden") });
+    .toMatchObject({ ok: false, code: "interaction_edit_forbidden", message: "You can only edit your own posts." });
   expect((await write(owner, memberPost, "delete", {}, "d-1")).body)
-    .toMatchObject({ ok: false, message: expect.stringContaining("interaction_delete_forbidden") });
+    .toMatchObject({ ok: false, code: "interaction_delete_forbidden" });
   expect((await write(owner, reply, "delete", {}, "d-2")).body).toMatchObject({ ok: true });
   expect((await list(member, `${general}${memberPost}/`)).map((entry) => entry.ref)).toEqual([memberPost]);
   expect((await write(member, memberPost, "delete", {}, "d-3")).body).toMatchObject({ ok: true });

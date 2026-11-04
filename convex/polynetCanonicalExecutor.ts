@@ -149,15 +149,48 @@ const PRESENCE_HEARTBEAT_OPERATION = "community.presence.heartbeat";
 const TYPING_SET_OPERATION = "community.typing.set";
 const SELF_FORMS_DIRECTORY = "/members/me/forms/";
 
+// Plain words for the domain refusals a caller is most likely to meet.
+const DOMAIN_REFUSAL_MESSAGES: Record<string, string> = {
+  interaction_edit_forbidden: "You can only edit your own posts.",
+  interaction_delete_forbidden: "You can only delete your own posts (moderators can remove others').",
+  interaction_not_editable: "That post can't be edited any more.",
+  interaction_content_required: "Write something to post.",
+  interaction_mention_everybody_reply_not_allowed: "@everybody can only start a post, not a reply.",
+  community_channel_post_forbidden: "Only managers can post in that channel.",
+  community_forbidden: "You don't have permission to do that here.",
+  profile_setup_required: "Finish setting up your Polynet profile first.",
+};
+
+// A refusal never carries a raw server error or stack trace: a thrown domain
+// error ("Uncaught Error: interaction_edit_forbidden at ...") becomes its own
+// code and a plain sentence; a generic "..._failed" code gives way to it.
+function cleanRefusal(code: string, message: string): { code: string; message: string } {
+  const raw = String(message ?? "");
+  // A known domain refusal, bare, gets its plain sentence.
+  const bare = raw.trim();
+  if (DOMAIN_REFUSAL_MESSAGES[bare]) {
+    return { code: /_failed$/.test(code) ? bare : code, message: DOMAIN_REFUSAL_MESSAGES[bare] };
+  }
+  // Only a raw server error is rewritten; every message we write ourselves passes as it is.
+  if (!/Uncaught\s+Error|\[Request ID:|\n\s+at\s|\.ts:\d/.test(raw)) return { code, message };
+  const thrown = /Error:\s*([a-z][a-z0-9_]*)(?=[\s:]|$)/.exec(raw)?.[1] ?? null;
+  if (thrown) {
+    return { code: /_failed$/.test(code) ? thrown : code,
+      message: DOMAIN_REFUSAL_MESSAGES[thrown] ?? `Refused: ${thrown.replace(/_/g, " ")}.` };
+  }
+  return { code, message: "That didn't work." };
+}
+
 function canonicalError(
   code: string,
   message: string,
   value?: unknown,
 ): PolynetCanonicalExecutionResult {
+  const clean = cleanRefusal(code, message);
   return {
     ok: false,
-    code,
-    message,
+    code: clean.code,
+    message: clean.message,
     ...(value === undefined ? {} : { value }),
   };
 }
@@ -2284,7 +2317,10 @@ async function executeCanonicalWrite(args: {
     }
   }
 
-  if (writableChannelPath?.kind === "directory") {
+  // A new post on a channel; a reply on the channel (with root_id) or on the
+  // post's own thread path.
+  const threadReply = writableChannelPath?.kind === "thread" && mode === "append";
+  if (writableChannelPath?.kind === "directory" || threadReply) {
     if (!target.authority.canWriteParticipation) {
       return canonicalError(
         "community_write_forbidden",
@@ -2304,7 +2340,12 @@ async function executeCanonicalWrite(args: {
         "Channel path not found or not accessible.",
       );
     }
-    const rootId = requiredString(content.root_id ?? content.rootId, 180);
+    const pathRootId = writableChannelPath?.kind === "thread" ? writableChannelPath.rootId : null;
+    const contentRootId = requiredString(content.root_id ?? content.rootId, 180);
+    if (pathRootId && contentRootId && contentRootId !== pathRootId) {
+      return canonicalError("invalid_tool_args", "root_id doesn't match the post this path names; leave it out when replying on the post's own path.");
+    }
+    const rootId = pathRootId ?? contentRootId;
     if (
       (mode === "create" && rootId) ||
       (mode === "append" && !rootId) ||
@@ -2345,22 +2386,18 @@ async function executeCanonicalWrite(args: {
           ? { attachments: content.attachments }
           : {}),
       };
-      // A community app has no Convex session identity; its member was
-      // authenticated by the app session token, so it uses the trusted composer.
+      // A person's own tools (their site, their AI through the MCP) post as
+      // that person: their name, their post, theirs to edit or delete. The
+      // door already authenticated them, so both use the trusted composer.
       const value = (await args.ctx.runMutation(
         args.principalKind === "community_agent"
           ? (internal as any).communityInteractions
               .createCommunityAgentCanonicalInteractionInternal
-          : args.principalKind === "community_app"
-            ? (internal as any).communityInteractions
-                .createCommunityInteractionComposerMessageForTrustedUserInternal
-            : (api as any).communityInteractions
-                .createCommunityInteractionComposerMessage,
+          : (internal as any).communityInteractions
+              .createCommunityInteractionComposerMessageForTrustedUserInternal,
         args.principalKind === "community_agent"
           ? mutationArgs
-          : args.principalKind === "community_app"
-            ? { ...mutationArgs, trustedUserId: args.userId }
-            : { ...mutationArgs, asCommunityAgent: true },
+          : { ...mutationArgs, trustedUserId: args.userId },
       )) as Record<string, unknown>;
       const interaction =
         value.interaction && typeof value.interaction === "object"

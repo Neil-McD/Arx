@@ -1911,11 +1911,10 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
   ).toBe(true);
   expect(rows.roots).toEqual(
     expect.arrayContaining([
-      // A write through a member's own harness is attributed to that member;
-      // an @mention reply has no member.
+      // A write through a member's own harness is that member's own post;
+      // an @mention reply is the community agent's.
       expect.objectContaining({
-        actorType: "community_agent",
-        actorAgentKey: "community_agent",
+        actorType: "human",
         actorUserId: fixture.memberId,
       }),
       expect.objectContaining({
@@ -3615,4 +3614,39 @@ test("people: owners and admins tag, re-role, remove, ban and unban a selection;
   // Bad selections are refused whole.
   expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await owner.call("community.members.set_role", { members: [ref(f.memberId)], role: "owner" }, "x2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+});
+
+test("a person's own AI posts as them: their post, editable, replies on the post's path, clean refusals", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const as = (subject: string, userId: any) => (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName, input });
+  const member = as(f.memberSubject, f.memberId);
+  const owner = as(f.ownerSubject, f.ownerId);
+  const posted = await member("polynet_write", { path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "From my Claude" }, idempotency_key: "p1" });
+  expect(posted, JSON.stringify(posted)).toMatchObject({ ok: true });
+  const ref = (posted as any).value.ref as string;
+  const rootId = ref.split(":").pop()!;
+  // Stored as the member, not the community agent.
+  const root = await t.run(ctx => ctx.db.get(rootId as any)) as any;
+  expect(root).toMatchObject({ actorType: "human", actorUserId: f.memberId });
+  // They edit it like any post of theirs.
+  expect(await member("polynet_write", { path: `/communities/canonical-community/channels/general/${ref}.md`, mode: "update", content: { text: "From my Claude, edited" }, idempotency_key: "e1" }))
+    .toMatchObject({ ok: true });
+  // A reply on the post's own path, and on the channel with root_id.
+  const onPath = await member("polynet_write", { path: `/communities/canonical-community/channels/general/${ref}/`, mode: "append", content: { text: "Reply on the post" }, idempotency_key: "r1" });
+  expect(onPath, JSON.stringify(onPath)).toMatchObject({ ok: true });
+  expect(await member("polynet_write", { path: "/communities/canonical-community/channels/general/", mode: "append", content: { text: "Reply on the channel", root_id: rootId }, idempotency_key: "r2" }))
+    .toMatchObject({ ok: true });
+  expect(await member("polynet_write", { path: `/communities/canonical-community/channels/general/${ref}/`, mode: "append", content: { text: "x", root_id: "someotherpost" }, idempotency_key: "r3" }))
+    .toMatchObject({ ok: false, code: "invalid_tool_args" });
+  // Someone else editing it gets a clean refusal: the domain's code, a sentence, no stack.
+  const refused = await owner("polynet_write", { path: `/communities/canonical-community/channels/general/${ref}.md`, mode: "update", content: { text: "Not mine" }, idempotency_key: "e2" });
+  expect(refused).toMatchObject({ ok: false, code: "interaction_edit_forbidden", message: "You can only edit your own posts." });
+  expect(JSON.stringify(refused)).not.toMatch(/Uncaught| at |\.ts:/);
+  // A capability names the community it was read in.
+  for (const slug of ["canonical-community"]) {
+    const read = await member("polynet_read", { path: `/communities/${slug}/capabilities/community.interaction.react.json` });
+    expect(JSON.parse((read as any).value.body).target).toBe(`/communities/${slug}/capabilities/community.interaction.react.json`);
+  }
 });
