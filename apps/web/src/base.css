@@ -88,13 +88,14 @@
   --border-default: #232427;
   --border-strong: #313236;
   --border-muted: #1a1b1e;
-  --border-active: #f7f8f8;
+  --border-active: #6b6f76;
+  --stroke-focus: #6b6f76;
   --divider-accent: rgba(255, 255, 255, 0.06);
 
   /* Icons */
   --icon-default: #8a8f98;
   --icon-hover: #d0d3d9;
-  --icon-active: var(--border-active);
+  --icon-active: var(--text-primary);
 
   /* Overlays */
   --hover-overlay: rgba(255, 255, 255, 0.06);
@@ -120,12 +121,12 @@
   --surface-card-alt: var(--bg-card-alt);
   --surface-card-hover: var(--bg-card-hover);
   --surface-input: var(--bg-input);
-  --surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);
+  --surface-selected: rgba(255, 255, 255, 0.06);
   --stroke-default: var(--border-default);
   --stroke-muted: var(--border-muted);
   --stroke-strong: var(--border-strong);
   --stroke-active: var(--border-active);
-  --stroke-selected: color-mix(in srgb, var(--accent-gold) 46%, var(--stroke-default));
+  --stroke-selected: transparent;
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
   --stroke-panel-edge: var(--stroke-divider-accent);
   --composer-surface: var(--bg-card-solid, #161719);
@@ -225,6 +226,7 @@
   --border-strong: rgba(23, 23, 25, 0.22);
   --border-muted: rgba(23, 23, 25, 0.1);
   --border-active: #2F55FF;
+  --stroke-focus: #2F55FF;
   --divider-accent: rgba(23, 23, 25, 0.1);
   --stroke-panel-edge: rgba(23, 23, 25, 0.16);
   --header-border: none;

@@ -2030,8 +2030,8 @@
 
 .settings-preference-switch:focus-visible {
   outline: none;
-  border-color: var(--accent-selection);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-selection) 20%, transparent);
+  border-color: var(--stroke-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--stroke-focus) 20%, transparent);
 }
 
 .settings-preference-switch:disabled {
@@ -2082,7 +2082,7 @@
 
 .profile-row input:focus {
   outline: none;
-  border-color: var(--accent-gold);
+  border-color: var(--stroke-focus);
 }
 
 .profile-handle-row {
@@ -2094,7 +2094,7 @@
 }
 
 .profile-handle-row:focus-within {
-  border-color: var(--accent-gold);
+  border-color: var(--stroke-focus);
 }
 
 .profile-handle-prefix {
@@ -2372,7 +2372,7 @@
 }
 
 .web-social-profile-modal-field input:focus {
-  border-color: var(--accent-gold);
+  border-color: var(--stroke-focus);
   outline: none;
 }
 
@@ -2423,7 +2423,7 @@
 
 .profile-bio:focus {
   outline: none;
-  border-color: var(--accent-gold);
+  border-color: var(--stroke-focus);
 }
 
 .auth-actions {
@@ -2880,7 +2880,7 @@
 .create-community-field select:focus,
 .create-community-field textarea:focus {
   outline: none;
-  border-color: var(--accent-gold);
+  border-color: var(--stroke-focus);
 }
 
 .create-community-field textarea {
@@ -4032,8 +4032,8 @@ button.settings-primary-action svg {
 
 .system-prompt-input:focus {
   outline: none;
-  border-color: var(--accent-gold);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 18%, transparent);
+  border-color: var(--stroke-focus);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stroke-focus) 18%, transparent);
 }
 
 .system-prompt-input::placeholder {

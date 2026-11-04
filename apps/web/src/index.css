@@ -424,7 +424,7 @@
 
 .system-prompt-input:focus {
   outline: none;
-  border-color: var(--accent-gold);
+  border-color: var(--stroke-focus);
 }
 
 .system-prompt-input::placeholder {
