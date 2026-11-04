@@ -1981,6 +1981,27 @@ export default defineSchema({
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
 
+  // Community notes (communityNotes.ts): what the community agent learned
+  // that is worth sharing with everyone, one short markdown note each.
+  communityNotes: defineTable({
+    communityId: v.id("communities"),
+    slug: v.string(),
+    title: v.string(),
+    bodyMd: v.string(),
+    source: v.union(v.literal("ask"), v.literal("tag"), v.literal("founder"), v.literal("migrated")),
+    searchText: v.string(),
+    // The old memory node a migrated note came from, so the copy runs once.
+    migratedFromNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    createdByUserId: v.optional(v.id("users")),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_slug", ["communityId", "slug"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"])
+    .index("by_migrated_node", ["migratedFromNodeId"])
+    .searchIndex("search_text", { searchField: "searchText", filterFields: ["communityId"] }),
+
   // The founder-approved handbook (communityHandbook.ts): facts members ask
   // about. Only approvedMd reaches the agent; the draft waits for approval.
   communityHandbooks: defineTable({

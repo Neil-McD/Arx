@@ -343,6 +343,39 @@ test("the community agent drafts a post for the member instead of posting it", a
   expect(studioRoot.root ?? studioRoot).toMatchObject({ actor_type: "community_agent", actor_user_id: null, on_behalf_of_user_id: expect.any(String) });
 });
 
+test("the agent saves a community note, but never on a turn that read a private room", async () => {
+  const f = await fixture();
+  const token = await f.signIn("agent-member");
+  await f.t.run(async (c) => {
+    const now = Date.now();
+    const membership = (await c.db.query("communityMemberships")
+      .withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", f.ids.memberId)).first())!;
+    const crewId = await c.db.insert("communityChannels", { communityId: f.ids.communityId, slug: "crew", name: "crew",
+      accessMode: "restricted", postingPolicy: "members", status: "active", position: 1, createdAt: now, updatedAt: now });
+    await c.db.insert("communityChannelParticipants", { communityId: f.ids.communityId, channelId: crewId,
+      principalKey: `user:${f.ids.memberId}`, membershipId: membership._id, membershipActivationSequence: membership.activationSequence,
+      status: "active", createdByUserId: f.ids.ownerId, createdAt: now, updatedAt: now });
+  });
+  const save = (key: string) => ({ tool: "polynet_write", args: { path: "/communities/agent-community/memory/", mode: "create",
+    content: { title: "Thursday coffee crew", text: "The coffee cart by the gym opens at 7." }, idempotency_key: key } });
+
+  const locked = scriptedModel([
+    { tool: "polynet_list", args: { path: "/communities/agent-community/channels/crew/" } },
+    save("note-locked"),
+    { text: "I can't save that one." },
+  ]);
+  expect((await turn(f, token, "What's new in crew? Save anything useful.", "note-locked")).stream).toContain("event: done");
+  const lockedOutput = (locked[2]?.input ?? []).filter((item: any) => item?.type === "function_call_output").pop();
+  expect(JSON.parse(String(lockedOutput?.output))).toMatchObject({ tool_name: "polynet_write", success: false, error_code: "private_source_read" });
+  expect(await f.t.run((c) => c.db.query("communityNotes").collect())).toHaveLength(0);
+
+  scriptedModel([save("note-open"), { text: "Saved it as a community note." }]);
+  expect((await turn(f, token, "FYI the coffee cart by the gym opens at 7.", "note-open")).stream).toContain("event: done");
+  expect(await f.t.run((c) => c.db.query("communityNotes").collect())).toEqual([
+    expect.objectContaining({ slug: "thursday-coffee-crew", source: "ask", createdByUserId: f.ids.memberId }),
+  ]);
+});
+
 test("an owner's agent in a front end stays in the member lane", async () => {
   const f = await fixture();
   const token = await f.signIn("agent-owner");

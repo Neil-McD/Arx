@@ -1,5 +1,5 @@
 import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
-import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, toolOutputSawPrivateSource, type CommunityTurnToolState } from "../shared/communityTurnContract";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
@@ -2059,6 +2059,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         });
         usage = createFounderInferenceUsageTotals(admittedModelId);
         const runtimeKernel = selectRuntimeKernel("tag");
+        const turnToolState: CommunityTurnToolState = { sawPrivateSource: false };
         completion =
           await runtimeKernel.run<CommunityAgentConciergeToolName>({
           messages: initialMessages,
@@ -2164,17 +2165,19 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           },
           executeTool: async ({ toolName, rawArguments }) => {
             // The tag's reply is its only speech; a request to post becomes a draft in it.
-            const allowed = checkCommunityTurnToolCall(turnContract, toolName, rawArguments);
+            const allowed = checkCommunityTurnToolCall(turnContract, toolName, rawArguments, turnToolState);
             if (!allowed.ok) {
               return { status: "error", exitCode: null, outputText: "", errorCode: allowed.errorCode, errorMessage: allowed.errorMessage };
             }
-            return await executeConciergeTool({
+            const toolResult = await executeConciergeTool({
               ctx,
               context,
               requestId,
               toolName,
               rawArguments,
             });
+            if (toolResult.status === "ok" && toolOutputSawPrivateSource(toolResult.outputText)) turnToolState.sawPrivateSource = true;
+            return toolResult;
           },
         });
       } catch (error) {

@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import { buildCommunityNoteSearchText } from "../shared/communityNotes";
 import { convexTest } from "convex-test";
 import { COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED } from "../shared/founderPlan";
 import { afterEach, expect, test, vi } from "vitest";
@@ -52,6 +53,7 @@ import {
 
 const modules = import.meta.glob([
   "./communityApps.ts",
+  "./communityNotes.ts",
   "./communitySites.ts",
   "./communityLive.ts",
   "./communityAttachmentUploads.ts",
@@ -516,42 +518,33 @@ test("a front end uploads a file with a post, lists it, and serves it only withi
   expect((await f.raw(COMMUNITY_APP_FILE_PATH, token, { headers: { "x-polynet-attachment-id": "not-an-id" } })).status).toBe(404);
 });
 
-test("a front end browses, searches and reads community memory, never admin-only memory", async () => {
+test("a front end lists, searches and reads community notes, and can't write them", async () => {
   const f = await fixture();
   await f.register();
   const token = await f.signIn();
-  const node = (title: string, visibilityScope: "community" | "admin") => f.t.run((c) => c.db.insert("communityIntelligenceNodes", {
-    communityId: f.ids.communityId, type: "insight", title, bodyMd: `${title} body.`, status: "promising",
-    visibilityScope, sourceVisibility: "community", confidence: 0.7, evidenceStrength: "observed", workflowIds: [], tags: [],
-    sourceTraceIds: [], outcomeObservationIds: [], stalenessScore: 0, retrievalUsefulnessScore: 0, outcomeImpactScore: 0,
-    createdByActorType: "admin", createdByUserId: f.ids.ownerId, lastUpdatedByActorType: "admin", lastUpdatedByUserId: f.ids.ownerId,
-    version: 1, createdAt: Date.now(), updatedAt: Date.now(),
-  } as any));
-  const shared = await node("Async check-ins beat calls", "community");
-  await node("Founder-only pricing note", "admin");
+  await f.t.run((c) => c.db.insert("communityNotes", {
+    communityId: f.ids.communityId, slug: "async-check-ins-beat-calls", title: "Async check-ins beat calls",
+    bodyMd: "Async check-ins beat calls body.", source: "ask",
+    searchText: buildCommunityNoteSearchText({ title: "Async check-ins beat calls", bodyMd: "Async check-ins beat calls body." }),
+    createdAt: Date.now(), updatedAt: Date.now(),
+  }));
 
   const listed = await f.call(token, { tool: "polynet_list", input: { path: `${COMMUNITY}/memory/` } });
-  expect(listed.body).toMatchObject({ ok: true });
-  expect(listed.body.value.entries.map((entry: any) => [entry.title, entry.type])).toEqual([["Async check-ins beat calls", "insight"]]);
-  expect(listed.body.value.retrieval_id).toBeTruthy();
+  expect(listed.body).toMatchObject({ ok: true, value: { writable: false } });
+  expect(listed.body.value.entries.map((entry: any) => [entry.title, entry.path])).toEqual([
+    ["Async check-ins beat calls", `${COMMUNITY}/memory/async-check-ins-beat-calls.md`],
+  ]);
 
   const searched = await f.call(token, { tool: "polynet_search", input: { path: `${COMMUNITY}/memory/`, query: "check-ins" } });
-  expect(searched.body).toMatchObject({ ok: true });
   expect(searched.body.value.results.map((result: any) => result.title)).toEqual(["Async check-ins beat calls"]);
-  const pricing = await f.call(token, { tool: "polynet_search", input: { path: `${COMMUNITY}/memory/`, query: "pricing" } });
-  expect(JSON.stringify(pricing.body)).not.toContain("Founder-only");
 
-  const read = await f.call(token, { tool: "polynet_read", input: { path: `${COMMUNITY}/memory/${shared}.md` } });
-  expect(read.body).toMatchObject({ ok: true });
-  expect(JSON.stringify(read.body.value)).toContain("Async check-ins beat calls body.");
+  const read = await f.call(token, { tool: "polynet_read", input: { path: `${COMMUNITY}/memory/async-check-ins-beat-calls.md` } });
+  expect(read.body.value.body).toContain("Async check-ins beat calls body.");
 
-  const outcome = await f.call(token, { tool: "polynet_call", input: {
-    target: `${COMMUNITY}/capabilities/community.memory.record_outcome.json`, operation: "community.memory.record_outcome",
-    version: 1, idempotencyKey: "outcome-1",
-    input: { retrieval_log_id: searched.body.value.retrieval_id, node_id: String(shared), result_status: "worked" },
-  } });
-  // It reaches the memory rules (no identity error); outcomes count only for memory an agent used.
-  expect(outcome.body).toMatchObject({ ok: false, code: "community_intelligence_retrieval_node_not_injected" });
+  // Only the community agent saves notes; a member's own site can't.
+  const write = await f.call(token, { tool: "polynet_write", input: {
+    path: `${COMMUNITY}/memory/`, mode: "create", idempotency_key: "note-1", content: { title: "Mine", text: "Not allowed." } } });
+  expect(write.body).toMatchObject({ ok: false });
 });
 
 test("a front-end post that mentions the community agent asks it to reply", async () => {

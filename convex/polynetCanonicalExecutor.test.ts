@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import { buildCommunityNoteSearchText } from "../shared/communityNotes";
 import { convexTest } from "convex-test";
 import { getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
@@ -402,7 +403,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts",
+  "./communityHandbook.ts", "./communityNotes.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -625,6 +626,17 @@ async function createCanonicalSearchFixture(
       pinned: false,
       createdAt: nowMs + 3,
       updatedAt: nowMs + 3,
+    });
+    // A community note, which is what memory/ serves.
+    await ctx.db.insert("communityNotes", {
+      communityId: fixture.communityId,
+      slug: "canonical-repository-search",
+      title: "Canonical repository search",
+      bodyMd: "Canonical repository search proof from a community note.",
+      source: "ask",
+      searchText: buildCommunityNoteSearchText({ title: "Canonical repository search", bodyMd: "Canonical repository search proof from a community note." }),
+      createdAt: nowMs + 4,
+      updatedAt: nowMs + 4,
     });
     const memoryNodeId = await ctx.db.insert("communityIntelligenceNodes", {
       communityId: fixture.communityId,
@@ -2592,108 +2604,6 @@ test("builder resource effects survive receipt-completion crashes without duplic
   });
 });
 
-test("community-memory outcome effects survive receipt-completion crashes without duplication", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asMember = t.withIdentity({ subject: fixture.memberSubject });
-  const memberCtx = executionContext(asMember);
-  const nowMs = 1_760_000_000_000;
-  const memoryScope = await t.run(async (ctx) => {
-    const nodeId = await ctx.db.insert("communityIntelligenceNodes", {
-      communityId: fixture.communityId,
-      type: "insight",
-      title: "Crash-safe memory",
-      bodyMd: "A memory node used to verify retry-safe outcome recording.",
-      status: "promising",
-      visibilityScope: "community",
-      sourceVisibility: "community",
-      confidence: 0.7,
-      evidenceStrength: "observed",
-      workflowIds: [],
-      tags: ["receipt-test"],
-      sourceTraceIds: [],
-      outcomeObservationIds: [],
-      stalenessScore: 0,
-      retrievalUsefulnessScore: 0,
-      outcomeImpactScore: 0,
-      createdByActorType: "admin",
-      createdByUserId: fixture.ownerId,
-      lastUpdatedByActorType: "admin",
-      lastUpdatedByUserId: fixture.ownerId,
-      version: 1,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const retrievalLogId = await ctx.db.insert(
-      "communityIntelligenceRetrievalLogs",
-      {
-        communityId: fixture.communityId,
-        userId: fixture.memberId,
-        receiptVersion: "community_memory_retrieval_receipt:v1",
-        surface: "member_agent_dock",
-        retrievedNodeIds: [nodeId],
-        injectedNodeIds: [nodeId],
-        outcomeObservationIds: [],
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      },
-    );
-    return { nodeId, retrievalLogId };
-  });
-  const input = {
-    operation: "community.memory.record_outcome",
-    version: 1,
-    target:
-      "/communities/canonical-community/capabilities/community.memory.record_outcome.json",
-    input: {
-      retrieval_log_id: String(memoryScope.retrievalLogId),
-      node_id: String(memoryScope.nodeId),
-      result_status: "worked",
-      notes: "The retry-safe approach worked.",
-    },
-    idempotency_key: "memory-outcome-crash-1",
-  };
-
-  const recovered = await recoverCanonicalOperationAfterReceiptCompletionCrash(
-    t,
-    {
-      healthyCtx: memberCtx,
-      authSubject: fixture.memberSubject,
-      userId: fixture.memberId,
-      principalKind: "community_agent_for_member",
-      evidenceSurface: "member_agent_dock",
-      toolName: "polynet_call",
-      input,
-      idempotencyKey: "memory-outcome-crash-1",
-      expectedErrorCode: "polynet_call_failed",
-      assertDomainEffect: async () => {
-        await t.run(async (ctx) => {
-          expect(
-            await ctx.db.query("communityOutcomeObservations").collect(),
-          ).toHaveLength(1);
-          expect(
-            await ctx.db.query("communityIntelligenceChangeRequests").collect(),
-          ).toHaveLength(1);
-        });
-      },
-    },
-  );
-  expect(recovered).toMatchObject({
-    ok: true,
-    value: {
-      result: { deduplicated: true },
-    },
-  });
-  await t.run(async (ctx) => {
-    expect(
-      await ctx.db.query("communityOutcomeObservations").collect(),
-    ).toHaveLength(1);
-    expect(
-      await ctx.db.query("communityIntelligenceChangeRequests").collect(),
-    ).toHaveLength(1);
-  });
-});
-
 
 const admissionQueuePath = "/communities/canonical-community/builder/join-requests/";
 async function admissionFixture(t: ReturnType<typeof convexTest>, count = 5) {
@@ -3130,155 +3040,6 @@ test.each(["same-key", "different-key", "external-approve", "first-party-approve
   if (mode === "same-key") expect(results.every(r => r.status === "fulfilled" && (r.value as any).ok)).toBe(true);
 });
 
-// Real source -> trace -> deterministic digest -> governed synthetic decision.
-// This fixture exercises current compiler/citation owners without model inference.
-async function memoryConsumptionFixture() {
-  const t = convexTest(schema, modules), f = await createFixture(t);
-  const source = await t.run(async ctx => {
-    const now = Date.now(), text = "Synthetic amber protocol: verify the canonical receipt before retrying.";
-    const rootId = await ctx.db.insert("communityInteractionRoots", { communityId:f.communityId, channelId:f.generalChannelId,
-      actorType:"human",actorUserId:f.memberId,kind:"discussion",status:"live",visibilityScope:"community",contentSummary:text,
-      replyCount:0,reactionSummary:[],idempotencyKey:"memory-source",createdAt:now,updatedAt:now });
-    const blockId = await ctx.db.insert("communityInteractionContentBlocks", {communityId:f.communityId,rootId,blockOrder:0,
-      blockType:"markdown_text",text,createdAt:now,updatedAt:now});
-    const trace = await recordTrustedCommunitySourceTraceCore({ctx,communityId:f.communityId,channelId:f.generalChannelId,
-      sourceType:"interaction",sourceId:`interaction:root:${rootId}`,title:"Synthetic amber protocol",summary:text,
-      visibilityScope:"community",sourceVisibility:"community",actorType:"member",actorUserId:f.memberId,nowMs:now});
-    return {rootId,blockId,traceId:trace.id};
-  });
-  const digest = await t.mutation(internal.communityCompilerDigest.runCommunityCompilerDigestPassInternal,{communityId:f.communityId});
-  if (!("items" in digest)) throw new Error("expected deterministic digest");
-  expect(digest.items).toHaveLength(1);
-  await t.run(ctx => settleCommunityIntelligenceFromDigestItemsCore({ctx,communityId:f.communityId,digestId:digest.id,
-    decisions:[{workKey:digest.items[0].workKey!,disposition:"retain",nodeType:"insight",title:"Synthetic amber protocol",
-      bodyMd:"Verify the canonical receipt before retrying.",appliesWhen:null,doesNotApplyWhen:null,confidence:0.8,
-      existingNodeId:null,reason:"Synthetic deterministic consumption fixture."}],actorType:"compiler",actorAgentKey:"synthetic_test_compiler"}));
-  const node = (await t.run(ctx=>ctx.db.query("communityIntelligenceNodes").first()))!;
-  expect(node).toMatchObject({status:"promising",tags:expect.arrayContaining(["compiler_memory"]),evidencePolicyVersion:"citation_v1"});
-  expect(node.evidenceCitationIds).toHaveLength(1);
-  const memberCtx=executionContext(t.withIdentity({subject:f.memberSubject}));
-  const execute=(toolName:any,input:Record<string,unknown>,overrides={})=>executePolynetCanonicalTool({ctx:memberCtx,
-    authSubject:f.memberSubject,userId:f.memberId,principalKind:"external_mcp",evidenceSurface:"external_mcp",toolName,input,...overrides});
-  const read=()=>execute("polynet_read",{path:`/communities/canonical-community/memory/${node._id}.md`});
-  const search=()=>execute("polynet_search",{path:"/communities/canonical-community/memory/",query:"amber"});
-  const consumed=await read();expect(consumed).toMatchObject({ok:true,value:{ref:`memory:${node._id}`}});
-  const retrievalId=(consumed as any).value.retrieval_id;
-  const input={operation:"community.memory.record_outcome",version:1,
-    target:"/communities/canonical-community/capabilities/community.memory.record_outcome.json",
-    input:{node_id:String(node._id),retrieval_log_id:retrievalId,result_status:"worked",notes:"Synthetic observation."},idempotency_key:"memory-consumption-1"};
-  const call=(value:Record<string,unknown>=input,overrides={})=>execute("polynet_call",value,overrides);
-  const snapshot=()=>t.run(async ctx=>({outcomes:await ctx.db.query("communityOutcomeObservations").collect(),
-    changes:await ctx.db.query("communityIntelligenceChangeRequests").collect(),receipts:await ctx.db.query("polynetCanonicalOperationReceipts").collect(),
-    logs:await ctx.db.query("communityIntelligenceRetrievalLogs").collect()}));
-  return {...f,t,...source,node,memberCtx,execute,search,read,call,input,retrievalId,snapshot};
-}
-
-test("memory consumption returns one citation-backed node and distinct actor-owned search/read receipts",async()=>{
-  const f=await memoryConsumptionFixture();const searched:any=await f.search();expect(searched).toMatchObject({ok:true,value:{results:[{id:String(f.node._id)}]}});
-  const s=await f.snapshot();const search=s.logs.find(x=>String(x._id)===searched.value.retrieval_id)!;
-  const read=s.logs.find(x=>String(x._id)===f.retrievalId)!;
-  expect(search).toMatchObject({userId:f.memberId,surface:"external_mcp",retrievedNodeIds:[f.node._id],injectedNodeIds:[]});
-  expect(read).toMatchObject({userId:f.memberId,surface:"external_mcp",retrievedNodeIds:[f.node._id],injectedNodeIds:[f.node._id]});
-  expect(search._id).not.toBe(read._id);
-});
-
-test.each(["foreign-actor","foreign-community","surface","version","search-only","unreturned","corrupt"])(
-  "memory outcome %s refusal is a canonical error without a successful receipt",async mode=>{
-    const f=await memoryConsumptionFixture();let retrievalId=f.retrievalId;
-    if(mode==="search-only") retrievalId=((await f.search()) as any).value.retrieval_id;
-    await f.t.run(async ctx=>{
-      const id=ctx.db.normalizeId("communityIntelligenceRetrievalLogs",retrievalId)!;
-      if(mode==="foreign-actor") await ctx.db.patch(id,{userId:f.ownerId});
-      if(mode==="foreign-community") await ctx.db.patch(id,{communityId:f.otherCommunityId});
-      if(mode==="surface") await ctx.db.patch(id,{surface:"member_agent_dock"});
-      if(mode==="version") await ctx.db.patch(id,{receiptVersion:undefined});
-      if(mode==="unreturned") await ctx.db.patch(id,{retrievedNodeIds:[],injectedNodeIds:[]});
-      if(mode==="corrupt") {const orphan=await ctx.db.insert("communityOutcomeObservations",{communityId:f.communityId,nodeId:f.node._id,
-        resultStatus:"worked",evidenceStrength:"observed",observedByActorType:"member",observedByUserId:f.memberId,
-        observedAt:Date.now(),createdAt:Date.now(),updatedAt:Date.now()});await ctx.db.delete(orphan);await ctx.db.patch(id,{outcomeObservationIds:[orphan]});}
-    });
-    const codes={"foreign-actor":"community_intelligence_retrieval_log_forbidden","foreign-community":"community_intelligence_retrieval_log_not_found",
-      surface:"community_intelligence_retrieval_receipt_surface_mismatch",version:"community_intelligence_retrieval_receipt_version_required",
-      "search-only":"community_intelligence_retrieval_node_not_injected",unreturned:"community_intelligence_retrieval_node_not_injected",corrupt:"community_memory_outcome_receipt_corrupt"};
-    expect(await f.call({...f.input,input:{...f.input.input,retrieval_log_id:retrievalId}})).toMatchObject({ok:false,code:codes[mode as keyof typeof codes]});
-    const s=await f.snapshot();expect(s.outcomes).toHaveLength(0);expect(s.changes.filter(x=>x.operation==="attach_outcome")).toHaveLength(0);
-    expect(s.receipts).toMatchObject([{status:"failed",lastErrorCode:codes[mode as keyof typeof codes]}]);
-  });
-
-test.each([null,{},[],{ok:true},{ok:false},{ok:true,outcome_observation_id:"x",outcome:{id:"different"},deduplicated:false}].map(result=>({result})))(
-  "memory malformed acknowledgment $result never completes success",async ({result})=>{
-    const f=await memoryConsumptionFixture();const ctx={...f.memberCtx,runMutation:(ref:any,args:any)=>
-      getFunctionName(ref)===getFunctionName(internal.communityIntelligenceDirectory.recordCommunityOutcomeObservationInternal)?Promise.resolve(result):f.memberCtx.runMutation(ref,args)};
-    expect(await f.call(f.input,{ctx})).toMatchObject({ok:false,code:(result as any)?.ok===false?"community_memory_outcome_failed":"community_memory_outcome_acknowledgment_invalid"});
-    const s=await f.snapshot();expect(s.outcomes).toHaveLength(0);expect(s.receipts[0].status).toBe("failed");
-  });
-
-test.each(["refusal","malformed"])("memory cached %s is rejected without rewriting history",async mode=>{
-  const f=await memoryConsumptionFixture();expect(await f.call()).toMatchObject({ok:true});
-  await f.t.run(async ctx=>{const r=(await ctx.db.query("polynetCanonicalOperationReceipts").first())!;
-    await ctx.db.patch(r._id,{result:{ok:true,operation:"community.memory.record_outcome",result:mode==="refusal"?
-      {ok:false,reason_code:"community_intelligence_retrieval_log_forbidden",message:"Historical refusal."}:{ok:true}}});});
-  const before=await f.snapshot();expect(await f.call()).toMatchObject({ok:false,code:mode==="refusal"?
-    "community_intelligence_retrieval_log_forbidden":"community_memory_outcome_acknowledgment_invalid"});
-  expect(await f.snapshot()).toEqual(before);
-});
-
-test("memory same-episode retries and conflicting reports preserve one observation and pending request",async()=>{
-  const f=await memoryConsumptionFixture();const first:any=await f.call();expect(first).toMatchObject({ok:true,value:{deduped:false}});
-  const before=await f.snapshot();expect(before.outcomes).toHaveLength(1);expect(before.changes.filter(x=>x.operation==="attach_outcome")).toMatchObject([{status:"pending_decision"}]);
-  expect(await f.call()).toMatchObject({ok:true,value:{deduped:true,result:{outcome_observation_id:first.value.result.outcome_observation_id}}});
-  expect(await f.snapshot()).toEqual(before);
-  expect(await f.call({...f.input,input:{...f.input.input,notes:"changed"}})).toMatchObject({ok:false,code:"idempotency_key_conflict"});
-  expect(await f.call({...f.input,idempotency_key:"same-episode-new-key"})).toMatchObject({ok:true,value:{deduped:true}});
-  expect(await f.call({...f.input,idempotency_key:"conflicting-episode-new-key",input:{...f.input.input,result_status:"failed"}})).toMatchObject({ok:false,code:"community_memory_outcome_conflict"});
-  const after=await f.snapshot();expect(after.outcomes).toEqual(before.outcomes);expect(after.changes).toEqual(before.changes);
-  expect(await f.t.run(ctx=>ctx.db.get(f.node._id))).toEqual(f.node);
-});
-
-test.each([true,false])("memory concurrent reports preserve one episode (same key=%s)",async sameKey=>{
-  const f=await memoryConsumptionFixture();const results=await Promise.all([f.call(),f.call({...f.input,idempotency_key:sameKey?f.input.idempotency_key:"parallel-new-key"})]);
-  expect(results.some(x=>x.ok)).toBe(true);for(const r of results)if(!r.ok)expect(r.code).toBe("operation_in_progress");
-  expect(await f.call()).toMatchObject({ok:true,value:{deduped:true}});const s=await f.snapshot();
-  expect(s.outcomes).toHaveLength(1);expect(s.changes.filter(x=>x.operation==="attach_outcome")).toHaveLength(1);
-});
-
-test.each(["revoked","archived","funding"])("memory current %s authority denies completed replay",async mode=>{
-  const f=await memoryConsumptionFixture();expect(await f.call()).toMatchObject({ok:true});
-  await f.t.run(async ctx=>{
-    if(mode==="revoked"){const m=await ctx.db.query("communityMemberships").withIndex("by_community_user",q=>q.eq("communityId",f.communityId).eq("userId",f.memberId)).unique();await ctx.db.patch(m!._id,{active:false});}
-    if(mode==="archived")await ctx.db.patch(f.communityId,{lifecycleStatus:"archived"});
-    if(mode==="funding"){await ctx.db.patch(f.communityId,{builderAccessMode:"subscription_required"});}
-  });const before=await f.snapshot();
-  if(mode==="archived")await expect(f.call()).rejects.toThrow("community_archived");
-  else expect(await f.call()).toMatchObject({ok:false,code:"semantic_not_found"});
-  expect(await f.snapshot()).toEqual(before);
-});
-
-test("citation-backed memory outcome recovers uncertain receipt completion without repeating its domain effect",async()=>{
-  const f=await memoryConsumptionFixture();
-  await recoverCanonicalOperationAfterReceiptCompletionCrash(f.t,{healthyCtx:f.memberCtx,authSubject:f.memberSubject,userId:f.memberId,
-    principalKind:"external_mcp",evidenceSurface:"external_mcp",toolName:"polynet_call",input:f.input,idempotencyKey:f.input.idempotency_key,
-    expectedErrorCode:"polynet_call_failed",assertDomainEffect:async()=>{const s=await f.snapshot();expect(s.outcomes).toHaveLength(1);
-      expect(s.changes.filter(x=>x.operation==="attach_outcome")).toHaveLength(1);}});
-  const s=await f.snapshot();expect(s.outcomes).toHaveLength(1);expect(s.changes.filter(x=>x.operation==="attach_outcome")).toHaveLength(1);
-});
-
-test.each(["draft","admin","private","foreign","revoked-source","superseded-citation"])(
-  "memory %s is not consumed through member or founder external context",async mode=>{
-    const f=await memoryConsumptionFixture();await f.t.run(async ctx=>{
-      if(mode==="draft")await ctx.db.patch(f.node._id,{status:"draft"});
-      if(mode==="admin"||mode==="private")await ctx.db.patch(f.node._id,{visibilityScope:mode});
-      if(mode==="foreign")await ctx.db.patch(f.node._id,{communityId:f.otherCommunityId});
-      if(mode==="revoked-source")await ctx.db.patch(f.rootId,{status:"hidden"});
-      if(mode==="superseded-citation")await ctx.db.patch(f.blockId,{text:"Materially changed source.",updatedAt:Date.now()+100});
-    });
-    for(const who of [{}, {ctx:executionContext(f.t.withIdentity({subject:f.ownerSubject})),authSubject:f.ownerSubject,userId:f.ownerId}]){
-      expect(await f.execute("polynet_read",{path:`/communities/canonical-community/memory/${f.node._id}.md`},who)).toMatchObject({ok:false});
-      expect(await f.execute("polynet_search",{path:"/communities/canonical-community/memory/",query:"amber"},who)).toMatchObject({ok:true,value:{results:[]}});
-    }
-    const s=await f.snapshot();expect(s.logs.filter(x=>x.injectedNodeIds.includes(f.node._id))).toHaveLength(1); // Only the earlier authorized control read.
-  });
-
 test("site rails: the community agent gets no read state, presence, typing or member JSON; a member harness gets read state only", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
@@ -3357,4 +3118,54 @@ test("community.md is the community card: the reader's restricted channels (from
   expect(body).toContain("## People");
   expect(body).toContain("- #crew (private: invited members only)");
   expect(body).not.toContain("founders-only");
+});
+
+test("the community agent saves community notes everyone reads; others can't write them; private rooms are marked", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  await t.run(async ctx => {
+    const now = Date.now();
+    const membership = (await ctx.db.query("communityMemberships")
+      .withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
+    const crewId = await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "crew", name: "crew",
+      accessMode: "restricted", postingPolicy: "members", status: "active", position: 2, createdAt: now, updatedAt: now });
+    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: crewId,
+      principalKey: `user:${f.memberId}`, membershipId: membership._id, membershipActivationSequence: membership.activationSequence,
+      status: "active", createdByUserId: f.ownerId, createdAt: now, updatedAt: now });
+  });
+  const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
+  const run = (principalKind: "community_agent_for_member" | "external_mcp", toolName: any, input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({ ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind,
+      evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock", toolName, input });
+  const notes = "/communities/canonical-community/memory/";
+
+  const created = await run("community_agent_for_member", "polynet_write", {
+    path: notes, mode: "create", idempotency_key: "note-1", content: { title: "Liquid chalk helps", text: "Liquid chalk under block chalk helps cold hands." } });
+  expect(created).toMatchObject({ ok: true, value: { path: `${notes}liquid-chalk-helps.md`, created: true } });
+  expect(await run("community_agent_for_member", "polynet_write", {
+    path: notes, mode: "create", idempotency_key: "note-2", content: { title: "Liquid chalk helps", text: "Again." } }))
+    .toMatchObject({ ok: false, code: "note_exists" });
+  expect(await run("community_agent_for_member", "polynet_write", {
+    path: `${notes}liquid-chalk-helps.md`, mode: "append", idempotency_key: "note-3", content: { text: "Bring your own on Saturdays." } }))
+    .toMatchObject({ ok: true, value: { created: false } });
+
+  const read = await run("external_mcp", "polynet_read", { path: `${notes}liquid-chalk-helps.md` });
+  expect(read).toMatchObject({ ok: true });
+  expect((read as any).value.body).toMatch(/# Liquid chalk helps[\s\S]*cold hands\.[\s\S]*Bring your own on Saturdays\.[\s\S]*Community note, from a member's conversation/);
+  expect(await run("external_mcp", "polynet_list", { path: notes })).toMatchObject({ ok: true, value: { writable: false,
+    entries: [expect.objectContaining({ title: "Liquid chalk helps", path: `${notes}liquid-chalk-helps.md` })] } });
+  expect(await run("community_agent_for_member", "polynet_list", { path: notes })).toMatchObject({ ok: true, value: { writable: true } });
+  expect(await run("external_mcp", "polynet_search", { path: notes, query: "chalk" })).toMatchObject({ ok: true,
+    value: { results: [expect.objectContaining({ title: "Liquid chalk helps" })] } });
+  expect(await run("external_mcp", "polynet_write", {
+    path: notes, mode: "create", idempotency_key: "note-4", content: { title: "Mine", text: "Not the agent." } }))
+    .toMatchObject({ ok: false, code: "community_write_forbidden" });
+  const row = await t.run(ctx => ctx.db.query("communityNotes").first());
+  expect(row).toMatchObject({ source: "ask", createdByUserId: f.memberId });
+
+  // What a private room returns says so; a shared channel's doesn't.
+  const crew = await run("community_agent_for_member", "polynet_list", { path: "/communities/canonical-community/channels/crew/" });
+  expect(crew).toMatchObject({ ok: true, value: { private_room: true } });
+  const general = await run("community_agent_for_member", "polynet_list", { path: "/communities/canonical-community/channels/general/" });
+  expect(general.ok && (general.value as any).private_room).toBeFalsy();
 });

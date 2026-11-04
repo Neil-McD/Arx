@@ -1,6 +1,6 @@
 import { api, internal } from "./_generated/api";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
-import { buildCommunityTurnContract, checkCommunityTurnToolCall, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract, toolOutputSawPrivateSource, type CommunityTurnToolState } from "../shared/communityTurnContract";
 import {
   COMMUNITY_MEMORY_RECALL_LIMIT,
   buildCommunityMemoryRecallQuery,
@@ -926,6 +926,8 @@ async function executeRetrievalAgentLoop(
       speakerUserId: String(params.userId),
     })
     : null;
+  // What this turn's tools have seen; a private source locks community notes.
+  const turnToolState: CommunityTurnToolState = { sawPrivateSource: false };
   if (turnContract) {
     try {
       await params.appendRunEvent({
@@ -1792,7 +1794,7 @@ async function executeRetrievalAgentLoop(
             errorMessage: `${toolName} is not active for this runtime.`,
           };
         }
-        const allowed = checkCommunityTurnToolCall(turnContract, toolName, normalizedArgs);
+        const allowed = checkCommunityTurnToolCall(turnContract, toolName, normalizedArgs, turnToolState);
         if (!allowed.ok) {
           try {
             await params.appendRunEvent({
@@ -1831,6 +1833,7 @@ async function executeRetrievalAgentLoop(
               }),
           });
           await throwIfRunCannotContinue();
+          if (toolResult.status === "ok" && toolOutputSawPrivateSource(toolResult.outputText)) turnToolState.sawPrivateSource = true;
           return toolResult;
         } catch (error) {
           if (isRuntimeRunCancelledError(error)) {

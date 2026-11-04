@@ -644,7 +644,7 @@ async function compilerMemoryEvidenceIsCurrentlyReadable(args: {
   return true;
 }
 
-export async function canViewerReadNodeWithCurrentEvidence(args: {
+async function canViewerReadNodeWithCurrentEvidence(args: {
   ctx: any;
   node: IntelligenceNodeRow;
   isManager: boolean;
