@@ -59,20 +59,9 @@ assert.match(schema, /v\.literal\("interaction"\)/);
 assert.match(evidence, /buildCommunityInteractionEvidenceRef/);
 assert.match(evidence, /requireCommunityChatAccess/);
 assert.match(evidence, /communityEvidenceAudit\.recordCommunityEvidenceRetrievalInternal/);
-assert.match(evidence, /recordTrustedCommunitySourceTraceCore/);
-assert.match(evidence, /const actor = sourceTraceActor\(row\)/);
-assert.match(evidence, /actorUserId: actor\.actorUserId/);
-assert.match(evidence, /actorAgentKey: actor\.actorAgentKey/);
 assert.match(evidence, /deriveCommunityInteractionLineageEnvelope/);
 assert.match(evidence, /lineage,/);
 assert.doesNotMatch(evidence, /syncArchiveDocumentForInteraction|deleteArchiveDocumentBySource/);
-assert.match(evidence, /backfillCommunityInteractionEvidenceInternal/);
-assert.match(evidence, /sourceVisibility: "redacted"/);
-assert.match(evidence, /compilerState: "excluded_by_visibility"/);
-assert.match(evidence, /compilerDecision: undefined/);
-assert.match(evidence, /redactCommunityInteractionEvidenceChildrenInternal/);
-assert.match(evidence, /async function upsertInteractionSourceTrace/);
-assert.match(evidence, /compilerGroupKey: `interaction_episode:\$\{normalizeIdValue\(root\._id\)\}`/);
 assert.doesNotMatch(evidence, /promoteCommunityInteractionEvidenceInternal/);
 assert.doesNotMatch(evidence, /communityInteractionSourceTraceLinks/);
 assert.match(evidenceCore, /normalizeId\(table as any/);
@@ -80,24 +69,12 @@ assert.match(evidenceCore, /normalizeId\([\s\S]*"communityInteractionRoots" as a
 assert.match(evidenceCore, /normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(args\.communityId\)/);
 assert.match(evidenceCore, /normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(row\.communityId\)/);
 
-const syncStart = evidence.indexOf("export const syncCommunityInteractionEvidenceInternal");
-const redactionStart = evidence.indexOf("export const redactCommunityInteractionEvidenceChildrenInternal");
-assert.ok(syncStart >= 0 && redactionStart > syncStart, "sync and redaction blocks must exist");
-const syncBlock = evidence.slice(syncStart, redactionStart);
-assert.match(
-  syncBlock,
-  /const traced = await upsertInteractionSourceTrace\([\s\S]*traced: true/,
-  "every live readable interaction should enter the compiler evidence ledger without a promotion gate",
-);
+// Posts no longer feed a compiler: the evidence sync only keeps search rows (POL-39).
+assert.doesNotMatch(evidence, /communitySourceTraces|upsertInteractionSourceTrace|syncCommunityInteractionEvidenceInternal/);
 
 assert.match(audit, /export const recordCommunityEvidenceRetrievalInternal/);
 assert.doesNotMatch(audit, /query: v\.optional/);
 assert.doesNotMatch(audit, /args\.query/);
-
-const backfillStart = evidence.indexOf("export const listCommunityInteractionEvidenceBackfillBatchInternal");
-const redactionBlock = evidence.slice(redactionStart, backfillStart);
-assert.match(redactionBlock, /query\("communityInteractionReplies" as any\)/);
-assert.doesNotMatch(redactionBlock, /query\("communityInteractionSourceTraceLinks" as any\)/);
 
 const retrievalAuditStart = evidence.indexOf("const retrievalId: any = await ctx.runMutation");
 assert.ok(retrievalAuditStart >= 0, "retrieval audit block must exist");

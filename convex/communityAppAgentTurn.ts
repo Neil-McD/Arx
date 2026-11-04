@@ -31,10 +31,6 @@ const REDIRECTS: Record<string, Redirect> = {
   "memberOntology:confirmMemberInterviewFacts": userTwin(internal.memberOntology.confirmMemberInterviewFactsForTrustedUserInternal),
   "communityInteractions:createCommunityInteractionComposerMessage":
     userTwin(internal.communityInteractions.createCommunityInteractionComposerMessageForTrustedUserInternal),
-  "communityIntelligenceDirectory:searchCommunityMemoryInternal": userTwin(internal.communityIntelligenceDirectory.searchCommunityMemoryInternal),
-  "communityIntelligenceDirectory:readCommunityMemoryInternal": userTwin(internal.communityIntelligenceDirectory.readCommunityMemoryInternal),
-  "communityIntelligenceDirectory:recordCommunityOutcomeObservationInternal":
-    userTwin(internal.communityIntelligenceDirectory.recordCommunityOutcomeObservationInternal),
   // The door's authority for the agent acting for a member: resolved for the trusted member.
   "communityCapabilityContext:resolveCommunityCapabilityContextInternal": (args, member) => ({
     ref: internal.communityCapabilityContext.resolveCommunityCapabilityContextForTrustedActorInternal,

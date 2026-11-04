@@ -43,7 +43,6 @@ run_step "Purchase token hygiene proof" npm run check:purchase-token-hygiene-pro
 run_step "Frontend privacy hygiene proof" npm run check:frontend-privacy-hygiene-proof
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
-run_step "Community deletion quarantine behavior" npm run check:community-cognition-cleanup-behavior
 run_step "Community access role policy proof" npm run check:community-access-role-policy-proof
 run_step "Community presence lease proof" npm run check:community-presence-lease-proof
 run_step "Community typing presence proof" npm run check:community-typing-presence-proof

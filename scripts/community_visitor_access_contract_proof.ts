@@ -73,13 +73,8 @@ assert.match(
 );
 assert.match(
   activityCounts,
-  /visibilityScope === "community" \|\| row\.visibilityScope === "public"/,
-  "the public memory count must only include member-readable notes — private and admin notes stay invisible",
-);
-assert.match(
-  communityPublic,
-  /const PUBLIC_MEMORY_NOTE_STATUSES = \["promising", "validated", "canonical", "contested", "stale"\]/,
-  "public memory statuses must stay in parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory",
+  /query\("communityNotes" as any\)/,
+  "the public note count counts community notes, which every member reads",
 );
 
 assert.doesNotMatch(
@@ -122,28 +117,24 @@ assert.match(
 const intelligenceDirectory = read("convex/communityIntelligenceDirectory.ts");
 const publicMemoryOverview = intelligenceDirectory.slice(
   intelligenceDirectory.indexOf("export const resolvePublicCommunityMemoryOverviewBySlug"),
-  intelligenceDirectory.indexOf("export async function searchCommunityMemoryCore"),
 );
-assert.notEqual(publicMemoryOverview.length, 0, "public memory overview query must exist");
+assert.notEqual(publicMemoryOverview.length, 0, "public overview query must exist");
 assert.doesNotMatch(
   publicMemoryOverview,
   /visibility !== "published"/,
-  "the public memory overview must NOT gate on visibility — unlisted communities serve their memory graph exactly like published",
+  "the public overview must NOT gate on visibility — unlisted communities serve it exactly like published",
+);
+assert.match(publicMemoryOverview, /isManager: false/, "the public overview reads with member visibility, never manager");
+assert.match(publicMemoryOverview, /anonymous: true/, "the public overview shows shape only");
+assert.match(
+  intelligenceDirectory,
+  /const label = \(text: string\) => \(args\.anonymous \? null : text\);/,
+  "anonymous overview nodes carry no titles or labels — the shape is public, the content is not",
 );
 assert.match(
-  publicMemoryOverview,
-  /isManager: false/,
-  "the public memory overview must read with member visibility, never manager",
-);
-assert.match(
-  publicMemoryOverview,
-  /label: null,\s*\n\s*title: null/,
-  "public memory nodes must strip titles and labels — the shape is public, the content is not",
-);
-assert.match(
-  publicMemoryOverview,
+  intelligenceDirectory,
   /recent_runs: \[\]/,
-  "the public memory overview must not expose run history",
+  "the overview exposes no run history",
 );
 // The ONE legitimate reader of community visibility: the Discover directory.
 const discoverQuery = sliceExport(communityPublic, "listPublicDiscoverCommunities");

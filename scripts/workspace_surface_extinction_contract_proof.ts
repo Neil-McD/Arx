@@ -132,7 +132,7 @@ assert.doesNotMatch(webSource, /threads:(?:getCloudRuntimeRunComputerUseLiveSess
 assert.doesNotMatch(app, /WebWorkspaceSurfaceHost|useWebWorkspaceCoreController|activePage === "workspace"/, "App must not mount or own a general Workspace surface");
 assert.doesNotMatch(routes, /page: "workspace"|buildWorkspaceThreadPath|buildWorkspaceDraftPath/, "routing must not produce a Workspace destination");
 assert.match(mcp, /executePolynetCanonicalTool[\s\S]*POLYNET_CANONICAL_TOOL_NAMES/, "Workspace extinction must preserve the canonical external Polynet MCP");
-assert.equal(existsSync("convex/communityCompilerDigest.ts"), true, "community compiler must remain");
+assert.equal(existsSync("convex/communityCompilerDigest.ts"), false, "the community compiler was retired (POL-39, Neil 2026-11-03)");
 assert.equal(existsSync("convex/communityResources.ts"), true, "community resources must remain");
 
 console.log("workspace_surface_extinction_contract_proof: ok");

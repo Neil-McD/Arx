@@ -10,7 +10,6 @@ assert.equal(existsSync(join(root, "convex/communityArchive.ts")), false);
 assert.equal(existsSync(join(root, "convex/communityArchiveRetrieval.ts")), false);
 
 const excludedRuntimeFiles = new Set([
-  "communityCognitionCleanupCore.ts",
   "schema.ts",
 ]);
 const activeConvexSources = readdirSync(join(root, "convex"))
@@ -29,7 +28,6 @@ for (const { file, source } of activeConvexSources) {
 const communityMaintenance = read("convex/communityMaintenance.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const schema = read("convex/schema.ts");
-const cleanup = read("convex/communityCognitionCleanupCore.ts");
 assert.equal(existsSync(join(root, "convex/communityRecentContext.ts")), false);
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
@@ -42,7 +40,6 @@ for (const source of [communityMaintenance, adminGateway]) {
 }
 assert.match(schema, /communityArchiveDocuments: defineTable/);
 assert.match(schema, /\.vectorIndex\("by_embedding"/);
-assert.match(cleanup, /table: "communityArchiveDocuments"/);
 assert.match(communityMaintenance, /purgeOrphanedCommunityUserArtifactsInternal/);
 assert.doesNotMatch(read("convex/_generated/api.d.ts"), /communityRecentContext/);
 assert.match(runtimeAgentLoop, /executePolynetCanonicalTool/);

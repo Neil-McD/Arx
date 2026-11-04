@@ -20,13 +20,6 @@ test("a public tag answers to the channel: shared layers only, no one's private 
   expect(tag.cacheKey).toBe("pn:c1:tag");
 });
 
-test("the steward runs on a schedule for the founder", () => {
-  const steward = buildCommunityTurnContract({ surface: "steward", communityId: "c1", speakerUserId: "u1" });
-  expect(steward.speaker).toEqual({ kind: "schedule" });
-  expect(steward.audience).toEqual({ kind: "founder" });
-  expect(steward.uses.askerProfile).toBe(false);
-});
-
 test("an Ask needs a member and every turn needs a community; the receipt summary has no ids", () => {
   expect(() => buildCommunityTurnContract({ surface: "ask", communityId: "c1" })).toThrow("community_turn_contract_ask_requires_member");
   expect(() => buildCommunityTurnContract({ surface: "tag", communityId: " " })).toThrow("community_turn_contract_requires_community");
@@ -35,18 +28,17 @@ test("an Ask needs a member and every turn needs a community; the receipt summar
 });
 
 // Governed actions: a member's Ask or tag never becomes a post.
-test("Asks and tags only draft channel posts; the steward speaks in its own voice", () => {
-  const surfaces = { ask: "u1", ask_in_conversation: "u1", tag: "u1", steward: null } as const;
+test("Asks and tags only draft channel posts", () => {
+  const surfaces = { ask: "u1", ask_in_conversation: "u1", tag: "u1" } as const;
   const writes = Object.fromEntries(Object.entries(surfaces).map(([surface, speakerUserId]) => [
     surface, buildCommunityTurnContract({ surface: surface as keyof typeof surfaces, communityId: "c1", speakerUserId }).channelWrites,
   ]));
-  expect(writes).toEqual({ ask: "draft_only", ask_in_conversation: "draft_only", tag: "draft_only", steward: "own_voice" });
+  expect(writes).toEqual({ ask: "draft_only", ask_in_conversation: "draft_only", tag: "draft_only" });
   expect(summarizeCommunityTurnContract(buildCommunityTurnContract({ surface: "tag", communityId: "c1", speakerUserId: "u1" })).channel_writes).toBe("draft_only");
 });
 
 test("the tool-call check refuses every channel write on a draft-only turn and nothing else", () => {
   const ask = buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" });
-  const steward = buildCommunityTurnContract({ surface: "steward", communityId: "c1" });
   for (const path of [
     "/communities/sunrise/channels/general/",
     "/communities/sunrise/channels/general/interaction:root:abc/",
@@ -58,21 +50,18 @@ test("the tool-call check refuses every channel write on a draft-only turn and n
   }
   expect(checkCommunityTurnToolCall(ask, "polynet_write", { path: "/communities/sunrise/builder/resources/", mode: "create" })).toEqual({ ok: true });
   expect(checkCommunityTurnToolCall(ask, "polynet_read", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
-  expect(checkCommunityTurnToolCall(steward, "polynet_write", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
   expect(checkCommunityTurnToolCall(null, "polynet_write", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
 });
 
 // Community notes: Asks and tags may save them, never after seeing a private source.
-test("notes writes are open on Asks and tags, closed after a private source, and closed for the steward", () => {
+test("notes writes are open on Asks and tags and closed after a private source", () => {
   const ask = buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" });
   const tag = buildCommunityTurnContract({ surface: "tag", communityId: "c1", speakerUserId: "u1" });
-  const steward = buildCommunityTurnContract({ surface: "steward", communityId: "c1" });
   const write = { path: "/communities/sunrise/memory/", mode: "create" };
   expect(checkCommunityTurnToolCall(ask, "polynet_write", write)).toEqual({ ok: true });
   expect(checkCommunityTurnToolCall(tag, "polynet_write", { path: "/communities/sunrise/memory/chalk.md", mode: "append" })).toEqual({ ok: true });
   expect(checkCommunityTurnToolCall(ask, "polynet_write", write, { sawPrivateSource: true })).toMatchObject({ ok: false, errorCode: "private_source_read" });
   expect(checkCommunityTurnToolCall(null, "polynet_write", write, { sawPrivateSource: true })).toMatchObject({ ok: false, errorCode: "private_source_read" });
-  expect(checkCommunityTurnToolCall(steward, "polynet_write", write)).toMatchObject({ ok: false, errorCode: "notes_not_allowed" });
   // Reading stays open after a private source; only saving a note is locked.
   expect(checkCommunityTurnToolCall(ask, "polynet_read", { path: "/communities/sunrise/memory/chalk.md" }, { sawPrivateSource: true })).toEqual({ ok: true });
   expect(summarizeCommunityTurnContract(ask).notes_writes).toBe("agent");

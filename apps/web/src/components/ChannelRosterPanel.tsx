@@ -17,9 +17,8 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
-import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
+import { WebCommunityNotes } from "./WebCommunityNotes";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
-import { createCloudCommunityPolynetLiveClient, subscribeCloudCommunityPolynetOverview, type CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
@@ -111,33 +110,11 @@ function RosterSurface(props: RosterProps & {
   const [loadingMore, setLoadingMore] = useState(false);
   const [retry, setRetry] = useState(0);
   const [now, setNow] = useState(Date.now);
-  const [memory, setMemory] = useState<CloudCommunityPolynetOverview | null>(null);
-  const [memoryError, setMemoryError] = useState(false);
-  const [memoryRetry, setMemoryRetry] = useState(0);
-  // The workspace identity resets memory; credential renewal only revalidates it.
-  useEffect(() => {
-    setMemoryError(false);
-    if (!scope || props.directory) return;
-    let disposed = false;
-    let close: (() => void) | undefined;
-    let stop: (() => void) | undefined;
-    try {
-      const liveClient = createCloudCommunityPolynetLiveClient({ session: scope.session });
-      close = liveClient.close;
-      stop = subscribeCloudCommunityPolynetOverview({
-        liveClient, communityId: scope.communityId, nodeLimit: 24,
-        onUpdate: value => { if (!disposed) { setMemory(value); setMemoryError(false); } },
-        onError: () => { if (!disposed) { setMemory(null); setMemoryError(true); } },
-      });
-    } catch { setMemory(null); setMemoryError(true); }
-    return () => { disposed = true; stop?.(); close?.(); };
-  }, [scope?.session, scope?.communityId, memoryRetry, props.directory]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, []);
   // Reset channel-private state before commit, not in an effect after old rows paint.
-  // Community memory stays mounted because its authorization scope did not change.
   const [rosterChannel, setRosterChannel] = useState(props.channelId);
   if (rosterChannel !== props.channelId) {
     setRosterChannel(props.channelId);
@@ -226,12 +203,8 @@ function RosterSurface(props: RosterProps & {
     <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={props.presenceSummary?.online_count}
       onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} />
     <div className="community-context-memory">
-      <div className="community-context-memory-head"><div className="community-context-section">Memory{memory ? ` — ${memory.memory.total_visible_nodes}${memory.memory.node_counts_are_lower_bound ? "+" : ""}` : ""}</div></div>
-      {memoryError ? <div role="status">Could not load memory. <button type="button" onClick={() => setMemoryRetry(value => value + 1)}>Retry</button></div>
-        : memory ? <div className="community-context-memory-summary">
-          <div className="community-context-memory-preview"><CommunityMemoryGraphPreview overview={memory} /></div>
-          <div className="community-context-memory-status"><span>{(memory.agent.activity_state || memory.agent.status).replace(/_/g, " ").replace(/\b\w/g, value => value.toUpperCase())}</span></div>
-        </div> : <div className="community-context-memory-summary" aria-label="Loading memory"><div className="community-context-memory-preview web-skeleton-block" /><div className="community-context-memory-loading-status web-skeleton-row" /></div>}
+      <div className="community-context-memory-head"><div className="community-context-section">Community notes</div></div>
+      {scope ? <WebCommunityNotes communityId={scope.communityId} session={scope.session} compact /> : null}
     </div></> : null}
     <div className="community-context-members" ref={membersViewportRef} onScroll={handleMembersScroll}>
       {rebuilding ? <p role="status">Updating members…</p> : null}

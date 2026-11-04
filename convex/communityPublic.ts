@@ -88,9 +88,6 @@ const PUBLIC_ACTIVITY_COUNT_CAP = 200;
 const PUBLIC_MEMBER_FACES_PREVIEW_LIMIT = 5;
 const PUBLIC_MESSAGES_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PUBLIC_JOINED_RECENTLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-/* Parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory:
-   the visitor number must only count notes a member could actually read. */
-const PUBLIC_MEMORY_NOTE_STATUSES = ["promising", "validated", "canonical", "contested", "stale"];
 
 type PublicCommunityInteractionActivityRow = {
   _id: any;
@@ -171,20 +168,13 @@ async function resolvePublicCommunityActivityCounts(ctx: any, communityId: any):
     communityResourceIsLiveModulePage(row, liveModuleIds),
   );
 
-  let memoryNoteCount = 0;
-  let memoryNoteCountCapped = false;
-  for (const status of PUBLIC_MEMORY_NOTE_STATUSES) {
-    const bucket = await ctx.db
-      .query("communityIntelligenceNodes" as any)
-      .withIndex("by_community_status_updatedAt", (q: any) =>
-        q.eq("communityId", communityId).eq("status", status),
-      )
-      .take(cap);
-    if (bucket.length >= cap) memoryNoteCountCapped = true;
-    memoryNoteCount += bucket.filter(
-      (row: any) => row.visibilityScope === "community" || row.visibilityScope === "public",
-    ).length;
-  }
+  // Community notes: every member reads them, so the visitor number is theirs.
+  const noteRows = await ctx.db
+    .query("communityNotes" as any)
+    .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", communityId))
+    .take(cap);
+  const memoryNoteCount = noteRows.length;
+  const memoryNoteCountCapped = noteRows.length >= cap;
 
   return {
     ...interactionActivity,

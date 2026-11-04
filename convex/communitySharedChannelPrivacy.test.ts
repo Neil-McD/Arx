@@ -7,10 +7,6 @@ import type { MutationCtx } from "./_generated/server";
 import { ensureGeneralChannel, listSharedCommunityChannels, listSharedChannelReadableRows, listChannelReadableRows } from "./communityChannelCore";
 import { interactionTraceHasSharedSource } from "./communityInteractionEvidenceCore";
 import { resolveCommunityEvidenceRefCore } from "./communityEvidenceCore";
-import { buildCommunitySourceTraceRevision, measureCommunityCompilerEvidenceForCommunity, drainIneligiblePendingSourceTracesForCommunity } from "./communityCompilerEvidenceCore";
-import { settleCommunityIntelligenceFromDigestItemsCore } from "./communityCompilerCandidates";
-import { buildCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
-import { normalizeCommunityMemoryDecision } from "../shared/communityMemoryDecisionContract";
 
 const modules = import.meta.glob(["./communityWeeklyDigestWorker.ts", "./_generated/**/*.*s"]);
 const NOW = Date.parse("2026-08-14T12:00:00Z");
@@ -118,116 +114,5 @@ test("direct evidence and captured source refs revalidate audience, archive, pro
     await ctx.db.patch(f.shared, { accessMode: "all_members", status: "archived" });
     expect(await interactionTraceHasSharedSource(args)).toBe(false);
     expect(await interactionTraceHasSharedSource({ ...args, trace: { ...row, sourceId: "interaction:root:invalid" } })).toBe(false);
-  });
-});
-
-test("compiler measurement and existing drain exclude captured private traces without losing shared work", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const f = await fixture(ctx);
-    const sharedId = await trace(ctx, f, f.sharedRoot, f.shared);
-    const privateId = await trace(ctx, f, f.privateRoot, f.restricted);
-    const args = { ctx, communityId: f.communityId, nowMs: NOW };
-    expect((await measureCommunityCompilerEvidenceForCommunity(args)).selectedRows.map(r => r._id)).toEqual([sharedId]);
-    expect(await drainIneligiblePendingSourceTracesForCommunity(args)).toBe(1);
-    expect(await ctx.db.get(privateId)).toMatchObject({ compilerState: "excluded_by_visibility", compilerLastHandledAt: NOW });
-    expect((await ctx.db.get(privateId))?.compilerPendingSince).toBeUndefined();
-    expect(await drainIneligiblePendingSourceTracesForCommunity(args)).toBe(0);
-  });
-});
-
-test("settlement rechecks queued sources and does not roll back unrelated decisions; replay creates no memory", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const f = await fixture(ctx);
-    const secondRoot = await f.root(f.general._id, "Another shared message");
-    const ids = [await trace(ctx, f, f.sharedRoot, f.shared), await trace(ctx, f, secondRoot, f.general._id)];
-    const items = [];
-    for (const id of ids) {
-      const row = (await ctx.db.get(id))!;
-      const item = {
-        category: "chat_activity" as const, title: "Captured", summary: "Captured", priority: 1, confidence: 1,
-        sourceTypes: ["interaction"], sourceIds: [row.sourceId!], sourceTraceIds: [id],
-        sourceRevisions: [await buildCommunitySourceTraceRevision(row)],
-      };
-      items.push({ ...item, workKey: await buildCommunityMemoryWorkKey({ communityId: f.communityId, ...item, contentRevisions: item.sourceRevisions }) });
-    }
-    const digestId = await ctx.db.insert("communityCompilerDigests", {
-      communityId: f.communityId, dedupeKey: "privacy-digest", windowStartedAt: ACTIVITY, windowEndedAt: NOW,
-      summary: "Queued", itemCount: items.length, items, createdByActorType: "compiler", createdAt: NOW, updatedAt: NOW,
-      signalCounts: { chat: 2, aiFeed: 0, resources: 0, events: 0, sourceTraces: 2, outcomes: 0, newMembers: 0, activeMembers: 0, postingMembers: 0, aiFeedReactingMembers: 0 },
-    });
-    await ctx.db.patch(f.shared, { accessMode: "restricted" });
-    const decisions = items.map((item, index) => normalizeCommunityMemoryDecision({
-      workKey: item.workKey, disposition: index === 0 ? "retain" : "dismiss_low_signal", reason: "Test decision",
-      nodeType: "insight", title: "Must not retain private source", bodyMd: "PRIVATE", confidence: 1,
-    }));
-    const args = { ctx, communityId: f.communityId, digestId, decisions, nowMs: NOW };
-    const result = await settleCommunityIntelligenceFromDigestItemsCore(args);
-    expect(result.decisions[0]).toMatchObject({ status: "excluded_by_visibility" });
-    expect((await ctx.db.get(ids[1]))?.compilerState).toBe("dismissed_low_signal");
-    expect((await settleCommunityIntelligenceFromDigestItemsCore(args)).decisions[1]).toMatchObject({ reused_existing: true });
-    expect(await ctx.db.query("communityIntelligenceNodes").collect()).toEqual([]);
-    expect(await ctx.db.query("communityIntelligenceChangeRequests").collect()).toEqual([]);
-  });
-});
-
-test("retained learning is reused when the same digest is settled again", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const f = await fixture(ctx);
-    const traceId = await trace(ctx, f, f.sharedRoot, f.shared);
-    const row = (await ctx.db.get(traceId))!;
-    const item = {
-      category: "chat_activity" as const,
-      title: "Shared learning",
-      summary: "Shared learning",
-      priority: 1,
-      confidence: 1,
-      sourceTypes: ["interaction"],
-      sourceIds: [row.sourceId!],
-      sourceTraceIds: [traceId],
-      sourceRevisions: [await buildCommunitySourceTraceRevision(row)],
-    };
-    const workKey = await buildCommunityMemoryWorkKey({
-      communityId: f.communityId,
-      ...item,
-      contentRevisions: item.sourceRevisions,
-    });
-    const digestId = await ctx.db.insert("communityCompilerDigests", {
-      communityId: f.communityId,
-      dedupeKey: "retained-retry-digest",
-      windowStartedAt: ACTIVITY,
-      windowEndedAt: NOW,
-      summary: "Queued",
-      itemCount: 1,
-      items: [{ ...item, workKey }],
-      createdByActorType: "compiler",
-      createdAt: NOW,
-      updatedAt: NOW,
-      signalCounts: { chat: 1, aiFeed: 0, resources: 0, events: 0, sourceTraces: 1, outcomes: 0, newMembers: 0, activeMembers: 0, postingMembers: 0, aiFeedReactingMembers: 0 },
-    });
-    const decision = normalizeCommunityMemoryDecision({
-      workKey,
-      disposition: "retain",
-      reason: "Observed shared learning",
-      nodeType: "insight",
-      title: "Shared learning",
-      bodyMd: "A useful shared learning.",
-      confidence: 1,
-    });
-    const args = { ctx, communityId: f.communityId, digestId, decisions: [decision], nowMs: NOW };
-    const first = await settleCommunityIntelligenceFromDigestItemsCore(args);
-    expect(first.decisions[0]).toMatchObject({ disposition: "retain", reused_existing: false });
-    expect(await ctx.db.query("communityIntelligenceNodes").collect()).toHaveLength(1);
-    expect(await ctx.db.query("communityIntelligenceChangeRequests").collect()).toHaveLength(1);
-
-    // Model a retry after the write committed but a later steward step failed.
-    const retry = await settleCommunityIntelligenceFromDigestItemsCore(args);
-    expect(retry.decisions[0]).toMatchObject({ disposition: "retain", reused_existing: true });
-    expect(retry.decisions[0].target_node_id).toBe(first.decisions[0].target_node_id);
-    expect(retry.applied_change_request_ids).toEqual([]);
-    expect(await ctx.db.query("communityIntelligenceNodes").collect()).toHaveLength(1);
-    expect(await ctx.db.query("communityIntelligenceChangeRequests").collect()).toHaveLength(1);
   });
 });

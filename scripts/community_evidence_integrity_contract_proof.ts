@@ -525,37 +525,15 @@ async function main() {
   );
 
   const schema = await readFile(new URL("../convex/schema.ts", import.meta.url), "utf8");
-  const directory = await readFile(
-    new URL("../convex/communityIntelligenceDirectory.ts", import.meta.url),
-    "utf8",
-  );
   const resourceEvidence = await readFile(
     new URL("../convex/communityResourceEvidence.ts", import.meta.url),
     "utf8",
   );
-  const compilerCandidates = await readFile(
-    new URL("../convex/communityCompilerCandidates.ts", import.meta.url),
-    "utf8",
-  );
   const legacyChat = await readFile(new URL("../convex/communityChat.ts", import.meta.url), "utf8");
   assert.match(schema, /communityEvidenceCitations: defineTable/);
-  assert.match(directory, /requireCommunityEvidenceCitationsActiveCore/);
-  assert.match(directory, /community_evidence_citation_review_required/);
-  assert.match(directory, /requestRecapturesAllExistingTraces\s*\? evidenceCitationIds/);
-  assert.match(directory, /citationIds: effectiveEvidenceCitationIds/);
   assert.doesNotMatch(resourceEvidence, /query\("communityAiFeedPosts"/);
   assert.match(resourceEvidence, /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/);
   assert.doesNotMatch(legacyChat, /createThreadUserMessage|deleteOwnMessage|patchOwnMessageContent/, "the old chat no longer writes evidence-bearing messages");
-  assert.match(
-    compilerCandidates,
-    /resolveCurrentDigestItemTrace[\s\S]*sourceTraceIds\.length !== 1[\s\S]*sourceRevisions/,
-  );
-  assert.doesNotMatch(
-    compilerCandidates,
-    /RESOLVABLE_SOURCE_TRACE_TYPES|RESOLVABLE_COMPILER_SOURCE_TYPES/,
-    "the compiler should settle the exact normalized trace, not reconstruct evidence from a source-type allowlist",
-  );
-
   console.log("community_evidence_integrity_contract_proof: ok");
 }
 

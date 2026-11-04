@@ -337,7 +337,7 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent/,
   "source crawl pages should dedupe root/redirect URL aliases and persist canonical ready URL source rows through the memory lifecycle",
 );
 assert.match(
@@ -442,7 +442,7 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /finalizeCommunitySourceIngestionInternal[\s\S]*sourceIngestionStatus: args\.status[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  /finalizeCommunitySourceIngestionInternal[\s\S]*sourceIngestionStatus: args\.status[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent/,
   "source ingestion should persist extracted text and keep canonical memory projections in sync",
 );
 assert.match(

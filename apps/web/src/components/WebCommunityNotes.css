@@ -1,0 +1,37 @@
+.community-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.community-note {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.2));
+}
+
+.community-note-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.community-note-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.community-note-edit {
+  display: grid;
+  gap: 8px;
+}
+
+.community-notes-compact ul {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+}

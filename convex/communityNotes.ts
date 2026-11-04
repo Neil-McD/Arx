@@ -3,9 +3,12 @@
 // Members and the agent read them under memory/; the founder can edit or
 // delete them. Callers establish who may read or write before calling these.
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import {
   buildCommunityNoteSearchText,
+  communityNoteSourceWords,
   COMMUNITY_NOTE_BODY_MAX_CHARS,
   COMMUNITY_NOTE_SLUG_PATTERN,
   COMMUNITY_NOTES_MAX_PER_COMMUNITY,
@@ -14,7 +17,6 @@ import {
   normalizeCommunityNoteTitle,
 } from "../shared/communityNotes";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
-import { canViewerReadNodeWithCurrentEvidence } from "./communityIntelligenceDirectory";
 
 const LIST_LIMIT_MAX = 50;
 const SEARCH_LIMIT_MAX = 20;
@@ -165,42 +167,56 @@ export const writeCommunityNoteInternal = internalMutation({
   handler: async (ctx, args) => await writeCommunityNote(ctx, args),
 });
 
-// One-time copy of the old memory nodes members could read into notes, so
-// nothing already learned is lost when the old memory pipeline goes. Paged and
-// safe to repeat: a node already copied is skipped. Hand-run, dry run first:
-//   npx convex run communityNotes:migrateMemoryNodesToNotesInternal '{"dryRun":true}'
-const MIGRATABLE_STATUSES = new Set(["promising", "validated", "canonical", "contested", "stale"]);
+// Studio: every member reads the notes; owners and admins edit or delete them.
+const viewerArgs = { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), communityId: v.id("communities") };
 
-export const migrateMemoryNodesToNotesInternal = internalMutation({
-  args: { dryRun: v.boolean(), cursor: v.optional(v.union(v.string(), v.null())), limit: v.optional(v.number()) },
+async function viewer(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }) {
+  const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+  const canManage = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
+  return { userId, canManage };
+}
+
+export const listCommunityNotes = query({
+  args: { ...viewerArgs, limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const page = await ctx.db.query("communityIntelligenceNodes")
-      .paginate({ cursor: args.cursor ?? null, numItems: Math.max(1, Math.min(200, Math.floor(args.limit ?? 100))) });
-    let copied = 0;
-    let skipped = 0;
-    for (const node of page.page as any[]) {
-      // The same member-level check the old memory reader made, including that
-      // every source it cites is still there and readable.
-      const readable = MIGRATABLE_STATUSES.has(node.status) && node.visibilityScope === "community"
-        && (node.sourceVisibility ?? "community") === "community"
-        && await canViewerReadNodeWithCurrentEvidence({ ctx, node, isManager: false });
-      const title = normalizeCommunityNoteTitle(node.title);
-      const bodyMd = normalizeCommunityNoteBody(node.bodyMd);
-      const already = await ctx.db.query("communityNotes").withIndex("by_migrated_node", (q) => q.eq("migratedFromNodeId", node._id)).first();
-      if (!readable || !title || !bodyMd || already) { skipped += 1; continue; }
-      let slug = communityNoteSlug(title);
-      for (let n = 2; await ctx.db.query("communityNotes")
-        .withIndex("by_community_slug", (q) => q.eq("communityId", node.communityId).eq("slug", slug)).first(); n += 1) {
-        slug = `${communityNoteSlug(title).slice(0, 60)}-${n}`;
-      }
-      copied += 1;
-      if (args.dryRun) continue;
-      await ctx.db.insert("communityNotes", {
-        communityId: node.communityId, slug, title, bodyMd, source: "migrated",
-        searchText: buildCommunityNoteSearchText({ title, bodyMd }), migratedFromNodeId: node._id,
-        createdAt: node.createdAt ?? node._creationTime, updatedAt: node.updatedAt ?? node.createdAt ?? node._creationTime,
-      });
-    }
-    return { dryRun: args.dryRun, copied, skipped, isDone: page.isDone, continueCursor: page.continueCursor };
+    const { canManage } = await viewer(ctx, args);
+    const limit = Math.max(1, Math.min(COMMUNITY_NOTES_MAX_PER_COMMUNITY, Math.floor(args.limit ?? 100)));
+    const rows = await ctx.db.query("communityNotes")
+      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(limit + 1);
+    return {
+      can_manage: canManage,
+      has_more: rows.length > limit,
+      notes: rows.slice(0, limit).map((row) => ({
+        slug: row.slug, title: row.title, body_md: row.bodyMd, source: communityNoteSourceWords(row.source),
+        updated_at: new Date(row.updatedAt).toISOString(),
+      })),
+    };
+  },
+});
+
+export const updateCommunityNote = mutation({
+  args: { ...viewerArgs, slug: v.string(), title: v.string(), text: v.string() },
+  handler: async (ctx, args) => {
+    const { userId, canManage } = await viewer(ctx, args);
+    if (!canManage) throw new Error("community_forbidden");
+    const result = await writeCommunityNote(ctx, {
+      communityId: args.communityId, mode: "update", slug: args.slug, title: args.title, text: args.text,
+      source: "founder", actorUserId: userId,
+    });
+    if (!result.ok) throw new Error(result.code);
+    return { slug: result.slug, title: result.title };
+  },
+});
+
+export const deleteCommunityNote = mutation({
+  args: { ...viewerArgs, slug: v.string() },
+  handler: async (ctx, args) => {
+    const { canManage } = await viewer(ctx, args);
+    if (!canManage) throw new Error("community_forbidden");
+    const row = await ctx.db.query("communityNotes")
+      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
+    if (row) await ctx.db.delete(row._id);
+    return { deleted: Boolean(row) };
   },
 });

@@ -72,8 +72,8 @@ for (const file of ["convex/communityInteractionEvidence.ts", "convex/communityR
   assert.doesNotMatch(read(file), /query\("communityAiFeedPosts"/);
 }
 
-const compiler = read("convex/communityCompilerEvidenceCore.ts");
-assert.match(compiler, /row\.sourceType !== "ai_feed"/);
+// The compiler that once had to skip AI Feed traces is deleted (POL-39).
+assert.equal(existsSync(resolve(root, "convex/communityCompilerEvidenceCore.ts")), false);
 
 const citations = read("convex/communityEvidenceCitations.ts");
 assert.match(

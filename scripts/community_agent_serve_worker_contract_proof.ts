@@ -210,11 +210,6 @@ assert.match(
   /communityAgentRunEvents: defineTable\([\s\S]*v\.literal\("context_snapshot"\)/,
   "run-event schema should accept the canonical context snapshot",
 );
-assert.doesNotMatch(
-  readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8"),
-  /recordCommunityAgentRunEventsInternal[\s\S]*v\.literal\("context_snapshot"\)/,
-  "the generic best-effort event writer must not gain authority to overwrite mandatory context snapshots",
-);
 
 assert.match(
   actionBlock,

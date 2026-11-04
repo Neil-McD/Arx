@@ -11,9 +11,7 @@ export type CommunityTurnSurface =
   // asker's global profile stays out (it belongs to the person, not the room).
   | "ask_in_conversation"
   // A public tag or mention in a channel: the channel sees the answer.
-  | "tag"
-  // The scheduled steward and founder brief: the founder sees the result.
-  | "steward";
+  | "tag";
 
 export type CommunityTurnSpeaker =
   | { kind: "member"; userId: string }
@@ -21,8 +19,7 @@ export type CommunityTurnSpeaker =
 
 export type CommunityTurnAudience =
   | { kind: "asker" }
-  | { kind: "channel"; channelId: string | null }
-  | { kind: "founder" };
+  | { kind: "channel"; channelId: string | null };
 
 export type CommunityTurnContract = {
   version: 1;
@@ -62,7 +59,7 @@ export function buildCommunityTurnContract(args: {
   const communityId = String(args.communityId ?? "").trim();
   if (!communityId) throw new Error("community_turn_contract_requires_community");
   const speakerUserId = String(args.speakerUserId ?? "").trim();
-  const speaker: CommunityTurnSpeaker = args.surface === "steward" || !speakerUserId
+  const speaker: CommunityTurnSpeaker = !speakerUserId
     ? { kind: "schedule" }
     : { kind: "member", userId: speakerUserId };
   if ((args.surface === "ask" || args.surface === "ask_in_conversation") && speaker.kind !== "member") {
@@ -70,7 +67,7 @@ export function buildCommunityTurnContract(args: {
   }
   const audience: CommunityTurnAudience = args.surface === "tag"
     ? { kind: "channel", channelId: String(args.channelId ?? "").trim() || null }
-    : args.surface === "steward" ? { kind: "founder" } : { kind: "asker" };
+    : { kind: "asker" };
   return {
     version: 1,
     surface: args.surface,
@@ -81,15 +78,15 @@ export function buildCommunityTurnContract(args: {
       communityCard: true,
       handbook: true,
       // Only a private Ask outside a community conversation reads the
-      // asker's own profile; a channel or the founder never sees it.
+      // asker's own profile; a channel never sees it.
       askerProfile: args.surface === "ask",
     },
     cacheKey: `pn:${communityId}:${args.surface === "ask_in_conversation" ? "ask" : args.surface}`,
     historyTurns: COMMUNITY_TURN_HISTORY_TURNS,
     // A member's Ask or tag never becomes a post: the answer (or the tag's
-    // reply) is the agent's only speech. Only the steward speaks on its own.
-    channelWrites: args.surface === "steward" ? "own_voice" : "draft_only",
-    notesWrites: args.surface === "steward" ? "none" : "agent",
+    // reply) is the agent's only speech. It may save community notes.
+    channelWrites: "draft_only",
+    notesWrites: "agent",
   };
 }
 

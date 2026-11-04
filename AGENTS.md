@@ -49,8 +49,9 @@ is approved.
 
 - The community agent harness (Agent page, @mentions, site conversations) under
   explicit community context.
-- Community cognition: the memory compiler, accepted memory, member knowledge.
-- Community resources and memory systems.
+- Community knowledge: resources, the founder's handbook, and community notes
+  (what the agent saves for everyone, `memory/`). Neil retired the memory
+  compiler and its steward on 2026-11-03 (POL-39).
 - The official Polynet MCP.
 - Community sites: the edge, sign-in with Polynet, the SDK, the shell, the CLI,
   deploys.

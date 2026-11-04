@@ -5,7 +5,7 @@
 //
 // Everything the seed writes is marked: simulated users have auth subject
 // `seed:sunrise:<key>`, their posts carry a `seed:sunrise:` idempotency key,
-// and events, the course and memories are authored by the simulated moderator.
+// and events, the course and community notes are authored by the simulated moderator.
 // Running the seed again deletes the previous posts and events (re-dated to
 // now) and updates the course and memories in place; users, memberships and
 // the Beta channel are reused.
@@ -24,7 +24,7 @@ import { normalizeIdValue, syncCommunityActiveMemberCount } from "./communityCor
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { renewCommunityPresenceLease } from "./communityPresenceCore";
 import { writeCommunityResourceBodyContent } from "./communityResourceContent";
-import { syncCommunityResourceMemoryProjection } from "./communityResourceMemoryProjection";
+import { buildCommunityNoteSearchText, communityNoteSlug } from "../shared/communityNotes";
 import { renewCommunityTypingLease } from "./communityTypingPresenceCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
@@ -406,22 +406,17 @@ export const seedSunriseInternal = internalMutation({
       });
       if (existing) await ctx.db.patch(resourceId, fields);
       await writeCommunityResourceBodyContent(ctx, { communityId: args.communityId, resourceId, bodyMd: lesson.body, nowMs });
-      await syncCommunityResourceMemoryProjection(ctx, await ctx.db.get(resourceId), nowMs);
     }
 
-    // Community memory (/memory/ on the semantic repository), updated in place.
-    const nodes = await ctx.db.query("communityIntelligenceNodes").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect();
+    // Community notes (memory/), written as the founder's and updated in place.
     for (const memory of MEMORIES) {
-      const existing = nodes.find((row: any) => row.title === memory.title && normalizeIdValue(row.createdByUserId) === normalizeIdValue(moderatorId));
-      const fields = { type: memory.type, bodyMd: memory.body, status: "validated", visibilityScope: "community", sourceVisibility: "community",
-        confidence: 0.8, evidenceStrength: "observed", tags: ["sessions"], lastUpdatedByActorType: "admin", lastUpdatedByUserId: moderatorId,
-        lastValidatedAt: nowMs, updatedAt: nowMs };
+      const slug = communityNoteSlug(memory.title);
+      const existing = await ctx.db.query("communityNotes")
+        .withIndex("by_community_slug", (q: any) => q.eq("communityId", args.communityId).eq("slug", slug)).first();
+      const fields = { title: memory.title, bodyMd: memory.body, searchText: buildCommunityNoteSearchText({ title: memory.title, bodyMd: memory.body }),
+        updatedByUserId: moderatorId, updatedAt: nowMs };
       if (existing) await ctx.db.patch(existing._id, fields);
-      else await ctx.db.insert("communityIntelligenceNodes", {
-        communityId: args.communityId, title: memory.title, ...fields, workflowIds: [], sourceTraceIds: [], outcomeObservationIds: [],
-        stalenessScore: 0, retrievalUsefulnessScore: 0, outcomeImpactScore: 0, createdByActorType: "admin", createdByUserId: moderatorId,
-        version: 1, createdAt: nowMs,
-      });
+      else await ctx.db.insert("communityNotes", { communityId: args.communityId, slug, source: "founder", createdByUserId: moderatorId, createdAt: nowMs, ...fields });
     }
 
     return {
