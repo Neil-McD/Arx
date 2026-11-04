@@ -1,6 +1,6 @@
 import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
 import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
-import { parseCommunityCardBody } from "./runtimeAgentLoop";
+import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
@@ -1971,18 +1971,13 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         })
         : null;
       if (turnContract) {
-        const slug = String(context.community?.slug ?? "").trim();
-        const readLayer = async (file: "community.md" | "handbook.md") => {
-          if (!slug) return null;
-          try {
-            const read = await executeConciergeTool({ ctx, context, requestId, toolName: "polynet_read", rawArguments: { path: `/communities/${slug}/${file}` } });
-            return read.status === "ok" ? parseCommunityCardBody(read.outputText) : null;
-          } catch {
-            return null;
-          }
-        };
-        if (turnContract.uses.communityCard) context.communityCardMd = await readLayer("community.md");
-        if (turnContract.uses.handbook) context.communityHandbookMd = await readLayer("handbook.md");
+        const layers = await loadCommunityTurnLayers({
+          contract: turnContract,
+          communitySlug: context.community?.slug,
+          read: (path) => executeConciergeTool({ ctx, context, requestId, toolName: "polynet_read", rawArguments: { path } }),
+        });
+        context.communityCardMd = layers.communityCardMd;
+        context.communityHandbookMd = layers.communityHandbookMd;
       }
       const servePromptBundle = buildCommunityAgentServePromptBundle(context);
       const initialMessages = servePromptBundle.messages;

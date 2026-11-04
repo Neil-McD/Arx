@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 import {
   COMMUNITY_MEMORY_RECALL_LIMIT,
@@ -789,19 +790,6 @@ export function resolveRuntimeTimeZone(value: unknown): string {
   }
 }
 
-const COMMUNITY_CARD_PROMPT_MAX_CHARS = 6_000;
-
-// The canonical read returns { path, body }; the card is its body, bounded.
-export function parseCommunityCardBody(outputText: string): string | null {
-  try {
-    const value = JSON.parse(outputText) as Record<string, unknown>;
-    const body = typeof value?.body === "string" ? value.body.trim() : "";
-    return body ? body.slice(0, COMMUNITY_CARD_PROMPT_MAX_CHARS) : null;
-  } catch {
-    return null;
-  }
-}
-
 async function runProviderNativeToolCompletion(params: {
   modelRef: string;
   messages: NativeToolAwareMessage[];
@@ -995,41 +983,26 @@ async function executeRetrievalAgentLoop(
     communityCardSlug &&
     effectiveAllowedToolNames.includes("polynet_read")
   ) {
-    let cardStatus: "loaded" | "empty" | "error" = "error";
-    try {
-      const card = await executeRetrievalHarnessTool({
+    const layerCommunityId = params.communityId;
+    const layers = await loadCommunityTurnLayers({
+      contract: turnContract,
+      communitySlug: communityCardSlug,
+      read: (path, layer) => executeRetrievalHarnessTool({
         ctx: params.ctx,
         userId: params.userId,
-        communityId: params.communityId,
+        communityId: layerCommunityId,
         authSubject: params.authSubject,
         runId: params.runId,
-        toolCallId: `${params.runId}:community_card`,
+        toolCallId: `${params.runId}:${layer}`,
         toolName: "polynet_read",
-        args: { path: `/communities/${communityCardSlug}/community.md` },
+        args: { path },
         evidenceSurface: "member_agent_dock",
         communityBoundConversation: communityConversation,
-      });
-      if (card.status === "ok") {
-        communityCardMd = parseCommunityCardBody(card.outputText);
-        cardStatus = communityCardMd ? "loaded" : "empty";
-      }
-      // The founder-approved handbook joins the card when there is one.
-      const handbook = !turnContract.uses.handbook ? null : await executeRetrievalHarnessTool({
-        ctx: params.ctx,
-        userId: params.userId,
-        communityId: params.communityId,
-        authSubject: params.authSubject,
-        runId: params.runId,
-        toolCallId: `${params.runId}:community_handbook`,
-        toolName: "polynet_read",
-        args: { path: `/communities/${communityCardSlug}/handbook.md` },
-        evidenceSurface: "member_agent_dock",
-        communityBoundConversation: communityConversation,
-      });
-      if (handbook?.status === "ok") communityHandbookMd = parseCommunityCardBody(handbook.outputText);
-    } catch {
-      communityCardMd = communityCardMd ?? null;
-    }
+      }),
+    });
+    communityCardMd = layers.communityCardMd;
+    communityHandbookMd = layers.communityHandbookMd;
+    const cardStatus = layers.cardStatus;
     try {
       await params.appendRunEvent({
         eventType: "community_card",

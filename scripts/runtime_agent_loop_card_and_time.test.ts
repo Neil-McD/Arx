@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { parseCommunityCardBody, resolveRuntimeTimeZone } from "../convex/runtimeAgentLoop";
+import { resolveRuntimeTimeZone } from "../convex/runtimeAgentLoop";
+import { parseCommunityTurnLayerBody as parseCommunityCardBody } from "../shared/communityTurnLayers";
 
 // A private Ask reads "now" in the asker's own timezone, and carries the
 // community card read through the canonical door.

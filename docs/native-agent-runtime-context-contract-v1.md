@@ -1,8 +1,8 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture, pre-Slice 8 liveness, and native-only Slice 10 cleanup are production-released; Slice 8 rejected Pi, Slice 9 is skipped, and only final Steward live acceptance remains
+Status: context architecture, pre-Slice 8 liveness, and native-only Slice 10 cleanup are production-released. Slice 8 rejected Pi in October 2026, Slice 9 is skipped, and only final Steward live acceptance remains. **Neil reopened the Pi decision on Nov 3, 2026 (POL-38): Pi agent core becomes the loop engine behind the turn contract** (see 14.3)
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
-Last updated: 2026-08-16
+Last updated: 2026-11-03
 
 Program position:
 
@@ -444,7 +444,27 @@ Do not adopt:
 
 ### 14.3 Pi: adopt only the loop engine if it earns adoption
 
-Decision: Pi did not earn adoption. Slice 8's compatibility and deterministic
+**November 2026 (POL-38, Neil, Nov 3): reopened and adopted as the loop
+engine.** What changed since the October rejection:
+
+1. One provider. OpenRouter, Gemini and other transports were removed
+   (POL-10), so the adapter no longer spans three provider and credential
+   models. Our funded OpenAI call (`runOpenAiNativeToolCompletion` through the
+   funded gateway, with cache breakpoints) becomes Pi's stream function
+   unchanged: funding, receipts and caching stay ours.
+2. Pi 1.5 has the seams the October adapter had to fake: `prepareRequest`
+   (the context projection before every request), `beforeToolCall` and
+   `afterToolCall` (admission, governed actions and audit) and `finishTurn`
+   (budget and stop conditions).
+3. The turn contract (`shared/communityTurnContract.ts`) and the shared layer
+   loader (`shared/communityTurnLayers.ts`) now own what each turn may use on
+   every surface. Pi only runs the loop behind them.
+
+Everything below this note about what Pi may and must not own still holds.
+The cutover is surface by surface behind a switch, with a parity suite, and
+ends by deleting `runNativeRuntimeKernel` so one engine remains.
+
+October 2026 record: Pi did not earn adoption. Slice 8's compatibility and deterministic
 parity probes were valuable evidence, but the provider/context boundary failed
 the explicit net-complexity gate. The requirements below remain the reason the
 candidate was rejected, not unfinished destination work.
@@ -492,9 +512,11 @@ the backend merely to satisfy Pi without first re-evaluating its benefit.
 
 ## 15. End-state invariants
 
-1. Exactly one production native loop implementation serves all four native
-   roles after convergence. Slice 8 selected `runNativeRuntimeKernel`; Pi never
-   became an authority or production requirement.
+1. Exactly one production native loop implementation serves all roles after
+   convergence. Slice 8 selected `runNativeRuntimeKernel`; POL-38 (Nov 2026)
+   replaces it with Pi agent core behind the turn contract, then deletes it.
+   Pi never becomes an authority: prompt, identity, access, tool admission,
+   funding, history and receipts stay Polynet's.
 2. Every native run has mandatory pre-first-provider context evidence. Bounded
    Concierge and Steward inputs retain exact snapshots; potentially long
    Member and Funnel inputs retain exact cryptographic attestations over the
