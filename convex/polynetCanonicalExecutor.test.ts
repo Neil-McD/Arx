@@ -3227,11 +3227,12 @@ test("a moderator reviews a selection of join requests: each is decided on its o
     ctx: executionContext(t.withIdentity({ subject: moderator.authSubject })), ...moderator, principalKind: "external_mcp", evidenceSurface: "external_mcp",
     toolName: "polynet_call", input: { operation: "community.admission.approve", version: 1, target: admissionApprovalPath, input, idempotency_key: key } });
   const first = await call({ requests: [observed(rows[0]), observed(rows[1]), stale] });
-  expect(first, JSON.stringify(first)).toMatchObject({ ok: true, value: { succeeded: 2, failed: 1, results: [
+  expect(first, JSON.stringify(first)).toMatchObject({ ok: true, value: { ok: true, operation: "community.admission.approve",
+    receipt: { authority_lane: "moderator", relation: "moderator", idempotency_key: "approve-three" }, result: { succeeded: 2, failed: 1, results: [
     { request_ref: `join-request:${rows[0]!._id}`, ok: true }, { request_ref: `join-request:${rows[1]!._id}`, ok: true },
-    { request_ref: `join-request:${rows[2]!._id}`, ok: false } ] } });
+    { request_ref: `join-request:${rows[2]!._id}`, ok: false } ] } } });
   // The receipt records who decided: a moderator, in the moderator lens.
-  expect((first as any).value.results[0].receipt).toMatchObject({ authority_lane: "moderator", relation: "moderator" });
+  expect((first as any).value.result.results[0].receipt).toMatchObject({ authority_lane: "moderator", relation: "moderator" });
   const state = () => t.run(async ctx => ({
     pending: (await ctx.db.query("communityJoinRequests").collect()).length,
     receipts: (await ctx.db.query("polynetCanonicalOperationReceipts").collect()).length,
@@ -3240,7 +3241,7 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   expect(after.pending).toBe(2);
   // The same call again decides nothing twice.
   const again = await call({ requests: [observed(rows[0]), observed(rows[1]), stale] });
-  expect(again).toMatchObject({ ok: true, value: { succeeded: 2, results: [{ ok: true, deduped: true }, { ok: true, deduped: true }, { ok: false }] } });
+  expect(again).toMatchObject({ ok: true, value: { result: { succeeded: 2, results: [{ ok: true, deduped: true }, { ok: true, deduped: true }, { ok: false }] } } });
   expect(await state()).toEqual(after);
   // Selections are bounded, distinct and exact.
   expect(await call({ requests: [] }, "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
@@ -3276,10 +3277,11 @@ test("moderators remove a selection of posts through their own AI; members and t
   await makeModerator(t, f);
   expect(await capabilities(member)).toEqual(expect.arrayContaining(["community.interaction.remove.json", "community.admission.approve.json"]));
   const removed = await remove(member, [refs[0], refs[1], "interaction:root:nosuchpost"]);
-  expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { succeeded: 2, failed: 1, results: [
-    { ref: refs[0], ok: true, removed: true }, { ref: refs[1], ok: true, removed: true }, { ref: "interaction:root:nosuchpost", ok: false } ] } });
+  expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { ok: true, operation: "community.interaction.remove",
+    receipt: { authority_lane: "moderator", relation: "moderator" }, result: { succeeded: 2, failed: 1, results: [
+    { ref: refs[0], ok: true, removed: true }, { ref: refs[1], ok: true, removed: true }, { ref: "interaction:root:nosuchpost", ok: false } ] } } });
   // Removing again is still removed.
-  expect(await remove(member, [refs[0]], "again")).toMatchObject({ ok: true, value: { succeeded: 1, results: [{ already_removed: true }] } });
+  expect(await remove(member, [refs[0]], "again")).toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ already_removed: true }] } } });
   const live = await t.run(async ctx => (await ctx.db.query("communityInteractionRoots").collect()).filter(r => r.status === "live").length);
   expect(live).toBe(1);
   expect(await remove(member, [], "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });

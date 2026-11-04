@@ -1464,7 +1464,7 @@ test("a member marks a lesson done for themselves; only reads made for them show
   expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(false);
   // The community agent in an Ask reads progress but can't change it.
   expect(await setDone("community_agent_for_member", true, "agent-done")).toMatchObject({ ok: false, code: "operation_not_found" });
-  expect(await setDone("external_mcp", true, "member-done")).toMatchObject({ ok: true, value: { ref: lessonRef, done: true } });
+  expect(await setDone("external_mcp", true, "member-done")).toMatchObject({ ok: true, value: { ok: true, operation: "community.lesson.set_done", result: { ref: lessonRef, done: true } } });
   expect(await setDone("external_mcp", true, "member-done-again")).toMatchObject({ ok: true });
   expect(await t.run((ctx) => ctx.db.query("communityLessonProgress").collect())).toHaveLength(1);
   expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(true);
@@ -1474,7 +1474,7 @@ test("a member marks a lesson done for themselves; only reads made for them show
   // Another member, and the agent answering a channel, never see it.
   expect(await doneIn("resource-semantic-peer", fixture.peerId, "external_mcp")).toBe(false);
   expect(await doneIn(fixture.memberSubject, fixture.memberId, "community_agent")).toBeUndefined();
-  expect(await setDone("external_mcp", false, "member-undo")).toMatchObject({ ok: true, value: { done: false } });
+  expect(await setDone("external_mcp", false, "member-undo")).toMatchObject({ ok: true, value: { result: { done: false } } });
   expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(false);
   expect(await run(fixture.memberSubject, fixture.memberId, "external_mcp", "polynet_call", {
     operation: "community.lesson.set_done", version: 1, target: "/communities/resource-semantic/capabilities/community.lesson.set_done.json",

@@ -81,9 +81,19 @@ function selectionItemKey(idempotencyKey: string, itemId: string): string {
   return `${idempotencyKey}:${itemId}`;
 }
 
-function selectionResult(results: Array<{ ok: boolean } & Record<string, unknown>>) {
-  const succeeded = results.filter(result => result.ok).length;
-  return { results, succeeded, failed: results.length - succeeded };
+// A selection's answer, in the call output's shape: each item's outcome in
+// result, and one receipt for the call (each item keeps its own underneath).
+function selectionResult(args: {
+  operation: string; principalKind: PolynetPrincipalKind; target: ResolvedCommunityTarget; idempotencyKey: string;
+  results: Array<{ ok: boolean } & Record<string, unknown>>;
+}) {
+  const succeeded = args.results.filter(result => result.ok).length;
+  return {
+    ok: true, operation: args.operation,
+    result: { results: args.results, succeeded, failed: args.results.length - succeeded },
+    receipt: { ...canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target: args.target, idempotencyKey: args.idempotencyKey }),
+      authority_lane: "moderator" },
+  };
 }
 const APPROVE_MILESTONE_OPERATION = "community.workflow.approve_milestone";
 // A builder's own agent publishes the community's site by handing over its files.
@@ -787,7 +797,7 @@ function capabilityDocument(args: {
   if (isRemovePostsCapability) {
     operationDefinition.input = { required: ["refs"],
       refs: `a selection of 1 to ${SELECTION_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
-      result: "{ results: [{ ref, ok, removed | code, message }], succeeded, failed }: each post is removed or refused on its own; one already removed counts as removed",
+      result: "result: { results: [{ ref, ok, removed | code, message }], succeeded, failed }: each post is removed or refused on its own; one already removed counts as removed",
       effects: ["remove_posts_for_everyone"], forbidden_effects: ["edit_posts", "ban_authors", "remove_from_other_communities"] };
   } else if (isReactCapability) {
     operationDefinition.input = { required: ["ref", "emoji", "on"],
@@ -797,7 +807,7 @@ function capabilityDocument(args: {
   } else if (isLessonDoneCapability) {
     operationDefinition.input = { required: ["ref", "done"],
       ref: "resource:<id> of a lesson from a course listing under resources/", done: "true marks the lesson done, false undoes it",
-      result: "{ ref, done }", effects: ["set_own_lesson_progress"], forbidden_effects: ["progress_for_someone_else"] };
+      result: "result: { ref, done }", effects: ["set_own_lesson_progress"], forbidden_effects: ["progress_for_someone_else"] };
   } else if (isMarkReadCapability) {
     operationDefinition.input = { required: ["channel"], optional: ["through_at"],
       channel: "a channel slug from the channels listing",
@@ -837,7 +847,7 @@ function capabilityDocument(args: {
     operationDefinition.input = {
       required: ["requests"],
       requests: `a selection of 1 to ${SELECTION_MAX} { request_ref, expected_created_at, expected_updated_at }, each copied exactly from the pending queue (join-request:<id> and its ISO timestamps)`,
-      result: "{ results: [{ request_ref, ok, ... | code, message }], succeeded, failed }: each request is decided on its own",
+      result: "result: { results: [{ request_ref, ok, ... | code, message }], succeeded, failed }: each request is decided on its own",
       also_accepted: "one request as request_ref, expected_created_at and expected_updated_at at the top level",
       effects: args.operation === ADMISSION_APPROVE_OPERATION
         ? ["grant_fresh_free_member_access", "record_approval", "existing_activation_workflows_and_access_email"]
@@ -2428,7 +2438,9 @@ async function executeCanonicalCall(args: {
       return canonicalError("invalid_tool_args", "A lesson ref (resource:<id>) and done (true or false) are required.");
     const value = await args.ctx.runMutation((internal as any).communityLessonProgress.setLessonDoneInternal,
       { communityId: target.communityId, userId: args.userId, ref: rawInput.ref, done: rawInput.done });
-    return value.ok ? { ok: true, value } : canonicalError(value.code, value.message);
+    return value.ok ? { ok: true, value: { ok: true, operation, result: { ref: value.ref, done: value.done },
+      receipt: canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target, idempotencyKey }) } }
+      : canonicalError(value.code, value.message);
   }
   if (operation === MARK_READ_OPERATION || operation === PRESENCE_HEARTBEAT_OPERATION || operation === TYPING_SET_OPERATION) {
     return await executeLiveMemberCall({ ...args, target, operation, input });
@@ -2516,7 +2528,7 @@ async function executeCanonicalCall(args: {
       results.push(decided.ok ? { request_ref: request!.requestRef, ok: true, ...decided.value }
         : { request_ref: request!.requestRef, ...decided });
     }
-    return { ok: true, value: selectionResult(results) };
+    return { ok: true, value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }) };
   }
   if (operation === REMOVE_POSTS_OPERATION) {
     const refs = Array.isArray(rawInput.refs) ? rawInput.refs : null;
@@ -2537,7 +2549,7 @@ async function executeCanonicalCall(args: {
         results.push({ ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." });
       }
     }
-    return { ok: true, value: selectionResult(results) };
+    return { ok: true, value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }) };
   }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
 }
