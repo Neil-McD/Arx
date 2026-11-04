@@ -33,9 +33,27 @@ const DRAFT_SEARCHES = ["runs leads organizes", "every weekly session", "start n
 
 async function managerHandbook(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
-  await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-  const row = await ctx.db.query("communityHandbooks").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).first();
+  return await managerHandbookFor(ctx, userId, args.communityId);
+}
+
+async function managerHandbookFor(ctx: any, userId: any, communityId: any) {
+  await requireCommunityManager({ ctx, communityId, userId });
+  const row = await ctx.db.query("communityHandbooks").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).first();
   return { userId, row };
+}
+
+async function saveDraft(ctx: any, communityId: any, row: any, text: string) {
+  await upsertHandbook(ctx, communityId, row, { draftMd: normalizeCommunityHandbookText(text), draftUpdatedAt: Date.now() });
+  return managerView(await ctx.db.query("communityHandbooks").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).first());
+}
+
+async function approve(ctx: any, communityId: any, row: any, userId: any, rawText: string) {
+  const text = normalizeCommunityHandbookText(rawText);
+  const nowMs = Date.now();
+  await upsertHandbook(ctx, communityId, row, text
+    ? { approvedMd: text, approvedAt: nowMs, approvedByUserId: userId, draftMd: text, draftUpdatedAt: nowMs }
+    : { approvedMd: undefined, approvedAt: undefined, approvedByUserId: undefined });
+  return managerView(await ctx.db.query("communityHandbooks").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).first());
 }
 
 async function upsertHandbook(ctx: any, communityId: any, row: any, patch: Record<string, unknown>) {
@@ -70,8 +88,7 @@ export const saveCommunityHandbookDraft = mutation({
   args: { ...managerArgs, text: v.string() },
   handler: async (ctx, args) => {
     const { row } = await managerHandbook(ctx, args);
-    await upsertHandbook(ctx, args.communityId, row, { draftMd: normalizeCommunityHandbookText(args.text), draftUpdatedAt: Date.now() });
-    return managerView(await ctx.db.query("communityHandbooks").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first());
+    return await saveDraft(ctx, args.communityId, row, args.text);
   },
 });
 
@@ -81,12 +98,31 @@ export const approveCommunityHandbook = mutation({
   args: { ...managerArgs, text: v.string() },
   handler: async (ctx, args) => {
     const { userId, row } = await managerHandbook(ctx, args);
-    const text = normalizeCommunityHandbookText(args.text);
-    const nowMs = Date.now();
-    await upsertHandbook(ctx, args.communityId, row, text
-      ? { approvedMd: text, approvedAt: nowMs, approvedByUserId: userId, draftMd: text, draftUpdatedAt: nowMs }
-      : { approvedMd: undefined, approvedAt: undefined, approvedByUserId: undefined });
-    return managerView(await ctx.db.query("communityHandbooks").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first());
+    return await approve(ctx, args.communityId, row, userId, args.text);
+  },
+});
+
+// A person's own AI (the MCP), with Studio's checks: owners and admins.
+const trustedManagerArgs = { userId: v.id("users"), communityId: v.id("communities") };
+
+export const getCommunityHandbookForTrustedManagerInternal = internalQuery({
+  args: trustedManagerArgs,
+  handler: async (ctx, args) => managerView((await managerHandbookFor(ctx, args.userId, args.communityId)).row),
+});
+
+export const saveCommunityHandbookDraftForTrustedUserInternal = internalMutation({
+  args: { ...trustedManagerArgs, text: v.string() },
+  handler: async (ctx, args) => {
+    const { row } = await managerHandbookFor(ctx, args.userId, args.communityId);
+    return await saveDraft(ctx, args.communityId, row, args.text);
+  },
+});
+
+export const approveCommunityHandbookForTrustedUserInternal = internalMutation({
+  args: { ...trustedManagerArgs, text: v.string() },
+  handler: async (ctx, args) => {
+    const { row } = await managerHandbookFor(ctx, args.userId, args.communityId);
+    return await approve(ctx, args.communityId, row, args.userId, args.text);
   },
 });
 

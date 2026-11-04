@@ -2146,7 +2146,19 @@ export const setCommunityFreeAccessMode = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
+    return await setCommunityFreeAccessModeCore(ctx, { communityId: args.communityId, mode: args.mode, userId });
+  },
+});
+
+// A person's own AI setting how people join (the MCP), with Studio's checks.
+export const setCommunityFreeAccessModeForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), mode: v.string() },
+  handler: async (ctx, args) => await setCommunityFreeAccessModeCore(ctx, args),
+});
+
+// Open or by approval (a paid community stays paid). Opening approves the
+// requests already waiting, in batches.
+async function setCommunityFreeAccessModeCore(ctx: any, args: { userId: any; communityId: any; mode: string }) {
     return await runLoggedCommunityAdminMutation({
       operation: "set_free_access_mode",
       context: {
@@ -2212,8 +2224,7 @@ export const setCommunityFreeAccessMode = mutation({
         };
       },
     });
-  },
-});
+}
 
 export const leaveCommunity = mutation({
   args: {

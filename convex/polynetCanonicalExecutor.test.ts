@@ -402,7 +402,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3381,4 +3381,77 @@ test("the published polynet_call schema covers every input any role's actions ac
     expect(answer.ok, JSON.stringify(answer)).toBe(true);
     for (const key of required) expect((answer as any).value, `${(answer as any).value?.operation} answers ${key}`).toHaveProperty(key);
   }
+});
+
+test("owners and admins run the community itself through their own AI; owner-only fields stay owner-only", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const admin = await createAdminFixture(t, f);
+  await t.run(ctx => ctx.db.patch(f.communityId, { oneLiner: "Runs at dawn", about: "We run." } as any));
+  const as = (subject: string, userId: any, slug = "canonical-community") => ({
+    read: (path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId,
+      principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName: "polynet_read", input: { path: `/communities/${slug}/${path}` } }),
+    call: (operation: string, input: Record<string, unknown>, key: string) => executePolynetCanonicalTool({
+      ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: "external_mcp", evidenceSurface: "external_mcp",
+      toolName: "polynet_call", input: { operation, version: 1, target: `/communities/${slug}/capabilities/${operation}.json`, input, idempotency_key: key } }),
+  });
+  const owner = as(f.ownerSubject, f.ownerId);
+  const adminAi = as(admin.authSubject, admin.userId);
+  const memberAi = as(f.memberSubject, f.memberId);
+  const settings = async (who = owner) => JSON.parse(((await who.read("builder/community.json")) as any).value.body);
+
+  const before = await settings();
+  expect(before).toMatchObject({ name: "Canonical community", slug: "canonical-community", one_liner: "Runs at dawn", about: "We run.",
+    visibility: "unlisted", join_mode: "open", agent_instructions: "", handbook: { approved_md: null, draft_md: null } });
+
+  // The owner renames and rewrites the one-liner; the about it didn't mention stays.
+  const renamed = await owner.call("community.settings.update", { expected_revision: before.settings_revision, name: "Dawn Runners", one_liner: "Five runs a week" }, "s1");
+  expect(renamed, JSON.stringify(renamed)).toMatchObject({ ok: true, value: { ok: true, operation: "community.settings.update",
+    result: { name: "Dawn Runners", one_liner: "Five runs a week", about: "We run." }, receipt: { authority_lane: "builder", relation: "owner" } } });
+  // The same call replays; a change against an old revision is refused.
+  expect(await owner.call("community.settings.update", { expected_revision: before.settings_revision, name: "Dawn Runners", one_liner: "Five runs a week" }, "s1"))
+    .toMatchObject({ ok: true, value: { result: { name: "Dawn Runners" } } });
+  expect(await owner.call("community.settings.update", { expected_revision: before.settings_revision, about: "Stale" }, "s2"))
+    .toMatchObject({ ok: false, code: "community_settings_conflict" });
+
+  // An admin may change the one-liner and about, not the name or visibility.
+  const current = await settings(adminAi);
+  expect(await adminAi.call("community.settings.update", { expected_revision: current.settings_revision, about: "We run, all paces." }, "a1"))
+    .toMatchObject({ ok: true, value: { result: { about: "We run, all paces.", name: "Dawn Runners" } } });
+  const next = await settings(adminAi);
+  expect(await adminAi.call("community.settings.update", { expected_revision: next.settings_revision, name: "Admin's name" }, "a2"))
+    .toMatchObject({ ok: false, code: "owner_only" });
+  expect(await adminAi.call("community.settings.update", { expected_revision: next.settings_revision, visibility: "published" }, "a3"))
+    .toMatchObject({ ok: false, code: "owner_only" });
+
+  // How people join, the agent's instructions and the handbook.
+  expect(await adminAi.call("community.join_mode.set", { mode: "approval" }, "j1")).toMatchObject({ ok: true, value: { result: { entry_policy: "approval" } } });
+  expect(await owner.call("community.agent.instructions.set", { text: "Keep answers short. Point new runners to the Tuesday easy run." }, "i1"))
+    .toMatchObject({ ok: true, value: { result: { instructions: "Keep answers short. Point new runners to the Tuesday easy run." } } });
+  expect(await owner.call("community.handbook.save_draft", { text: "# Start here\nCome on Tuesday." }, "h1"))
+    .toMatchObject({ ok: true, value: { result: { draft_md: "# Start here\nCome on Tuesday.", approved_md: null } } });
+  expect(await adminAi.call("community.handbook.approve", { text: "# Start here\nCome on Tuesday." }, "h2"))
+    .toMatchObject({ ok: true, value: { result: { approved_md: "# Start here\nCome on Tuesday." } } });
+  expect(await settings()).toMatchObject({ join_mode: "approval", agent_instructions: "Keep answers short. Point new runners to the Tuesday easy run.",
+    handbook: { approved_md: "# Start here\nCome on Tuesday." } });
+  // Members read the approved handbook.
+  expect(JSON.stringify(await memberAi.read("handbook.md"))).toContain("Come on Tuesday.");
+
+  // A member's own AI neither sees nor runs any of it.
+  expect(await memberAi.read("builder/community.json")).toMatchObject({ ok: false });
+  for (const [operation, input] of [["community.settings.update", { expected_revision: 0, about: "x" }], ["community.join_mode.set", { mode: "open" }],
+    ["community.agent.instructions.set", { text: "x" }], ["community.handbook.save_draft", { text: "x" }], ["community.handbook.approve", { text: "x" }]] as const) {
+    expect(await memberAi.call(operation, input, `m-${operation}`)).toMatchObject({ ok: false, code: "operation_not_found" });
+  }
+  // Bad input is refused before anything changes.
+  const latest = await settings();
+  expect(await owner.call("community.settings.update", { expected_revision: latest.settings_revision }, "b1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await owner.call("community.settings.update", { expected_revision: latest.settings_revision, visibility: "secret" }, "b2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await owner.call("community.join_mode.set", { mode: "paid" }, "b3")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+
+  // A new address: the community answers there.
+  expect(await owner.call("community.settings.update", { expected_revision: latest.settings_revision, slug: "dawn-runners" }, "s3"))
+    .toMatchObject({ ok: true, value: { result: { slug: "dawn-runners" } } });
+  expect(JSON.parse(((await as(f.ownerSubject, f.ownerId, "dawn-runners").read("builder/community.json")) as any).value.body)).toMatchObject({ slug: "dawn-runners" });
 });

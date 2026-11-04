@@ -11,6 +11,7 @@ import { parseCommunityInteractionEvidenceRef } from "../shared/communityEvidenc
 import {
   WORKFLOW_MEMBERS_DIRECTORY,
   POLYNET_JOIN_REQUESTS_DIRECTORY_PATH,
+  POLYNET_BUILDER_COMMUNITY_PATH,
   POLYNET_BUILDER_DIRECTORY_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
@@ -71,6 +72,15 @@ const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
 const ADMISSION_DENY_OPERATION = "community.admission.deny";
 const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
 const REMOVE_POSTS_OPERATION = "community.interaction.remove";
+// The community itself, run by its owners and admins through their own AI.
+const SETTINGS_UPDATE_OPERATION = "community.settings.update";
+const JOIN_MODE_OPERATION = "community.join_mode.set";
+const AGENT_INSTRUCTIONS_OPERATION = "community.agent.instructions.set";
+const HANDBOOK_DRAFT_OPERATION = "community.handbook.save_draft";
+const HANDBOOK_APPROVE_OPERATION = "community.handbook.approve";
+const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION];
+const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // Actions take a selection: up to this many items, each decided on its own.
 const SELECTION_MAX = 50;
 
@@ -800,7 +810,10 @@ function capabilityDocument(args: {
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isAdmissionCapability && !isRemovePostsCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
+  const isCommunityCapability = COMMUNITY_OPERATIONS.includes(args.operation) &&
+    args.evidenceSurface === "external_mcp" &&
+    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
+  if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
     !isMarkReadCapability && !isPresenceCapability && !isSiteDeployCapability) {
     return null;
   }
@@ -809,11 +822,32 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isWorkflowApprovalCapability || isSiteDeployCapability ? "builder"
+    authority_lane: isWorkflowApprovalCapability || isSiteDeployCapability || isCommunityCapability ? "builder"
       : isAdmissionCapability || isRemovePostsCapability ? "moderator" : "member",
     idempotency_required: true,
   };
-  if (isRemovePostsCapability) {
+  if (isCommunityCapability) {
+    operationDefinition.input = args.operation === SETTINGS_UPDATE_OPERATION ? {
+      required: ["expected_revision"], optional: ["name", "slug", "one_liner", "about", "visibility"],
+      expected_revision: "settings_revision from builder/community.json; a change made since is refused (community_settings_conflict)",
+      who: "owners: name, slug and visibility; owners and admins: one_liner and about",
+      slug: "the community's address; its site moves with it", visibility: "published or unlisted (publishing needs a name, one-liner and picture)",
+      result: "result: the community as builder/community.json shows it", effects: ["change_community_profile"],
+      forbidden_effects: ["pricing", "pictures", "archive"] }
+    : args.operation === JOIN_MODE_OPERATION ? {
+      required: ["mode"], mode: "open or approval (a paid community stays paid)",
+      result: "result: { entry_policy, approved_pending_request_count }", effects: ["set_join_mode", "opening_approves_waiting_requests"] }
+    : args.operation === AGENT_INSTRUCTIONS_OPERATION ? {
+      required: ["text"], text: "what the community agent is told about this community (up to 40,000 characters); empty clears it",
+      result: "result: { instructions }", effects: ["set_community_agent_instructions"],
+      forbidden_effects: ["platform_rules", "agent_permissions"] }
+    : args.operation === HANDBOOK_DRAFT_OPERATION ? {
+      required: ["text"], text: "the handbook draft in markdown; members and the agent don't see it until approved",
+      result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
+    : {
+      required: ["text"], text: "exactly the handbook to publish to members and the agent; empty withdraws it",
+      result: "result: { approved_md, draft_md, ... }", effects: ["publish_handbook"] };
+  } else if (isRemovePostsCapability) {
     operationDefinition.input = { required: ["refs"],
       refs: `a selection of 1 to ${SELECTION_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
       result: "result: { results: [{ ref, ok, removed | code, message }], succeeded, failed }: each post is removed or refused on its own; one already removed counts as removed",
@@ -1218,7 +1252,7 @@ async function executeCanonicalList(args: {
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
       ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
-        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
+        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, ...COMMUNITY_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -1276,6 +1310,7 @@ async function executeCanonicalList(args: {
       value: virtualDirectory({
         path: absolutePath,
         entries: [
+          { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, agent instructions, handbook" },
           joinRequests,
           { path: mountedPath(target.communitySlug, WORKFLOW_MEMBERS_DIRECTORY), kind: "directory", type: "builder", name: "Member workflow context and form responses" },
           {
@@ -1560,6 +1595,27 @@ async function executeCanonicalRead(args: {
       ...renderCommunityMemberSelfContext(resolvedSelf.context),
       writable: false,
     } };
+  }
+
+  // The community itself, as its owners and admins change it.
+  if (target.localPath === BUILDER_COMMUNITY_PATH) {
+    if (!target.authority.canUseBuilderProjection || args.principalKind === "community_agent") {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const scope = { userId: args.userId, communityId: target.communityId };
+      const [settings, agent, handbook] = await Promise.all([
+        args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal, scope),
+        args.ctx.runQuery((internal as any).communityAgent.readCommunityAgentInstructionsForTrustedManagerInternal, scope),
+        args.ctx.runQuery((internal as any).communityHandbook.getCommunityHandbookForTrustedManagerInternal, scope),
+      ]);
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath,
+        payload: { ...settings, agent_instructions: agent.instructions,
+          handbook: { approved_md: handbook.approved_md, approved_at: handbook.approved_at, draft_md: handbook.draft_md } } }),
+        writable: false, searchable: false } };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
   }
 
   if (target.localPath.startsWith(POLYNET_JOIN_REQUESTS_DIRECTORY_PATH)) {
@@ -2568,7 +2624,80 @@ async function executeCanonicalCall(args: {
         }
       } });
   }
+  if (COMMUNITY_OPERATIONS.includes(operation)) {
+    return await executeCommunityOperation({ ...args, target, operation, rawInput, idempotencyKey });
+  }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+}
+
+// What a refused change to the community means, by the domain's code.
+const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
+  community_owner_required: ["owner_only", "Only the community's owner can change its name, address or visibility."],
+  community_settings_conflict: ["community_settings_conflict", "The community changed since you read it. Read builder/community.json again and retry with its settings_revision."],
+  community_slug_taken: ["community_slug_taken", "Another community already uses that address."],
+  community_free_access_mode_invalid: ["invalid_tool_args", "mode is open or approval."],
+};
+
+// The community itself: profile, how people join, the agent's instructions and
+// the handbook, through Studio's own domain functions (owners and admins, with
+// owner-only fields checked there). One receipt per call.
+async function executeCommunityOperation(args: {
+  ctx: any; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
+  target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const { target, rawInput, operation } = args;
+  const text = (key: string, max: number) => typeof rawInput[key] === "string" && (rawInput[key] as string).length <= max;
+  const only = (keys: string[]) => Object.keys(rawInput).every(key => keys.includes(key));
+  const settingsKeys = ["expected_revision", "name", "slug", "one_liner", "about", "visibility"];
+  const valid = target.localPath === `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` && (
+    operation === SETTINGS_UPDATE_OPERATION
+      ? only(settingsKeys) && Number.isSafeInteger(rawInput.expected_revision) && (rawInput.expected_revision as number) >= 0 &&
+        settingsKeys.slice(1).some(key => key in rawInput) &&
+        (!("name" in rawInput) || text("name", 120)) && (!("slug" in rawInput) || text("slug", 64)) &&
+        (!("one_liner" in rawInput) || rawInput.one_liner === null || text("one_liner", 280)) &&
+        (!("about" in rawInput) || rawInput.about === null || text("about", 8_000)) &&
+        (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
+    : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
+    : operation === AGENT_INSTRUCTIONS_OPERATION ? only(["text"]) && text("text", 40_000)
+    : only(["text"]) && text("text", 40_000));
+  if (!valid) {
+    return canonicalError("invalid_tool_args", operation === SETTINGS_UPDATE_OPERATION
+      ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
+      : operation === JOIN_MODE_OPERATION ? "mode is open or approval." : "Give text.");
+  }
+  const reservation = await reserveMutatingOperation({ ...args, toolName: "polynet_call" });
+  if (!reservation.ok) return reservation.result;
+  if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+  const scope = { userId: args.userId, communityId: target.communityId };
+  try {
+    const result = operation === SETTINGS_UPDATE_OPERATION
+      ? await args.ctx.runMutation((internal as any).communityLifecycle.updateCommunityProfileForTrustedUserInternal, {
+        ...scope, expectedSettingsRevision: rawInput.expected_revision,
+        ...("name" in rawInput ? { name: rawInput.name } : {}), ...("slug" in rawInput ? { slug: rawInput.slug } : {}),
+        ...("one_liner" in rawInput ? { oneLiner: rawInput.one_liner } : {}), ...("about" in rawInput ? { about: rawInput.about } : {}),
+        ...("visibility" in rawInput ? { visibility: rawInput.visibility } : {}) })
+        .then(() => args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal, scope))
+      : operation === JOIN_MODE_OPERATION
+        ? await args.ctx.runMutation((internal as any).communityAdmin.setCommunityFreeAccessModeForTrustedUserInternal, { ...scope, mode: rawInput.mode })
+      : operation === AGENT_INSTRUCTIONS_OPERATION
+        ? await args.ctx.runMutation((internal as any).communityAgent.setCommunityAgentInstructionsForTrustedUserInternal, { ...scope, text: rawInput.text })
+      : await args.ctx.runMutation(operation === HANDBOOK_DRAFT_OPERATION
+        ? (internal as any).communityHandbook.saveCommunityHandbookDraftForTrustedUserInternal
+        : (internal as any).communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: rawInput.text });
+    return { ok: true, value: await completeMutatingOperation({
+      ...args, toolName: "polynet_call", requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+      value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result }),
+    }) };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : "";
+    const known = Object.entries(COMMUNITY_REFUSALS).find(([code]) => raw.includes(code))?.[1];
+    const [code, message] = known ?? (raw.includes("community_publish") || raw.includes("publish_readiness")
+      ? ["community_publish_not_ready", "Publishing needs a name, a one-liner and a picture."]
+      : ["community_change_refused", "That change wasn't made."]);
+    await failMutatingOperation({ ...args, toolName: "polynet_call", requestFingerprint: reservation.requestFingerprint,
+      attemptToken: reservation.attemptToken, errorCode: code, errorMessage: message });
+    return canonicalError(code, message);
+  }
 }
 
 // community.site.deploy: decode the files, upload only what Cloudflare lacks,

@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { moveCommunitySiteAddresses, registerCommunitySiteAddresses } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -812,6 +812,90 @@ export const getCommunitySettings = query({
   },
 });
 
+// Studio's settings save, for a user already resolved: the whole profile and
+// pricing in one write, with the owner-only checks for identity, branding and
+// visibility. Every field is the next state: one left out is cleared.
+async function saveCommunitySettingsCore(ctx: any, args: any) {
+  const userId = args.userId;
+  const nowMs = Date.now();
+  const { community } = await requireCommunityManager({
+    ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  requireExpectedCommunitySettingsRevision(
+    args.expectedSettingsRevision,
+    community,
+  );
+  const currentPricing = await getCurrentCommunityPriceAmounts(ctx, args.communityId);
+  const settingsState = resolveCommunitySettingsState(args, community, currentPricing);
+  const existingBySlug = (await ctx.db
+    .query("communities")
+    .withIndex("by_slug", (q: any) => q.eq("slug", settingsState.normalizedSlug))
+    .first()) as CommunityLike | null;
+  if (existingBySlug && String(existingBySlug._id) !== String(args.communityId)) {
+    throw new Error("community_slug_taken");
+  }
+
+  await requireCommunitySettingsPermissions({
+    ctx,
+    communityId: args.communityId,
+    community,
+    userId,
+    state: settingsState,
+    nowMs,
+  });
+
+  const previousAvatarStorageId = community.avatarStorageId;
+  const previousBannerStorageId = community.bannerStorageId;
+  // Its site addresses move with the slug (or the rename is refused, before anything changes).
+  await moveCommunitySiteAddresses(ctx, community, settingsState.normalizedSlug);
+
+  await ctx.db.patch(community._id as any, {
+    name: settingsState.nextName,
+    slug: settingsState.normalizedSlug,
+    oneLiner: settingsState.nextOneLiner,
+    about: settingsState.nextAbout,
+    avatarUrl: settingsState.nextAvatarUrl,
+    avatarStorageId: settingsState.nextAvatarStorageId,
+    avatarFocusX: settingsState.nextAvatarFocusX,
+    avatarFocusY: settingsState.nextAvatarFocusY,
+    avatarZoom: settingsState.nextAvatarZoom,
+    bannerUrl: settingsState.nextBannerUrl,
+    bannerStorageId: settingsState.nextBannerStorageId,
+    bannerFocusX: settingsState.nextBannerFocusX,
+    bannerFocusY: settingsState.nextBannerFocusY,
+    bannerZoom: settingsState.nextBannerZoom,
+    visibility: settingsState.nextVisibility,
+    entryPolicy: settingsState.nextEntryPolicy,
+    ...(
+      settingsState.identityChanged || settingsState.brandingChanged
+        ? { brandingRevision: nextCommunityBrandingRevision(community) }
+        : null
+    ),
+    settingsRevision: resolveCommunitySettingsRevision(community) + 1,
+    updatedAt: nowMs,
+  });
+
+  if (previousAvatarStorageId && String(previousAvatarStorageId) !== String(settingsState.nextAvatarStorageId ?? "")) {
+    await maybeDeleteStorageAsset(ctx, previousAvatarStorageId);
+  }
+  if (previousBannerStorageId && String(previousBannerStorageId) !== String(settingsState.nextBannerStorageId ?? "")) {
+    await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
+  }
+
+  await upsertCommunitySettingsPricePoints({
+    ctx,
+    communityId: args.communityId,
+    state: settingsState,
+    nowMs,
+  });
+
+  const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
+  if (!updated) throw new Error("community_not_found");
+  return await mapCommunitySettingsSnapshot(ctx, updated);
+}
+
 export const saveCommunitySettings = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -844,84 +928,60 @@ export const saveCommunitySettings = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
+    return await saveCommunitySettingsCore(ctx, { ...args, userId });
+  },
+});
+
+// The community itself as a manager's own AI reads it (the MCP): the profile,
+// visibility, how people join, and the revision a change must name.
+export const readCommunitySettingsForTrustedManagerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const snapshot = await mapCommunitySettingsSnapshot(ctx, community);
+    return {
+      name: snapshot.name, slug: snapshot.slug, one_liner: snapshot.one_liner, about: snapshot.about,
+      visibility: snapshot.visibility, join_mode: resolveCommunityEntryPolicy(community),
+      pricing_mode: snapshot.pricing.mode, avatar_url: snapshot.avatar_url, banner_url: snapshot.banner_url,
+      settings_revision: snapshot.settings_revision, updated_at: snapshot.updated_at,
+    };
+  },
+});
+
+// A person's own AI changing the profile (the MCP): only the fields it gives
+// change. Everything else, pricing and pictures included, is carried over, so
+// the full-replace save above never clears what wasn't mentioned.
+export const updateCommunityProfileForTrustedUserInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    expectedSettingsRevision: v.number(),
+    name: v.optional(v.string()),
+    slug: v.optional(v.string()),
+    oneLiner: v.optional(v.union(v.string(), v.null())),
+    about: v.optional(v.union(v.string(), v.null())),
+    visibility: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    const pricing = await getCurrentCommunityPriceAmounts(ctx, args.communityId);
+    const currentPrice = ((await ctx.db.query("communityPricePoints" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as Array<{ isCurrent: boolean; currency: string; currencyDecimals: number }>).find((row) => row.isCurrent);
+    return await saveCommunitySettingsCore(ctx, {
       userId: args.userId,
-    });
-    requireExpectedCommunitySettingsRevision(
-      args.expectedSettingsRevision,
-      community,
-    );
-    const currentPricing = await getCurrentCommunityPriceAmounts(ctx, args.communityId);
-    const settingsState = resolveCommunitySettingsState(args, community, currentPricing);
-    const existingBySlug = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q: any) => q.eq("slug", settingsState.normalizedSlug))
-      .first()) as CommunityLike | null;
-    if (existingBySlug && String(existingBySlug._id) !== String(args.communityId)) {
-      throw new Error("community_slug_taken");
-    }
-
-    await requireCommunitySettingsPermissions({
-      ctx,
       communityId: args.communityId,
-      community,
-      userId,
-      state: settingsState,
-      nowMs,
+      expectedSettingsRevision: args.expectedSettingsRevision,
+      name: args.name ?? community.name,
+      slug: args.slug ?? community.slug,
+      oneLiner: args.oneLiner !== undefined ? args.oneLiner : (community as any).oneLiner ?? null,
+      about: args.about !== undefined ? args.about : (community as any).about ?? null,
+      visibility: args.visibility ?? community.visibility,
+      monthlyAmountBaseUnits: pricing.monthlyAmount,
+      annualAmountBaseUnits: pricing.annualAmount,
+      ...(currentPrice ? { currency: currentPrice.currency, currencyDecimals: currentPrice.currencyDecimals } : {}),
     });
-
-    const previousAvatarStorageId = community.avatarStorageId;
-    const previousBannerStorageId = community.bannerStorageId;
-    // Its site addresses move with the slug (or the rename is refused, before anything changes).
-    await moveCommunitySiteAddresses(ctx, community, settingsState.normalizedSlug);
-
-    await ctx.db.patch(community._id as any, {
-      name: settingsState.nextName,
-      slug: settingsState.normalizedSlug,
-      oneLiner: settingsState.nextOneLiner,
-      about: settingsState.nextAbout,
-      avatarUrl: settingsState.nextAvatarUrl,
-      avatarStorageId: settingsState.nextAvatarStorageId,
-      avatarFocusX: settingsState.nextAvatarFocusX,
-      avatarFocusY: settingsState.nextAvatarFocusY,
-      avatarZoom: settingsState.nextAvatarZoom,
-      bannerUrl: settingsState.nextBannerUrl,
-      bannerStorageId: settingsState.nextBannerStorageId,
-      bannerFocusX: settingsState.nextBannerFocusX,
-      bannerFocusY: settingsState.nextBannerFocusY,
-      bannerZoom: settingsState.nextBannerZoom,
-      visibility: settingsState.nextVisibility,
-      entryPolicy: settingsState.nextEntryPolicy,
-      ...(
-        settingsState.identityChanged || settingsState.brandingChanged
-          ? { brandingRevision: nextCommunityBrandingRevision(community) }
-          : null
-      ),
-      settingsRevision: resolveCommunitySettingsRevision(community) + 1,
-      updatedAt: nowMs,
-    });
-
-    if (previousAvatarStorageId && String(previousAvatarStorageId) !== String(settingsState.nextAvatarStorageId ?? "")) {
-      await maybeDeleteStorageAsset(ctx, previousAvatarStorageId);
-    }
-    if (previousBannerStorageId && String(previousBannerStorageId) !== String(settingsState.nextBannerStorageId ?? "")) {
-      await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
-    }
-
-    await upsertCommunitySettingsPricePoints({
-      ctx,
-      communityId: args.communityId,
-      state: settingsState,
-      nowMs,
-    });
-
-    const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
-    if (!updated) throw new Error("community_not_found");
-    return await mapCommunitySettingsSnapshot(ctx, updated);
   },
 });
 

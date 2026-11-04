@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
@@ -185,6 +185,38 @@ export const saveCommunityAgentConfig = mutation({
     const created = (await ctx.db.get(id as any)) as CommunityAgentConfigLike | null;
     if (!created) throw new Error("community_agent_config_create_failed");
     return mapCommunityAgentConfigRow(created);
+  },
+});
+
+// The community agent's instructions, for a manager's own AI (the MCP).
+export const readCommunityAgentInstructionsForTrustedManagerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const row = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
+    return { instructions: row?.systemPrompt ?? "" };
+  },
+});
+
+// A person's own AI rewriting the community agent's instructions (the MCP):
+// owners and admins, as in Studio. Only the instructions change.
+export const setCommunityAgentInstructionsForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), text: v.string() },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const systemPrompt = normalizeCommunitySystemPrompt(args.text);
+    const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
+    const existing = selectPrimaryCommunityAgentConfigRow(rows);
+    if (existing) {
+      await ctx.db.patch(existing._id as any, { systemPrompt, updatedAt: nowMs });
+      await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
+    } else {
+      await ctx.db.insert("communityAgentConfigs" as any, {
+        communityId: args.communityId, landingJson: null, systemPrompt, createdAt: nowMs, updatedAt: nowMs,
+      });
+    }
+    return { instructions: systemPrompt };
   },
 });
 
