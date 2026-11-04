@@ -41,7 +41,10 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
   const pendingIdsRef = useRef<Set<string>>(new Set());
   pendingIdsRef.current = new Set(pendingJoinRequests.map((request) => request.id));
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const joinRequestPanelId = useId();
   const pendingJoinRequestCount = visiblePendingJoinRequests.length;
   const canShowJoinRequests = Boolean(
