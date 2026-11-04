@@ -22,6 +22,7 @@ run_step() {
 }
 
 run_step "No orphan Convex modules" npm run check:no-orphan-modules
+run_step "No references to missing Convex modules" npm run check:no-missing-module-refs
 run_step "System map covers every module and table" npm run check:system-map-coverage
 run_step "One inference provider, founder-funded turns" npm run check:single-inference-provider
 run_step "Community launcher retirement contract" npm run check:community-launcher-retirement-proof

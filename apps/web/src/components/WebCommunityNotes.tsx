@@ -8,6 +8,7 @@ import {
   type CommunityNotesView,
 } from "../../../../shared/cloudCommunityNotesGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "../../../../shared/ensureUsableSession";
+import { COMMUNITY_NOTES_MAX_PER_COMMUNITY } from "../../../../shared/communityNotes";
 import "./WebCommunityNotes.css";
 
 const COMPACT_LIMIT = 5;
@@ -33,7 +34,7 @@ export function WebCommunityNotes<SessionT>(props: {
     const session = await resolveUsableSession(props.session, props.ensureSession);
     if (!session) { setError("Sign in again to see community notes."); return; }
     try {
-      setView(await fetchCommunityNotes({ session, communityId: props.communityId, limit: props.compact ? COMPACT_LIMIT : 100 }));
+      setView(await fetchCommunityNotes({ session, communityId: props.communityId, limit: props.compact ? COMPACT_LIMIT : COMMUNITY_NOTES_MAX_PER_COMMUNITY }));
       setError(null);
     } catch {
       setError("Couldn't load community notes.");

@@ -16,6 +16,7 @@ import {
   internalMutation,
   internalQuery,
 } from "./_generated/server";
+import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 import { v } from "convex/values";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import {
@@ -372,7 +373,7 @@ function createServeRunEventRecorder(args: {
     const eventSeq = seq;
     seq += 1;
     await args.ctx.runMutation(
-      internalRefs.communityAgentRuntime
+      internalRefs.communityAgentServeWorker
         .recordCommunityAgentRunEventsInternal,
       {
         communityId: args.communityId,
@@ -1434,6 +1435,66 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       threadContext,
       funding,
     };
+  },
+});
+
+// The run log of one agent turn (tags and workflow turns): prompts, tool
+// calls, input budget and projection evidence, the final answer or error.
+const RUN_EVENT_CONTENT_MAX_CHARS = 8_000;
+const RUN_EVENT_MAX_SEQ = 240;
+
+export const recordCommunityAgentRunEventsInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    runId: v.string(),
+    events: v.array(
+      v.object({
+        seq: v.number(),
+        kind: v.union(
+          v.literal("system_prompt"),
+          v.literal("wake_context"),
+          v.literal("reasoning"),
+          v.literal("assistant"),
+          v.literal("tool_call"),
+          v.literal("tool_result"),
+          v.literal("input_budget"),
+          v.literal("context_projection"),
+          v.literal("final"),
+          v.literal("error"),
+        ),
+        toolName: v.optional(v.string()),
+        status: v.optional(v.string()),
+        errorCode: v.optional(v.string()),
+        content: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireLiveCommunityForCognitionWrite(ctx, args.communityId);
+    const nowMs = Date.now();
+    for (const event of args.events) {
+      const seq = Math.max(0, Math.floor(event.seq));
+      // Hard cap so a pathological run cannot flood the log.
+      if (seq >= RUN_EVENT_MAX_SEQ) continue;
+      const row = {
+        communityId: args.communityId,
+        runId: boundedText(args.runId, 128),
+        seq,
+        kind: event.kind,
+        toolName: boundedText(event.toolName, 80) || undefined,
+        status: boundedText(event.status, 40) || undefined,
+        errorCode: boundedText(event.errorCode, 120) || undefined,
+        content: boundedText(event.content, RUN_EVENT_CONTENT_MAX_CHARS),
+        createdAt: nowMs,
+      };
+      const existing = await ctx.db
+        .query("communityAgentRunEvents" as any)
+        .withIndex("by_run_seq", (q: any) => q.eq("runId", row.runId).eq("seq", seq))
+        .first();
+      if (existing) await ctx.db.patch(existing._id, row);
+      else await ctx.db.insert("communityAgentRunEvents" as any, row);
+    }
+    return { ok: true, recorded: args.events.length };
   },
 });
 

@@ -215,6 +215,7 @@
     "check:all": "node scripts/run_all_checks.mjs",
     "test:unit": "vitest run",
     "check:no-orphan-modules": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/no_orphan_modules_proof.ts",
+    "check:no-missing-module-refs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/no_missing_module_refs_proof.ts",
     "check:no-uncalled-functions": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/no_uncalled_functions_proof.ts",
     "check:one-community-lens": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/one_community_lens_proof.ts",
     "check:one-agent-identity": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/one_agent_identity_proof.ts",

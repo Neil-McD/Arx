@@ -63,8 +63,10 @@ async function buildOverview(ctx: any, community: any, args: { isManager: boolea
   ]);
   const root = rootId(community._id);
   const label = (text: string) => (args.anonymous ? null : text);
+  // Opaque ids: a note's slug is its title, which the visitor lens must not show.
   const noteNodes = notes.rows.map((note) => ({
-    id: `note:${note.slug}`, lineage_id: `note:${note.slug}`, kind: "directory_node", node_id: note.slug,
+    id: `note:${normalizeIdValue(note._id)}`, lineage_id: `note:${normalizeIdValue(note._id)}`, kind: "directory_node",
+    node_id: normalizeIdValue(note._id),
     type: "note", label: label(note.title), title: label(note.title), status: "note", updated_at: toIsoString(note.updatedAt),
   }));
   const resourceNodes = resources.rows.map((row) => ({
