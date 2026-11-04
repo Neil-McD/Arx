@@ -13,7 +13,7 @@ import {
   type CommunityAgentToolName,
 } from "../shared/communityAgentToolProtocol";
 import type { NativeToolAwareCompletionSuccess } from "../shared/nativeToolProtocol";
-import { runNativeRuntimeKernel } from "../shared/runtimeKernel";
+import { selectRuntimeKernel } from "../shared/runtimeKernelEngine";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
   type RuntimeKernelFailureInput,
@@ -1142,7 +1142,8 @@ export const runCommunityAgentLoopInternal = internalAction({
             "community_agent_context_snapshot_unavailable",
         );
       }
-      const result = await runNativeRuntimeKernel<CommunityAgentToolName>({
+      const runtimeKernel = selectRuntimeKernel("steward");
+      const result = await runtimeKernel.run<CommunityAgentToolName>({
         messages,
         budget: {
           ...DEFAULT_RUNTIME_KERNEL_BUDGET,

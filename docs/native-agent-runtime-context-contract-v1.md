@@ -463,6 +463,22 @@ engine.** What changed since the October rejection:
    `checkCommunityTurnToolCall`, before every tool call on Ask and tag turns.
    Pi's `beforeToolCall` calls the same function.
 
+Engine slice 1 (POL-38 PR 5) is in. The loop rules (input budget and context
+projection, tool budget, repeated-call, failure and no-progress limits,
+cancellation, transcript and step records) live in one class,
+`RuntimeKernelRun` (`shared/runtimeKernel.ts`). Two sequencers drive it:
+`runNativeRuntimeKernel` and `runPiRuntimeKernel` (`shared/piRuntimeKernel.ts`,
+`@earendil-works/pi-agent-core` 1.4.0, pinned). On Pi, `streamFn` is one model
+request through our funded completion (`RuntimeKernelRun.nextStep`);
+`beforeToolCall` starts an admitted step; `afterToolCall` records a serial
+step; `finishTurn` records a parallel batch in source order and ends the run on
+a terminal signal. Pi never sees tool schemas or our transcript, and it runs in
+Convex's default runtime, so streaming is unchanged. Every kernel test runs on
+both engines (`scripts/runtimeKernelEngines.ts`). The Convex env variable
+`POLYNET_PI_ENGINE_SURFACES` (comma list of `ask`, `tag`, `steward`) moves a
+surface to Pi; unset keeps all three native. An Ask records its engine in a
+`runtime_engine` run event.
+
 Everything below this note about what Pi may and must not own still holds.
 The cutover is surface by surface behind a switch, with a parity suite, and
 ends by deleting `runNativeRuntimeKernel` so one engine remains.

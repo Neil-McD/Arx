@@ -258,6 +258,7 @@
     "check:community-everybody-mention-row-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_row_contract_proof.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "1.4.0",
     "convex": "^1.42.1",
     "highlight.js": "^11.11.1",
     "katex": "0.18.2",

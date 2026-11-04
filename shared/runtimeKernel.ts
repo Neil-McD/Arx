@@ -327,7 +327,7 @@ function sameRuntimeInputBudgetPlan(
   );
 }
 
-export async function runNativeRuntimeKernel<TToolName extends string>(params: {
+export type RuntimeKernelParams<TToolName extends string> = {
   messages: NativeToolAwareMessage[];
   budget: RuntimeKernelBudget;
   inputBudget: RuntimeKernelInputBudgetConfig;
@@ -366,57 +366,103 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     consecutiveFailureCount: number;
     consecutiveNoProgressCount: number;
   }) => Promise<void> | void;
-}): Promise<RuntimeKernelResult<TToolName>> {
-  const transcript = [...params.messages];
-  const steps: RuntimeKernelStepRecord<TToolName>[] = [];
-  let promptTokens: number | null = null;
-  let completionTokens: number | null = null;
-  let toolStepCount = 0;
-  let lastToolSignature: string | null = null;
-  let lastToolResultSignature: string | null = null;
-  let repeatedCallCount = 0;
-  let consecutiveFailureCount = 0;
-  let consecutiveNoProgressCount = 0;
-  let inputBudgetPlanSequence = 0;
-  let contextProjectionSequence = 0;
-  let previousInputBudgetPlan: RuntimeInputBudgetPlan | null = null;
+};
 
-  type RuntimeKernelTerminalSignal = {
-    status: number;
-    code: RuntimeKernelFailure<TToolName>["code"];
-    stopReason: RuntimeKernelStopReason;
-    message: string;
-  };
+export type RuntimeKernelTerminalSignal = {
+  status: number;
+  code: RuntimeKernelFailure<string>["code"];
+  stopReason: RuntimeKernelStopReason;
+  message: string;
+};
 
-  const buildTerminalFailure = (
+export type RuntimeKernelPreparedToolStep<TToolName extends string> = {
+  iteration: number;
+  step: RuntimeKernelResolvedToolStep<TToolName>;
+  toolSignature: string;
+  repeatedCallCount: number;
+};
+
+// What the next model request decided: the run is over, or here is a batch of
+// tool calls that passed the budget and repeat checks, to run serially or in
+// parallel.
+export type RuntimeKernelNextStep<TToolName extends string> =
+  | { kind: "result"; result: RuntimeKernelResult<TToolName> }
+  | {
+      kind: "tools";
+      prepared: RuntimeKernelPreparedToolStep<TToolName>[];
+      parallel: boolean;
+    };
+
+// The rules of one agent run: input budget and context projection, the tool
+// budget, repeated-call and no-progress limits, cancellation and the transcript.
+// A loop engine only sequences these calls: request a step, run its tools,
+// process each result, finish the batch.
+export class RuntimeKernelRun<TToolName extends string> {
+  readonly transcript: NativeToolAwareMessage[];
+  readonly steps: RuntimeKernelStepRecord<TToolName>[] = [];
+  private promptTokens: number | null = null;
+  private completionTokens: number | null = null;
+  private toolStepCount = 0;
+  private lastToolSignature: string | null = null;
+  private lastToolResultSignature: string | null = null;
+  private repeatedCallCount = 0;
+  private consecutiveFailureCount = 0;
+  private consecutiveNoProgressCount = 0;
+  private inputBudgetPlanSequence = 0;
+  private contextProjectionSequence = 0;
+  private previousInputBudgetPlan: RuntimeInputBudgetPlan | null = null;
+  private assistantMessageAppended = false;
+  private pendingObservationContent: NativeToolInputContentPart[] | null = null;
+
+  private readonly params: RuntimeKernelParams<TToolName>;
+
+  constructor(params: RuntimeKernelParams<TToolName>) {
+    this.params = params;
+    this.transcript = [...params.messages];
+  }
+
+  buildTerminalFailure(
     signal: RuntimeKernelTerminalSignal,
-  ): RuntimeKernelFailure<TToolName> => ({
-    ok: false,
-    status: signal.status,
-    code: signal.code,
-    stopReason: signal.stopReason,
-    message: signal.message,
-    promptTokens,
-    completionTokens,
-    transcript: [...transcript],
-    stepCount: toolStepCount,
-    steps: [...steps],
-  });
+  ): RuntimeKernelFailure<TToolName> {
+    return {
+      ok: false,
+      status: signal.status,
+      code: signal.code,
+      stopReason: signal.stopReason,
+      message: signal.message,
+      promptTokens: this.promptTokens,
+      completionTokens: this.completionTokens,
+      transcript: [...this.transcript],
+      stepCount: this.toolStepCount,
+      steps: [...this.steps],
+    };
+  }
 
-  const planProviderMessages = async (
+  failure(failure: RuntimeKernelFailureInput): RuntimeKernelFailure<TToolName> {
+    return toKernelFailure({
+      failure,
+      transcript: this.transcript,
+      steps: this.steps,
+      stepCount: this.toolStepCount,
+      promptTokens: this.promptTokens,
+      completionTokens: this.completionTokens,
+    });
+  }
+
+  private async planProviderMessages(
     messages: NativeToolAwareMessage[],
   ): Promise<{
     plan: RuntimeInputBudgetPlan | null;
     failure: RuntimeKernelFailureInput | null;
-  }> => {
+  }> {
     let plan: RuntimeInputBudgetPlan;
     try {
       plan = planRuntimeInputBudget({
-        transport: params.inputBudget.transport,
-        modelRef: params.inputBudget.modelRef,
+        transport: this.params.inputBudget.transport,
+        modelRef: this.params.inputBudget.modelRef,
         messages,
-        toolSchemas: params.inputBudget.toolSchemas,
-        reservedOutputTokens: params.inputBudget.reservedOutputTokens,
+        toolSchemas: this.params.inputBudget.toolSchemas,
+        reservedOutputTokens: this.params.inputBudget.reservedOutputTokens,
       });
     } catch {
       return {
@@ -431,12 +477,12 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       };
     }
 
-    const previousPlan = previousInputBudgetPlan;
+    const previousPlan = this.previousInputBudgetPlan;
     if (!previousPlan || !sameRuntimeInputBudgetPlan(previousPlan, plan)) {
-      inputBudgetPlanSequence += 1;
+      this.inputBudgetPlanSequence += 1;
       try {
-        await params.inputBudget.recordPlan({
-          sequence: inputBudgetPlanSequence,
+        await this.params.inputBudget.recordPlan({
+          sequence: this.inputBudgetPlanSequence,
           kind: previousPlan ? "delta" : "initial",
           plan,
           delta: previousPlan
@@ -462,7 +508,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           },
         };
       }
-      previousInputBudgetPlan = plan;
+      this.previousInputBudgetPlan = plan;
     }
 
     if (!plan.fits && plan.failureCode !== CONTEXT_WINDOW_EXCEEDED_CODE) {
@@ -486,32 +532,35 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       plan,
       failure: null,
     };
-  };
+  }
 
-  const contextOverflowFailure = (): RuntimeKernelFailureInput => ({
-    ok: false,
-    status: 413,
-    code: CONTEXT_WINDOW_EXCEEDED_CODE,
-    stopReason: "model_error",
-    message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
-  });
+  private contextOverflowFailure(): RuntimeKernelFailureInput {
+    return {
+      ok: false,
+      status: 413,
+      code: CONTEXT_WINDOW_EXCEEDED_CODE,
+      stopReason: "model_error",
+      message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+    };
+  }
 
-  const imageInputTokensForPlan = (
+  private imageInputTokensForPlan(
     plan: RuntimeInputBudgetPlan,
-  ): number | undefined =>
-    plan.imageCount > 0
+  ): number | undefined {
+    return plan.imageCount > 0
       ? Math.max(0, Math.floor(plan.imageTokens / plan.imageCount))
       : undefined;
+  }
 
-  const recordProjection = async (paramsToRecord: {
+  private async recordProjection(paramsToRecord: {
     projection: ProviderContextProjection;
     trigger: "preflight_overflow" | "provider_overflow";
-  }): Promise<RuntimeKernelFailureInput | null> => {
-    contextProjectionSequence += 1;
+  }): Promise<RuntimeKernelFailureInput | null> {
+    this.contextProjectionSequence += 1;
     try {
       const { messages, ...projectionEvidence } = paramsToRecord.projection;
-      await params.inputBudget.recordProjection({
-        sequence: contextProjectionSequence,
+      await this.params.inputBudget.recordProjection({
+        sequence: this.contextProjectionSequence,
         trigger: paramsToRecord.trigger,
         digest: await sha256RuntimeProviderContext(messages),
         projection: projectionEvidence,
@@ -526,87 +575,59 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         message: "The agent could not record the projected model context safely.",
       };
     }
-  };
+  }
 
   // Once the tool budget is spent, ask for an answer from what the tools found
   // instead of ending the turn with nothing to say.
-  const runProviderCompletion = async (
+  private async runProviderCompletion(
     messages: NativeToolAwareMessage[],
-  ): Promise<Awaited<ReturnType<RuntimeKernelRunCompletion<TToolName>>>> =>
-    await params.runCompletion(
+  ): Promise<Awaited<ReturnType<RuntimeKernelRunCompletion<TToolName>>>> {
+    return await this.params.runCompletion(
       messages,
-      toolStepCount >= params.budget.maxToolSteps ? { toolChoice: "none" } : undefined,
+      this.toolStepCount >= this.params.budget.maxToolSteps ? { toolChoice: "none" } : undefined,
     );
+  }
 
-  while (true) {
-    let providerMessages = [...transcript];
-    let planned = await planProviderMessages(providerMessages);
-    if (planned.failure) {
-      return toKernelFailure({
-        failure: planned.failure,
-        transcript,
-        steps,
-        stepCount: toolStepCount,
-        promptTokens,
-        completionTokens,
-      });
-    }
+  // One model request: fit the transcript to the input budget, ask the model,
+  // and either finish the run or admit the next batch of tool calls.
+  async nextStep(): Promise<RuntimeKernelNextStep<TToolName>> {
+    const done = (result: RuntimeKernelResult<TToolName>): RuntimeKernelNextStep<TToolName> => ({ kind: "result", result });
+    let providerMessages = [...this.transcript];
+    let planned = await this.planProviderMessages(providerMessages);
+    if (planned.failure) return done(this.failure(planned.failure));
     if (!planned.plan) {
-      return buildTerminalFailure({
+      return done(this.buildTerminalFailure({
         status: 503,
         code: RUNTIME_INPUT_BUDGET_INVALID_CODE,
         stopReason: "model_error",
         message: "The agent could not safely calculate the model input budget.",
-      });
+      }));
     }
     if (!planned.plan.fits) {
       const projection = projectProviderContextToBudget({
-        messages: transcript,
+        messages: this.transcript,
         targetInputTokens: Math.max(
           0,
           planned.plan.usableInputTokens - planned.plan.toolSchemaTokens,
         ),
-        imageInputTokens: imageInputTokensForPlan(planned.plan),
+        imageInputTokens: this.imageInputTokensForPlan(planned.plan),
       });
       if (!projection.changed || !projection.fitsTarget) {
-        return toKernelFailure({
-          failure: contextOverflowFailure(),
-          transcript,
-          steps,
-          stepCount: toolStepCount,
-          promptTokens,
-          completionTokens,
-        });
+        return done(this.failure(this.contextOverflowFailure()));
       }
-      const projectionFailure = await recordProjection({
+      const projectionFailure = await this.recordProjection({
         projection,
         trigger: "preflight_overflow",
       });
-      if (projectionFailure) {
-        return toKernelFailure({
-          failure: projectionFailure,
-          transcript,
-          steps,
-          stepCount: toolStepCount,
-          promptTokens,
-          completionTokens,
-        });
-      }
+      if (projectionFailure) return done(this.failure(projectionFailure));
       providerMessages = projection.messages;
-      planned = await planProviderMessages(providerMessages);
+      planned = await this.planProviderMessages(providerMessages);
       if (planned.failure || !planned.plan?.fits) {
-        return toKernelFailure({
-          failure: planned.failure ?? contextOverflowFailure(),
-          transcript,
-          steps,
-          stepCount: toolStepCount,
-          promptTokens,
-          completionTokens,
-        });
+        return done(this.failure(planned.failure ?? this.contextOverflowFailure()));
       }
     }
 
-    let completion = await runProviderCompletion(providerMessages);
+    let completion = await this.runProviderCompletion(providerMessages);
     if (
       completion.ok === false &&
       completion.code === CONTEXT_WINDOW_EXCEEDED_CODE &&
@@ -614,12 +635,12 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     ) {
       const currentProviderTokens = estimateNativeToolTranscriptTokens(
         providerMessages,
-        imageInputTokensForPlan(planned.plan),
+        this.imageInputTokensForPlan(planned.plan),
       );
       const recoveryProjection = projectProviderContextToBudget({
-        messages: transcript,
+        messages: this.transcript,
         targetInputTokens: Math.max(0, Math.floor(currentProviderTokens * 0.9)),
-        imageInputTokens: imageInputTokensForPlan(planned.plan),
+        imageInputTokens: this.imageInputTokensForPlan(planned.plan),
       });
       if (
         recoveryProjection.changed &&
@@ -627,93 +648,52 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         recoveryProjection.projectedEstimatedTokens <
           currentProviderTokens
       ) {
-        const projectionFailure = await recordProjection({
+        const projectionFailure = await this.recordProjection({
           projection: recoveryProjection,
           trigger: "provider_overflow",
         });
-        if (projectionFailure) {
-          return toKernelFailure({
-            failure: projectionFailure,
-            transcript,
-            steps,
-            stepCount: toolStepCount,
-            promptTokens,
-            completionTokens,
-          });
-        }
-        const recoveryPlan = await planProviderMessages(
+        if (projectionFailure) return done(this.failure(projectionFailure));
+        const recoveryPlan = await this.planProviderMessages(
           recoveryProjection.messages,
         );
-        if (recoveryPlan.failure) {
-          return toKernelFailure({
-            failure: recoveryPlan.failure,
-            transcript,
-            steps,
-            stepCount: toolStepCount,
-            promptTokens,
-            completionTokens,
-          });
-        }
+        if (recoveryPlan.failure) return done(this.failure(recoveryPlan.failure));
         if (!recoveryPlan.plan?.fits) {
-          return toKernelFailure({
-            failure: contextOverflowFailure(),
-            transcript,
-            steps,
-            stepCount: toolStepCount,
-            promptTokens,
-            completionTokens,
-          });
+          return done(this.failure(this.contextOverflowFailure()));
         }
-        completion = await runProviderCompletion(recoveryProjection.messages);
+        completion = await this.runProviderCompletion(recoveryProjection.messages);
       }
     }
-    if (completion.ok === false) {
-      return toKernelFailure({
-        failure: completion,
-        transcript,
-        steps,
-        stepCount: toolStepCount,
-        promptTokens,
-        completionTokens,
-      });
-    }
+    if (completion.ok === false) return done(this.failure(completion));
 
-    promptTokens = completion.promptTokens;
-    completionTokens = completion.completionTokens;
+    this.promptTokens = completion.promptTokens;
+    this.completionTokens = completion.completionTokens;
 
     const resolvedStep = await resolveLoopStep({
       completion,
-      normalizeToolArguments: params.normalizeToolArguments,
+      normalizeToolArguments: this.params.normalizeToolArguments,
     });
     if (isRuntimeKernelFailureInput(resolvedStep)) {
-      return toKernelFailure({
-        failure: resolvedStep,
-        transcript,
-        steps,
-        stepCount: toolStepCount,
-        promptTokens,
-        completionTokens,
-      });
+      return done(this.failure(resolvedStep));
     }
 
     if (resolvedStep.kind === "assistant_final") {
       const finalTranscript: NativeToolAwareMessage[] = [
-        ...transcript,
+        ...this.transcript,
         {
           role: "assistant",
           content: resolvedStep.assistantText,
         },
       ];
-      return {
+      return done({
         ok: true,
         assistantText: resolvedStep.assistantText,
-        promptTokens,
-        completionTokens,
+        promptTokens: this.promptTokens,
+        completionTokens: this.completionTokens,
         transcript: finalTranscript,
-        stepCount: toolStepCount,
-        steps: [...steps],
+        stepCount: this.toolStepCount,
+        steps: [...this.steps],
         stopReason: "assistant_final",
-      };
+      });
     }
 
     const toolSteps: RuntimeKernelResolvedToolStep<TToolName>[] =
@@ -722,30 +702,28 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         : [resolvedStep];
     const remainingToolBudget = Math.max(
       0,
-      params.budget.maxToolSteps - toolStepCount,
+      this.params.budget.maxToolSteps - this.toolStepCount,
     );
-    const batchPlan = await params.onToolBatchResolved?.({
+    const batchPlan = await this.params.onToolBatchResolved?.({
       steps: toolSteps,
       isBatch: resolvedStep.kind === "tool_follow_up_batch",
       remainingToolBudget,
-      toolStepCount,
+      toolStepCount: this.toolStepCount,
     });
     const batchExecutionMode =
       batchPlan && typeof batchPlan === "object"
         ? batchPlan.executionMode
         : null;
-    const executeBatchInParallel =
-      batchExecutionMode === "parallel" && toolSteps.length > 1;
     if (toolSteps.length > remainingToolBudget) {
       const blockedStep =
         toolSteps[Math.min(remainingToolBudget, toolSteps.length - 1)] ??
         toolSteps[0]!;
-      const blockedIteration = toolStepCount + remainingToolBudget + 1;
+      const blockedIteration = this.toolStepCount + remainingToolBudget + 1;
       const blockedToolSignature = buildRuntimeToolCallSignature({
         toolName: blockedStep.toolName,
         normalizedArgs: blockedStep.normalizedArgs,
       });
-      steps.push({
+      this.steps.push({
         iteration: blockedIteration,
         providerCallId: blockedStep.providerCallId,
         toolName: blockedStep.toolName,
@@ -753,39 +731,34 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         normalizedArgs: blockedStep.normalizedArgs,
         toolSignature: blockedToolSignature,
         repeatedCallCount:
-          blockedToolSignature === lastToolSignature
-            ? repeatedCallCount + 1
+          blockedToolSignature === this.lastToolSignature
+            ? this.repeatedCallCount + 1
             : 1,
         blocked: true,
       });
-      return {
+      return done({
         ok: false,
         status: 502,
         code: "tool_budget_exhausted",
         stopReason: "tool_budget_exhausted",
-        message: `Tool loop exhausted max tool steps (${params.budget.maxToolSteps}).`,
+        message: `Tool loop exhausted max tool steps (${this.params.budget.maxToolSteps}).`,
         pendingToolCallId: blockedStep.providerCallId,
         pendingToolName: blockedStep.toolName,
-        promptTokens,
-        completionTokens,
-        transcript: [...transcript],
-        stepCount: toolStepCount,
-        steps: [...steps],
-      };
+        promptTokens: this.promptTokens,
+        completionTokens: this.completionTokens,
+        transcript: [...this.transcript],
+        stepCount: this.toolStepCount,
+        steps: [...this.steps],
+      });
     }
 
-    let assistantMessageAppended = false;
-    let pendingObservationContent: NativeToolInputContentPart[] | null = null;
+    this.assistantMessageAppended = false;
+    this.pendingObservationContent = null;
 
-    const preparedToolSteps: Array<{
-      iteration: number;
-      step: RuntimeKernelResolvedToolStep<TToolName>;
-      toolSignature: string;
-      repeatedCallCount: number;
-    }> = [];
-    let simulatedToolStepCount: number = toolStepCount;
-    let simulatedLastToolSignature: string | null = lastToolSignature;
-    let simulatedRepeatedCallCount: number = repeatedCallCount;
+    const preparedToolSteps: RuntimeKernelPreparedToolStep<TToolName>[] = [];
+    let simulatedToolStepCount: number = this.toolStepCount;
+    let simulatedLastToolSignature: string | null = this.lastToolSignature;
+    let simulatedRepeatedCallCount: number = this.repeatedCallCount;
 
     for (const toolStep of toolSteps) {
       const iteration = simulatedToolStepCount + 1;
@@ -798,12 +771,9 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           ? simulatedRepeatedCallCount + 1
           : 1;
 
-      if (nextRepeatedCallCount > params.budget.maxRepeatedIdenticalCalls) {
-        appendComputerUseObservationMessage({
-          transcript,
-          observationContent: pendingObservationContent,
-        });
-        steps.push({
+      if (nextRepeatedCallCount > this.params.budget.maxRepeatedIdenticalCalls) {
+        this.finishBatch();
+        this.steps.push({
           iteration,
           providerCallId: toolStep.providerCallId,
           toolName: toolStep.toolName,
@@ -813,7 +783,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           repeatedCallCount: nextRepeatedCallCount,
           blocked: true,
         });
-        return {
+        return done({
           ok: false,
           status: 409,
           code: "repeated_call_blocked",
@@ -822,12 +792,12 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
             "Tool loop blocked a repeated identical tool call because it was not making progress.",
           pendingToolCallId: toolStep.providerCallId,
           pendingToolName: toolStep.toolName,
-          promptTokens,
-          completionTokens,
-          transcript: [...transcript],
-          stepCount: toolStepCount,
-          steps: [...steps],
-        };
+          promptTokens: this.promptTokens,
+          completionTokens: this.completionTokens,
+          transcript: [...this.transcript],
+          stepCount: this.toolStepCount,
+          steps: [...this.steps],
+        });
       }
 
       preparedToolSteps.push({
@@ -841,192 +811,191 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       simulatedRepeatedCallCount = nextRepeatedCallCount;
     }
 
-    const executePreparedToolStep = async (prepared: {
-      iteration: number;
-      step: RuntimeKernelResolvedToolStep<TToolName>;
-    }): Promise<RuntimeKernelToolExecutionResult> => {
-      if (prepared.step.argumentError) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: prepared.step.argumentError.code,
-          errorMessage: prepared.step.argumentError.message,
-        };
-      }
-      try {
-        return await params.executeTool({
-          iteration: prepared.iteration,
-          providerCallId: prepared.step.providerCallId,
-          toolName: prepared.step.toolName,
-          normalizedArgs: prepared.step.normalizedArgs,
-          rawArguments: prepared.step.rawArguments,
-        });
-      } catch (error) {
-        return buildRuntimeToolExecutionExceptionResult(error);
-      }
+    return {
+      kind: "tools",
+      prepared: preparedToolSteps,
+      parallel: batchExecutionMode === "parallel" && toolSteps.length > 1,
     };
+  }
 
-    const processPreparedToolResult = async (
-      prepared: {
-        iteration: number;
-        step: RuntimeKernelResolvedToolStep<TToolName>;
-        toolSignature: string;
-        repeatedCallCount: number;
+  async startStep(prepared: RuntimeKernelPreparedToolStep<TToolName>): Promise<void> {
+    await this.params.onToolStepStart?.({
+      iteration: prepared.iteration,
+      step: prepared.step,
+      repeatedCallCount: prepared.repeatedCallCount,
+      toolSignature: prepared.toolSignature,
+    });
+  }
+
+  async executeStep(
+    prepared: RuntimeKernelPreparedToolStep<TToolName>,
+  ): Promise<RuntimeKernelToolExecutionResult> {
+    if (prepared.step.argumentError) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: prepared.step.argumentError.code,
+        errorMessage: prepared.step.argumentError.message,
+      };
+    }
+    try {
+      return await this.params.executeTool({
+        iteration: prepared.iteration,
+        providerCallId: prepared.step.providerCallId,
+        toolName: prepared.step.toolName,
+        normalizedArgs: prepared.step.normalizedArgs,
+        rawArguments: prepared.step.rawArguments,
+      });
+    } catch (error) {
+      return buildRuntimeToolExecutionExceptionResult(error);
+    }
+  }
+
+  // Record one tool result in source order; returns a terminal signal when the
+  // run must stop (failure or no-progress limits, cancellation).
+  async processResult(
+    prepared: RuntimeKernelPreparedToolStep<TToolName>,
+    toolResult: RuntimeKernelToolExecutionResult,
+    options?: {
+      recordUserCancelledArtifacts?: boolean;
+    },
+  ): Promise<RuntimeKernelTerminalSignal | null> {
+    const { iteration, step: toolStep, toolSignature } = prepared;
+    this.repeatedCallCount = prepared.repeatedCallCount;
+
+    const toolResultEnvelope = buildRuntimeToolResultEnvelope({
+      toolName: toolStep.toolName,
+      toolResult,
+    });
+    const transition = advanceRuntimeToolResultState({
+      state: {
+        lastToolSignature: this.lastToolSignature,
+        lastToolResultSignature: this.lastToolResultSignature,
+        consecutiveFailureCount: this.consecutiveFailureCount,
+        consecutiveNoProgressCount: this.consecutiveNoProgressCount,
       },
-      toolResult: RuntimeKernelToolExecutionResult,
-      options?: {
-        recordUserCancelledArtifacts?: boolean;
-      },
-    ): Promise<RuntimeKernelTerminalSignal | null> => {
-      const { iteration, step: toolStep, toolSignature } = prepared;
-      repeatedCallCount = prepared.repeatedCallCount;
+      toolSignature,
+      toolResult,
+      budget: this.params.budget,
+    });
+    const { toolResultSignature, madeProgress } = transition;
+    this.lastToolSignature = transition.state.lastToolSignature;
+    this.lastToolResultSignature = transition.state.lastToolResultSignature;
+    this.consecutiveFailureCount = transition.state.consecutiveFailureCount;
+    this.consecutiveNoProgressCount = transition.state.consecutiveNoProgressCount;
 
-      const toolResultEnvelope = buildRuntimeToolResultEnvelope({
-        toolName: toolStep.toolName,
-        toolResult,
-      });
-      const transition = advanceRuntimeToolResultState({
-        state: {
-          lastToolSignature,
-          lastToolResultSignature,
-          consecutiveFailureCount,
-          consecutiveNoProgressCount,
-        },
-        toolSignature,
-        toolResult,
-        budget: params.budget,
-      });
-      const { toolResultSignature, madeProgress } = transition;
-      ({
-        lastToolSignature,
-        lastToolResultSignature,
-        consecutiveFailureCount,
-        consecutiveNoProgressCount,
-      } = transition.state);
+    this.steps.push({
+      iteration,
+      providerCallId: toolStep.providerCallId,
+      toolName: toolStep.toolName,
+      rawArguments: toolStep.rawArguments,
+      normalizedArgs: toolStep.normalizedArgs,
+      toolSignature,
+      repeatedCallCount: this.repeatedCallCount,
+      toolResultStatus: toolResult.status,
+      toolResultErrorCode: toolResult.errorCode,
+      toolResultSignature,
+      madeProgress,
+      consecutiveFailureCount: this.consecutiveFailureCount,
+      consecutiveNoProgressCount: this.consecutiveNoProgressCount,
+      outputPreview: summarizeLongText(toolResult.outputText, 320),
+    });
 
-      steps.push({
-        iteration,
-        providerCallId: toolStep.providerCallId,
-        toolName: toolStep.toolName,
-        rawArguments: toolStep.rawArguments,
-        normalizedArgs: toolStep.normalizedArgs,
-        toolSignature,
-        repeatedCallCount,
-        toolResultStatus: toolResult.status,
-        toolResultErrorCode: toolResult.errorCode,
-        toolResultSignature,
-        madeProgress,
-        consecutiveFailureCount,
-        consecutiveNoProgressCount,
-        outputPreview: summarizeLongText(toolResult.outputText, 320),
-      });
+    await this.params.onToolStepFinish?.({
+      iteration,
+      step: toolStep,
+      toolResult,
+      toolResultEnvelope,
+      toolResultSignature,
+      madeProgress,
+      repeatedCallCount: this.repeatedCallCount,
+      consecutiveFailureCount: this.consecutiveFailureCount,
+      consecutiveNoProgressCount: this.consecutiveNoProgressCount,
+    });
 
-      await params.onToolStepFinish?.({
-        iteration,
+    const recordUserCancelledArtifacts =
+      options?.recordUserCancelledArtifacts === true;
+    const shouldAppendTranscript =
+      toolResult.errorCode !== "user_cancelled" || recordUserCancelledArtifacts;
+
+    if (shouldAppendTranscript) {
+      appendToolResultToTranscript({
+        transcript: this.transcript,
         step: toolStep,
-        toolResult,
         toolResultEnvelope,
-        toolResultSignature,
-        madeProgress,
-        repeatedCallCount,
-        consecutiveFailureCount,
-        consecutiveNoProgressCount,
+        appendAssistantMessage: !this.assistantMessageAppended,
       });
+      this.assistantMessageAppended = true;
+    } else if (this.assistantMessageAppended) {
+      removeSerialToolCallsFromLatestAssistantMessage({
+        transcript: this.transcript,
+        cancelledProviderCallId: toolStep.providerCallId,
+      });
+    }
 
-      const recordUserCancelledArtifacts =
-        options?.recordUserCancelledArtifacts === true;
-      const shouldAppendTranscript =
-        toolResult.errorCode !== "user_cancelled" || recordUserCancelledArtifacts;
+    if (
+      Array.isArray(toolResult.observationContent) &&
+      toolResult.observationContent.length > 0 &&
+      (toolResult.errorCode !== "user_cancelled" || recordUserCancelledArtifacts)
+    ) {
+      this.pendingObservationContent = toolResult.observationContent;
+    }
 
-      if (shouldAppendTranscript) {
-        appendToolResultToTranscript({
-          transcript,
-          step: toolStep,
-          toolResultEnvelope,
-          appendAssistantMessage: !assistantMessageAppended,
-        });
-        assistantMessageAppended = true;
-      } else if (assistantMessageAppended) {
-        removeSerialToolCallsFromLatestAssistantMessage({
-          transcript,
-          cancelledProviderCallId: toolStep.providerCallId,
-        });
-      }
+    this.toolStepCount = iteration;
+    return transition.terminalSignal;
+  }
 
-      if (
-        Array.isArray(toolResult.observationContent) &&
-        toolResult.observationContent.length > 0 &&
-        (toolResult.errorCode !== "user_cancelled" || recordUserCancelledArtifacts)
-      ) {
-        pendingObservationContent = toolResult.observationContent;
-      }
+  finishBatch(): void {
+    appendComputerUseObservationMessage({
+      transcript: this.transcript,
+      observationContent: this.pendingObservationContent,
+    });
+  }
 
-      toolStepCount = iteration;
-      return transition.terminalSignal;
-    };
+  terminate(signal: RuntimeKernelTerminalSignal): RuntimeKernelFailure<TToolName> {
+    this.finishBatch();
+    return this.buildTerminalFailure(signal);
+  }
+}
 
-    if (executeBatchInParallel) {
+// The original sequencer: request a step, run its tools serially or in
+// parallel, and repeat until the run has a result.
+export async function runNativeRuntimeKernel<TToolName extends string>(
+  params: RuntimeKernelParams<TToolName>,
+): Promise<RuntimeKernelResult<TToolName>> {
+  const run = new RuntimeKernelRun(params);
+  while (true) {
+    const next = await run.nextStep();
+    if (next.kind === "result") return next.result;
+
+    if (next.parallel) {
       let terminalSignal: RuntimeKernelTerminalSignal | null = null;
-      for (const prepared of preparedToolSteps) {
-        await params.onToolStepStart?.({
-          iteration: prepared.iteration,
-          step: prepared.step,
-          repeatedCallCount: prepared.repeatedCallCount,
-          toolSignature: prepared.toolSignature,
-        });
-      }
+      for (const prepared of next.prepared) await run.startStep(prepared);
       const settledResults = await Promise.allSettled(
-        preparedToolSteps.map(executePreparedToolStep),
+        next.prepared.map((prepared) => run.executeStep(prepared)),
       );
-      for (const [index, prepared] of preparedToolSteps.entries()) {
+      for (const [index, prepared] of next.prepared.entries()) {
         const settled = settledResults[index];
         const toolResult =
           settled?.status === "fulfilled"
             ? settled.value
             : buildRuntimeToolExecutionExceptionResult(settled?.reason);
-        const terminalFailure = await processPreparedToolResult(
-          prepared,
-          toolResult,
-          { recordUserCancelledArtifacts: true },
-        );
-        if (!terminalSignal && terminalFailure) {
-          terminalSignal = terminalFailure;
-        }
-      }
-      if (terminalSignal) {
-        appendComputerUseObservationMessage({
-          transcript,
-          observationContent: pendingObservationContent,
+        const terminalFailure = await run.processResult(prepared, toolResult, {
+          recordUserCancelledArtifacts: true,
         });
-        return buildTerminalFailure(terminalSignal);
+        if (!terminalSignal && terminalFailure) terminalSignal = terminalFailure;
       }
+      if (terminalSignal) return run.terminate(terminalSignal);
     } else {
-      for (const prepared of preparedToolSteps) {
-        await params.onToolStepStart?.({
-          iteration: prepared.iteration,
-          step: prepared.step,
-          repeatedCallCount: prepared.repeatedCallCount,
-          toolSignature: prepared.toolSignature,
-        });
-        const toolResult = await executePreparedToolStep(prepared);
-        const terminalFailure = await processPreparedToolResult(
-          prepared,
-          toolResult,
-        );
-        if (terminalFailure) {
-          appendComputerUseObservationMessage({
-            transcript,
-            observationContent: pendingObservationContent,
-          });
-          return buildTerminalFailure(terminalFailure);
-        }
+      for (const prepared of next.prepared) {
+        await run.startStep(prepared);
+        const toolResult = await run.executeStep(prepared);
+        const terminalFailure = await run.processResult(prepared, toolResult);
+        if (terminalFailure) return run.terminate(terminalFailure);
       }
     }
 
-    appendComputerUseObservationMessage({
-      transcript,
-      observationContent: pendingObservationContent,
-    });
+    run.finishBatch();
   }
 }

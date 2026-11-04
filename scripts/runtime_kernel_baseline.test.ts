@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { RUNTIME_KERNEL_ENGINES } from "./runtimeKernelEngines.ts";
+import { resolveRuntimeKernelEngine } from "../shared/runtimeKernelEngine.ts";
 import {
   buildAssistantToolCallMessage,
   buildAssistantToolCallsMessage,
@@ -7,7 +9,6 @@ import {
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol.ts";
 import {
-  runNativeRuntimeKernel,
   type RuntimeKernelInputBudgetConfig,
 } from "../shared/runtimeKernel.ts";
 import {
@@ -128,9 +129,9 @@ function failure(
   };
 }
 
-describe("native runtime kernel behavioral baseline", () => {
+describe.each(RUNTIME_KERNEL_ENGINES)("runtime kernel behavioral baseline (%s engine)", (_engine, runKernel) => {
   it("preserves durable input and appends the final assistant response", async () => {
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -156,7 +157,7 @@ describe("native runtime kernel behavioral baseline", () => {
   it("round-trips one normalized tool result through the provider transcript", async () => {
     const requests: NativeToolAwareMessage[][] = [];
     let invocation = 0;
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -205,7 +206,7 @@ describe("native runtime kernel behavioral baseline", () => {
     let executorCalls = 0;
     const startedToolCallIds: string[] = [];
     const finishedToolCallIds: string[] = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -250,7 +251,7 @@ describe("native runtime kernel behavioral baseline", () => {
 
   it("asks for an answer without tools once the tool budget is spent", async () => {
     const choices: Array<string | undefined> = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxToolSteps: 2 }),
       inputBudget,
@@ -269,7 +270,7 @@ describe("native runtime kernel behavioral baseline", () => {
 
   it("still ends as tool_budget_exhausted when a runner ignores the no-tools request", async () => {
     let calls = 0;
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxToolSteps: 1 }),
       inputBudget,
@@ -287,7 +288,7 @@ describe("native runtime kernel behavioral baseline", () => {
   it("blocks an over-budget batch before executing any member of it", async () => {
     let executorCalls = 0;
     const startedToolCallIds: string[] = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxToolSteps: 1 }),
       inputBudget,
@@ -321,7 +322,7 @@ describe("native runtime kernel behavioral baseline", () => {
   it("blocks a repeated call inside a batch before executing any batch member", async () => {
     let executorCalls = 0;
     const startedToolCallIds: string[] = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxRepeatedIdenticalCalls: 1 }),
       inputBudget,
@@ -363,7 +364,7 @@ describe("native runtime kernel behavioral baseline", () => {
   it("blocks a repeated identical call before executing it twice", async () => {
     let providerCalls = 0;
     let executorCalls = 0;
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({
         maxRepeatedIdenticalCalls: 1,
@@ -392,7 +393,7 @@ describe("native runtime kernel behavioral baseline", () => {
   });
 
   it("stops at the configured consecutive failure bound", async () => {
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxConsecutiveFailures: 1 }),
       inputBudget,
@@ -411,7 +412,7 @@ describe("native runtime kernel behavioral baseline", () => {
 
   it("resets the consecutive failure count after a successful tool result", async () => {
     let providerCalls = 0;
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -437,7 +438,7 @@ describe("native runtime kernel behavioral baseline", () => {
   });
 
   it("canonicalizes an unexpected serial executor exception", async () => {
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxConsecutiveFailures: 1 }),
       inputBudget,
@@ -464,7 +465,7 @@ describe("native runtime kernel behavioral baseline", () => {
 
   it("stops after a configured number of successful but stagnant steps", async () => {
     let providerCalls = 0;
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({
         maxRepeatedIdenticalCalls: 10,
@@ -494,7 +495,7 @@ describe("native runtime kernel behavioral baseline", () => {
   it("treats a changed canonical result as progress", async () => {
     let providerCalls = 0;
     let executorCalls = 0;
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({
         maxRepeatedIdenticalCalls: 10,
@@ -523,7 +524,7 @@ describe("native runtime kernel behavioral baseline", () => {
   });
 
   it("maps provider cancellation to the canonical terminal reason", async () => {
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -546,7 +547,7 @@ describe("native runtime kernel behavioral baseline", () => {
   });
 
   it("maps tool cancellation without appending misleading tool artifacts", async () => {
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -567,7 +568,7 @@ describe("native runtime kernel behavioral baseline", () => {
 
   it("keeps completed serial artifacts but omits cancelled and unreached calls", async () => {
     const executedToolCallIds: string[] = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -616,7 +617,7 @@ describe("native runtime kernel behavioral baseline", () => {
   });
 
   it("records parallel cancellation artifacts in provider source order", async () => {
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -667,7 +668,7 @@ describe("native runtime kernel behavioral baseline", () => {
       release = resolve;
     });
 
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -709,7 +710,7 @@ describe("native runtime kernel behavioral baseline", () => {
     const startedToolCallIds: string[] = [];
     const finishedToolCallIds: string[] = [];
     const executedToolCallIds: string[] = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -766,7 +767,7 @@ describe("native runtime kernel behavioral baseline", () => {
     let inFlight = 0;
     let maxInFlight = 0;
     const executionOrder: string[] = [];
-    const result = await runNativeRuntimeKernel<TestToolName>({
+    const result = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -802,7 +803,7 @@ describe("native runtime kernel behavioral baseline", () => {
   });
 
   it("rejects empty assistant responses and malformed tool batches", async () => {
-    const emptyAssistant = await runNativeRuntimeKernel<TestToolName>({
+    const emptyAssistant = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -810,7 +811,7 @@ describe("native runtime kernel behavioral baseline", () => {
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
       executeTool: async () => success("unused"),
     });
-    const emptyBatch = await runNativeRuntimeKernel<TestToolName>({
+    const emptyBatch = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -818,7 +819,7 @@ describe("native runtime kernel behavioral baseline", () => {
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
       executeTool: async () => success("unused"),
     });
-    const duplicateIds = await runNativeRuntimeKernel<TestToolName>({
+    const duplicateIds = await runKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
       inputBudget,
@@ -871,5 +872,14 @@ describe("native runtime kernel behavioral baseline", () => {
         admittedToolNames: ["read_one", "read_two", "unadmitted"],
       }),
     ).toBeNull();
+  });
+});
+
+describe("runtime engine switch", () => {
+  it("keeps every surface native unless POLYNET_PI_ENGINE_SURFACES names it", () => {
+    expect(resolveRuntimeKernelEngine("ask", undefined)).toBe("native");
+    expect(resolveRuntimeKernelEngine("ask", "")).toBe("native");
+    expect(resolveRuntimeKernelEngine("ask", "tag, Ask")).toBe("pi");
+    expect(resolveRuntimeKernelEngine("steward", "ask,tag")).toBe("native");
   });
 });

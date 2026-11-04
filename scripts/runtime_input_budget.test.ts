@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { RUNTIME_KERNEL_ENGINES } from "./runtimeKernelEngines.ts";
 import {
   buildAssistantToolCallMessage,
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol.ts";
-import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
 import {
   listRuntimeModelCapacityProfiles,
@@ -18,7 +18,7 @@ const baseMessages: NativeToolAwareMessage[] = [
   { role: "user", content: "What is happening here?" },
 ];
 
-describe("runtime input budget", () => {
+describe.each(RUNTIME_KERNEL_ENGINES)("runtime input budget (%s engine)", (_engine, runKernel) => {
   it("admits every reviewed runtime capacity profile", () => {
     for (const profile of listRuntimeModelCapacityProfiles()) {
       const plan = planRuntimeInputBudget({
@@ -170,7 +170,7 @@ describe("runtime input budget", () => {
   it("rejects unknown capacity before provider execution and records the plan", async () => {
     let providerCalls = 0;
     const evidence: Array<{ kind: string; fits: boolean }> = [];
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages: baseMessages,
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
@@ -213,7 +213,7 @@ describe("runtime input budget", () => {
 
   it("rejects oversized input before provider execution", async () => {
     let providerCalls = 0;
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages: [
         { role: "user", content: "x".repeat(2_400_000) },
       ],
@@ -257,7 +257,7 @@ describe("runtime input budget", () => {
       trigger: string;
       omittedRanges: Array<{ start: number; end: number }>;
     }> = [];
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages: [
         { role: "system", content: "Inspect only the authorized community." },
         { role: "user", content: "x".repeat(2_400_000) },
@@ -321,7 +321,7 @@ describe("runtime input budget", () => {
   it("records changed follow-up plans as deltas", async () => {
     let providerCalls = 0;
     const evidenceKinds: string[] = [];
-    const result = await runNativeRuntimeKernel<"polynet_search">({
+    const result = await runKernel<"polynet_search">({
       messages: baseMessages,
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {

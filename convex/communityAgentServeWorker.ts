@@ -34,7 +34,7 @@ import {
   type CommunityAgentConciergeToolName,
 } from "../shared/communityAgentConciergeTools";
 import type { NativeToolAwareCompletionSuccess } from "../shared/nativeToolProtocol";
-import { runNativeRuntimeKernel } from "../shared/runtimeKernel";
+import { selectRuntimeKernel } from "../shared/runtimeKernelEngine";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
   type RuntimeKernelFailureInput,
@@ -2051,8 +2051,9 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           surface: isWorkflowAction ? "community_workflow_action" : "community_agent_mention",
         });
         usage = createFounderInferenceUsageTotals(admittedModelId);
+        const runtimeKernel = selectRuntimeKernel("tag");
         completion =
-          await runNativeRuntimeKernel<CommunityAgentConciergeToolName>({
+          await runtimeKernel.run<CommunityAgentConciergeToolName>({
           messages: initialMessages,
           budget: {
             ...DEFAULT_RUNTIME_KERNEL_BUDGET,
