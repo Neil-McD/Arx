@@ -802,6 +802,38 @@ describe.each(RUNTIME_KERNEL_ENGINES)("runtime kernel behavioral baseline (%s en
     expect(maxInFlight).toBe(1);
   });
 
+  it("lets a throw from the model call or a caller hook escape unchanged", async () => {
+    const base = {
+      messages: baseMessages,
+      budget: budget(),
+      inputBudget,
+      normalizeToolArguments: (_toolName: TestToolName, rawArgs: Record<string, unknown>) => rawArgs,
+    };
+    await expect(runKernel<TestToolName>({
+      ...base,
+      runCompletion: async () => { throw new Error("founder_inference_actor_rate_limited"); },
+      executeTool: async () => success("unused"),
+    })).rejects.toThrow("founder_inference_actor_rate_limited");
+    let executed = 0;
+    await expect(runKernel<TestToolName>({
+      ...base,
+      runCompletion: async () => toolCall({ providerCallId: "call-start" }),
+      executeTool: async () => { executed += 1; return success("unused"); },
+      onToolStepStart: () => { throw new Error("step_start_failed"); },
+    })).rejects.toThrow("step_start_failed");
+    expect(executed).toBe(0);
+    await expect(runKernel<TestToolName>({
+      ...base,
+      runCompletion: async () => toolBatch([
+        { providerCallId: "call-a", toolName: "read_one" },
+        { providerCallId: "call-b", toolName: "read_two" },
+      ]),
+      executeTool: async () => success("ok"),
+      onToolBatchResolved: () => ({ executionMode: "parallel" }),
+      onToolStepFinish: () => { throw new Error("step_finish_failed"); },
+    })).rejects.toThrow("step_finish_failed");
+  });
+
   it("rejects empty assistant responses and malformed tool batches", async () => {
     const emptyAssistant = await runKernel<TestToolName>({
       messages: baseMessages,

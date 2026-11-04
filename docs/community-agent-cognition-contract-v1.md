@@ -2553,4 +2553,8 @@ Three fixes from the November 3 staging eval (24 live questions, both engines).
   runs, so no receipt is written. Workflow and timed turns are unchanged.
 - The Ask instructions say the agent may tell the member anything its tools
   return, private rooms they are in included; a "don't share" post is
-  addressed to people outside its room.
+  addressed to people outside its room and is never withheld from a member
+  who can read it.
+- The Pi engine lets a throw from the model call or a caller's hook escape
+  unchanged, as the native loop does (callers branch on the thrown code, such
+  as the rate limit and the run budget); a kernel parity test covers it.
