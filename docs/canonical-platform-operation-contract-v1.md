@@ -373,6 +373,18 @@ admin changing an owner field is `owner_only`. `community.join_mode.set`
 `community.handbook.save_draft` and `community.handbook.approve` (exactly this
 text; empty withdraws) call Studio's own functions. Each call has a receipt.
 
+People (builder lens): `community.tags.create`, `.rename`, `.delete` change
+one tag (with the community operations' one-transaction receipt);
+`community.members.tag` (`tag`, `members`, `on`), `.set_role` (`members`,
+`role`), `.remove`, `.ban` (`reason` optional) and `.unban` take a selection of
+`user:<id>` refs and run Studio's own functions per person
+(`communityPeople.applyPersonActionForTrustedUserInternal`): only the owner
+makes, unmakes or removes admins; the owner can't change. A paying member is
+refused with `paid_member_use_studio` (removal cancels their subscription;
+a person does it in Studio). Each is a state, so a retried item changes
+nothing. Moderators and up read `builder/tags/`, `builder/tags/<tag>/` and
+`tags` on `members/` entries; members and the community agent never do.
+
 Every `polynet_call` answers in the published output shape:
 `{ ok, operation, result, receipt }`. A test lists every role's actions and
 fails if any input they accept is missing from the published call schema, or

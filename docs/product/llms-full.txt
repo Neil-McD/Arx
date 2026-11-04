@@ -657,7 +657,10 @@ the communities they belong to, in the lens their role there allows:
   (`builder/community.json`: name, address, one-liner, about, visibility, how
   people join, the agent's instructions, the handbook), staging course
   changes, workflow decisions and site deploys. Name, address and visibility
-  are the owner's alone.
+  are the owner's alone. They also tag people and change roles, remove, ban
+  and unban on a selection; removing or banning a paying member is left to
+  Studio, because it cancels their subscription. Moderators read the tags;
+  members never see them.
 
 Actions that decide about people or posts take a selection: up to 50 items,
 each decided on its own with its own receipt.

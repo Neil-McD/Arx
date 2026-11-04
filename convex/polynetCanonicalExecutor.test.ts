@@ -402,7 +402,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityTags.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3219,9 +3219,10 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   await t.run(ctx => ctx.db.patch(f.communityId, { entryPolicy: "approval" }));
   await makeModerator(t, f);
   const moderator = { userId: f.memberId, authSubject: f.memberSubject };
-  // The moderator's builder/ holds only the join requests.
+  // The moderator's builder/ holds the join requests and the tags, nothing a builder manages.
   const builder = await f.call("polynet_list", { path: "/communities/canonical-community/builder/" }, moderator);
-  expect(builder.ok && (builder.value.entries as any[]).map(e => e.path)).toEqual(["/communities/canonical-community/builder/join-requests/"]);
+  expect(builder.ok && (builder.value.entries as any[]).map(e => e.path)).toEqual([
+    "/communities/canonical-community/builder/join-requests/", "/communities/canonical-community/builder/tags/"]);
   const rows = await t.run(async ctx => Promise.all(f.requests.map(id => ctx.db.get(id))));
   const observed = (row: any) => ({ request_ref: `join-request:${row._id}`, expected_created_at: new Date(row.createdAt).toISOString(),
     expected_updated_at: new Date(row.updatedAt).toISOString() });
@@ -3483,4 +3484,135 @@ test("a change to the community and its receipt commit together; a retry after a
   expect(await revision()).toBe(before + 1);
   expect(await call({ expected_revision: before, one_liner: "Once only" }, "k")).toMatchObject({ ok: true, value: { result: { one_liner: "Once only" } } });
   expect(await revision()).toBe(before + 1);
+});
+
+test("people: owners and admins tag, re-role, remove, ban and unban a selection; moderators read tags; members and the agent never see them", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const admin = await createAdminFixture(t, f);
+  const extra = await t.run(async ctx => {
+    const join = async (handle: string, role: "member" | "moderator") => {
+      const userId = await ctx.db.insert("users", { authSubject: `${handle}-subject`, displayName: handle, handle, normalizedHandle: handle, createdAt: 1, updatedAt: 1 });
+      const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role, accessSource: "free_grant", active: true,
+        activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
+      return { userId, membershipId, authSubject: `${handle}-subject` };
+    };
+    return { mod: await join("mod", "moderator"), payer: await join("payer", "member"), quiet: await join("quiet", "member"),
+      outsider: await ctx.db.insert("users", { authSubject: "outsider-subject", createdAt: 1, updatedAt: 1 }) };
+  });
+  // The payer has a live Stripe subscription.
+  await t.run(async ctx => {
+    const pricePointId = await ctx.db.insert("communityPricePoints", { communityId: f.communityId, billingPeriod: "monthly", name: "Monthly",
+      amountBaseUnits: 1_000, currency: "usd", currencyDecimals: 2, isCurrent: true, createdAt: 1, updatedAt: 1 });
+    await ctx.db.insert("communitySubscriptions", { communityId: f.communityId, userId: extra.payer.userId, membershipId: extra.payer.membershipId,
+      pricePointId, source: "stripe", status: "active", providerSubscriptionId: "sub_123", providerAccountId: "acct_1",
+      cancelAtPeriodEnd: false, createdAt: 1, updatedAt: 1 });
+  });
+  const as = (subject: string, userId: any, principalKind: any = "external_mcp") => ({
+    list: (path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind,
+      evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "community_concierge",
+      ...(principalKind === "community_agent" ? { mountedCommunityId: f.communityId } : {}), toolName: "polynet_list", input: { path: `/communities/canonical-community/${path}` } }),
+    call: (operation: string, input: Record<string, unknown>, key: string) => executePolynetCanonicalTool({
+      ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: "external_mcp", evidenceSurface: "external_mcp",
+      toolName: "polynet_call", input: { operation, version: 1, target: `/communities/canonical-community/capabilities/${operation}.json`, input, idempotency_key: key } }),
+  });
+  const owner = as(f.ownerSubject, f.ownerId);
+  const adminAi = as(admin.authSubject, admin.userId);
+  const modAi = as(extra.mod.authSubject, extra.mod.userId);
+  const memberAi = as(f.memberSubject, f.memberId);
+  const ref = (id: any) => `user:${id}`;
+
+  // Tags: created by owners and admins; the same name twice is the same tag.
+  expect(await owner.call("community.tags.create", { name: "Beginner" }, "t1")).toMatchObject({ ok: true, value: { result: { slug: "beginner", created: true } } });
+  expect(await adminAi.call("community.tags.create", { name: "beginner" }, "t2")).toMatchObject({ ok: true, value: { result: { slug: "beginner", created: false } } });
+  expect(await modAi.call("community.tags.create", { name: "Coach" }, "t3")).toMatchObject({ ok: false, code: "operation_not_found" });
+
+  // Tag a selection: someone who isn't a member is refused, the rest are tagged.
+  const tagged = await adminAi.call("community.members.tag", { tag: "beginner", on: true,
+    members: [ref(f.memberId), ref(extra.quiet.userId), ref(extra.outsider)] }, "tag-1");
+  expect(tagged, JSON.stringify(tagged)).toMatchObject({ ok: true, value: { receipt: { authority_lane: "builder" }, result: { succeeded: 2, failed: 1,
+    results: [{ ok: true }, { ok: true }, { member: ref(extra.outsider), ok: false, code: "member_not_found" }] } } });
+
+  // Moderators and up see tags on the member list and in builder/tags/; members and the agent don't.
+  const tagsOf = async (who: any, id: any) => ((await who.list("members/")).value.entries as any[]).find(e => e.ref === ref(id))?.tags;
+  expect(await tagsOf(owner, f.memberId)).toEqual([{ slug: "beginner", name: "Beginner" }]);
+  expect(await tagsOf(modAi, extra.quiet.userId)).toEqual([{ slug: "beginner", name: "Beginner" }]);
+  expect(await tagsOf(memberAi, f.memberId)).toBeUndefined();
+  expect(await tagsOf(as(f.ownerSubject, f.ownerId, "community_agent"), f.memberId)).toBeUndefined();
+  expect((await modAi.list("builder/tags/") as any).value.entries).toMatchObject([{ slug: "beginner", name: "Beginner", people: 2 }]);
+  expect(((await modAi.list("builder/tags/beginner/") as any).value.entries as any[]).map(e => e.ref).sort())
+    .toEqual([ref(f.memberId), ref(extra.quiet.userId)].sort());
+  expect(await memberAi.list("builder/tags/")).toMatchObject({ ok: false });
+
+  // Roles: only the owner makes admins.
+  expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "admin" }, "r1"))
+    .toMatchObject({ ok: true, value: { result: { failed: 1, results: [{ ok: false, code: "owner_only" }] } } });
+  expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "moderator" }, "r2"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+  expect(await owner.call("community.members.set_role", { members: [ref(f.ownerId)], role: "member" }, "r3"))
+    .toMatchObject({ ok: true, value: { result: { failed: 1 } } });
+
+  // Remove: a paying member is left to Studio; the free one goes; again is still gone.
+  const removed = await adminAi.call("community.members.remove", { members: [ref(extra.payer.userId), ref(extra.quiet.userId)] }, "rm1");
+  expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { result: { succeeded: 1, failed: 1, results: [
+    { member: ref(extra.payer.userId), ok: false, code: "paid_member_use_studio" }, { member: ref(extra.quiet.userId), ok: true, removed: true } ] } } });
+  expect(await adminAi.call("community.members.remove", { members: [ref(extra.quiet.userId)] }, "rm2"))
+    .toMatchObject({ ok: true, value: { result: { results: [{ ok: true, already_gone: true }] } } });
+  const active = (id: any) => t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).some(m => String(m.userId) === String(id) && m.active));
+  expect(await active(extra.payer.userId)).toBe(true);
+  expect(await active(extra.quiet.userId)).toBe(false);
+  // An admin can't remove an admin.
+  expect(await adminAi.call("community.members.remove", { members: [ref(admin.userId)] }, "rm3"))
+    .toMatchObject({ ok: true, value: { result: { failed: 1 } } });
+
+  // Ban, then unban.
+  expect(await owner.call("community.members.ban", { members: [ref(f.memberId)], reason: "Spam" }, "b1"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ banned: true }] } } });
+  expect(await active(f.memberId)).toBe(false);
+  expect(await t.run(async ctx => (await ctx.db.query("communityBlocks" as any).collect()).length)).toBe(1);
+  expect(await owner.call("community.members.unban", { members: [ref(f.memberId)] }, "u1")).toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+
+  // A selection cut off after a removal: the person rejoins, and the retry
+  // replays their receipt instead of removing them again.
+  const solo = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "solo-subject", displayName: "solo", handle: "solo", normalizedHandle: "solo", createdAt: 1, updatedAt: 1 });
+    const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
+      active: true, activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
+    return { userId, membershipId };
+  });
+  const original = (completeCanonicalOperationReceiptInternal as any)._handler;
+  const crash = vi.spyOn(completeCanonicalOperationReceiptInternal as any, "_handler").mockImplementation(async (ctx: any, a: any) => {
+    if (a.idempotencyKey === "rm-crash") throw new Error("simulated_completion_failure");
+    return original(ctx, a);
+  });
+  await expect(adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash")).rejects.toThrow();
+  crash.mockRestore();
+  expect(await active(solo.userId)).toBe(false);
+  await t.run(ctx => ctx.db.patch(solo.membershipId, { active: true, revokedAt: undefined, revokedReason: undefined }));
+  await expireCanonicalReceipt(t, { toolName: "polynet_call", idempotencyKey: "rm-crash" });
+  expect(await adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ ok: true, deduped: true }] } } });
+  expect(await active(solo.userId)).toBe(true);
+
+  // An older membership row without the active field still counts as active.
+  const legacy = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "legacy-subject", displayName: "legacy", handle: "legacy", normalizedHandle: "legacy", createdAt: 1, updatedAt: 1 });
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
+      activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 } as any);
+    return userId;
+  });
+  expect(await owner.call("community.members.tag", { tag: "beginner", on: true, members: [ref(legacy)] }, "legacy-tag"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+  expect(await owner.call("community.members.remove", { members: [ref(legacy)] }, "legacy-rm"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ removed: true }] } } });
+  expect(await t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).find(m => String(m.userId) === String(legacy))!.active)).toBe(false);
+
+  // Rename and delete a tag; deleting untags everyone.
+  expect(await owner.call("community.tags.rename", { tag: "beginner", name: "New runner" }, "t4")).toMatchObject({ ok: true, value: { result: { slug: "new-runner" } } });
+  expect(await owner.call("community.tags.delete", { tag: "new-runner" }, "t5")).toMatchObject({ ok: true, value: { result: { deleted: true } } });
+  expect(await t.run(async ctx => (await ctx.db.query("communityMemberTags").collect()).length)).toBe(0);
+  // Bad selections are refused whole.
+  expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await owner.call("community.members.set_role", { members: [ref(f.memberId)], role: "owner" }, "x2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
 });

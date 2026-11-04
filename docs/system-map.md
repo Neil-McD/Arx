@@ -63,14 +63,17 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
-  `memberEntryDestination`, `platformHomeCommunity`.
+  `memberEntryDestination`, `platformHomeCommunity`, `communityTags` (an owner's
+  labels on people), `communityPeople` (one person, one action, from someone's
+  own AI).
 - **Reached by:** Studio (`/c/<slug>`); community sites' `/join` (their private twin).
 - **Rules:** rejoining starts as `member` (an earlier role is never restored);
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
-  `communityOnboardingConfigs`, `communityArchiveBillingJobs`.
+  `communityOnboardingConfigs`, `communityArchiveBillingJobs`, `communityTags`,
+  `communityMemberTags`.
 - **Contracts:** [community-join-request-canonicalization.md](community-join-request-canonicalization.md),
   [community-member-arrival-v1.md](community-member-arrival-v1.md),
   [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),
