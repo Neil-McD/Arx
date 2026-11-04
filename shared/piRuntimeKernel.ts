@@ -1,6 +1,6 @@
-// The agent loop on Pi (pi-agent-core): Pi sequences the run and calls our
-// hooks; the rules stay in RuntimeKernelRun, shared with the native engine, so
-// both produce the same transcript, steps, stop reasons and receipts.
+// The agent loop, on Pi (pi-agent-core): Pi sequences the run and calls our
+// hooks; the rules (budgets, limits, cancellation, transcript, steps and
+// receipts) stay ours, in RuntimeKernelRun (shared/runtimeKernel.ts).
 //
 // - streamFn: one model request through our funded completion, with our input
 //   budget and context projection (RuntimeKernelRun.nextStep). A finished run
@@ -56,9 +56,9 @@ export async function runPiRuntimeKernel<TToolName extends string>(
   const run = new RuntimeKernelRun(params);
   let result: RuntimeKernelResult<TToolName> | null = null;
   let batch: PiBatch<TToolName> | null = null;
-  // What the native loop lets escape (a throw from the model call or from a
-  // caller's hook) escapes here too: Pi would otherwise turn it into a tool
-  // error or a model_error, and callers branch on the thrown code.
+  // A throw from the model call or from a caller's hook escapes the run
+  // unchanged: Pi would otherwise turn it into a tool error or a model_error,
+  // and callers branch on the thrown code (the rate limit, the run budget).
   let thrown: { error: unknown } | null = null;
   const capture = (error: unknown) => { thrown ??= { error }; };
 

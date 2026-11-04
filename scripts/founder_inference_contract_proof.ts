@@ -347,7 +347,7 @@ assert.match(
 );
 assert.match(
   memberRuntime,
-  /recordInitialProviderContextAttestation\(attestation\)[\s\S]*runtimeKernel\.run/,
+  /recordInitialProviderContextAttestation\(attestation\)[\s\S]*runPiRuntimeKernel/,
   "Member and Funnel evidence must persist before the provider/tool kernel starts",
 );
 assert.match(

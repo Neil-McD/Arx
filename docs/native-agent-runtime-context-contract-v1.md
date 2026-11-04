@@ -473,11 +473,14 @@ request through our funded completion (`RuntimeKernelRun.nextStep`);
 `beforeToolCall` starts an admitted step; `afterToolCall` records a serial
 step; `finishTurn` records a parallel batch in source order and ends the run on
 a terminal signal. Pi never sees tool schemas or our transcript, and it runs in
-Convex's default runtime, so streaming is unchanged. Every kernel test runs on
-both engines (`scripts/runtimeKernelEngines.ts`). The Convex env variable
-`POLYNET_PI_ENGINE_SURFACES` (comma list of `ask`, `tag`, `steward`) moves a
-surface to Pi; unset keeps all three native. An Ask records its engine in a
-`runtime_engine` run event.
+Convex's default runtime, so streaming is unchanged.
+
+Engine slice 2 (POL-38, after the Nov 4 staging eval on Pi matched the native
+engine): Pi is the only engine. Ask (`runtimeAgentLoop`) and tags, including
+workflow and timed turns (`communityAgentServeWorker`), call
+`runPiRuntimeKernel` directly; `runNativeRuntimeKernel`, the per-surface switch
+(`runtimeKernelEngine`, `POLYNET_PI_ENGINE_SURFACES`) and the `runtime_engine`
+run event are deleted. The kernel tests run on Pi.
 
 Everything below this note about what Pi may and must not own still holds.
 The cutover is surface by surface behind a switch, with a parity suite, and
