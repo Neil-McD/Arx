@@ -90,7 +90,9 @@ The cash path is simple: configure the community, define the paid access model, 
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
-- The official Polynet MCP is for builders (owners and admins) only.
+- Everyone can connect their own AI through the official Polynet MCP, in the
+  lens of their role: members as members, moderators with join review and post
+  removal, owners and admins as builders.
 - Polynet does not mount third-party MCP servers or app integrations into
   the community agent.
 - Community sites on `polynet.page` are staging-only until the production edge

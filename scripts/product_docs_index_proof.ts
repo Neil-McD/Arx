@@ -322,8 +322,8 @@ function validateCurrentProductTruth(index: ProductDocsIndex): void {
     "Polynet MCP docs must reject third-party MCP consumption.",
   );
   assert(
-    /builder-only/i.test(mcp.content),
-    "Polynet MCP docs must say the MCP is builder-only.",
+    /\*\*Members\*\*/.test(mcp.content) && /\*\*Moderators\*\*/.test(mcp.content) && /selection/i.test(mcp.content),
+    "Polynet MCP docs must describe the member and moderator lenses and selections.",
   );
 
   const site = getProductDocFromIndex(index, "primitives/community-site");

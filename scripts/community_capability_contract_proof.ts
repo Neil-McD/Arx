@@ -271,8 +271,14 @@ assert.deepEqual(
     canReadMemberProjection: true,
     canWriteParticipation: true,
     canUseBuilderProjection: false,
+    canReviewJoinRequests: false,
+    canModerateContent: false,
   },
 );
+// A moderator's own AI gets the moderator lens; their site never does.
+const moderatorAccess = access({ relation: "moderator", can_review_join_requests: true, can_moderate_content: true });
+assert.equal(derivePolynetHumanAuthority({ access: moderatorAccess, principalKind: "external_mcp" })?.canModerateContent, true);
+assert.equal(derivePolynetHumanAuthority({ access: moderatorAccess, principalKind: "community_app" })?.canModerateContent, false);
 assert.equal(
   derivePolynetHumanAuthority({
     access: access({

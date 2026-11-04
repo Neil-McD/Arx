@@ -15,8 +15,8 @@ community, not to any member, and it always works inside that one community.
 
 There is no separate Polynet assistant that follows a member across
 communities. People bring their own AI (Claude, Codex, and similar harnesses)
-through the official Polynet MCP, which is limited to builders (owners and
-admins) today.
+through the official Polynet MCP, each in their own lens: members as members,
+moderators as moderators, owners and admins as builders.
 
 ## Where Members Reach It
 

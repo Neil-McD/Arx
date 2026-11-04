@@ -445,7 +445,7 @@ After every production release, verify the changed surface and at least these co
 3. Member Discover/join page/gate/join
 4. Community navigation, post/chat, voice, and resources
 5. The community agent on the Agent page (explicit community context) and in @mention replies, when touched
-6. Official Polynet MCP (builders only) authenticated community context when touched
+6. Official Polynet MCP (every role in its own lens) authenticated community context when touched
 7. Billing checkout, entitlement convergence, and builder payout readiness when touched
 
 If the release touched billing, check both:

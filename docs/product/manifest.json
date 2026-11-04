@@ -112,13 +112,13 @@
       "slug": "primitives/polynet-mcp",
       "title": "Polynet MCP",
       "section": "Primitives",
-      "summary": "The official builder-only gateway for external AI harnesses into authorized Polynet context.",
+      "summary": "The official gateway for anyone's external AI harness into the Polynet context their role allows.",
       "audience": ["builder", "llm", "operator"],
       "status": "alpha-current",
       "source": "docs/product/primitives/polynet-mcp.md",
       "search": {
         "aliases": ["polynet mcp", "official mcp", "mcp server", "bring your own ai"],
-        "keywords": ["mcp", "oauth", "external harness", "claude code", "codex", "builder-only", "polynet_list", "polynet_call"],
+        "keywords": ["mcp", "oauth", "external harness", "claude code", "codex", "member lens", "polynet_list", "polynet_call"],
         "queries": ["what is the polynet mcp", "how do I connect Polynet MCP", "can members use the mcp"],
         "relatedSlugs": ["guides/connect-polynet-mcp", "primitives/agent"],
         "boost": 1.1
@@ -244,7 +244,7 @@
       "slug": "guides/connect-polynet-mcp",
       "title": "Connect Polynet MCP",
       "section": "Builder Guides",
-      "summary": "How to connect your own AI harness to the official, builder-only Polynet MCP.",
+      "summary": "How to connect your own AI harness to the official Polynet MCP.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/connect-polynet-mcp.md"

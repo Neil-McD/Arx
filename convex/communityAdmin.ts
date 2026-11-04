@@ -1080,7 +1080,7 @@ export const listPendingAdmissionRequestsInternal = internalQuery({
     cursor: v.optional(v.string()), limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
     const limit = args.limit ?? 20;
     if (!Number.isInteger(limit) || limit < 2 || limit > 50) {
       throw new Error("community_join_request_limit_invalid");
@@ -1109,7 +1109,7 @@ export const listPendingAdmissionRequestsInternal = internalQuery({
 export const readPendingAdmissionRequestInternal = internalQuery({
   args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.id("communityJoinRequests") },
   handler: async (ctx, args) => {
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
     const row = await ctx.db.get(args.requestId);
     if (!row || row.communityId !== args.communityId) throw new Error("community_join_request_unavailable");
     return await mapPendingAdmissionRequest(ctx, row);
@@ -1133,7 +1133,7 @@ type FreshAdmissionArgs = {
 
 async function decideFreshAdmission(ctx: MutationCtx, args: FreshAdmissionArgs,
   operation: "community.admission.approve" | "community.admission.deny"): Promise<Record<string, any>> {
-  const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+  const { community, relation } = await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
   if (!args.idempotencyKey.trim() || args.idempotencyKey.length > 200 ||
       !Number.isSafeInteger(args.expectedCreatedAt) || !Number.isSafeInteger(args.expectedUpdatedAt)) {
     throw new Error("invalid_tool_args");
@@ -1193,7 +1193,8 @@ async function decideFreshAdmission(ctx: MutationCtx, args: FreshAdmissionArgs,
     deduped: false,
     receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_call",
       principal_kind: args.principalKind, community_id: String(args.communityId), community_slug: community.slug,
-      authority_lane: "builder", relation: community.ownerId === args.userId ? "owner" : "admin",
+      // The decider's actual relation: owner, admin or moderator, in the moderator lens.
+      authority_lane: "moderator", relation,
       idempotency_key: args.idempotencyKey, deduped: false } };
   await ctx.runMutation(internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
     { ...scope, requestFingerprint, attemptToken: reservation.attemptToken, result: value });

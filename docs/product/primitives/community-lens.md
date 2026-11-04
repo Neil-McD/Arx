@@ -38,6 +38,10 @@ may receive builder authority; moderators and members receive member authority.
 On a community site, and whenever the agent acts on its own, it has member
 authority only.
 
+A person's own AI through the Polynet MCP gets the lens of their role:
+member, moderator (join requests and removing posts), or builder (owners and
+admins).
+
 ## Rules
 
 1. Community context must be explicit.

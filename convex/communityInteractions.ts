@@ -2432,6 +2432,11 @@ export const removeInteractionForTrustedModeratorInternal = internalMutation({
   handler: async (ctx, args) => {
     const found = await loadModerationTarget(ctx, args);
     if (!found) throw new Error("interaction_target_not_found");
+    // Already removed: still removed (a retried selection), for a moderator.
+    if (found.target.status === "deleted") {
+      await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
+      return { ok: true, alreadyRemoved: true };
+    }
     return await deleteCommunityInteractionMessageCore(ctx, {
       targetType: found.targetType, targetId: String(found.target._id),
     }, args.userId, true);

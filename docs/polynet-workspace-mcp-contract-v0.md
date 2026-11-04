@@ -8,11 +8,9 @@ five-tool Polynet repository.
 
 The official Polynet MCP is a provider surface: an external agent harness can
 operate the Polynet platform under the authenticated user's current
-community authority. It is for builders only: every tool call is refused with
-`builder_only` unless the caller owns or administers some community, and any
-community the call targets must be one the caller owns or administers
-(`mcpBuilderGate` in `convex/httpMcp.ts`). Members use their community's site
-and agent.
+community authority. Everyone signed in can use it, in the lens of their role
+in each community: member, moderator (join review, removing posts) or builder
+(owners and admins). See [community-lens-contract-v1.md](community-lens-contract-v1.md).
 
 Polynet does not consume, connect, mount, proxy, or execute third-party MCP
 servers. The official provider is a one-way boundary over Polynet-owned data
@@ -194,10 +192,13 @@ approval capability below does not make the queue writable.
   historical replay. External submission means authorized on behalf of the member,
   not unaided human authorship.
 
-Builder decisions (`community.workflow.approve_milestone`,
-`community.admission.approve` and `community.admission.deny`) are discoverable
-and executable only through the official external MCP (`external_mcp`), where the
-founder operates the harness directly. The native community agent cannot discover
+Decisions (`community.workflow.approve_milestone` for builders;
+`community.admission.approve`, `community.admission.deny` and
+`community.interaction.remove` for the moderator lens: owners, admins and
+moderators) are discoverable and executable only through the official external
+MCP (`external_mcp`), where the person operates the harness directly. Admission
+and removal take a selection of up to 50 items, each decided on its own with
+its own receipt. The native community agent cannot discover
 or execute them, even on an owner's Agent page: it reads member-authored evidence and has no per-call human
 confirmation, so a prompt in that evidence must not be able to grant access or
 advance a member. Mutation validators also reject any other principal.
@@ -443,8 +444,6 @@ retired AI Feed absence, inaccessible-community denial, and—when the actor has
 builder authority—a staged changeset plus an expected `operation_not_found`
 response to an agent terminal-decision call. The changeset remains pending
 product review; this probe neither applies nor rejects it. Run it with a
-builder identity. (The script still supports a member-lane run from before the
-MCP became builder-only; a member identity is now refused with `builder_only`
-at the entrance.) Preserve a separate successful control read of the
+builder identity, or a member identity for a member-lane run. Preserve a separate successful control read of the
 denied community so the certificate proves isolation from a real object rather
 than only missing-path behavior.

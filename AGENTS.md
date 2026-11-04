@@ -85,7 +85,7 @@ product.
   Polynet application fee, connected-account payouts and proportional fee
   reversals for refunds.
 - Provider-cost evidence, usage receipts and quota enforcement.
-- The official Polynet MCP for builders.
+- The official Polynet MCP for everyone, each in the lens of their role.
 
 ## 5) Not now
 
@@ -125,7 +125,9 @@ every change must respect:
 - Access follows the surface: a private conversation uses the requesting
   member's access (owners may also use builder drafting in Studio, which they
   approve); public replies use the channel audience's access; sites are member
-  lane only; the MCP is builder only.
+  lane only; through the MCP a person's own AI gets the lens of their role:
+  member, moderator (join review, removing posts) or builder (owners and
+  admins). See docs/community-lens-contract-v1.md.
 - Every turn is bound to one explicit, server-validated community context, fails
   closed without membership or entitlement, and is auditable from stored
   records. Context changes affect later turns only.

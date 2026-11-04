@@ -14,6 +14,10 @@ export type PolynetResolvedAuthority = {
   canReadMemberProjection: true;
   canWriteParticipation: boolean;
   canUseBuilderProjection: boolean;
+  // The moderator lens (owners, admins and moderators): review join requests
+  // and remove anyone's post. Never through a community app or the agent.
+  canReviewJoinRequests: boolean;
+  canModerateContent: boolean;
 };
 
 function normalizeRelation(
@@ -61,6 +65,8 @@ export function derivePolynetHumanAuthority(args: {
       args.access.can_post_chat === true ||
       args.access.can_post_message === true,
     canUseBuilderProjection: lane === "builder",
+    canReviewJoinRequests: args.principalKind === "external_mcp" && args.access.can_review_join_requests === true,
+    canModerateContent: args.principalKind === "external_mcp" && args.access.can_moderate_content === true,
   };
 }
 
@@ -72,5 +78,7 @@ export function derivePolynetCommunityAgentAuthority(): PolynetResolvedAuthority
     canReadMemberProjection: true,
     canWriteParticipation: true,
     canUseBuilderProjection: false,
+    canReviewJoinRequests: false,
+    canModerateContent: false,
   };
 }

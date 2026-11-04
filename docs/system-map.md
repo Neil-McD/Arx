@@ -260,9 +260,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityForms`, `communityFormVersions`, `communityFormRequests`; cron "advance due
   workflow milestones". The journey-stage idea moves into the agent's board.
 
-### 10. Official Polynet MCP — Keep (protected, builders only)
+### 10. Official Polynet MCP — Keep (protected; every role in its own lens)
 
-- **Code:** `httpMcp` (builder gate at the entrance), `platformOperationExecutor`,
+- **Code:** `httpMcp`, `platformOperationExecutor`, `polynetCanonicalExecutor`
+  (member, moderator and builder lenses; selections),
   `polynetCanonicalReceipts`; Vercel `api/mcp/*` (OAuth metadata, proxy).
 - **Reached by:** `/runtime/mcp`, `/.well-known/oauth-*`.
 - **Tables:** `polynetCanonicalOperationReceipts`.

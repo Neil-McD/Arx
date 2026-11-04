@@ -54,7 +54,7 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /isJoinRequestDecisionPending = Boolean\(props\.decidingJoinRequestId\)[\s\S]*?disabled=\{isJoinRequestDecisionPending[^}]*\}[\s\S]*?disabled=\{isJoinRequestDecisionPending[^}]*\}/,
+  /isJoinRequestDecisionPending = Boolean\(props\.decidingJoinRequestId\)[\s\S]*?const isBusy = isJoinRequestDecisionPending \|\| bulkDeciding[\s\S]*?disabled=\{isBusy[^}]*\}[\s\S]*?disabled=\{isBusy[^}]*\}/,
   "every request action must disable while any decision is pending",
 );
 assert.match(joinRequestCore, /COMMUNITY_JOIN_REQUEST_PAIR_READ_LIMIT = 4[\s\S]*?\.withIndex\("by_community_user"[\s\S]*?\.take\(COMMUNITY_JOIN_REQUEST_PAIR_READ_LIMIT\)/,

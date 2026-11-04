@@ -1483,10 +1483,10 @@ export async function requireCommunityModerator(args: {
   ctx: any;
   communityId: any;
   userId: any;
-}): Promise<{ community: CommunityLike }> {
+}): Promise<{ community: CommunityLike; relation: CommunityLens["relation"] }> {
   const lens = await requireCommunityLens(args);
   if (!lens.can.moderateContent) throw new Error("community_forbidden");
-  return { community: lens.community };
+  return { community: lens.community, relation: lens.relation };
 }
 
 export function mapActivePlanSummaries<

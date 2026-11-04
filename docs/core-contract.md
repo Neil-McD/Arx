@@ -65,7 +65,8 @@ on this boundary and never move it.
 10. **An actor never exceeds its grant.** A member's site acts as that member,
     inside that community, in the member lane. Founder administration from a
     site needs separately authorized management operations, never an ordinary
-    member session. The MCP is for builders only.
+    member session. Through the MCP each person's own AI gets the lens of their
+    role: member, moderator or builder.
 11. **One agent per community.** Agent-page conversations, @mention replies,
     site conversations and proactive work are the same community agent. What
     it writes for a member is the agent's post, attributed to that member.

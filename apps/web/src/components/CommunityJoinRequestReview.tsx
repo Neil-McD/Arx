@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 const PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200;
@@ -33,6 +33,19 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
     ? pendingJoinRequests.slice(0, PENDING_JOIN_REQUEST_DISPLAY_LIMIT)
     : pendingJoinRequests;
   const [joinRequestsExpanded, setJoinRequestsExpanded] = useState(false);
+  // A selection: approve or deny several at once, one request at a time underneath.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkDeciding, setBulkDeciding] = useState(false);
+  // A selection belongs to the requests on screen: a request decided elsewhere
+  // meanwhile is skipped; switching community skips them all (none is pending
+  // here any more); closing the panel stops the batch.
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  pendingIdsRef.current = new Set(pendingJoinRequests.map((request) => request.id));
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const joinRequestPanelId = useId();
   const pendingJoinRequestCount = visiblePendingJoinRequests.length;
   const canShowJoinRequests = Boolean(
@@ -59,11 +72,47 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
   useEffect(() => {
     if (!canShowJoinRequests) setJoinRequestsExpanded(false);
   }, [canShowJoinRequests]);
+  // Decided or vanished requests leave the selection.
+  useEffect(() => {
+    setSelected((current) => {
+      const live = new Set(pendingJoinRequests.map((request) => request.id));
+      const next = new Set([...current].filter((id) => live.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [pendingJoinRequests]);
+  const toggleSelected = (id: string) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const allSelected = visiblePendingJoinRequests.length > 0 && visiblePendingJoinRequests.every((request) => selected.has(request.id));
+  const decideSelected = async (decide: ((requestId: string) => Promise<void> | void) | undefined) => {
+    if (!decide || bulkDeciding) return;
+    setBulkDeciding(true);
+    try {
+      for (const id of [...selected]) {
+        if (!mountedRef.current) break;
+        if (!pendingIdsRef.current.has(id)) continue;
+        await decide(id);
+      }
+    } finally {
+      if (mountedRef.current) setBulkDeciding(false);
+    }
+  };
+  const isBusy = isJoinRequestDecisionPending || bulkDeciding || Boolean(props.isLoadingJoinRequests);
   const renderJoinRequest = (request: CommunityAdmissionJoinRequest) => {
     const name = (request.displayName ?? "").trim() || props.displayName(request.userId);
     const isDeciding = props.decidingJoinRequestId === request.id;
     return (
       <div key={request.id} className="community-context-request-row">
+        <input
+          className="community-context-request-select"
+          type="checkbox"
+          checked={selected.has(request.id)}
+          disabled={bulkDeciding}
+          aria-label={`Select ${name}`}
+          onChange={() => toggleSelected(request.id)}
+        />
         <UserAvatar
           className="community-context-request-avatar"
           readyClassName="has-image"
@@ -89,7 +138,7 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
           <button
             className="community-context-request-action"
             type="button"
-            disabled={isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onApproveJoinRequest}
+            disabled={isBusy || !props.onApproveJoinRequest}
             aria-busy={isDeciding || undefined}
             aria-label={`Approve ${name}`}
             title="Approve"
@@ -100,7 +149,7 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
           <button
             className="community-context-request-action"
             type="button"
-            disabled={isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onDenyJoinRequest}
+            disabled={isBusy || !props.onDenyJoinRequest}
             aria-busy={isDeciding || undefined}
             aria-label={`Deny ${name}`}
             title="Deny"
@@ -138,6 +187,28 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
         ) : null}
         {canShowJoinRequests && joinRequestsExpanded ? (
           <div className="community-context-request-panel" id={joinRequestPanelId}>
+            {visiblePendingJoinRequests.length > 1 || selected.size > 0 ? (
+              <div className="community-context-request-bulk">
+                <label>
+                  <input
+                    className="community-context-request-select"
+                    type="checkbox"
+                    checked={allSelected}
+                    disabled={bulkDeciding}
+                    onChange={() => setSelected(allSelected ? new Set() : new Set(visiblePendingJoinRequests.map((request) => request.id)))}
+                  />
+                  <span>{selected.size ? `${selected.size} selected` : "Select all"}</span>
+                </label>
+                {selected.size ? (
+                  <span className="community-context-request-bulk-actions">
+                    <button type="button" disabled={isBusy || !props.onApproveJoinRequest} aria-busy={bulkDeciding || undefined}
+                      onClick={() => void decideSelected(props.onApproveJoinRequest)}>Approve</button>
+                    <button type="button" disabled={isBusy || !props.onDenyJoinRequest} aria-busy={bulkDeciding || undefined}
+                      onClick={() => void decideSelected(props.onDenyJoinRequest)}>Deny</button>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             {visiblePendingJoinRequests.map(renderJoinRequest)}
             {props.joinRequestsError ? (
               <div className="community-context-admission-status">{props.joinRequestsError}</div>
