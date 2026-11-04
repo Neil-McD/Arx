@@ -9,7 +9,7 @@ import { api, internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { requireCommunityManager } from "./communityCore";
 
-const refs = { api: api as any, internal: internal as any };
+const refs: { api: any; internal: any } = { api, internal };
 
 // Their current membership if they have one, else their latest.
 async function membershipOf(ctx: any, communityId: any, userId: any) {
@@ -66,5 +66,42 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
       return { banned: true };
     }
     return { removed: true };
+  },
+});
+
+// One person in a selection, with their own receipt, all in one transaction:
+// the receipt is reserved, the change made and the receipt completed together,
+// so a retried selection replays what was done for them instead of doing it
+// again (someone removed and since rejoined isn't removed twice).
+export const applyMemberSelectionItemInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    authSubject: v.string(),
+    communityId: v.id("communities"),
+    itemKey: v.string(),
+    requestFingerprint: v.string(),
+    targetUserId: v.id("users"),
+    action: v.union(v.literal("tag"), v.literal("set_role"), v.literal("remove"), v.literal("ban"), v.literal("unban")),
+    tag: v.optional(v.string()),
+    on: v.optional(v.boolean()),
+    role: v.optional(v.union(v.literal("admin"), v.literal("moderator"), v.literal("member"))),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const receipt = { communityId: args.communityId, userId: args.userId, principalKind: "external_mcp", toolName: "polynet_call",
+      idempotencyKey: args.itemKey, requestFingerprint: args.requestFingerprint };
+    const reservation: any = await ctx.runMutation(refs.internal.polynetCanonicalReceipts.reserveCanonicalOperationReceiptInternal, receipt);
+    if (!reservation.ok) throw new Error(String(reservation.code ?? "member_action_refused"));
+    if (reservation.status === "completed") return { ...(reservation.result ?? {}), deduped: true };
+    const scope = { userId: args.userId, communityId: args.communityId };
+    const result: Record<string, unknown> = args.action === "tag"
+      ? await ctx.runMutation(refs.internal.communityTags.setCommunityMemberTagForTrustedUserInternal,
+        { ...scope, tag: args.tag ?? "", targetUserId: args.targetUserId, on: args.on === true })
+      : await ctx.runMutation(refs.internal.communityPeople.applyPersonActionForTrustedUserInternal, {
+        ...scope, authSubject: args.authSubject, targetUserId: args.targetUserId, action: args.action,
+        ...(args.role ? { role: args.role } : {}), ...(args.reason ? { reason: args.reason } : {}) });
+    await ctx.runMutation(refs.internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
+      { ...receipt, attemptToken: reservation.attemptToken, result });
+    return result;
   },
 });

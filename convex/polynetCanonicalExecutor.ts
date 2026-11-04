@@ -2750,15 +2750,19 @@ async function executeMembersOperation(args: {
   return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
     decide: async ({ ref, userId }) => {
       try {
-        const value = operation === MEMBERS_TAG_OPERATION
-          ? await args.ctx.runMutation((internal as any).communityTags.setCommunityMemberTagForTrustedUserInternal,
-            { ...scope, tag: rawInput.tag, targetUserId: userId, on: rawInput.on })
-          : await args.ctx.runMutation((internal as any).communityPeople.applyPersonActionForTrustedUserInternal, {
-            ...scope, authSubject: args.authSubject, targetUserId: userId,
-            action: operation === MEMBERS_ROLE_OPERATION ? "set_role" : operation === MEMBERS_REMOVE_OPERATION ? "remove"
-              : operation === MEMBERS_BAN_OPERATION ? "ban" : "unban",
-            ...(operation === MEMBERS_ROLE_OPERATION ? { role: rawInput.role } : {}),
-            ...(typeof rawInput.reason === "string" ? { reason: rawInput.reason } : {}) });
+        const action = operation === MEMBERS_TAG_OPERATION ? "tag" : operation === MEMBERS_ROLE_OPERATION ? "set_role"
+          : operation === MEMBERS_REMOVE_OPERATION ? "remove" : operation === MEMBERS_BAN_OPERATION ? "ban" : "unban";
+        const details = {
+          ...(operation === MEMBERS_TAG_OPERATION ? { tag: rawInput.tag, on: rawInput.on } : {}),
+          ...(operation === MEMBERS_ROLE_OPERATION ? { role: rawInput.role } : {}),
+          ...(typeof rawInput.reason === "string" ? { reason: rawInput.reason } : {}),
+        };
+        // Each person has their own receipt, committed with their change.
+        const value = await args.ctx.runMutation((internal as any).communityPeople.applyMemberSelectionItemInternal, {
+          ...scope, authSubject: args.authSubject, targetUserId: userId, action, ...details,
+          itemKey: selectionItemKey(args.idempotencyKey, userId),
+          requestFingerprint: JSON.stringify([operation, userId, details]),
+        });
         return { member: ref, ok: true, ...value };
       } catch (error) {
         const raw = error instanceof Error ? error.message : "";

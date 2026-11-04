@@ -40,16 +40,12 @@ async function activeMembership(ctx: any, communityId: any, userId: any) {
   return row && row.active === true ? row : null;
 }
 
+// One read per tag: each tag keeps its own count of people.
 async function listTags(ctx: any, communityId: any) {
   const tags = await ctx.db.query("communityTags")
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(COMMUNITY_TAGS_MAX);
-  const counted = [];
-  for (const tag of tags) {
-    const people = await ctx.db.query("communityMemberTags")
-      .withIndex("by_tag_user", (q: any) => q.eq("tagId", tag._id)).take(TAG_DELETE_MAX_PEOPLE + 1);
-    counted.push({ slug: tag.slug, name: tag.name, people: people.length, people_is_lower_bound: people.length > TAG_DELETE_MAX_PEOPLE });
-  }
-  return counted.sort((a, b) => a.name.localeCompare(b.name));
+  return tags.map((tag: any) => ({ slug: tag.slug, name: tag.name, people: Math.max(0, tag.peopleCount ?? 0) }))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
 }
 
 async function tagsForUsers(ctx: any, communityId: any, userIds: any[]) {
@@ -83,7 +79,7 @@ async function createTag(ctx: any, userId: any, communityId: any, rawName: unkno
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(COMMUNITY_TAGS_MAX)).length;
   if (count >= COMMUNITY_TAGS_MAX) throw new Error("community_tags_full");
   const nowMs = Date.now();
-  await ctx.db.insert("communityTags", { communityId, slug, name, createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs });
+  await ctx.db.insert("communityTags", { communityId, slug, name, peopleCount: 0, createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs });
   return { slug, name, created: true };
 }
 
@@ -109,15 +105,23 @@ async function deleteTag(ctx: any, communityId: any, slug: string) {
   return { deleted: true };
 }
 
+// Read fresh each time: one transaction may tag many people.
+async function adjustPeopleCount(ctx: any, tagId: any, by: number) {
+  const tag = await ctx.db.get(tagId);
+  if (tag) await ctx.db.patch(tagId, { peopleCount: Math.max(0, (tag.peopleCount ?? 0) + by) });
+}
+
 // Tagging needs a current member; untagging works for anyone (a person who left keeps no stale label).
-async function setMemberTag(ctx: any, communityId: any, tagId: any, targetUserId: any, on: boolean) {
+async function setMemberTag(ctx: any, communityId: any, tag: any, targetUserId: any, on: boolean) {
   const existing = await ctx.db.query("communityMemberTags")
-    .withIndex("by_tag_user", (q: any) => q.eq("tagId", tagId).eq("userId", targetUserId)).first();
+    .withIndex("by_tag_user", (q: any) => q.eq("tagId", tag._id).eq("userId", targetUserId)).first();
   if (on && !existing) {
     if (!(await activeMembership(ctx, communityId, targetUserId))) throw new Error("community_member_not_found");
-    await ctx.db.insert("communityMemberTags", { communityId, tagId, userId: targetUserId, createdAt: Date.now() });
+    await ctx.db.insert("communityMemberTags", { communityId, tagId: tag._id, userId: targetUserId, createdAt: Date.now() });
+    await adjustPeopleCount(ctx, tag._id, 1);
   } else if (!on && existing) {
     await ctx.db.delete(existing._id);
+    await adjustPeopleCount(ctx, tag._id, -1);
   }
   return { tagged: on };
 }
@@ -188,6 +192,6 @@ export const setCommunityMemberTagForTrustedUserInternal = internalMutation({
   handler: async (ctx, args) => {
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
     const tag = await requireTag(ctx, args.communityId, args.tag);
-    return await setMemberTag(ctx, args.communityId, tag._id, args.targetUserId, args.on);
+    return await setMemberTag(ctx, args.communityId, tag, args.targetUserId, args.on);
   },
 });

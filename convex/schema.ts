@@ -2434,6 +2434,8 @@ export default defineSchema({
     communityId: v.id("communities"),
     slug: v.string(),
     name: v.string(),
+    // How many people carry it, kept as they're tagged and untagged.
+    peopleCount: v.optional(v.number()),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),

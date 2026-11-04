@@ -3573,6 +3573,28 @@ test("people: owners and admins tag, re-role, remove, ban and unban a selection;
   expect(await t.run(async ctx => (await ctx.db.query("communityBlocks" as any).collect()).length)).toBe(1);
   expect(await owner.call("community.members.unban", { members: [ref(f.memberId)] }, "u1")).toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
 
+  // A selection cut off after a removal: the person rejoins, and the retry
+  // replays their receipt instead of removing them again.
+  const solo = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "solo-subject", displayName: "solo", handle: "solo", normalizedHandle: "solo", createdAt: 1, updatedAt: 1 });
+    const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
+      active: true, activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
+    return { userId, membershipId };
+  });
+  const original = (completeCanonicalOperationReceiptInternal as any)._handler;
+  const crash = vi.spyOn(completeCanonicalOperationReceiptInternal as any, "_handler").mockImplementation(async (ctx: any, a: any) => {
+    if (a.idempotencyKey === "rm-crash") throw new Error("simulated_completion_failure");
+    return original(ctx, a);
+  });
+  await expect(adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash")).rejects.toThrow();
+  crash.mockRestore();
+  expect(await active(solo.userId)).toBe(false);
+  await t.run(ctx => ctx.db.patch(solo.membershipId, { active: true, revokedAt: undefined, revokedReason: undefined }));
+  await expireCanonicalReceipt(t, { toolName: "polynet_call", idempotencyKey: "rm-crash" });
+  expect(await adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ ok: true, deduped: true }] } } });
+  expect(await active(solo.userId)).toBe(true);
+
   // Rename and delete a tag; deleting untags everyone.
   expect(await owner.call("community.tags.rename", { tag: "beginner", name: "New runner" }, "t4")).toMatchObject({ ok: true, value: { result: { slug: "new-runner" } } });
   expect(await owner.call("community.tags.delete", { tag: "new-runner" }, "t5")).toMatchObject({ ok: true, value: { result: { deleted: true } } });
