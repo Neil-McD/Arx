@@ -938,15 +938,19 @@ export const readCommunitySettingsForTrustedManagerInternal = internalQuery({
   args: { userId: v.id("users"), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
-    const snapshot = await mapCommunitySettingsSnapshot(ctx, community);
-    return {
-      name: snapshot.name, slug: snapshot.slug, one_liner: snapshot.one_liner, about: snapshot.about,
-      visibility: snapshot.visibility, join_mode: resolveCommunityEntryPolicy(community),
-      pricing_mode: snapshot.pricing.mode, avatar_url: snapshot.avatar_url, banner_url: snapshot.banner_url,
-      settings_revision: snapshot.settings_revision, updated_at: snapshot.updated_at,
-    };
+    return await builderSettingsView(ctx, community);
   },
 });
+
+async function builderSettingsView(ctx: any, community: CommunityLike) {
+  const snapshot = await mapCommunitySettingsSnapshot(ctx, community);
+  return {
+    name: snapshot.name, slug: snapshot.slug, one_liner: snapshot.one_liner, about: snapshot.about,
+    visibility: snapshot.visibility, join_mode: resolveCommunityEntryPolicy(community),
+    pricing_mode: snapshot.pricing.mode, avatar_url: snapshot.avatar_url, banner_url: snapshot.banner_url,
+    settings_revision: snapshot.settings_revision, updated_at: snapshot.updated_at,
+  };
+}
 
 // A person's own AI changing the profile (the MCP): only the fields it gives
 // change. Everything else, pricing and pictures included, is carried over, so
@@ -969,7 +973,7 @@ export const updateCommunityProfileForTrustedUserInternal = internalMutation({
     const currentPrice = ((await ctx.db.query("communityPricePoints" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect()) as Array<{ isCurrent: boolean; currency: string; currencyDecimals: number }>).find((row) => row.isCurrent);
-    return await saveCommunitySettingsCore(ctx, {
+    await saveCommunitySettingsCore(ctx, {
       userId: args.userId,
       communityId: args.communityId,
       expectedSettingsRevision: args.expectedSettingsRevision,
@@ -982,6 +986,10 @@ export const updateCommunityProfileForTrustedUserInternal = internalMutation({
       annualAmountBaseUnits: pricing.annualAmount,
       ...(currentPrice ? { currency: currentPrice.currency, currencyDecimals: currentPrice.currencyDecimals } : {}),
     });
+    // The community as this write left it, read in the same transaction.
+    const updated = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!updated) throw new Error("community_not_found");
+    return await builderSettingsView(ctx, updated);
   },
 });
 

@@ -2684,7 +2684,6 @@ async function executeCommunityOperation(args: {
         ...("name" in rawInput ? { name: rawInput.name } : {}), ...("slug" in rawInput ? { slug: rawInput.slug } : {}),
         ...("one_liner" in rawInput ? { oneLiner: rawInput.one_liner } : {}), ...("about" in rawInput ? { about: rawInput.about } : {}),
         ...("visibility" in rawInput ? { visibility: rawInput.visibility } : {}) })
-        .then(() => args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal, scope))
       : operation === JOIN_MODE_OPERATION
         ? await args.ctx.runMutation((internal as any).communityAdmin.setCommunityFreeAccessModeForTrustedUserInternal, { ...scope, mode: rawInput.mode })
       : operation === AGENT_INSTRUCTIONS_OPERATION
