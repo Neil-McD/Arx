@@ -66,8 +66,6 @@ const realtimeAuth = read("shared/convexRealtimeAuth.ts");
 const runtimeCancellation = read("convex/runtimeCancellation.ts");
 const communityPresenceContract = read("shared/communityPresenceContract.ts");
 const schema = read("convex/schema.ts");
-const communityHeartbeat = read("convex/communityAgentHeartbeat.ts");
-const communityDirectory = read("convex/communityIntelligenceDirectory.ts");
 
 const uiOnlyIntervalFiles = [
   "apps/web/src/components/ChannelRosterPanel.tsx",
@@ -123,7 +121,7 @@ const declaredCronNames = Array.from(
   crons.matchAll(/crons\.(?:interval|daily)\(\s*\n\s*"([^"]+)"/g),
   (match) => match[1]!,
 );
-assert.equal(declaredCronNames.length, 6, "every Convex cron must remain inventoried");
+assert.equal(declaredCronNames.length, 5, "every Convex cron must remain inventoried");
 for (const cronName of declaredCronNames) {
   assert.ok(
     contract.toLowerCase().includes(cronName.toLowerCase()),
@@ -135,6 +133,7 @@ for (const retiredCronName of [
   "process queued community mention broadcasts",
   "process canceled community mention broadcast cleanups",
   "process pending community agent mentions",
+  "community memory sweep",
 ]) {
   assert.ok(
     !declaredCronNames.includes(retiredCronName),
@@ -145,26 +144,6 @@ assert.doesNotMatch(
   crons,
   /emailDigests|weekly_(?:member|founder)_digest/,
   "weekly digest delivery must stay disabled until its bounded worker is proven",
-);
-assert.doesNotMatch(
-  communityHeartbeat,
-  /query\("communities" as any\)\.take\(limit\)/,
-  "community memory sweep must not enumerate idle communities",
-);
-assert.match(
-  schema,
-  /by_memoryMetabolismPending_requestedAt[\s\S]*by_compilerState_pendingSince[\s\S]*by_agentHandoffState_createdAt[\s\S]*by_agentHandoffState_agentClaimedAt/,
-  "community memory sweep must discover work through bounded due-work indexes",
-);
-assert.match(
-  communityDirectory,
-  /memoryMetabolismPending: true[\s\S]*memoryMetabolismRevision[\s\S]*memoryMetabolismRequestedAt: nowMs|memoryMetabolismRevision[\s\S]*memoryMetabolismPending: true[\s\S]*memoryMetabolismRequestedAt: nowMs/,
-  "new memory outcomes must mark their community for due-work discovery",
-);
-assert.match(
-  communityHeartbeat,
-  /currentRevision !== args\.revision[\s\S]*newer_memory_work[\s\S]*memoryMetabolismPending: false/,
-  "community memory settlement must preserve newer concurrent work",
 );
 assert.match(
   emailCore,

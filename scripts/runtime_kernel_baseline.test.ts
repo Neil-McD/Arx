@@ -912,6 +912,6 @@ describe("runtime engine switch", () => {
     expect(resolveRuntimeKernelEngine("ask", undefined)).toBe("native");
     expect(resolveRuntimeKernelEngine("ask", "")).toBe("native");
     expect(resolveRuntimeKernelEngine("ask", "tag, Ask")).toBe("pi");
-    expect(resolveRuntimeKernelEngine("steward", "ask,tag")).toBe("native");
+    expect(resolveRuntimeKernelEngine("tag", "ask")).toBe("native");
   });
 });

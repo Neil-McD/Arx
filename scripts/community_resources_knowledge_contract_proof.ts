@@ -273,7 +273,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /backfillCommunityResourceModuleStatusesInternal[\s\S]*syncResourceMemoryProjectionsForModule/,
+  /backfillCommunityResourceModuleStatusesInternal/,
   "module status backfill must resync resource memory projections after canonicalizing visibility",
 );
 assert.doesNotMatch(
@@ -799,7 +799,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /export const deleteCommunityResourceModule[\s\S]*const lessons = resources\.filter[\s\S]*revokeCommunityResourceMemoryProjection[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete\(lesson\._id[\s\S]*detachedIngestionSources/,
+  /export const deleteCommunityResourceModule[\s\S]*const lessons = resources\.filter[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete\(lesson\._id[\s\S]*detachedIngestionSources/,
   "course deletion must delete lessons while preserving hidden ingestion evidence",
 );
 assert.match(

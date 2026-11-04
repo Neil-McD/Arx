@@ -16,7 +16,6 @@ import {
 import {
   requireCommunityChatAccess,
 } from "./communityCore";
-import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   COMMUNITY_AGENT_GLOBAL_SCOPE_KEY,
@@ -986,69 +985,6 @@ function isRuntimeRunStale(args: {
   return Math.max(0, args.nowMs - lastProgressAt) >= RUNTIME_RUN_STALE_AFTER_MS;
 }
 
-function buildRuntimeRunSourceTraceSummary(args: {
-  run: RuntimeRunLike;
-  status: "ok" | "error" | "cancelled";
-  reason?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  finishedAt: number;
-}): string {
-  const durationMs = Math.max(0, args.finishedAt - Math.floor(args.run.startedAt));
-  return [
-    `Runtime agent run finished with status ${args.status}.`,
-    `Run id: ${args.run.runId}.`,
-    `Lane: ${args.run.lane || "unknown"}.`,
-    `Visibility: ${args.run.visibility ?? "user_visible"}.`,
-    `Execution mode: ${args.run.executionMode ?? "chat"}.`,
-    `Model: ${args.run.modelId ?? "unknown"}.`,
-    `Engine: ${args.run.engineId ?? "unknown"}.`,
-    `Contract: ${args.run.contractName ?? "unknown"} ${args.run.contractVersion ?? ""}`.trim(),
-    `Started at ms: ${Math.floor(args.run.startedAt)}.`,
-    `Finished at ms: ${args.finishedAt}.`,
-    `Duration ms: ${durationMs}.`,
-    args.reason ? `Reason: ${args.reason}.` : "",
-    args.errorCode ? `Error code: ${args.errorCode}.` : "",
-    "Message content, tool arguments, raw error details, and raw runtime transcript are intentionally excluded from this evidence trace.",
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .slice(0, 4000);
-}
-
-async function recordRuntimeRunCommunitySourceTraceBestEffort(args: {
-  ctx: any;
-  ownerId: any;
-  run: RuntimeRunLike;
-  status: "ok" | "error" | "cancelled";
-  reason?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  finishedAt: number;
-  nowMs: number;
-}): Promise<void> {
-  const runCommunityId = normalizeIdValue(args.run.communityId);
-  if (!runCommunityId) return;
-  try {
-    await recordTrustedCommunitySourceTraceCore({
-      ctx: args.ctx,
-      communityId: runCommunityId,
-      sourceType: "agent_run",
-      sourceId: `runtime_run:${normalizeRunId(args.run.runId)}`,
-      title: `Runtime agent run: ${args.status}`,
-      summary: buildRuntimeRunSourceTraceSummary(args),
-      visibilityScope: "admin",
-      sourceVisibility: "redacted",
-      actorType: "agent",
-      actorUserId: args.ownerId,
-      actorAgentKey: "runtime_run_finalizer",
-      nowMs: args.nowMs,
-    });
-  } catch {
-    // Source traces are compiler evidence. Runtime completion remains authoritative even if evidence capture fails.
-  }
-}
-
 async function finalizeRuntimeRunRecord(args: {
   ctx: any;
   ownerId: any;
@@ -1147,17 +1083,6 @@ async function finalizeRuntimeRunRecord(args: {
   });
   const updated = (await args.ctx.db.get(run._id)) as RuntimeRunLike | null;
   if (!updated) throw new Error("runtime_run_not_found");
-  await recordRuntimeRunCommunitySourceTraceBestEffort({
-    ctx: args.ctx,
-    ownerId: args.ownerId,
-    run: updated,
-    status,
-    reason,
-    errorCode,
-    errorMessage,
-    finishedAt,
-    nowMs: args.nowMs,
-  });
   return updated;
 }
 

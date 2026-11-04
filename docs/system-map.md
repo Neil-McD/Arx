@@ -151,22 +151,26 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityEvents`, `eventReminders` (cron: 24-hour reminder emails).
 - **Tables:** `communityEvents`.
 
-### 7. Community memory and cognition — Keep (protected)
+### 7. Community notes — Keep (protected)
 
-- **Does:** turns activity into cited, accepted community memory; member facts.
-- **Code:** `communityCompiler*`, `communityIntelligenceDirectory`,
-  `communityEvidence*`, `communityCognitionLifecycle`, `communityCognitionCleanupCore`,
-  `communityMemoryWorkKey`, `communityMemoryMetabolizer`, `communityWikiArchitect`,
-  `memberOntology`,
-  `memberOntologyCore`; cron "community
-  memory sweep" (`communityAgentHeartbeat`, every 6 hours).
-- **Tables:** `communitySourceTraces`, `communityEvidenceCitations`,
-  `communityEvidenceRetrievalLogs`, `communityIntelligenceNodes`,
-  `communityIntelligenceEdges`, `communityIntelligenceMutations`,
-  `communityIntelligenceChangeRequests`, `communityIntelligenceRetrievalLogs`,
-  `communityOutcomeObservations`,
-  `communityCompilerDigests`, `communityMemoryMetabolizerRuns`, `memberFacts`,
-  `memberProfileSpines`.
+- **Does:** community notes, the agent's shared memory: short markdown notes the
+  community agent writes from an Ask or a tag when it learns something worth
+  sharing; every member reads them under `memory/`; owners and admins edit or
+  delete them in Studio (Knowledge → Notes). The Studio and public overview
+  (`communityIntelligenceDirectory`, kept by name for cached pages) shows notes
+  and lessons around the community.
+- **Code:** `communityNotes`, `communityIntelligenceDirectory`, `communityEvidence*`,
+  `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
+  `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`).
+- **Legacy, until the old tables drop (POL-39 slice 3):** `communityMemoryMigration`
+  (one-time copy of old memory into notes), and the unused tables
+  `communityIntelligenceNodes`, `communityIntelligenceEdges`,
+  `communityIntelligenceMutations`, `communityIntelligenceChangeRequests`,
+  `communityIntelligenceRetrievalLogs`, `communitySourceTraces`,
+  `communityCompilerDigests`, `communityMemoryMetabolizerRuns`, `communityAgentRuns`,
+  `communityOutcomeObservations`.
+  The steward, the 6-hour memory sweep, the compiler and the metabolizer were
+  deleted on 2026-11-03.
 - **Contracts:** [community-agent-cognition-contract-v1.md](community-agent-cognition-contract-v1.md),
   [community-lineage-ontology-contract-v0.md](community-lineage-ontology-contract-v0.md),
   [community-evidence-integrity-contract-v1.md](community-evidence-integrity-contract-v1.md),
@@ -174,8 +178,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Going:** `personalMemoryItems` and `userMemorySettings` tables (personal-agent
   era; the `personalMemory` module was deleted Oct 27);
   `communityAiFeed*` tables and `communityAiFeedRetirement` (feature retired).
-- **Hand-run:** `communityCognitionCleanup` (drains a deleted community's cognition
-  data).
 - **Retiring tables:** `communityArchiveDocuments` (no writers). Deleted Oct 27:
   `communityAiFeedEvidence`, `communityMemoryHealth`.
 
@@ -452,7 +454,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 | Enqueue 24-hour event reminder emails | 15 min | `eventReminders` |
 | Process pending mention emails | 15 min | `communityMentionEmails` |
 | Send due founder briefs | 15 min | `communityFounderBrief` |
-| Community memory sweep | 6 h | `communityAgentHeartbeat` |
 | Advance due workflow milestones | 1 min | `communityMemberWorkflows` (going) |
 
 ## Cleanup plan this map drives

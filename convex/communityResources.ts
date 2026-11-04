@@ -40,10 +40,6 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
-  revokeCommunityResourceMemoryProjection,
-  syncCommunityResourceMemoryProjection,
-} from "./communityResourceMemoryProjection";
-import {
   deleteCommunityResourceBodyContent,
   hydrateCommunityResourceBody,
   normalizeCommunityResourceBodyMd,
@@ -946,22 +942,6 @@ async function getNextResourceSortOrder(args: {
   );
 }
 
-async function syncResourceMemoryProjectionsForModule(args: {
-  ctx: any;
-  communityId: any;
-  moduleId: any;
-}): Promise<void> {
-  const rows = (await args.ctx.db
-    .query("communityResources" as any)
-    .withIndex("by_community_module", (q: any) =>
-      q.eq("communityId", args.communityId).eq("moduleId", args.moduleId),
-    )
-    .collect()) as CommunityResourceLike[];
-  for (const row of rows) {
-    await syncCommunityResourceMemoryProjection(args.ctx, row);
-  }
-}
-
 function hasPersistedResourceModuleStatus(module: CommunityResourceModuleLike): boolean {
   return Object.prototype.hasOwnProperty.call(module, "status") &&
     parseResourceModuleStatusForBackfill(module.status) !== null;
@@ -1044,11 +1024,6 @@ export const backfillCommunityResourceModuleStatusesInternal = internalMutation(
         await ctx.db.patch(module._id as any, {
           status: nextStatus,
           updatedAt: nowMs,
-        });
-        await syncResourceMemoryProjectionsForModule({
-          ctx,
-          communityId: module.communityId,
-          moduleId: module._id,
         });
       }
       modulesUpdated += 1;
@@ -1807,7 +1782,6 @@ async function createPageFromChangesetOperation(args: {
     });
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, created) ?? created;
-  await syncCommunityResourceMemoryProjection(args.ctx, hydrated, args.nowMs);
   return hydrated;
 }
 
@@ -1885,7 +1859,6 @@ async function editPageFromChangesetOperation(args: {
     });
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
-  await syncCommunityResourceMemoryProjection(args.ctx, hydrated, args.nowMs);
   return hydrated;
 }
 
@@ -1901,7 +1874,6 @@ async function deletePageFromChangesetOperation(args: {
     role: "page",
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
-  await revokeCommunityResourceMemoryProjection(args.ctx, existing);
   await deleteCommunityResourceBodyContent(args.ctx, existing._id);
   await args.ctx.db.delete(existing._id as any);
   return existing;
@@ -1963,21 +1935,12 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         expectedUpdatedAt: operation.expected_updated_at,
         actualUpdatedAt: module.updatedAt,
       });
-      const moduleStatusChanged = hasOwnField(operation as any, "module_status") &&
-        normalizeResourceModuleStatus(module.status) !== operation.module_status;
       await args.ctx.db.patch(module._id as any, {
         ...(hasOwnField(operation as any, "name") ? { name: operation.name } : {}),
         ...(hasOwnField(operation as any, "description_md") ? { descriptionMd: operation.description_md ?? undefined } : {}),
         ...(hasOwnField(operation as any, "module_status") ? { status: operation.module_status } : {}),
         updatedAt: args.nowMs,
       });
-      if (moduleStatusChanged) {
-        await syncResourceMemoryProjectionsForModule({
-          ctx: args.ctx,
-          communityId: args.communityId,
-          moduleId: module._id,
-        });
-      }
       applied.push({
         index,
         op: operation.op,
@@ -2045,8 +2008,6 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         sortOrder,
         updatedAt: args.nowMs,
       });
-      const updated = (await args.ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
-      if (updated) await syncCommunityResourceMemoryProjection(args.ctx, updated, args.nowMs);
       applied.push({
         index,
         op: operation.op,
@@ -2105,8 +2066,6 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
       sourceResourceId: operation.source_resource_id,
       updatedAt: args.nowMs,
     });
-    const updated = (await args.ctx.db.get(page._id as any)) as CommunityResourceLike | null;
-    if (updated) await syncCommunityResourceMemoryProjection(args.ctx, updated, args.nowMs);
     applied.push({
       index,
       op: operation.op,
@@ -4285,7 +4244,6 @@ export const saveCommunityResourceModule = mutation({
       const nextModuleStatus = Object.prototype.hasOwnProperty.call(payload, "module_status")
         ? requireResourceModuleStatusForWrite(payload.module_status)
         : normalizeResourceModuleStatus(existing.status);
-      const moduleStatusChanged = normalizeResourceModuleStatus(existing.status) !== nextModuleStatus;
       await ctx.db.patch(existing._id as any, {
         name: normalizeName(nextNameRaw),
         descriptionMd: normalizeOptionalText(nextDescriptionRaw, 1200),
@@ -4301,13 +4259,6 @@ export const saveCommunityResourceModule = mutation({
       });
       if (previousBannerStorageId && String(previousBannerStorageId) !== String(nextBannerStorageId ?? "")) {
         await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
-      }
-      if (moduleStatusChanged) {
-        await syncResourceMemoryProjectionsForModule({
-          ctx,
-          communityId: existing.communityId,
-          moduleId: existing._id,
-        });
       }
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
       if (!updated) throw new Error("community_resource_module_not_found");
@@ -4441,7 +4392,6 @@ export const deleteCommunityResourceModule = mutation({
     const ingestionSources = resources.filter((resource) => normalizeResourceRole(resource.role) === "source");
 
     for (const lesson of lessons) {
-      await revokeCommunityResourceMemoryProjection(ctx, lesson);
       await deleteCommunitySourceUnitsForSourceResource(ctx, lesson._id);
       await deleteCommunityResourceBodyContent(ctx, lesson._id);
       await ctx.db.delete(lesson._id as any);
@@ -4453,8 +4403,6 @@ export const deleteCommunityResourceModule = mutation({
         moduleId: undefined,
         updatedAt: nowMs,
       });
-      const updated = (await ctx.db.get(source._id as any)) as CommunityResourceLike | null;
-      if (updated) await syncCommunityResourceMemoryProjection(ctx, updated, nowMs);
     }
 
     if (module.bannerStorageId) {
@@ -4942,7 +4890,6 @@ export const finalizeCommunitySourceIngestionInternal = internalMutation({
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return { ok: true, resource: await mapCommunityResourceRow(ctx, hydrated) };
   },
 });
@@ -5746,11 +5693,6 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
           nowMs,
           maxChars: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
         });
-        const updated = (await ctx.db.get(decision.source_id as any)) as CommunityResourceLike | null;
-        if (updated) {
-          const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-          await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-        }
         sourceResourceIds.push(decision.source_id);
         const unitResult = await saveCommunitySourceUnitsForPage(ctx, {
           crawlJobId: args.crawlJobId,
@@ -5792,11 +5734,6 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
         nowMs,
         maxChars: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
       });
-      const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
-      if (created) {
-        const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-        await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-      }
       const sourceResourceId = normalizeIdValue(id);
       sourceResourceIds.push(sourceResourceId);
       const unitResult = await saveCommunitySourceUnitsForPage(ctx, {
@@ -6245,7 +6182,6 @@ export const saveCommunityResource = mutation({
         });
       }
       const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-      await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
       return await mapCommunityResourceRow(ctx, hydrated);
     }
 
@@ -6346,7 +6282,6 @@ export const saveCommunityResource = mutation({
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     const createdModule = moduleId
       ? ((await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null)
       : null;
@@ -6545,7 +6480,6 @@ export const deleteCommunityResource = mutation({
       communityId: resource.communityId,
       userId: args.userId,
     });
-    await revokeCommunityResourceMemoryProjection(ctx, resource);
     await deleteCommunitySourceUnitsForSourceResource(ctx, resource._id);
     await deleteCommunityResourceBodyContent(ctx, resource._id);
     await ctx.db.delete(resource._id as any);

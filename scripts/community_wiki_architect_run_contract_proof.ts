@@ -200,7 +200,7 @@ assert.match(
 );
 assert.match(
   applyBody,
-  /patchSourceModuleIfNeeded[\s\S]*ctx\.db\.patch\(source\._id as any,[\s\S]*moduleId,[\s\S]*syncCommunityResourceMemoryProjection\(ctx, updatedSource, nowMs\)/,
+  /patchSourceModuleIfNeeded[\s\S]*ctx\.db\.patch\(source\._id as any,[\s\S]*moduleId,/,
   "architect apply should persist used source rows into the page module",
 );
 assert.match(
@@ -250,7 +250,7 @@ assert.match(
 );
 assert.match(
   architect,
-  /export const patchCommunityResourceContentDraftInternal = internalMutation\([\s\S]*expectedSourceRevisionHash: v\.string\(\)[\s\S]*hydrateCommunityResourceBody[\s\S]*normalizeResourceStatus\(page\.status\) !== "draft"[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hashCommunityResourceContentWriterSourceRevision[\s\S]*community_resource_content_writer_source_changed[\s\S]*status: "review"[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  /export const patchCommunityResourceContentDraftInternal = internalMutation\([\s\S]*expectedSourceRevisionHash: v\.string\(\)[\s\S]*hydrateCommunityResourceBody[\s\S]*normalizeResourceStatus\(page\.status\) !== "draft"[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hashCommunityResourceContentWriterSourceRevision[\s\S]*community_resource_content_writer_source_changed[\s\S]*status: "review"[\s\S]*writeCommunityResourceBodyContent/,
   "content writer patch should atomically refuse stale source input or unsafe targets before leaving generated pages in review",
 );
 assert.match(

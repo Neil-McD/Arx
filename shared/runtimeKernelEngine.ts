@@ -1,11 +1,11 @@
 // Which loop engine runs a surface's agent turns. Both run the same rules
 // (RuntimeKernelRun); Pi only sequences them. The switch is the Convex env
-// variable POLYNET_PI_ENGINE_SURFACES, a comma list of surfaces (ask, tag,
-// steward) that run on Pi. Unset means every surface stays native.
+// variable POLYNET_PI_ENGINE_SURFACES, a comma list of surfaces (ask, tag)
+// that run on Pi. Unset means every surface stays native.
 import { runNativeRuntimeKernel } from "./runtimeKernel.ts";
 import { runPiRuntimeKernel } from "./piRuntimeKernel.ts";
 
-export type RuntimeKernelSurface = "ask" | "tag" | "steward";
+export type RuntimeKernelSurface = "ask" | "tag";
 export type RuntimeKernelEngine = "native" | "pi";
 
 export function resolveRuntimeKernelEngine(

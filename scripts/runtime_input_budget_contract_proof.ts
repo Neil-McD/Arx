@@ -57,7 +57,6 @@ assert.doesNotMatch(
 for (const path of [
   "convex/runtimeAgentLoop.ts",
   "convex/communityAgentServeWorker.ts",
-  "convex/communityAgentRuntime.ts",
 ]) {
   const source = read(path);
   const callAt = source.indexOf("runtimeKernel.run<");
@@ -103,18 +102,6 @@ assert.match(
   "Concierge must budget and send one resolved provider tool surface",
 );
 
-const stewardRuntime = read("convex/communityAgentRuntime.ts");
-assert.match(
-  stewardRuntime,
-  /const stewardProviderTools = buildCommunityAgentFunctionTools\([\s\S]*toolSchemas: stewardProviderTools[\s\S]*tools: stewardProviderTools/,
-  "Steward must budget and send one resolved provider tool surface",
-);
-assert.match(
-  stewardRuntime,
-  /fundingClaimAttempted = true[\s\S]*preProviderFundingErrorCode[\s\S]*runtimeErrorCode[\s\S]*errorCode: runtimeErrorCode/,
-  "Steward must preserve pre-provider funding error semantics",
-);
-
 const turnHandlers = read("convex/runtimeTurnHandlers.ts");
 const turnFundingClaims = Array.from(
   turnHandlers.matchAll(
@@ -133,16 +120,10 @@ for (const match of turnFundingClaims) {
 
 for (const path of [
   "convex/communityAgentServeWorker.ts",
-  "convex/communityAgentRuntime.ts",
 ]) {
   const source = read(path);
   const completionAt = source.indexOf("runCompletion:");
-  const claimAt = source.indexOf(
-    path.endsWith("communityAgentRuntime.ts")
-      ? "fundingState.run = await startFundedInferenceRun"
-      : "fundingSession = await claimCommunityInferenceFundingSession",
-    completionAt,
-  );
+  const claimAt = source.indexOf("fundingSession = await claimCommunityInferenceFundingSession", completionAt);
   assert.ok(
     claimAt > completionAt,
     `${path} must not claim funding before shared-kernel admission`,
@@ -153,9 +134,6 @@ for (const path of ["convex/openAiNativeToolCompletion.ts"]) {
   assert.doesNotMatch(read(path), /messages_exceed_size_budget/);
 }
 
-const runtimeEvents = read("convex/communityAgentRuntime.ts");
-assert.match(runtimeEvents, /v\.literal\("input_budget"\)/);
-assert.match(runtimeEvents, /v\.literal\("context_projection"\)/);
 
 const capacityRegistry = read("shared/runtimeInputBudget.ts");
 assert.doesNotMatch(

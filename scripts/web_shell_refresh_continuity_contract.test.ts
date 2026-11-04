@@ -260,16 +260,14 @@ describe("web shell refresh continuity contract", () => {
     expect(controller).toContain("channelScopeSessionIdentityRef");
   });
 
-  it("scopes feed, members, and memory synchronously across community boundaries", () => {
+  it("scopes feed and members synchronously across community boundaries", () => {
     const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
     const directory = read("shared/useCommunityDirectoryController.ts");
-    const polynet = read("apps/web/src/controllers/useWebCommunityPolynetController.ts");
 
     expect(interaction).toContain("isPresentationScopedToBoundary");
     expect(interaction).toContain("roots: presentedRoots");
     expect(directory).toContain("requestedPresentationScope");
     expect(directory).toContain("communityDirectoryMembers: isPresentationScoped");
-    expect(polynet).toContain("overview: presentedOverview");
   });
 
   it("does not paint avatar images before canonical geometry exists", () => {

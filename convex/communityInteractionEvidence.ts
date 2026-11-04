@@ -2,8 +2,7 @@ import { presentInteractionActorType } from "../shared/communityAgentIdentity";
 import { SHARED_SEARCH_ACCESS_KEY, restrictedSearchAccessKey, syncCommunitySearchDoc } from "./communitySearchDocs";
 import { buildCommunitySearchQuery, searchWords, stemSearchWord } from "../shared/communitySearchText";
 import { v } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor, type ChannelActor, type ChannelActorKind } from "./communityChannelAccess";
 import { channelActorKindValidator } from "./communityChannelValidators";
@@ -15,13 +14,11 @@ import {
 } from "./communityCore";
 import { normalizeOptionalText, truncateText } from "./communityText";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import {
   communityInteractionEvidenceSourceIsReadable,
   resolveCommunityInteractionEvidenceSource,
   requireSharedInteractionEvidenceChannel,
   type CommunityInteractionEvidenceRow,
-  type ResolvedCommunityInteractionEvidence,
 } from "./communityInteractionEvidenceCore";
 import {
   communityEvidenceSurfaceValidator,
@@ -96,7 +93,6 @@ type EmbedRow = {
   description?: string;
 };
 
-const evidenceObjectTypeValidator = v.union(v.literal("root"), v.literal("reply"));
 const RECENT_ROOT_SCAN_LIMIT = 80;
 const RECENT_REPLY_SCAN_LIMIT = 160;
 
@@ -1103,280 +1099,6 @@ export const readCommunityInteractionEvidenceForToolInternal = internalAction({
   },
 });
 
-function sourceTraceActor(row: InteractionRow): {
-  actorType: "member" | "agent" | "system";
-  actorUserId?: any;
-  actorAgentKey?: string;
-} {
-  if (row.actorType === "human" && row.actorUserId) {
-    return { actorType: "member", actorUserId: row.actorUserId };
-  }
-  if (presentInteractionActorType(row.actorType) === "community_agent") {
-    return {
-      actorType: "agent",
-      ...(row.actorUserId ? { actorUserId: row.actorUserId } : null),
-      actorAgentKey: row.actorAgentKey ?? row.actorType,
-    };
-  }
-  return {
-    actorType: "system",
-    actorAgentKey: row.actorAgentKey ?? "community_interaction_evidence_sync",
-  };
-}
-
-async function removeInteractionSourceTrace(args: {
-  ctx: any;
-  communityId: any;
-  ref: string;
-  nowMs: number;
-}) {
-  const directTrace = await args.ctx.db
-    .query("communitySourceTraces" as any)
-    .withIndex("by_community_source", (q: any) =>
-      q.eq("communityId", args.communityId).eq("sourceType", "interaction").eq("sourceId", args.ref),
-    )
-    .first();
-  const traceId = directTrace?._id;
-  if (traceId) {
-    await args.ctx.db.patch(traceId as any, {
-      sourceVisibility: "redacted",
-      visibilityScope: "admin",
-      compilerState: "excluded_by_visibility",
-      compilerPendingSince: undefined,
-      compilerContinuationReady: undefined,
-      compilerLastHandledAt: args.nowMs,
-      compilerLastDigestId: undefined,
-      compilerDecision: undefined,
-      updatedAt: args.nowMs,
-    });
-  }
-}
-
-async function upsertInteractionSourceTrace(args: {
-  ctx: any;
-  communityId: any;
-  source: ResolvedCommunityInteractionEvidence;
-  channel: CommunityChannelLike;
-  nowMs: number;
-}) {
-  const { row, root, objectType } = args.source;
-  const ref = buildCommunityInteractionEvidenceRef({
-    objectType,
-    objectId: normalizeIdValue(row._id),
-  });
-  const actor = sourceTraceActor(row);
-  const trace = await recordTrustedCommunitySourceTraceCore({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    channelId: args.channel._id,
-    sourceType: "interaction",
-    sourceId: ref,
-    title: objectType === "root" ? row.title : root.title,
-    summary: row.contentSummary,
-    visibilityScope: row.visibilityScope,
-    sourceVisibility: row.visibilityScope,
-    actorType: actor.actorType,
-    actorUserId: actor.actorUserId,
-    actorAgentKey: actor.actorAgentKey,
-    compilerGroupKey: `interaction_episode:${normalizeIdValue(root._id)}`,
-    nowMs: args.nowMs,
-  });
-  return { ref, sourceTraceId: (trace as any).id };
-}
-
-export const syncCommunityInteractionEvidenceInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    objectType: evidenceObjectTypeValidator,
-    objectId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = Date.now();
-    const ref = buildCommunityInteractionEvidenceRef({
-      objectType: args.objectType,
-      objectId: args.objectId,
-    });
-    const source = await resolveCommunityInteractionEvidenceSource({
-      ctx,
-      communityId: args.communityId,
-      objectType: args.objectType,
-      objectId: args.objectId,
-    });
-    let channel: CommunityChannelLike | null = null;
-    if (source && communityInteractionEvidenceSourceIsReadable(source)) {
-      try {
-        channel = await requireSharedInteractionEvidenceChannel({
-          ctx,
-          communityId: args.communityId,
-          source,
-        });
-      } catch {
-        channel = null;
-      }
-    }
-    if (!source || !communityInteractionEvidenceSourceIsReadable(source) || !channel) {
-      await removeInteractionSourceTrace({
-        ctx,
-        communityId: args.communityId,
-        ref,
-        nowMs,
-      });
-      if (args.objectType === "root") {
-        await ctx.scheduler.runAfter(
-          0,
-          (internal as any).communityInteractionEvidence.redactCommunityInteractionEvidenceChildrenInternal,
-          {
-            communityId: args.communityId,
-            rootId: args.objectId,
-          },
-        );
-      }
-      return { ok: true, traced: false, ref };
-    }
-    const traced = await upsertInteractionSourceTrace({
-      ctx,
-      communityId: args.communityId,
-      source,
-      channel,
-      nowMs,
-    });
-    return {
-      ok: true,
-      traced: true,
-      ref,
-      source_trace_id: traced.sourceTraceId,
-    };
-  },
-});
-
-export const redactCommunityInteractionEvidenceChildrenInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    rootId: v.string(),
-    cursor: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const rootId = ctx.db.normalizeId("communityInteractionRoots", args.rootId);
-    if (!rootId) throw new Error("community_interaction_evidence_root_not_found");
-    const root = await ctx.db.get(rootId);
-    if (
-      root &&
-      normalizeIdValue((root as any).communityId) !== normalizeIdValue(args.communityId)
-    ) {
-      throw new Error("community_interaction_evidence_root_not_found");
-    }
-    const batch = await ctx.db
-      .query("communityInteractionReplies" as any)
-      .withIndex("by_root_createdAt", (q: any) => q.eq("rootId", rootId))
-      .paginate({
-        numItems: 50,
-        cursor: args.cursor ?? null,
-      });
-    let redacted = 0;
-    for (const reply of batch.page) {
-      const ref = buildCommunityInteractionEvidenceRef({
-        objectType: "reply",
-        objectId: normalizeIdValue(reply._id),
-      });
-      await removeInteractionSourceTrace({
-        ctx,
-        communityId: args.communityId,
-        ref,
-        nowMs: Date.now(),
-      });
-      redacted += 1;
-    }
-    if (!batch.isDone) {
-      await ctx.scheduler.runAfter(
-        0,
-        (internal as any).communityInteractionEvidence.redactCommunityInteractionEvidenceChildrenInternal,
-        {
-          communityId: args.communityId,
-          rootId: normalizeIdValue(rootId),
-          cursor: batch.continueCursor,
-        },
-      );
-    }
-    return {
-      ok: true,
-      redacted,
-      complete: batch.isDone,
-      continue_cursor: batch.continueCursor,
-    };
-  },
-});
-
-export const listCommunityInteractionEvidenceBackfillBatchInternal = internalQuery({
-  args: {
-    communityId: v.id("communities"),
-    objectType: evidenceObjectTypeValidator,
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query(
-        args.objectType === "root"
-          ? ("communityInteractionRoots" as any)
-          : ("communityInteractionReplies" as any),
-      )
-      .withIndex("by_community_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId),
-      )
-      .order("asc")
-      .paginate(args.paginationOpts);
-  },
-});
-
-export const backfillCommunityInteractionEvidenceInternal = internalAction({
-  args: {
-    communityId: v.id("communities"),
-    objectType: evidenceObjectTypeValidator,
-    cursor: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const batch: any = await ctx.runQuery(
-      (internal as any).communityInteractionEvidence.listCommunityInteractionEvidenceBackfillBatchInternal,
-      {
-        communityId: args.communityId,
-        objectType: args.objectType,
-        paginationOpts: {
-          numItems: 50,
-          cursor: args.cursor ?? null,
-        },
-      },
-    );
-    let synced = 0;
-    for (const row of Array.isArray(batch?.page) ? batch.page : []) {
-      await ctx.runMutation(
-        (internal as any).communityInteractionEvidence.syncCommunityInteractionEvidenceInternal,
-        {
-          communityId: args.communityId,
-          objectType: args.objectType,
-          objectId: normalizeIdValue(row._id),
-        },
-      );
-      synced += 1;
-    }
-    if (!batch?.isDone && batch?.continueCursor) {
-      await ctx.scheduler.runAfter(
-        0,
-        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
-        {
-          communityId: args.communityId,
-          objectType: args.objectType,
-          cursor: batch.continueCursor,
-        },
-      );
-    }
-    return {
-      ok: true,
-      object_type: args.objectType,
-      synced,
-      complete: Boolean(batch?.isDone),
-      continue_cursor: batch?.continueCursor ?? null,
-    };
-  },
-});
 
 // Every write to a post or reply calls this. The search row is rebuilt in the
 // same transaction (never stale); the compiler's evidence follows on a job.
@@ -1391,15 +1113,6 @@ export async function scheduleCommunityInteractionEvidenceSync(args: {
     objectType: args.objectType,
     objectId: args.objectId,
   });
-  await args.ctx.scheduler.runAfter(
-    0,
-    (internal as any).communityInteractionEvidence.syncCommunityInteractionEvidenceInternal,
-    {
-      communityId: args.communityId,
-      objectType: args.objectType,
-      objectId: normalizeIdValue(args.objectId),
-    },
-  );
 }
 
 export type { CommunityEvidenceSurface };

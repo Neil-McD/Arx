@@ -23,7 +23,6 @@ const lifecycle = read("convex/communityLifecycle.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const intake = read("convex/communityAgentConciergeCore.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
-const autonomousRuntime = read("convex/communityAgentRuntime.ts");
 const memberRuntime = read("convex/runtimeAgentLoop.ts");
 const memberTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const wikiArchitect = read("convex/communityWikiArchitect.ts");
@@ -360,29 +359,6 @@ assert.match(
   memberTurnHandlers,
   /observeFounderProviderResult\(communityFundingUsage, result,[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingUsage\.promptTokens[\s\S]*completionTokens: communityFundingUsage\.completionTokens/,
 );
-assert.match(
-  autonomousRuntime,
-  /resolveCommunityInferenceFundingForAction\([\s\S]*ctx,[\s\S]*args\.communityId[\s\S]*\)/,
-);
-assert.match(autonomousRuntime, /surface: "community_autonomous_cognition"/);
-assert.match(autonomousRuntime, /receiptKey: `community_autonomous_cognition:\$\{runId\}`/);
-assert.doesNotMatch(autonomousRuntime, /beginCommunityInferenceFundingSession/);
-assert.match(autonomousRuntime, /resolveCommunityInferenceModelForReceipt[\s\S]*startFundedInferenceRun\([\s\S]*fundingState\.run\.modelId !== modelId/);
-assert.match(
-  autonomousRuntime,
-  /runCompletion: async[\s\S]*fundingState\.run\.request\([\s\S]*fundingState\.run\.usage\(\)\.complete/,
-);
-assert.match(
-  autonomousRuntime,
-  /fundingClaimAttempted = true[\s\S]*preProviderFundingErrorCode[\s\S]*errorCode: runtimeErrorCode/,
-  "Steward must retain a failed pre-provider funding claim's original bounded code",
-);
-assert.match(
-  autonomousRuntime,
-  /fundingState\.run\.usage\(\)[\s\S]*fundingState\.run\.settle\("provider_completed"\)[\s\S]*fundingState\.run\.fail\(runtimeErrorCode\)/,
-);
-assert.match(autonomousRuntime, /modelRef: `openai\/\$\{modelId\}`/);
-assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|claimCommunityInferenceFundingSession|fundingSession\.apiKeyOverride/);
 assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);

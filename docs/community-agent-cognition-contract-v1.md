@@ -2591,5 +2591,30 @@ that everyone reads. This replaces the steward's scheduled memory pipeline
 - Ask recall, the repository-wide search, handbook drafting and the community
   card (a note count) read notes. `community.memory.record_outcome` is removed:
   notes have no usefulness ledger.
-- `communityNotes:migrateMemoryNodesToNotesInternal` (dry run first) copies the
+- `communityMemoryMigration:migrateMemoryNodesToNotesInternal` (dry run first) copies the
   old memory members could read into notes once.
+
+## Fortieth Implementation Slice: One Agent, No Steward
+
+Goal: the community agent that talks to people is the only agent, and its
+community notes are the only shared memory. Everything this contract built for
+scheduled cognition before slice 39 (the steward and its roles, the 6-hour
+memory sweep and heartbeat, compiler digests and candidates, source traces,
+the memory status ladder, edges, change requests, retrieval logs, outcomes
+and the metabolizer) is deleted. The sections above describe history.
+
+- Deleted: `communityAgentRuntime`, `communityAgentHeartbeat`,
+  `communityAgentStewardPrompt`, `communityAgentRoles`, `communityAgentSkills`,
+  `communityCompiler*`, `communityMemoryMetabolizer`, `communityMemoryWorkKey`,
+  `communityMemoryDecisionContract`, `communityCognitionCleanup*`,
+  `communityAgentFilesystem`, `communityResourceMemoryProjection`, the
+  "community memory sweep" cron, and the trace writes on every post, reply and
+  runtime run. Studio's memory graph is replaced by a notes list (channel panel)
+  and a Notes tab on Knowledge where owners and admins edit or delete notes.
+- `communityIntelligenceDirectory` keeps its two public overview queries by
+  name for cached Studio pages; they now show notes and lessons around the
+  community (titles hidden on the public one).
+- The turn contract has two surfaces' worth of turns: `ask`,
+  `ask_in_conversation` and `tag`. The engine switch covers `ask` and `tag`.
+- The one-time copy lives in `communityMemoryMigration` with the old reader's
+  evidence check until slice 41 drops the old tables.

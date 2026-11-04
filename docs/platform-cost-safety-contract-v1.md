@@ -154,7 +154,6 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Recover distribution attribution deliveries | 5 minutes | 25 | delivery repair; keep only with indexed due-work lookup |
 | Recover archived community billing cleanup | 5 minutes | 3 | billing repair; keep |
 | Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; verify due-window indexes and fanout accounting |
-| Community memory sweep | 6 hours | 500 oldest due communities across bounded indexed sources | AI-triggering job; idle communities are absent, metabolism is outcome-revision gated, and compiler admission retains founder funding plus per-community caps |
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
 | Advance due workflow milestones | 1 minute | 25 due timers | member-workflow job; goes when member workflows are removed |
 | Send due founder briefs | 15 minutes | 25 due briefs (`MAX_BRIEFS_PER_RUN`) | AI-triggering job: one founder-funded model call per brief, deterministic brief when funding or the model is unavailable |

@@ -55,7 +55,7 @@ const seededState = (t: ReturnType<typeof convexTest>, communityId: any) => t.ru
     events: await ctx.db.query("communityEvents").collect(),
     modules: await ctx.db.query("communityResourceModules").collect(),
     lessons: await ctx.db.query("communityResources").collect(),
-    nodes: (await ctx.db.query("communityIntelligenceNodes").collect()).length,
+    nodes: (await ctx.db.query("communityNotes").collect()).length,
     activeMemberCount: (await ctx.db.get(communityId))?.activeMemberCount,
   };
 });
@@ -132,12 +132,9 @@ describe("Sunrise staging seed", () => {
     });
     expect(lessons.entries).toHaveLength(3);
 
-    // Memories are readable to members where /knowledge reads them.
-    const memory = await t.mutation(refs.communityIntelligenceDirectory.searchCommunityMemoryInternal, {
-      trustedUserId: state.seedUserIds[0], communityId: f.communityId, surface: "member_agent_dock", limit: 12, forceMemberView: true,
-    });
-    expect(memory.ok).toBe(true);
-    expect(memory.nodes.map((node: any) => node.title).sort()).toEqual(["Board etiquette", "Early sessions need warmer fingers", "How a Sunrise session runs"]);
+    // The founder's notes are community notes every member reads.
+    const notes = await t.query(refs.communityNotes.listCommunityNotesInternal, { communityId: f.communityId, limit: 12 });
+    expect(notes.notes.map((note: any) => note.title).sort()).toEqual(["Board etiquette", "Early sessions need warmer fingers", "How a Sunrise session runs"]);
 
     // A rerun replaces the posts and events and reuses everything else.
     const second = await seed();

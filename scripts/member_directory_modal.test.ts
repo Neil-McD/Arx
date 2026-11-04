@@ -13,7 +13,7 @@ test("members popup reuses the roster renderer with community scope, not a secon
   expect(roster).toContain('<CommunityAutoJoinControl admission={props.admission} />');
   expect(roster).toContain('className="members-view-all"');
   expect(roster).toContain('>View all</button>');
-  expect(roster).toContain('if (!scope || props.directory) return;');
+  expect(roster).toContain('<WebCommunityNotes communityId={scope.communityId} session={scope.session} compact />');
 });
 
 test("popup resets scope and restores focus without resetting the mounted conversation", () => {

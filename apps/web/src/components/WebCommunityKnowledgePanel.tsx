@@ -2,10 +2,9 @@ import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
-import { CommunityMemoryGraph } from "./CommunityMemoryGraph";
+import { WebCommunityNotes } from "./WebCommunityNotes";
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import type { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
-import { useWebCommunityPolynetController } from "../controllers/useWebCommunityPolynetController";
 import "./WebCommunityKnowledgePanel.css";
 
 type Props = {
@@ -21,40 +20,32 @@ type Props = {
 };
 
 export function WebCommunityKnowledgePanel({ resources, context }: Props) {
-  const [view, setView] = useState<"resources" | "graph">("resources");
+  const [view, setView] = useState<"resources" | "notes">("resources");
   useEffect(() => { setView("resources"); }, [resources.state.selectedModuleId]);
-  const graphOpen = view === "graph" && context.canViewGraph;
-  const tabs: { id: "resources" | "graph"; label: string }[] = [
+  const notesOpen = view === "notes" && context.canViewGraph;
+  const tabs: { id: "resources" | "notes"; label: string }[] = [
     { id: "resources", label: "Resources" },
-    ...(context.canViewGraph ? [{ id: "graph" as const, label: "Graph" }] : []),
+    ...(context.canViewGraph ? [{ id: "notes" as const, label: "Notes" }] : []),
   ];
-  const graph = useWebCommunityPolynetController({
-    activePage: "community",
-    communityTab: "resources",
-    isGraphOpen: graphOpen,
-    activeCommunityId: context.communityId,
-    session: context.session,
-    ensureSession: context.ensureSession,
-    requireSignIn: context.requireSignIn,
-    canViewPolynet: context.canViewGraph,
-  });
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
       <div className="community-knowledge-header">
         <h1>Knowledge</h1>
         <WebPlatformTabList
           tabs={tabs}
-          activeTab={graphOpen ? "graph" : "resources"}
+          activeTab={notesOpen ? "notes" : "resources"}
           onSelectTab={setView}
           ariaLabel="Knowledge view"
           idPrefix="community-knowledge"
-          style={buildPlatformSwitcherStyle(tabs.length, graphOpen ? 1 : 0)}
+          style={buildPlatformSwitcherStyle(tabs.length, notesOpen ? 1 : 0)}
         />
       </div>
-      <div hidden={graphOpen} role="tabpanel" id={platformTabPanelId("community-knowledge", "resources")} aria-labelledby={platformTabId("community-knowledge", "resources")}>
+      <div hidden={notesOpen} role="tabpanel" id={platformTabPanelId("community-knowledge", "resources")} aria-labelledby={platformTabId("community-knowledge", "resources")}>
         <CommunityResourcesPanel {...resources} />
       </div>
-      {graphOpen ? <div className="community-knowledge-graph" role="tabpanel" id={platformTabPanelId("community-knowledge", "graph")} aria-labelledby={platformTabId("community-knowledge", "graph")}><CommunityMemoryGraph activeCommunityName={context.communityName} state={graph.state} onRefresh={graph.actions.refresh} /></div> : null}
+      {notesOpen ? <div className="community-knowledge-notes" role="tabpanel" id={platformTabPanelId("community-knowledge", "notes")} aria-labelledby={platformTabId("community-knowledge", "notes")}>
+        <WebCommunityNotes communityId={context.communityId} session={context.session} ensureSession={context.ensureSession} />
+      </div> : null}
     </section>
   );
 }

@@ -16,8 +16,6 @@ import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime"
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { buildCommunityFunnelContentTestFixture } from "../scripts/community_funnel_test_fixture";
 import { renderCommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
-import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
-import { settleCommunityIntelligenceFromDigestItemsCore } from "./communityCompilerCandidates";
 
 const selfContextPath = "/communities/canonical-community/members/me/context.md";
 test("retired integration paths are not found", async () => {

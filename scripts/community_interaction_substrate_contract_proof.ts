@@ -23,8 +23,6 @@ const contractPath = "docs/community-interaction-substrate-contract-v1.md";
 const contract = read(contractPath);
 const schemaPath = "convex/schema.ts";
 const schema = read(schemaPath);
-const directoryPath = "convex/communityIntelligenceDirectory.ts";
-const directory = read(directoryPath);
 
 [
   "# Community Interaction Substrate Contract v1",
@@ -263,11 +261,5 @@ const legacyChatLinkTable = schemaTable("communityInteractionLegacyChatLinks", "
 
 const sourceTraceTable = schemaTable("communitySourceTraces", "communityIntelligenceNodes");
 assertIncludes(schemaPath, sourceTraceTable, 'v.literal("interaction")');
-assertIncludes(
-  directoryPath,
-  directory,
-  '| "interaction"',
-);
-assertExcludes(directoryPath, directory, "export const recordCommunitySourceTrace = mutation");
 
 console.log("community_interaction_substrate_contract_proof: ok");
