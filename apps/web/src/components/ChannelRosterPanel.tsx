@@ -18,6 +18,7 @@ import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting"
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
+import { CommunityMembersBulkBar, useCommunityMemberTags, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 
@@ -170,6 +171,21 @@ function RosterSurface(props: RosterProps & {
   })) : rosterMembers;
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
+  // In the members list, owners, admins and moderators see tags; owners and
+  // admins select people and act on them together.
+  const canReadTags = Boolean(props.directory && (props.memberSettings.canManageMembers || props.joinReview?.canReviewJoinRequests));
+  const canSelect = Boolean(props.directory && props.memberSettings.canManageMembers);
+  const [picked, setPicked] = useState<Map<string, SelectedMember>>(() => new Map());
+  const [tagFilter, setTagFilter] = useState("");
+  const memberTagState = useCommunityMemberTags({ session: scope?.session, communityId: scope?.communityId ?? null,
+    userIds: canReadTags ? members.map(member => member.user_id) : [], enabled: canReadTags });
+  const shown = tagFilter ? members.filter(member => memberTagState.memberTags[member.user_id]?.some(tag => tag.slug === tagFilter)) : members;
+  const togglePicked = (member: typeof members[number], name: string) => setPicked(current => {
+    const next = new Map(current);
+    if (next.has(member.user_id)) next.delete(member.user_id);
+    else next.set(member.user_id, { userId: member.user_id, membershipId: member.membership_id, role: member.role, name });
+    return next;
+  });
   useEffect(() => {
     if (selectedMembershipId && !selectedMember && !rebuilding) setSelectedMembershipId(null);
   }, [selectedMembershipId, selectedMember, rebuilding]);
@@ -227,6 +243,10 @@ function RosterSurface(props: RosterProps & {
           </div> : null}
           {props.directory ? <>{props.admission?.canManage && props.admission.error ? <div role="alert" className="community-context-admission-status">{props.admission.error}</div> : null}
           {props.joinReview ? <CommunityJoinRequestReview {...props.joinReview} /> : null}
+          {canReadTags && scope ? <CommunityMembersBulkBar session={scope.session} communityId={scope.communityId}
+            canManage={canSelect} isOwner={props.memberSettings.isActiveCommunityOwner} tags={memberTagState.tags}
+            selected={[...picked.values()]} filter={tagFilter} onFilter={setTagFilter}
+            onClear={() => setPicked(new Map())} onChanged={memberTagState.reload} /> : null}
           <label className="community-dm-recipient-search community-dm-inbox-search">
             <Search aria-hidden="true" />
             <input ref={searchRef} type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
@@ -234,7 +254,7 @@ function RosterSurface(props: RosterProps & {
           </> : null}
       {(searching || (!error && ready)) ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
-            const rows = members.filter(member => status(member) === group);
+            const rows = shown.filter(member => status(member) === group);
             if (!rows.length) return null;
             const heading = <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>;
             return <Fragment key={group}>
@@ -246,7 +266,10 @@ function RosterSurface(props: RosterProps & {
                 const lastActive = group === "online" ? "Last active: now"
                   : member.last_seen_at === null ? "Last active: unavailable"
                   : `Last active: ${formatRelativeTimeFromIso(new Date(member.last_seen_at).toISOString())}`;
+                const tags = canReadTags ? memberTagState.memberTags[member.user_id] ?? [] : [];
                 return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
+                  {canSelect && member.membership_id && member.role !== "owner" ? <input type="checkbox" className="community-context-member-select"
+                    aria-label={`Select ${name}`} checked={picked.has(member.user_id)} onChange={() => togglePicked(member, name)} /> : null}
                   <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
                     <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}>
                       <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
@@ -255,7 +278,8 @@ function RosterSurface(props: RosterProps & {
                         alt="" aria-hidden={true} fallback={<span>{props.getInitials(name)}</span>} />
                       {group === "online" ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
                     </span>
-                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
+                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span>
+                      {tags.length ? <span className="community-context-member-tags">{tags.map(tag => <span key={tag.slug} className="community-context-member-tag">{tag.name}</span>)}</span> : null}</span>
                   </button>
                   <span className="community-context-member-last-active" aria-hidden="true">{lastActive.replace("Last active: ", "")}</span>
                   {props.onMessageUser && member.user_id !== props.currentUserId ? <button type="button" className="community-context-member-action" aria-label={`Message ${name}`} title="Direct message" onClick={() => props.onMessageUser?.(member.user_id)}><MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}

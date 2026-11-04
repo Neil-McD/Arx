@@ -1,0 +1,90 @@
+.members-bulk {
+  display: grid;
+  gap: 6px;
+  margin: 0 6px 8px;
+}
+
+.members-bulk-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.members-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.members-bulk-count {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-right: 4px;
+}
+
+.members-bulk-actions select,
+.members-bulk-actions button,
+.members-bulk-filter select,
+.members-bulk-new-tag input {
+  font: inherit;
+  padding: 3px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.members-bulk-actions button:disabled,
+.members-bulk-actions select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.members-bulk-new-tag,
+.members-bulk-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.members-bulk-clear {
+  margin-left: auto;
+}
+
+.members-bulk-status {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.community-context-member-select {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px 0 0;
+  accent-color: var(--text-primary);
+  cursor: pointer;
+}
+
+.community-context-member-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.community-context-member-tag {
+  padding: 0 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 16px;
+}
