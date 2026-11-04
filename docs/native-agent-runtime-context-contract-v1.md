@@ -459,6 +459,9 @@ engine.** What changed since the October rejection:
 3. The turn contract (`shared/communityTurnContract.ts`) and the shared layer
    loader (`shared/communityTurnLayers.ts`) now own what each turn may use on
    every surface. Pi only runs the loop behind them.
+4. Governed actions already run through one check,
+   `checkCommunityTurnToolCall`, before every tool call on Ask and tag turns.
+   Pi's `beforeToolCall` calls the same function.
 
 Everything below this note about what Pi may and must not own still holds.
 The cutover is surface by surface behind a switch, with a parity suite, and

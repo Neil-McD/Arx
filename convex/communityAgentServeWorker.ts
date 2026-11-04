@@ -1,5 +1,5 @@
 import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
-import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
@@ -2154,14 +2154,20 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                   toolResult.status === "ok" ? "Tool completed" : "Tool failed",
             });
           },
-          executeTool: async ({ toolName, rawArguments }) =>
-            await executeConciergeTool({
+          executeTool: async ({ toolName, rawArguments }) => {
+            // The tag's reply is its only speech; a request to post becomes a draft in it.
+            const allowed = checkCommunityTurnToolCall(turnContract, toolName, rawArguments);
+            if (!allowed.ok) {
+              return { status: "error", exitCode: null, outputText: "", errorCode: allowed.errorCode, errorMessage: allowed.errorMessage };
+            }
+            return await executeConciergeTool({
               ctx,
               context,
               requestId,
               toolName,
               rawArguments,
-            }),
+            });
+          },
         });
       } catch (error) {
         const failureCode = founderInferenceBudgetFailureCode(error) ?? (providerStarted

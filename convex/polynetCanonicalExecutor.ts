@@ -1,3 +1,4 @@
+import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { api, internal } from "./_generated/api";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
@@ -2027,6 +2028,11 @@ async function executeCanonicalWrite(args: {
     target.localPath,
   );
   // Edit or delete your own post or reply. Moderating others' posts stays in Studio.
+  // The community agent never speaks in a channel for a member: what a member
+  // asks it to post comes back as a draft the member sends themselves.
+  if (writableChannelPath && args.principalKind === "community_agent_for_member") {
+    return canonicalError("draft_only", DRAFT_ONLY_REFUSAL_MESSAGE);
+  }
   if (writableChannelPath?.kind === "document" && (mode === "update" || mode === "delete")) {
     const ref = parseCommunityInteractionEvidenceRef(writableChannelPath.ref);
     if (!ref || args.principalKind === "community_agent" || !target.authority.canWriteParticipation) {
