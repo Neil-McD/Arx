@@ -7,7 +7,7 @@
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { requireCommunityManager } from "./communityCore";
+import { communityMembershipRowIsActive, requireCommunityManager } from "./communityCore";
 
 const refs: { api: any; internal: any } = { api, internal };
 
@@ -15,7 +15,7 @@ const refs: { api: any; internal: any } = { api, internal };
 async function membershipOf(ctx: any, communityId: any, userId: any) {
   const rows = await ctx.db.query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).collect();
-  return rows.find((row: any) => row.active === true) ?? rows.sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0] ?? null;
+  return rows.find((row: any) => communityMembershipRowIsActive(row)) ?? rows.sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
 async function isPaying(ctx: any, membershipId: any) {
@@ -44,7 +44,7 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
     }
     const membership = await membershipOf(ctx, args.communityId, args.targetUserId);
     if (args.action === "set_role") {
-      if (!membership || membership.active !== true) throw new Error("community_member_not_found");
+      if (!membership || !communityMembershipRowIsActive(membership)) throw new Error("community_member_not_found");
       await ctx.runMutation(refs.api.communityAdmin.setCommunityMemberRole, {
         ...actor, targetMembershipId: membership._id, role: args.role ?? "member" });
       return { role: args.role ?? "member" };
@@ -52,7 +52,7 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
     // Remove or ban someone who is or was a member. Someone already gone is
     // still gone; a ban still bans them.
     if (!membership) throw new Error("community_member_not_found");
-    if (membership.active === true) {
+    if (communityMembershipRowIsActive(membership)) {
       if (await isPaying(ctx, membership._id)) throw new Error("paid_member_use_studio");
       await ctx.runMutation(refs.internal.communityAdmin.revokeCommunityMemberInternal, {
         ...actor, targetMembershipId: membership._id, revokedReason: args.action === "ban" ? "banned_by_manager" : "removed_by_manager",

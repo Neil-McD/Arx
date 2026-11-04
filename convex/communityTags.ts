@@ -4,7 +4,7 @@
 // own AI (the MCP) use the same functions here.
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { requireCommunityManager, requireCommunityModerator } from "./communityCore";
+import { communityMembershipRowIsActive, requireCommunityManager, requireCommunityModerator } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 export const COMMUNITY_TAGS_MAX = 100;
@@ -35,9 +35,9 @@ async function requireTag(ctx: any, communityId: any, slug: string) {
 }
 
 async function activeMembership(ctx: any, communityId: any, userId: any) {
-  const row = await ctx.db.query("communityMemberships")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).first();
-  return row && row.active === true ? row : null;
+  const rows = await ctx.db.query("communityMemberships")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).collect();
+  return rows.find((row: any) => communityMembershipRowIsActive(row)) ?? null;
 }
 
 // One read per tag: each tag keeps its own count of people.

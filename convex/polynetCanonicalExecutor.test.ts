@@ -3595,6 +3595,19 @@ test("people: owners and admins tag, re-role, remove, ban and unban a selection;
     .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ ok: true, deduped: true }] } } });
   expect(await active(solo.userId)).toBe(true);
 
+  // An older membership row without the active field still counts as active.
+  const legacy = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { authSubject: "legacy-subject", displayName: "legacy", handle: "legacy", normalizedHandle: "legacy", createdAt: 1, updatedAt: 1 });
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
+      activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 } as any);
+    return userId;
+  });
+  expect(await owner.call("community.members.tag", { tag: "beginner", on: true, members: [ref(legacy)] }, "legacy-tag"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+  expect(await owner.call("community.members.remove", { members: [ref(legacy)] }, "legacy-rm"))
+    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ removed: true }] } } });
+  expect(await t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).find(m => String(m.userId) === String(legacy))!.active)).toBe(false);
+
   // Rename and delete a tag; deleting untags everyone.
   expect(await owner.call("community.tags.rename", { tag: "beginner", name: "New runner" }, "t4")).toMatchObject({ ok: true, value: { result: { slug: "new-runner" } } });
   expect(await owner.call("community.tags.delete", { tag: "new-runner" }, "t5")).toMatchObject({ ok: true, value: { result: { deleted: true } } });
