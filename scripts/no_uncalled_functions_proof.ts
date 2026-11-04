@@ -15,7 +15,6 @@ const ALLOWED = new Map<string, string>([
   ["anonymousUserCleanup:cleanupAnonymousUsersInternal", "operator tool: data deletion, run by hand"],
   ["authSessions:pruneRevokedAuthSessionsForMaintenance", "operator tool: scripts/auth_prune_sessions.sh"],
   ["authSessions:scrubRevokedAuthSessionSecretsForMaintenance", "operator tool: scripts/auth_scrub_revoked_session_secrets.sh"],
-  ["communityAdmin:unbanCommunityUser", "operator tool: the only way to lift a ban; no Studio screen"],
   ["communityAiFeedRetirement:inspectAiFeedRetirementInternal", "data retirement job; removed with the AI feed tables"],
   ["communityAiFeedRetirement:deleteAiFeedRetirementBatchInternal", "data retirement job; removed with the AI feed tables"],
   ["communityApps:registerCommunityDomainInternal", "operator tool: registers a site domain by hand"],
