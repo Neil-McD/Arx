@@ -2639,3 +2639,22 @@ let the founder see what the agent shares.
   handle as the title, role, joined, shared-channel counts, last active, and
   links to their recent activity and profile; no quoting, code formatting or
   "not provided" lines. The profile card shows About only when there is one.
+
+## Forty-Second Implementation Slice: Lesson Progress
+
+Goal: a member can mark the lessons they've finished, and see how far
+through each course they are. Progress is private to the member.
+
+- `community.lesson.set_done` (`ref`: a lesson's `resource:<id>`, `done`)
+  is offered only to the member's own tools (`community_app`,
+  `external_mcp`). It sets rather than toggles, so a retry is safe, and it
+  refuses with `lesson_not_found` unless the lesson is a live page in a live
+  course of this community. The community agent never marks a lesson.
+- Lessons listed or read for a member (their site, their MCP harness, their
+  Ask) carry `done: true` once they've marked them. A tag (the community
+  agent acting for the community) never sees anyone's progress, so it can't
+  leak into a public reply or a note.
+- The site SDK has `polynet.lessonDone(lesson, done)`. The Learn block shows
+  a tick on finished lessons, "n of m done" on course cards and course pages,
+  and a "Mark as done" button at the end of each lesson, which undoes too.
+- No founder view of progress yet.

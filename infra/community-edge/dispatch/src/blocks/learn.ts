@@ -40,6 +40,9 @@ const STYLE = BASE_STYLE + "\n" + PROSE_STYLE + "\n" + [
   ".pager .name { font-weight: 600; overflow-wrap: anywhere; }",
   "@media (hover: hover) { .pager a:hover .name { text-decoration: underline; text-underline-offset: .2em; } }",
   ".none { color: var(--pn-muted); margin: 0; }",
+  ".lesson[data-done] .number { color: var(--pn-accent); font-weight: 600; }",
+  ".finish { display: flex; flex-wrap: wrap; gap: .75em; align-items: center; }",
+  ".finish button[aria-pressed=true] { border-color: var(--pn-accent); background: color-mix(in srgb, var(--pn-accent) 12%, transparent); }",
   "@media (pointer: coarse) { .lesson, .pager a { min-height: 44px; } }",
 ].join("\n");
 
@@ -57,6 +60,11 @@ function segmentOf(entry) {
 function idOf(segment) { return segment.slice(segment.indexOf("~") + 1); }
 function titleOf(entry, fallback) { return String((entry && (entry.name || entry.title)) || fallback); }
 function lessonCount(n) { return n === 1 ? "1 lesson" : n + " lessons"; }
+// "2 of 5 done" once the member has finished one; lessons only they see as done.
+function progress(lessons) {
+  const done = lessons.filter((lesson) => lesson.done).length;
+  return done ? done + " of " + lessons.length + " done" : lessonCount(lessons.length);
+}
 
 class PolynetLearn extends HTMLElement {
   constructor() {
@@ -162,7 +170,7 @@ class PolynetLearn extends HTMLElement {
       for (let course = queue.shift(); course; course = queue.shift()) {
         try {
           const lessons = await this.lessons(course);
-          if (generation === this.generation) counts.get(course).textContent = lessonCount(lessons.length);
+          if (generation === this.generation) counts.get(course).textContent = progress(lessons);
         } catch (error) {
           // The card still opens the course.
         }
@@ -192,11 +200,14 @@ class PolynetLearn extends HTMLElement {
     this.view.replaceChildren(
       all,
       h("h2", { class: "heading", part: "course-heading", tabindex: "-1", text: title }),
-      h("p", { class: "kicker", part: "course-count", text: lessonCount(lessons.length) }),
+      h("p", { class: "kicker", part: "course-count", text: progress(lessons) }),
       lessons.length
         ? h("ol", { class: "lessons", part: "lessons", "aria-label": "Lessons in " + title }, lessons.map((lesson, index) => h("li", {}, [
-          this.link(BASE + "/" + segmentOf(course) + "/" + segmentOf(lesson), { class: "lesson", part: "lesson" }, [
-            h("span", { class: "number", part: "lesson-number", "aria-hidden": "true", text: String(index + 1) }),
+          this.link(BASE + "/" + segmentOf(course) + "/" + segmentOf(lesson), {
+            class: "lesson", part: "lesson", "data-done": Boolean(lesson.done),
+            "aria-label": lesson.done ? titleOf(lesson, "Lesson") + ", done" : null,
+          }, [
+            h("span", { class: "number", part: "lesson-number", "aria-hidden": "true", text: lesson.done ? "✓" : String(index + 1) }),
             h("span", { class: "lesson-title", part: "lesson-title", text: titleOf(lesson, "Lesson") }),
           ]),
         ])))
@@ -230,9 +241,37 @@ class PolynetLearn extends HTMLElement {
         h("p", { class: "kicker", part: "lesson-position", text: "Lesson " + (index + 1) + " of " + lessons.length }),
         h("h2", { class: "heading", part: "lesson-heading", id: "pn-lesson-title", tabindex: "-1", text: titleOf(lesson, "Lesson") }),
         h("div", { class: "prose", part: "lesson-body" }, [polynet.markdown(text)]),
+        this.finish(lesson),
       ]),
       previous || next ? h("nav", { class: "pager", part: "pager", "aria-label": "Lessons" }, [previous, next]) : null,
     );
+  }
+
+  // Mark as done, and undo it. The folder cache holds this same entry, so the
+  // course page and catalogue show the change without reading again.
+  finish(lesson) {
+    const status = h("span", { class: "muted", part: "lesson-done-status", role: "status" });
+    const button = h("button", { type: "button", part: "lesson-done" });
+    const show = () => {
+      button.setAttribute("aria-pressed", lesson.done ? "true" : "false");
+      button.textContent = lesson.done ? "✓ Done" : "Mark as done";
+    };
+    button.addEventListener("click", async () => {
+      const done = !lesson.done;
+      button.disabled = true;
+      status.textContent = "";
+      try {
+        await polynet.lessonDone(lesson, done);
+        lesson.done = done;
+        show();
+      } catch (error) {
+        status.textContent = "Couldn't save that. Try again.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+    show();
+    return h("div", { class: "finish", part: "lesson-finish" }, [button, status]);
   }
 
   // The address as Polynet names it now (a renamed course or lesson), without a new history entry.

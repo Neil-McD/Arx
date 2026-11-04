@@ -254,6 +254,10 @@ Chat through the door, the same for every actor:
   community agent, which replies in the channel (community-funded).
 - `polynet_call` `community.interaction.react` sets the caller's reaction
   (`ref`, `emoji`, `on`), so retries are safe.
+- `polynet_call` `community.lesson.set_done` marks a lesson (`ref`
+  `resource:<id>`) done or not done for the caller (`done`), so retries are
+  safe. Lessons listed or read for that member carry `done: true`; nobody
+  else sees it.
 - A post's `content.mentions` may also name members as `{ userId }` (the id in
   a member's `ref`, `user:<id>`); the text must contain each one's `@handle`.
 

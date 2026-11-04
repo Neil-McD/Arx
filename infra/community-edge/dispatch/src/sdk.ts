@@ -400,6 +400,12 @@ async function resources(path) {
   return listAll(path || root() + "resources/");
 }
 
+// Mark a lesson done for yourself (done false undoes it). Only you see your
+// progress: lessons you've finished list with done: true.
+const lessonDone = function (lesson, done) {
+  return call("community.lesson.set_done", { ref: String((lesson && lesson.ref) || lesson), done: done !== false });
+};
+
 // A document's text: a lesson, a memory, or a post (posts from feed/thread already have .text).
 // A long lesson comes a page at a time; this reads them all (up to TEXT_PAGES).
 const TEXT_PAGES = 20;
@@ -742,7 +748,7 @@ const polynet = {
   session: session, signIn: signIn, signOut: signOut, community: community, account: account,
   channels: channels, feed: feed, thread: thread, post: post, edit: edit, remove: remove, react: react, fileUrl: fileUrl, watch: watch,
   markRead: markRead, typing: typing,
-  events: events, event: event, resources: resources, readText: readText, knowledge: knowledge, members: members,
+  events: events, event: event, resources: resources, lessonDone: lessonDone, readText: readText, knowledge: knowledge, members: members,
   profile: profile, online: online, watchOnline: watchOnline,
   agentHistory: agentHistory, askAgent: askAgent, markdown: markdown, discover: discover,
   door: { list: list, read: read, search: search, write: write, call: call },

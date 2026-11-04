@@ -47,6 +47,8 @@ test("posts, replies, reacts and asks the agent through the door on this communi
   await polynet.post("general", "Morning run at 7");
   await polynet.post("general", "I'm in", { replyTo: "interaction:root:abc123" });
   await polynet.react("interaction:root:abc123", "🔥", true);
+  await polynet.lessonDone({ ref: "resource:r2", path: "/communities/run-club/resources/start~m1/shoes~r2.md" });
+  await polynet.lessonDone("resource:r2", false);
   await polynet.post("general", "what's the route?", { askAgent: true });
 
   const writes = calls.filter((call) => call.body?.tool === "polynet_write").map((call) => call.body.input);
@@ -59,6 +61,11 @@ test("posts, replies, reacts and asks the agent through the door on this communi
     target: "/communities/run-club/capabilities/community.interaction.react.json", operation: "community.interaction.react",
     version: 1, input: { ref: "interaction:root:abc123", emoji: "🔥", on: true },
   });
+  const lessons = calls.filter((call) => call.body?.tool === "polynet_call" && call.body.input.operation === "community.lesson.set_done").map((call) => call.body.input);
+  expect(lessons.map((input) => [input.target, input.input])).toEqual([
+    ["/communities/run-club/capabilities/community.lesson.set_done.json", { ref: "resource:r2", done: true }],
+    ["/communities/run-club/capabilities/community.lesson.set_done.json", { ref: "resource:r2", done: false }],
+  ]);
 });
 
 test("feed returns posts oldest first; errors surface as PolynetError", async () => {

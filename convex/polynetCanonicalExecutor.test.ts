@@ -401,7 +401,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",

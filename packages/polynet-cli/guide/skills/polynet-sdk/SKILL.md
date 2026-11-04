@@ -179,7 +179,7 @@ offer `askAgent: true` in channels.
 | Need | Call |
 |---|---|
 | Events | `events({ limit })` from now; `events({ from: date })` includes past ones; `events({ cursor: list.cursor })` the next page; `event(ref)` one. Show times in the event's `timezone`; link to `/events/<id>~<start ms>` (from `ref` `event:<id>:<start ms>`) for its page |
-| Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` (a long lesson is read whole); link to `/learn/<course segment>/<lesson segment>` (the last part of each `path`, without `.md`) |
+| Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` (a long lesson is read whole); `lesson.done` is true once the member marked it, and `lessonDone(lesson, done)` marks or unmarks it (only they see it); link to `/learn/<course segment>/<lesson segment>` (the last part of each `path`, without `.md`) |
 | What the community knows | `knowledge(query?)` |
 | Other communities (public) | `discover()`: `[{ slug, name, one_liner, avatar_url, member_count, url, has_site, here }]`; `url` is that community's own site, or its Polynet page when `has_site` is false; `here` is this one |
 | Members | `members()`, `profile(member)`, `online()` (includes the signed-in member) |
