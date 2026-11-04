@@ -2522,13 +2522,23 @@ async function executeCanonicalCall(args: {
       return decided.ok ? { ok: true, value: decided.value } : canonicalError(decided.code, decided.message,
         "retry_after_ms" in decided ? { retry_after_ms: decided.retry_after_ms } : undefined);
     }
+    // The call's key is bound to the whole selection: a retry replays it, the
+    // same key with another selection is refused. Each item keeps its own
+    // receipt too, so a call cut off part way never decides one twice.
+    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_call", idempotencyKey });
+    if (!reservation.ok) return reservation.result;
+    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
     const results = [];
     for (const request of requests) {
       const decided = await decide(request!);
       results.push(decided.ok ? { request_ref: request!.requestRef, ok: true, ...decided.value }
         : { request_ref: request!.requestRef, ...decided });
     }
-    return { ok: true, value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }) };
+    return { ok: true, value: await completeMutatingOperation({
+      ...args, target, toolName: "polynet_call", idempotencyKey,
+      requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+      value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }),
+    }) };
   }
   if (operation === REMOVE_POSTS_OPERATION) {
     const refs = Array.isArray(rawInput.refs) ? rawInput.refs : null;

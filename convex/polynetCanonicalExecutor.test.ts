@@ -3239,9 +3239,12 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   }));
   const after = await state();
   expect(after.pending).toBe(2);
-  // The same call again decides nothing twice.
+  // The same call replays its receipt and decides nothing twice.
   const again = await call({ requests: [observed(rows[0]), observed(rows[1]), stale] });
-  expect(again).toMatchObject({ ok: true, value: { result: { succeeded: 2, results: [{ ok: true, deduped: true }, { ok: true, deduped: true }, { ok: false }] } } });
+  expect(again).toMatchObject({ ok: true, value: { result: { succeeded: 2, failed: 1 } } });
+  expect(await state()).toEqual(after);
+  // The same key with another selection is refused, and decides nothing.
+  expect(await call({ requests: [observed(rows[0]), observed(rows[3])] })).toMatchObject({ ok: false, code: "idempotency_key_conflict" });
   expect(await state()).toEqual(after);
   // Selections are bounded, distinct and exact.
   expect(await call({ requests: [] }, "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
