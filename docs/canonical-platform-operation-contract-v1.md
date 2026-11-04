@@ -361,6 +361,18 @@ removed still counts as removed. Every selection runs through one runner
 replays the answer; the same key with another selection is
 `idempotency_key_conflict`), then each item is decided on its own.
 
+Owners and admins run the community itself through their own AI (builder
+lens): `builder/community.json` holds the profile, visibility, join mode,
+agent instructions, handbook and `settings_revision`. `community.settings.update`
+takes `expected_revision` and any of `name`, `slug`, `visibility` (owner) and
+`one_liner`, `about` (owners and admins); only the fields given change, and
+pricing and pictures are carried over (`updateCommunityProfileForTrustedUserInternal`
+over Studio's save). A stale revision is `community_settings_conflict`; an
+admin changing an owner field is `owner_only`. `community.join_mode.set`
+(`open` approves waiting requests), `community.agent.instructions.set`,
+`community.handbook.save_draft` and `community.handbook.approve` (exactly this
+text; empty withdraws) call Studio's own functions. Each call has a receipt.
+
 Every `polynet_call` answers in the published output shape:
 `{ ok, operation, result, receipt }`. A test lists every role's actions and
 fails if any input they accept is missing from the published call schema, or

@@ -653,8 +653,11 @@ the communities they belong to, in the lens their role there allows:
   progress.
 - **Moderators** also review join requests (`builder/join-requests/`) and
   remove anyone's post (`community.interaction.remove`).
-- **Owners and admins** also get the builder lens: staging course changes,
-  workflow decisions and site deploys.
+- **Owners and admins** also get the builder lens: the community itself
+  (`builder/community.json`: name, address, one-liner, about, visibility, how
+  people join, the agent's instructions, the handbook), staging course
+  changes, workflow decisions and site deploys. Name, address and visibility
+  are the owner's alone.
 
 Actions that decide about people or posts take a selection: up to 50 items,
 each decided on its own with its own receipt.

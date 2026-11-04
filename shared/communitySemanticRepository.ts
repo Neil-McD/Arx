@@ -27,6 +27,8 @@ export const POLYNET_MEMORY_DIRECTORY_PATH = "/memory/";
 export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";
 export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
 export const POLYNET_JOIN_REQUESTS_DIRECTORY_PATH = "/builder/join-requests/";
+// The community itself, for its owners and admins.
+export const POLYNET_BUILDER_COMMUNITY_PATH = "/builder/community.json";
 export const WORKFLOW_MEMBERS_DIRECTORY = "/builder/workflow-members/";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
@@ -400,6 +402,7 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
     value === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH ||
+    value === POLYNET_BUILDER_COMMUNITY_PATH ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
     value === WORKFLOW_MEMBERS_DIRECTORY ||
     /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(value) ||
@@ -539,6 +542,7 @@ export function validateCommunitySemanticOperationInput(args: {
     "memberUserId" in parsed;
   const isCanonicalVirtualDocumentRead =
     /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(parsed.path) ||
+    parsed.path === POLYNET_BUILDER_COMMUNITY_PATH ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||
     /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
