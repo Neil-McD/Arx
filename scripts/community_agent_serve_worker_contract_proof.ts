@@ -269,7 +269,7 @@ assert.match(
 );
 assert.match(
   servePrompt,
-  /The five Polynet tools are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Use polynet_write only when the member explicitly requests[\s\S]*Use polynet_call only for a versioned operation returned under capabilities\/[\s\S]*member authority, never builder authority/,
+  /The five Polynet tools are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Your reply is your only speech[\s\S]*put the draft in your reply[\s\S]*Use polynet_call only for a versioned operation returned under capabilities\/[\s\S]*member authority, never builder authority/,
   "serve prompt should orient the Concierge to the canonical five and fixed member authority",
 );
 assert.match(

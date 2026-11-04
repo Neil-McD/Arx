@@ -2515,3 +2515,26 @@ exchange rather than everything ever said.
   summarized and no summary call is made; the agent can still find older posts
   through search.
 - Tags and steward turns are unaffected by this slice.
+
+## Thirty-Seventh Implementation Slice: The Agent Drafts, The Member Posts
+
+Goal: the community only ever sees a member speak as themselves. The agent
+never posts, replies, edits or deletes in a channel for a member.
+
+- The turn contract carries `channelWrites`: `draft_only` for `ask`,
+  `ask_in_conversation` and `tag`; `own_voice` for `steward`. It is recorded
+  as `channel_writes` in the `turn_contract` receipt.
+- `checkCommunityTurnToolCall` runs before every tool call of an Ask (runtime
+  loop) and a tag (serve worker). On a `draft_only` turn it refuses
+  `polynet_write` on any `/communities/<slug>/channels` path with
+  `draft_only` and tells the model to put the draft in its answer, name the
+  channel, and ask the member to post it. The Ask loop records a
+  `tool_call_refused` run event; the tag records the failed tool step.
+- Second lock: the canonical executor refuses every channel create, append,
+  update and delete from the `community_agent_for_member` principal with the
+  same `draft_only` code, so a turn without a contract still fails closed.
+- A tag's reply remains its only speech. Builder resource changesets,
+  discovered `polynet_call` operations, a member's own MCP harness
+  (`external_mcp`) and the community agent's own posts are unchanged.
+- Agent instructions on both surfaces state the rule. Posts written for
+  members before this slice stay as they are.

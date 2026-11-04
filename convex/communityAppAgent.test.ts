@@ -316,33 +316,31 @@ test("the front-end conversation is the member's own Studio conversation for thi
   expect(messages.map((message: any) => message.contentJson?.text ?? message.contentJson)).toContain("Remember I like async check-ins");
 });
 
-test("the community agent posts for the member through the door", async () => {
+test("the community agent drafts a post for the member instead of posting it", async () => {
   const f = await fixture();
   const token = await f.signIn("agent-member");
-  scriptedModel([
+  const calls = scriptedModel([
     { tool: "polynet_write", args: { path: "/communities/agent-community/channels/general/", mode: "create",
       content: { text: "Posted by my agent." }, idempotency_key: "agent-post-1" } },
-    { text: "Done, I posted it." },
+    { text: "Here's a draft for #general: Posted by my agent." },
   ]);
   const result = await turn(f, token, "Post 'Posted by my agent.' in general", "agent-post");
   expect(result.stream).toContain("event: done");
-  const roots = await f.t.run((c) => c.db.query("communityInteractionRoots").collect());
-  expect(roots).toHaveLength(1);
-  expect(roots[0]).toMatchObject({
-    communityId: f.ids.communityId, actorUserId: f.ids.memberId, actorType: "community_agent", actorAgentKey: "community_agent", contentSummary: "Posted by my agent.",
-  });
+  // Nothing reaches the channel; the model is told to draft instead.
+  expect(await f.t.run((c) => c.db.query("communityInteractionRoots").collect())).toHaveLength(0);
+  const outputItem = (calls[1]?.input ?? []).find((item: any) => item?.type === "function_call_output");
+  expect(JSON.parse(String(outputItem?.output))).toMatchObject({ tool_name: "polynet_write", success: false, error_code: "draft_only" });
+  const events = await f.t.run((c) => c.db.query("runtimeRunEvents").collect());
+  expect(events.filter((event: any) => event.eventType === "tool_call_refused")).toHaveLength(1);
 
-  // Studio shows the agent as the author and the member as who it acted for.
+  // Posts made for a member before this rule (and through a member's own MCP
+  // harness) still show the agent as the author and the member it acted for.
   const studio = f.t.withIdentity({ subject: "agent-member-subject" });
+  await studio.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
+    communityId: f.ids.communityId, idempotencyKey: "legacy-agent-post", text: "Posted by my agent.", asCommunityAgent: true });
   const page = await studio.query(api.communityInteractions.listCommunityInteractionRoots, { communityId: f.ids.communityId, limit: 10 }) as any;
-  const studioRoot = (page.roots ?? page.page ?? page).find((entry: any) => (entry.root ?? entry).id === String(roots[0]._id));
+  const [studioRoot] = page.roots ?? page.page ?? page;
   expect(studioRoot.root ?? studioRoot).toMatchObject({ actor_type: "community_agent", actor_user_id: null, on_behalf_of_user_id: expect.any(String) });
-
-  // The member can't rewrite the agent's words in a post made for them.
-  const ref = `interaction:root:${roots[0]._id}`;
-  const edited = await f.post(COMMUNITY_APP_RUNTIME_PATH_FOR_TEST, f.asEdge(token), { tool: "polynet_write", input: {
-    path: `/communities/agent-community/channels/general/${ref}.md`, mode: "update", content: { text: "rewritten" }, idempotency_key: "edit-agent-post" } });
-  expect(await edited.json()).toMatchObject({ ok: false, message: expect.stringContaining("interaction_edit_forbidden") });
 });
 
 test("an owner's agent in a front end stays in the member lane", async () => {

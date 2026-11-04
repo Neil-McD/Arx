@@ -1298,8 +1298,8 @@ test("custom channels discover, isolate, search, read, and write through exact p
     ctx: memberCtx,
     authSubject: fixture.memberSubject,
     userId: fixture.memberId,
-    principalKind: "community_agent_for_member" as const,
-    evidenceSurface: "member_agent_dock" as const,
+    principalKind: "external_mcp" as const,
+    evidenceSurface: "external_mcp" as const,
   };
 
   const channels = await executePolynetCanonicalTool({
@@ -1779,8 +1779,8 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
     ctx: memberCtx,
     authSubject: fixture.memberSubject,
     userId: fixture.memberId,
-    principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock",
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
     toolName: "polynet_write",
     input: memberWrite,
   });
@@ -1789,7 +1789,7 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
     value: {
       deduped: false,
       receipt: {
-        principal_kind: "community_agent_for_member",
+        principal_kind: "external_mcp",
         authority_lane: "member",
       },
     },
@@ -1805,8 +1805,8 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
     ctx: memberCtx,
     authSubject: fixture.memberSubject,
     userId: fixture.memberId,
-    principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock",
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
     toolName: "polynet_read",
     input: { path: memberWritePath, offset: 0, limit: 2_000 },
   });
@@ -1828,8 +1828,8 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
       ctx: memberCtx,
       authSubject: fixture.memberSubject,
       userId: fixture.memberId,
-      principalKind: "community_agent_for_member",
-      evidenceSurface: "member_agent_dock",
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
       toolName: "polynet_write",
       input: memberWrite,
     }),
@@ -1845,8 +1845,8 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
       ctx: memberCtx,
       authSubject: fixture.memberSubject,
       userId: fixture.memberId,
-      principalKind: "community_agent_for_member",
-      evidenceSurface: "member_agent_dock",
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
       toolName: "polynet_write",
       input: {
         ...memberWrite,
@@ -1893,8 +1893,8 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
   ).toBe(true);
   expect(rows.roots).toEqual(
     expect.arrayContaining([
-      // One agent per community: a write made for a member is the community
-      // agent's post attributed to that member; an @mention reply has no member.
+      // A write through a member's own harness is attributed to that member;
+      // an @mention reply has no member.
       expect.objectContaining({
         actorType: "community_agent",
         actorAgentKey: "community_agent",
@@ -1907,6 +1907,35 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
     ]),
   );
   expect(rows.receipts).toHaveLength(2);
+});
+
+test("the community agent never posts, replies, edits or deletes in a channel for a member", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const memberCtx = executionContext(t.withIdentity({ subject: fixture.memberSubject }));
+  const channel = "/communities/canonical-community/channels/general/";
+  for (const input of [
+    { path: channel, mode: "create", content: { text: "Who's in for Saturday dawn?" }, idempotency_key: "draft-create" },
+    { path: channel, mode: "append", content: { text: "Me!", root_id: "abc" }, idempotency_key: "draft-append" },
+    { path: `${channel}interaction:root:abc.md`, mode: "update", content: { text: "Edited" }, idempotency_key: "draft-update" },
+    { path: `${channel}interaction:root:abc.md`, mode: "delete", content: {}, idempotency_key: "draft-delete" },
+  ]) {
+    await expect(executePolynetCanonicalTool({
+      ctx: memberCtx,
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      principalKind: "community_agent_for_member",
+      evidenceSurface: "member_agent_dock",
+      toolName: "polynet_write",
+      input,
+    })).resolves.toMatchObject({ ok: false, code: "draft_only", message: expect.stringContaining("draft") });
+  }
+  const rows = await t.run(async (ctx) => ({
+    roots: await ctx.db.query("communityInteractionRoots").collect(),
+    receipts: await ctx.db.query("polynetCanonicalOperationReceipts").collect(),
+  }));
+  expect(rows.roots).toHaveLength(0);
+  expect(rows.receipts).toHaveLength(0);
 });
 
 test("chat roots and replies survive receipt-completion crashes without duplication", async () => {
@@ -1926,8 +1955,8 @@ test("chat roots and replies survive receipt-completion crashes without duplicat
     healthyCtx: memberCtx,
     authSubject: fixture.memberSubject,
     userId: fixture.memberId,
-    principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock",
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
     toolName: "polynet_write",
     input,
     idempotencyKey: "member-chat-crash-after-write-1",
@@ -1960,8 +1989,8 @@ test("chat roots and replies survive receipt-completion crashes without duplicat
     healthyCtx: memberCtx,
     authSubject: fixture.memberSubject,
     userId: fixture.memberId,
-    principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock",
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
     toolName: "polynet_write",
     input: replyInput,
     idempotencyKey: "member-reply-crash-after-write-1",

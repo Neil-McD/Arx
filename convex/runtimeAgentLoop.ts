@@ -1,6 +1,6 @@
 import { api, internal } from "./_generated/api";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
-import { buildCommunityTurnContract, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 import {
   COMMUNITY_MEMORY_RECALL_LIMIT,
   buildCommunityMemoryRecallQuery,
@@ -1781,6 +1781,19 @@ async function executeRetrievalAgentLoop(
             errorCode: "tool_not_found",
             errorMessage: `${toolName} is not active for this runtime.`,
           };
+        }
+        const allowed = checkCommunityTurnToolCall(turnContract, toolName, normalizedArgs);
+        if (!allowed.ok) {
+          try {
+            await params.appendRunEvent({
+              eventType: "tool_call_refused",
+              eventKey: `${params.runId}:tool_call_refused:${providerCallId}`,
+              payload: { run_id: params.runId, tool_name: toolName, reason: allowed.errorCode },
+            });
+          } catch {
+            // Best-effort receipt; the tool result records the refusal too.
+          }
+          return { status: "error", exitCode: null, outputText: "", errorCode: allowed.errorCode, errorMessage: allowed.errorMessage };
         }
 
         try {

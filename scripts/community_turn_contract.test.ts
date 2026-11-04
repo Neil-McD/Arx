@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 
 // Who speaks, who sees the answer, and what that allows.
 test("a private Ask: the member asks and sees the answer; their profile and the shared layers are in", () => {
@@ -32,4 +32,32 @@ test("an Ask needs a member and every turn needs a community; the receipt summar
   expect(() => buildCommunityTurnContract({ surface: "tag", communityId: " " })).toThrow("community_turn_contract_requires_community");
   const summary = summarizeCommunityTurnContract(buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" }));
   expect(JSON.stringify(summary)).not.toMatch(/u1|c1/);
+});
+
+// Governed actions: a member's Ask or tag never becomes a post.
+test("Asks and tags only draft channel posts; the steward speaks in its own voice", () => {
+  const surfaces = { ask: "u1", ask_in_conversation: "u1", tag: "u1", steward: null } as const;
+  const writes = Object.fromEntries(Object.entries(surfaces).map(([surface, speakerUserId]) => [
+    surface, buildCommunityTurnContract({ surface: surface as keyof typeof surfaces, communityId: "c1", speakerUserId }).channelWrites,
+  ]));
+  expect(writes).toEqual({ ask: "draft_only", ask_in_conversation: "draft_only", tag: "draft_only", steward: "own_voice" });
+  expect(summarizeCommunityTurnContract(buildCommunityTurnContract({ surface: "tag", communityId: "c1", speakerUserId: "u1" })).channel_writes).toBe("draft_only");
+});
+
+test("the tool-call check refuses every channel write on a draft-only turn and nothing else", () => {
+  const ask = buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" });
+  const steward = buildCommunityTurnContract({ surface: "steward", communityId: "c1" });
+  for (const path of [
+    "/communities/sunrise/channels/general/",
+    "/communities/sunrise/channels/general/interaction:root:abc/",
+    "/communities/sunrise/channels/general/interaction:reply:abc.md",
+    "//communities/sunrise//channels/general/",
+    "  /communities/sunrise/channels",
+  ]) {
+    expect(checkCommunityTurnToolCall(ask, "polynet_write", { path, mode: "create" })).toMatchObject({ ok: false, errorCode: "draft_only" });
+  }
+  expect(checkCommunityTurnToolCall(ask, "polynet_write", { path: "/communities/sunrise/builder/resources/", mode: "create" })).toEqual({ ok: true });
+  expect(checkCommunityTurnToolCall(ask, "polynet_read", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
+  expect(checkCommunityTurnToolCall(steward, "polynet_write", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
+  expect(checkCommunityTurnToolCall(null, "polynet_write", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
 });
