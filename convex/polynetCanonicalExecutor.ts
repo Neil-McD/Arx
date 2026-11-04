@@ -80,8 +80,22 @@ const AGENT_INSTRUCTIONS_OPERATION = "community.agent.instructions.set";
 const HANDBOOK_DRAFT_OPERATION = "community.handbook.save_draft";
 const HANDBOOK_APPROVE_OPERATION = "community.handbook.approve";
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, "community.tags.create", "community.tags.rename", "community.tags.delete"];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
+// People: tags (single changes, with the community operations above) and
+// actions on a selection of members (owners and admins).
+const TAG_CREATE_OPERATION = "community.tags.create";
+const TAG_RENAME_OPERATION = "community.tags.rename";
+const TAG_DELETE_OPERATION = "community.tags.delete";
+const TAG_OPERATIONS = [TAG_CREATE_OPERATION, TAG_RENAME_OPERATION, TAG_DELETE_OPERATION];
+const MEMBERS_TAG_OPERATION = "community.members.tag";
+const MEMBERS_ROLE_OPERATION = "community.members.set_role";
+const MEMBERS_REMOVE_OPERATION = "community.members.remove";
+const MEMBERS_BAN_OPERATION = "community.members.ban";
+const MEMBERS_UNBAN_OPERATION = "community.members.unban";
+const MEMBERS_OPERATIONS = [MEMBERS_TAG_OPERATION, MEMBERS_ROLE_OPERATION, MEMBERS_REMOVE_OPERATION, MEMBERS_BAN_OPERATION, MEMBERS_UNBAN_OPERATION];
+const BUILDER_TAGS_PATH = "/builder/tags/";
+const BUILDER_TAG_PATH = /^\/builder\/tags\/([a-z0-9-]{1,40})\/$/;
 // Actions take a selection: up to this many items, each decided on its own.
 const SELECTION_MAX = 50;
 
@@ -101,6 +115,7 @@ async function runSelection<T>(args: {
   ctx: any; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
   target: ResolvedCommunityTarget; operation: string; idempotencyKey: string;
   items: T[]; decide: (item: T) => Promise<{ ok: boolean } & Record<string, unknown>>;
+  lane?: "moderator" | "builder";
 }): Promise<PolynetCanonicalExecutionResult> {
   const reservation = await reserveMutatingOperation({ ...args, toolName: "polynet_call" });
   if (!reservation.ok) return reservation.result;
@@ -114,7 +129,7 @@ async function runSelection<T>(args: {
       ok: true, operation: args.operation,
       result: { results, succeeded, failed: results.length - succeeded },
       receipt: { ...canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target: args.target, idempotencyKey: args.idempotencyKey }),
-        authority_lane: "moderator" },
+        authority_lane: args.lane ?? "moderator" },
     },
   }) };
 }
@@ -811,10 +826,13 @@ function capabilityDocument(args: {
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
+  const isMembersCapability = MEMBERS_OPERATIONS.includes(args.operation) &&
+    args.evidenceSurface === "external_mcp" &&
+    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
   const isCommunityCapability = COMMUNITY_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
+  if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isMembersCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
     !isMarkReadCapability && !isPresenceCapability && !isSiteDeployCapability) {
     return null;
   }
@@ -823,12 +841,35 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isWorkflowApprovalCapability || isSiteDeployCapability || isCommunityCapability ? "builder"
+    authority_lane: isWorkflowApprovalCapability || isSiteDeployCapability || isCommunityCapability || isMembersCapability ? "builder"
       : isAdmissionCapability || isRemovePostsCapability ? "moderator" : "member",
     idempotency_required: true,
   };
-  if (isCommunityCapability) {
-    operationDefinition.input = args.operation === SETTINGS_UPDATE_OPERATION ? {
+  const members = `a selection of 1 to ${SELECTION_MAX} members, as user:<id> refs from members/ or builder/tags/<tag>/`;
+  if (isMembersCapability) {
+    operationDefinition.input = args.operation === MEMBERS_TAG_OPERATION ? {
+      required: ["tag", "members", "on"], tag: "a tag's slug from builder/tags/", members, on: "true tags them, false untags them",
+      result: "result: { results: [{ member, ok, ... | code, message }], succeeded, failed }", effects: ["tag_members"],
+      forbidden_effects: ["members_see_tags", "agent_sees_tags"] }
+    : args.operation === MEMBERS_ROLE_OPERATION ? {
+      required: ["members", "role"], members, role: "member, moderator or admin (only the owner makes or unmakes admins; the owner's role is fixed)",
+      result: "result: { results, succeeded, failed }", effects: ["set_member_roles"] }
+    : args.operation === MEMBERS_UNBAN_OPERATION ? {
+      required: ["members"], members, result: "result: { results, succeeded, failed }", effects: ["unban_members"] }
+    : {
+      required: ["members"], ...(args.operation === MEMBERS_BAN_OPERATION ? { optional: ["reason"], reason: "why, for the record (up to 1,000 characters)" } : {}),
+      members, result: "result: { results, succeeded, failed }: a paying member is refused (paid_member_use_studio: removing them cancels their subscription, so a person does it in Studio); the rest still go through",
+      effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members" : "remove_members"],
+      forbidden_effects: ["cancel_subscriptions", "remove_admins_unless_owner", "remove_owner"] };
+  } else if (isCommunityCapability) {
+    operationDefinition.input = args.operation === TAG_CREATE_OPERATION ? {
+      required: ["name"], name: "the tag's name (up to 40 characters); its slug comes from it. An existing tag of that name is returned as it is",
+      result: "result: { slug, name, created }", effects: ["create_tag"] }
+    : args.operation === TAG_RENAME_OPERATION ? {
+      required: ["tag", "name"], tag: "the tag's slug", name: "its new name; the slug follows", result: "result: { slug, name }", effects: ["rename_tag"] }
+    : args.operation === TAG_DELETE_OPERATION ? {
+      required: ["tag"], tag: "the tag's slug; deleting it untags everyone", result: "result: { deleted }", effects: ["delete_tag"] }
+    : args.operation === SETTINGS_UPDATE_OPERATION ? {
       required: ["expected_revision"], optional: ["name", "slug", "one_liner", "about", "visibility"],
       expected_revision: "settings_revision from builder/community.json; a change made since is refused (community_settings_conflict)",
       who: "owners: name, slug and visibility; owners and admins: one_liner and about",
@@ -1253,7 +1294,7 @@ async function executeCanonicalList(args: {
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
       ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
-        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, ...COMMUNITY_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
+        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, ...COMMUNITY_OPERATIONS, ...MEMBERS_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -1272,6 +1313,31 @@ async function executeCanonicalList(args: {
         })),
       }),
     };
+  }
+  // Tags, and each tag's members: owners, admins and moderators, through their own AI.
+  const tagPath = BUILDER_TAG_PATH.exec(target.localPath);
+  if (target.localPath === BUILDER_TAGS_PATH || tagPath) {
+    if (!target.authority.canReviewJoinRequests || args.principalKind === "community_agent") {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    const scope = { userId: args.userId, communityId: target.communityId };
+    try {
+      if (!tagPath) {
+        const tags = await args.ctx.runQuery((internal as any).communityTags.listCommunityTagsForTrustedReviewerInternal, scope);
+        return { ok: true, value: virtualDirectory({ path: absolutePath,
+          entries: tags.map((tag: any) => ({ ...tag, path: mountedPath(target.communitySlug, `${BUILDER_TAGS_PATH}${tag.slug}/`), kind: "directory", type: "tag" })),
+          searchable: false, writable: false }) };
+      }
+      const page = await args.ctx.runQuery((internal as any).communityTags.listCommunityTagMembersForTrustedReviewerInternal, {
+        ...scope, tag: tagPath[1], ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
+        ...(typeof args.input.limit === "number" ? { limit: args.input.limit } : {}) });
+      return { ok: true, value: { ...virtualDirectory({ path: absolutePath,
+        entries: page.members.map((member: any) => ({ ...member, ...(member.handle ? { path: mountedPath(target.communitySlug, `/members/${member.handle}.md`) } : {}),
+          kind: "document", type: "member" })),
+        nextCursor: page.nextCursor, truncated: page.nextCursor !== null, searchable: false, writable: false }), tag: page.tag } };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
   }
   if (target.localPath === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH) {
     if (!target.authority.canReviewJoinRequests || args.principalKind === "community_agent") {
@@ -1302,9 +1368,10 @@ async function executeCanonicalList(args: {
       );
     }
     const joinRequests = { path: mountedPath(target.communitySlug, POLYNET_JOIN_REQUESTS_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Pending admission requests" };
-    // A moderator's builder/ holds only the join requests they review.
+    const tags = { path: mountedPath(target.communitySlug, BUILDER_TAGS_PATH), kind: "directory", type: "builder", name: "Tags on people" };
+    // A moderator's builder/ holds the join requests they review and the tags they read.
     if (!target.authority.canUseBuilderProjection) {
-      return { ok: true, value: virtualDirectory({ path: absolutePath, entries: [joinRequests] }) };
+      return { ok: true, value: virtualDirectory({ path: absolutePath, entries: [joinRequests, tags] }) };
     }
     return {
       ok: true,
@@ -1313,6 +1380,7 @@ async function executeCanonicalList(args: {
         entries: [
           { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, agent instructions, handbook" },
           joinRequests,
+          tags,
           { path: mountedPath(target.communitySlug, WORKFLOW_MEMBERS_DIRECTORY), kind: "directory", type: "builder", name: "Member workflow context and form responses" },
           {
             path: mountedPath(
@@ -1405,10 +1473,21 @@ async function executeCanonicalList(args: {
   });
   if (!execution.ok) return execution;
   const value = execution.value as Record<string, unknown>;
-  if (target.localPath === POLYNET_MEMBERS_DIRECTORY_PATH && args.principalKind !== "community_agent" && !args.input.cursor) {
-    return { ok: true, value: { ...value, entries: [
+  if (target.localPath === POLYNET_MEMBERS_DIRECTORY_PATH && args.principalKind !== "community_agent") {
+    let entries = Array.isArray(value.entries) ? value.entries as Array<Record<string, unknown>> : [];
+    // Owners, admins and moderators see each member's tags, through their own AI only.
+    if (target.authority.canReviewJoinRequests) {
+      const ids = entries.map(entry => /^user:([A-Za-z0-9]+)$/.exec(String(entry.ref ?? ""))?.[1]).filter((id): id is string => Boolean(id));
+      const tags = ids.length ? await args.ctx.runQuery((internal as any).communityTags.communityTagsForUsersForTrustedReviewerInternal,
+        { userId: args.userId, communityId: target.communityId, userIds: ids }) as Record<string, Array<{ slug: string; name: string }>> : {};
+      entries = entries.map(entry => {
+        const id = /^user:([A-Za-z0-9]+)$/.exec(String(entry.ref ?? ""))?.[1];
+        return id ? { ...entry, tags: tags[id] ?? [] } : entry;
+      });
+    }
+    return { ok: true, value: { ...value, entries: args.input.cursor ? entries : [
       { path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_DIRECTORY), kind: "directory", type: "member_self_context" },
-      ...(Array.isArray(value.entries) ? value.entries : []),
+      ...entries,
     ] } };
   }
   if (target.localPath !== "/") return { ok: true, value };
@@ -2628,7 +2707,66 @@ async function executeCanonicalCall(args: {
   if (COMMUNITY_OPERATIONS.includes(operation)) {
     return await executeCommunityOperation({ ...args, target, operation, rawInput, idempotencyKey });
   }
+  if (MEMBERS_OPERATIONS.includes(operation)) {
+    return await executeMembersOperation({ ...args, target, operation, rawInput, idempotencyKey });
+  }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+}
+
+// What a refused action on one person means, by the domain's code.
+const PERSON_REFUSALS: Record<string, [string, string]> = {
+  paid_member_use_studio: ["paid_member_use_studio", "They pay for their membership. Removing them cancels it, so do this in Studio."],
+  community_member_not_found: ["member_not_found", "They aren't a member of this community."],
+  community_owner_required_for_admin_role: ["owner_only", "Only the owner makes, unmakes or removes admins."],
+  community_owner_required: ["owner_only", "Only the owner makes, unmakes or removes admins."],
+  community_owner_role_fixed: ["owner_fixed", "The owner's role can't change."],
+  community_owner_remove_forbidden: ["owner_fixed", "The owner can't be removed."],
+  community_owner_ban_forbidden: ["owner_fixed", "The owner can't be banned."],
+  community_tag_not_found: ["community_tag_not_found", "No tag with that slug. List builder/tags/ for the tags."],
+};
+
+// Tag, change the role of, remove, ban or unban a selection of members
+// (owners and admins). Each person is decided on its own; every action is a
+// state (tagged, a role, gone, banned), so a retried item changes nothing.
+async function executeMembersOperation(args: {
+  ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
+  target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const { target, rawInput, operation } = args;
+  const allowed = operation === MEMBERS_TAG_OPERATION ? ["tag", "members", "on"] : operation === MEMBERS_ROLE_OPERATION ? ["members", "role"]
+    : operation === MEMBERS_BAN_OPERATION ? ["members", "reason"] : ["members"];
+  const members = Array.isArray(rawInput.members) ? rawInput.members : null;
+  const userIds = members?.map(ref => typeof ref === "string" ? /^user:([A-Za-z0-9]+)$/.exec(ref)?.[1] ?? null : null) ?? [];
+  if (args.principalKind !== "external_mcp" || target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
+      Object.keys(rawInput).some(key => !allowed.includes(key)) || !members || !members.length || members.length > SELECTION_MAX ||
+      userIds.some(id => !id) || new Set(userIds).size !== userIds.length || args.idempotencyKey.length > SELECTION_KEY_MAX ||
+      (operation === MEMBERS_TAG_OPERATION && (typeof rawInput.tag !== "string" || typeof rawInput.on !== "boolean")) ||
+      (operation === MEMBERS_ROLE_OPERATION && !["member", "moderator", "admin"].includes(String(rawInput.role))) ||
+      (rawInput.reason !== undefined && (typeof rawInput.reason !== "string" || rawInput.reason.length > 1_000))) {
+    return canonicalError("invalid_tool_args",
+      `Give members: 1 to ${SELECTION_MAX} different user:<id> refs, with the inputs the capability lists.`);
+  }
+  const scope = { userId: args.userId, communityId: target.communityId };
+  return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
+    decide: async ({ ref, userId }) => {
+      try {
+        const value = operation === MEMBERS_TAG_OPERATION
+          ? await args.ctx.runMutation((internal as any).communityTags.setCommunityMemberTagForTrustedUserInternal,
+            { ...scope, tag: rawInput.tag, targetUserId: userId, on: rawInput.on })
+          : await args.ctx.runMutation((internal as any).communityPeople.applyPersonActionForTrustedUserInternal, {
+            ...scope, authSubject: args.authSubject, targetUserId: userId,
+            action: operation === MEMBERS_ROLE_OPERATION ? "set_role" : operation === MEMBERS_REMOVE_OPERATION ? "remove"
+              : operation === MEMBERS_BAN_OPERATION ? "ban" : "unban",
+            ...(operation === MEMBERS_ROLE_OPERATION ? { role: rawInput.role } : {}),
+            ...(typeof rawInput.reason === "string" ? { reason: rawInput.reason } : {}) });
+        return { member: ref, ok: true, ...value };
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : "";
+        const [code, message] = Object.entries(PERSON_REFUSALS).find(([known]) => raw.includes(known))?.[1]
+          ?? ["member_action_refused", "That wasn't done for them."];
+        return { member: ref, ok: false, code, message };
+      }
+    } });
 }
 
 // What a refused change to the community means, by the domain's code.
@@ -2637,6 +2775,11 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_settings_conflict: ["community_settings_conflict", "The community changed since you read it. Read builder/community.json again and retry with its settings_revision."],
   community_slug_taken: ["community_slug_taken", "Another community already uses that address."],
   community_free_access_mode_invalid: ["invalid_tool_args", "mode is open or approval."],
+  community_tag_not_found: ["community_tag_not_found", "No tag with that slug. List builder/tags/ for the tags."],
+  community_tag_name_invalid: ["invalid_tool_args", "A tag's name has letters or numbers and is up to 40 characters."],
+  community_tag_exists: ["community_tag_exists", "Another tag already has that name."],
+  community_tags_full: ["community_tags_full", "This community has 100 tags. Delete one first."],
+  community_tag_too_large_to_delete: ["community_tag_too_large_to_delete", "That tag is on more than 4,000 people. Untag some first."],
 };
 
 // The community itself: profile, how people join, the agent's instructions and
@@ -2659,6 +2802,9 @@ async function executeCommunityOperation(args: {
         (!("about" in rawInput) || rawInput.about === null || text("about", 8_000)) &&
         (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
     : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
+    : operation === TAG_CREATE_OPERATION ? only(["name"]) && text("name", 40)
+    : operation === TAG_RENAME_OPERATION ? only(["tag", "name"]) && text("tag", 40) && text("name", 40)
+    : operation === TAG_DELETE_OPERATION ? only(["tag"]) && text("tag", 40)
     : operation === AGENT_INSTRUCTIONS_OPERATION ? only(["text"]) && text("text", 40_000)
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
@@ -2666,6 +2812,7 @@ async function executeCommunityOperation(args: {
     return canonicalError("invalid_tool_args", operation === SETTINGS_UPDATE_OPERATION
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
       : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
+      : TAG_OPERATIONS.includes(operation) ? "Give the tag's slug (tag) and/or a name of up to 40 characters, as the capability says."
       : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }

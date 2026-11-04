@@ -2428,6 +2428,28 @@ export default defineSchema({
     .index("by_blocker_blocked", ["blockerUserId", "blockedUserId"])
     .index("by_blocked_blocker", ["blockedUserId", "blockerUserId"]),
 
+  // An owner's labels on people (convex/communityTags.ts). Owners, admins and
+  // moderators see them; members and the community agent never do.
+  communityTags: defineTable({
+    communityId: v.id("communities"),
+    slug: v.string(),
+    name: v.string(),
+    createdByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_slug", ["communityId", "slug"]),
+
+  communityMemberTags: defineTable({
+    communityId: v.id("communities"),
+    tagId: v.id("communityTags"),
+    userId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_tag_user", ["tagId", "userId"])
+    .index("by_community_user", ["communityId", "userId"]),
+
   // Writes a person makes through their own AI (the MCP) or their site, per
   // minute (convex/memberWriteRateLimit.ts).
   memberWriteRateCounters: defineTable({

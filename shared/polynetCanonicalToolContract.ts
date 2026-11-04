@@ -372,6 +372,10 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     visibility: { type: "string", enum: ["published", "unlisted"] },
     mode: { type: "string", enum: ["open", "approval"] },
     text: { type: "string", maxLength: 40_000 },
+    // People (owners and admins): a selection of members, a tag, a role.
+    members: { type: "array", minItems: 1, maxItems: 50, items: { type: "string", pattern: "^user:[A-Za-z0-9]+$", maxLength: 180 } },
+    tag: { type: "string", minLength: 1, maxLength: 40 },
+    role: { type: "string", enum: ["member", "moderator", "admin"] },
     expected_created_at: { type: "string", maxLength: 24 },
     expected_updated_at: { type: "string", maxLength: 24 },
     retrieval_log_id: { type: "string", minLength: 1, maxLength: 180 },
