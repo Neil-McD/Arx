@@ -221,7 +221,7 @@ assert.equal(browserThemeColor, "#F8F8F4");
 applyAppThemeAttributes("dark", root);
 assert.equal(attributes.get("data-theme"), "dark");
 assert.equal(attributes.has("data-theme-family"), false);
-assert.equal(browserThemeColor, "#1A1A1A");
+assert.equal(browserThemeColor, "#08090A");
 
 const baseThemeCss = read("apps/web/src/base.css");
 const baseCss = [
@@ -257,19 +257,20 @@ const manifest = read("apps/web/public/manifest.webmanifest");
 const darkRootBlock = baseThemeCss.match(/^:root\s*\{([\s\S]*?)\n\}/)?.[1];
 assert.ok(darkRootBlock, "base.css should define canonical Dark tokens at root");
 [
-  "--bg-app: #1a1a1a;",
-  "--bg-workspace: rgba(30, 30, 30, 0.95);",
-  "--bg-panel: rgba(24, 24, 24, 0.9);",
-  "--bg-card: rgba(42, 42, 42, 0.9);",
-  "--bg-card-hover: rgba(50, 50, 50, 0.95);",
-  "--accent-gold: #f1ede5;",
-  "--text-primary: #fcf8f0;",
-  "--text-secondary: #d6d0c6;",
-  "--text-muted: #b3ad9f;",
-  "--text-faint: #9c968a;",
-  "--border-default: #3a3a3a;",
-  "--border-strong: #4a4a4a;",
-  "--border-muted: #2a2a2a;",
+  "--bg-app: #08090a;",
+  "--bg-workspace: rgba(11, 12, 13, 0.96);",
+  "--bg-panel: rgba(15, 16, 17, 0.92);",
+  "--bg-card: rgba(22, 23, 25, 0.92);",
+  "--bg-card-hover: rgba(30, 31, 34, 0.96);",
+  "--accent-gold: #f7f8f8;",
+  "--accent-agent: #f7f8f8;",
+  "--text-primary: #f7f8f8;",
+  "--text-secondary: #d0d3d9;",
+  "--text-muted: #9a9fa8;",
+  "--text-faint: #82878f;",
+  "--border-default: #232427;",
+  "--border-strong: #313236;",
+  "--border-muted: #1a1b1e;",
 ].forEach((token) => {
   assert.ok(darkRootBlock.includes(token), `Dark root should define ${token}`);
 });
@@ -467,7 +468,7 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /--accent-attention:\s*#7BAAD6;[\s\S]*?--text-on-attention:\s*#171719;[\s\S]*?--accent-global-attention:\s*#EF4444;[\s\S]*?--text-on-global-attention:\s*#171719;/,
+  /--accent-attention:\s*#f7f8f8;[\s\S]*?--text-on-attention:\s*#08090a;[\s\S]*?--accent-global-attention:\s*#EF4444;[\s\S]*?--text-on-global-attention:\s*#171719;/,
   "community and global attention should have independent readable semantic roles",
 );
 [
@@ -481,7 +482,7 @@ assert.match(
   assert.match(
     baseCss,
     activitySelector,
-    "community-local reply, unread, and navigation activity should share the blue attention role",
+    "community-local reply, unread, and navigation activity should share the attention role",
   );
 });
 [
@@ -575,11 +576,11 @@ assert.doesNotMatch(
   /data-theme-family/,
   "theme family must not survive as a second styling authority",
 );
-assert.match(indexHtml, /<meta name="theme-color" content="#1A1A1A"/);
+assert.match(indexHtml, /<meta name="theme-color" content="#08090A"/);
 assert.match(indexHtml, /manifest\.webmanifest\?v=20260811a/);
 assert.match(manifest, /"start_url": "\/m\?launch=app"/);
-assert.match(manifest, /"background_color": "#1A1A1A"/);
-assert.match(manifest, /"theme_color": "#1A1A1A"/);
+assert.match(manifest, /"background_color": "#08090A"/);
+assert.match(manifest, /"theme_color": "#08090A"/);
 const genericSettingsButtonSelector =
   baseCss.match(/\.settings-panel button[^{]+\{/)?.[0] ?? "";
 assert.match(
@@ -774,15 +775,17 @@ assert.match(
 );
 
 const accessiblePairs = [
-  ["Builder primary text on canvas", "#FCF8F0", "#1A1A1A"],
-  ["Builder muted text on canvas", "#B3AD9F", "#1A1A1A"],
-  ["Builder faint text on canvas", "#9C968A", "#1A1A1A"],
-  ["Builder brand label on canvas", "#D66A8A", "#1A1A1A"],
+  ["Builder primary text on canvas", "#F7F8F8", "#08090A"],
+  ["Builder muted text on canvas", "#9A9FA8", "#08090A"],
+  ["Builder faint text on canvas", "#82878F", "#08090A"],
+  ["Builder faint text on card", "#82878F", "#161719"],
+  ["Builder muted text on hover card", "#9A9FA8", "#1E1F22"],
+  ["Builder action text on white", "#08090A", "#F7F8F8"],
   ["Builder action text on cream", "#0A0A0A", "#F1EDE5"],
-  ["Dark activity blue on canvas", "#7BAAD6", "#1E1E1E"],
+  ["Dark attention on canvas", "#F7F8F8", "#0B0C0D"],
   ["Light activity blue on canvas", "#326FAD", "#F8F8F4"],
   ["Light activity blue on navigation", "#326FAD", "#F0F0EE"],
-  ["Dark unread count on activity fill", "#171719", "#7BAAD6"],
+  ["Dark unread count on attention fill", "#08090A", "#F7F8F8"],
   ["Light unread count on activity fill", "#FFFFFF", "#326FAD"],
   ["Dark global attention count", "#171719", "#EF4444"],
   ["Light global attention count", "#FFFFFF", "#B42318"],

@@ -32,7 +32,7 @@ assert.doesNotMatch(
 );
 assert.match(
   baseTheme,
-  /--bg-card-solid: #2a2a2a;[\s\S]*--bg-button: #f1ede5;[\s\S]*--text-primary: #fcf8f0;[\s\S]*--border-default: #3a3a3a;/,
+  /--bg-card-solid: #161719;[\s\S]*--bg-button: #f7f8f8;[\s\S]*--text-primary: #f7f8f8;[\s\S]*--border-default: #232427;/,
   "the canonical default-dark component palette must remain explicit",
 );
 assert.match(
