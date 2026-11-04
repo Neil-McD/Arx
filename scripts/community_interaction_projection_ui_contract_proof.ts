@@ -896,18 +896,18 @@ assert.match(
 );
 assert.match(
   webPackageJson,
-  /"@fontsource-variable\/ibm-plex-sans":\s*"5\.3\.0"/,
-  "web must pin the self-hosted IBM Plex Sans package",
+  /"@fontsource-variable\/geist":\s*"5\.3\.0"[\s\S]*"@fontsource-variable\/geist-mono":\s*"5\.3\.0"/,
+  "web must pin the self-hosted Geist and Geist Mono packages",
 );
 assert.match(
   webMain,
-  /import\s+"@fontsource-variable\/ibm-plex-sans\/wght\.css";/,
-  "web entrypoint must load the IBM Plex Sans variable font before application styles",
+  /import\s+"@fontsource-variable\/geist\/wght\.css";\s*import\s+"@fontsource-variable\/geist-mono\/wght\.css";/,
+  "web entrypoint must load the Geist variable fonts before application styles",
 );
 assert.match(
   baseCss,
-  /--font-sans:\s*"IBM Plex Sans Variable",\s*"IBM Plex Sans",\s*system-ui,\s*-apple-system,\s*sans-serif;[\s\S]*font-family:\s*var\(--font-sans\);/,
-  "the application must use the loaded IBM Plex family with resilient system fallbacks",
+  /--font-sans:\s*"Geist Variable",\s*"Geist",\s*system-ui,\s*-apple-system,\s*sans-serif;[\s\S]*font-family:\s*var\(--font-sans\);/,
+  "the application must use the loaded Geist family with resilient system fallbacks",
 );
 assert.match(
   baseCss,

@@ -1,7 +1,7 @@
 :root {
-  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-sans: "Geist Variable", "Geist", system-ui, -apple-system, sans-serif;
   font-family: var(--font-sans);
-  --font-mono: "IBM Plex Mono", "SF Mono", "Fira Code", monospace;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", monospace;
   color-scheme: dark;
 
   /* Radius */

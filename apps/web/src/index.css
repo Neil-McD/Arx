@@ -419,7 +419,7 @@
   line-height: 1.45;
   resize: vertical;
   min-height: 120px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
 }
 
 .system-prompt-input:focus {
