@@ -662,3 +662,33 @@ test("workflow prompts are accepted only as an explicit fourth policy section", 
     { requestId, expectedAttempt: claim.attempt, snapshotJson, nowMs: 10_001 },
   )).resolves.toMatchObject({ ok: true, duplicate: false });
 });
+
+test("a tag's context record with the card and handbook section is accepted; a misplaced one is not", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createServeFixture(t, "context-snapshot-layers");
+  const requestId = await insertServeRequest(t, fixture);
+  const first = await t.mutation(
+    internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
+    { requestId, nowMs: 10_000 },
+  );
+  const promptBundle = buildCommunityAgentServePromptBundle({
+    community: { name: "Snapshot", slug: "snapshot" },
+    agent: { displayName: "Snapshot agent" },
+    threadContext: { rendered: "thread" },
+    communityCardMd: "# Snapshot",
+    communityHandbookMd: "## Who runs what\n\n- Ana.",
+  });
+  const sections = promptBundle.systemPromptBundle.sections;
+  const snapshot = (promptSections: unknown[]) => JSON.stringify({
+    version: 2, sha256: "b".repeat(64), messages: promptBundle.messages, prompt_sections: promptSections,
+  });
+  // The shared-layers section in any other position is refused.
+  await expect(t.mutation(
+    internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+    { requestId, expectedAttempt: first.attempt, snapshotJson: snapshot([sections[2], sections[0], sections[1], sections[3]]), nowMs: 10_001 },
+  )).resolves.toMatchObject({ ok: false, errorCode: "serve_context_snapshot_invalid" });
+  await expect(t.mutation(
+    internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+    { requestId, expectedAttempt: first.attempt, snapshotJson: snapshot(sections), nowMs: 10_002 },
+  )).resolves.toMatchObject({ ok: true });
+});
