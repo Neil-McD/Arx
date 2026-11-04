@@ -80,22 +80,29 @@ describe("Sunrise staging seed", () => {
       .rejects.toThrow(/seed_not_allowed/);
   });
 
-  it("seeds members, two channels, posts, an owner mention, events, a course and memories, and reseeds cleanly", async () => {
+  it("seeds members, three channels (one private), posts, an owner mention, events, a course and memories, and reseeds cleanly", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t);
     process.env.POLYNET_ALLOW_SEED = "1";
     const seed = () => t.mutation(refs.stagingSeedSunrise.seedSunriseInternal, { communityId: f.communityId });
 
     const first = await seed();
-    expect(first).toMatchObject({ timeZone: "America/Los_Angeles", posts: 8, replies: 9, removedPosts: 0, ownerMention: { handle: "neil-sunrise" } });
-    expect(first.channels.map((channel: any) => channel.slug)).toEqual(["general", "beta"]);
+    expect(first).toMatchObject({ timeZone: "America/Los_Angeles", posts: 9, replies: 10, removedPosts: 0, ownerMention: { handle: "neil-sunrise" } });
+    expect(first.channels.map((channel: any) => channel.slug)).toEqual(["general", "beta", "setters"]);
+    // Setters is private to Maya and Priya.
+    const setters: any = await t.run(async (ctx) => {
+      const channel = await ctx.db.query("communityChannels").withIndex("by_community_slug", (q: any) => q.eq("communityId", f.communityId).eq("slug", "setters")).first();
+      const participants = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", channel!._id)).collect();
+      return { accessMode: channel?.accessMode, participants: participants.filter((row: any) => row.status === "active").length };
+    });
+    expect(setters).toEqual({ accessMode: "restricted", participants: 2 });
     const state = await seededState(t, f.communityId);
     expect(state.seedUserIds).toHaveLength(4);
     expect(state.memberships.filter((row) => row.active)).toHaveLength(4);
     expect(state.memberships.filter((row) => row.role === "moderator")).toHaveLength(1);
     expect(state.activeMemberCount).toBe(5);
-    expect(state.channels).toEqual(["beta", "general"]);
-    expect(state).toMatchObject({ roots: 8, replies: 9, reactions: 13, nodes: 3 });
+    expect(state.channels).toEqual(["beta", "general", "setters"]);
+    expect(state).toMatchObject({ roots: 9, replies: 10, reactions: 13, nodes: 3 });
     // The owner's mention came through the member composer and is unread.
     expect(state.mentions).toHaveLength(1);
     expect(state.mentions[0]).toMatchObject({ mentionKind: "user", mentionedUserId: f.ownerId, notifyState: "pending" });
@@ -134,10 +141,10 @@ describe("Sunrise staging seed", () => {
 
     // A rerun replaces the posts and events and reuses everything else.
     const second = await seed();
-    expect(second.removedPosts).toBe(8);
+    expect(second.removedPosts).toBe(9);
     const again = await seededState(t, f.communityId);
     expect(again.seedUserIds).toEqual(state.seedUserIds);
-    expect(again).toMatchObject({ roots: 8, replies: 9, reactions: 13, blocks: state.blocks, nodes: 3, channels: ["beta", "general"] });
+    expect(again).toMatchObject({ roots: 9, replies: 10, reactions: 13, blocks: state.blocks, nodes: 3, channels: ["beta", "general", "setters"] });
     expect(again.rootIds.some((id) => state.rootIds.includes(id))).toBe(false);
     expect(again.mentions).toHaveLength(1);
     expect(again.events).toHaveLength(5);
@@ -176,6 +183,6 @@ describe("Sunrise staging seed", () => {
 
     // A reseed clears live posts too.
     const reseed = await t.mutation(refs.stagingSeedSunrise.seedSunriseInternal, { communityId: f.communityId });
-    expect(reseed.removedPosts).toBe(9);
+    expect(reseed.removedPosts).toBe(10);
   });
 });
