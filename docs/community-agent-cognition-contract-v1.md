@@ -2583,7 +2583,11 @@ that everyone reads. This replaces the steward's scheduled memory pipeline
 - One lock in code: channel reads and searches mark anything from a restricted
   room `private_room`, and every `builder/` read is marked the same way. Once
   a turn has seen a marked result, `checkCommunityTurnToolCall` refuses
-  `memory/` writes for the rest of the turn with `private_source_read`.
+  `memory/` writes for the rest of the turn with `private_source_read`. Member
+  timelines that include a private-room post are marked too. The conversation
+  records the user message at which it happened (`threads.privateSourceSeenAtSeq`),
+  and while that message is in a later turn's carried history the lock holds,
+  so "save that as a note" can't publish what an earlier answer quoted.
 - Ask recall, the repository-wide search, handbook drafting and the community
   card (a note count) read notes. `community.memory.record_outcome` is removed:
   notes have no usefulness ledger.

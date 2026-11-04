@@ -359,21 +359,35 @@ test("the agent saves a community note, but never on a turn that read a private 
   const save = (key: string) => ({ tool: "polynet_write", args: { path: "/communities/agent-community/memory/", mode: "create",
     content: { title: "Thursday coffee crew", text: "The coffee cart by the gym opens at 7." }, idempotency_key: key } });
 
-  const locked = scriptedModel([
-    { tool: "polynet_list", args: { path: "/communities/agent-community/channels/crew/" } },
-    save("note-locked"),
-    { text: "I can't save that one." },
-  ]);
-  expect((await turn(f, token, "What's new in crew? Save anything useful.", "note-locked")).stream).toContain("event: done");
-  const lockedOutput = (locked[2]?.input ?? []).filter((item: any) => item?.type === "function_call_output").pop();
-  expect(JSON.parse(String(lockedOutput?.output))).toMatchObject({ tool_name: "polynet_write", success: false, error_code: "private_source_read" });
-  expect(await f.t.run((c) => c.db.query("communityNotes").collect())).toHaveLength(0);
+  const outputOf = (calls: any[], index: number) =>
+    JSON.parse(String((calls[index]?.input ?? []).filter((item: any) => item?.type === "function_call_output").pop()?.output));
 
+  // A clean turn saves a note.
   scriptedModel([save("note-open"), { text: "Saved it as a community note." }]);
   expect((await turn(f, token, "FYI the coffee cart by the gym opens at 7.", "note-open")).stream).toContain("event: done");
   expect(await f.t.run((c) => c.db.query("communityNotes").collect())).toEqual([
     expect.objectContaining({ slug: "thursday-coffee-crew", source: "ask", createdByUserId: f.ids.memberId }),
   ]);
+
+  // A turn that read a private room can't save one.
+  const locked = scriptedModel([
+    { tool: "polynet_list", args: { path: "/communities/agent-community/channels/crew/" } },
+    { tool: "polynet_write", args: { path: "/communities/agent-community/memory/", mode: "create",
+      content: { title: "Crew plans", text: "From the crew room." }, idempotency_key: "note-locked" } },
+    { text: "I can't save that one." },
+  ]);
+  expect((await turn(f, token, "What's new in crew? Save anything useful.", "note-locked")).stream).toContain("event: done");
+  expect(outputOf(locked, 2)).toMatchObject({ tool_name: "polynet_write", success: false, error_code: "private_source_read" });
+
+  // Nor can the next turn, while that answer is still in the conversation it carries.
+  const followUp = scriptedModel([
+    { tool: "polynet_write", args: { path: "/communities/agent-community/memory/", mode: "create",
+      content: { title: "Crew plans", text: "What you just told me." }, idempotency_key: "note-follow-up" } },
+    { text: "I can't save that one either." },
+  ]);
+  expect((await turn(f, token, "Save that as a community note.", "note-follow-up")).stream).toContain("event: done");
+  expect(outputOf(followUp, 1)).toMatchObject({ tool_name: "polynet_write", success: false, error_code: "private_source_read" });
+  expect(await f.t.run((c) => c.db.query("communityNotes").collect())).toHaveLength(1);
 });
 
 test("an owner's agent in a front end stays in the member lane", async () => {

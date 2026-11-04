@@ -3753,6 +3753,9 @@ export default defineSchema({
 
   threads: defineTable({
     ownerId: v.id("users"),
+    // The newest user message whose turn read a private room or owner-only
+    // data: while it is in a turn's carried history, community notes stay locked.
+    privateSourceSeenAtSeq: v.optional(v.number()),
     threadKey: v.optional(v.string()),
     title: v.optional(v.string()),
     titleSource: v.union(v.literal("auto"), v.literal("manual")),
