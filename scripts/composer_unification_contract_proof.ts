@@ -12,7 +12,7 @@ const communityAgentCss = read("apps/web/src/components/WebCommunityAgentDock.cs
 
 assert.match(
   baseCss,
-  /--composer-surface: var\(--bg-card-solid, #2a2a2a\);[\s\S]*--composer-elevation: 0 10px 28px/,
+  /--composer-surface: var\(--bg-card-solid, #161719\);[\s\S]*--composer-elevation: 0 10px 28px/,
   "canonical composer material should expose an opaque surface and restrained elevation",
 );
 assert.match(

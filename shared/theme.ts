@@ -5,9 +5,9 @@ export const APP_THEME_DEFINITIONS = [
   {
     id: "dark",
     label: "Dark",
-    description: "Neutral dark theme",
+    description: "Black and white",
     disabled: false,
-    browserColor: "#1A1A1A",
+    browserColor: "#08090A",
   },
   {
     id: "light",

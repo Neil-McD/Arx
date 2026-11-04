@@ -14,40 +14,40 @@
   --web-chat-gutter: clamp(12px, 3vw, 20px);
 
   /* Canonical Dark fallback prevents a light flash before theme bootstrap. */
-  --bg-app: #1a1a1a;
-  --bg-header: rgba(18, 18, 18, 0.95);
-  --bg-panel: rgba(24, 24, 24, 0.9);
-  --bg-modal: rgba(20, 20, 20, 0.98);
-  --bg-workspace: rgba(30, 30, 30, 0.95);
-  --bg-card: rgba(42, 42, 42, 0.9);
-  --bg-card-solid: #2a2a2a;
-  --bg-card-alt: rgba(36, 36, 36, 0.9);
-  --bg-card-hover: rgba(50, 50, 50, 0.95);
-  --bg-input: rgba(20, 20, 20, 0.95);
-  --bg-button: #f1ede5;
+  --bg-app: #08090a;
+  --bg-header: rgba(8, 9, 10, 0.95);
+  --bg-panel: rgba(15, 16, 17, 0.92);
+  --bg-modal: rgba(15, 16, 17, 0.98);
+  --bg-workspace: rgba(11, 12, 13, 0.96);
+  --bg-card: rgba(22, 23, 25, 0.92);
+  --bg-card-solid: #161719;
+  --bg-card-alt: rgba(18, 19, 21, 0.92);
+  --bg-card-hover: rgba(30, 31, 34, 0.96);
+  --bg-input: rgba(15, 16, 17, 0.96);
+  --bg-button: #f7f8f8;
   --bg-button-hover: #ffffff;
-  --bg-button-text: #0a0a0a;
+  --bg-button-text: #08090a;
   --conversation-primary-action-surface: #ffffff;
   --conversation-primary-action-hover-surface: #ffffff;
   --conversation-primary-action-foreground: #111111;
   --bg-terminal: #050505;
 
   /* Accent color */
-  --accent-gold: #f1ede5;
-  --accent-gold-subtle: #b75874;
-  --accent-gold-glow: rgba(214, 106, 138, 0.18);
+  --accent-gold: #f7f8f8;
+  --accent-gold-subtle: #8a8f98;
+  --accent-gold-glow: rgba(255, 255, 255, 0.08);
   --text-link: var(--accent-gold);
   --text-link-hover: color-mix(in srgb, var(--accent-gold) 84%, white 16%);
 
   /* Semantic color roles. Identity, selection, activity/attention, and presence are independent. */
-  --accent-brand: #d66a8a;
+  --accent-brand: #f7f8f8;
   --accent-selection: var(--accent-gold);
-  --accent-agent: #a78bfa;
-  --accent-agent-strong: #8b5cf6;
-  --accent-agent-foreground: #c4b5fd;
-  --accent-agent-surface: rgba(167, 139, 250, 0.16);
-  --accent-attention: #7BAAD6;
-  --text-on-attention: #171719;
+  --accent-agent: #f7f8f8;
+  --accent-agent-strong: #ffffff;
+  --accent-agent-foreground: #d0d3d9;
+  --accent-agent-surface: rgba(255, 255, 255, 0.08);
+  --accent-attention: #f7f8f8;
+  --text-on-attention: #08090a;
   --accent-global-attention: #EF4444;
   --text-on-global-attention: #171719;
   --focus-ring: color-mix(in srgb, var(--accent-selection) 62%, white 38%);
@@ -62,20 +62,20 @@
   --accent-green: var(--accent-success);
 
   /* Secondary accent */
-  --accent-cyan: #4285f4;
-  --accent-cyan-subtle: #2d6de0;
-  --accent-cyan-glow: rgba(66, 133, 244, 0.16);
+  --accent-cyan: #d0d3d9;
+  --accent-cyan-subtle: #8a8f98;
+  --accent-cyan-glow: rgba(255, 255, 255, 0.08);
   /* Links are a shared Dark utility signal. Brand accents remain free
      for theme identity, selection, mentions, and community actions. */
   --chat-link: var(--accent-cyan);
   --chat-link-hover: color-mix(in srgb, var(--accent-cyan) 82%, white 18%);
 
   /* Text */
-  --text-primary: #fcf8f0;
-  --text-secondary: #d6d0c6;
-  --text-muted: #b3ad9f;
-  --text-faint: #9c968a;
-  --text-terminal: #fcf8f0;
+  --text-primary: #f7f8f8;
+  --text-secondary: #d0d3d9;
+  --text-muted: #9a9fa8;
+  --text-faint: #82878f;
+  --text-terminal: #f7f8f8;
 
   /* Chat has its own semantic ladder so identity, content, and metadata stay
      distinct without changing the platform-wide text hierarchy. */
@@ -85,15 +85,15 @@
   --chat-system-text: color-mix(in srgb, var(--text-primary) 62%, var(--surface-workspace) 38%);
 
   /* Borders */
-  --border-default: #3a3a3a;
-  --border-strong: #4a4a4a;
-  --border-muted: #2a2a2a;
-  --border-active: #f1ede5;
+  --border-default: #232427;
+  --border-strong: #313236;
+  --border-muted: #1a1b1e;
+  --border-active: #f7f8f8;
   --divider-accent: rgba(255, 255, 255, 0.06);
 
   /* Icons */
-  --icon-default: #b3ad9f;
-  --icon-hover: #d6d0c6;
+  --icon-default: #8a8f98;
+  --icon-hover: #d0d3d9;
   --icon-active: var(--border-active);
 
   /* Overlays */
@@ -104,10 +104,10 @@
   --panel-shadow: none;
 
   /* Status colors - muted */
-  --status-default: #2a2a2a;
-  --status-proposed: #4a4230;
-  --status-approved: #2a3d2e;
-  --status-executed: #2e3040;
+  --status-default: #161719;
+  --status-proposed: #232427;
+  --status-approved: #1d2420;
+  --status-executed: #202127;
 
   /* Semantic aliases (no-visual-delta compatibility layer) */
   --surface-app: var(--bg-app);
@@ -128,7 +128,7 @@
   --stroke-selected: color-mix(in srgb, var(--accent-gold) 46%, var(--stroke-default));
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
   --stroke-panel-edge: var(--stroke-divider-accent);
-  --composer-surface: var(--bg-card-solid, #2a2a2a);
+  --composer-surface: var(--bg-card-solid, #161719);
   --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
   --composer-elevation: 0 10px 28px rgba(0, 0, 0, 0.24), 0 1px 2px rgba(0, 0, 0, 0.2);
   --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
