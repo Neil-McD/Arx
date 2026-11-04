@@ -68,7 +68,7 @@ export const loadMemberTimelineInternal = internalQuery({
         return null;
       }
     };
-    type Item = { kind: "post" | "reply"; createdAt: number; ref: string; channelSlug: string; channelName: string; snippet: string; thread: string | null };
+    type Item = { kind: "post" | "reply"; createdAt: number; ref: string; channelSlug: string; channelName: string; snippet: string; thread: string | null; privateRoom: boolean };
     // Rows the reader can't see (private rooms, deleted posts) share the scan
     // with those they can: widen the scan until the requested page is filled
     // with readable items, the history ends, or the scan bound is reached.
@@ -102,7 +102,8 @@ export const loadMemberTimelineInternal = internalQuery({
       const channel = readable(root) ? channelFor(root) : null;
       if (!channel) continue;
       items.push({ kind: "post", createdAt: root.createdAt, ref: buildCommunityInteractionEvidenceRef({ objectType: "root", objectId: normalizeIdValue(root._id) }),
-        channelSlug: channel.slug, channelName: channel.name, snippet: String(root.title ?? root.contentSummary ?? "").slice(0, SNIPPET_CHARS), thread: null });
+        channelSlug: channel.slug, channelName: channel.name, snippet: String(root.title ?? root.contentSummary ?? "").slice(0, SNIPPET_CHARS), thread: null,
+        privateRoom: channel.accessMode === "restricted" });
     }
     for (const reply of replies) {
       if (!readable(reply)) continue;
@@ -111,6 +112,7 @@ export const loadMemberTimelineInternal = internalQuery({
       if (!channel || !interactionBelongsToChannel(reply, channel)) continue;
       items.push({ kind: "reply", createdAt: reply.createdAt, ref: buildCommunityInteractionEvidenceRef({ objectType: "reply", objectId: normalizeIdValue(reply._id) }),
         channelSlug: channel.slug, channelName: channel.name, snippet: String(reply.contentSummary ?? "").slice(0, SNIPPET_CHARS),
+        privateRoom: channel.accessMode === "restricted",
         thread: String((root as any).title ?? (root as any).contentSummary ?? "").slice(0, 80) || null });
     }
     return items;

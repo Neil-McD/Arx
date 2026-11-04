@@ -3123,7 +3123,7 @@ test("community.md is the community card: the reader's restricted channels (from
 test("the community agent saves community notes everyone reads; others can't write them; private rooms are marked", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  await t.run(async ctx => {
+  const crewId = await t.run(async ctx => {
     const now = Date.now();
     const membership = (await ctx.db.query("communityMemberships")
       .withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
@@ -3132,6 +3132,7 @@ test("the community agent saves community notes everyone reads; others can't wri
     await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: crewId,
       principalKey: `user:${f.memberId}`, membershipId: membership._id, membershipActivationSequence: membership.activationSequence,
       status: "active", createdByUserId: f.ownerId, createdAt: now, updatedAt: now });
+    return crewId;
   });
   const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
   const run = (principalKind: "community_agent_for_member" | "external_mcp", toolName: any, input: Record<string, unknown>) =>
@@ -3168,4 +3169,20 @@ test("the community agent saves community notes everyone reads; others can't wri
   expect(crew).toMatchObject({ ok: true, value: { private_room: true } });
   const general = await run("community_agent_for_member", "polynet_list", { path: "/communities/canonical-community/channels/general/" });
   expect(general.ok && (general.value as any).private_room).toBeFalsy();
+
+  // A member's timeline that includes a private-room post is marked too.
+  const timeline = "/communities/canonical-community/members/canonical-member/timeline.md";
+  const before = await run("community_agent_for_member", "polynet_read", { path: timeline });
+  expect(before.ok && (before.value as any).private_room).toBeFalsy();
+  await t.withIdentity({ subject: f.memberSubject }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
+    communityId: f.communityId, channelId: crewId, idempotencyKey: "crew-plan", text: "Crew-only plan for Saturday." });
+  expect(await run("community_agent_for_member", "polynet_read", { path: timeline })).toMatchObject({ ok: true, value: { private_room: true } });
+
+  // A retried write under the same key is applied once.
+  const appendAgain = { path: `${notes}liquid-chalk-helps.md`, mode: "append", idempotency_key: "note-3", content: { text: "Bring your own on Saturdays." } };
+  // As if the note committed but its receipt was lost.
+  await t.run(async ctx => { for (const row of await ctx.db.query("polynetCanonicalOperationReceipts").collect()) await ctx.db.delete(row._id); });
+  expect(await run("community_agent_for_member", "polynet_write", appendAgain)).toMatchObject({ ok: true });
+  const saved = await t.run(ctx => ctx.db.query("communityNotes").first());
+  expect(saved!.bodyMd.match(/Bring your own on Saturdays\./g)).toHaveLength(1);
 });

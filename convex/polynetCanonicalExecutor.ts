@@ -1429,7 +1429,10 @@ async function executeCanonicalRead(args: {
         path: evidencePath({ communitySlug: target.communitySlug, channelSlug: item.channelSlug, sourceType: "interaction", ref: item.ref }),
       })),
     });
-    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore } };
+    // A timeline can include posts from private rooms the reader is in.
+    const privateRoom = timeline.items.some((item: any) => item.privateRoom === true);
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore,
+      ...(privateRoom ? { private_room: true } : {}) } };
   }
 
   // Who is online, and one member's profile, as JSON for a member's site or
@@ -1960,6 +1963,7 @@ async function executeCanonicalWrite(args: {
       ...(typeof content.title === "string" ? { title: content.title } : {}),
       text: String(content.text ?? content.body ?? ""),
       source: args.principalKind === "community_agent" ? "tag" : "ask",
+      operationKey: `${args.principalKind}:${args.userId}:${idempotencyKey}`,
       // A tag runs on its sponsor's account, so only an Ask records whose turn it was.
       ...(args.principalKind === "community_agent_for_member" ? { actorUserId: args.userId } : {}),
     })) as { ok: boolean; slug?: string; title?: string; created?: boolean; code?: string; message?: string };

@@ -14,6 +14,7 @@ import {
   normalizeCommunityNoteTitle,
 } from "../shared/communityNotes";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
+import { canViewerReadNodeWithCurrentEvidence } from "./communityIntelligenceDirectory";
 
 const LIST_LIMIT_MAX = 50;
 const SEARCH_LIMIT_MAX = 20;
@@ -91,6 +92,8 @@ export async function writeCommunityNote(ctx: any, args: {
   text: string;
   source: "ask" | "tag" | "founder";
   actorUserId?: any;
+  // The caller's retry key: a write already applied under it is not applied again.
+  operationKey?: string;
   nowMs?: number;
 }): Promise<CommunityNoteWriteResult> {
   const nowMs = args.nowMs ?? Date.now();
@@ -104,6 +107,9 @@ export async function writeCommunityNote(ctx: any, args: {
     if (!title) return { ok: false, code: "invalid_tool_args", message: "Give the note a short title in content.title." };
     const slug = communityNoteSlug(title);
     const existing = await bySlug(slug);
+    if (existing && args.operationKey && existing.lastOperationKey === args.operationKey) {
+      return { ok: true, slug, title: existing.title, created: true };
+    }
     if (existing) {
       return { ok: false, code: "note_exists", slug,
         message: `A note called "${existing.title}" already exists. Read memory/${slug}.md and append to it instead.` };
@@ -117,6 +123,7 @@ export async function writeCommunityNote(ctx: any, args: {
     await ctx.db.insert("communityNotes", {
       communityId: args.communityId, slug, title, bodyMd: text, source: args.source,
       searchText: buildCommunityNoteSearchText({ title, bodyMd: text }),
+      ...(args.operationKey ? { lastOperationKey: args.operationKey } : {}),
       ...(args.actorUserId ? { createdByUserId: args.actorUserId, updatedByUserId: args.actorUserId } : {}),
       createdAt: nowMs, updatedAt: nowMs,
     });
@@ -126,6 +133,9 @@ export async function writeCommunityNote(ctx: any, args: {
   const slug = String(args.slug ?? "").trim();
   const existing = COMMUNITY_NOTE_SLUG_PATTERN.test(slug) ? await bySlug(slug) : null;
   if (!existing) return { ok: false, code: "semantic_not_found", message: "No note at that path. List memory/ for notes, or create one." };
+  if (args.operationKey && existing.lastOperationKey === args.operationKey) {
+    return { ok: true, slug, title: existing.title, created: false };
+  }
   const title = args.mode === "update" ? normalizeCommunityNoteTitle(args.title) ?? existing.title : existing.title;
   const bodyMd = args.mode === "append" ? `${existing.bodyMd}\n\n${text}` : text;
   if (bodyMd.length > COMMUNITY_NOTE_BODY_MAX_CHARS) {
@@ -134,6 +144,7 @@ export async function writeCommunityNote(ctx: any, args: {
   }
   await ctx.db.patch(existing._id, {
     title, bodyMd, searchText: buildCommunityNoteSearchText({ title, bodyMd }),
+    ...(args.operationKey ? { lastOperationKey: args.operationKey } : {}),
     ...(args.actorUserId ? { updatedByUserId: args.actorUserId } : {}),
     updatedAt: nowMs,
   });
@@ -149,6 +160,7 @@ export const writeCommunityNoteInternal = internalMutation({
     text: v.string(),
     source: v.union(v.literal("ask"), v.literal("tag"), v.literal("founder")),
     actorUserId: v.optional(v.id("users")),
+    operationKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => await writeCommunityNote(ctx, args),
 });
@@ -167,8 +179,11 @@ export const migrateMemoryNodesToNotesInternal = internalMutation({
     let copied = 0;
     let skipped = 0;
     for (const node of page.page as any[]) {
+      // The same member-level check the old memory reader made, including that
+      // every source it cites is still there and readable.
       const readable = MIGRATABLE_STATUSES.has(node.status) && node.visibilityScope === "community"
-        && (node.sourceVisibility ?? "community") === "community";
+        && (node.sourceVisibility ?? "community") === "community"
+        && await canViewerReadNodeWithCurrentEvidence({ ctx, node, isManager: false });
       const title = normalizeCommunityNoteTitle(node.title);
       const bodyMd = normalizeCommunityNoteBody(node.bodyMd);
       const already = await ctx.db.query("communityNotes").withIndex("by_migrated_node", (q) => q.eq("migratedFromNodeId", node._id)).first();

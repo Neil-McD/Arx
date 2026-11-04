@@ -1992,6 +1992,8 @@ export default defineSchema({
     searchText: v.string(),
     // The old memory node a migrated note came from, so the copy runs once.
     migratedFromNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    // The last write's retry key, so a retried write is not applied twice.
+    lastOperationKey: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
