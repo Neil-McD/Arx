@@ -11,14 +11,6 @@ import {
   parseCommunityResourceEvidenceRef,
 } from "../shared/communityEvidenceContract";
 
-const MEMORY_TYPES = new Set([
-  "playbook",
-  "insight",
-  "example",
-  "warning_failure",
-  "decision_judgment",
-  "open_question",
-]);
 
 type SearchItem = Record<string, unknown>;
 type SearchDomain = {
@@ -69,21 +61,16 @@ function canonicalResourceItem(item: SearchItem): SearchItem {
   };
 }
 
-function canonicalMemoryItem(item: SearchItem): SearchItem {
-  const nodeId = requiredString(item.id ?? item.node_id ?? item._id, 180);
-  if (!nodeId) {
-    throw new Error("community_repository_search_memory_ref_invalid");
-  }
-  const path = `/memory/${nodeId}.md`;
+// Community notes live under memory/, one markdown file each.
+function canonicalNoteItem(note: Record<string, unknown>): SearchItem {
+  const slug = requiredString(note.slug, 80);
+  if (!slug) throw new Error("community_repository_search_note_ref_invalid");
   return {
-    ...item,
     source_type: "memory",
-    source_id: nodeId,
-    path,
-    snippet:
-      requiredString(item.snippet, 500) ??
-      requiredString(item.title, 500) ??
-      "Accepted community memory",
+    source_id: slug,
+    path: `/memory/${slug}.md`,
+    title: requiredString(note.title, 180),
+    snippet: requiredString(note.snippet, 500) ?? requiredString(note.title, 500) ?? "Community note",
   };
 }
 
@@ -128,11 +115,7 @@ export const searchCommunityRepositoryInternal = internalAction({
     const query = requiredString(args.query, 240);
     if (!query) throw new Error("community_repository_search_query_required");
     const limit = normalizeCommunityEvidenceSearchLimit(args.limit);
-    const memoryTypes = (args.types ?? [])
-      .map((value) => String(value ?? "").trim())
-      .filter((value) => MEMORY_TYPES.has(value));
-
-    const [interactions, resources, memory] = await Promise.all([
+    const [interactions, resources, notes] = await Promise.all([
       ctx.runQuery(
         (internal as any).communityInteractionEvidence
           .searchRecentCommunityInteractionEvidenceInternal,
@@ -143,31 +126,15 @@ export const searchCommunityRepositoryInternal = internalAction({
           .searchRecentCommunityResourceEvidenceInternal,
         { userId, communityId: args.communityId, query, limit },
       ),
-      ctx.runMutation(
-        (internal as any).communityIntelligenceDirectory
-          .searchCommunityMemoryInternal,
-        {
-          userId,
-          communityId: args.communityId,
-          query,
-          limit,
-          surface: args.surface,
-          forceMemberView: true,
-          ...(memoryTypes.length ? { types: memoryTypes } : {}),
-        },
+      ctx.runQuery(
+        (internal as any).communityNotes.searchCommunityNotesInternal,
+        { communityId: args.communityId, query, limit },
       ),
     ]) as [
       Record<string, unknown>,
       Record<string, unknown>,
-      Record<string, unknown>,
+      { notes: Array<Record<string, unknown>> },
     ];
-
-    if (memory?.ok !== true) {
-      throw new Error(
-        requiredString(memory?.reason_code, 180) ??
-          "community_repository_search_memory_failed",
-      );
-    }
 
     const merged = interleaveDomains(
       [
@@ -186,10 +153,8 @@ export const searchCommunityRepositoryInternal = internalAction({
           truncated: resources.truncated === true,
         },
         {
-          items: (Array.isArray(memory.nodes) ? memory.nodes : []).map((item) =>
-            canonicalMemoryItem(item as SearchItem),
-          ),
-          truncated: memory.truncated === true,
+          items: notes.notes.map(canonicalNoteItem),
+          truncated: false,
         },
       ],
       limit,

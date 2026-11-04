@@ -1981,6 +1981,29 @@ export default defineSchema({
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
 
+  // Community notes (communityNotes.ts): what the community agent learned
+  // that is worth sharing with everyone, one short markdown note each.
+  communityNotes: defineTable({
+    communityId: v.id("communities"),
+    slug: v.string(),
+    title: v.string(),
+    bodyMd: v.string(),
+    source: v.union(v.literal("ask"), v.literal("tag"), v.literal("founder"), v.literal("migrated")),
+    searchText: v.string(),
+    // The old memory node a migrated note came from, so the copy runs once.
+    migratedFromNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    // The last write's retry key, so a retried write is not applied twice.
+    lastOperationKey: v.optional(v.string()),
+    createdByUserId: v.optional(v.id("users")),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_slug", ["communityId", "slug"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"])
+    .index("by_migrated_node", ["migratedFromNodeId"])
+    .searchIndex("search_text", { searchField: "searchText", filterFields: ["communityId"] }),
+
   // The founder-approved handbook (communityHandbook.ts): facts members ask
   // about. Only approvedMd reaches the agent; the draft waits for approval.
   communityHandbooks: defineTable({
@@ -3730,6 +3753,9 @@ export default defineSchema({
 
   threads: defineTable({
     ownerId: v.id("users"),
+    // The newest user message whose turn read a private room or owner-only
+    // data: while it is in a turn's carried history, community notes stay locked.
+    privateSourceSeenAtSeq: v.optional(v.number()),
     threadKey: v.optional(v.string()),
     title: v.optional(v.string()),
     titleSource: v.union(v.literal("auto"), v.literal("manual")),

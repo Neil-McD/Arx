@@ -20,6 +20,7 @@ const ALLOWED = new Map<string, string>([
   ["communityAiFeedRetirement:deleteAiFeedRetirementBatchInternal", "data retirement job; removed with the AI feed tables"],
   ["communityApps:registerCommunityDomainInternal", "operator tool: registers a site domain by hand"],
   ["communityApps:removeCommunityDomainInternal", "operator tool: removes a site domain by hand"],
+  ["communityNotes:migrateMemoryNodesToNotesInternal", "operator tool: one-time copy of old memory into community notes, run by hand"],
   ["communitySites:registerSitePrivateTwinsInternal", "operator tool: one-off backfill of site private twins, run by hand"],
   ["communitySites:registerCommunitySiteAddressesInternal", "operator tool: one-off backfill of every community's site addresses, run by hand"],
   ["communityChannelAudit:listGeneralChannelAuditCommunitiesInternal", "hand-run: General channel migration audit (residue map R-009)"],

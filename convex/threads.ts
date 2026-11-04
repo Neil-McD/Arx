@@ -1467,6 +1467,25 @@ export const listNewestCloudThreadMessagesForTrustedOwnerInternal = internalQuer
   handler: async (ctx, { trustedOwnerId, ...args }) => await listNewestCloudThreadMessagesHandler(ctx, args, trustedOwnerId),
 });
 
+// Community notes stay locked while private-source material is in the
+// conversation the agent carries (communityTurnContract).
+export const getThreadPrivateSourceSeqInternal = internalQuery({
+  args: { ownerId: v.id("users"), threadId: v.id("threads") },
+  handler: async (ctx, args) => {
+    const thread = (await ctx.db.get(args.threadId)) as (ThreadLike & { privateSourceSeenAtSeq?: number }) | null;
+    return thread && thread.ownerId === args.ownerId ? thread.privateSourceSeenAtSeq ?? null : null;
+  },
+});
+
+export const markThreadPrivateSourceSeenInternal = internalMutation({
+  args: { ownerId: v.id("users"), threadId: v.id("threads"), seq: v.number() },
+  handler: async (ctx, args) => {
+    const thread = (await ctx.db.get(args.threadId)) as (ThreadLike & { privateSourceSeenAtSeq?: number }) | null;
+    if (!thread || thread.ownerId !== args.ownerId) return;
+    if ((thread.privateSourceSeenAtSeq ?? -1) < args.seq) await ctx.db.patch(args.threadId, { privateSourceSeenAtSeq: args.seq } as any);
+  },
+});
+
 export const listCommunityAgentRuntimeMessagesInternal = internalQuery({
   args: {
     ownerId: v.id("users"),

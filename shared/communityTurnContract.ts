@@ -46,6 +46,9 @@ export type CommunityTurnContract = {
   // deletes in a channel for anyone; it writes the draft in its answer and the
   // member sends it. "own_voice": the agent may post as itself.
   channelWrites: "draft_only" | "own_voice";
+  // Community notes (memory/): "agent" lets the agent save what is worth
+  // sharing with everyone; "none" keeps the turn from writing notes.
+  notesWrites: "agent" | "none";
 };
 
 export const COMMUNITY_TURN_HISTORY_TURNS = 20;
@@ -86,6 +89,7 @@ export function buildCommunityTurnContract(args: {
     // A member's Ask or tag never becomes a post: the answer (or the tag's
     // reply) is the agent's only speech. Only the steward speaks on its own.
     channelWrites: args.surface === "steward" ? "own_voice" : "draft_only",
+    notesWrites: args.surface === "steward" ? "none" : "agent",
   };
 }
 
@@ -99,10 +103,23 @@ export function summarizeCommunityTurnContract(contract: CommunityTurnContract) 
     uses: contract.uses,
     history_turns: contract.historyTurns,
     channel_writes: contract.channelWrites,
+    notes_writes: contract.notesWrites,
   };
 }
 
 const CHANNEL_WRITE_PATH = /^\/communities\/[^/]+\/channels(?:\/|$)/;
+const NOTES_WRITE_PATH = /^\/communities\/[^/]+\/memory(?:\/|$)/;
+
+export const PRIVATE_SOURCE_NOTE_REFUSAL_MESSAGE =
+  "This turn read a private room or owner-only data, so it can't write a community note. Answer the member without saving one.";
+
+// What a turn has seen so far: a tool result from a private room or owner-only
+// data (private_room) locks community notes for the rest of the turn.
+export type CommunityTurnToolState = { sawPrivateSource: boolean };
+
+export function toolOutputSawPrivateSource(outputText: string): boolean {
+  return /"private_room"\s*:\s*true/.test(String(outputText ?? ""));
+}
 
 export const DRAFT_ONLY_REFUSAL_MESSAGE =
   "You never post, reply, edit or delete in a channel for anyone. Write the post in your answer as a draft, say which channel it belongs in, and ask the member to post it themselves.";
@@ -113,9 +130,19 @@ export function checkCommunityTurnToolCall(
   contract: CommunityTurnContract | null,
   toolName: string,
   args: unknown,
-): { ok: true } | { ok: false; errorCode: "draft_only"; errorMessage: string } {
-  if (!contract || contract.channelWrites !== "draft_only" || toolName !== "polynet_write") return { ok: true };
+  state: CommunityTurnToolState = { sawPrivateSource: false },
+): { ok: true } | { ok: false; errorCode: "draft_only" | "notes_not_allowed" | "private_source_read"; errorMessage: string } {
+  if (toolName !== "polynet_write") return { ok: true };
   const path = String((args as { path?: unknown } | null)?.path ?? "").trim().replace(/\/{2,}/g, "/");
-  if (!CHANNEL_WRITE_PATH.test(path)) return { ok: true };
+  if (NOTES_WRITE_PATH.test(path)) {
+    if (contract && contract.notesWrites !== "agent") {
+      return { ok: false, errorCode: "notes_not_allowed", errorMessage: "This turn can't write community notes." };
+    }
+    if (state.sawPrivateSource) {
+      return { ok: false, errorCode: "private_source_read", errorMessage: PRIVATE_SOURCE_NOTE_REFUSAL_MESSAGE };
+    }
+    return { ok: true };
+  }
+  if (!contract || contract.channelWrites !== "draft_only" || !CHANNEL_WRITE_PATH.test(path)) return { ok: true };
   return { ok: false, errorCode: "draft_only", errorMessage: DRAFT_ONLY_REFUSAL_MESSAGE };
 }

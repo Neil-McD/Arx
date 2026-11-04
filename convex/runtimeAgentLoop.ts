@@ -1,6 +1,6 @@
 import { api, internal } from "./_generated/api";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
-import { buildCommunityTurnContract, checkCommunityTurnToolCall, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract, toolOutputSawPrivateSource, type CommunityTurnToolState } from "../shared/communityTurnContract";
 import {
   COMMUNITY_MEMORY_RECALL_LIMIT,
   buildCommunityMemoryRecallQuery,
@@ -926,6 +926,8 @@ async function executeRetrievalAgentLoop(
       speakerUserId: String(params.userId),
     })
     : null;
+  // What this turn's tools have seen; a private source locks community notes.
+  const turnToolState: CommunityTurnToolState = { sawPrivateSource: false };
   if (turnContract) {
     try {
       await params.appendRunEvent({
@@ -1125,6 +1127,8 @@ async function executeRetrievalAgentLoop(
   });
   const resolvedProviderToolSchemas = activeProviderTools.responsesTools;
   let conversationMessagesForProvider = params.messages;
+  let currentUserSeq: number | null = null;
+  let privateSourceMarked = false;
   if (params.persistedConversationHistory) {
     const historySeed = params.persistedConversationHistory;
     let loadedRows = [...historySeed.rows];
@@ -1190,6 +1194,15 @@ async function executeRetrievalAgentLoop(
           ? "turn_limit"
           : "history_exhausted";
       const selectedSeqs = selection.selectedEntries.map((entry) => entry.seq);
+      currentUserSeq = historySeed.expectedUserSeq;
+      // A private source read on an earlier turn still in this history keeps
+      // community notes locked: its answer may carry what it read.
+      if (params.threadId && selectedSeqs.length > 0) {
+        const privateSeq = await params.ctx.runQuery((internal as any).threads.getThreadPrivateSourceSeqInternal, {
+          ownerId: params.userId, threadId: params.threadId,
+        }).catch(() => null);
+        if (typeof privateSeq === "number" && privateSeq >= Math.min(...selectedSeqs)) turnToolState.sawPrivateSource = true;
+      }
       conversationMessagesForProvider = selection.selectedEntries.map(
         (entry): InferenceMessage => ({
           role: entry.role,
@@ -1792,7 +1805,7 @@ async function executeRetrievalAgentLoop(
             errorMessage: `${toolName} is not active for this runtime.`,
           };
         }
-        const allowed = checkCommunityTurnToolCall(turnContract, toolName, normalizedArgs);
+        const allowed = checkCommunityTurnToolCall(turnContract, toolName, normalizedArgs, turnToolState);
         if (!allowed.ok) {
           try {
             await params.appendRunEvent({
@@ -1831,6 +1844,15 @@ async function executeRetrievalAgentLoop(
               }),
           });
           await throwIfRunCannotContinue();
+          if (toolResult.status === "ok" && toolOutputSawPrivateSource(toolResult.outputText) && !privateSourceMarked) {
+            turnToolState.sawPrivateSource = true;
+            privateSourceMarked = true;
+            if (params.threadId && currentUserSeq !== null) {
+              await params.ctx.runMutation((internal as any).threads.markThreadPrivateSourceSeenInternal, {
+                ownerId: params.userId, threadId: params.threadId, seq: currentUserSeq,
+              }).catch(() => undefined);
+            }
+          }
           return toolResult;
         } catch (error) {
           if (isRuntimeRunCancelledError(error)) {

@@ -45,6 +45,7 @@ export type CommunityCardSource = {
   canonicalUrl: string;
   // Set when the founder has approved a handbook (handbook.md).
   handbookApprovedAt?: number;
+  notesCount?: number;
   people: CommunityCardPerson[];
   channels: CommunityCardChannel[];
   events: CommunityCardEvent[];
@@ -132,6 +133,7 @@ function renderSection(key: (typeof COMMUNITY_CARD_SECTIONS)[number]["key"], sou
         `- Listed in Discover: ${source.visibility === "published" ? "yes" : "no (link only)"}`,
         `- Address: ${source.canonicalUrl}`,
         ...(source.handbookApprovedAt ? [`- Handbook: handbook.md (approved by the founder ${new Date(source.handbookApprovedAt).toISOString().slice(0, 10)}): who runs what, rhythms, where to start, what to bring, norms`] : []),
+        ...(source.notesCount ? [`- Community notes: memory/ (${source.notesCount >= 500 ? "500+" : source.notesCount} ${source.notesCount === 1 ? "note" : "notes"}): what the community has learned, saved by the community agent`] : []),
         "",
         "About:",
         "",

@@ -1,4 +1,5 @@
 import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
+import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
 import { api, internal } from "./_generated/api";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
@@ -66,14 +67,6 @@ type ResolvedRepositoryChannel = {
 
 type PolynetMutatingToolName = "polynet_write" | "polynet_call";
 
-const MEMORY_TYPES = new Set([
-  "playbook",
-  "insight",
-  "example",
-  "warning_failure",
-  "decision_judgment",
-  "open_question",
-]);
 const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
 const ADMISSION_DENY_OPERATION = "community.admission.deny";
 const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
@@ -90,7 +83,6 @@ const MARK_READ_OPERATION = "community.channel.mark_read";
 const PRESENCE_HEARTBEAT_OPERATION = "community.presence.heartbeat";
 const TYPING_SET_OPERATION = "community.typing.set";
 const SELF_FORMS_DIRECTORY = "/members/me/forms/";
-const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 
 function canonicalError(
   code: string,
@@ -110,29 +102,15 @@ function requiredString(value: unknown, maxLength = 2_000): string | null {
   return normalized ? normalized.slice(0, maxLength) : null;
 }
 
-// The memory owner returns explicit refusals instead of throwing. A returned
-// object (including one cached by an older adapter) is not necessarily success.
-function memoryOutcomeAcknowledgmentError(result: unknown): { code: string; message: string } | null {
-  const row = result && typeof result === "object" && !Array.isArray(result)
-    ? result as Record<string, unknown> : null;
-  if (row?.ok === false) return {
-    code: typeof row.reason_code === "string" && row.reason_code.trim()
-      ? row.reason_code.trim().slice(0, 180) : "community_memory_outcome_failed",
-    message: typeof row.message === "string" && row.message.trim()
-      ? row.message.trim().slice(0, 2_000) : "Memory outcome was refused.",
-  };
-  const outcome = row?.outcome && typeof row.outcome === "object" && !Array.isArray(row.outcome)
-    ? row.outcome as Record<string, unknown> : null;
-  const id = row?.outcome_observation_id;
-  return row?.ok === true && typeof id === "string" && id.trim() === id && id.length > 0 &&
-    id.length <= 180 && outcome?.id === id && typeof row.deduplicated === "boolean"
-    ? null : { code: "community_memory_outcome_acknowledgment_invalid", message: "Memory outcome acknowledgment is invalid." };
-}
-
 function mountedPath(communitySlug: string, localPath: string): string {
   return localPath === "/"
     ? `/communities/${communitySlug}/`
     : `/communities/${communitySlug}${localPath}`;
+}
+
+// The community agent (in an Ask or a tag) writes community notes in its own voice.
+function principalWritesNotes(principalKind: PolynetPrincipalKind): boolean {
+  return principalKind === "community_agent_for_member" || principalKind === "community_agent";
 }
 
 function virtualDirectory(args: {
@@ -746,9 +724,6 @@ function capabilityDocument(args: {
   evidenceSurface: CommunityEvidenceSurface;
   principalKind: PolynetPrincipalKind;
 }): Record<string, unknown> | null {
-  const isMemberCapability =
-    args.evidenceSurface !== "community_funnel_builder" &&
-    (MEMBER_CAPABILITIES as readonly string[]).includes(args.operation);
   // Builder decisions run only from a harness the founder operates directly. The native
   // community agent reads member-authored evidence and has no per-call human confirmation.
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
@@ -768,7 +743,7 @@ function capabilityDocument(args: {
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isMemberCapability && !isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability &&
+  if (!isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability &&
     !isMarkReadCapability && !isPresenceCapability && !isSiteDeployCapability) {
     return null;
   }
@@ -831,12 +806,6 @@ function capabilityDocument(args: {
         : ["record_denial", "seven_day_reapplication_cooldown"],
       forbidden_effects: ["paid_access", "restore_membership", "change_role", "bulk_decision",
         ...(args.operation === ADMISSION_APPROVE_OPERATION ? ["deny"] : ["grant_access", "extend_existing_cooldown", "send_email", "run_workflow"])],
-    };
-  } else if (args.operation === "community.memory.record_outcome") {
-    operationDefinition.input = {
-      required: ["retrieval_log_id", "node_id", "result_status"],
-      result_status: ["worked", "failed", "mixed"],
-      optional: ["notes"],
     };
   } else {
     operationDefinition.input = {
@@ -1154,53 +1123,33 @@ async function executeCanonicalList(args: {
       );
     }
   }
-  // Browsing memory returns the top accepted memories the member can read,
-  // recorded as a retrieval like a search so usefulness tracking still works.
+  // memory/ holds the community notes: everything the agent saved for everyone.
   if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH) {
-    if (args.principalKind === "community_agent") {
-      return { ok: true, value: virtualDirectory({ path: absolutePath, searchable: true, writable: false }) };
+    if (args.evidenceSurface === "community_funnel_builder") {
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }
-    const value = (await args.ctx.runMutation(
-      (internal as any).communityIntelligenceDirectory.searchCommunityMemoryInternal,
-      {
-        userId: args.userId,
-        authSubject: args.authSubject,
-        communityId: target.communityId,
-        surface: args.evidenceSurface,
-        limit: 12,
-        forceMemberView: true,
-        ...trustedMemberArgs(args),
-      },
-    )) as Record<string, unknown>;
-    if (value?.ok !== true) {
-      return canonicalError(String(value?.code ?? value?.reason_code ?? "community_memory_list_failed"), String(value?.message ?? "Community memory could not be listed."));
-    }
-    const nodes = Array.isArray(value.nodes) ? (value.nodes as Array<Record<string, unknown>>) : [];
+    const listed = (await args.ctx.runQuery((internal as any).communityNotes.listCommunityNotesInternal, {
+      communityId: target.communityId,
+      limit: typeof args.input.limit === "number" ? args.input.limit : 20,
+    })) as { notes: Array<Record<string, any>>; hasMore: boolean };
     return {
       ok: true,
-      value: {
-        ...virtualDirectory({
-          path: absolutePath,
-          entries: nodes.flatMap((node) => {
-            const nodeId = requiredString(node.node_id ?? node.id ?? node._id, 180);
-            return nodeId
-              // Keep the memory's own type (insight, example, ...), as search results do.
-              ? [{ ...node, path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${nodeId}.md`), kind: "document" }]
-              : [];
-          }),
-          truncated: value.truncated === true,
-          searchable: true,
-          writable: false,
-        }),
-        retrieval_id: value.retrieval_log_id ?? null,
-      },
+      value: virtualDirectory({
+        path: absolutePath,
+        entries: listed.notes.map((note) => ({
+          path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${note.slug}.md`),
+          kind: "document",
+          title: note.title,
+          updated_at: new Date(note.updatedAt).toISOString(),
+        })),
+        truncated: listed.hasMore,
+        searchable: true,
+        writable: principalWritesNotes(args.principalKind),
+      }),
     };
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
-      ...(args.evidenceSurface === "community_funnel_builder"
-        ? []
-        : MEMBER_CAPABILITIES),
       ...[REACT_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
         APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
@@ -1480,7 +1429,10 @@ async function executeCanonicalRead(args: {
         path: evidencePath({ communitySlug: target.communitySlug, channelSlug: item.channelSlug, sourceType: "interaction", ref: item.ref }),
       })),
     });
-    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore } };
+    // A timeline can include posts from private rooms the reader is in.
+    const privateRoom = timeline.items.some((item: any) => item.privateRoom === true);
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore,
+      ...(privateRoom ? { private_room: true } : {}) } };
   }
 
   // Who is online, and one member's profile, as JSON for a member's site or
@@ -1673,43 +1625,12 @@ async function executeCanonicalRead(args: {
 
   const memoryMatch = /^\/memory\/([A-Za-z0-9_-]+)\.md$/.exec(target.localPath);
   if (memoryMatch) {
-    try {
-      const value = (await args.ctx.runMutation(
-        (internal as any).communityIntelligenceDirectory
-          .readCommunityMemoryInternal,
-        {
-          userId: args.userId,
-          authSubject: args.authSubject,
-          communityId: target.communityId,
-          surface: args.evidenceSurface,
-          nodeId: memoryMatch[1],
-          forceMemberView: true,
-          ...trustedMemberArgs(args),
-        },
-      )) as Record<string, unknown>;
-      if (value?.ok !== true) {
-        return canonicalError(
-          String(value?.code ?? "semantic_not_found"),
-          String(value?.message ?? "Memory not found or not accessible."),
-          value,
-        );
-      }
-      return {
-        ok: true,
-        value: canonicalJsonDocument({
-          target,
-          localPath: target.localPath,
-          payload: value.node ?? value,
-          ref: `memory:${memoryMatch[1]}`,
-          retrievalId: value.retrieval_log_id,
-        }),
-      };
-    } catch (error) {
-      return canonicalError(
-        "semantic_not_found",
-        error instanceof Error ? error.message : "Memory not found.",
-      );
-    }
+    const note = args.evidenceSurface === "community_funnel_builder" ? null : (await args.ctx.runQuery(
+      (internal as any).communityNotes.readCommunityNoteInternal,
+      { communityId: target.communityId, slug: memoryMatch[1] },
+    )) as (CommunityNote | null);
+    if (!note) return canonicalError("semantic_not_found", "No note at that path. List memory/ for notes.");
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: renderCommunityNote(note), truncated: false } };
   }
 
   const capabilityMatch = /^\/capabilities\/([a-z0-9][a-z0-9._-]*)\.json$/.exec(
@@ -1908,54 +1829,26 @@ async function executeCanonicalSearch(args: {
       };
     }
     if (target.localPath.startsWith(POLYNET_MEMORY_DIRECTORY_PATH)) {
-      const requestedTypes = Array.isArray(args.input.types)
-        ? args.input.types
-            .map((value) => String(value ?? "").trim())
-            .filter((value) => MEMORY_TYPES.has(value))
-        : [];
-      const value = (await args.ctx.runMutation(
-        (internal as any).communityIntelligenceDirectory
-          .searchCommunityMemoryInternal,
-        {
-          ...common,
-          ...(requestedTypes.length ? { types: requestedTypes } : {}),
-          forceMemberView: true,
-          ...trustedMemberArgs(args),
-        },
-      )) as Record<string, unknown>;
-      if (value?.ok !== true) {
-        return canonicalError(
-          String(value?.code ?? value?.reason_code ?? "community_memory_search_failed"),
-          String(value?.message ?? "Community memory search failed."),
-          value,
-        );
+      if (args.evidenceSurface === "community_funnel_builder") {
+        return canonicalError("semantic_not_found", "Search path not found or not searchable.");
       }
-      const nodes = Array.isArray(value.nodes)
-        ? (value.nodes as Array<Record<string, unknown>>)
-        : [];
+      const found = (await args.ctx.runQuery((internal as any).communityNotes.searchCommunityNotesInternal, {
+        communityId: target.communityId,
+        query,
+        limit: typeof args.input.limit === "number" ? args.input.limit : 8,
+      })) as { notes: Array<Record<string, any>> };
       return {
         ok: true,
         value: {
           path: mountedPath(target.communitySlug, target.localPath),
-          results: nodes.map((node) => {
-            const nodeId = requiredString(
-              node.node_id ?? node.id ?? node._id,
-              180,
-            );
-            return {
-              ...node,
-              ...(nodeId
-                ? {
-                    path: mountedPath(
-                      target.communitySlug,
-                      `${POLYNET_MEMORY_DIRECTORY_PATH}${nodeId}.md`,
-                    ),
-                  }
-                : {}),
-            };
-          }),
-          truncated: value.truncated === true,
-          retrieval_id: value.retrieval_log_id ?? null,
+          results: found.notes.map((note) => ({
+            path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${note.slug}.md`),
+            title: note.title,
+            snippet: note.snippet,
+            updated_at: new Date(note.updatedAt).toISOString(),
+          })),
+          truncated: false,
+          ...(found.notes.length === 0 ? { hint: "No note matched. Notes match whole words: try one or two other keywords." } : {}),
         },
       };
     }
@@ -2005,6 +1898,23 @@ async function executeCanonicalSearch(args: {
   }
 }
 
+// A result from a room only some members can read, or from owner-only data,
+// says so (private_room), so an agent turn that saw it can't write a note.
+const PRIVATE_SOURCE_PATH = /^\/communities\/([a-z0-9-]+)\/(?:builder\/|channels\/([a-z0-9-]+)\/)/;
+
+async function markPrivateSource(
+  ctx: any,
+  rawPath: unknown,
+  result: Extract<PolynetCanonicalExecutionResult, { ok: true }>,
+): Promise<PolynetCanonicalExecutionResult> {
+  const match = PRIVATE_SOURCE_PATH.exec(String(rawPath ?? "").trim().replace(/\/{2,}/g, "/"));
+  if (!match || !result.value || typeof result.value !== "object") return result;
+  const isPrivate = !match[2] || await ctx.runQuery((internal as any).communityNotes.isRestrictedChannelInternal, {
+    communitySlug: match[1], channelSlug: match[2],
+  });
+  return isPrivate ? { ...result, value: { ...(result.value as Record<string, unknown>), private_room: true } } : result;
+}
+
 async function executeCanonicalWrite(args: {
   ctx: any;
   authSubject: string;
@@ -2031,6 +1941,56 @@ async function executeCanonicalWrite(args: {
   const content = omitNullishObjectFields(args.input.content);
   const mode = String(args.input.mode ?? "");
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
+
+  // Community notes: the agent saves what is worth sharing with everyone.
+  // memory/ takes a new note; memory/<note>.md takes an addition or a rewrite.
+  const noteMatch = /^\/memory\/([a-z0-9-]+)\.md$/.exec(target.localPath);
+  if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH || noteMatch) {
+    if (!principalWritesNotes(args.principalKind) || args.evidenceSurface === "community_funnel_builder") {
+      return canonicalError("community_write_forbidden", "Only the community agent writes community notes.");
+    }
+    const slug = noteMatch?.[1] ?? null;
+    if (slug ? mode !== "append" && mode !== "update" : mode !== "create") {
+      return canonicalError("invalid_tool_args", "Create a note on memory/ with content.title and content.text; append to or update a note on its memory/<note>.md path.");
+    }
+    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey });
+    if (!reservation.ok) return reservation.result;
+    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+    const written = (await args.ctx.runMutation((internal as any).communityNotes.writeCommunityNoteInternal, {
+      communityId: target.communityId,
+      mode,
+      ...(slug ? { slug } : {}),
+      ...(typeof content.title === "string" ? { title: content.title } : {}),
+      text: String(content.text ?? content.body ?? ""),
+      source: args.principalKind === "community_agent" ? "tag" : "ask",
+      operationKey: `${args.principalKind}:${args.userId}:${idempotencyKey}`,
+      // A tag runs on its sponsor's account, so only an Ask records whose turn it was.
+      ...(args.principalKind === "community_agent_for_member" ? { actorUserId: args.userId } : {}),
+    })) as { ok: boolean; slug?: string; title?: string; created?: boolean; code?: string; message?: string };
+    if (!written.ok) {
+      await failMutatingOperation({
+        ...args, target, toolName: "polynet_write", idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+        errorCode: written.code ?? "community_note_write_failed", errorMessage: written.message ?? "The note could not be saved.",
+      });
+      return canonicalError(written.code ?? "community_note_write_failed", written.message ?? "The note could not be saved.");
+    }
+    const responseValue = {
+      ok: true,
+      path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${written.slug}.md`),
+      title: written.title,
+      created: written.created === true,
+      deduped: false,
+      receipt: canonicalReceipt({ toolName: "polynet_write", principalKind: args.principalKind, target, idempotencyKey, deduped: false }),
+    };
+    return {
+      ok: true,
+      value: await completeMutatingOperation({
+        ...args, target, toolName: "polynet_write", idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken, value: responseValue,
+      }),
+    };
+  }
 
   const writableChannelPath = parseCommunityChannelSemanticPath(
     target.localPath,
@@ -2459,102 +2419,7 @@ async function executeCanonicalCall(args: {
       return canonicalError("admission_request_unavailable", "Admission request not available or decision not authorized.");
     }
   }
-  const candidate = String(input.result_status ?? "");
-  if (
-    candidate !== "worked" &&
-    candidate !== "failed" &&
-    candidate !== "mixed"
-  ) {
-    return canonicalError(
-      "invalid_tool_args",
-      "result_status must be worked, failed, or mixed.",
-    );
-  }
-  if (
-    !requiredString(input.retrieval_log_id, 180) ||
-    !requiredString(input.node_id, 180)
-  ) {
-    return canonicalError(
-      "invalid_tool_args",
-      "retrieval_log_id and node_id are required.",
-    );
-  }
-  const reservation = await reserveMutatingOperation({
-    ...args,
-    target,
-    toolName: "polynet_call",
-    idempotencyKey,
-  });
-  if (!reservation.ok) return reservation.result;
-  if (reservation.status === "completed") {
-    const value = reservation.completedValue;
-    const error = memoryOutcomeAcknowledgmentError(value.ok === true ? value.result : null);
-    return error ? canonicalError(error.code, error.message) : { ok: true, value };
-  }
-  try {
-    const result = (await args.ctx.runMutation(
-      (internal as any).communityIntelligenceDirectory
-        .recordCommunityOutcomeObservationInternal,
-      {
-        userId: args.userId,
-        authSubject: args.authSubject,
-        communityId: target.communityId,
-        surface: args.evidenceSurface,
-        retrievalLogId: String(input.retrieval_log_id ?? ""),
-        nodeId: String(input.node_id ?? ""),
-        resultStatus: candidate,
-        ...(input.notes ? { notes: String(input.notes) } : {}),
-        ...trustedMemberArgs(args),
-      },
-    )) as Record<string, unknown>;
-    const refusal = memoryOutcomeAcknowledgmentError(result);
-    if (refusal) {
-      await failMutatingOperation({ ...args, target, toolName: "polynet_call", idempotencyKey,
-        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
-        errorCode: refusal.code, errorMessage: refusal.message });
-      return canonicalError(refusal.code, refusal.message);
-    }
-    const deduped = result.deduplicated === true;
-    const responseValue = {
-      ok: true,
-      operation,
-      result,
-      deduped,
-      receipt: canonicalReceipt({
-        toolName: "polynet_call",
-        principalKind: args.principalKind,
-        target,
-        idempotencyKey,
-        deduped,
-      }),
-    };
-    return {
-      ok: true,
-      value: await completeMutatingOperation({
-        ...args,
-        target,
-        toolName: "polynet_call",
-        idempotencyKey,
-        requestFingerprint: reservation.requestFingerprint,
-        attemptToken: reservation.attemptToken,
-        value: responseValue,
-      }),
-    };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Polynet operation failed.";
-    await failMutatingOperation({
-      ...args,
-      target,
-      toolName: "polynet_call",
-      idempotencyKey,
-      requestFingerprint: reservation.requestFingerprint,
-      attemptToken: reservation.attemptToken,
-      errorCode: "polynet_call_failed",
-      errorMessage,
-    });
-    return canonicalError("polynet_call_failed", errorMessage);
-  }
+  return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
 }
 
 // community.site.deploy: decode the files, upload only what Cloudflare lacks,
@@ -2747,10 +2612,12 @@ export async function executePolynetCanonicalTool(args: {
     userId,
     input,
   };
-  if (args.toolName === "polynet_list")
-    return await executeCanonicalList(common);
-  if (args.toolName === "polynet_read")
-    return await executeCanonicalRead(common);
+  if (args.toolName === "polynet_list" || args.toolName === "polynet_read") {
+    const result = args.toolName === "polynet_list"
+      ? await executeCanonicalList(common)
+      : await executeCanonicalRead(common);
+    return result.ok ? await markPrivateSource(args.ctx, args.input.path, result) : result;
+  }
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);
   if (args.toolName === "polynet_write")

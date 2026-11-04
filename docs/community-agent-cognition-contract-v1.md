@@ -2558,3 +2558,38 @@ Three fixes from the November 3 staging eval (24 live questions, both engines).
 - The Pi engine lets a throw from the model call or a caller's hook escape
   unchanged, as the native loop does (callers branch on the thrown code, such
   as the rate limit and the run budget); a kernel parity test covers it.
+
+## Thirty-Ninth Implementation Slice: Community Notes
+
+Goal: one agent, and one simple shared memory. When the community agent learns
+something the whole community would want, it writes a short markdown note
+that everyone reads. This replaces the steward's scheduled memory pipeline
+(compiler digests, the status ladder, outcomes), which slice 40 deletes.
+
+- `communityNotes` holds one note per row: title, markdown body (at most 4,000
+  characters), source (`ask`, `tag`, `founder`, `migrated`), and who and when.
+  At most 500 notes per community. A note's path is `memory/<slug>.md`, where
+  the slug is its title in lowercase words.
+- `memory/` lists, reads and searches notes for every authorized reader
+  (members, a member's site, MCP harnesses and the agent). Only the community
+  agent writes them, from an Ask (`community_agent_for_member`) or a tag
+  (`community_agent`): `create` on `memory/` with a title and text, `append`
+  or `update` on a note's path. Retries are idempotent like channel writes.
+- The turn contract gains `notesWrites` (`agent` on ask, ask_in_conversation
+  and tag; `none` on steward). The sharing rules are in both agents'
+  instructions: community knowledge only; never private things about a
+  person, never anything from a private room or owner-only data, never what a
+  member asked to keep between them.
+- One lock in code: channel reads and searches mark anything from a restricted
+  room `private_room`, and every `builder/` read is marked the same way. Once
+  a turn has seen a marked result, `checkCommunityTurnToolCall` refuses
+  `memory/` writes for the rest of the turn with `private_source_read`. Member
+  timelines that include a private-room post are marked too. The conversation
+  records the user message at which it happened (`threads.privateSourceSeenAtSeq`),
+  and while that message is in a later turn's carried history the lock holds,
+  so "save that as a note" can't publish what an earlier answer quoted.
+- Ask recall, the repository-wide search, handbook drafting and the community
+  card (a note count) read notes. `community.memory.record_outcome` is removed:
+  notes have no usefulness ledger.
+- `communityNotes:migrateMemoryNodesToNotesInternal` (dry run first) copies the
+  old memory members could read into notes once.

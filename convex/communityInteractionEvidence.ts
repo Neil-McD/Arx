@@ -301,6 +301,9 @@ async function mapEvidenceSearchItem(args: {
     interaction_kind: args.root.kind ?? "discussion",
     channel_id: normalizeIdValue(args.channel._id) || null,
     channel_slug: args.channel.slug,
+    // From a room only some members can read: an agent turn that sees it can't
+    // write community notes (communityTurnContract).
+    ...(args.channel.accessMode === "restricted" ? { private_room: true } : {}),
     version: Math.max(1, Math.floor(Number(args.row.updatedAt) || 1)),
     visibility_scope: args.row.visibilityScope,
     title: normalizeOptionalText(args.root.title, 180),

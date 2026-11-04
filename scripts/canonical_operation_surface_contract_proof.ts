@@ -180,7 +180,7 @@ assert.doesNotMatch(
 );
 assert.match(repositorySearch, /searchRecentCommunityInteractionEvidenceInternal/);
 assert.match(repositorySearch, /searchRecentCommunityResourceEvidenceInternal/);
-assert.match(repositorySearch, /searchCommunityMemoryInternal/);
+assert.match(repositorySearch, /communityNotes\.searchCommunityNotesInternal/);
 assert.match(repositorySearch, /community_repository_search/);
 assert.doesNotMatch(
   repositorySearch,

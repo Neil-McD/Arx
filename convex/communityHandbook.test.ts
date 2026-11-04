@@ -85,7 +85,7 @@ test("draft sources: about text, channels, recurring events and shared posts, ne
   expect(loaded!.sources.map((source: any) => source.id)).toEqual(loaded!.sources.map((_: any, i: number) => `s${i + 1}`));
 });
 
-test("draft sources read lesson text from its contents table, and skip memory whose evidence is gone", async () => {
+test("draft sources read lesson text from its contents table and community notes", async () => {
   const t = convexTest(schema, modules);
   const f = await fixture(t);
   await t.run(async (ctx: any) => {
@@ -94,20 +94,22 @@ test("draft sources read lesson text from its contents table, and skip memory wh
       communityId: f.communityId, moduleId, type: "note", pinned: false, title: "First session", status: "published", role: "page", bodyChars: 34, sortOrder: 0, createdByUserId: f.owner, createdAt: NOW, updatedAt: NOW,
     });
     await ctx.db.insert("communityResourceContents", { communityId: f.communityId, resourceId, bodyMd: "Arrive at 5:20 and sign the waiver.", bodyChars: 34, bodyHash: "h", createdAt: NOW, updatedAt: NOW });
-    const node = (title: string, tags: string[]) => ctx.db.insert("communityIntelligenceNodes", {
-      communityId: f.communityId, type: "playbook", title, bodyMd: `${title} body`, status: "canonical", visibilityScope: "community", sourceVisibility: "community",
-      confidence: 0.9, evidenceStrength: "anecdotal", workflowIds: [], tags, sourceTraceIds: [], outcomeObservationIds: [], stalenessScore: 0, retrievalUsefulnessScore: 0,
+    await ctx.db.insert("communityNotes", {
+      communityId: f.communityId, slug: "bring-liquid-chalk", title: "Bring liquid chalk", bodyMd: "Liquid chalk under block chalk helps cold hands.",
+      source: "ask", searchText: "bring liquid chalk", createdAt: NOW, updatedAt: NOW,
+    });
+    // The old memory store no longer feeds the handbook.
+    await ctx.db.insert("communityIntelligenceNodes", {
+      communityId: f.communityId, type: "playbook", title: "Old memory node", bodyMd: "Old memory node body", status: "canonical", visibilityScope: "community", sourceVisibility: "community",
+      confidence: 0.9, evidenceStrength: "anecdotal", workflowIds: [], tags: [], sourceTraceIds: [], outcomeObservationIds: [], stalenessScore: 0, retrievalUsefulnessScore: 0,
       outcomeImpactScore: 0, createdByActorType: "member", lastUpdatedByActorType: "member", version: 1, createdAt: NOW, updatedAt: NOW,
     });
-    await node("Founder-written playbook", []);
-    // Compiler memory with no surviving evidence must not come back through the handbook.
-    await node("Orphaned compiler note", ["compiler_memory"]);
   });
   const loaded = await t.query(internal.communityHandbook.loadCommunityHandbookSourcesInternal, { communityId: f.communityId });
   const all = JSON.stringify(loaded!.sources);
   expect(all).toContain("Arrive at 5:20 and sign the waiver.");
-  expect(all).toContain("Founder-written playbook");
-  expect(all).not.toContain("Orphaned compiler note");
+  expect(all).toContain("Community note: Bring liquid chalk");
+  expect(all).not.toContain("Old memory node");
 });
 
 test("asking for a draft without AI funding fails cleanly and leaves the approved text alone", async () => {

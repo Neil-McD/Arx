@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
-import { canViewerReadNodeWithCurrentEvidence } from "./communityIntelligenceDirectory";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -190,15 +189,10 @@ export const loadCommunityHandbookSourcesInternal = internalQuery({
       }
     }
 
-    for (const status of ["canonical", "validated"] as const) {
-      const notes = await ctx.db.query("communityIntelligenceNodes").withIndex("by_community_status", (q) => q.eq("communityId", args.communityId).eq("status", status)).take(12);
-      for (const note of notes) {
-        // The same member-level check the memory reader uses, including that
-        // its evidence is still readable: a note never outlives its sources.
-        if (!(await canViewerReadNodeWithCurrentEvidence({ ctx, node: note as any, isManager: false }))) continue;
-        add(`Community memory: ${clip(note.title, 80)}`, `${note.title}. ${note.bodyMd}`);
-      }
-    }
+    // Community notes: what the agent saved for everyone, newest first.
+    const notes = await ctx.db.query("communityNotes")
+      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(12);
+    for (const note of notes) add(`Community note: ${clip(note.title, 80)}`, `${note.title}. ${note.bodyMd}`);
 
     // Posts: the founder's own, then the words that tend to answer handbook questions.
     const seenPosts = new Set<string>();
