@@ -434,10 +434,11 @@ export function withNewNotesSection(brief: FounderBrief, snapshot: FounderBriefS
   if (!snapshot.newNotes.count) return brief;
   const section = {
     title: "New community notes",
+    // Up to four titles; the count and where to review them always fit.
     items: [
-      ...snapshot.newNotes.titles.map((title) => `"${title}"`),
+      ...snapshot.newNotes.titles.slice(0, 4).map((title) => `"${title}"`),
       `The agent saved ${plural(snapshot.newNotes.count, "note")} for everyone. Edit or delete any of them in Studio, Knowledge → Notes.`,
-    ].slice(0, 5),
+    ],
   };
   const others = brief.sections.filter((existing) => existing.title !== section.title).slice(0, 4);
   return { ...brief, sections: [...others, section] };

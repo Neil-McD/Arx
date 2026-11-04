@@ -55,6 +55,10 @@ describe("founder brief writing", () => {
       "The agent saved 2 notes for everyone. Edit or delete any of them in Studio, Knowledge → Notes.",
     ] });
     expect(withNewNotesSection(fromModel, quiet)).toBe(fromModel);
+    const busy = { ...quiet, newNotes: { count: 8, titles: ["a", "b", "c", "d", "e"] } };
+    const items = withNewNotesSection(fromModel, busy).sections[4].items;
+    expect(items).toHaveLength(5);
+    expect(items[4]).toBe("The agent saved 8 notes for everyone. Edit or delete any of them in Studio, Knowledge → Notes.");
   });
 
   it("reads the founder's local date and hour", () => {
