@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 const PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200;
@@ -36,6 +36,12 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
   // A selection: approve or deny several at once, one request at a time underneath.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkDeciding, setBulkDeciding] = useState(false);
+  // A selection belongs to the requests on screen: each step checks the request
+  // is still pending here, so switching community or closing the panel stops it.
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  pendingIdsRef.current = new Set(pendingJoinRequests.map((request) => request.id));
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const joinRequestPanelId = useId();
   const pendingJoinRequestCount = visiblePendingJoinRequests.length;
   const canShowJoinRequests = Boolean(
@@ -80,9 +86,12 @@ export function CommunityJoinRequestReview(props: CommunityJoinRequestReviewProp
     if (!decide || bulkDeciding) return;
     setBulkDeciding(true);
     try {
-      for (const id of [...selected]) await decide(id);
+      for (const id of [...selected]) {
+        if (!mountedRef.current || !pendingIdsRef.current.has(id)) break;
+        await decide(id);
+      }
     } finally {
-      setBulkDeciding(false);
+      if (mountedRef.current) setBulkDeciding(false);
     }
   };
   const isBusy = isJoinRequestDecisionPending || bulkDeciding || Boolean(props.isLoadingJoinRequests);

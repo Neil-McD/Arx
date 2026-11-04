@@ -3230,6 +3230,8 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   expect(first, JSON.stringify(first)).toMatchObject({ ok: true, value: { succeeded: 2, failed: 1, results: [
     { request_ref: `join-request:${rows[0]!._id}`, ok: true }, { request_ref: `join-request:${rows[1]!._id}`, ok: true },
     { request_ref: `join-request:${rows[2]!._id}`, ok: false } ] } });
+  // The receipt records who decided: a moderator, in the moderator lens.
+  expect((first as any).value.results[0].receipt).toMatchObject({ authority_lane: "moderator", relation: "moderator" });
   const state = () => t.run(async ctx => ({
     pending: (await ctx.db.query("communityJoinRequests").collect()).length,
     receipts: (await ctx.db.query("polynetCanonicalOperationReceipts").collect()).length,

@@ -40,7 +40,9 @@ test("both member surfaces reuse one request renderer and existing decision hand
   expect(source).toContain("const isBusy = isJoinRequestDecisionPending || bulkDeciding || Boolean(props.isLoadingJoinRequests);");
   expect(source).toContain("isBusy || !props.onApproveJoinRequest");
   expect(source).toContain("isBusy || !props.onDenyJoinRequest");
-  expect(source).toContain("for (const id of [...selected]) await decide(id);");
+  expect(source).toContain("for (const id of [...selected]) {");
+  // It stops when the panel goes away or the request is no longer pending here.
+  expect(source).toContain("if (!mountedRef.current || !pendingIdsRef.current.has(id)) break;");
 });
 
 test("View all remains available while the roster loads; management no longer clutters the sidebar", async () => {
