@@ -60,10 +60,10 @@ for (const path of [
   "convex/communityAgentRuntime.ts",
 ]) {
   const source = read(path);
-  const callAt = source.indexOf("runNativeRuntimeKernel<");
+  const callAt = source.indexOf("runtimeKernel.run<");
   const budgetAt = source.indexOf("inputBudget:", callAt);
   const completionAt = source.indexOf("runCompletion:", callAt);
-  assert.ok(callAt >= 0, `${path} must call the shared native kernel`);
+  assert.ok(callAt >= 0, `${path} must call the selected shared kernel`);
   assert.ok(
     budgetAt > callAt && budgetAt < completionAt,
     `${path} must configure admission before its provider callback`,

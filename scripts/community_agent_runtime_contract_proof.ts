@@ -87,7 +87,7 @@ assert.match(
   /writeCommunityAgentFilesystemInternal[\s\S]*settleCommunityIntelligenceFromDigestItemsCore/,
   "runtime writes should land on the atomic settlement core",
 );
-assert.match(runtime, /runNativeRuntimeKernel<CommunityAgentToolName>/);
+assert.match(runtime, /selectRuntimeKernel\("steward"\)[\s\S]*runtimeKernel\.run<CommunityAgentToolName>/);
 assert.match(runtime, /parallelToolCalls: false/);
 assert.doesNotMatch(runtime, /beginCommunityInferenceFundingSession/);
 assert.match(runtime, /resolveCommunityInferenceModelForReceipt[\s\S]*community_autonomous_cognition:\$\{normalizeIdValue\(id\)\}/);
@@ -124,7 +124,7 @@ assert.match(
 );
 assert.match(
   runtime,
-  /snapshotJson[\s\S]*recordCommunityAgentStewardContextSnapshotInternal[\s\S]*if \(!contextSnapshot\?\.ok\)[\s\S]*runNativeRuntimeKernel/,
+  /snapshotJson[\s\S]*recordCommunityAgentStewardContextSnapshotInternal[\s\S]*if \(!contextSnapshot\?\.ok\)[\s\S]*runtimeKernel\.run/,
   "context persistence must succeed before the first provider-capable kernel step",
 );
 assert.doesNotMatch(

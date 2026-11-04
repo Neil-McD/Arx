@@ -108,7 +108,7 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   concierge + conciergeCore,
-  /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|runNativeRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,
+  /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|runNativeRuntimeKernel|selectRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,
   "Concierge intake must not call an LLM or create runtime runs",
 );
 assert.doesNotMatch(

@@ -45,7 +45,7 @@ import {
   type NativeToolInputContentPart,
   type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
-import { runNativeRuntimeKernel } from "../shared/runtimeKernel";
+import { selectRuntimeKernel } from "../shared/runtimeKernelEngine";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
   type RuntimeKernelBudget,
@@ -1514,7 +1514,17 @@ async function executeRetrievalAgentLoop(
         };
       }
     };
-    const loopResult = await runNativeRuntimeKernel<string>({
+    const runtimeKernel = selectRuntimeKernel("ask");
+    try {
+      await params.appendRunEvent({
+        eventType: "runtime_engine",
+        eventKey: `${params.runId}:runtime_engine:1`,
+        payload: { run_id: params.runId, engine: runtimeKernel.engine },
+      });
+    } catch {
+      // Best-effort receipt.
+    }
+    const loopResult = await runtimeKernel.run<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
       inputBudget: {

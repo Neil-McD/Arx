@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RUNTIME_KERNEL_ENGINES } from "./runtimeKernelEngines.ts";
 import {
   buildAssistantToolCallMessage,
   type NativeToolAwareMessage,
@@ -7,11 +8,10 @@ import {
   estimateNativeToolTranscriptTokens,
   projectProviderContextToBudget,
 } from "../shared/providerContextWindow.ts";
-import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
 import { sha256RuntimeProviderContext } from "../shared/runtimeProviderContextAttestation.ts";
 
-describe("runtime context projection", () => {
+describe.each(RUNTIME_KERNEL_ENGINES)("runtime context projection (%s engine)", (_engine, runKernel) => {
   it("is deterministic and never mutates the durable transcript", () => {
     const messages: NativeToolAwareMessage[] = [
       { role: "system", content: "Canonical policy." },
@@ -197,7 +197,7 @@ describe("runtime context projection", () => {
       rawArguments: JSON.stringify({ path: "/communities/example/members" }),
     });
     let providerCalls = 0;
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages: [
         { role: "system", content: "Canonical policy." },
         { role: "user", content: "Inspect the current members." },
@@ -253,7 +253,7 @@ describe("runtime context projection", () => {
     let providerCalls = 0;
     const triggers: string[] = [];
     const digests: string[] = [];
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages,
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
@@ -308,7 +308,7 @@ describe("runtime context projection", () => {
 
   it("fails closed before provider execution when projection evidence cannot persist", async () => {
     let providerCalls = 0;
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages: [
         { role: "system", content: "Canonical policy." },
         { role: "user", content: "x".repeat(2_400_000) },
@@ -357,7 +357,7 @@ describe("runtime context projection", () => {
   it("does not retry when provider-overflow projection cannot save tokens", async () => {
     let providerCalls = 0;
     let projectionRecords = 0;
-    const result = await runNativeRuntimeKernel({
+    const result = await runKernel({
       messages: [
         { role: "system", content: "Canonical policy." },
         { role: "user", content: "Current request cannot be omitted." },
