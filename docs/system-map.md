@@ -141,10 +141,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityResources` (10k lines, a known hot spot),
   `communityResourceContent`, `communityResourceEvidence*`,
   `communityResourceMemoryProjection`, `communitySourceUrlPolicy`,
-  `communityBuilderKnowledgeSetup`; Vercel `api/source-url-fetch.js`.
+  `communityBuilderKnowledgeSetup`, `communityLessonProgress` (lessons a member
+  marked done, private to them); Vercel `api/source-url-fetch.js`.
 - **Tables:** `communityResourceModules`, `communityResources`,
   `communityResourceContents`, `communitySourceUnits`, `communitySourceUnitContents`,
-  `communitySourceCrawlJobs`, `communityResourceBuilderChangesets`.
+  `communitySourceCrawlJobs`, `communityResourceBuilderChangesets`,
+  `communityLessonProgress`.
 
 ### 6. Events — Keep
 
