@@ -279,7 +279,7 @@ must evaluate every cited item independently.
 
 ### Lens Rules
 
-- Authorized external harness (the MCP, builders only): may traverse the
+- Authorized external harness (the MCP, each role in its own lens): may traverse the
   requesting user's authorized communities, one server-validated community
   context per evidence request.
 - The community agent acting for a member (Agent page, a site's `/ask`): one

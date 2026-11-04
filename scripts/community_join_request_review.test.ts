@@ -36,8 +36,11 @@ test("both member surfaces reuse one request renderer and existing decision hand
   expect(source.match(/const renderJoinRequest =/g)).toHaveLength(1);
   expect(read("ChannelRosterPanel.tsx")).toContain("<CommunityJoinRequestReview {...props.joinReview}");
   expect(read("WebCommunityInteractionProjection.tsx")).toContain("onApproveJoinRequest: props.onApproveCommunityJoinRequest");
-  expect(source).toContain("isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onApproveJoinRequest");
-  expect(source).toContain("isJoinRequestDecisionPending || props.isLoadingJoinRequests || !props.onDenyJoinRequest");
+  // A selection decides through the same handlers, one request at a time.
+  expect(source).toContain("const isBusy = isJoinRequestDecisionPending || bulkDeciding || Boolean(props.isLoadingJoinRequests);");
+  expect(source).toContain("isBusy || !props.onApproveJoinRequest");
+  expect(source).toContain("isBusy || !props.onDenyJoinRequest");
+  expect(source).toContain("for (const id of [...selected]) await decide(id);");
 });
 
 test("View all remains available while the roster loads; management no longer clutters the sidebar", async () => {

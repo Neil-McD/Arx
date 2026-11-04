@@ -363,7 +363,7 @@ function buildLlmsTxt(index: ProductDocsIndex): string {
     "## Platform Value Prop",
     "",
     "Polynet lets founders build communities that can think, remember, and act with AI.",
-    "Each community has one community agent that acts for each member inside that member's permissions, alongside chat, resources, events, accepted memory, access control, payments, and the official builder-only Polynet MCP.",
+    "Each community has one community agent that acts for each member inside that member's permissions, alongside chat, resources, events, accepted memory, access control, payments, and the official Polynet MCP.",
     "",
     "## Retrieval Rule",
     "",

@@ -2682,13 +2682,9 @@ test("admission queue bounds, cursor scope and empty termination fail closed", a
   expect(await f.call("polynet_list", { path: admissionQueuePath, cursor: JSON.stringify(tampered) })).toMatchObject({ ok: false });
 });
 
-test.each(["member", "moderator", "applicant", "outsider", "community_agent"])("admission queue denies %s list and detail", async mode => {
+test.each(["member", "applicant", "outsider", "community_agent"])("admission queue denies %s list and detail", async mode => {
   const t = convexTest(schema, modules); const f = await admissionFixture(t);
   let actor = { userId: f.memberId, authSubject: f.memberSubject };
-  if (mode === "moderator") await t.run(async ctx => {
-    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique();
-    await ctx.db.patch(membership!._id, { role: "moderator" });
-  });
   if (mode === "applicant") actor = await t.run(async ctx => ({ userId: (await ctx.db.get(f.requests[0]))!.userId, authSubject: "applicant-0" }));
   if (mode === "outsider") actor = await t.run(async ctx => ({ userId: await ctx.db.insert("users", { authSubject: "outsider", createdAt: 1, updatedAt: 1 }), authSubject: "outsider" }));
   if (mode === "community_agent") actor = { userId: f.ownerId, authSubject: f.ownerSubject };
@@ -2782,9 +2778,10 @@ async function approvalFixture(t: ReturnType<typeof convexTest>, operation = "ap
   return { ...f, row, input, call, snapshot };
 }
 
-test.each(["owner", "admin"])("fresh admission %s grants once, stores a historical result and cannot restore revoked access", async role => {
+test.each(["owner", "admin", "moderator"])("fresh admission %s grants once, stores a historical result and cannot restore revoked access", async role => {
   const t = convexTest(schema, modules); const f = await approvalFixture(t);
-  const actor = role === "owner" ? { userId: f.ownerId, authSubject: f.ownerSubject } : f.admin;
+  if (role === "moderator") await makeModerator(t, f);
+  const actor = role === "owner" ? { userId: f.ownerId, authSubject: f.ownerSubject } : role === "admin" ? f.admin : { userId: f.memberId, authSubject: f.memberSubject };
   const approve = (request = f.input) => f.call(request, actor);
   const capability = await approve();
   expect(capability, JSON.stringify(capability)).toMatchObject({ ok: true, value: { deduped: false, result: { status: "approved" } } });
@@ -2804,13 +2801,9 @@ test.each(["owner", "admin"])("fresh admission %s grants once, stores a historic
   expect(await f.snapshot()).toEqual(revoked);
 });
 
-test.each(["member", "moderator", "applicant", "outsider", "community_agent"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation denies $mode without any mutation", async ({ mode, operation }) => {
+test.each(["member", "applicant", "outsider", "community_agent"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation denies $mode without any mutation", async ({ mode, operation }) => {
   const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   let actor = { userId: f.memberId, authSubject: f.memberSubject };
-  if (mode === "moderator") await t.run(async ctx => {
-    const row = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique())!;
-    await ctx.db.patch(row._id, { role: "moderator" });
-  });
   if (mode === "applicant") actor = { userId: f.row.userId, authSubject: "applicant-0" };
   if (mode === "outsider") actor = await t.run(async ctx => ({ userId: await ctx.db.insert("users", { authSubject: "outsider", createdAt: 1, updatedAt: 1 }), authSubject: "outsider" }));
   if (mode === "community_agent") actor = { userId: f.ownerId, authSubject: f.ownerSubject };
@@ -3206,4 +3199,88 @@ test("the Ask agent can't react or submit a form for the member; the member's ow
     input: { operation: "community.interaction.react", version: 1, target: "/communities/canonical-community/capabilities/community.interaction.react.json",
       input: { ref: "interaction:root:abc", emoji: "🔥" }, idempotency_key: "react-1" },
   })).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
+});
+
+async function makeModerator(t: ReturnType<typeof convexTest>, f: { communityId: any; memberId: any }) {
+  await t.run(async ctx => {
+    const row = (await (ctx.db as any).query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique())!;
+    await ctx.db.patch(row._id, { role: "moderator" });
+  });
+}
+
+test("a moderator reviews a selection of join requests: each is decided on its own, with its own receipt", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const f = await admissionFixture(t, 4);
+  await t.run(ctx => ctx.db.patch(f.communityId, { entryPolicy: "approval" }));
+  await makeModerator(t, f);
+  const moderator = { userId: f.memberId, authSubject: f.memberSubject };
+  // The moderator's builder/ holds only the join requests.
+  const builder = await f.call("polynet_list", { path: "/communities/canonical-community/builder/" }, moderator);
+  expect(builder.ok && (builder.value.entries as any[]).map(e => e.path)).toEqual(["/communities/canonical-community/builder/join-requests/"]);
+  const rows = await t.run(async ctx => Promise.all(f.requests.map(id => ctx.db.get(id))));
+  const observed = (row: any) => ({ request_ref: `join-request:${row._id}`, expected_created_at: new Date(row.createdAt).toISOString(),
+    expected_updated_at: new Date(row.updatedAt).toISOString() });
+  // One of the three has moved on since it was observed: only that one is refused.
+  const stale = { ...observed(rows[2]), expected_updated_at: new Date(rows[2]!.updatedAt + 1).toISOString() };
+  const call = (input: Record<string, unknown>, key = "approve-three") => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject: moderator.authSubject })), ...moderator, principalKind: "external_mcp", evidenceSurface: "external_mcp",
+    toolName: "polynet_call", input: { operation: "community.admission.approve", version: 1, target: admissionApprovalPath, input, idempotency_key: key } });
+  const first = await call({ requests: [observed(rows[0]), observed(rows[1]), stale] });
+  expect(first, JSON.stringify(first)).toMatchObject({ ok: true, value: { succeeded: 2, failed: 1, results: [
+    { request_ref: `join-request:${rows[0]!._id}`, ok: true }, { request_ref: `join-request:${rows[1]!._id}`, ok: true },
+    { request_ref: `join-request:${rows[2]!._id}`, ok: false } ] } });
+  const state = () => t.run(async ctx => ({
+    pending: (await ctx.db.query("communityJoinRequests").collect()).length,
+    receipts: (await ctx.db.query("polynetCanonicalOperationReceipts").collect()).length,
+  }));
+  const after = await state();
+  expect(after.pending).toBe(2);
+  // The same call again decides nothing twice.
+  const again = await call({ requests: [observed(rows[0]), observed(rows[1]), stale] });
+  expect(again).toMatchObject({ ok: true, value: { succeeded: 2, results: [{ ok: true, deduped: true }, { ok: true, deduped: true }, { ok: false }] } });
+  expect(await state()).toEqual(after);
+  // Selections are bounded, distinct and exact.
+  expect(await call({ requests: [] }, "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await call({ requests: [observed(rows[3]), observed(rows[3])] }, "k2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await call({ requests: Array.from({ length: 51 }, () => observed(rows[3])) }, "k3")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await call({ requests: [observed(rows[3])], extra: true }, "k4")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await call({ requests: [observed(rows[3])] }, "k".repeat(136))).toMatchObject({ ok: false, code: "invalid_tool_args" });
+});
+
+test("moderators remove a selection of posts through their own AI; members and the agent can't", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const as = (subject: string, userId: any, principalKind: any = "external_mcp") => (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind,
+    evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "community_concierge",
+    ...(principalKind === "community_agent" ? { mountedCommunityId: f.communityId } : {}), toolName, input });
+  const owner = as(f.ownerSubject, f.ownerId);
+  const member = as(f.memberSubject, f.memberId);
+  const refs: string[] = [];
+  for (const [i, text] of ["one", "two", "three"].entries()) {
+    const posted = await owner("polynet_write", { path: "/communities/canonical-community/channels/general/", mode: "create", content: { text }, idempotency_key: `post-${i}` });
+    expect(posted.ok, JSON.stringify(posted)).toBe(true);
+    refs.push((posted as any).value.ref);
+  }
+  const remove = (who: any, selection: unknown, key = "remove") => who("polynet_call", { operation: "community.interaction.remove", version: 1,
+    target: "/communities/canonical-community/capabilities/community.interaction.remove.json", input: { refs: selection }, idempotency_key: key });
+  const capabilities = async (who: any) => ((await who("polynet_list", { path: "/communities/canonical-community/capabilities/" })).value.entries as any[])
+    .map(e => String(e.path).split("/").pop());
+  // A plain member neither sees nor runs it; nor does the community agent.
+  expect(await capabilities(member)).not.toContain("community.interaction.remove.json");
+  expect(await remove(member, refs.slice(0, 1))).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await remove(as(f.ownerSubject, f.ownerId, "community_agent"), refs.slice(0, 1))).toMatchObject({ ok: false, code: "operation_not_found" });
+  await makeModerator(t, f);
+  expect(await capabilities(member)).toEqual(expect.arrayContaining(["community.interaction.remove.json", "community.admission.approve.json"]));
+  const removed = await remove(member, [refs[0], refs[1], "interaction:root:nosuchpost"]);
+  expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { succeeded: 2, failed: 1, results: [
+    { ref: refs[0], ok: true, removed: true }, { ref: refs[1], ok: true, removed: true }, { ref: "interaction:root:nosuchpost", ok: false } ] } });
+  // Removing again is still removed.
+  expect(await remove(member, [refs[0]], "again")).toMatchObject({ ok: true, value: { succeeded: 1, results: [{ already_removed: true }] } });
+  const live = await t.run(async ctx => (await ctx.db.query("communityInteractionRoots").collect()).filter(r => r.status === "live").length);
+  expect(live).toBe(1);
+  expect(await remove(member, [], "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await remove(member, [refs[2], refs[2]], "k2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await remove(member, ["not-a-ref"], "k3")).toMatchObject({ ok: false, code: "invalid_tool_args" });
 });

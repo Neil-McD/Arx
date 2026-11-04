@@ -6,7 +6,7 @@ Use it to choose the smallest relevant document before reading full context.
 ## Platform Value Prop
 
 Polynet lets founders build communities that can think, remember, and act with AI.
-Each community has one community agent that acts for each member inside that member's permissions, alongside chat, resources, events, accepted memory, access control, payments, and the official builder-only Polynet MCP.
+Each community has one community agent that acts for each member inside that member's permissions, alongside chat, resources, events, accepted memory, access control, payments, and the official Polynet MCP.
 
 ## Retrieval Rule
 
@@ -25,7 +25,7 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `primitives/memory` (Primitives) — Community Memory: Accepted community-owned intelligence and its evidence boundary.
 - `primitives/join-page` (Primitives) — Join Page: The community's one public join page (/c/<slug>) for joining, approval, sign-in, and checkout.
 - `primitives/voice` (Primitives) — Voice: Voice input as a core member interaction surface.
-- `primitives/polynet-mcp` (Primitives) — Polynet MCP: The official builder-only gateway for external AI harnesses into authorized Polynet context.
+- `primitives/polynet-mcp` (Primitives) — Polynet MCP: The official gateway for anyone's external AI harness into the Polynet context their role allows.
 - `primitives/community-site` (Primitives) — Community Site: A community's own website on polynet.page, built with @polynet/cli; staging only for now.
 - `primitives/resource` (Primitives) — Resource: Community-owned durable knowledge available to members and agents where allowed.
 - `primitives/entitlement` (Primitives) — Entitlement: Durable backend access truth for products, communities, plans, and capabilities.
@@ -34,7 +34,7 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `guides/launch-a-community` (Builder Guides) — Launch A Community: How to create, configure, gate, and share a community through its join page.
 - `guides/manage-resources` (Builder Guides) — Manage Resources: How builders should curate community knowledge without confusing it with private memory.
 - `guides/configure-community-agent` (Builder Guides) — Configure Community Agent: How builders shape the community agent with instructions and resources.
-- `guides/connect-polynet-mcp` (Builder Guides) — Connect Polynet MCP: How to connect your own AI harness to the official, builder-only Polynet MCP.
+- `guides/connect-polynet-mcp` (Builder Guides) — Connect Polynet MCP: How to connect your own AI harness to the official Polynet MCP.
 - `guides/manage-access-billing-and-roles` (Builder Guides) — Manage Access, Billing, And Roles: The builder mental model for entitlements, payments, and roles.
 - `guides/member-quickstart` (Member Guides) — Member Quickstart: How members join, use communities, and talk with the community agent.
 - `guides/joining-communities` (Member Guides) — Joining Communities: How members should understand the join page, access, and joining.

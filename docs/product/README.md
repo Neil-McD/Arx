@@ -35,7 +35,7 @@ The product combines:
 - the join page as the one public entry path, with access and billing decided
   by the backend
 - one canonical five-operation Polynet repository contract, shared by the
-  community agent and the official (builder-only) Polynet MCP
+  community agent and the official Polynet MCP
 - community sites on `polynet.page` (staging only for now)
 
 ## Documentation Rules

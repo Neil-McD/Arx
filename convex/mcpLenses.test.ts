@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import schema from "./schema";
-import { handleMcpPost, mcpTargetCommunitySlug } from "./httpMcp";
+import { handleMcpPost } from "./httpMcp";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const modules = import.meta.glob("./**/*.*s");
@@ -49,6 +49,7 @@ async function fixture() {
           userId, documentKey: document.key, documentVersion: document.version, acceptedAt: nowMs, source: "test", createdAt: nowMs,
         });
       }
+      await ctx.db.insert("userProfileDetails", { userId, displayName: handle, avatarUrl: `https://example.com/${handle}.png`, createdAt: nowMs, updatedAt: nowMs });
       return userId;
     };
     const owner = await user("owner");
@@ -86,35 +87,45 @@ async function fixture() {
   return { call };
 }
 
-test("the Polynet MCP is for builders: members and outsiders are refused", async () => {
+test("every member reaches the MCP in their own lens; outsiders find nothing", async () => {
   const f = await fixture();
-  // A member of run-club who builds nothing is told the MCP is for builders.
+  // A member of run-club reads their community as a member: no builder/ in it.
   const memberCall = await f.call("member", "polynet_list", { path: "/communities/run-club/" });
-  expect(memberCall.isError).toBe(true);
-  expect(memberCall.content[0].text).toContain("builder_only");
-  // The outsider builds other-club, but run-club isn't theirs: it isn't even found.
+  expect(memberCall.isError).toBe(false);
+  expect(memberCall.structuredContent.authority).toEqual({ lane: "member", relation: "member" });
+  expect(JSON.stringify(memberCall.structuredContent.entries)).not.toContain("/builder/");
+  expect((await f.call("member", "polynet_list", { path: "/communities/run-club/builder/" })).content[0].text).toContain("semantic_not_found");
+  // Posting works in the member lens.
+  const posted = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+    content: { text: "Morning run at 7" }, idempotency_key: "member-post" });
+  expect(posted.isError, JSON.stringify(posted)).toBe(false);
+  // Someone who isn't in run-club gets nothing from it.
   const outsiderCall = await f.call("outsider", "polynet_list", { path: "/communities/run-club/" });
   expect(outsiderCall.isError).toBe(true);
   expect(outsiderCall.content[0].text).toContain("semantic_not_found");
+  // The communities directory lists what the caller belongs to, with their role.
   const member = await f.call("member", "polynet_list", { path: "/communities/" });
-  expect(member.content[0].text).toContain("builder_only");
+  expect(member.structuredContent.entries.map((entry: any) => [entry.path, entry.role])).toEqual([["/communities/run-club/", "member"]]);
 });
 
-test("a builder works on its own community and sees only the communities it builds", async () => {
+test("a builder works on its own community in the builder lens and on others as a member", async () => {
   const f = await fixture();
   const own = await f.call("owner", "polynet_list", { path: "/communities/run-club/" });
   expect(own.isError).toBe(false);
-  // The owner is only a member of other-club: that community is off limits and hidden.
-  expect((await f.call("owner", "polynet_list", { path: "/communities/other-club/" })).content[0].text).toContain("builder_only");
-  const listed = await f.call("owner", "polynet_list", { path: "/communities/" });
-  expect(listed.structuredContent.entries.map((entry: any) => [entry.path, entry.role])).toEqual([["/communities/run-club/", "owner"]]);
-});
-
-test("the targeted community comes from the path or the call target", () => {
-  expect(mcpTargetCommunitySlug({ path: "/communities/run-club/channels/general/" })).toBe("run-club");
-  expect(mcpTargetCommunitySlug({ target: "/communities/run-club/capabilities/community.site.deploy.json" })).toBe("run-club");
-  expect(mcpTargetCommunitySlug({ path: "/communities/" })).toBeNull();
-  expect(mcpTargetCommunitySlug({ path: "/users/me" })).toBeNull();
+  expect(own.structuredContent.authority).toEqual({ lane: "builder", relation: "owner" });
+  // In other-club the owner is only a member.
+  const other = await f.call("owner", "polynet_list", { path: "/communities/other-club/" });
+  expect(other.structuredContent.authority).toEqual({ lane: "member", relation: "member" });
+  // Communities it owns come first, then the ones it belongs to, a page at a time.
+  const entries: any[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: any = await f.call("owner", "polynet_list", { path: "/communities/", ...(cursor ? { cursor } : {}) });
+    entries.push(...page.structuredContent.entries);
+    cursor = page.structuredContent.next_cursor;
+  } while (cursor);
+  expect(entries.map((entry: any) => [entry.path, entry.role]).sort()).toEqual([
+    ["/communities/other-club/", "member"], ["/communities/run-club/", "owner"]]);
 });
 
 // Pages that pass the site checks: language, title, zoomable viewport; the frame
@@ -174,6 +185,6 @@ test("site deploys through the MCP are bounded static sites", async () => {
   expect(failed.content[0].text).toContain("lang");
   expect(failed.content[0].text).toContain("no frame.html");
   expect(calls).toEqual([]);
-  // A member's agent can't deploy: the MCP is builder-only.
-  expect((await f.call("member", "polynet_call", deploy({ "/index.html": { content: "x" } }, "k6"))).content[0].text).toContain("builder_only");
+  // A member's agent can't deploy: it isn't in the member lens.
+  expect((await f.call("member", "polynet_call", deploy({ "/index.html": { content: "x" } }, "k6"))).content[0].text).toContain("operation_not_found");
 });

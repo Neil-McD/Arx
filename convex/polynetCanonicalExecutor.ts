@@ -70,6 +70,21 @@ type PolynetMutatingToolName = "polynet_write" | "polynet_call";
 const ADMISSION_APPROVE_OPERATION = "community.admission.approve";
 const ADMISSION_DENY_OPERATION = "community.admission.deny";
 const ADMISSION_OPERATIONS = [ADMISSION_APPROVE_OPERATION, ADMISSION_DENY_OPERATION];
+const REMOVE_POSTS_OPERATION = "community.interaction.remove";
+// Actions take a selection: up to this many items, each decided on its own.
+const SELECTION_MAX = 50;
+
+// Each item of a selection gets its own receipt key, derived from the call's key.
+// Ids are at most 64 characters, so a key up to SELECTION_KEY_MAX always fits.
+const SELECTION_KEY_MAX = 135;
+function selectionItemKey(idempotencyKey: string, itemId: string): string {
+  return `${idempotencyKey}:${itemId}`;
+}
+
+function selectionResult(results: Array<{ ok: boolean } & Record<string, unknown>>) {
+  const succeeded = results.filter(result => result.ok).length;
+  return { results, succeeded, failed: results.length - succeeded };
+}
 const APPROVE_MILESTONE_OPERATION = "community.workflow.approve_milestone";
 // A builder's own agent publishes the community's site by handing over its files.
 const SITE_DEPLOY_OPERATION = "community.site.deploy";
@@ -726,11 +741,16 @@ function capabilityDocument(args: {
   evidenceSurface: CommunityEvidenceSurface;
   principalKind: PolynetPrincipalKind;
 }): Record<string, unknown> | null {
-  // Builder decisions run only from a harness the founder operates directly. The native
-  // community agent reads member-authored evidence and has no per-call human confirmation.
+  // Decisions about people and others' posts run only from a harness the
+  // person operates directly (the moderator lens: owners, admins, moderators).
+  // The native community agent reads member-authored evidence and has no
+  // per-call human confirmation.
   const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface === "external_mcp" &&
-    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
+    args.principalKind === "external_mcp" && args.target.authority.canReviewJoinRequests;
+  const isRemovePostsCapability = args.operation === REMOVE_POSTS_OPERATION &&
+    args.evidenceSurface === "external_mcp" &&
+    args.principalKind === "external_mcp" && args.target.authority.canModerateContent;
   // Submitting a form and reacting speak for the member, so only the member's
   // own tools do them (their site, their MCP harness); the community agent in
   // an Ask helps fill a form or suggests a reaction, and the member acts.
@@ -751,7 +771,7 @@ function capabilityDocument(args: {
   const isSiteDeployCapability = args.operation === SITE_DEPLOY_OPERATION &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  if (!isAdmissionCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
+  if (!isAdmissionCapability && !isRemovePostsCapability && !isFormCapability && !isWorkflowApprovalCapability && !isReactCapability && !isLessonDoneCapability &&
     !isMarkReadCapability && !isPresenceCapability && !isSiteDeployCapability) {
     return null;
   }
@@ -760,10 +780,16 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isAdmissionCapability || isWorkflowApprovalCapability || isSiteDeployCapability ? "builder" : "member",
+    authority_lane: isWorkflowApprovalCapability || isSiteDeployCapability ? "builder"
+      : isAdmissionCapability || isRemovePostsCapability ? "moderator" : "member",
     idempotency_required: true,
   };
-  if (isReactCapability) {
+  if (isRemovePostsCapability) {
+    operationDefinition.input = { required: ["refs"],
+      refs: `a selection of 1 to ${SELECTION_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
+      result: "{ results: [{ ref, ok, removed | code, message }], succeeded, failed }: each post is removed or refused on its own; one already removed counts as removed",
+      effects: ["remove_posts_for_everyone"], forbidden_effects: ["edit_posts", "ban_authors", "remove_from_other_communities"] };
+  } else if (isReactCapability) {
     operationDefinition.input = { required: ["ref", "emoji", "on"],
       ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
       emoji: "up to 32 characters", on: "true adds your reaction, false removes it",
@@ -809,14 +835,14 @@ function capabilityDocument(args: {
       maximum_document_chars: 24_000, guidance: "Submission acknowledges answers; read canonical context separately for progress." };
   } else if (isAdmissionCapability) {
     operationDefinition.input = {
-      required: ["request_ref", "expected_created_at", "expected_updated_at"],
-      request_ref: "exact join-request reference from the pending queue",
-      expected_created_at: "exact canonical ISO timestamp from the pending request",
-      expected_updated_at: "exact canonical ISO timestamp from the pending request",
+      required: ["requests"],
+      requests: `a selection of 1 to ${SELECTION_MAX} { request_ref, expected_created_at, expected_updated_at }, each copied exactly from the pending queue (join-request:<id> and its ISO timestamps)`,
+      result: "{ results: [{ request_ref, ok, ... | code, message }], succeeded, failed }: each request is decided on its own",
+      also_accepted: "one request as request_ref, expected_created_at and expected_updated_at at the top level",
       effects: args.operation === ADMISSION_APPROVE_OPERATION
         ? ["grant_fresh_free_member_access", "record_approval", "existing_activation_workflows_and_access_email"]
         : ["record_denial", "seven_day_reapplication_cooldown"],
-      forbidden_effects: ["paid_access", "restore_membership", "change_role", "bulk_decision",
+      forbidden_effects: ["paid_access", "restore_membership", "change_role",
         ...(args.operation === ADMISSION_APPROVE_OPERATION ? ["deny"] : ["grant_access", "extend_existing_cooldown", "send_email", "run_workflow"])],
     };
   } else {
@@ -1163,7 +1189,7 @@ async function executeCanonicalList(args: {
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
       ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, FORM_SUBMIT_OPERATION,
-        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
+        APPROVE_MILESTONE_OPERATION, ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, SITE_DEPLOY_OPERATION].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -1184,7 +1210,7 @@ async function executeCanonicalList(args: {
     };
   }
   if (target.localPath === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH) {
-    if (!target.authority.canUseBuilderProjection || args.principalKind === "community_agent") {
+    if (!target.authority.canReviewJoinRequests || args.principalKind === "community_agent") {
       return canonicalError("semantic_not_found", "Community path not found or not accessible.");
     }
     try {
@@ -1205,18 +1231,23 @@ async function executeCanonicalList(args: {
     }
   }
   if (target.localPath === POLYNET_BUILDER_DIRECTORY_PATH) {
-    if (!target.authority.canUseBuilderProjection) {
+    if (!target.authority.canUseBuilderProjection && !target.authority.canReviewJoinRequests) {
       return canonicalError(
         "semantic_not_found",
         "Community path not found or not accessible.",
       );
+    }
+    const joinRequests = { path: mountedPath(target.communitySlug, POLYNET_JOIN_REQUESTS_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Pending admission requests" };
+    // A moderator's builder/ holds only the join requests they review.
+    if (!target.authority.canUseBuilderProjection) {
+      return { ok: true, value: virtualDirectory({ path: absolutePath, entries: [joinRequests] }) };
     }
     return {
       ok: true,
       value: virtualDirectory({
         path: absolutePath,
         entries: [
-          { path: mountedPath(target.communitySlug, POLYNET_JOIN_REQUESTS_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Pending admission requests" },
+          joinRequests,
           { path: mountedPath(target.communitySlug, WORKFLOW_MEMBERS_DIRECTORY), kind: "directory", type: "builder", name: "Member workflow context and form responses" },
           {
             path: mountedPath(
@@ -1317,7 +1348,7 @@ async function executeCanonicalList(args: {
   }
   if (target.localPath !== "/") return { ok: true, value };
   const rawEntries = Array.isArray(value.entries) ? value.entries : [];
-  const builderEntry = target.authority.canUseBuilderProjection
+  const builderEntry = target.authority.canUseBuilderProjection || target.authority.canReviewJoinRequests
     ? [
         {
           path: mountedPath(
@@ -1504,7 +1535,7 @@ async function executeCanonicalRead(args: {
 
   if (target.localPath.startsWith(POLYNET_JOIN_REQUESTS_DIRECTORY_PATH)) {
     const match = /^\/builder\/join-requests\/([A-Za-z0-9]+)\.md$/.exec(target.localPath);
-    if (!match || !target.authority.canUseBuilderProjection || args.principalKind === "community_agent") {
+    if (!match || !target.authority.canReviewJoinRequests || args.principalKind === "community_agent") {
       return canonicalError("semantic_not_found", "Community path not found or not accessible.");
     }
     try {
@@ -2432,31 +2463,81 @@ async function executeCanonicalCall(args: {
     if (args.principalKind !== "external_mcp") {
       return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
     }
-    const match = typeof rawInput.request_ref === "string" ? /^join-request:([A-Za-z0-9]+)$/.exec(rawInput.request_ref) : null;
     const timestamp = (value: unknown): number | null => {
       if (typeof value !== "string" || value.length !== 24) return null;
       const ms = Date.parse(value);
       return Number.isSafeInteger(ms) && new Date(ms).toISOString() === value ? ms : null;
     };
-    const createdAt = timestamp(rawInput.expected_created_at);
-    const updatedAt = timestamp(rawInput.expected_updated_at);
+    const ADMISSION_KEYS = ["request_ref", "expected_created_at", "expected_updated_at"];
+    const parseRequest = (raw: unknown) => {
+      const item = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+      const match = typeof item.request_ref === "string" ? /^join-request:([A-Za-z0-9]+)$/.exec(item.request_ref) : null;
+      const createdAt = timestamp(item.expected_created_at);
+      const updatedAt = timestamp(item.expected_updated_at);
+      return match && createdAt !== null && updatedAt !== null && Object.keys(item).every(key => ADMISSION_KEYS.includes(key))
+        ? { requestRef: String(item.request_ref), requestId: match[1], createdAt, updatedAt } : null;
+    };
+    // One request at the top level, or a selection under requests.
+    const single = !("requests" in rawInput);
+    const items = single ? [rawInput] : rawInput.requests;
+    const requests = Array.isArray(items) ? items.map(parseRequest) : [];
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
-        !match || createdAt === null || updatedAt === null ||
-        Object.keys(rawInput).some(key => !["request_ref", "expected_created_at", "expected_updated_at"].includes(key))) {
-      return canonicalError("invalid_tool_args", "An exact capability target and observed pending request reference/timestamps are required.");
+        !requests.length || requests.length > SELECTION_MAX || requests.some(request => !request) ||
+        (!single && idempotencyKey.length > SELECTION_KEY_MAX) ||
+        (!single && Object.keys(rawInput).some(key => key !== "requests")) ||
+        new Set(requests.map(request => request!.requestId)).size !== requests.length) {
+      return canonicalError("invalid_tool_args",
+        `Give 1 to ${SELECTION_MAX} different pending requests, each with its exact request_ref and observed timestamps.`);
     }
-    try {
-      const value = await args.ctx.runMutation(operation === ADMISSION_APPROVE_OPERATION
-        ? internal.communityAdmin.approveFreshAdmissionInternal : internal.communityAdmin.denyFreshAdmissionInternal, {
-        userId: args.userId, communityId: target.communityId, principalKind: args.principalKind,
-        requestId: match[1], expectedCreatedAt: createdAt, expectedUpdatedAt: updatedAt, idempotencyKey,
-      });
-      if (value.ok === false) return canonicalError(value.code, value.message,
-        value.retryAfterMs ? { retry_after_ms: value.retryAfterMs } : undefined);
-      return { ok: true, value };
-    } catch {
-      return canonicalError("admission_request_unavailable", "Admission request not available or decision not authorized.");
+    const decide = async (request: NonNullable<ReturnType<typeof parseRequest>>) => {
+      try {
+        const value = await args.ctx.runMutation(operation === ADMISSION_APPROVE_OPERATION
+          ? internal.communityAdmin.approveFreshAdmissionInternal : internal.communityAdmin.denyFreshAdmissionInternal, {
+          userId: args.userId, communityId: target.communityId, principalKind: args.principalKind,
+          requestId: request.requestId, expectedCreatedAt: request.createdAt, expectedUpdatedAt: request.updatedAt,
+          // A selection gives each request its own receipt, so a retry never decides one twice.
+          idempotencyKey: single ? idempotencyKey : selectionItemKey(idempotencyKey, request.requestId),
+        });
+        return value.ok === false
+          ? { ok: false as const, code: String(value.code), message: String(value.message), ...(value.retryAfterMs ? { retry_after_ms: value.retryAfterMs } : {}) }
+          : { ok: true as const, value };
+      } catch {
+        return { ok: false as const, code: "admission_request_unavailable", message: "Admission request not available or decision not authorized." };
+      }
+    };
+    if (single) {
+      const decided = await decide(requests[0]!);
+      return decided.ok ? { ok: true, value: decided.value } : canonicalError(decided.code, decided.message,
+        "retry_after_ms" in decided ? { retry_after_ms: decided.retry_after_ms } : undefined);
     }
+    const results = [];
+    for (const request of requests) {
+      const decided = await decide(request!);
+      results.push(decided.ok ? { request_ref: request!.requestRef, ok: true, ...decided.value }
+        : { request_ref: request!.requestRef, ...decided });
+    }
+    return { ok: true, value: selectionResult(results) };
+  }
+  if (operation === REMOVE_POSTS_OPERATION) {
+    const refs = Array.isArray(rawInput.refs) ? rawInput.refs : null;
+    if (args.principalKind !== "external_mcp" || target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
+        !refs || !refs.length || refs.length > SELECTION_MAX || Object.keys(rawInput).some(key => key !== "refs") ||
+        !refs.every(ref => typeof ref === "string" && parseCommunityInteractionEvidenceRef(ref)) || new Set(refs).size !== refs.length) {
+      return canonicalError("invalid_tool_args",
+        `Give refs: 1 to ${SELECTION_MAX} different interaction:root:<id> or interaction:reply:<id> refs.`);
+    }
+    // Removing is a state, not a toggle: a retry or an already removed post is still removed.
+    const results = [];
+    for (const ref of refs as string[]) {
+      try {
+        const value = await args.ctx.runMutation((internal as any).communityInteractions.removeInteractionForTrustedModeratorInternal,
+          { userId: args.userId, communityId: target.communityId, ref });
+        results.push({ ref, ok: true, removed: true, ...(value?.alreadyRemoved ? { already_removed: true } : {}) });
+      } catch {
+        results.push({ ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." });
+      }
+    }
+    return { ok: true, value: selectionResult(results) };
   }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
 }

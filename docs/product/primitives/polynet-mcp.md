@@ -10,13 +10,20 @@ last_verified: 2026-10-28
 
 ## Definition
 
-Polynet MCP is the official OAuth-protected provider that lets a builder's
-external AI harness (Claude Code, Codex, or another compatible client) work on
-the communities they build.
+Polynet MCP is the official OAuth-protected provider that lets anyone's
+external AI harness (Claude Code, Codex, or another compatible client) work in
+the communities they belong to, in the lens their role there allows:
 
-It is builder-only today: the caller must be an owner or admin of a community,
-and every community it touches must be one where they have builder authority.
-Members use their community's Agent page, chat, or site instead.
+- **Members** read what they can see in the community and write their own
+  things: posts and replies, edits to their own posts, reactions, lesson
+  progress.
+- **Moderators** also review join requests (`builder/join-requests/`) and
+  remove anyone's post (`community.interaction.remove`).
+- **Owners and admins** also get the builder lens: staging course changes,
+  workflow decisions and site deploys.
+
+Actions that decide about people or posts take a selection: up to 50 items,
+each decided on its own with its own receipt.
 
 ## Mental Model
 
@@ -34,8 +41,7 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
   `polynet_search`, `polynet_write`, and `polynet_call`.
 - The harness begins at `/` and selects communities through canonical
   repository paths.
-- Every request revalidates builder status, membership, entitlement, and
-  capability.
+- Every request revalidates membership, entitlement, role, and capability.
 - Tool arguments are selectors, never authority.
 - The community context used by a call is auditable.
 - Calls into a community where the caller lacks builder authority are refused.

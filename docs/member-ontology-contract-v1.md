@@ -217,7 +217,7 @@ must set its audience explicitly rather than reinterpret historical profile fact
    `member_profile_confirm_facts` runtime primitive delegates to the same
    confirmation mutation; one mutation, one approval marker. Nothing exposes it
    (skills were deleted). A future profile-building flow must activate it explicitly.
-   The external Polynet MCP (builders only) exposes a separate
+   The external Polynet MCP exposes a separate
    authenticated-self confirmation boundary for the caller's platform profile. It accepts only an approval
    marker plus bounded `kind`/`body` pairs; the server fixes the verified user,
    platform scope, `stated_interview` provenance, confidence, evidence

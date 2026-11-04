@@ -65,9 +65,10 @@ reference it resolves, is authorized again when used.
 The executor derives authority for every call:
 
 - the community agent acting for a member and external MCP: current
-  authenticated human relation (the MCP admits builders only, `convex/httpMcp.ts`);
+  authenticated human relation, in the lens of that relation;
 - owner/admin with current resource-management permission: builder lane;
-- moderator/member: member lane;
+- moderator/member: member lane; through the external MCP, moderators (and
+  owners and admins) also have the moderator lens: join review and removing posts;
 - community-owned agent: fixed member lane within its mounted community;
 - community front end: the signed-in member's current relation, forced to the
   member lane and mounted to its community (see Community front ends below);
@@ -331,20 +332,31 @@ API rate limits belong at the edge. Retrieval logs record these reads on the
 `external_mcp` surface; a dedicated surface is a follow-up.
 
 
-## The Polynet MCP is for builders
+## The Polynet MCP: every role, in its own lens
 
-The Polynet MCP (`/runtime/mcp`) is for community builders: the owners and
-admins of an active community, using their own agent harness (Claude Code,
-Codex, claude.ai, ChatGPT). Members use their community's site and its agent.
+The Polynet MCP (`/runtime/mcp`) is for anyone signed in, using their own
+agent harness (Claude Code, Codex, claude.ai, ChatGPT). In each community the
+door gives the caller the lens of their role there
+([community-lens-contract-v1.md](community-lens-contract-v1.md)):
 
-- A caller who builds no active community gets `builder_only` for every tool.
-- A call that targets a community (`path`, or `target` for `polynet_call`)
-  must be one the caller builds; otherwise `builder_only` (or
-  `semantic_not_found` when the caller isn't in that community at all).
-- Listing `/communities/` returns only the communities the caller builds.
+- **member:** reads what members see; writes their own posts and replies,
+  edits and deletes their own posts, reacts, marks lessons done;
+- **moderator** (owners, admins, moderators): also `builder/join-requests/`,
+  `community.admission.approve` / `.deny`, and `community.interaction.remove`;
+- **builder** (owners and admins who manage resources): also the rest of
+  `builder/`, workflow decisions and `community.site.deploy`.
 
-The gate sits at the MCP entrance (`convex/httpMcp.ts`), so the door's shared
-authority rules, used by every principal, are unchanged.
+A community the caller isn't an entitled member of is `semantic_not_found`.
+Listing `/communities/` returns the communities the caller belongs to, with
+their role. There is no gate at the MCP entrance: the door's shared authority
+rules decide every call (`derivePolynetHumanAuthority`, `shared/polynetAuthority.ts`).
+
+Decisions about people and posts take a selection: `requests` (approve, deny)
+or `refs` (remove), 1 to 50 distinct items. Each item is decided on its own
+and has its own receipt (the call's idempotency key plus the item's id, so
+the key is at most 135 characters); the result lists each item's outcome
+with `succeeded` and `failed` counts. Removing a post that is already
+removed still counts as removed.
 
 Builders publish their community's site with `polynet_call`
 `community.site.deploy` (`input.files`: `"/path" -> { content, encoding }`,

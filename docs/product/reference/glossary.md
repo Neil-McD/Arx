@@ -61,8 +61,13 @@ and checkout. Formerly called the community funnel.
 ## MCP
 
 Model Context Protocol. Polynet provides one official OAuth-protected MCP
-server for builders' external AI harnesses and does not consume third-party
-MCP servers.
+server for anyone's external AI harness, in the lens of their role, and does
+not consume third-party MCP servers.
+
+## Moderator Lens
+
+What a moderator's own AI adds to member authority through the MCP: reviewing
+join requests and removing anyone's post, each on a selection.
 
 ## Member Authority
 

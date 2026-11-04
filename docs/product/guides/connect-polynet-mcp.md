@@ -1,7 +1,7 @@
 ---
 id: product.guide.connect_polynet_mcp
 title: Connect Polynet MCP
-audience: builder, llm
+audience: builder, member, llm
 status: alpha-current
 last_verified: 2026-10-28
 ---
@@ -13,8 +13,10 @@ last_verified: 2026-10-28
 Connect your own AI harness to the official Polynet MCP provider without
 copying credentials or weakening community access controls.
 
-The MCP is for builders: you must be an owner or admin of a community, and
-you can only open communities where you have builder authority.
+Anyone can connect. In each community you belong to, your AI gets the lens
+of your role there: a member reads what members see and writes their own
+posts, reactions and lesson progress; a moderator also reviews join requests
+and removes posts; an owner or admin also gets the builder lens.
 
 ## Setup
 
@@ -25,7 +27,7 @@ you can only open communities where you have builder authority.
 5. Complete Polynet OAuth in the browser.
 6. Start a fresh harness session if the client does not reload MCP state.
 7. Call `polynet_list` at `/`, follow the returned `communities/` path, and
-   explicitly open a community you own or administer.
+   explicitly open a community you belong to.
 
 ## Canonical Tools
 
@@ -45,8 +47,8 @@ overlay. They do not change the base Polynet MCP contract.
 ## Authority Boundary
 
 The setup packet identifies the Polynet provider. It does not grant community
-access. The server derives the authenticated user and revalidates builder
-status, community membership, entitlements, and capabilities for every tool
+access. The server derives the authenticated user and revalidates
+community membership, entitlements, role, and capabilities for every tool
 call.
 
 ## Rules
