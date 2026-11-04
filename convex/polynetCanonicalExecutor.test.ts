@@ -402,7 +402,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3461,4 +3461,26 @@ test("owners and admins run the community itself through their own AI; owner-onl
   // A handbook longer than the limit is refused, never cut.
   expect(await moved.call("community.handbook.approve", { text: "x".repeat(6_001) }, "h-long")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(JSON.parse(((await moved.read("builder/community.json")) as any).value.body).handbook.approved_md).toBe("# Start here\nCome on Tuesday.");
+});
+
+test("a change to the community and its receipt commit together; a retry after a failure makes it once", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const call = (input: Record<string, unknown>, key: string) => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), authSubject: f.ownerSubject, userId: f.ownerId,
+    principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName: "polynet_call",
+    input: { operation: "community.settings.update", version: 1, target: "/communities/canonical-community/capabilities/community.settings.update.json", input, idempotency_key: key } });
+  const revision = async () => (await t.run(ctx => ctx.db.get(f.communityId)) as any).settingsRevision ?? 0;
+  const before = await revision();
+  // The receipt can't be completed: the change is rolled back with it.
+  const handler = vi.spyOn(completeCanonicalOperationReceiptInternal as any, "_handler").mockImplementationOnce(async () => { throw new Error("simulated_completion_failure"); });
+  expect(await call({ expected_revision: before, one_liner: "Once only" }, "k")).toMatchObject({ ok: false });
+  handler.mockRestore();
+  expect(await revision()).toBe(before);
+  expect((await t.run(ctx => ctx.db.get(f.communityId)) as any).oneLiner ?? null).toBeNull();
+  // The retry makes the change once, and replays after that.
+  expect(await call({ expected_revision: before, one_liner: "Once only" }, "k")).toMatchObject({ ok: true, value: { result: { one_liner: "Once only" } } });
+  expect(await revision()).toBe(before + 1);
+  expect(await call({ expected_revision: before, one_liner: "Once only" }, "k")).toMatchObject({ ok: true, value: { result: { one_liner: "Once only" } } });
+  expect(await revision()).toBe(before + 1);
 });

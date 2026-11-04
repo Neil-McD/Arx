@@ -2676,25 +2676,14 @@ async function executeCommunityOperation(args: {
   const reservation = await reserveMutatingOperation(receiptArgs);
   if (!reservation.ok) return reservation.result;
   if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
-  const scope = { userId: args.userId, communityId: target.communityId };
   try {
-    const result = operation === SETTINGS_UPDATE_OPERATION
-      ? await args.ctx.runMutation((internal as any).communityLifecycle.updateCommunityProfileForTrustedUserInternal, {
-        ...scope, expectedSettingsRevision: rawInput.expected_revision,
-        ...("name" in rawInput ? { name: rawInput.name } : {}), ...("slug" in rawInput ? { slug: rawInput.slug } : {}),
-        ...("one_liner" in rawInput ? { oneLiner: rawInput.one_liner } : {}), ...("about" in rawInput ? { about: rawInput.about } : {}),
-        ...("visibility" in rawInput ? { visibility: rawInput.visibility } : {}) })
-      : operation === JOIN_MODE_OPERATION
-        ? await args.ctx.runMutation((internal as any).communityAdmin.setCommunityFreeAccessModeForTrustedUserInternal, { ...scope, mode: rawInput.mode })
-      : operation === AGENT_INSTRUCTIONS_OPERATION
-        ? await args.ctx.runMutation((internal as any).communityAgent.setCommunityAgentInstructionsForTrustedUserInternal, { ...scope, text: rawInput.text })
-      : await args.ctx.runMutation(operation === HANDBOOK_DRAFT_OPERATION
-        ? (internal as any).communityHandbook.saveCommunityHandbookDraftForTrustedUserInternal
-        : (internal as any).communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: rawInput.text });
-    return { ok: true, value: await completeMutatingOperation({
-      ...receiptArgs, requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
-      value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result }),
-    }) };
+    // The change and its receipt commit together (communityOperations).
+    const applied = await args.ctx.runMutation((internal as any).communityOperations.applyCommunityOperationInternal, {
+      userId: args.userId, communityId: target.communityId, operation, input: rawInput, idempotencyKey: args.idempotencyKey,
+      requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+      answer: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result: {} }),
+    });
+    return { ok: true, value: applied.replayed !== undefined ? replayedOperationValue(applied.replayed) : applied.value };
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";
     const known = Object.entries(COMMUNITY_REFUSALS).find(([code]) => raw.includes(code))?.[1];
