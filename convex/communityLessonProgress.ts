@@ -7,6 +7,7 @@ import {
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
   normalizeIdValue,
+  requireCommunityChatAccess,
 } from "./communityCore";
 
 const MAX_REFS_PER_READ = 200;
@@ -28,6 +29,9 @@ async function liveLesson(ctx: any, communityId: any, resourceId: any) {
 export const setLessonDoneInternal = internalMutation({
   args: { communityId: v.id("communities"), userId: v.id("users"), ref: v.string(), done: v.boolean() },
   handler: async (ctx, args) => {
+    // Checked again here, in the write's own transaction: access revoked since
+    // the door authorized the call stops the write.
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
     const resourceId = lessonIdFromRef(ctx, args.ref);
     if (!resourceId || !(await liveLesson(ctx, args.communityId, resourceId))) {
       return { ok: false as const, code: "lesson_not_found", message: "That lesson isn't available. List a course under resources/ for its lessons." };

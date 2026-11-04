@@ -1479,4 +1479,14 @@ test("a member marks a lesson done for themselves; only reads made for them show
   expect(await run(fixture.memberSubject, fixture.memberId, "external_mcp", "polynet_call", {
     operation: "community.lesson.set_done", version: 1, target: "/communities/resource-semantic/capabilities/community.lesson.set_done.json",
     input: { ref: "resource:notalesson", done: true }, idempotency_key: "bad" })).toMatchObject({ ok: false, code: "lesson_not_found" });
+  // Access is checked again inside the write: a member removed after the door
+  // authorized them can't record progress.
+  await t.run(async (ctx) => {
+    const memberships = await ctx.db.query("communityMemberships").collect();
+    for (const row of memberships) if (String(row.userId) === String(fixture.memberId)) await ctx.db.delete(row._id);
+  });
+  await expect(t.mutation((internal as any).communityLessonProgress.setLessonDoneInternal, {
+    communityId: fixture.communityId, userId: fixture.memberId, ref: lessonRef, done: true,
+  })).rejects.toThrow();
+  expect(await t.run((ctx) => ctx.db.query("communityLessonProgress").collect())).toHaveLength(0);
 });
