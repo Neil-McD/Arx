@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { buildAssistantToolCallMessage } from "../shared/nativeToolProtocol.ts";
-import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
+import { runPiRuntimeKernel } from "../shared/piRuntimeKernel.ts";
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools.ts";
@@ -12,7 +12,7 @@ const executed: Array<{
 }> = [];
 let invocation = 0;
 
-const result = await runNativeRuntimeKernel<RetrievalToolName>({
+const result = await runPiRuntimeKernel<RetrievalToolName>({
   messages: [
     { role: "system", content: "Inspect the authorized community." },
     { role: "user", content: "What is happening in this community?" },

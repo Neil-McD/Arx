@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RUNTIME_KERNEL_ENGINES } from "./runtimeKernelEngines.ts";
-import { resolveRuntimeKernelEngine } from "../shared/runtimeKernelEngine.ts";
+import { runPiRuntimeKernel as runKernel } from "../shared/piRuntimeKernel.ts";
 import {
   buildAssistantToolCallMessage,
   buildAssistantToolCallsMessage,
@@ -129,7 +128,7 @@ function failure(
   };
 }
 
-describe.each(RUNTIME_KERNEL_ENGINES)("runtime kernel behavioral baseline (%s engine)", (_engine, runKernel) => {
+describe("runtime kernel behavioral baseline", () => {
   it("preserves durable input and appends the final assistant response", async () => {
     const result = await runKernel<TestToolName>({
       messages: baseMessages,
@@ -904,14 +903,5 @@ describe.each(RUNTIME_KERNEL_ENGINES)("runtime kernel behavioral baseline (%s en
         admittedToolNames: ["read_one", "read_two", "unadmitted"],
       }),
     ).toBeNull();
-  });
-});
-
-describe("runtime engine switch", () => {
-  it("keeps every surface native unless POLYNET_PI_ENGINE_SURFACES names it", () => {
-    expect(resolveRuntimeKernelEngine("ask", undefined)).toBe("native");
-    expect(resolveRuntimeKernelEngine("ask", "")).toBe("native");
-    expect(resolveRuntimeKernelEngine("ask", "tag, Ask")).toBe("pi");
-    expect(resolveRuntimeKernelEngine("tag", "ask")).toBe("native");
   });
 });

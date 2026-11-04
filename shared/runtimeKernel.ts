@@ -395,8 +395,9 @@ export type RuntimeKernelNextStep<TToolName extends string> =
 
 // The rules of one agent run: input budget and context projection, the tool
 // budget, repeated-call and no-progress limits, cancellation and the transcript.
-// A loop engine only sequences these calls: request a step, run its tools,
-// process each result, finish the batch.
+// The loop engine (runPiRuntimeKernel, shared/piRuntimeKernel.ts) only
+// sequences these calls: request a step, run its tools, process each result,
+// finish the batch.
 export class RuntimeKernelRun<TToolName extends string> {
   readonly transcript: NativeToolAwareMessage[];
   readonly steps: RuntimeKernelStepRecord<TToolName>[] = [];
@@ -956,46 +957,5 @@ export class RuntimeKernelRun<TToolName extends string> {
   terminate(signal: RuntimeKernelTerminalSignal): RuntimeKernelFailure<TToolName> {
     this.finishBatch();
     return this.buildTerminalFailure(signal);
-  }
-}
-
-// The original sequencer: request a step, run its tools serially or in
-// parallel, and repeat until the run has a result.
-export async function runNativeRuntimeKernel<TToolName extends string>(
-  params: RuntimeKernelParams<TToolName>,
-): Promise<RuntimeKernelResult<TToolName>> {
-  const run = new RuntimeKernelRun(params);
-  while (true) {
-    const next = await run.nextStep();
-    if (next.kind === "result") return next.result;
-
-    if (next.parallel) {
-      let terminalSignal: RuntimeKernelTerminalSignal | null = null;
-      for (const prepared of next.prepared) await run.startStep(prepared);
-      const settledResults = await Promise.allSettled(
-        next.prepared.map((prepared) => run.executeStep(prepared)),
-      );
-      for (const [index, prepared] of next.prepared.entries()) {
-        const settled = settledResults[index];
-        const toolResult =
-          settled?.status === "fulfilled"
-            ? settled.value
-            : buildRuntimeToolExecutionExceptionResult(settled?.reason);
-        const terminalFailure = await run.processResult(prepared, toolResult, {
-          recordUserCancelledArtifacts: true,
-        });
-        if (!terminalSignal && terminalFailure) terminalSignal = terminalFailure;
-      }
-      if (terminalSignal) return run.terminate(terminalSignal);
-    } else {
-      for (const prepared of next.prepared) {
-        await run.startStep(prepared);
-        const toolResult = await run.executeStep(prepared);
-        const terminalFailure = await run.processResult(prepared, toolResult);
-        if (terminalFailure) return run.terminate(terminalFailure);
-      }
-    }
-
-    run.finishBatch();
   }
 }

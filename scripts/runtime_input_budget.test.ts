@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RUNTIME_KERNEL_ENGINES } from "./runtimeKernelEngines.ts";
+import { runPiRuntimeKernel as runKernel } from "../shared/piRuntimeKernel.ts";
 import {
   buildAssistantToolCallMessage,
   type NativeToolAwareMessage,
@@ -18,7 +18,7 @@ const baseMessages: NativeToolAwareMessage[] = [
   { role: "user", content: "What is happening here?" },
 ];
 
-describe.each(RUNTIME_KERNEL_ENGINES)("runtime input budget (%s engine)", (_engine, runKernel) => {
+describe("runtime input budget", () => {
   it("admits every reviewed runtime capacity profile", () => {
     for (const profile of listRuntimeModelCapacityProfiles()) {
       const plan = planRuntimeInputBudget({

@@ -59,7 +59,7 @@ for (const path of [
   "convex/communityAgentServeWorker.ts",
 ]) {
   const source = read(path);
-  const callAt = source.indexOf("runtimeKernel.run<");
+  const callAt = source.indexOf("runPiRuntimeKernel<");
   const budgetAt = source.indexOf("inputBudget:", callAt);
   const completionAt = source.indexOf("runCompletion:", callAt);
   assert.ok(callAt >= 0, `${path} must call the selected shared kernel`);

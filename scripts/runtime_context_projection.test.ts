@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RUNTIME_KERNEL_ENGINES } from "./runtimeKernelEngines.ts";
+import { runPiRuntimeKernel as runKernel } from "../shared/piRuntimeKernel.ts";
 import {
   buildAssistantToolCallMessage,
   type NativeToolAwareMessage,
@@ -11,7 +11,7 @@ import {
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
 import { sha256RuntimeProviderContext } from "../shared/runtimeProviderContextAttestation.ts";
 
-describe.each(RUNTIME_KERNEL_ENGINES)("runtime context projection (%s engine)", (_engine, runKernel) => {
+describe("runtime context projection", () => {
   it("is deterministic and never mutates the durable transcript", () => {
     const messages: NativeToolAwareMessage[] = [
       { role: "system", content: "Canonical policy." },
