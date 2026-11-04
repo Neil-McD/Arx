@@ -402,3 +402,9 @@ assert.match(
 );
 
 console.log("community_agent_serve_worker_contract_proof: ok");
+
+// A rate-limited tag answers in its thread instead of going silent.
+assert.match(
+  workerSource,
+  /if \(turnContract && SERVE_RATE_LIMITED_CODES\.has\(failureCode\)\)[\s\S]*finalizeCommunityAgentServeReplyInternal[\s\S]*content: SERVE_RATE_LIMITED_REPLY/,
+);
