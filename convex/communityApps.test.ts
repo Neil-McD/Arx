@@ -54,6 +54,7 @@ import {
 const modules = import.meta.glob([
   "./communityApps.ts",
   "./communityNotes.ts",
+  "./memberWriteRateLimit.ts",
   "./communitySites.ts",
   "./communityLive.ts",
   "./communityAttachmentUploads.ts",
@@ -437,12 +438,12 @@ test("a front end runs a full chat: names, threads, reactions, and edits or dele
   expect(thread.map((entry) => entry.ref)).toEqual([memberPost, reply]);
 
   // Reactions set and unset, retry-safe, with the viewer's own marked.
-  expect((await react(member, ownerPost, true, "r-1")).body).toMatchObject({ ok: true, value: { reacted: true } });
-  expect((await react(member, ownerPost, true, "r-2")).body).toMatchObject({ ok: true, value: { reacted: true } });
+  expect((await react(member, ownerPost, true, "r-1")).body).toMatchObject({ ok: true, value: { result: { reacted: true } } });
+  expect((await react(member, ownerPost, true, "r-2")).body).toMatchObject({ ok: true, value: { result: { reacted: true } } });
   let ownerEntry = (await list(member)).find((entry) => entry.ref === ownerPost)!;
   expect(ownerEntry).toMatchObject({ reactions: [{ emoji: "👍", count: 1 }], reacted_by_me: ["👍"] });
   expect((await list(owner)).find((entry) => entry.ref === ownerPost)).toMatchObject({ reacted_by_me: [] });
-  expect((await react(member, ownerPost, false, "r-3")).body).toMatchObject({ ok: true, value: { reacted: false } });
+  expect((await react(member, ownerPost, false, "r-3")).body).toMatchObject({ ok: true, value: { result: { reacted: false } } });
   ownerEntry = (await list(member)).find((entry) => entry.ref === ownerPost)!;
   expect(ownerEntry.reactions).toEqual([]);
   expect((await react(member, "interaction:root:missing", true, "r-4")).body).toMatchObject({ ok: false });
@@ -663,10 +664,10 @@ test("a front end sees which channels are unread or mention its member, and mark
   expect((await capability(f, member, "community.channel.mark_read", { channel: "missing" }, "m-0")).body).toMatchObject({ ok: false, code: "channel_unavailable" });
   const latest = (await general()).latest_activity_at;
   expect((await capability(f, member, "community.channel.mark_read", { channel: "general" }, "m-1")).body)
-    .toMatchObject({ ok: true, value: { channel: "general", advanced: true, seen_through_at: latest } });
+    .toMatchObject({ ok: true, value: { result: { channel: "general", advanced: true, seen_through_at: latest } } });
   expect(await general()).toMatchObject({ unread: false, mentioned: false, seen_through_at: latest });
   expect((await capability(f, member, "community.channel.mark_read", { channel: "general", through_at: 1 }, "m-2")).body)
-    .toMatchObject({ ok: true, value: { advanced: false, seen_through_at: latest } });
+    .toMatchObject({ ok: true, value: { result: { advanced: false, seen_through_at: latest } } });
   // The owner's own read state is theirs.
   const ownerListed = await f.call(owner, { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } });
   expect(ownerListed.body.value.entries.find((entry: any) => entry.slug === "general")).toMatchObject({ mentioned: false });
@@ -688,7 +689,7 @@ test("a front end keeps its member present, shows who is online, and marks membe
   expect(await watchOnline()).toEqual({ ok: true, version: "" });
 
   expect((await capability(f, member, "community.presence.heartbeat", { here: true }, "h-0")).body).toMatchObject({ ok: false, code: "invalid_tool_args" });
-  expect((await capability(f, member, "community.presence.heartbeat", {}, "h-1")).body).toMatchObject({ ok: true, value: { active_until: expect.any(String) } });
+  expect((await capability(f, member, "community.presence.heartbeat", {}, "h-1")).body).toMatchObject({ ok: true, value: { result: { active_until: expect.any(String) } } });
   expect(await online(owner)).toEqual({ online_count: 1, online_count_capped: false, members: [
     { ref: `user:${f.ids.memberId}`, name: "apps-member", handle: "apps-member", avatar_url: "https://example.com/apps-member.png" },
   ] });
@@ -730,7 +731,7 @@ test("a front end sets its member's typing; others see it live, the typist doesn
   }
   expect((await typing({ channel: "missing", on: true }, "t-0")).body).toMatchObject({ ok: false, code: "channel_unavailable" });
 
-  expect((await typing({ channel: "general", on: true }, "t-1")).body).toMatchObject({ ok: true, value: { on: true } });
+  expect((await typing({ channel: "general", on: true }, "t-1")).body).toMatchObject({ ok: true, value: { result: { on: true } } });
   expect((await typing({ channel: "general", on: true }, "t-2")).body).toMatchObject({ ok: true });
   expect(await f.t.run((c) => c.db.query("communityTypingPresence").collect())).toHaveLength(1);
   expect(await watchAs(member)).toMatchObject({ ok: true, typing: [{
@@ -744,8 +745,8 @@ test("a front end sets its member's typing; others see it live, the typist doesn
   const thread = posted.body.value.ref as string;
   expect((await typing({ channel: "general", on: true, thread_ref: thread }, "t-3")).body).toMatchObject({ ok: true });
   expect(await watchAs(member)).toMatchObject({ typing: [{ ref: `user:${f.ids.ownerId}`, thread_ref: thread }] });
-  expect((await typing({ channel: "general", on: false, thread_ref: thread }, "t-4")).body).toMatchObject({ ok: true, value: { on: false } });
-  expect((await typing({ channel: "general", on: false, thread_ref: thread }, "t-5")).body).toMatchObject({ ok: true, value: { on: false } });
+  expect((await typing({ channel: "general", on: false, thread_ref: thread }, "t-4")).body).toMatchObject({ ok: true, value: { result: { on: false } } });
+  expect((await typing({ channel: "general", on: false, thread_ref: thread }, "t-5")).body).toMatchObject({ ok: true, value: { result: { on: false } } });
   expect(await watchAs(member)).toMatchObject({ ok: true, typing: [] });
 });
 

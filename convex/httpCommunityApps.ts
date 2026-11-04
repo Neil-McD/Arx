@@ -540,7 +540,8 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       });
       return execution.ok
         ? reply(200, { ok: true, value: execution.value })
-        : reply(200, { ok: false, code: execution.code, message: execution.message });
+        : reply(200, { ok: false, code: execution.code, message: execution.message,
+          ...(execution.value !== undefined ? { value: execution.value } : {}) });
     }),
   });
 

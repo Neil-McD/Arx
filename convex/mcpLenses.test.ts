@@ -84,7 +84,7 @@ async function fixture() {
     });
     return (await res.json() as any).result;
   };
-  return { call };
+  return { call, t, users };
 }
 
 test("every member reaches the MCP in their own lens; outsiders find nothing", async () => {
@@ -106,6 +106,19 @@ test("every member reaches the MCP in their own lens; outsiders find nothing", a
   // The communities directory lists what the caller belongs to, with their role.
   const member = await f.call("member", "polynet_list", { path: "/communities/" });
   expect(member.structuredContent.entries.map((entry: any) => [entry.path, entry.role])).toEqual([["/communities/run-club/", "member"]]);
+});
+
+test("past the write budget, the MCP answers rate_limited with a machine-readable retry time", async () => {
+  const f = await fixture();
+  // The member has used this minute's budget.
+  await f.t.run(ctx => ctx.db.insert("memberWriteRateCounters", { userId: f.users.member, windowStartMs: Date.now(), count: 60, updatedAt: Date.now() }));
+  const refused = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+    content: { text: "one too many" }, idempotency_key: "over" });
+  expect(refused.isError).toBe(true);
+  expect(refused.structuredContent).toMatchObject({ code: "rate_limited", retry_after_ms: expect.any(Number) });
+  expect(refused.structuredContent.error).toContain("rate_limited");
+  // Reads still work.
+  expect((await f.call("member", "polynet_list", { path: "/communities/run-club/" })).isError).toBe(false);
 });
 
 test("a builder works on its own community in the builder lens and on others as a member", async () => {
