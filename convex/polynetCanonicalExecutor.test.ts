@@ -10,6 +10,7 @@ afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers();})
 
 import { api, internal } from "./_generated/api";
 import { fitJsonDocument, executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
+import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalToolContract";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import schema from "./schema";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
@@ -401,7 +402,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -2900,8 +2901,11 @@ test.each(["same-key", "different-key", "first-party-approve", "first-party-deny
 test.each(["approve", "deny"])("admission first response can be discarded after commit and safely recovered (%s)", async operation => {
   const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   const ctx = executionContext(t.withIdentity({ subject: f.ownerSubject }));
+  // The admission commits but its answer is lost (the write budget is taken first, as usual).
   expect(await f.call(f.input, undefined, "external_mcp", { ...ctx, runMutation: async (ref: any, args: any) => {
-    await ctx.runMutation(ref, args); throw new Error("discarded_committed_response");
+    const value = await ctx.runMutation(ref, args);
+    if (getFunctionName(ref).startsWith("memberWriteRateLimit:")) return value;
+    throw new Error("discarded_committed_response");
   } })).toMatchObject({ ok: false });
   const committed = await f.snapshot(); expect(committed.receipts[0].status).toBe("completed");
   const recovered = await f.call(); expect(recovered).toMatchObject({ ok: true, value: { deduped: true, result: committed.receipts[0].result.result } });
@@ -3062,7 +3066,7 @@ test("site rails: the community agent gets no read state, presence, typing or me
   expect((memberChannels.value.entries as Array<Record<string, unknown>>).find((entry) => entry.slug === "wins"))
     .toMatchObject({ unread: false, mentioned: false, latest_activity_at: null, seen_through_at: null });
   expect(await execute("external_mcp", "polynet_call", callInput("community.channel.mark_read", { channel: "wins" })))
-    .toMatchObject({ ok: true, value: { channel: "wins", advanced: false } });
+    .toMatchObject({ ok: true, value: { ok: true, operation: "community.channel.mark_read", result: { channel: "wins", advanced: false } } });
   expect(await execute("external_mcp", "polynet_read", { path: `${community}/presence.json` })).toMatchObject({ ok: true });
   for (const [operation, input] of [["community.presence.heartbeat", {}], ["community.typing.set", { channel: "general", on: true }]] as const) {
     expect(await execute("external_mcp", "polynet_call", callInput(operation, input))).toMatchObject({ ok: false, code: "operation_not_found" });
@@ -3294,4 +3298,87 @@ test("moderators remove a selection of posts through their own AI; members and t
   expect(await remove(member, [], "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await remove(member, [refs[2], refs[2]], "k2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await remove(member, ["not-a-ref"], "k3")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+});
+
+test("a person's own AI and site share a budget of writes a minute; keeping a site alive doesn't count", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const as = (subject: string, userId: any, principalKind: any) => (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind,
+    evidenceSurface: "external_mcp",
+    ...(principalKind === "community_app" ? { mountedCommunityId: f.communityId } : {}), toolName, input });
+  const posted = await as(f.ownerSubject, f.ownerId, "external_mcp")("polynet_write", {
+    path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "react to me" }, idempotency_key: "owner-post" });
+  const ref = (posted as any).value.ref;
+  const react = (principalKind: any, i: number) => as(f.memberSubject, f.memberId, principalKind)("polynet_call", {
+    operation: "community.interaction.react", version: 1, target: "/communities/canonical-community/capabilities/community.interaction.react.json",
+    input: { ref, emoji: "🔥", on: i % 2 === 0 }, idempotency_key: `react-${i}` });
+  const markRead = () => as(f.memberSubject, f.memberId, "external_mcp")("polynet_call", {
+    operation: "community.channel.mark_read", version: 1, target: "/communities/canonical-community/capabilities/community.channel.mark_read.json",
+    input: { channel: "general" }, idempotency_key: "read" });
+  // The site and the MCP draw on one budget.
+  for (let i = 0; i < 60; i++) expect(await react(i % 2 ? "community_app" : "external_mcp", i), `write ${i}`).toMatchObject({ ok: true });
+  const refused = await react("external_mcp", 60);
+  expect(refused).toMatchObject({ ok: false, code: "rate_limited", value: { retry_after_ms: expect.any(Number) } });
+  expect((refused as any).value.retry_after_ms).toBeLessThanOrEqual(60_000);
+  // Reads and read positions still work.
+  expect(await markRead()).toMatchObject({ ok: true });
+  expect(await as(f.memberSubject, f.memberId, "external_mcp")("polynet_list", { path: "/communities/canonical-community/channels/" })).toMatchObject({ ok: true });
+  // Someone else's budget is their own.
+  expect(await as(f.ownerSubject, f.ownerId, "external_mcp")("polynet_write", {
+    path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "still here" }, idempotency_key: "owner-post-2" })).toMatchObject({ ok: true });
+  // A minute on, the budget is back.
+  await t.run(async ctx => {
+    for (const row of await ctx.db.query("memberWriteRateCounters").collect()) await ctx.db.patch(row._id, { windowStartMs: row.windowStartMs - 60_000 });
+  });
+  expect(await react("external_mcp", 61)).toMatchObject({ ok: true });
+});
+
+test("the published polynet_call schema covers every input any role's actions accept, and calls answer in its output shape", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const callSchema = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call;
+  const published = Object.keys((callSchema.inputSchema as any).properties.input.properties);
+  const as = (subject: string, userId: any, principalKind: any) => (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind, evidenceSurface: "external_mcp",
+    ...(principalKind === "community_app" ? { mountedCommunityId: f.communityId } : {}), toolName, input });
+  const owner = as(f.ownerSubject, f.ownerId, "external_mcp");
+  const memberMcp = as(f.memberSubject, f.memberId, "external_mcp");
+  const memberSite = as(f.memberSubject, f.memberId, "community_app");
+  const accepted = async (who: any) => {
+    const listed = await who("polynet_list", { path: "/communities/canonical-community/capabilities/" });
+    const keys: Record<string, string[]> = {};
+    for (const entry of (listed as any).value.entries) {
+      const read = await who("polynet_read", { path: entry.path });
+      const definition = JSON.parse((read as any).value.body);
+      keys[definition.operation] = [...(definition.input?.required ?? []), ...(definition.input?.optional ?? [])];
+    }
+    return keys;
+  };
+  const everyRole = { ...(await accepted(memberSite)), ...(await accepted(memberMcp)), ...(await accepted(owner)) };
+  await makeModerator(t, f);
+  Object.assign(everyRole, await accepted(memberMcp));
+  expect(Object.keys(everyRole)).toEqual(expect.arrayContaining(["community.interaction.react", "community.lesson.set_done",
+    "community.channel.mark_read", "community.presence.heartbeat", "community.typing.set", "community.interaction.remove",
+    "community.admission.approve", "community.site.deploy"]));
+  for (const [operation, keys] of Object.entries(everyRole)) {
+    for (const key of keys) expect(published, `${operation} accepts ${key}`).toContain(key);
+  }
+  // Answers carry what the published output requires.
+  const required = (callSchema.outputSchema as any).required as string[];
+  const posted = await owner("polynet_write", { path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "hi" }, idempotency_key: "p" });
+  const ref = (posted as any).value.ref;
+  const call = (who: any, operation: string, input: Record<string, unknown>, key: string) => who("polynet_call", {
+    operation, version: 1, target: `/communities/canonical-community/capabilities/${operation}.json`, input, idempotency_key: key });
+  const answers = [
+    await call(memberMcp, "community.interaction.react", { ref, emoji: "🔥", on: true }, "a1"),
+    await call(memberMcp, "community.channel.mark_read", { channel: "general" }, "a2"),
+    await call(memberSite, "community.presence.heartbeat", {}, "a3"),
+    await call(memberSite, "community.typing.set", { channel: "general", on: true }, "a4"),
+    await call(memberMcp, "community.interaction.remove", { refs: [ref] }, "a5"),
+  ];
+  for (const answer of answers) {
+    expect(answer.ok, JSON.stringify(answer)).toBe(true);
+    for (const key of required) expect((answer as any).value, `${(answer as any).value?.operation} answers ${key}`).toHaveProperty(key);
+  }
 });

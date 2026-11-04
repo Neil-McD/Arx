@@ -2428,6 +2428,15 @@ export default defineSchema({
     .index("by_blocker_blocked", ["blockerUserId", "blockedUserId"])
     .index("by_blocked_blocker", ["blockedUserId", "blockerUserId"]),
 
+  // Writes a person makes through their own AI (the MCP) or their site, per
+  // minute (convex/memberWriteRateLimit.ts).
+  memberWriteRateCounters: defineTable({
+    userId: v.id("users"),
+    windowStartMs: v.number(),
+    count: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   dmRateCounters: defineTable({
     userId: v.id("users"),
     kind: v.union(v.literal("message"), v.literal("conversation")),

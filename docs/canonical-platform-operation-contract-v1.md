@@ -356,7 +356,21 @@ or `refs` (remove), 1 to 50 distinct items. Each item is decided on its own
 and has its own receipt (the call's idempotency key plus the item's id, so
 the key is at most 135 characters); the result lists each item's outcome
 with `succeeded` and `failed` counts. Removing a post that is already
-removed still counts as removed.
+removed still counts as removed. Every selection runs through one runner
+(`runSelection`): the call's key is bound to the whole selection (a retry
+replays the answer; the same key with another selection is
+`idempotency_key_conflict`), then each item is decided on its own.
+
+Every `polynet_call` answers in the published output shape:
+`{ ok, operation, result, receipt }`. A test lists every role's actions and
+fails if any input they accept is missing from the published call schema, or
+an answer lacks a required output field.
+
+Writes a person makes through their own AI (`external_mcp`) or their site
+(`community_app`) share one budget of 60 a minute
+(`convex/memberWriteRateLimit.ts`). Over it, the call is `rate_limited`
+with `retry_after_ms`. Reads, presence, typing and read positions don't
+count; the community agent is bounded by AI quota instead.
 
 Builders publish their community's site with `polynet_call`
 `community.site.deploy` (`input.files`: `"/path" -> { content, encoding }`,

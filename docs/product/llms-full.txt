@@ -659,6 +659,9 @@ the communities they belong to, in the lens their role there allows:
 Actions that decide about people or posts take a selection: up to 50 items,
 each decided on its own with its own receipt.
 
+Writes through your own AI and your community's site share a budget of 60 a
+minute; past it, a call is refused with `rate_limited` and says when to retry.
+
 ## Mental Model
 
 The direction is one way:

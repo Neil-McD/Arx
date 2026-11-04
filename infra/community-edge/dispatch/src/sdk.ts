@@ -99,10 +99,13 @@ const list = function (path, options) { return door("polynet_list", Object.assig
 const read = function (path, options) { return door("polynet_read", Object.assign({ path: path }, options || {})); };
 const search = function (path, query) { return door("polynet_search", { path: path, query: query }); };
 const write = function (input) { return door("polynet_write", Object.assign({ idempotency_key: newKey() }, input)); };
+// An action's answer is { ok, operation, result, receipt }; the SDK hands back the result.
 const call = function (operation, input) {
   return door("polynet_call", {
     target: root() + "capabilities/" + operation + ".json",
     operation: operation, version: 1, idempotencyKey: newKey(), input: input,
+  }).then(function (value) {
+    return value && value.receipt && value.result !== undefined ? value.result : value;
   });
 };
 

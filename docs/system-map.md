@@ -266,7 +266,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (member, moderator and builder lenses; selections),
   `polynetCanonicalReceipts`; Vercel `api/mcp/*` (OAuth metadata, proxy).
 - **Reached by:** `/runtime/mcp`, `/.well-known/oauth-*`.
-- **Tables:** `polynetCanonicalOperationReceipts`.
+- **Tables:** `polynetCanonicalOperationReceipts`, `memberWriteRateCounters`
+  (`memberWriteRateLimit`: a person's writes per minute through their own AI
+  or site).
 - **Contracts:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
   [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md).
 

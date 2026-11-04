@@ -762,3 +762,19 @@ test("markdown builds safe DOM: no markup from Polynet text gets through", async
   expect(html("")).toBe("");
   expect(html(null as any)).toBe("");
 });
+
+test("an action's standard answer comes back as its result; a rate limit surfaces as a PolynetError", async () => {
+  let limited = false;
+  stubFetch({
+    "/__polynet/auth/session": signedIn,
+    "/__polynet/api": () => limited
+      ? Response.json({ ok: false, code: "rate_limited", message: "Too many changes in a minute. Try again in 12 seconds.", value: { retry_after_ms: 12_000 } })
+      : ok({ ok: true, operation: "community.channel.mark_read", result: { channel: "general", advanced: true, seen_through_at: 5 },
+        receipt: { contract: "polynet.canonical.operation:v1" } }),
+  });
+  const polynet = await loadSdk();
+  await polynet.session();
+  expect(await polynet.markRead("general")).toEqual({ channel: "general", advanced: true, seen_through_at: 5 });
+  limited = true;
+  await expect(polynet.react("interaction:root:abc", "🔥", true)).rejects.toMatchObject({ code: "rate_limited" });
+});

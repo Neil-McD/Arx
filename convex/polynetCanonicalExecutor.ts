@@ -81,19 +81,31 @@ function selectionItemKey(idempotencyKey: string, itemId: string): string {
   return `${idempotencyKey}:${itemId}`;
 }
 
-// A selection's answer, in the call output's shape: each item's outcome in
-// result, and one receipt for the call (each item keeps its own underneath).
-function selectionResult(args: {
-  operation: string; principalKind: PolynetPrincipalKind; target: ResolvedCommunityTarget; idempotencyKey: string;
-  results: Array<{ ok: boolean } & Record<string, unknown>>;
-}) {
-  const succeeded = args.results.filter(result => result.ok).length;
-  return {
-    ok: true, operation: args.operation,
-    result: { results: args.results, succeeded, failed: args.results.length - succeeded },
-    receipt: { ...canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target: args.target, idempotencyKey: args.idempotencyKey }),
-      authority_lane: "moderator" },
-  };
+// Every action on a selection runs here. One receipt binds the call's key to
+// the whole selection: a retry replays the answer, and the same key with
+// another selection is refused. Each item is then decided on its own; one that
+// needs its own receipt derives it with selectionItemKey. The answer has the
+// call output's shape: each item's outcome in result, and the call's receipt.
+async function runSelection<T>(args: {
+  ctx: any; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
+  target: ResolvedCommunityTarget; operation: string; idempotencyKey: string;
+  items: T[]; decide: (item: T) => Promise<{ ok: boolean } & Record<string, unknown>>;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const reservation = await reserveMutatingOperation({ ...args, toolName: "polynet_call" });
+  if (!reservation.ok) return reservation.result;
+  if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+  const results = [];
+  for (const item of args.items) results.push(await args.decide(item));
+  const succeeded = results.filter(result => result.ok).length;
+  return { ok: true, value: await completeMutatingOperation({
+    ...args, toolName: "polynet_call", requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+    value: {
+      ok: true, operation: args.operation,
+      result: { results, succeeded, failed: results.length - succeeded },
+      receipt: { ...canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target: args.target, idempotencyKey: args.idempotencyKey }),
+        authority_lane: "moderator" },
+    },
+  }) };
 }
 const APPROVE_MILESTONE_OPERATION = "community.workflow.approve_milestone";
 // A builder's own agent publishes the community's site by handing over its files.
@@ -214,6 +226,13 @@ function canonicalReceipt(args: {
     ...(args.idempotencyKey ? { idempotency_key: args.idempotencyKey } : {}),
     deduped: args.deduped === true,
   };
+}
+
+// A polynet_call's answer in the published output shape.
+function callAnswer(args: { operation: string; principalKind: PolynetPrincipalKind; target: ResolvedCommunityTarget;
+  idempotencyKey?: string | null; result: Record<string, unknown> }) {
+  return { ok: true, operation: args.operation, result: args.result,
+    receipt: canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target: args.target, idempotencyKey: args.idempotencyKey }) };
 }
 
 function stableRequestValue(value: unknown): unknown {
@@ -2429,7 +2448,7 @@ async function executeCanonicalCall(args: {
       const value = await args.ctx.runMutation(
         (internal as any).communityInteractions.setCommunityInteractionReactionForTrustedUserInternal,
         { targetType: ref.objectType, targetId: String(ref.objectId), emoji, on: rawInput.on, trustedUserId: args.userId });
-      return { ok: true, value };
+      return { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey, result: value }) };
     } catch { return canonicalError("interaction_unavailable", "That post is not available to react to."); }
   }
   if (operation === LESSON_DONE_OPERATION) {
@@ -2438,12 +2457,11 @@ async function executeCanonicalCall(args: {
       return canonicalError("invalid_tool_args", "A lesson ref (resource:<id>) and done (true or false) are required.");
     const value = await args.ctx.runMutation((internal as any).communityLessonProgress.setLessonDoneInternal,
       { communityId: target.communityId, userId: args.userId, ref: rawInput.ref, done: rawInput.done });
-    return value.ok ? { ok: true, value: { ok: true, operation, result: { ref: value.ref, done: value.done },
-      receipt: canonicalReceipt({ toolName: "polynet_call", principalKind: args.principalKind, target, idempotencyKey }) } }
-      : canonicalError(value.code, value.message);
+    return value.ok ? { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey,
+      result: { ref: value.ref, done: value.done } }) } : canonicalError(value.code, value.message);
   }
   if (operation === MARK_READ_OPERATION || operation === PRESENCE_HEARTBEAT_OPERATION || operation === TYPING_SET_OPERATION) {
-    return await executeLiveMemberCall({ ...args, target, operation, input });
+    return await executeLiveMemberCall({ ...args, target, operation, input, idempotencyKey });
   }
   if (operation === FORM_SUBMIT_OPERATION) {
     const request = typeof rawInput.form_request_ref === "string" ? /^form-request:([A-Za-z0-9]+)$/.exec(rawInput.form_request_ref) : null;
@@ -2522,23 +2540,13 @@ async function executeCanonicalCall(args: {
       return decided.ok ? { ok: true, value: decided.value } : canonicalError(decided.code, decided.message,
         "retry_after_ms" in decided ? { retry_after_ms: decided.retry_after_ms } : undefined);
     }
-    // The call's key is bound to the whole selection: a retry replays it, the
-    // same key with another selection is refused. Each item keeps its own
-    // receipt too, so a call cut off part way never decides one twice.
-    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_call", idempotencyKey });
-    if (!reservation.ok) return reservation.result;
-    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
-    const results = [];
-    for (const request of requests) {
-      const decided = await decide(request!);
-      results.push(decided.ok ? { request_ref: request!.requestRef, ok: true, ...decided.value }
-        : { request_ref: request!.requestRef, ...decided });
-    }
-    return { ok: true, value: await completeMutatingOperation({
-      ...args, target, toolName: "polynet_call", idempotencyKey,
-      requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
-      value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }),
-    }) };
+    // Each request also keeps its own receipt (selectionItemKey), so a call cut
+    // off part way never decides one twice.
+    return await runSelection({ ...args, target, operation, idempotencyKey, items: requests.map(request => request!),
+      decide: async request => {
+        const decided = await decide(request);
+        return decided.ok ? { request_ref: request.requestRef, ok: true, ...decided.value } : { request_ref: request.requestRef, ...decided };
+      } });
   }
   if (operation === REMOVE_POSTS_OPERATION) {
     const refs = Array.isArray(rawInput.refs) ? rawInput.refs : null;
@@ -2548,27 +2556,17 @@ async function executeCanonicalCall(args: {
       return canonicalError("invalid_tool_args",
         `Give refs: 1 to ${SELECTION_MAX} different interaction:root:<id> or interaction:reply:<id> refs.`);
     }
-    // One receipt for the call: a retry replays it, and the same key with a
-    // different selection is refused. Removing is a state, so a post already
-    // removed still counts as removed.
-    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_call", idempotencyKey });
-    if (!reservation.ok) return reservation.result;
-    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
-    const results = [];
-    for (const ref of refs as string[]) {
-      try {
-        const value = await args.ctx.runMutation((internal as any).communityInteractions.removeInteractionForTrustedModeratorInternal,
-          { userId: args.userId, communityId: target.communityId, ref });
-        results.push({ ref, ok: true, removed: true, ...(value?.alreadyRemoved ? { already_removed: true } : {}) });
-      } catch {
-        results.push({ ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." });
-      }
-    }
-    return { ok: true, value: await completeMutatingOperation({
-      ...args, target, toolName: "polynet_call", idempotencyKey,
-      requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
-      value: selectionResult({ operation, principalKind: args.principalKind, target, idempotencyKey, results }),
-    }) };
+    // Removing is a state, so a post already removed still counts as removed.
+    return await runSelection({ ...args, target, operation, idempotencyKey, items: refs as string[],
+      decide: async ref => {
+        try {
+          const value = await args.ctx.runMutation((internal as any).communityInteractions.removeInteractionForTrustedModeratorInternal,
+            { userId: args.userId, communityId: target.communityId, ref });
+          return { ref, ok: true, removed: true, ...(value?.alreadyRemoved ? { already_removed: true } : {}) };
+        } catch {
+          return { ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." };
+        }
+      } });
   }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
 }
@@ -2667,9 +2665,11 @@ async function executeSiteDeploy(args: {
 async function executeLiveMemberCall(args: {
   ctx: any;
   userId: string;
+  principalKind: PolynetPrincipalKind;
   target: ResolvedCommunityTarget;
   operation: string;
   input: Record<string, unknown>;
+  idempotencyKey: string;
 }): Promise<PolynetCanonicalExecutionResult> {
   const { input, target } = args;
   const allowed = args.operation === MARK_READ_OPERATION ? ["channel", "through_at"]
@@ -2691,25 +2691,41 @@ async function executeLiveMemberCall(args: {
         : "The presence heartbeat takes no input.");
   }
   const scope = { userId: args.userId, communityId: target.communityId };
+  const answer = (result: Record<string, unknown>) => ({ ok: true as const, value: callAnswer({
+    operation: args.operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result }) });
   try {
     if (args.operation === PRESENCE_HEARTBEAT_OPERATION) {
-      return { ok: true, value: await args.ctx.runMutation(
-        (internal as any).communityPublic.heartbeatCommunityPresenceForUserInternal, scope) };
+      return answer(await args.ctx.runMutation(
+        (internal as any).communityPublic.heartbeatCommunityPresenceForUserInternal, scope));
     }
     if (args.operation === TYPING_SET_OPERATION) {
-      return { ok: true, value: await args.ctx.runMutation(
+      return answer(await args.ctx.runMutation(
         (internal as any).communityChat.setCommunityTypingForUserInternal,
-        { ...scope, channelSlug: channel, on: input.on, ...(thread ? { rootId: String(thread.objectId) } : {}) }) };
+        { ...scope, channelSlug: channel, on: input.on, ...(thread ? { rootId: String(thread.objectId) } : {}) }) ?? {});
     }
     const value = await args.ctx.runMutation(
       (internal as any).communityAttention.markCommunityChannelReadForUserInternal,
       { ...scope, channelSlug: channel, ...(input.through_at === undefined ? {} : { throughAtMs: input.through_at }) });
-    return { ok: true, value: { channel, advanced: value.advanced === true,
-      seen_through_at: value.seenThroughAt > 0 ? value.seenThroughAt : null } };
+    return answer({ channel, advanced: value.advanced === true,
+      seen_through_at: value.seenThroughAt > 0 ? value.seenThroughAt : null });
   } catch {
     return canonicalError("channel_unavailable", args.operation === PRESENCE_HEARTBEAT_OPERATION
       ? "Presence is not available in this community." : "That channel is not available.");
   }
+}
+
+// Writes a person makes through their own AI or their site come out of a
+// per-minute budget. Keeping a site alive (presence, typing, read position)
+// doesn't count.
+const WRITE_BUDGET_EXEMPT_OPERATIONS = [PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, MARK_READ_OPERATION];
+async function takeMemberWrite(args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind; toolName: PolynetCanonicalToolName },
+  input: Record<string, unknown>): Promise<PolynetCanonicalExecutionResult | null> {
+  if (args.principalKind !== "external_mcp" && args.principalKind !== "community_app") return null;
+  if (args.toolName === "polynet_call" && WRITE_BUDGET_EXEMPT_OPERATIONS.includes(String(input.operation ?? ""))) return null;
+  const taken = await args.ctx.runMutation((internal as any).memberWriteRateLimit.takeMemberWriteInternal, { userId: args.userId });
+  return taken.ok ? null : canonicalError("rate_limited",
+    `Too many changes in a minute. Try again in ${Math.max(1, Math.ceil(taken.retryAfterMs / 1000))} seconds.`,
+    { retry_after_ms: taken.retryAfterMs });
 }
 
 export async function executePolynetCanonicalTool(args: {
@@ -2772,6 +2788,8 @@ export async function executePolynetCanonicalTool(args: {
   }
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);
+  const limited = await takeMemberWrite(args, input);
+  if (limited) return limited;
   if (args.toolName === "polynet_write")
     return await executeCanonicalWrite(common);
   return await executeCanonicalCall(common);

@@ -120,6 +120,8 @@ await polynet.post(general.slug, text);                          // a new post
 await polynet.post(general.slug, text, { replyTo: p.ref });      // a reply
 await polynet.post(general.slug, text, { askAgent: true });      // ask the agent in public: it answers in the thread
 await polynet.react(p.ref, "🔥", !p.reacted_by_me.includes("🔥")); // toggle a reaction
+// A member has 60 changes a minute (posts, edits, reactions, lesson progress); past that a call
+// throws PolynetError with code "rate_limited". Read state, presence and typing don't count.
 const replies = await polynet.thread(general.slug, p.ref);       // the post, then its replies
 ```
 

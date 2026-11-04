@@ -168,6 +168,7 @@ import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberOntology from "../memberOntology.js";
 import type * as memberOntologyCore from "../memberOntologyCore.js";
+import type * as memberWriteRateLimit from "../memberWriteRateLimit.js";
 import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.js";
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
 import type * as operatorAccess from "../operatorAccess.js";
@@ -380,6 +381,7 @@ declare const fullApi: ApiFromModules<{
   memberEntryDestination: typeof memberEntryDestination;
   memberOntology: typeof memberOntology;
   memberOntologyCore: typeof memberOntologyCore;
+  memberWriteRateLimit: typeof memberWriteRateLimit;
   openAiNativeToolCompletion: typeof openAiNativeToolCompletion;
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
   operatorAccess: typeof operatorAccess;
