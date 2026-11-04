@@ -4,7 +4,7 @@ import { buildCommunityTurnContract, summarizeCommunityTurnContract } from "../s
 // Who speaks, who sees the answer, and what that allows.
 test("a private Ask: the member asks and sees the answer; their profile and the shared layers are in", () => {
   const ask = buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" });
-  expect(ask).toMatchObject({ speaker: { kind: "member", userId: "u1" }, audience: { kind: "asker" }, uses: { communityCard: true, handbook: true, askerProfile: true }, cacheKey: "pn:c1:ask" });
+  expect(ask).toMatchObject({ speaker: { kind: "member", userId: "u1" }, audience: { kind: "asker" }, uses: { communityCard: true, handbook: true, askerProfile: true }, cacheKey: "pn:c1:ask", historyTurns: 20 });
 });
 
 test("an Ask inside a community conversation keeps the shared layers but never the asker's global profile", () => {
