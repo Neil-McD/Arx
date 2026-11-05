@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type {
   CommunityFunnelConfig,
   PublicPlanSummary,
@@ -87,6 +88,15 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   } = props;
 
   const communityName = publicCommunity?.name ?? publicRouteSlug ?? "Community";
+
+  useEffect(() => {
+    if (!publicCommunity?.name) return;
+    const previousTitle = document.title;
+    document.title = `${publicCommunity.name} · Polynet`;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [publicCommunity?.name]);
   const funnel = publicCommunity?.funnel ?? null;
   const memberCount =
     typeof publicCommunity?.member_count === "number" ? publicCommunity.member_count : null;

@@ -4,7 +4,8 @@ import { Search } from "lucide-react";
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
 import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
 import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityTypes";
-import { PublicFrame } from "./ConversionLanding";
+import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
+import { PublicFrame, trackStart } from "./ConversionLanding";
 import "./ConversionLanding.css";
 
 type PublicFindPageProps = { onJoin: () => void };
@@ -24,7 +25,11 @@ function matches(community: DiscoverCommunitySnapshot, query: string): boolean {
 function CommunityCard(props: { community: DiscoverCommunitySnapshot }) {
   const { community } = props;
   return (
-    <a className="showcase-card" href={`/c/${community.slug}`}>
+    <a
+      className="showcase-card"
+      href={`/c/${community.slug}`}
+      onClick={() => captureProductAnalyticsEvent("community_card_opened", { community_id: community.id, placement: "find" })}
+    >
       {community.banner_url ? (
         <span className="showcase-banner" style={{ backgroundImage: `url(${community.banner_url})` }} />
       ) : (
@@ -49,12 +54,21 @@ export function PublicFindPage({ onJoin }: PublicFindPageProps) {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
+    const previousTitle = document.title;
+    document.title = "Find a community · Polynet";
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     void listCloudDiscoverCommunities({ limit: 200 })
       .then((all) => {
         if (cancelled) return;
         setCommunities(all);
         setLoadState("ready");
+        captureProductAnalyticsEvent("find_viewed", { communities: all.length });
       })
       .catch(() => {
         if (!cancelled) setLoadState("failed");
@@ -102,7 +116,7 @@ export function PublicFindPage({ onJoin }: PublicFindPageProps) {
 
       <section className="closing" aria-labelledby="find-start-title">
         <h2 id="find-start-title">Don't see yours? Start it.</h2>
-        <button className="cta" type="button" onClick={onJoin}>Start a community</button>
+        <button className="cta" type="button" onClick={trackStart("find_closing", onJoin)}>Start a community</button>
         <p className="microcopy">Free to build your community · The agent is $79/month with AI included</p>
       </section>
     </PublicFrame>
