@@ -64,10 +64,6 @@ const dmInboxQuery = directMessages.slice(
 );
 const dmListMessagesQuery = directMessages.slice(
   directMessages.indexOf("async function listDirectMessagesForUser"),
-  directMessages.indexOf("async function generateDirectMessageAttachmentUploadUrlForConversation"),
-);
-const dmAttachmentUploadMutation = directMessages.slice(
-  directMessages.indexOf("async function generateDirectMessageAttachmentUploadUrlForConversation"),
   directMessages.indexOf("async function sendDirectMessageForUser"),
 );
 const dmExistingConversationSendMutation = directMessages.slice(
@@ -77,10 +73,6 @@ const dmExistingConversationSendMutation = directMessages.slice(
 const dmFirstSendMutation = directMessages.slice(
   directMessages.indexOf("async function sendDirectMessageToTargetForUser"),
   directMessages.indexOf("async function setDirectMessageBlockForUser"),
-);
-const dmFirstAttachmentUploadMutation = directMessages.slice(
-  directMessages.indexOf("async function generateDirectMessageAttachmentUploadUrlForTarget"),
-  directMessages.indexOf("const SITE_DM_UPLOAD_MAX_AGE_MS"),
 );
 const dmSetTypingMutation = directMessages.slice(
   directMessages.indexOf("async function setDirectTypingForUser"),
@@ -104,10 +96,6 @@ const dmSendMutation = directMessages.slice(
 const dmHostSerializeAttachments = dmHost.slice(
   dmHost.indexOf("function serializeDirectAttachmentsForWrite"),
   dmHost.indexOf("export function WebDirectMessagesHost"),
-);
-const dmHostUploadAttachmentDraft = dmHost.slice(
-  dmHost.indexOf("const uploadDirectAttachmentDraft = useCallback"),
-  dmHost.indexOf("const sendDirectMessage = useCallback"),
 );
 const dmPanelComposerAttachmentStatus = dmPanel.slice(
   dmPanel.indexOf("function getComposerAttachmentUploadStatus"),
@@ -194,7 +182,6 @@ assert.match(directMessages, /lastSeq > 0[\s\S]*query\("dmMessages" as any\)[\s\
 assert.match(directMessages, /last_message_preview: \(\(\) => \{[\s\S]*readDirectMessageTextPreview\(lastMessage\.contentJson\)[\s\S]*`You: \$\{preview\}`/, "conversation projection must expose the latest text preview and identify viewer sends");
 assert.match(communityTypes, /last_message_preview: string \| null/, "shared DM conversation type must expose the latest text preview");
 assert.match(communityTypes, /export type DirectMessageAttachment/, "shared DM types must expose the DM attachment shape");
-assert.match(directMessages, /Sent an image[\s\S]*Sent a file[\s\S]*Sent attachments/, "DM inbox preview must summarize attachment-only messages");
 assert.match(communityTypes, /export type DirectMessageTypingPresenceUser/, "shared DM types must expose typing presence users");
 assert.match(communityTypes, /export type DirectMessageTypingPresenceBundle/, "shared DM types must expose typing presence bundles");
 assert.match(dmEnsureUserParticipantHelper, /touchActivity: boolean/, "participant ensure helper must distinguish creation/send activity from open-only access");
@@ -251,13 +238,6 @@ assert.match(dmExistingConversationSendMutation, /requireActiveUserParticipant[\
 assert.doesNotMatch(dmExistingConversationSendMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "existing-conversation sends must not depend on public-profile completion");
 assert.match(dmFirstSendMutation, /requireDirectMessageRelationshipAccess/, "first sends must require current shared-community relationship access");
 assert.doesNotMatch(dmFirstSendMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "first sends must not depend on public-profile completion");
-assert.match(directMessages, /generateDirectMessageAttachmentUploadUrl = mutation/, "backend must expose a DM attachment upload URL mutation");
-assert.match(dmAttachmentUploadMutation, /requireActiveUserParticipant/, "DM attachment upload must require active conversation participation");
-assert.doesNotMatch(dmAttachmentUploadMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "DM attachment upload must not depend on public-profile completion");
-assert.match(dmAttachmentUploadMutation, /requireDirectConversationSendAccess/, "DM attachment upload must require current send access");
-assert.match(dmAttachmentUploadMutation, /ctx\.storage\.generateUploadUrl/, "DM attachment upload must use Convex storage upload URLs");
-assert.match(dmFirstAttachmentUploadMutation, /requireDirectMessageRelationshipAccess/, "first-message attachment uploads must require current shared-community relationship access");
-assert.doesNotMatch(dmFirstAttachmentUploadMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "first-message attachment uploads must not depend on public-profile completion");
 assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*listConversationParticipants[\s\S]*participantType === "user"[\s\S]*peerParticipants\.length !== 1/, "DM send access guard must require exactly one active human peer");
@@ -266,15 +246,8 @@ assert.doesNotMatch(directMessages, /requireDirectConversationSendAccess[\s\S]*r
 assert.match(dmExistingConversationSendMutation, /requireDirectConversationSendAccess\(\{[\s\S]*conversation,[\s\S]*viewerUserId[\s\S]*appendDirectMessageFromUser/, "send mutation must enforce continuous shared-community access before appending");
 assert.match(dmExistingConversationSendMutation, /export const sendDirectMessage = mutation[\s\S]*sendDirectMessageForUser\(ctx, viewerUserId/, "Studio's send must run the shared send helper");
 assert.match(dmSendMutation, /attachments: v\.optional\(v\.array\(v\.any\(\)\)\)/, "send mutation must accept bounded attachment metadata");
-assert.match(dmAppendMessageHelper, /normalizeStoredDirectMessageAttachments\(args\.attachments,[\s\S]*enforceWritePolicy: true/, "shared send append must normalize DM attachments with write policy enforcement");
 assert.match(dmAppendMessageHelper, /dm_message_payload_required/, "shared send append must allow attachment-only messages but reject empty payloads");
-assert.match(directMessages, /MAX_DM_STORED_ATTACHMENTS = 8/, "DM attachments must keep a small per-message count limit");
-assert.match(directMessages, /MAX_DM_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/, "DM attachments must enforce a 10MB per-file metadata limit");
-assert.match(directMessages, /MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 \* 1024 \* 1024/, "DM attachments must enforce a 25MB total metadata limit");
-assert.match(directMessages, /dm_attachment_storage_required/, "DM attachments must require uploaded storage ids instead of inline payloads");
 assert.doesNotMatch(directMessages, /data_url/, "DM backend must not store raw attachment data URLs");
-assert.match(directMessages, /maybeResolveDirectMessageStorageUrl[\s\S]*ctx\.storage\.getUrl[\s\S]*mapDirectMessageContentJsonForRead/, "DM read mapping must resolve stored attachment URLs only after participant-gated reads");
-assert.match(dmAppendMessageHelper, /contentJson = attachments\.length > 0 \? \{ text, attachments \} : \{ text \}/, "DM send must keep attachments embedded in the message payload");
 assert.match(dmAppendMessageHelper, /touchActiveConversationParticipantsActivity\(\{[\s\S]*nowMs,[\s\S]*senderParticipantId: args\.senderParticipantId,[\s\S]*senderLastReadSeq: seq/, "shared send append must update participant inbox activity and mark the sender read through their own message");
 assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slice must not introduce follow graph semantics");
 
@@ -294,8 +267,6 @@ assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose l
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
 assert.match(gateway, /sendCloudDirectMessageToUser/, "web gateway must support first-send conversation creation");
 assert.match(gateway, /directMessages:sendDirectMessageToUser[\s\S]*clientMessageId/, "first-send gateway path must preserve client-message idempotency");
-assert.match(gateway, /uploadCloudDirectMessageAttachmentFile/, "web gateway must upload direct message attachments");
-assert.match(gateway, /directMessages:generateDirectMessageAttachmentUploadUrl/, "web gateway must request DM attachment upload URLs from the canonical backend mutation");
 assert.match(gateway, /directMessages:sendDirectMessage[\s\S]*attachments: params\.attachments \?\? \[\]/, "web gateway must pass attachment metadata through the canonical send mutation");
 assert.match(gateway, /markCloudDirectConversationRead/, "web gateway must expose direct conversation read mutation");
 assert.match(gateway, /directMessages:markDirectConversationRead/, "web gateway read mutation must use the canonical backend mutation");
@@ -412,26 +383,14 @@ assert.match(dmHost, /useDirectMessageTypingPresence/, "global DM host must own 
 assert.match(dmHost, /clearDirectTypingForConversation/, "global DM host must centralize DM typing clear calls");
 assert.doesNotMatch(dmHost, /clearCloudDirectTyping/, "global DM host must delegate ordered typing clears to the dedicated hook");
 assert.match(dmHost, /typingPresence=\{directTypingPresence\}/, "global DM host must pass typing presence into the DM panel");
-assert.match(dmHost, /MAX_DM_ATTACHMENTS_PER_MESSAGE = 8/, "global DM host must keep the same per-message attachment count limit");
-assert.match(dmHost, /MAX_DM_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/, "global DM host must enforce the 10MB per-file attachment limit");
-assert.match(dmHost, /MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 \* 1024 \* 1024/, "global DM host must enforce the 25MB total attachment limit");
-assert.match(dmHost, /isAllowedDirectAttachmentFile/, "global DM host must filter unsupported DM attachment types before upload");
-assert.match(dmHost, /uploadCloudDirectMessageAttachmentFile/, "global DM host must upload DM attachments through the DM gateway");
 assert.match(dmHost, /uploadStatus\?: "queued" \| "uploading" \| "ready" \| "failed"/, "global DM host must model attachment upload lifecycle state");
 assert.match(dmHost, /uploadStatus: "queued"/, "new DM attachment drafts must start queued");
-assert.match(dmHost, /uploadDirectAttachmentDraft/, "global DM host must upload attachment drafts before send");
-assert.match(dmHostUploadAttachmentDraft, /shouldClearPanelError = currentUploadError\.length > 0 && previous\.error === currentUploadError/, "DM upload start must clear only the current attachment upload error");
-assert.match(dmHostUploadAttachmentDraft, /error: shouldClearPanelError \? null : previous\.error/, "DM upload start must preserve unrelated validation errors");
-assert.doesNotMatch(dmHostUploadAttachmentDraft, /error: nextHasFailedAttachment \? previous\.error : null/, "DM upload success must not erase unrelated validation errors");
 assert.match(dmHost, /hasUnreadyDirectAttachments/, "global DM host must block sends while attachments are queued, uploading, or failed");
 assert.match(dmHostSerializeAttachments, /getDirectAttachmentUploadStatus\(attachment\) !== "ready"[\s\S]*continue/, "global DM host must serialize only ready uploaded attachments");
 assert.match(dmHostSerializeAttachments, /storageId/, "global DM host must serialize uploaded storage ids for DM attachment sends");
 assert.doesNotMatch(dmHostSerializeAttachments, /data_url|text:/, "global DM host must not serialize inline attachment payloads for DMs");
 assert.doesNotMatch(dmHost, /prepareDirectAttachmentsForSend/, "DM send path must not upload implicitly during send");
 assert.match(dmHost, /attachments=\{directMessagePanel\.attachments\}/, "global DM host must pass composer attachments into the DM panel");
-assert.match(dmHost, /onAttachmentFilesSelected=\{handleDirectAttachmentFilesSelected\}/, "global DM host must wire file selection to the DM panel");
-assert.match(dmHost, /onRetryAttachment=\{retryDirectAttachmentUpload\}/, "global DM host must wire failed attachment retry to the DM panel");
-assert.match(dmHost, /onRemoveAttachment=\{removeDirectAttachment\}/, "global DM host must wire attachment removal to the DM panel");
 assert.match(dmHost, /void clearDirectTypingForConversation\(conversationId\)/, "global DM host must clear typing presence immediately after send submission");
 assert.match(dmHost, /onComposerBlur=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence on composer blur");
 assert.match(dmHost, /onBackToInbox=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when leaving a conversation");
@@ -526,3 +485,10 @@ assert.match(css, /\.community-dm-inbox-row-unread \{[\s\S]*width: 8px[\s\S]*hei
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");
 
 console.log("PASS: direct messages are community-origin, participant-based, and follow-free.");
+
+// Nov 5: direct messages are text only. Nothing uploads a DM file, and any
+// attachment a send carries (an older page) is refused.
+assert.match(dmAppendMessageHelper, /dm_attachments_not_supported/, "DM send must refuse any attachment");
+assert.doesNotMatch(directMessages, /ctx\.storage\.generateUploadUrl/, "DM backend must not hand out upload URLs");
+assert.doesNotMatch(gateway, /AttachmentUploadUrl|uploadCloudDirectMessageAttachmentFile/, "web gateway must not upload DM files");
+assert.doesNotMatch(dmHost, /onAttachmentFilesSelected=/, "Studio's DM host must not offer file selection");

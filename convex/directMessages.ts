@@ -80,23 +80,9 @@ type DirectMessageTypingPresenceLike = {
   updatedAt: number;
 };
 
-type StoredDirectMessageAttachment = {
-  id: string;
-  name: string;
-  type: "image" | "file";
-  mime: string | null;
-  size: number;
-  storageId: string;
-};
-
 const MAX_DM_TEXT_CHARS = 4000;
 const MAX_DM_PREVIEW_CHARS = 120;
 const MAX_DM_MESSAGE_ROWS = 200;
-const MAX_DM_STORED_ATTACHMENTS = 8;
-const MAX_DM_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
-const MAX_DM_ATTACHMENT_NAME_CHARS = 256;
-const MAX_DM_ATTACHMENT_MIME_CHARS = 160;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
 const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
 const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
@@ -144,177 +130,15 @@ function normalizeDirectMessageText(raw: unknown): string {
   return text.slice(0, MAX_DM_TEXT_CHARS);
 }
 
-function createAttachmentId(): string {
-  return `attachment-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function normalizeDirectAttachmentName(raw: unknown): string {
-  const name = String(raw ?? "").trim();
-  return (name || "attachment").slice(0, MAX_DM_ATTACHMENT_NAME_CHARS);
-}
-
-function normalizeDirectAttachmentMime(raw: unknown): string | null {
-  const mime = String(raw ?? "").trim().toLowerCase();
-  return mime ? mime.slice(0, MAX_DM_ATTACHMENT_MIME_CHARS) : null;
-}
-
-function isAllowedDirectAttachment(rawType: "image" | "file", mime: string | null, name: string): boolean {
-  const normalizedMime = String(mime ?? "").toLowerCase();
-  const normalizedName = name.toLowerCase();
-  const blockedMimes = new Set([
-    "application/gzip",
-    "application/vnd.microsoft.portable-executable",
-    "application/x-7z-compressed",
-    "application/x-msdownload",
-    "application/x-rar-compressed",
-    "application/x-sh",
-    "application/zip",
-    "image/avif",
-    "image/heic",
-    "image/heif",
-    "image/svg+xml",
-  ]);
-  if (normalizedMime && blockedMimes.has(normalizedMime)) return false;
-  if (rawType === "image") {
-    if (normalizedMime) {
-      return ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(normalizedMime);
-    }
-    return (
-      [".jpg", ".jpeg", ".png", ".webp", ".gif"].some((extension) => normalizedName.endsWith(extension))
-    );
-  }
-  const allowedFileMimes = new Set([
-    "application/json",
-    "application/msword",
-    "application/pdf",
-    "application/rtf",
-    "application/vnd.ms-excel",
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/csv",
-    "text/markdown",
-    "text/plain",
-  ]);
-  if (normalizedMime && allowedFileMimes.has(normalizedMime)) return true;
-  return [
-    ".csv",
-    ".doc",
-    ".docx",
-    ".json",
-    ".md",
-    ".pdf",
-    ".ppt",
-    ".pptx",
-    ".rtf",
-    ".txt",
-    ".xls",
-    ".xlsx",
-  ].some((extension) => normalizedName.endsWith(extension));
-}
-
-function normalizeStoredDirectMessageAttachment(
-  raw: unknown,
-  options: { enforceWritePolicy?: boolean } = {},
-): StoredDirectMessageAttachment | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record = raw as Record<string, unknown>;
-  const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : createAttachmentId();
-  const name = normalizeDirectAttachmentName(record.name);
-  const type = record.type === "image" ? "image" : "file";
-  const mime = normalizeDirectAttachmentMime(record.mime);
-  const sizeRaw = Number(record.size);
-  const size = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
-  const storageIdRaw =
-    typeof record.storageId === "string"
-      ? record.storageId
-      : typeof record.storage_id === "string"
-        ? record.storage_id
-        : "";
-  const storageId = storageIdRaw.trim();
-  if (!storageId) {
-    if (options.enforceWritePolicy) throw new Error("dm_attachment_storage_required");
-    return null;
-  }
-  if (!isAllowedDirectAttachment(type, mime, name)) {
-    if (options.enforceWritePolicy) throw new Error("dm_attachment_type_not_supported");
-    return null;
-  }
-  if (size > MAX_DM_ATTACHMENT_BYTES) {
-    if (options.enforceWritePolicy) throw new Error("dm_attachment_too_large");
-    return null;
-  }
-  return {
-    id,
-    name,
-    type,
-    mime,
-    size,
-    storageId,
-  };
-}
-
-function normalizeStoredDirectMessageAttachments(
-  raw: unknown,
-  options: { enforceWritePolicy?: boolean } = {},
-): StoredDirectMessageAttachment[] {
-  if (!Array.isArray(raw)) return [];
-  if (options.enforceWritePolicy && raw.length > MAX_DM_STORED_ATTACHMENTS) {
-    throw new Error("dm_attachment_limit_exceeded");
-  }
-  const out: StoredDirectMessageAttachment[] = [];
-  let totalBytes = 0;
-  for (const item of raw) {
-    if (out.length >= MAX_DM_STORED_ATTACHMENTS) break;
-    const normalized = normalizeStoredDirectMessageAttachment(item, options);
-    if (!normalized) continue;
-    totalBytes += normalized.size;
-    if (totalBytes > MAX_DM_ATTACHMENT_TOTAL_BYTES) {
-      if (options.enforceWritePolicy) throw new Error("dm_attachment_total_too_large");
-      break;
-    }
-    out.push(normalized);
-  }
-  return out;
-}
-
-async function maybeResolveDirectMessageStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
-  const resolvedStorageId = String(storageId ?? "").trim();
-  if (!resolvedStorageId) return null;
-  const resolved = await ctx.storage.getUrl(resolvedStorageId as any);
-  return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
-}
-
-async function mapDirectMessageContentJsonForRead(ctx: any, contentJson: unknown): Promise<unknown> {
+// Messages are text only (Nov 5: DM attachments removed; none were ever sent in
+// production). An older stored message's attachments are never served.
+async function mapDirectMessageContentJsonForRead(_ctx: any, contentJson: unknown): Promise<unknown> {
   if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return contentJson;
   const record = contentJson as Record<string, unknown>;
-  const attachments = normalizeStoredDirectMessageAttachments(record.attachments);
-  if (attachments.length === 0) {
-    return Array.isArray(record.attachments) ? { ...record, attachments: [] } : contentJson;
-  }
-  const resolvedAttachments = await Promise.all(
-    attachments.map(async (attachment) => ({
-      id: attachment.id,
-      name: attachment.name,
-      type: attachment.type,
-      mime: attachment.mime,
-      size: attachment.size,
-      storage_id: attachment.storageId,
-      url: await maybeResolveDirectMessageStorageUrl(ctx, attachment.storageId),
-    })),
-  );
-  return {
-    ...record,
-    attachments: resolvedAttachments,
-  };
+  return "attachments" in record ? { ...record, attachments: [] } : contentJson;
 }
 
 function readDirectMessageTextPreview(contentJson: unknown): string | null {
-  const attachments =
-    contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)
-      ? normalizeStoredDirectMessageAttachments((contentJson as Record<string, unknown>).attachments)
-      : [];
   const rawText =
     typeof contentJson === "string"
       ? contentJson
@@ -322,11 +146,7 @@ function readDirectMessageTextPreview(contentJson: unknown): string | null {
         ? (contentJson as Record<string, unknown>).text
         : null;
   const normalized = stripChatInlineMarkdown(rawText).replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    if (attachments.length === 0) return null;
-    if (attachments.length === 1) return attachments[0]?.type === "image" ? "Sent an image" : "Sent a file";
-    return "Sent attachments";
-  }
+  if (!normalized) return null;
   if (normalized.length <= MAX_DM_PREVIEW_CHARS) return normalized;
   return `${normalized.slice(0, MAX_DM_PREVIEW_CHARS - 3).trimEnd()}...`;
 }
@@ -999,7 +819,7 @@ async function appendDirectMessageFromUser(args: {
   senderUserId: any;
   senderParticipantId: any;
   text: string;
-  attachments: unknown;
+  attachments?: unknown;
   clientMessageId?: string | null;
 }): Promise<DirectMessageLike> {
   const nowMs = Date.now();
@@ -1015,11 +835,10 @@ async function appendDirectMessageFromUser(args: {
   }
   const seq = Math.max(0, Math.floor(args.conversation.lastSeq ?? 0)) + 1;
   const text = normalizeDirectMessageText(args.text);
-  const attachments = normalizeStoredDirectMessageAttachments(args.attachments, {
-    enforceWritePolicy: true,
-  });
-  if (!text && attachments.length === 0) throw new Error("dm_message_payload_required");
-  const contentJson = attachments.length > 0 ? { text, attachments } : { text };
+  // Text only. Older Studio pages may still send an attachments array.
+  if (Array.isArray(args.attachments) && args.attachments.length > 0) throw new Error("dm_attachments_not_supported");
+  if (!text) throw new Error("dm_message_payload_required");
+  const contentJson = { text };
   const messageId = await args.ctx.db.insert("dmMessages" as any, {
     conversationId: args.conversation._id,
     seq,
@@ -1635,33 +1454,19 @@ export const listDirectMessages = query({
   },
 });
 
-async function generateDirectMessageAttachmentUploadUrlForConversation(ctx: any, viewerUserId: any, conversationId: any) {
-  const { conversation } = await requireActiveUserParticipant({
-    ctx,
-    conversationId,
-    userId: viewerUserId,
-  });
-  await requireDirectConversationSendAccess({
-    ctx,
-    conversation,
-    viewerUserId,
-  });
-  return {
-    uploadUrl: await ctx.storage.generateUploadUrl(),
-  };
-}
-
+// Retired Nov 5 (DMs are text only). Kept by name for one release because
+// cached Studio pages call them; both refuse. Delete the release after.
 export const generateDirectMessageAttachmentUploadUrl = mutation({
-  args: {
-    authSubject: v.optional(v.string()),
-    conversationId: v.id("dmConversations"),
+  args: { authSubject: v.optional(v.string()), conversationId: v.id("dmConversations") },
+  handler: async () => {
+    throw new Error("dm_attachments_not_supported");
   },
-  handler: async (ctx, args) => {
-    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    return await generateDirectMessageAttachmentUploadUrlForConversation(ctx, viewerUserId, args.conversationId);
+});
+
+export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
+  args: { authSubject: v.optional(v.string()), targetUserId: v.string(), communityId: v.optional(v.id("communities")) },
+  handler: async () => {
+    throw new Error("dm_attachments_not_supported");
   },
 });
 
@@ -1885,44 +1690,6 @@ export const unblockDirectMessageUser = mutation({
   },
 });
 
-async function generateDirectMessageAttachmentUploadUrlForTarget(
-  ctx: any,
-  viewerUserId: any,
-  targetUser: UserRow,
-  communityId: any | null,
-) {
-  await requireDirectMessageRelationshipAccess({
-    ctx,
-    viewerUserId,
-    targetUserId: targetUser._id,
-    preferredCommunityId: communityId,
-    requiredCommunityId: null,
-  });
-  return {
-    uploadUrl: await ctx.storage.generateUploadUrl(),
-  };
-}
-
-export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
-  args: {
-    authSubject: v.optional(v.string()),
-    targetUserId: v.string(),
-    communityId: v.optional(v.id("communities")),
-  },
-  handler: async (ctx, args) => {
-    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const targetUser = await findUserByPublicId(ctx, args.targetUserId);
-    if (!targetUser) throw new Error("dm_target_not_found");
-    if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
-      throw new Error("dm_target_self");
-    }
-    return await generateDirectMessageAttachmentUploadUrlForTarget(ctx, viewerUserId, targetUser, args.communityId ?? null);
-  },
-});
-
 // ---------------------------------------------------------------------------
 // Messages on a community site's private twin. The caller (httpCommunityApps)
 // has already checked a private session of a member of that community; these
@@ -1944,27 +1711,6 @@ async function siteTargetByHandle(ctx: any, viewerUserId: any, handle: string): 
   if (normalizeIdValue(target._id) === normalizeIdValue(viewerUserId)) throw new Error("dm_target_self");
   return target;
 }
-
-// Only files the member uploaded just now (upload URLs last an hour), never an
-// existing file; their size and type as storage recorded them, not as claimed.
-async function siteFreshAttachments(ctx: any, raw: Array<{ storage_id: string; name: string; type: "image" | "file" }>) {
-  const nowMs = Date.now();
-  const out: Array<Record<string, unknown>> = [];
-  for (const item of raw) {
-    const storageId = ctx.db.system.normalizeId("_storage", item.storage_id);
-    const file = storageId ? await ctx.db.system.get(storageId) : null;
-    if (!file || nowMs - Number(file._creationTime) > SITE_DM_UPLOAD_MAX_AGE_MS) throw new Error("dm_attachment_storage_required");
-    out.push({
-      storageId: String(storageId), name: item.name, type: item.type,
-      mime: typeof file.contentType === "string" ? file.contentType : null, size: Number(file.size) || 0,
-    });
-  }
-  return out;
-}
-
-const siteAttachmentInput = v.array(v.object({
-  storage_id: v.string(), name: v.string(), type: v.union(v.literal("image"), v.literal("file")),
-}));
 
 export const listSiteDirectConversationsForTrustedUserInternal = internalQuery({
   args: { userId: v.id("users") },
@@ -2033,13 +1779,11 @@ export const sendSiteDirectMessageForTrustedUserInternal = internalMutation({
     conversationId: v.optional(v.string()),
     handle: v.optional(v.string()),
     text: v.string(),
-    attachments: siteAttachmentInput,
     clientMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const attachments = await siteFreshAttachments(ctx, args.attachments);
     const viewer = await resolvePublicUserId(ctx, args.userId);
-    const send = { text: args.text, attachments, clientMessageId: args.clientMessageId ?? null };
+    const send = { text: args.text, clientMessageId: args.clientMessageId ?? null };
     if (args.conversationId !== undefined) {
       const conversationId = siteConversationId(ctx, args.conversationId);
       const message = await sendDirectMessageForUser(ctx, args.userId, { conversationId, ...send });
@@ -2048,18 +1792,6 @@ export const sendSiteDirectMessageForTrustedUserInternal = internalMutation({
     const target = await siteTargetByHandle(ctx, args.userId, String(args.handle ?? ""));
     const sent = await sendDirectMessageToTargetForUser(ctx, args.userId, target, { communityId: args.communityId, ...send });
     return { conversation_id: sent.conversation.id, message: siteDirectMessage(sent.message, viewer) };
-  },
-});
-
-// Step 1 of Studio's attachment flow: where the browser sends the file.
-export const generateSiteDirectMessageUploadUrlForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), conversationId: v.optional(v.string()), handle: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    if (args.conversationId !== undefined) {
-      return await generateDirectMessageAttachmentUploadUrlForConversation(ctx, args.userId, siteConversationId(ctx, args.conversationId));
-    }
-    const target = await siteTargetByHandle(ctx, args.userId, String(args.handle ?? ""));
-    return await generateDirectMessageAttachmentUploadUrlForTarget(ctx, args.userId, target, args.communityId);
   },
 });
 

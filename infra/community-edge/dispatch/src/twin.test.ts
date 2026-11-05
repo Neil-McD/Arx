@@ -226,8 +226,6 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
       row.last_message = { preview: `You: ${body.text}`, from_me: true, at: message.created_at };
       return Response.json({ ok: true, conversation_id: row.id, message });
     }
-    case "/runtime/app/me/messages/upload":
-      return Response.json({ ok: true, upload_url: `${STORAGE}/api/storage/upload?token=dm` });
     case "/runtime/app/me/messages/read": {
       if (dm.failRead) { dm.failRead = false; return refuse("dm_unavailable", 503); }
       const row = find(body.conversation_id);
@@ -925,7 +923,7 @@ for (const [engine, type] of ENGINES) {
       await expect.poll(() => dmCalls("typing")[0]).toEqual({ conversation_id: SAM, typing: true });
       await input.press("Enter");
       await expect.poll(() => dmCalls("send").length).toBe(1);
-      expect(dmCalls("send")[0]).toEqual({ conversation_id: SAM, text: "Hello Sam", attachments: [], client_message_id: expect.stringMatching(/^[0-9a-f]{32}$/) });
+      expect(dmCalls("send")[0]).toEqual({ conversation_id: SAM, text: "Hello Sam", client_message_id: expect.stringMatching(/^[0-9a-f]{32}$/) });
       await expect.poll(() => log.locator("[part~=message-mine]").allTextContents()).toEqual([expect.stringContaining("Hello Sam")]);
       expect(dmCalls("typing").at(-1)).toEqual({ conversation_id: SAM, typing: false });
       expect(await input.inputValue()).toBe("");
@@ -970,7 +968,7 @@ test("Messages: a profile's Message starts a conversation with the first message
     await input.fill("Welcome to the club!");
     await personal.locator("[part=send]").click();
     await page.waitForURL(`${TWIN}/messages/${NEWBIE}`);
-    expect(dmCalls("send")).toEqual([{ to: "newbie", text: "Welcome to the club!", attachments: [], client_message_id: expect.any(String) }]);
+    expect(dmCalls("send")).toEqual([{ to: "newbie", text: "Welcome to the club!", client_message_id: expect.any(String) }]);
     await expect.poll(() => personal.locator("[part~=message-mine]").allTextContents()).toEqual([expect.stringContaining("Welcome to the club!")]);
     await expect.poll(() => personal.locator("[part=conversation-name]").first().textContent()).toBe("Newbie");
     // Someone the member already talks to: straight to that conversation (Back skips the hop).
@@ -1055,16 +1053,12 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     await expect.poll(() => personal.locator("[part=input]").count()).toBe(1);
     expect(await personal.locator("[part=block]").textContent()).toBe("Block");
     expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
-    // A draft and an attached file survive the next change.
+    // A draft survives the next change.
     await personal.locator("[part=input]").fill("Sorry about that");
-    await personal.locator("input[type=file]").setInputFiles({ name: "wall.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
-    await expect.poll(() => personal.locator("[part=chip]").getAttribute("data-state")).toBe("ready");
     dm.conversations[0].muted = false;
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await expect.poll(() => personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("false");
     expect(await personal.locator("[part=input]").inputValue()).toBe("Sorry about that");
-    expect(await personal.locator("[part=chip]").count()).toBe(1);
-    expect(await personal.locator("[part=attachments]").isVisible()).toBe(true);
   } finally {
     await browser.close();
   }
@@ -1199,7 +1193,7 @@ test("Messages: when the first message makes the thread, other sends and the dra
   }
 }, 60_000);
 
-test("Messages: mute; attachments straight to storage; a failed send kept with Retry under the same key; block asks first", async () => {
+test("Messages: mute; text only, no file picker; a failed send kept with Retry under the same key; block asks first", async () => {
   resetMessages();
   const { browser, page } = await openTwin(chromium, `/messages/${SAM}`, TOKEN, undefined, { fakeLive: true });
   try {
@@ -1210,17 +1204,9 @@ test("Messages: mute; attachments straight to storage; a failed send kept with R
     await expect.poll(() => mute.getAttribute("aria-pressed")).toBe("true");
     expect(dmCalls("mute")).toEqual([{ conversation_id: SAM, muted: true }]);
     await expect.poll(() => personal.locator("[part=conversation]").first().locator("[part=muted-mark]").count()).toBe(1);
-    // A photo: an upload address from the twin, the file straight to Polynet's storage.
-    uploads.length = 0;
-    await personal.locator("input[type=file]").setInputFiles({ name: "wall.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
-    const chip = personal.locator("[part=chip]");
-    await expect.poll(() => chip.getAttribute("data-state")).toBe("ready");
-    expect(uploads).toEqual([{ type: "image/png", bytes: expect.any(Number) }]);
-    expect(dmCalls("upload")).toEqual([{ conversation_id: SAM }]);
-    // Something that can't be sent never uploads.
-    await personal.locator("input[type=file]").setInputFiles({ name: "run.exe", mimeType: "application/x-msdownload", buffer: Buffer.from("MZ") });
-    await expect.poll(() => personal.locator("[part=composer] [part=error]").textContent()).toBe("run.exe: That kind of file can't be sent.");
-    expect(uploads).toHaveLength(1);
+    // Messages are text only: no file picker, no attach button.
+    expect(await personal.locator("input[type=file]").count()).toBe(0);
+    expect(await personal.locator("[part=attach]").count()).toBe(0);
     // Refused: kept on screen with Studio's words and Retry; the retry is the same message.
     dm.failSend = "dm_rate_limited";
     await personal.locator("[part=input]").fill("The wall today");
@@ -1231,8 +1217,7 @@ test("Messages: mute; attachments straight to storage; a failed send kept with R
     await expect.poll(() => dmCalls("send").length).toBe(2);
     const [failed, retried] = dmCalls("send");
     expect(retried).toEqual(failed);
-    expect(retried).toMatchObject({ conversation_id: SAM, text: "The wall today", attachments: [{ storage_id: "kg2photo", name: "wall.png", type: "image" }] });
-    await expect.poll(() => personal.locator("[part~=message-mine] img").getAttribute("src")).toBe(`${STORAGE}/api/storage/kg2photo`);
+    expect(retried).toEqual({ conversation_id: SAM, text: "The wall today", client_message_id: expect.any(String) });
     await expect.poll(() => pending.count()).toBe(0);
     // Block asks first; Cancel changes nothing.
     await personal.locator("[part=block]").click();

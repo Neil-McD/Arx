@@ -327,15 +327,16 @@ so every rule, rate limit, block and refusal is Studio's:
 - **Inbox:** every conversation, newest first, with the other person's picture
   and name, the last message, unread counts and muted marks; a search by name.
   Beside the conversation on a wide page, instead of it on a narrow one.
-- **Conversation:** each at its own address. Messages by day, links in text,
-  images and files; "Load earlier messages"; "Seen" once the other person has
+- **Conversation:** each at its own address. Messages by day, links in text;
+  "Load earlier messages"; "Seen" once the other person has
   read the member's last message; read up to the newest message shown while
   the page is visible; typing both ways (Studio's lease, renewed while
   typing); a send that fails stays on screen with Studio's words and Retry
   (the same key, so the server never takes it twice).
-- **Attachments:** Studio's flow and limits (8 files, 10 MB each, 25 MB in
-  all, Studio's types). The twin's send takes only a file uploaded in the
-  last hour, with the size and type storage recorded.
+- **Text only (Nov 5):** DM attachments were removed everywhere (none had
+  been sent in production, and Studio's send trusted a client-sent storage
+  id). There is no upload route; a send carrying `attachments` is refused
+  with `dm_attachments_not_supported`.
 - **Mute and block:** both on the conversation; block and unblock ask first.
   Blocked, the box is replaced by a note; the other person isn't told.
 

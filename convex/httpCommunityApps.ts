@@ -55,7 +55,6 @@ export const COMMUNITY_APP_MY_MESSAGES_PATH = "/runtime/app/me/messages";
 export const COMMUNITY_APP_MY_CONVERSATION_PATH = "/runtime/app/me/messages/conversation";
 export const COMMUNITY_APP_MY_MESSAGE_START_PATH = "/runtime/app/me/messages/start";
 export const COMMUNITY_APP_MY_MESSAGE_SEND_PATH = "/runtime/app/me/messages/send";
-export const COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH = "/runtime/app/me/messages/upload";
 export const COMMUNITY_APP_MY_MESSAGE_READ_PATH = "/runtime/app/me/messages/read";
 export const COMMUNITY_APP_MY_MESSAGE_MUTE_PATH = "/runtime/app/me/messages/mute";
 export const COMMUNITY_APP_MY_MESSAGE_TYPING_PATH = "/runtime/app/me/messages/typing";
@@ -322,21 +321,6 @@ function messageTarget(body: Record<string, unknown> | null): { conversationId: 
   if (to && body?.conversation_id === undefined) return { handle: to };
   return null;
 }
-// Attachments as the twin sends them after uploading: what storage gave back and the file's name.
-function messageAttachments(raw: unknown): Array<{ storage_id: string; name: string; type: "image" | "file" }> | null {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw) || raw.length > 8) return null;
-  const out: Array<{ storage_id: string; name: string; type: "image" | "file" }> = [];
-  for (const item of raw) {
-    const row = (item ?? {}) as Record<string, unknown>;
-    if (typeof row.storage_id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(row.storage_id)) return null;
-    if (typeof row.name !== "string" || !row.name.trim() || row.name.length > 256) return null;
-    if (row.type !== "image" && row.type !== "file") return null;
-    out.push({ storage_id: row.storage_id, name: row.name.trim(), type: row.type });
-  }
-  return out;
-}
-
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
   // A turn with the community agent acting for the member, pinned to this community's
   // conversation and the member lane. The page sends only text; it cannot pick
@@ -877,36 +861,20 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       if (session instanceof Response) return session;
       const body = await readJsonObject(req, MESSAGE_SEND_MAX_BYTES);
       const target = messageTarget(body);
-      const attachments = messageAttachments(body?.attachments);
       const key = body?.client_message_id;
-      if (!body || !target || !attachments || typeof body.text !== "string" || (key !== undefined && !(typeof key === "string" && CLIENT_MESSAGE_ID_PATTERN.test(key)))) {
+      // Text only (DM attachments were removed Nov 5).
+      if (body?.attachments !== undefined) return reply(400, { ok: false, code: "dm_attachments_not_supported" });
+      if (!body || !target || typeof body.text !== "string" || (key !== undefined && !(typeof key === "string" && CLIENT_MESSAGE_ID_PATTERN.test(key)))) {
         return reply(400, { ok: false, code: "invalid_request" });
       }
       // Studio's limit, said rather than silently cut.
       if (body.text.trim().length > SITE_DM_TEXT_MAX_CHARS) return reply(400, { ok: false, code: "dm_message_too_long" });
       const sent = await runMessages(() => ctx.runMutation(internal.directMessages.sendSiteDirectMessageForTrustedUserInternal, {
         userId: session.userId as any, communityId: session.communityId as any, ...target,
-        text: body.text as string, attachments, ...(typeof key === "string" ? { clientMessageId: key } : {}),
+        text: body.text as string, ...(typeof key === "string" ? { clientMessageId: key } : {}),
       }));
       if (sent instanceof Response) return sent;
       return reply(200, { ok: true, ...sent.value });
-    }),
-  });
-
-  // Step 1 of Studio's attachment flow: the browser sends the file straight to storage.
-  args.http.route({
-    path: COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH,
-    method: "POST",
-    handler: args.httpAction(async (ctx, req) => {
-      const session = await requirePrivateMemberSession(ctx, req);
-      if (session instanceof Response) return session;
-      const target = messageTarget(await readJsonObject(req, 1024));
-      if (!target) return reply(400, { ok: false, code: "invalid_request" });
-      const issued = await runMessages(() => ctx.runMutation(internal.directMessages.generateSiteDirectMessageUploadUrlForTrustedUserInternal, {
-        userId: session.userId as any, communityId: session.communityId as any, ...target,
-      }));
-      if (issued instanceof Response) return issued;
-      return reply(200, { ok: true, upload_url: (issued.value as { uploadUrl: string }).uploadUrl });
     }),
   });
 
