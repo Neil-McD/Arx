@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import {
+  cancelAndRefundDuplicateSubscription,
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
@@ -113,3 +114,25 @@ describe("canonical Stripe subscription cancellation", () => {
     });
   });
 });
+
+test("a duplicate subscription is cancelled and its payment refunded in full, once", async () => {
+  const calls: unknown[][] = [];
+  const stripe = {
+    subscriptions: {
+      retrieve: async () => ({ status: "active" }),
+      cancel: async (...args: unknown[]) => { calls.push(["cancel", ...args]); return {}; },
+    },
+    refunds: { create: async (...args: unknown[]) => { calls.push(["refund", ...args]); return {}; } },
+  } as any;
+  expect(await cancelAndRefundDuplicateSubscription({ providerSubscriptionId: "sub_dup", providerAccountId: "acct_1", paymentIntentId: "pi_dup" }, stripe))
+    .toEqual({ cancelled: "canceled", refunded: true });
+  expect(calls).toEqual([
+    ["cancel", "sub_dup", {}, { stripeAccount: "acct_1" }],
+    ["refund", { payment_intent: "pi_dup", reason: "duplicate", refund_application_fee: true },
+      { stripeAccount: "acct_1", idempotencyKey: "duplicate-subscription-refund:sub_dup" }],
+  ]);
+  const refunded = { ...stripe, refunds: { create: async () => { throw Object.assign(new Error("x"), { code: "charge_already_refunded" }); } } };
+  expect(await cancelAndRefundDuplicateSubscription({ providerSubscriptionId: "sub_dup", providerAccountId: "acct_1", chargeId: "ch_1" }, refunded))
+    .toEqual({ cancelled: "canceled", refunded: true });
+});
+

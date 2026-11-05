@@ -12,7 +12,7 @@ export type StripeCheckoutExpirationTarget = {
   providerAccountId?: string | null;
 };
 
-type StripeCancellationClient = Pick<Stripe, "checkout" | "subscriptions">;
+type StripeCancellationClient = Pick<Stripe, "checkout" | "subscriptions"> & Partial<Pick<Stripe, "refunds">>;
 
 function normalizeStripeId(value: unknown): string {
   return String(value ?? "").trim();
@@ -59,6 +59,29 @@ export async function cancelStripeSubscriptionIfActive(
     return "canceled";
   } catch (error: any) {
     if (stripeResourceMissing(error)) return "already_inactive";
+    throw error;
+  }
+}
+
+// A second subscription for someone who is already a paying member: cancel it
+// now and refund its first payment in full (the platform fee too). Safe to repeat.
+export async function cancelAndRefundDuplicateSubscription(
+  target: StripeSubscriptionCancellationTarget & { paymentIntentId?: string | null; chargeId?: string | null },
+  stripe: StripeCancellationClient = getStripeClient(),
+): Promise<{ cancelled: "canceled" | "already_inactive" | "missing"; refunded: boolean }> {
+  const cancelled = await cancelStripeSubscriptionIfActive(target, stripe);
+  const paymentIntentId = normalizeStripeId(target.paymentIntentId);
+  const chargeId = normalizeStripeId(target.chargeId);
+  if (!paymentIntentId && !chargeId) return { cancelled, refunded: false };
+  const options = stripeRequestOptions(target.providerAccountId);
+  try {
+    await stripe.refunds!.create(
+      { ...(paymentIntentId ? { payment_intent: paymentIntentId } : { charge: chargeId }), reason: "duplicate", refund_application_fee: true },
+      { ...(options ?? {}), idempotencyKey: `duplicate-subscription-refund:${normalizeStripeId(target.providerSubscriptionId)}` },
+    );
+    return { cancelled, refunded: true };
+  } catch (error: any) {
+    if (error?.code === "charge_already_refunded") return { cancelled, refunded: true };
     throw error;
   }
 }

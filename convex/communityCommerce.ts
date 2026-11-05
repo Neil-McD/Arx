@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   getStripeClient,
@@ -31,6 +31,7 @@ import {
   communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
   parseIsoMs,
+  requireCommunityChatAccess,
   requireCommunityUserNotBlocked,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
@@ -49,6 +50,7 @@ import {
   normalizeCommunityLifecycle,
 } from "../shared/communityLifecycle";
 import {
+  cancelAndRefundDuplicateSubscription,
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
@@ -869,6 +871,40 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         : "expired",
       updatedAt: nowMs,
     });
+    // The buyer is known (signed in before paying): Stripe's notice itself makes
+    // them a member. If they already have another paid subscription here (two
+    // tabs), this one is a duplicate: cancelled and refunded, nothing granted.
+    if (args.markComplete && lifecycleMatches && row.ownerUserId && row.claimToken && row.communityId) {
+      const newSubscriptionId = String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim();
+      const others = await ctx.db.query("communitySubscriptions")
+        .withIndex("by_community_user", (q: any) => q.eq("communityId", row.communityId).eq("userId", row.ownerUserId))
+        .collect();
+      const alreadyPaying = others.some((other: any) =>
+        communitySubscriptionStatusGrantsAccess(other.status)
+        && String(other.providerSubscriptionId ?? "").trim()
+        && String(other.providerSubscriptionId).trim() !== newSubscriptionId);
+      if (alreadyPaying && newSubscriptionId) {
+        await ctx.scheduler.runAfter(0, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, {
+          providerSubscriptionId: newSubscriptionId, providerAccountId,
+          paymentIntentId: String(args.sourceProviderPaymentIntentId ?? "").trim() || null,
+          chargeId: String(args.sourceProviderChargeId ?? "").trim() || null,
+        });
+        const claim = await ctx.db.query("purchaseClaims").withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken)).first();
+        if (claim && claim.status === "pending") await ctx.db.patch(claim._id, { status: "expired", updatedAt: nowMs });
+        await recordCriticalAuditEventBestEffort(ctx, {
+          eventKey: `community_duplicate_subscription_refunded:${newSubscriptionId}`, eventType: "community_duplicate_subscription_refunded",
+          status: "started", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId, communityId: row.communityId,
+          checkoutSessionId: args.sessionId, provider: "stripe", providerObjectId: newSubscriptionId, metadata: { providerAccountId }, createdAt: nowMs,
+        });
+      } else {
+        try {
+          await redeemPurchaseClaimForUser(ctx, row.ownerUserId, row.claimToken);
+        } catch (error) {
+          // Blocked or no longer allowed: the return page shows it; nothing is lost.
+          console.error("community_checkout_grant_failed", { sessionId: args.sessionId, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+    }
     // Paid as a guest: if nobody has claimed it in a little while, email the
     // buyer a way back (sent once per checkout; skipped if claimed by then).
     const buyerEmail = String(args.buyerEmail ?? "").trim();
@@ -1148,6 +1184,12 @@ export async function startCommunityJoinCheckoutCore(
       communityId: checkoutConfig.communityId,
       userId: ownerUserId,
     });
+    // Already in (a member, or the owner): no checkout, so nobody pays twice.
+    if (await ctx.runQuery(internal.communityCommerce.userHasCommunityAccessInternal, {
+      communityId: checkoutConfig.communityId, userId: ownerUserId as any,
+    })) {
+      throw new Error("already_member");
+    }
   }
   // A guest's Stripe customer is the one Checkout creates from the email they give.
   const stripeCustomerId = ownerUserId
@@ -1362,6 +1404,40 @@ export async function startCommunityJoinCheckoutCore(
     throw error;
   }
 }
+
+export const userHasCommunityAccessInternal = internalQuery({
+  args: { communityId: v.id("communities"), userId: v.id("users") },
+  handler: async (ctx, args) =>
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId }).then(() => true, () => false),
+});
+
+// A second subscription that slipped past the checkout guard (say, two tabs):
+// cancel it and refund it in full, retrying with growing gaps (about a day).
+const DUPLICATE_REFUND_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 3_600_000, 6 * 3_600_000, 12 * 3_600_000];
+export const refundDuplicateCommunitySubscriptionInternal = internalAction({
+  args: {
+    providerSubscriptionId: v.string(),
+    providerAccountId: v.string(),
+    paymentIntentId: v.union(v.string(), v.null()),
+    chargeId: v.union(v.string(), v.null()),
+    attempt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const attempt = args.attempt ?? 0;
+    try {
+      return { ok: true, ...(await cancelAndRefundDuplicateSubscription(args)) };
+    } catch (error) {
+      console.error("community_duplicate_subscription_refund_failed", {
+        providerSubscriptionId: args.providerSubscriptionId, attempt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const delay = DUPLICATE_REFUND_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) return { ok: false };
+      await ctx.scheduler.runAfter(delay, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, { ...args, attempt: attempt + 1 });
+      return { ok: false, retrying: true };
+    }
+  },
+});
 
 export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
   args: {
