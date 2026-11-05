@@ -1454,122 +1454,14 @@ export const startFounderSubscriptionCheckout = action({
   },
 });
 
-// Canonical public Builder entry: payment first, account and community second.
-// Kept separate from startFounderSubscriptionCheckout so cached authenticated
-// clients retain their existing community-scoped contract.
+// Retired Nov 5: building a community is free, so nothing sells the $79
+// Builder up front any more. Nothing on screen reached this, but the action was
+// still public, so anyone calling it could be charged. Kept by name for cached
+// pages, refusing; the anonymous recovery path goes with the billing redesign.
 export const startPublicBuilderCheckout = action({
   args: {},
-  handler: async (ctx) => {
-    requireFounderInferencePricingFromEnv();
-    requireFounderCheckoutRecoverySecret();
-    const publicOrigin = readCanonicalPublicAppOrigin();
-    const successUrl = new URL(
-      "/?builder_checkout=success",
-      `${publicOrigin}/`,
-    ).toString();
-    const cancelUrl = new URL(
-      "/?builder_checkout=canceled",
-      `${publicOrigin}/`,
-    ).toString();
-    const nowMs = Date.now();
-    const providerPriceId = await verifyFounderStripePrice();
-    const prepared = (await ctx.runMutation(
-      (internal as any).founderBilling.createPendingPublicBuilderCheckoutInternal,
-      {
-        sessionId: newOpaqueToken("founder"),
-        expiresAt: nowMs + FOUNDER_CHECKOUT_TTL_MS,
-        nowMs,
-      },
-    )) as {
-      sessionId: string;
-      providerCheckoutSessionId?: string | null;
-      expiresAt: number;
-    };
-    let checkoutSession: any = null;
-    try {
-      const metadata = {
-        local_session_id: prepared.sessionId,
-        checkout_mode: "founder_subscription",
-        offer_version: "polynet_builder_79_monthly_v1",
-      };
-      checkoutSession = await getStripeClient().checkout.sessions.create({
-        mode: "subscription",
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        expires_at: Math.floor(prepared.expiresAt / 1000),
-        client_reference_id: prepared.sessionId,
-        line_items: [{ price: providerPriceId, quantity: 1 }],
-        metadata,
-        subscription_data: { metadata },
-      }, {
-        idempotencyKey: `founder-subscription-checkout:${prepared.sessionId}`,
-      });
-      const checkoutUrl = String(checkoutSession.url ?? "").trim();
-      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-      await ctx.runMutation(
-        (internal as any).founderBilling.attachFounderStripeCheckoutSessionInternal,
-        {
-          sessionId: prepared.sessionId,
-          providerCheckoutSessionId: checkoutSession.id,
-          providerCustomerId:
-            typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-          providerSubscriptionId:
-            typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
-          providerPriceId,
-          nowMs: Date.now(),
-        },
-      );
-      return { ok: true, checkout_url: checkoutUrl };
-    } catch (error) {
-      let providerCleanupComplete = !checkoutSession?.id;
-      if (checkoutSession?.id) {
-        try {
-          await ctx.runMutation(
-            (internal as any).founderBilling.recordStaleFounderStripeCheckoutSessionInternal,
-            {
-              sessionId: prepared.sessionId,
-              providerCheckoutSessionId: checkoutSession.id,
-              providerCustomerId:
-                typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-              providerSubscriptionId:
-                typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
-              providerPriceId,
-              nowMs: Date.now(),
-            },
-          );
-        } catch (persistenceError) {
-          console.error("stale_public_builder_checkout_persistence_failed", {
-            sessionId: prepared.sessionId,
-            error: persistenceError instanceof Error
-              ? persistenceError.message
-              : String(persistenceError),
-          });
-        }
-        try {
-          const expired = await expireStripeCheckoutSessionIfOpen({
-            providerCheckoutSessionId: checkoutSession.id,
-          });
-          if (expired.providerSubscriptionId) {
-            await cancelStripeSubscriptionIfActive({
-              providerSubscriptionId: expired.providerSubscriptionId,
-            });
-          }
-          providerCleanupComplete = true;
-        } catch (cleanupError) {
-          console.error("stale_public_builder_checkout_cleanup_failed", {
-            sessionId: prepared.sessionId,
-            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-          });
-        }
-      }
-      if (providerCleanupComplete) {
-        await ctx.runMutation(
-          (internal as any).founderBilling.expireFounderSubscriptionCheckoutInternal,
-          { sessionId: prepared.sessionId, nowMs: Date.now() },
-        );
-      }
-      throw error;
-    }
+  handler: async () => {
+    throw new Error("public_builder_checkout_retired");
   },
 });
 

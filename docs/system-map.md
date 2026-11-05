@@ -360,6 +360,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityApplicationFeeRefundCore`, `founderPaidTool*`, `providerCostCore`,
   `voiceProviderCostAccounting`.
 - **Reached by:** `/billing/stripe_webhook` (authoritative), Studio checkout.
+- Building a community is free: `startPublicBuilderCheckout` (the anonymous
+  $79 Builder purchase) refuses since Nov 5, kept by name for cached pages.
+  Its recovery path (`createPendingPublicBuilderCheckoutInternal`, the
+  recovery email, the email-hash receipt claim) is removed with the billing
+  redesign.
 - **Tables:** `founderSubscriptions`, `founderUsageCycles`, `checkoutSessions`,
   `purchaseClaims`, `userStripeCustomers`, `communityStripeCustomers`,
   `userStripeConnectAccounts`, `communityPricePoints`, `communitySubscriptions`,

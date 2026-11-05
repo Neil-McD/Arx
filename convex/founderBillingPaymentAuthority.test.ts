@@ -2,7 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   FOUNDER_CHECKOUT_RECOVERY_EMAIL_HASH_VERSION,
   hashFounderCheckoutRecoveryEmail,
@@ -208,3 +208,10 @@ test("unverified or different-email accounts cannot receive a paid Builder purch
     expect(await ctx.db.query("founderSubscriptions").collect()).toHaveLength(0);
   });
 });
+
+test("the public Builder checkout is retired: it refuses and charges nobody", async () => {
+  const t = convexTest(schema, modules);
+  await expect(t.action((api as any).founderBilling.startPublicBuilderCheckout, {})).rejects.toThrow(/public_builder_checkout_retired/);
+  expect(await t.run((ctx) => ctx.db.query("checkoutSessions").collect())).toHaveLength(0);
+});
+
