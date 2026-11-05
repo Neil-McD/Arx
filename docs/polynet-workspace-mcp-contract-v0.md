@@ -333,6 +333,14 @@ bearer_methods_supported: ["header"]
 must issue audience-bound access tokens for that same URL, and Convex accepts
 the audience through `ARX_MCP_AUTH_JWT_AUDIENCE`.
 
+`/runtime/mcp` accepts only those tokens (Nov 5). Convex verifies every
+token's signature and issuer, but it accepts several sign-in providers; the
+MCP route additionally requires the token's `aud` to include
+`ARX_MCP_AUTH_JWT_AUDIENCE` (`bearerTokenAudienceIncludes` in
+`convex/httpMcp.ts`), and refuses everything else with 401 (MCP's normal
+"authorize" answer). A Studio browser token, which carries no `aud`, can never
+act as an AI client's key. Unconfigured, the route fails closed.
+
 `/.well-known/oauth-authorization-server` is a compatibility projection of
 the configured upstream authorization server. It advertises
 `registration_endpoint` only when `ARX_AUTH_REGISTRATION_URL` is explicitly
