@@ -624,6 +624,25 @@ export async function handleMcpPost(args: {
   return jsonRpcErrorResponse(req, jsonResponse, id, -32601, "Method not found.");
 }
 
+// MCP takes only tokens minted for MCP: their audience is this resource
+// (ARX_MCP_AUTH_JWT_AUDIENCE, the /runtime/mcp address clients ask for). The
+// backend has already verified the token's signature and issuer for this
+// request; this checks what it was issued for, so a Studio browser token (no
+// aud) can never act as an AI client's key. Fails closed when unconfigured.
+export function bearerTokenAudienceIncludes(req: Request, audience: string): boolean {
+  const raw = String(req.headers.get("authorization") ?? "").trim();
+  const token = raw.toLowerCase().startsWith("bearer ") ? raw.slice(7).trim() : "";
+  const payload = token.split(".")[1];
+  if (!payload || !audience) return false;
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="))) as { aud?: unknown };
+    return Array.isArray(claims.aud) ? claims.aud.includes(audience) : claims.aud === audience;
+  } catch {
+    return false;
+  }
+}
+
 export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): void {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
 
@@ -725,7 +744,10 @@ export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): vo
         ctx,
         req,
         jsonResponse,
-        requireAuthenticatedActor,
+        requireAuthenticatedActor: async (actorCtx, actorReq) =>
+          bearerTokenAudienceIncludes(actorReq, readEnv("ARX_MCP_AUTH_JWT_AUDIENCE"))
+            ? await requireAuthenticatedActor(actorCtx, actorReq)
+            : { ok: false, response: jsonResponse(actorReq, 401, { ok: false, code: "auth_wrong_audience" }) },
       })),
   });
 }

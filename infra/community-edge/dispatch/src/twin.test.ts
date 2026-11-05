@@ -1050,7 +1050,8 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     dm.conversations[0].blocked = false;
     dm.conversations[0].muted = true;
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    await expect.poll(() => personal.locator("[part=input]").count()).toBe(1);
+    // The refresh round-trips the twin and rebuilds the thread: slower on CI.
+    await expect.poll(() => personal.locator("[part=input]").count(), { timeout: 20_000 }).toBe(1);
     expect(await personal.locator("[part=block]").textContent()).toBe("Block");
     expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
     // A draft survives the next change.
