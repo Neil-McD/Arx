@@ -37,9 +37,6 @@ export type FounderBriefSnapshot = {
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
   upcomingEvents: Array<{ title: string; startsAt: string }>;
-  // Community notes the agent saved in the window, so the founder sees each
-  // one and can edit or delete it in Studio.
-  newNotes: { count: number; titles: string[] };
 };
 
 export type FounderBrief = {
@@ -91,10 +88,6 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
   const memberRows = (from: number, to: number) => ctx.db.query("communityMemberships")
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id).gte("createdAt", from).lt("createdAt", to))
     .order("desc").take(SCAN_LIMIT);
-  const newNotes = await ctx.db.query("communityNotes")
-    .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", community._id).gte("updatedAt", windowStartMs))
-    .order("desc").take(SCAN_LIMIT)
-    .then((rows: any[]) => rows.filter((row) => Number(row.createdAt) >= windowStartMs && row.source !== "founder" && row.source !== "migrated"));
   const [roots, replies, recentJoins, newcomerRows, joinRequests, events] = await Promise.all([
     listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionRoots", communityId: community._id, limit: SCAN_LIMIT }),
     listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionReplies", communityId: community._id, limit: SCAN_LIMIT }),
@@ -165,14 +158,12 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     quietNewcomers: { count: quiet.length, names: await nameList(quiet) },
     joinRequestsPending: joinRequests.length,
     upcomingEvents: events.map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
-    newNotes: { count: newNotes.length, titles: newNotes.slice(0, LIST_LIMIT).map((note: any) => clip(note.title, 120)) },
   };
 }
 
 export function snapshotIsQuiet(snapshot: FounderBriefSnapshot): boolean {
   return snapshot.newMembers.count === 0 && snapshot.activity.posts === 0 && snapshot.activity.replies === 0
-    && snapshot.unanswered.length === 0 && snapshot.joinRequestsPending === 0 && snapshot.upcomingEvents.length === 0
-    && snapshot.newNotes.count === 0;
+    && snapshot.unanswered.length === 0 && snapshot.joinRequestsPending === 0 && snapshot.upcomingEvents.length === 0;
 }
 
 // ---------- writing ----------
@@ -428,22 +419,6 @@ export const finishFounderBriefInternal = internalMutation({
 
 // Asks the model for the brief. Null when funding, the provider or the reply
 // isn't usable: the caller then sends the plain brief.
-// New community notes always reach the founder, whoever wrote the rest of the
-// brief: the section is added here, not left to the model.
-export function withNewNotesSection(brief: FounderBrief, snapshot: FounderBriefSnapshot): FounderBrief {
-  if (!snapshot.newNotes.count) return brief;
-  const section = {
-    title: "New community notes",
-    // Up to four titles; the count and where to review them always fit.
-    items: [
-      ...snapshot.newNotes.titles.slice(0, 4).map((title) => `"${title}"`),
-      `The agent saved ${plural(snapshot.newNotes.count, "note")} for everyone. Edit or delete any of them in Studio, Knowledge → Notes.`,
-    ],
-  };
-  const others = brief.sections.filter((existing) => existing.title !== section.title).slice(0, 4);
-  return { ...brief, sections: [...others, section] };
-}
-
 async function writeWithModel(ctx: any, claim: any, communityId: any, briefDate: string, snapshot: FounderBriefSnapshot, stats: Record<string, number>) {
   const funding = await resolveCommunityInferenceFundingForAction(ctx, communityId);
   if (!funding.ok) return null;
@@ -511,7 +486,7 @@ async function writeAndDeliver(ctx: any, args: { communityId: any; briefDate: st
       };
       const modelBrief = snapshotIsQuiet(snapshot)
         ? null : await writeWithModel(ctx, claim, args.communityId, args.briefDate, snapshot, stats);
-      const brief = withNewNotesSection(modelBrief ?? deterministicBrief(snapshot), snapshot);
+      const brief = modelBrief ?? deterministicBrief(snapshot);
       const conversation = await ctx.runMutation(internalRefs.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
         communityId: args.communityId, trustedUserId: claim.ownerUserId,
       }) as { thread_id: string };

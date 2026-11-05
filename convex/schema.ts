@@ -3797,8 +3797,8 @@ export default defineSchema({
 
   threads: defineTable({
     ownerId: v.id("users"),
-    // The newest user message whose turn read a private room or owner-only
-    // data: while it is in a turn's carried history, community notes stay locked.
+    // Retired Nov 5 (agent no longer writes community notes): nothing writes
+    // or reads it; dropped with the next table-drop release.
     privateSourceSeenAtSeq: v.optional(v.number()),
     threadKey: v.optional(v.string()),
     title: v.optional(v.string()),
