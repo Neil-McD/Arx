@@ -286,9 +286,8 @@ const MY_MESSAGES: Record<string, MyRoute> = {
     const handle = url.searchParams.get("to") ?? "";
     return HANDLE_PATTERN.test(handle) ? { handle } : null;
   } },
-  // Text up to Studio's 4,000 characters (each up to 4 bytes), and up to 8 attachments.
+  // Text up to Studio's 4,000 characters (each up to 4 bytes).
   "/__polynet/me/messages/send": { method: "POST", backend: "/runtime/app/me/messages/send", maxBytes: 24 * 1024 },
-  "/__polynet/me/messages/upload": { method: "POST", backend: "/runtime/app/me/messages/upload", maxBytes: 1024 },
   "/__polynet/me/messages/read": { method: "POST", backend: "/runtime/app/me/messages/read", maxBytes: 1024 },
   "/__polynet/me/messages/mute": { method: "POST", backend: "/runtime/app/me/messages/mute", maxBytes: 1024 },
   "/__polynet/me/messages/typing": { method: "POST", backend: "/runtime/app/me/messages/typing", maxBytes: 1024 },
@@ -1036,18 +1035,10 @@ function myMessagesAnswer(path: string, answer: Record<string, unknown>, env: En
   };
   const message = (raw: unknown) => {
     const row = (raw ?? {}) as Record<string, unknown>;
-    const attachments = (Array.isArray(row.attachments) ? row.attachments : []).slice(0, 8).flatMap((item) => {
-      const file = (item ?? {}) as Record<string, unknown>;
-      const url = stored(file.url);
-      return url ? [{
-        id: text(file.id, 64) ?? "", name: text(file.name, 256) ?? "attachment", kind: file.kind === "image" ? "image" : "file",
-        mime: text(file.mime, 160), size: count(file.size), url,
-      }] : [];
-    });
     const key = typeof row.client_message_id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(row.client_message_id) ? row.client_message_id : null;
     return {
       id: text(row.id, 64) ?? "", seq: count(row.seq), from_me: row.from_me === true, text: text(row.text, 4000) ?? "",
-      attachments, created_at: text(row.created_at, 40) ?? "", client_message_id: key,
+      created_at: text(row.created_at, 40) ?? "", client_message_id: key,
     };
   };
   switch (path) {
@@ -1064,11 +1055,6 @@ function myMessagesAnswer(path: string, answer: Record<string, unknown>, env: En
     case "/__polynet/me/messages/send": {
       const conversationId = id(answer.conversation_id);
       return conversationId ? { conversation_id: conversationId, message: message(answer.message) } : null;
-    }
-    case "/__polynet/me/messages/upload": {
-      // The file goes straight to Polynet's storage, nowhere else.
-      const upload = typeof answer.upload_url === "string" && storage && answer.upload_url.startsWith(`${storage}/api/storage/upload?`) ? answer.upload_url : null;
-      return upload ? { upload_url: upload } : null;
     }
     case "/__polynet/me/messages/typing":
       return { typing: answer.typing === true };

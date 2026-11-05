@@ -1174,7 +1174,7 @@ test("twin settings: the profile refusals read exactly as Studio words them", as
 const CONVERSATION = "k".repeat(32);
 const MESSAGE_PATHS: Array<[string, "GET" | "POST"]> = [
   ["/__polynet/me/messages", "GET"], [`/__polynet/me/messages/conversation?id=${CONVERSATION}`, "GET"], ["/__polynet/me/messages/start?to=sam", "GET"],
-  ["/__polynet/me/messages/send", "POST"], ["/__polynet/me/messages/upload", "POST"], ["/__polynet/me/messages/read", "POST"],
+  ["/__polynet/me/messages/send", "POST"], ["/__polynet/me/messages/read", "POST"],
   ["/__polynet/me/messages/mute", "POST"], ["/__polynet/me/messages/typing", "POST"], ["/__polynet/me/messages/block", "POST"],
 ];
 
@@ -1223,6 +1223,7 @@ test("twin messages: forwarded with the twin's session; only what the page draws
     community_name: "Apps Club", unread_count: 2, muted: false, blocked: false, last_seq: 2, read_seq: 0, peer_read_seq: 2,
     last_message: { preview: "Hi", from_me: false, at: "2026-10-28T10:00:00.000Z", sender_user_id: "sam-subject" }, participants: [{ user_id: "x" }],
   };
+  // Messages are text only: even an attachments field from the backend never reaches the page.
   const message = { id: "m1", seq: 1, from_me: false, text: "Hi", created_at: "2026-10-28T10:00:00.000Z", client_message_id: "key-1", sender_user_id: "sam-subject",
     attachments: [{ id: "a1", name: "wall.png", kind: "image", mime: "image/png", size: 4, url: `${storage}/f1`, storage_id: "kg1" },
       { id: "a2", name: "x.html", kind: "file", mime: "text/html", size: 4, url: "https://evil.example.com/x.html" }] };
@@ -1231,7 +1232,6 @@ test("twin messages: forwarded with the twin's session; only what the page draws
     "/runtime/app/me/messages/conversation": { ok: true, conversation, messages: [message], has_more: true },
     "/runtime/app/me/messages/start": { ok: true, conversation_id: null, peer: conversation.peer },
     "/runtime/app/me/messages/send": { ok: true, conversation_id: CONVERSATION, message },
-    "/runtime/app/me/messages/upload": { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" },
     "/runtime/app/me/messages/block": { ok: true, conversation: { ...conversation, blocked: true } },
     "/runtime/app/me/messages/typing": { ok: true, typing: true, by: "x" },
   };
@@ -1246,8 +1246,7 @@ test("twin messages: forwarded with the twin's session; only what the page draws
     id: CONVERSATION, peer: { name: "Sam", handle: "sam", avatar_url: null }, community_name: "Apps Club", unread_count: 2, muted: false, blocked: false,
     last_seq: 2, read_seq: 0, peer_read_seq: 2, last_message: { preview: "Hi", from_me: false, at: "2026-10-28T10:00:00.000Z" },
   };
-  const shapedMessage = { id: "m1", seq: 1, from_me: false, text: "Hi", created_at: "2026-10-28T10:00:00.000Z", client_message_id: "key-1",
-    attachments: [{ id: "a1", name: "wall.png", kind: "image", mime: "image/png", size: 4, url: `${storage}/f1` }] };
+  const shapedMessage = { id: "m1", seq: 1, from_me: false, text: "Hi", created_at: "2026-10-28T10:00:00.000Z", client_message_id: "key-1" };
   expect(await read("/__polynet/me/messages")).toEqual([200, { ok: true, conversations: [shaped] }]);
   const [path, init] = backend.mock.calls[0];
   expect(path).toBe("https://api.example.convex.site/runtime/app/me/messages");
@@ -1259,14 +1258,12 @@ test("twin messages: forwarded with the twin's session; only what the page draws
   const sendBody = JSON.stringify({ to: "sam", text: "Hi", client_message_id: "key-1" });
   expect(await read("/__polynet/me/messages/send", "POST", sendBody)).toEqual([200, { ok: true, conversation_id: CONVERSATION, message: shapedMessage }]);
   expect(String(backend.mock.calls[3][1]?.body)).toBe(sendBody);
-  expect(await read("/__polynet/me/messages/upload", "POST", JSON.stringify({ conversation_id: CONVERSATION }))).toEqual([200, { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" }]);
   expect(await read("/__polynet/me/messages/block", "POST", JSON.stringify({ conversation_id: CONVERSATION, blocked: true }))).toEqual([200, { ok: true, conversation: { ...shaped, blocked: true } }]);
   expect(await read("/__polynet/me/messages/typing", "POST", JSON.stringify({ conversation_id: CONVERSATION, typing: true }))).toEqual([200, { ok: true, typing: true }]);
   // Nothing about anyone's account, and no storage ids, ever leaves the edge.
   expect(JSON.stringify(await Promise.all(["/__polynet/me/messages", `/__polynet/me/messages/conversation?id=${CONVERSATION}`].map((p) => read(p))))).not.toMatch(/subject|example\.com\/x|storage_id|kg1|participants/);
-  // An upload address anywhere but Polynet's storage is never handed to the page.
-  answers["/runtime/app/me/messages/upload"] = { ok: true, upload_url: "https://evil.example.com/api/storage/upload?token=t" };
-  expect(await read("/__polynet/me/messages/upload", "POST", "{}")).toEqual([502, { ok: false, code: "messages_unavailable" }]);
+  // There is no message upload route any more.
+  expect((await edge.fetch(settingsCall(TWIN, "/__polynet/me/messages/upload", "POST", {}, "{}"), e)).status).toBe(404);
   // A core's refusal keeps its code (never its message); a session the backend refuses is cleared.
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: false, code: "dm_rate_limited", message: "<b>raw</b>" }, { status: 429 })));
   expect(await read("/__polynet/me/messages/send", "POST", sendBody)).toEqual([429, { ok: false, code: "dm_rate_limited" }]);
@@ -1306,7 +1303,7 @@ test("twin messages: the refusals read as Studio words them", async () => {
   const { MESSAGES_TEXT } = await import("./blocks/messages");
   const { readFileSync } = await import("node:fs");
   const studio = readFileSync(new URL("../../../../apps/web/src/components/WebDirectMessagesHost.tsx", import.meta.url), "utf8");
-  for (const code of ["dm_rate_limited", "dm_conversation_access_required", "dm_target_not_found", "dm_message_payload_required", "dm_attachment_invalid"]) {
+  for (const code of ["dm_rate_limited", "dm_conversation_access_required", "dm_target_not_found", "dm_message_payload_required"]) {
     expect(studio, code).toContain(JSON.stringify(MESSAGES_TEXT[code]));
   }
 });

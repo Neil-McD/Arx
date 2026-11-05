@@ -135,6 +135,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 4. Direct messages — Keep (Studio only)
 
 - **Code:** `directMessages`, `directMessageReadCore`, `directMessageEmails`.
+  Text only since Nov 5 (attachments removed; the two upload-URL mutations
+  stay as refusing stubs for one release, for cached Studio pages).
 - **Tables:** `dmConversations`, `dmParticipants`, `dmMessages`, `dmBlocks`,
   `dmRateCounters`, `dmTypingPresence`.
 
