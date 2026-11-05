@@ -75,8 +75,8 @@ assert.match(
 );
 assert.match(
   publicMemory,
-  /resolvePublicCommunityMemoryOverviewBySlug[\s\S]*!communityIsActive\(community\)/,
-  "the public memory projection must omit archived communities",
+  /resolvePublicCommunityMemoryOverviewBySlug[\s\S]*ok: false as const/,
+  "the public memory projection answers nothing, archived or not",
 );
 assert.match(
   profiles,
