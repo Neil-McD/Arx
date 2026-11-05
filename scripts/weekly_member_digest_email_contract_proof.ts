@@ -32,12 +32,12 @@ assert.doesNotMatch(
 );
 assert.match(
   baseTheme,
-  /--bg-card-solid: #161719;[\s\S]*--bg-button: #f7f8f8;[\s\S]*--text-primary: #f7f8f8;[\s\S]*--border-default: #232427;/,
+  /--bg-card-solid: #1c1d20;[\s\S]*--bg-button: #f7f8f8;[\s\S]*--text-primary: #f7f8f8;[\s\S]*--border-default: #232427;/,
   "the canonical default-dark component palette must remain explicit",
 );
 assert.match(
   webTheme,
-  /--bg-app: #08090a;[\s\S]*--bg-workspace: #0e0f10;[\s\S]*--bg-panel: #141517;/,
+  /--bg-app: #08090a;[\s\S]*--bg-workspace: #141517;[\s\S]*--bg-panel: #141517;/,
   "the canonical default-dark shell palette must remain explicit",
 );
 assert.match(

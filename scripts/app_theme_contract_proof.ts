@@ -260,8 +260,8 @@ assert.ok(darkRootBlock, "base.css should define canonical Dark tokens at root")
   "--bg-app: #08090a;",
   "--bg-workspace: rgba(11, 12, 13, 0.96);",
   "--bg-panel: rgba(15, 16, 17, 0.92);",
-  "--bg-card: rgba(22, 23, 25, 0.92);",
-  "--bg-card-hover: rgba(30, 31, 34, 0.96);",
+  "--bg-card: rgba(28, 29, 32, 0.94);",
+  "--bg-card-hover: rgba(36, 37, 40, 0.96);",
   "--accent-gold: #f7f8f8;",
   "--accent-agent: #f7f8f8;",
   "--text-primary: #f7f8f8;",
@@ -337,7 +337,7 @@ assert.equal(
 
 [
   "--bg-app: #F1F1F3;",
-  "--bg-workspace: #FFFFFF;",
+  "--bg-workspace: #F7F7F8;",
   "--bg-panel: #F7F7F8;",
   "--surface-rail: #F1F1F3;",
   "--community-rail-control-bg: var(--surface-nav);",
@@ -538,7 +538,7 @@ assert.doesNotMatch(
   "theme family must not survive as a second styling authority",
 );
 assert.match(indexHtml, /<meta name="theme-color" content="#08090A"/);
-assert.match(indexHtml, /manifest\.webmanifest\?v=20261105a/);
+assert.match(indexHtml, /manifest\.webmanifest\?v=20261105b/);
 assert.match(manifest, /"start_url": "\/m\?launch=app"/);
 assert.match(manifest, /"background_color": "#08090A"/);
 assert.match(manifest, /"theme_color": "#08090A"/);
@@ -739,8 +739,8 @@ const accessiblePairs = [
   ["Builder primary text on canvas", "#F7F8F8", "#08090A"],
   ["Builder muted text on canvas", "#9A9FA8", "#08090A"],
   ["Builder faint text on canvas", "#82878F", "#08090A"],
-  ["Builder faint text on card", "#82878F", "#161719"],
-  ["Builder muted text on hover card", "#9A9FA8", "#1E1F22"],
+  ["Builder faint text on card", "#82878F", "#1C1D20"],
+  ["Builder muted text on hover card", "#9A9FA8", "#242528"],
   ["Builder action text on white", "#08090A", "#F7F8F8"],
   ["Builder action text on cream", "#0A0A0A", "#F1EDE5"],
   ["Dark attention on canvas", "#F7F8F8", "#0B0C0D"],
