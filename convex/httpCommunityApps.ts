@@ -301,6 +301,8 @@ async function runJoin<T>(run: () => Promise<T>): Promise<{ ok: true; value: T }
       ? String((data as { code: string }).code) : String((error as { message?: unknown } | null)?.message ?? "");
     const known = Object.keys(JOIN_REFUSALS).find((code) => text === code || text.includes(code));
     if (known) return reply(JOIN_REFUSALS[known].status, { ok: false, code: JOIN_REFUSALS[known].code });
+    // Not a refusal Studio knows: the member sees "Try again"; the log keeps why.
+    console.error("community_app_join_failed", { error: text.slice(0, 200) });
     return reply(500, { ok: false, code: "join_unavailable", message: "That didn't work. Try again." });
   }
 }

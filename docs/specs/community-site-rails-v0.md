@@ -415,7 +415,13 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   it's that member's like any signed-in checkout, and the cookie is dropped
   once they've joined. Membership still comes only from the verified webhook.
   A buyer who closes the tab before signing in has paid with no membership:
-  the "finish joining" email (next slice) closes that gap.
+  the "finish joining" email (next slice) closes that gap. Admission limit:
+  a community takes at most 20 unclaimed guest checkouts started in any
+  10 minutes (pending, no owner yet); past that, guest checkout answers
+  `community_checkout_unavailable` ("Checkout is temporarily unavailable")
+  until older ones age out of the window or are claimed. Signed-in
+  checkouts don't count. The count is checked in the same transaction that
+  records the checkout, before Stripe's checkout is created.
 - **Already a member:** "You're in." with a link into the site.
 - **Blocked, denied, cooldown, unavailable, account not set up:** Studio's
   words (or, where Studio shows a raw code, plain ones), and for an

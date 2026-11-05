@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { StripeConnectReturn } from "../../../../shared/accountCommerce";
+import { refreshCloudConnectAccount } from "../../../../shared/cloudAccountCommerceGateway";
 
 type SessionLike = {
   user: {
@@ -34,6 +35,8 @@ export function useWebPostAuthStripeConnectLifecycle<TSession extends SessionLik
           return;
         }
         params.setAccountCommerceError(null);
+        // Stripe's notice can lag: ask Stripe directly before showing the status.
+        await refreshCloudConnectAccount({ session }).catch(() => undefined);
         await params.loadAccountCommerceStatus(session);
       } finally {
         if (!cancelled) {

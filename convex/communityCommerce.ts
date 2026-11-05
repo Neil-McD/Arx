@@ -636,6 +636,9 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     ) {
       throw new Error("community_lifecycle_generation_mismatch");
     }
+    if (!args.ownerUserId && !(await guestCheckoutAllowed(ctx, args.communityId, nowMs))) {
+      throw new Error("community_checkout_unavailable");
+    }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "community_join",
@@ -998,6 +1001,34 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
   },
 });
 
+// Cash first lets anyone start a checkout without signing in, and each one
+// makes a Stripe session and two rows. A community takes this many unclaimed
+// guest checkouts in this window; past it, "Checkout is temporarily unavailable".
+export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
+export const GUEST_CHECKOUTS_PER_WINDOW = 20;
+
+async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {
+  const since = nowMs - GUEST_CHECKOUT_WINDOW_MS;
+  // Newest first, only as far back as the window: every guest in it is counted.
+  let guests = 0;
+  for await (const row of ctx.db
+    .query("checkoutSessions")
+    .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", "pending"))
+    .order("desc")) {
+    if (row.createdAt < since) break;
+    if (!row.ownerUserId && ++guests >= GUEST_CHECKOUTS_PER_WINDOW) return false;
+  }
+  return true;
+}
+
+// An early answer, before any Stripe work. The binding check is in the
+// mutation that records the checkout (one transaction with the insert), so a
+// burst of parallel requests can't all pass on the same count.
+export const guestCheckoutAllowedInternal = internalQuery({
+  args: { communityId: v.id("communities"), nowMs: v.number() },
+  handler: async (ctx, args) => await guestCheckoutAllowed(ctx, args.communityId, args.nowMs),
+});
+
 export const startPublicCommunityCheckout = action({
   args: {
     communitySlug: v.string(),
@@ -1095,6 +1126,11 @@ export async function startCommunityJoinCheckoutCore(
   const ownerUserId: unknown = actor?.dbUserId;
   const ownerEmail: string | null = actor?.email ?? null;
   if (!args.guest && !ownerUserId) throw new Error("auth_subject_required");
+  if (args.guest && !(await ctx.runQuery(internal.communityCommerce.guestCheckoutAllowedInternal as any, {
+    communityId: checkoutConfig.communityId, nowMs,
+  }))) {
+    throw new Error("community_checkout_unavailable");
+  }
   if (ownerUserId) {
     await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
       communityId: checkoutConfig.communityId,

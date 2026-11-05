@@ -62,3 +62,45 @@ test("the buyer's claim makes the payment theirs (still pending on Stripe), and 
   // The buyer keeps finishing without it, as any signed-in checkout does.
   expect(await finish(ids.buyerId)).toEqual({ status: "pending" });
 });
+
+test("a community takes a limited number of unclaimed guest checkouts at a time", async () => {
+  const { t, ids } = await fixture();
+  const allowed = () => t.query(internal.communityCommerce.guestCheckoutAllowedInternal, { communityId: ids.communityId, nowMs: Date.now() });
+  expect(await allowed()).toBe(true);
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    for (let index = 1; index < 20; index += 1) {
+      await ctx.db.insert("checkoutSessions", {
+        sessionId: `chk_${String(index).padStart(32, "0")}`, mode: "community_join", communityId: ids.communityId,
+        status: "pending", expiresAt: now + 60_000, createdAt: now, updatedAt: now,
+      } as any);
+    }
+  });
+  expect(await allowed()).toBe(false);
+  // Ten minutes on, those have aged out of the window.
+  expect(await t.query(internal.communityCommerce.guestCheckoutAllowedInternal, {
+    communityId: ids.communityId, nowMs: Date.now() + 11 * 60 * 1000,
+  })).toBe(true);
+});
+
+test("recording a guest checkout re-checks the limit in the same transaction", async () => {
+  const { t, ids } = await fixture();
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    for (let index = 1; index < 20; index += 1) {
+      await ctx.db.insert("checkoutSessions", {
+        sessionId: `chk_${String(index).padStart(32, "0")}`, mode: "community_join", communityId: ids.communityId,
+        status: "pending", expiresAt: now + 60_000, createdAt: now, updatedAt: now,
+      } as any);
+    }
+  });
+  const pricePointId = await t.run((ctx) => ctx.db.insert("communityPricePoints", {
+    communityId: ids.communityId, billingPeriod: "monthly", name: "Monthly", amountBaseUnits: 500, currency: "usd",
+    currencyDecimals: 2, isCurrent: true, createdAt: Date.now(), updatedAt: Date.now(),
+  }));
+  await expect(t.mutation(internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal, {
+    sessionId: `chk_${"f".repeat(32)}`, communityId: ids.communityId, communityLifecycleGeneration: 0, billingPeriod: "monthly",
+    pricePointId, amountBaseUnits: 500, currency: "usd", currencyDecimals: 2, providerAccountId: "acct_test123",
+    providerPriceId: "price_test", claimToken: `claim_${"f".repeat(32)}`, expiresAt: Date.now() + 60_000,
+  })).rejects.toThrow("community_checkout_unavailable");
+});
