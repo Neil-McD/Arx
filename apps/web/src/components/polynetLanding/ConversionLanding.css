@@ -362,3 +362,61 @@
   .pn-landing .doors > * { justify-content: center; width: 100%; }
   .pn-landing .footer { flex-direction: column; align-items: flex-start; }
 }
+
+/* Find (public /discover) */
+.pn-landing .find { padding: 56px 0 96px; }
+
+.pn-landing .find h1 {
+  font-size: clamp(40px, 6vw, 64px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.pn-landing .find-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  height: 46px;
+  margin-top: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line-default);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--quiet);
+}
+
+.pn-landing .find-search:focus-within { border-color: var(--quiet); }
+
+.pn-landing .find-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+
+.pn-landing .find-search input::placeholder { color: var(--quiet); }
+
+.pn-landing .find-banner-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.pn-landing .find-banner-empty img {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.pn-landing .find-skeleton { min-height: 220px; }
+
+.pn-landing .find-empty { margin: 44px 0 0; color: var(--muted); }

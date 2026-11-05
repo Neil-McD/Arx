@@ -6,6 +6,7 @@ import { WebProductDocsPanel } from "./WebProductDocsPanel";
 import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebSettingsSurfaceHost } from "./WebSettingsSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
+import { PublicFindPage } from "./polynetLanding/PublicFindPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
 import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
 import type { WebOperatorDashboardHostProps } from "./WebOperatorDashboardHost";
@@ -25,6 +26,8 @@ export type WebAppMainSurfaceHostProps = {
   showOperatorDashboard: boolean;
   holdLandingForAuth: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
+  showPublicFind: boolean;
+  publicFindProps: ComponentProps<typeof PublicFindPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
   platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
@@ -52,6 +55,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="community-body">
           <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
         </div>
+      ) : props.showPublicFind ? (
+        <PublicFindPage {...props.publicFindProps} />
       ) : props.activePage === "landing" ? (
         <WebLandingPage {...props.landingPageProps} />
       ) : props.activePage === "onboarding" ? (

@@ -2491,6 +2491,7 @@ export default function App() {
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
     holdLandingForAuth: shouldHoldLandingForAuth,
+    isSignedOut: !session,
     landingPageProps: {
       // "Start your community free": sign in (and finish account setup), then
       // community setup. The Agent plan is bought later, from the community.
