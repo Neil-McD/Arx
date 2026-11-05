@@ -9,6 +9,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "mention_notification",
   "dm_message_notification",
   "founder_daily_brief",
+  "community_finish_joining",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -264,6 +265,14 @@ export function renderEmailTemplate(params: {
         "Billing needs attention",
         "There is a billing issue that needs your attention.",
         "Fix billing",
+      );
+    case "community_finish_joining":
+      return renderTransactionalTemplate(
+        `Finish joining ${communityName}`,
+        payload,
+        `You've paid for ${communityName}`,
+        "One step left: sign in to finish joining. It takes a few seconds.",
+        "Finish joining",
       );
     case "founder_checkout_recovery":
       return renderTransactionalTemplate(

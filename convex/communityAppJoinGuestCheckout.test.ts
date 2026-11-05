@@ -104,3 +104,26 @@ test("recording a guest checkout re-checks the limit in the same transaction", a
     providerPriceId: "price_test", claimToken: `claim_${"f".repeat(32)}`, expiresAt: Date.now() + 60_000,
   })).rejects.toThrow("community_checkout_unavailable");
 });
+
+test("the finish-joining email: only for a paid, unclaimed guest checkout, once, linking to the twin's /join with its claim", async () => {
+  const { t, ids, finish } = await fixture();
+  const TWIN_ORIGIN = "https://club--me.polynet.page";
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityDomains", { communityId: ids.communityId, origin: TWIN_ORIGIN, kind: "private", createdAt: Date.now() });
+    const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q) => q.eq("sessionId", SESSION)).first();
+    await ctx.db.patch(row!._id, { status: "complete" });
+  });
+  const plan = () => t.query(internal.communityAppJoin.finishJoiningEmailPlanInternal, { sessionId: SESSION });
+  expect((await plan())?.actionUrl).toBe(`${TWIN_ORIGIN}/join?checkout=${SESSION}&claim=${CLAIM}`);
+  // Sent once, however many times it's asked (a webhook Stripe retries).
+  for (let index = 0; index < 2; index += 1) {
+    await t.action(internal.communityAppJoin.sendFinishJoiningEmailInternal, { sessionId: SESSION, recipientEmail: "buyer@example.com" });
+  }
+  const outbox = await t.run((ctx) => ctx.db.query("emailOutbox").collect());
+  expect(outbox.map((row) => [row.templateKey, row.recipientEmail, row.dedupeKey])).toEqual([
+    ["community_finish_joining", "buyer@example.com", `community_finish_joining:${SESSION}`],
+  ]);
+  // Claimed: no plan, so no email.
+  await finish(ids.buyerId, CLAIM);
+  expect(await plan()).toBeNull();
+});
