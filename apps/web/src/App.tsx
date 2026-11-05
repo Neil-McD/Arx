@@ -1358,6 +1358,7 @@ export default function App() {
       );
     },
     onCommunityCreated: (community, context) => {
+      captureProductAnalyticsEvent("community_created", { community_id: community.id });
       suppressBuilderSetupSubscription(
         context.founderSubscriptionId,
         "attached",
@@ -2498,7 +2499,10 @@ export default function App() {
       // community setup. The Agent plan is bought later, from the community.
       onStartBuilderPurchase: () => {
         if (session) openNewCommunityPurchaseFlow();
-        else requireSignIn({ reason: "create_community", payload: { draft: null } });
+        else {
+          captureProductAnalyticsEvent("signin_started", { reason: "create_community" });
+          requireSignIn({ reason: "create_community", payload: { draft: null } });
+        }
       },
       builderPurchaseStatus: publicBuilderCheckout.status,
       builderPurchaseError: publicBuilderCheckout.error,

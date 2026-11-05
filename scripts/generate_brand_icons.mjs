@@ -3,6 +3,7 @@
 // Needs a local Chrome/Chromium for rasterising; the SVGs need nothing.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -56,14 +57,32 @@ function iconSvg({ mark = FULL, size = 512, radius = 112, markWidth = 360, backg
 }
 
 const work = mkdtempSync(join(tmpdir(), "polynet-icons-"));
-function renderPng(svg, size, out) {
-  const page = join(work, `icon-${size}.html`);
-  writeFileSync(page, `<!doctype html><style>html,body{margin:0;background:transparent}svg{display:block}</style>${svg}`);
+function renderPage(html, width, height, out) {
+  const page = join(work, `page-${width}x${height}.html`);
+  writeFileSync(page, html);
   execFileSync(chrome, [
     "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
-    `--window-size=${size},${size}`, "--default-background-color=00000000",
+    `--window-size=${width},${height}`, "--default-background-color=00000000",
+    "--allow-file-access-from-files", "--virtual-time-budget=2000",
     `--screenshot=${out}`, `file://${page}`,
   ], { stdio: "ignore" });
+}
+
+function renderPng(svg, size, out) {
+  renderPage(`<!doctype html><style>html,body{margin:0;background:transparent}svg{display:block}</style>${svg}`, size, size, out);
+}
+
+// Link-preview card (Open Graph / X): the mark and the line, 1200x630.
+function renderShareCard(out) {
+  const geist = resolve("apps/web/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2");
+  const mark = `<svg viewBox="20 46 472 384" width="300" height="244">${markShapes(FULL, WHITE)}</svg>`;
+  renderPage(`<!doctype html><style>
+    @font-face{font-family:Geist;src:url(file://${geist}) format("woff2");font-weight:100 900}
+    html,body{margin:0;width:1200px;height:630px;background:${INK};color:${WHITE};font-family:Geist,sans-serif}
+    .card{display:flex;align-items:center;gap:72px;height:100%;padding:0 104px;box-sizing:border-box}
+    h1{margin:0;font-size:84px;font-weight:300;line-height:1.02;letter-spacing:-0.045em}
+    p{margin:28px 0 0;color:#9A9FA8;font-size:30px;letter-spacing:-0.01em}
+  </style><div class="card">${mark}<div><h1>Communities<br>that think.</h1><p>polynet.ai</p></div></div>`, 1200, 630, out);
 }
 
 function writeIco(pngPaths, out) {
@@ -109,5 +128,7 @@ writeIco(
 renderPng(iconSvg({ size: 180, radius: 0, markWidth: 340 }), 180, `${PUBLIC}/apple-touch-icon.png`);
 renderPng(iconSvg({ size: 192, radius: 0, markWidth: 300 }), 192, `${PUBLIC}/icon-192.png`);
 renderPng(iconSvg({ size: 512, radius: 0, markWidth: 300 }), 512, `${PUBLIC}/icon-512.png`);
+
+renderShareCard(`${PUBLIC}/og-image.png`);
 
 console.log("brand icons written");

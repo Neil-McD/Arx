@@ -6,6 +6,7 @@ import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscove
 import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityTypes";
 import { buildPolynetMcpSetupForOrigin } from "../../../../../shared/polynetMcpSetup";
 import { tryCopyTextToClipboard } from "../../../../../shared/chatUi";
+import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
   TERMS_OF_SERVICE_ENTRY,
@@ -52,6 +53,18 @@ const PRICES = [
     detail: "Plus Stripe's fees, only when you charge. You connect Stripe when you set a price, not before.",
   },
 ];
+
+// Funnel step: which door a visitor used, and from where on the page.
+export function trackStart(placement: string, onJoin: () => void) {
+  return () => {
+    captureProductAnalyticsEvent("start_community_clicked", { placement });
+    onJoin();
+  };
+}
+
+function trackFind(placement: string) {
+  return () => captureProductAnalyticsEvent("find_community_clicked", { placement });
+}
 
 // Visitors only see communities that look finished: a banner and a one-liner.
 const SHOWCASE_LIMIT = 6;
@@ -116,7 +129,7 @@ function WaysIn(props: { onJoin: () => void }) {
         <article className="way">
           <h3>Studio</h3>
           <p>Run everything from the browser: people, channels, events, courses, the agent and payments.</p>
-          <button className="text-action" type="button" onClick={props.onJoin}>Open Studio</button>
+          <button className="text-action" type="button" onClick={trackStart("ways_studio", props.onJoin)}>Open Studio</button>
         </article>
         <article className="way">
           <h3>Your AI</h3>
@@ -146,7 +159,12 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
       <h2 id="showcase-title">Find your people.</h2>
       <div className="showcase-grid">
         {props.communities.map((community) => (
-          <a className="showcase-card" key={community.id} href={`/c/${community.slug}`}>
+          <a
+            className="showcase-card"
+            key={community.id}
+            href={`/c/${community.slug}`}
+            onClick={() => captureProductAnalyticsEvent("community_card_opened", { community_id: community.id, placement: "home" })}
+          >
             <span className="showcase-banner" style={{ backgroundImage: `url(${community.banner_url})` }} />
             <span className="showcase-body">
               <strong>{community.name}</strong>
@@ -171,7 +189,7 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
           <Brand />
           <nav aria-label="Account">
             <a href="/login">Sign in</a>
-            <button className="cta cta-small" type="button" onClick={props.onJoin}>Start a community</button>
+            <button className="cta cta-small" type="button" onClick={trackStart("header", props.onJoin)}>Start a community</button>
           </nav>
         </header>
 
@@ -183,7 +201,7 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
             <span>© 2026 Polynet</span>
           </div>
           <nav className="footer-links" aria-label="Footer navigation">
-            <a href="/discover">Find a community</a>
+            <a href="/discover" onClick={trackFind("footer")}>Find a community</a>
             <a href="/login">Sign in</a>
             <button type="button" onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}>Privacy</button>
             <button type="button" onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}>Terms</button>
@@ -202,6 +220,10 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
 
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
+
+  useEffect(() => {
+    captureProductAnalyticsEvent("home_viewed");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,8 +250,8 @@ export function ConversionLanding({ onJoin }: JoinProps) {
               so what one member learns becomes the community's collective intelligence.
             </p>
             <div className="doors">
-              <button className="cta" type="button" onClick={onJoin}>Start a community</button>
-              <a className="cta-secondary" href="/discover">Find a community</a>
+              <button className="cta" type="button" onClick={trackStart("hero", onJoin)}>Start a community</button>
+              <a className="cta-secondary" href="/discover" onClick={trackFind("hero")}>Find a community</a>
             </div>
             <p className="microcopy">{OFFER_META}</p>
           </section>
@@ -268,7 +290,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
           <section className="closing" aria-labelledby="closing-title">
             <h2 id="closing-title">Your community is one name away.</h2>
-            <button className="cta" type="button" onClick={onJoin}>Start a community</button>
+            <button className="cta" type="button" onClick={trackStart("closing", onJoin)}>Start a community</button>
             <p className="microcopy">{OFFER_META}</p>
           </section>
     </PublicFrame>

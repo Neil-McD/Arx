@@ -29,6 +29,7 @@ import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGa
 import { useWebProfileSettingsUiController } from "./useWebProfileSettingsUiController";
 import { readProfileDraftForUser } from "../../../../shared/profileDraftStorage";
 import { readAuthResumeState } from "../../../../shared/authResumeState";
+import { captureProductAnalyticsEvent } from "../posthogAnalytics";
 
 type LegalAcceptance = {
   termsOfServiceVersion: string;
@@ -400,6 +401,7 @@ export function useWebOnboardingProfileController(params: {
       accountCompletionContinuationInFlightRef.current = true;
       try {
         if (!(await completeAccountSetup(legalAcceptance))) return false;
+        captureProductAnalyticsEvent("account_setup_completed");
         return await continueAfterAccountSetup();
       } finally {
         accountCompletionContinuationInFlightRef.current = false;

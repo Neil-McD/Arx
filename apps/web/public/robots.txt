@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /$
+Allow: /discover
+Allow: /c/
+Disallow: /settings
+Disallow: /operator
+Disallow: /onboarding
+Disallow: /checkout
+Disallow: /m/
+Disallow: /runtime/
+
+Sitemap: https://www.polynet.ai/sitemap.xml
