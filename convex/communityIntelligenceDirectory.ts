@@ -1,5 +1,5 @@
 // The community overview: its lessons and its community notes around the
-// community, for Studio and (as anonymous dots) the public page. Kept under
+// community, for members in Studio only. Kept under
 // this module's name because cached Studio pages call these two queries by
 // name; the old memory store they used to read is gone (POL-39).
 import { query } from "./_generated/server";
@@ -16,7 +16,6 @@ import {
   type CommunityResourceLike,
   type CommunityResourceModuleLike,
 } from "./communityCore";
-import { communityIsActive } from "../shared/communityLifecycle";
 
 const OVERVIEW_DEFAULT_NODE_LIMIT = 80;
 const OVERVIEW_MAX_NODE_LIMIT = 120;
@@ -55,15 +54,14 @@ async function readOverviewNotes(ctx: any, communityId: any, limit: number): Pro
   return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
-async function buildOverview(ctx: any, community: any, args: { isManager: boolean; limit: number; anonymous: boolean }) {
+async function buildOverview(ctx: any, community: any, args: { isManager: boolean; limit: number }) {
   const half = Math.max(1, Math.floor(args.limit / 2));
   const [notes, resources] = await Promise.all([
     readOverviewNotes(ctx, community._id, half),
     readOverviewResources(ctx, community._id, args.limit - half),
   ]);
   const root = rootId(community._id);
-  const label = (text: string) => (args.anonymous ? null : text);
-  // Opaque ids: a note's slug is its title, which the visitor lens must not show.
+  const label = (text: string) => text;
   const noteNodes = notes.rows.map((note) => ({
     id: `note:${normalizeIdValue(note._id)}`, lineage_id: `note:${normalizeIdValue(note._id)}`, kind: "directory_node",
     node_id: normalizeIdValue(note._id),
@@ -126,20 +124,14 @@ export const getCommunityPolynetOverview = query({
     const { community } = await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     const isManager = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
     const limit = Math.max(1, Math.min(OVERVIEW_MAX_NODE_LIMIT, Math.floor(args.nodeLimit ?? OVERVIEW_DEFAULT_NODE_LIMIT)));
-    return await buildOverview(ctx, community, { isManager, limit, anonymous: false });
+    return await buildOverview(ctx, community, { isManager, limit });
   },
 });
 
-// Visitor lens: the overview's shape as anonymous dots, no titles.
+// Retired Nov 5: visitors no longer see any of a community's notes or lessons
+// (it leaked activity for unlisted communities, and nothing rendered it). Kept
+// by name for one release because cached Studio pages call it; then deleted.
 export const resolvePublicCommunityMemoryOverviewBySlug = query({
   args: { communitySlug: v.string() },
-  handler: async (ctx, args) => {
-    const community = await ctx.db.query("communities")
-      .withIndex("by_slug", (q: any) => q.eq("slug", normalizeSlug(args.communitySlug))).first();
-    if (!community || !communityIsActive(community)) return { ok: false as const };
-    return {
-      ok: true as const,
-      overview: await buildOverview(ctx, community, { isManager: false, limit: OVERVIEW_DEFAULT_NODE_LIMIT, anonymous: true }),
-    };
-  },
+  handler: async () => ({ ok: false as const }),
 });

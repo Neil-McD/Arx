@@ -163,9 +163,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** community notes: short markdown notes every member and the
   community agent read under `memory/`; only owners and admins edit or delete
   them in Studio (Knowledge → Notes). No agent, member or connected AI writes
-  them (Nov 5: closed a private-room leak and an injection path). The Studio and public overview
-  (`communityIntelligenceDirectory`, kept by name for cached pages) shows notes
-  and lessons around the community.
+  them (Nov 5: closed a private-room leak and an injection path). The member overview
+  (`communityIntelligenceDirectory.getCommunityPolynetOverview`, members only)
+  shows notes and lessons around the community. The public overview
+  (`resolvePublicCommunityMemoryOverviewBySlug`) answers `{ ok: false }` for
+  everyone since Nov 5, kept by name one release for cached Studio pages, then
+  deleted with the module's orphan exception.
 - **Code:** `communityNotes`, `communityIntelligenceDirectory`, `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`).

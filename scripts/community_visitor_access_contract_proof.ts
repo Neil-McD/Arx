@@ -118,18 +118,10 @@ const intelligenceDirectory = read("convex/communityIntelligenceDirectory.ts");
 const publicMemoryOverview = intelligenceDirectory.slice(
   intelligenceDirectory.indexOf("export const resolvePublicCommunityMemoryOverviewBySlug"),
 );
-assert.notEqual(publicMemoryOverview.length, 0, "public overview query must exist");
-assert.doesNotMatch(
-  publicMemoryOverview,
-  /visibility !== "published"/,
-  "the public overview must NOT gate on visibility — unlisted communities serve it exactly like published",
-);
-assert.match(publicMemoryOverview, /isManager: false/, "the public overview reads with member visibility, never manager");
-assert.match(publicMemoryOverview, /anonymous: true/, "the public overview shows shape only");
 assert.match(
-  intelligenceDirectory,
-  /const label = \(text: string\) => \(args\.anonymous \? null : text\);/,
-  "anonymous overview nodes carry no titles or labels — the shape is public, the content is not",
+  publicMemoryOverview,
+  /handler: async \(\) => \(\{ ok: false as const \}\)/,
+  "visitors see nothing of a community's notes or lessons (retired Nov 5)",
 );
 assert.match(
   intelligenceDirectory,
