@@ -32,8 +32,8 @@ assert.match(
 );
 assert.match(
   billing,
-  /redeemClaimRow[\s\S]*communityIsActive\(community\)[\s\S]*communityLifecycleGenerationMatches\([\s\S]*checkoutSession\?\.communityLifecycleGeneration[\s\S]*ensureCommunityMembership/,
-  "claim redemption must fence the final membership grant",
+  /grantCommunityCheckout[\s\S]*communityIsActive\(community\)[\s\S]*communityLifecycleGenerationMatches\(community, session\.communityLifecycleGeneration\)[\s\S]*ensureCommunityMembership/,
+  "the checkout grant must fence the final membership grant",
 );
 assert.match(
   commerce,

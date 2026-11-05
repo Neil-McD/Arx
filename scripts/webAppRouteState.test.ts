@@ -276,9 +276,5 @@ describe("canonical web destinations", () => {
     expect(
       deriveWebDestinationFromPath("/m/checkout/success?session_id=cs_123"),
     ).toEqual({ kind: "checkout_success", sessionId: "cs_123" });
-    expect(deriveWebDestinationFromPath("/m/claim?token=claim_123")).toEqual({
-      kind: "claim",
-      token: "claim_123",
-    });
   });
 });

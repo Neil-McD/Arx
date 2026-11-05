@@ -4,7 +4,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
-import { redeemClaimRow } from "./billingCore";
+import { grantCommunityCheckout } from "./billingCore";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -79,65 +79,50 @@ async function createCommunityFixture(
   });
 }
 
-async function insertCompletedCheckoutAndClaim(args: {
+async function insertCompletedCheckout(args: {
   t: ReturnType<typeof convexTest>;
   communityId: any;
   memberId: any;
   sessionId: string;
   generation?: number;
 }) {
-  return await args.t.run(async (ctx) => {
-    const claimToken = `claim-${args.sessionId}`;
-    await ctx.db.insert("checkoutSessions", {
-      sessionId: args.sessionId,
-      mode: "community_join",
-      communityId: args.communityId,
-      communityLifecycleGeneration: args.generation,
-      ownerUserId: args.memberId,
-      claimToken,
-      status: "complete",
-      expiresAt: nowMs + 60_000,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const claimId = await ctx.db.insert("purchaseClaims", {
-      claimToken,
-      communityId: args.communityId,
-      ownerUserId: args.memberId,
-      status: "pending",
-      sourceSessionId: args.sessionId,
-      expiresAt: nowMs + 60_000,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return claimId;
-  });
+  return await args.t.run(async (ctx) => await ctx.db.insert("checkoutSessions", {
+    sessionId: args.sessionId,
+    mode: "community_join",
+    communityId: args.communityId,
+    communityLifecycleGeneration: args.generation,
+    ownerUserId: args.memberId,
+    status: "complete",
+    expiresAt: nowMs + 60_000,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  }));
 }
 
-test("legacy generation-zero checkout remains redeemable on an active legacy community", async () => {
+function grant(t: ReturnType<typeof convexTest>, checkoutId: any, at = nowMs + 1) {
+  return t.run(async (ctx) => await grantCommunityCheckout({ ctx, checkoutSession: await ctx.db.get(checkoutId), nowMs: at }));
+}
+
+test("legacy generation-zero checkout still grants on an active legacy community, once", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createCommunityFixture(t, "legacy");
-  const claimId = await insertCompletedCheckoutAndClaim({
+  const checkoutId = await insertCompletedCheckout({
     t,
     communityId: fixture.communityId,
     memberId: fixture.memberId,
     sessionId: "legacy-session",
   });
 
-  const result = await t.run(async (ctx) => {
-    const claim = await ctx.db.get(claimId);
-    if (!claim) throw new Error("claim_missing");
-    return await redeemClaimRow({
-      ctx,
-      claim: claim as any,
-      userId: fixture.memberId,
-      nowMs: nowMs + 1,
-    });
-  });
-
-  expect(result).toMatchObject({
+  expect(await grant(t, checkoutId)).toMatchObject({
     communityId: String(fixture.communityId),
     accessGranted: true,
+  });
+  // The checkout keeps when; granting it again changes nothing.
+  expect((await t.run(async (ctx) => await ctx.db.get(checkoutId)))?.membershipGrantedAt).toBe(nowMs + 1);
+  expect(await grant(t, checkoutId, nowMs + 2)).toEqual({
+    communityId: String(fixture.communityId),
+    accessGranted: false,
+    grantMarker: null,
   });
   const arrivalEvents = await t.run(async (ctx) =>
     await ctx.db
@@ -190,7 +175,6 @@ test("archived communities cannot start or persist a member checkout", async () 
         providerAccountId: "acct_archived",
         providerPriceId: "price_archived",
         ownerUserId: fixture.memberId,
-        claimToken: "claim-archived-session",
         expiresAt: nowMs + 60_000,
         nowMs,
       },
@@ -204,25 +188,14 @@ test("a pre-archive checkout stays dead after archive and restore", async () => 
     status: "active",
     generation: 0,
   });
-  const claimId = await insertCompletedCheckoutAndClaim({
+  const checkoutId = await insertCompletedCheckout({
     t,
     communityId: fixture.communityId,
     memberId: fixture.memberId,
     sessionId: "stale-session",
     generation: 0,
   });
-
-  const redeem = async () =>
-    await t.run(async (ctx) => {
-      const claim = await ctx.db.get(claimId);
-      if (!claim) throw new Error("claim_missing");
-      return await redeemClaimRow({
-        ctx,
-        claim: claim as any,
-        userId: fixture.memberId,
-        nowMs: nowMs + 1,
-      });
-    });
+  const none = { communityId: null, accessGranted: false, grantMarker: null };
 
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.communityId, {
@@ -231,11 +204,7 @@ test("a pre-archive checkout stays dead after archive and restore", async () => 
       updatedAt: nowMs + 1,
     });
   });
-  await expect(redeem()).resolves.toEqual({
-    communityId: null,
-    accessGranted: false,
-    grantMarker: null,
-  });
+  await expect(grant(t, checkoutId)).resolves.toEqual(none);
 
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.communityId, {
@@ -244,11 +213,7 @@ test("a pre-archive checkout stays dead after archive and restore", async () => 
       updatedAt: nowMs + 2,
     });
   });
-  await expect(redeem()).resolves.toEqual({
-    communityId: null,
-    accessGranted: false,
-    grantMarker: null,
-  });
+  await expect(grant(t, checkoutId)).resolves.toEqual(none);
   await t.run(async (ctx) => {
     expect(
       await ctx.db
@@ -258,54 +223,23 @@ test("a pre-archive checkout stays dead after archive and restore", async () => 
         )
         .first(),
     ).toBeNull();
-    expect((await ctx.db.get(claimId))?.status).toBe("pending");
+    expect((await ctx.db.get(checkoutId))?.membershipGrantedAt).toBeUndefined();
   });
 });
 
-test("a checkout cannot redeem a claim for a different community", async () => {
+test("a checkout grants only to the buyer who started it, and only once paid", async () => {
   const t = convexTest(schema, modules);
-  const checkoutCommunity = await createCommunityFixture(t, "bound-checkout");
-  const claimCommunity = await createCommunityFixture(t, "bound-claim");
-  const claimId = await t.run(async (ctx) => {
-    await ctx.db.insert("checkoutSessions", {
-      sessionId: "community-bound-session",
-      mode: "community_join",
-      communityId: checkoutCommunity.communityId,
-      ownerUserId: checkoutCommunity.memberId,
-      claimToken: "community-bound-claim",
-      status: "complete",
-      expiresAt: nowMs + 60_000,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return await ctx.db.insert("purchaseClaims", {
-      claimToken: "community-bound-claim",
-      communityId: claimCommunity.communityId,
-      ownerUserId: checkoutCommunity.memberId,
-      status: "pending",
-      sourceSessionId: "community-bound-session",
-      expiresAt: nowMs + 60_000,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-  });
-
-  await expect(
-    t.run(async (ctx) => {
-      const claim = await ctx.db.get(claimId);
-      if (!claim) throw new Error("claim_missing");
-      return await redeemClaimRow({
-        ctx,
-        claim: claim as any,
-        userId: checkoutCommunity.memberId,
-        nowMs: nowMs + 1,
-      });
-    }),
-  ).resolves.toEqual({
-    communityId: null,
-    accessGranted: false,
-    grantMarker: null,
-  });
+  const fixture = await createCommunityFixture(t, "bound");
+  const none = { communityId: null, accessGranted: false, grantMarker: null };
+  const unowned = await t.run(async (ctx) => await ctx.db.insert("checkoutSessions", {
+    sessionId: "unowned-session", mode: "community_join", communityId: fixture.communityId,
+    status: "complete", expiresAt: nowMs + 60_000, createdAt: nowMs, updatedAt: nowMs,
+  }));
+  await expect(grant(t, unowned)).resolves.toEqual(none);
+  const unpaid = await insertCompletedCheckout({ t, communityId: fixture.communityId, memberId: fixture.memberId, sessionId: "unpaid-session" });
+  await t.run(async (ctx) => { await ctx.db.patch(unpaid, { status: "pending" }); });
+  await expect(grant(t, unpaid)).resolves.toEqual(none);
+  expect(await t.run(async (ctx) => await ctx.db.query("communityMemberships").collect())).toHaveLength(0);
 });
 
 test("a stale member webhook records provider truth but cannot complete the checkout", async () => {
@@ -328,7 +262,6 @@ test("a stale member webhook records provider truth but cannot complete the chec
       providerAccountId: "acct_webhook",
       providerPriceId: "price_webhook",
       ownerUserId: fixture.memberId,
-      claimToken: "claim-webhook-session",
       expiresAt: nowMs + 60_000,
       nowMs,
     },

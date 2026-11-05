@@ -109,8 +109,8 @@ function assertSourceAnchors() {
   assertIncludes(communityPublic, "outcome: \"paid_plan_required\"", "paid public join must route to checkout");
   assertIncludes(communityAdmin, "community_paid_checkout_required", "paid approval must be rejected");
   assertIncludes(communityCore, "if (lens.isBlocked) throw new Error(\"community_user_blocked\");", "shared community gates (the one lens) must enforce blocks");
-  assertIncludes(billingCore, "String(checkoutSession.status ?? \"\").trim().toLowerCase() !== \"complete\"", "claim redemption requires complete checkout");
-  assertIncludes(billingCore, "await requireCommunityUserNotBlocked({", "claim redemption rejects blocked users");
+  assertIncludes(billingCore, "String(session.status ?? \"\").trim().toLowerCase() !== \"complete\"", "the checkout grant requires a complete checkout");
+  assertIncludes(billingCore, "await requireCommunityUserNotBlocked({", "the checkout grant rejects blocked users");
   assertIncludes(communityAdmin, "revokedReason:", "manager removal keeps revoked membership evidence");
   assertIncludes(communityAdmin, "await ctx.db.delete(membership._id as any);", "member leave deletes own membership row intentionally");
   assertIncludes(audit, "active_membership_with_active_block", "state audit checks active block drift");

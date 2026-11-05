@@ -5,21 +5,25 @@ import { createConvexClient } from "./convexAuthenticatedClient";
 
 export type CheckoutFinalizeStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 
+export type PaidCommunity = { communityId: string; communitySlug: string | null };
+
 type UseCheckoutFinalizeControllerArgs = {
   checkoutSuccessSessionId: string | null;
   getSession: () => AuthSession | null;
-  redeemPurchaseClaim: (token: string) => Promise<unknown>;
-  persistClaimToken: (token: string) => void;
+  // Paid and in (Stripe's verified notice made them a member): go there.
+  enterCommunity: (community: PaidCommunity) => void;
   setCheckoutStatus: Dispatch<SetStateAction<CheckoutFinalizeStatus>>;
   setCheckoutError: Dispatch<SetStateAction<string | null>>;
-  setCheckoutClaimToken: Dispatch<SetStateAction<string | null>>;
-  setRedeemClaimError: Dispatch<SetStateAction<string | null>>;
   maxPendingAttempts?: number;
 };
 
+// Back from Stripe: reads what Stripe's notice recorded until the payment is in
+// (the return itself grants nothing), then enters the community.
 export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControllerArgs): {
   retryCheckoutFinalize: () => void;
+  continueToCommunity: (() => void) | null;
 } {
+  const [paidCommunity, setPaidCommunity] = useState<PaidCommunity | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const inFlightRef = useRef(false);
   const pollCountRef = useRef(0);
@@ -79,8 +83,6 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
       inFlightRef.current = true;
       currentArgs.setCheckoutStatus((prev) => (prev === "pending" ? "pending" : "loading"));
       currentArgs.setCheckoutError(null);
-      currentArgs.setCheckoutClaimToken(null);
-      currentArgs.setRedeemClaimError(null);
       try {
         const schedulePendingRetry = () => {
           currentArgs.setCheckoutStatus("pending");
@@ -109,7 +111,8 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
           ok?: boolean;
           status?: string;
           message?: string;
-          claim?: { token?: string };
+          community_id?: string | null;
+          community_slug?: string | null;
         };
         if (cancelled) return;
         if (payload?.status === "pending") {
@@ -122,19 +125,16 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
             : "Failed to finalize checkout.");
         }
 
-        const token = typeof payload?.claim?.token === "string" ? payload.claim.token.trim() : "";
-        if (!token) throw new Error("Missing claim token.");
-
+        const communityId = typeof payload?.community_id === "string" ? payload.community_id.trim() : "";
+        if (!communityId) throw new Error("Failed to finalize checkout.");
+        const community = { communityId, communitySlug: payload?.community_slug ?? null };
         currentArgs.setCheckoutStatus("succeeded");
-        currentArgs.setCheckoutClaimToken(token);
+        setPaidCommunity(community);
         if (pollTimeoutRef.current) {
           window.clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
         }
-        currentArgs.persistClaimToken(token);
-        if (currentArgs.getSession()) {
-          await currentArgs.redeemPurchaseClaim(token);
-        }
+        currentArgs.enterCommunity(community);
       } catch (error) {
         const message =
           typeof error === "string"
@@ -164,5 +164,6 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
     };
   }, []);
 
-  return { retryCheckoutFinalize };
+  const continueToCommunity = paidCommunity ? () => argsRef.current.enterCommunity(paidCommunity) : null;
+  return { retryCheckoutFinalize, continueToCommunity };
 }

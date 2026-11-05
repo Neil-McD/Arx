@@ -22,7 +22,7 @@ import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans } from "./communityPublic";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
-import { redeemPurchaseClaimForUser, resolveCheckoutSessionFinalization } from "./communityCommerce";
+import { resolveCheckoutSessionFinalization } from "./communityCommerce";
 
 // Join on a community site's private twin (<slug>--me<suffix>.<sites domain>/join).
 // The page shows what Studio's public funnel (/c/<slug>) shows and decides, from
@@ -149,9 +149,10 @@ export const cancelCommunityAppJoinRequestInternal = internalMutation({
   },
 });
 
-// Back from Stripe on the twin: Studio's finalization (the webhook's record,
-// never the redirect) and, once it grants access, Studio's claim. Only the
-// buyer's own checkout for this community; anything else reads as none at all.
+// Back from Stripe on the twin: Studio's finalization, a read of what Stripe's
+// verified notice recorded (never the redirect); the notice itself granted the
+// membership. Only the buyer's own checkout for this community; anything else
+// reads as none at all.
 export const finishCommunityAppCheckoutInternal = internalMutation({
   args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string() },
   handler: async (ctx, args): Promise<{ status: "joined" | "pending" | "expired" | "not_found" }> => {
@@ -163,12 +164,9 @@ export const finishCommunityAppCheckoutInternal = internalMutation({
       || String(row.ownerUserId ?? "") !== String(args.userId)) {
       return { status: "not_found" };
     }
-    const finalization = (await resolveCheckoutSessionFinalization(ctx, args.userId, args.sessionId)) as {
-      status: string; claim?: { token: string };
-    };
+    const finalization = (await resolveCheckoutSessionFinalization(ctx, args.userId, args.sessionId)) as { status: string };
     if (finalization.status === "pending") return { status: "pending" };
-    if (finalization.status !== "succeeded" || !finalization.claim?.token) return { status: "expired" };
-    await redeemPurchaseClaimForUser(ctx, args.userId, finalization.claim.token);
+    if (finalization.status !== "succeeded") return { status: "expired" };
     return { status: "joined" };
   },
 });

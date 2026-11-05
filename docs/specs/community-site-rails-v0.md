@@ -401,9 +401,9 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   built by the backend from the twin origin it verified, never from the page.
   The page goes exactly where the backend's answer says (the edge passes only
   a `https://checkout.stripe.com/` address). Back from Stripe it shows
-  "Finishing up…" and asks the backend, which runs Studio's finalization and
-  claim: membership comes only once Stripe's verified webhook has marked the
-  checkout complete. A return alone grants nothing. After a minute it offers
+  "Finishing up…" and asks the backend, which reads Studio's finalization:
+  Stripe's verified notice itself made the buyer a member (recorded on the
+  checkout, once), and the page only reads that. A return alone grants nothing. After a minute it offers
   "Check again".
 - **Paid, identify then pay (Nov 5, membership redesign; replaced the
   short-lived cash-first guest checkout):** who's paying is known before

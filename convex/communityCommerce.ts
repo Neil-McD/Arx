@@ -10,25 +10,21 @@ import {
   fillCheckoutSuccessUrl,
   type CommunityLike,
   type CommunityPricePointLike,
-  type PurchaseClaimLike,
   newOpaqueToken,
   normalizeBillingPeriod,
-  normalizeClaimToken,
   normalizeSessionId,
   normalizeSlug,
   normalizeStripeCommunitySubscriptionStatus,
   requireCanonicalCheckoutReturnUrl,
-  redeemClaimRow,
+  grantCommunityCheckout,
   resolveCheckoutPricePoint,
   resolveUserIdForAuthenticatedRequest,
-  toIsoString,
 } from "./billingCore";
 import {
   adjustCommunityActiveMemberCountForMembershipTransition,
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
   communitySubscriptionStatusGrantsAccess,
-  communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
   parseIsoMs,
   requireCommunityChatAccess,
@@ -639,7 +635,6 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     providerAccountId: v.string(),
     providerPriceId: v.string(),
     ownerUserId: v.id("users"),
-    claimToken: v.string(),
     expiresAt: v.number(),
     nowMs: v.optional(v.number()),
   },
@@ -672,7 +667,6 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       ),
       providerPriceId: args.providerPriceId,
       ownerUserId: args.ownerUserId,
-      claimToken: args.claimToken,
       status: "pending",
       expiresAt: args.expiresAt,
       createdAt: nowMs,
@@ -696,39 +690,6 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
         currencyDecimals: args.currencyDecimals,
         providerAccountId: args.providerAccountId,
         expiresAt: args.expiresAt,
-      },
-      createdAt: nowMs,
-    });
-    await ctx.db.insert("purchaseClaims", {
-      claimToken: args.claimToken,
-      communityId: args.communityId,
-      billingPeriod: args.billingPeriod,
-      pricePointId: args.pricePointId,
-      amountBaseUnits: args.amountBaseUnits,
-      currency: args.currency,
-      currencyDecimals: args.currencyDecimals,
-      ownerUserId: args.ownerUserId ?? undefined,
-      status: "pending",
-      sourceSessionId: args.sessionId,
-      expiresAt: args.expiresAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await recordCriticalAuditEventBestEffort(ctx, {
-      eventKey: `community_purchase_claim_created:${args.claimToken}`,
-      eventType: "community_purchase_claim_created",
-      status: "started",
-      actorUserId: args.ownerUserId,
-      subjectUserId: args.ownerUserId,
-      communityId: args.communityId,
-      checkoutSessionId: args.sessionId,
-      provider: "stripe",
-      providerObjectId: args.providerPriceId,
-      metadata: {
-        billingPeriod: args.billingPeriod,
-        pricePointId: String(args.pricePointId),
-        amountBaseUnits: args.amountBaseUnits,
-        currency: args.currency,
       },
       createdAt: nowMs,
     });
@@ -885,14 +846,10 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       updatedAt: nowMs,
     });
     // The buyer is known (signed in before paying): Stripe's notice itself makes
-    // them a member. If they already have another paid subscription here (two
-    // tabs), this one is a duplicate: cancelled and refunded, nothing granted.
-    // A replayed notice for a checkout that already granted (or was refunded)
-    // finds its claim no longer pending: nothing more to do.
-    const claim = args.markComplete && lifecycleMatches && row.ownerUserId && row.claimToken && row.communityId
-      ? await ctx.db.query("purchaseClaims").withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken)).first()
-      : null;
-    if (claim && claim.status === "pending" && row.ownerUserId && row.claimToken && row.communityId) {
+    // them a member, once (the checkout keeps when). If they already have
+    // another paid subscription here (two tabs), this one is a duplicate:
+    // cancelled and refunded, nothing granted.
+    if (args.markComplete && lifecycleMatches && row.ownerUserId && row.communityId && !(await checkoutAlreadyGranted(ctx, row))) {
       const newSubscriptionId = String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim();
       const others = await ctx.db.query("communitySubscriptions")
         .withIndex("by_community_user", (q: any) => q.eq("communityId", row.communityId).eq("userId", row.ownerUserId))
@@ -907,7 +864,6 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
           paymentIntentId: String(args.sourceProviderPaymentIntentId ?? "").trim() || null,
           chargeId: String(args.sourceProviderChargeId ?? "").trim() || null,
         });
-        await ctx.db.patch(claim._id, { status: "expired", updatedAt: nowMs });
         await recordCriticalAuditEventBestEffort(ctx, {
           eventKey: `community_duplicate_subscription_refunded:${newSubscriptionId}`, eventType: "community_duplicate_subscription_refunded",
           status: "started", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId, communityId: row.communityId,
@@ -915,7 +871,15 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         });
       } else {
         try {
-          await redeemPurchaseClaimForUser(ctx, row.ownerUserId, row.claimToken);
+          const granted = await grantCommunityCheckout({ ctx, checkoutSession: await ctx.db.get(row._id), nowMs });
+          await recordCriticalAuditEventBestEffort(ctx, {
+            eventKey: `community_checkout_granted:${args.sessionId}`, eventType: "community_checkout_granted",
+            status: granted.accessGranted ? "succeeded" : "ignored", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId,
+            communityId: row.communityId, checkoutSessionId: args.sessionId, provider: "stripe",
+            providerObjectId: newSubscriptionId || undefined,
+            metadata: { accessGranted: granted.accessGranted, grantMarker: granted.grantMarker, pricePointId: row.pricePointId ? String(row.pricePointId) : null },
+            createdAt: nowMs,
+          });
         } catch (error) {
           // Blocked or no longer allowed: the return page shows it; nothing is lost.
           console.error("community_checkout_grant_failed", { sessionId: args.sessionId, error: error instanceof Error ? error.message : String(error) });
@@ -1132,7 +1096,6 @@ export async function startCommunityJoinCheckoutCore(
   };
   requireStripeConnectWebhookConfiguration();
   const sessionId = newOpaqueToken("chk");
-  const claimToken = newOpaqueToken("claim");
   const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
   if (!args.authSubject) {
     throw new Error("auth_subject_required");
@@ -1238,7 +1201,6 @@ export async function startCommunityJoinCheckoutCore(
       providerAccountId: checkoutConfig.providerAccountId,
       providerPriceId,
       ownerUserId,
-      claimToken,
       expiresAt,
       nowMs,
     },
@@ -1261,7 +1223,6 @@ export async function startCommunityJoinCheckoutCore(
       ],
       metadata: {
         local_session_id: sessionId,
-        claim_token: claimToken,
         community_id: String(checkoutConfig.communityId),
         community_slug: checkoutConfig.communitySlug,
         community_price_point_id: String(checkoutConfig.pricePointId),
@@ -1271,8 +1232,7 @@ export async function startCommunityJoinCheckoutCore(
         application_fee_percent: checkoutConfig.platformFeeBps / 100,
         metadata: {
           local_session_id: sessionId,
-          claim_token: claimToken,
-          community_id: String(checkoutConfig.communityId),
+            community_id: String(checkoutConfig.communityId),
           community_slug: checkoutConfig.communitySlug,
           community_price_point_id: String(checkoutConfig.pricePointId),
           billing_period: billingPeriod,
@@ -1484,7 +1444,7 @@ export async function resolveCheckoutSessionFinalization(ctx: any, userId: any, 
       };
     }
   }
-  if (session.status !== "complete" || !session.claimToken) {
+  if (session.status !== "complete") {
     return {
       ok: true,
       status: "pending",
@@ -1493,22 +1453,46 @@ export async function resolveCheckoutSessionFinalization(ctx: any, userId: any, 
   const grantsAccess = communitySubscriptionStatusGrantsAccess(
     normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active",
   );
-  if (!grantsAccess) {
+  if (!grantsAccess || (session.mode === "community_join" && !(await checkoutBuyerIsIn(ctx, session)))) {
     return {
       ok: false,
       status: "expired",
       message: "checkout_session_inactive",
     };
   }
+  const community = session.communityId ? ((await ctx.db.get(session.communityId)) as CommunityLike | null) : null;
   return {
     ok: true,
     status: "succeeded",
+    community_id: session.communityId ? String(session.communityId) : null,
+    community_slug: String(community?.slug ?? "") || null,
+    // Studio tabs opened before the claims were retired redeem this; the
+    // redeem below only confirms it. Next release: removed.
     claim: {
-      token: session.claimToken,
+      token: session.sessionId,
     },
   };
 }
 
+// Granted once, from Stripe's notice. Checkouts paid before that was recorded
+// on the checkout (staging only) were granted through a claim instead.
+async function checkoutAlreadyGranted(ctx: any, session: any): Promise<boolean> {
+  if (typeof session.membershipGrantedAt === "number") return true;
+  if (!session.claimToken) return false;
+  const claim = await ctx.db.query("purchaseClaims").withIndex("by_claimToken", (q: any) => q.eq("claimToken", session.claimToken)).first();
+  return Boolean(claim && claim.status !== "pending");
+}
+
+// Paid and in: the grant happened (or the buyer was already a member, as after
+// a refunded second payment). A refused grant (blocked since) is not "in".
+async function checkoutBuyerIsIn(ctx: any, session: any): Promise<boolean> {
+  if (!session.ownerUserId || !session.communityId) return false;
+  return await requireCommunityChatAccess({ ctx, communityId: session.communityId, userId: session.ownerUserId }).then(() => true, () => false);
+}
+
+// Retired: Stripe's notice grants membership from the checkout itself. Kept
+// one release for Studio tabs opened before then: redeeming a checkout's id
+// only confirms the buyer is in and says where; the lists are empty.
 export const redeemPurchaseClaim = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -1521,136 +1505,25 @@ export const redeemPurchaseClaim = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    return await redeemPurchaseClaimForUser(ctx, userId, args.token);
+    const session = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", String(args.token ?? "").trim()))
+      .first();
+    if (!session || session.mode !== "community_join" || String(session.ownerUserId ?? "") !== String(userId)
+      || !(await checkoutBuyerIsIn(ctx, session))) {
+      throw new Error("claim_not_found");
+    }
+    const community = (await ctx.db.get(session.communityId as any)) as CommunityLike | null;
+    return [{ community_id: String(session.communityId), community_slug: String(community?.slug ?? "") || null }];
   },
 });
-
-// A paid checkout's claim becomes membership only once the webhook marked its
-// checkout complete (redeemClaimRow checks): Studio's return and the twin's Join.
-export async function redeemPurchaseClaimForUser(ctx: any, userId: any, tokenRaw: unknown) {
-  const nowMs = Date.now();
-  const token = normalizeClaimToken(tokenRaw);
-  const claim = (await ctx.db
-    .query("purchaseClaims")
-    .withIndex("by_claimToken", (q: any) => q.eq("claimToken", token))
-    .first()) as PurchaseClaimLike | null;
-  if (!claim) throw new Error("claim_not_found");
-  if (claim.ownerUserId && String(claim.ownerUserId) !== String(userId)) {
-    throw new Error("claim_owner_mismatch");
-  }
-  if (claim.expiresAt <= nowMs || claim.status === "expired") {
-    await ctx.db.patch(claim._id, {
-      status: "expired",
-      updatedAt: nowMs,
-    });
-    throw new Error("claim_expired");
-  }
-  if (claim.status === "redeemed" && claim.redeemedByUserId !== userId) {
-    throw new Error("claim_already_redeemed");
-  }
-
-  const redemption = await redeemClaimRow({
-    ctx,
-    claim,
-    userId,
-    nowMs,
-  });
-  await recordCriticalAuditEventBestEffort(ctx, {
-    eventKey: `community_purchase_claim_redeemed:${token}:${userId}`,
-    eventType: "community_purchase_claim_redeemed",
-    status: redemption.accessGranted ? "succeeded" : "ignored",
-    actorUserId: userId,
-    subjectUserId: userId,
-    communityId: claim.communityId,
-    checkoutSessionId: claim.sourceSessionId ?? undefined,
-    provider: "polynet",
-    providerObjectId: claim.claimToken,
-    metadata: {
-      accessGranted: redemption.accessGranted,
-      grantMarker: redemption.grantMarker,
-      pricePointId: claim.pricePointId ? String(claim.pricePointId) : null,
-    },
-    createdAt: nowMs,
-  });
-  const communityId = redemption.communityId;
-  if (!communityId) throw new Error("claim_not_redeemable");
-  const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
-  return [{ community_id: communityId, community_slug: String(community?.slug ?? "") || null }];
-}
 
 export const listPendingPurchaseClaims = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))
-      .collect()) as PurchaseClaimLike[];
-    const out: Array<{
-      community_id: string;
-      community_slug: string;
-      community_name: string;
-      expires_at: string;
-    }> = [];
-    for (const claim of rows) {
-      if (claim.expiresAt <= nowMs) continue;
-      let session: CommunityCheckoutSessionRow | null = null;
-      if (claim.sourceSessionId) {
-        session = (await ctx.db
-          .query("checkoutSessions")
-          .withIndex("by_sessionId", (q: any) => q.eq("sessionId", claim.sourceSessionId))
-          .first()) as CommunityCheckoutSessionRow | null;
-        if (
-          !session ||
-          String(session.communityId ?? "") !== String(claim.communityId) ||
-          session.status !== "complete" ||
-          !communitySubscriptionStatusGrantsAccess(
-            normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ??
-              "active",
-          )
-        ) {
-          continue;
-        }
-      }
-      const community = (await ctx.db.get(claim.communityId)) as CommunityLike | null;
-      if (
-        !community ||
-        !communityIsActive(community) ||
-        !communityLifecycleGenerationMatches(
-          community,
-          session?.communityLifecycleGeneration,
-        )
-      ) {
-        continue;
-      }
-      if (
-        await communityUserIsBlocked({
-          ctx,
-          communityId: claim.communityId,
-          userId,
-        })
-      ) {
-        continue;
-      }
-      const communityId = String(claim.communityId);
-      out.push({
-        community_id: communityId,
-        community_slug: String(community?.slug ?? communityId),
-        community_name: String(community?.name ?? community?.slug ?? communityId),
-        expires_at: toIsoString(claim.expiresAt),
-      });
-    }
-    out.sort((a, b) => Date.parse(a.expires_at) - Date.parse(b.expires_at));
-    return out;
-  },
+  handler: async () => [] as Array<{ community_id: string; community_slug: string; community_name: string; expires_at: string }>,
 });
 
 export const redeemPendingPurchaseClaims = mutation({
@@ -1658,45 +1531,5 @@ export const redeemPendingPurchaseClaims = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))
-      .collect()) as PurchaseClaimLike[];
-    const out: Array<{ community_id: string; community_slug: string | null }> = [];
-    const seen = new Set<string>();
-    for (const claim of rows) {
-      if (
-        await communityUserIsBlocked({
-          ctx,
-          communityId: claim.communityId,
-          userId,
-        })
-      ) {
-        continue;
-      }
-      const redemption = await redeemClaimRow({
-        ctx,
-        claim,
-        userId,
-        nowMs,
-      });
-      const communityId = redemption.communityId;
-      if (!communityId) continue;
-      if (seen.has(communityId)) continue;
-      seen.add(communityId);
-      const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
-      out.push({
-        community_id: communityId,
-        community_slug: String(community?.slug ?? "") || null,
-      });
-    }
-    return out;
-  },
+  handler: async () => [] as Array<{ community_id: string; community_slug: string | null }>,
 });

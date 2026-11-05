@@ -1609,6 +1609,21 @@ test("two tabs, two payments: the first makes them a member; the second is cance
   await pay(first, "sub_first");
   const refundsAfterReplay = (await f.t.run((c) => c.db.system.query("_scheduled_functions").collect()))
     .filter((job: any) => job.name === "communityCommerce:refundDuplicateCommunitySubscriptionInternal");
+  // Both return pages only read what the notice recorded: the first checkout
+  // reads joined; the refunded second one reads joined too (they're in).
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, token, { session_id: first })).body).toMatchObject({ status: "joined" });
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, token, { session_id: second })).body).toMatchObject({ status: "joined" });
+  // A Studio tab opened before claims were retired gets a token (the checkout's
+  // id) and redeems it: confirmed and pointed into the community, nothing granted.
+  const asBuyer = f.t.withIdentity({ subject: "apps-outsider-subject" });
+  const finalized = await asBuyer.query(api.communityCommerce.finalizeCheckoutSession, { sessionId: first });
+  expect(finalized).toMatchObject({ ok: true, status: "succeeded", community_slug: expect.any(String), claim: { token: first } });
+  expect(await asBuyer.mutation(api.communityCommerce.redeemPurchaseClaim, { token: first }))
+    .toEqual([{ community_id: String(f.ids.communityId), community_slug: finalized.community_slug }]);
+  await expect(asBuyer.mutation(api.communityCommerce.redeemPurchaseClaim, { token: "chk_" + "0".repeat(32) })).rejects.toThrow("claim_not_found");
+  expect(await asBuyer.query(api.communityCommerce.listPendingPurchaseClaims, {})).toEqual([]);
+  expect(await asBuyer.mutation(api.communityCommerce.redeemPendingPurchaseClaims, {})).toEqual([]);
+  expect(await f.t.run((c) => c.db.query("purchaseClaims").collect())).toEqual([]);
   expect(refundsAfterReplay.some((job: any) => job.args[0].providerSubscriptionId === "sub_first")).toBe(false);
   expect((await f.t.run((c) => c.db.query("communitySubscriptions").collect())).map((row) => [row.providerSubscriptionId, row.status]))
     .toEqual([["sub_rejoin", "active"]]);
