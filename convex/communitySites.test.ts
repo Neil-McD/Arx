@@ -261,3 +261,15 @@ test("a rename before the sites switch moves the pre-registered addresses with t
   const origins = await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").withIndex("by_community", (q) => q.eq("communityId", f.ids.runClub)).collect()).map((row) => row.origin));
   expect(origins.sort()).toEqual(["https://trail-club--me.polynet.page", "https://trail-club.polynet.page"]);
 });
+
+test("a custom domain shaped like the slug is never moved on rename before the switch", async () => {
+  const f = await fixture();
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "");
+  await f.t.run(async (ctx) => {
+    await ctx.db.insert("communityDomains", { communityId: f.ids.runClub, origin: "https://run-club.example.com", createdAt: 1 });
+    const community = await ctx.db.get(f.ids.runClub);
+    await moveCommunitySiteAddresses(ctx, community!, "trail-club");
+  });
+  const origins = await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").withIndex("by_community", (q) => q.eq("communityId", f.ids.runClub)).collect()).map((row) => row.origin));
+  expect(origins).toEqual(["https://run-club.example.com"]);
+});

@@ -157,7 +157,11 @@ async function sitesFromRegisteredAddress(ctx: any, communityId: any, slug: stri
     const dot = rest.indexOf(".");
     if (dot < 0) continue;
     const sites = sitesFromArgs(rest.slice(dot + 1), rest.slice(0, dot));
-    if (sites && siteHostname(slug, sites.domain, sites.suffix) === host) return sites;
+    if (!sites || siteHostname(slug, sites.domain, sites.suffix) !== host) continue;
+    // Only managed site addresses come with a members' twin; a founder's
+    // custom domain never does, so it is never mistaken for one.
+    const twin = privateTwinHost(host, sites.domain, sites.suffix);
+    if (twin && rows.some((other: any) => other.kind === "private" && other.origin === `https://${twin}`)) return sites;
   }
   return null;
 }
