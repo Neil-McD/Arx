@@ -2085,20 +2085,36 @@ export const saveCommunityMemberSettingsForTrustedUserInternal = internalMutatio
 
 // After a paid member leaves: tell Stripe not to renew. Stripe's own notice
 // ends the subscription (and with it the member's access) when the period ends.
+// A failed call is retried with growing gaps (about a day in all); the
+// subscription row also remembers the request (cancelRequestedAt), so a renewal
+// Stripe reports later is re-cancelled (syncCommunitySubscriptionLifecycleInternal).
+export const LEAVE_CANCEL_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 3_600_000, 6 * 3_600_000, 12 * 3_600_000];
+const leaveCancelTarget = v.object({ providerSubscriptionId: v.string(), providerAccountId: v.union(v.string(), v.null()) });
 export const cancelCommunitySubscriptionsAtPeriodEndInternal = internalAction({
-  args: { targets: v.array(v.object({ providerSubscriptionId: v.string(), providerAccountId: v.union(v.string(), v.null()) })) },
-  handler: async (_ctx, args) => {
+  args: { targets: v.array(leaveCancelTarget), attempt: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const attempt = args.attempt ?? 0;
+    const failed: typeof args.targets = [];
     for (const target of args.targets) {
       try {
         await cancelStripeSubscriptionAtPeriodEnd(target);
       } catch (error) {
+        failed.push(target);
         console.error("community_leave_stripe_cancel_failed", {
-          providerSubscriptionId: target.providerSubscriptionId,
+          providerSubscriptionId: target.providerSubscriptionId, attempt,
           error: error instanceof Error ? error.message : String(error),
         });
-        throw error;
       }
     }
+    if (!failed.length) return { ok: true };
+    const delay = LEAVE_CANCEL_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined) {
+      // Out of retries: loud, and the next Stripe notice for it re-cancels.
+      console.error("community_leave_stripe_cancel_gave_up", { providerSubscriptionIds: failed.map((target) => target.providerSubscriptionId) });
+      return { ok: false };
+    }
+    await ctx.scheduler.runAfter(delay, internal.communityAdmin.cancelCommunitySubscriptionsAtPeriodEndInternal, { targets: failed, attempt: attempt + 1 });
+    return { ok: false, retrying: true };
   },
 });
 
@@ -2296,7 +2312,7 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
         const targets: Array<{ providerSubscriptionId: string; providerAccountId: string | null }> = [];
         for (const row of paidRows as any[]) {
           if (row.status !== "cancel_at_period_end") {
-            await ctx.db.patch(row._id, { status: "cancel_at_period_end", cancelAtPeriodEnd: true, updatedAt: nowMs });
+            await ctx.db.patch(row._id, { status: "cancel_at_period_end", cancelAtPeriodEnd: true, cancelRequestedAt: nowMs, updatedAt: nowMs });
           }
           targets.push({ providerSubscriptionId: String(row.providerSubscriptionId), providerAccountId: row.providerAccountId ?? null });
         }

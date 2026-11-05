@@ -1609,6 +1609,10 @@ export default defineSchema({
     currentPeriodStartAt: v.optional(v.number()),
     currentPeriodEndAt: v.optional(v.number()),
     cancelAtPeriodEnd: v.boolean(),
+    // When the member left (asked to stop renewing). Until Stripe confirms the
+    // cancellation, Polynet keeps asking; a renewal Stripe reports after this
+    // time is re-cancelled instead of reopening billing.
+    cancelRequestedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

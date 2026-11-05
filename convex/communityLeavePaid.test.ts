@@ -78,3 +78,28 @@ test("a member who doesn't pay leaves straight away", async () => {
   expect(await canChat(ids.freeId)).toBe(false);
   expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
 });
+
+test("a failed Stripe call is retried with growing gaps, then reported once out of retries", async () => {
+  const { t } = await fixture();
+  // No Stripe key in tests: every call fails, as an outage would.
+  const targets = [{ providerSubscriptionId: "sub_payer", providerAccountId: "acct_paid" }];
+  expect(await t.action(internal.communityAdmin.cancelCommunitySubscriptionsAtPeriodEndInternal, { targets })).toMatchObject({ ok: false, retrying: true });
+  const retry = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).at(-1) as any;
+  expect([retry.name, retry.args[0]]).toEqual(["communityAdmin:cancelCommunitySubscriptionsAtPeriodEndInternal", { targets, attempt: 1 }]);
+  expect(await t.action(internal.communityAdmin.cancelCommunitySubscriptionsAtPeriodEndInternal, { targets, attempt: 6 })).toEqual({ ok: false });
+});
+
+test("a renewal Stripe reports after the member left is re-cancelled, not reopened", async () => {
+  const { t, ids, canChat } = await fixture();
+  await t.withIdentity({ subject: "payer-subject" }).mutation(api.communityAdmin.leaveCommunity, { communityId: ids.communityId });
+  const before = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).length;
+  await t.mutation(internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal, {
+    communityId: ids.communityId, userId: ids.payerId, source: "stripe", status: "active", cancelAtPeriodEnd: false,
+    providerAccountId: "acct_paid", providerSubscriptionId: "sub_payer",
+  });
+  expect(await t.run((ctx) => ctx.db.query("communitySubscriptions").first())).toMatchObject({ status: "cancel_at_period_end", cancelAtPeriodEnd: true });
+  expect(await canChat(ids.payerId)).toBe(true);
+  const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+  expect(jobs.length).toBe(before + 1);
+  expect((jobs.at(-1) as any).args[0]).toEqual({ targets: [{ providerSubscriptionId: "sub_payer", providerAccountId: "acct_paid" }] });
+});
