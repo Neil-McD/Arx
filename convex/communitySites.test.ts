@@ -229,3 +229,23 @@ test("sites deployed before twins get theirs from the backfill: only this enviro
   expect(rows).toContainEqual(["https://other-club--me-staging.polynet.page", f.ids.admin, "site"]);
   expect(rows).toHaveLength(7);
 });
+
+test("addresses can be registered before the sites switch is on, then serve as soon as it is", async () => {
+  const f = await fixture();
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "");
+  const backfill = (args: Record<string, unknown> = {}) =>
+    f.t.mutation(internal.communitySites.registerCommunitySiteAddressesInternal, args);
+  // With the switch off and no domain given, nothing happens.
+  expect(await backfill({ dryRun: true })).toMatchObject({ registered: [], sitesConfigured: false });
+  // Given the domain, the dry run lists every community's site address (a
+  // reserved name like "admin" gets none) and writes nothing.
+  const dry = await backfill({ sitesDomain: "polynet.page", dryRun: true });
+  expect(dry.registered).toEqual(["https://run-club.polynet.page", "https://other-club.polynet.page"]);
+  expect(await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").collect()).length)).toBe(0);
+  // The real run registers each site and its members' twin, once.
+  const real = await backfill({ sitesDomain: "polynet.page" });
+  expect(real.registered).toEqual(expect.arrayContaining(["https://run-club.polynet.page", "https://run-club--me.polynet.page"]));
+  expect((await backfill({ sitesDomain: "polynet.page" })).registered).toEqual([]);
+  // A malformed domain registers nothing.
+  expect(await backfill({ sitesDomain: "not a domain" })).toMatchObject({ registered: [], sitesConfigured: false });
+});

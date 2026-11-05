@@ -145,6 +145,12 @@ function sitesEnv(): { domain: string; suffix: string } | null {
   return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
 }
 
+function sitesFromArgs(rawDomain: string, rawSuffix?: string): { domain: string; suffix: string } | null {
+  const domain = rawDomain.trim().toLowerCase();
+  const suffix = (rawSuffix ?? "").trim().toLowerCase();
+  return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
+}
+
 // The community's own site on this environment (its registered address), for
 // Studio's links and the /c/<slug> hand-off; null where it has none.
 export async function communitySiteUrl(ctx: any, community: { _id: any; slug?: unknown }): Promise<string | null> {
@@ -181,8 +187,11 @@ export const communitySitePageUrlBySlugInternal = internalQuery({
 // serves them until the founder deploys their own. A slug with no valid site
 // address, or an address already taken, just leaves the community without one;
 // it never stops the community being created.
-export async function registerCommunitySiteAddresses(ctx: any, community: { _id: any; slug?: unknown }) {
-  const sites = sitesEnv();
+export async function registerCommunitySiteAddresses(
+  ctx: any,
+  community: { _id: any; slug?: unknown },
+  sites: { domain: string; suffix: string } | null = sitesEnv(),
+) {
   const host = sites ? siteHostname(String(community.slug ?? ""), sites.domain, sites.suffix) : null;
   if (!sites || !host) return null;
   try {
@@ -227,10 +236,18 @@ export async function moveCommunitySiteAddresses(ctx: any, community: { _id: any
 // Communities created before every community had a site: register theirs, a
 // page at a time, until done:
 //   npx convex run communitySites:registerCommunitySiteAddressesInternal '{"dryRun":true}'
+// Pass sitesDomain (and hostSuffix) to register before POLYNET_SITES_DOMAIN is
+// set, so sites can be checked live while Studio still links to itself:
+//   npx convex run communitySites:registerCommunitySiteAddressesInternal '{"sitesDomain":"polynet.page","dryRun":true}'
 export const registerCommunitySiteAddressesInternal = internalMutation({
-  args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) },
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    dryRun: v.optional(v.boolean()),
+    sitesDomain: v.optional(v.string()),
+    hostSuffix: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
-    const sites = sitesEnv();
+    const sites = args.sitesDomain === undefined ? sitesEnv() : sitesFromArgs(args.sitesDomain, args.hostSuffix);
     if (!sites) return { registered: [], skipped: 0, continueCursor: null, isDone: true, sitesConfigured: false };
     const page = await ctx.db.query("communities").paginate({ cursor: args.cursor ?? null, numItems: 50 });
     const registered: string[] = [];
@@ -243,7 +260,7 @@ export const registerCommunitySiteAddressesInternal = internalMutation({
         if (!taken) registered.push(`https://${host}`);
         continue;
       }
-      const result = await registerCommunitySiteAddresses(ctx, community);
+      const result = await registerCommunitySiteAddresses(ctx, community, sites);
       if (result) registered.push(...result.added); else skipped += 1;
     }
     return { registered, skipped, continueCursor: page.continueCursor, isDone: page.isDone, sitesConfigured: true };
