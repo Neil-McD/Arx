@@ -1,6 +1,11 @@
-import { useState } from "react";
-import { Play } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Copy } from "lucide-react";
 
+import { formatPlanPrice } from "../../../../../shared/accountCommerce";
+import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
+import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityTypes";
+import { buildPolynetMcpSetupForOrigin } from "../../../../../shared/polynetMcpSetup";
+import { tryCopyTextToClipboard } from "../../../../../shared/chatUi";
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
   TERMS_OF_SERVICE_ENTRY,
@@ -10,310 +15,239 @@ import { WebPlatformLegalReaderModal } from "../WebPlatformLegalReaderModal";
 
 type JoinProps = { onJoin: () => void };
 
-function PersonNode(props: { x: number; y: number }) {
-  return (
-    <g transform={`translate(${props.x} ${props.y})`}>
-      <circle className="diagram-node" r="17" />
-      <circle className="diagram-node" cy="-4" r="4" />
-      <path className="diagram-line" d="M-8 9 C-5 1 5 1 8 9" />
-    </g>
-  );
-}
-
-function Brain(props: { compact?: boolean } = {}) {
-  const brain = (
-    <>
-      <path
-        className="brain-outline"
-        d="M46 25 C38 18 28 22 28 31 C21 34 20 43 25 49 C20 56 24 66 34 67 C37 75 46 73 46 65 Z"
-      />
-      <path
-        className="brain-outline"
-        d="M46 25 C54 18 64 22 64 31 C71 34 72 43 67 49 C72 56 68 66 58 67 C55 75 46 73 46 65 Z"
-      />
-      <path className="brain-fold" d="M46 36 C40 31 34 34 35 41 M27 49 C34 46 39 51 36 57" />
-      <path className="brain-fold brain-fold-2" d="M46 56 C41 52 37 57 39 64 M46 45 C41 43 39 46 39 50" />
-      <path className="brain-fold brain-fold-3" d="M46 36 C52 31 58 34 57 41 M65 49 C58 46 53 51 56 57" />
-      <path className="brain-fold brain-fold-2" d="M46 56 C51 52 55 57 53 64 M46 45 C51 43 53 46 53 50" />
-    </>
-  );
-  return props.compact ? <g transform="scale(0.565)">{brain}</g> : brain;
-}
-
-function BuildCommunityVisual(props: { instance?: string } = {}) {
-  const titleId = `community-visual-title-${props.instance ?? "mechanism"}`;
-  return (
-    <svg viewBox="0 0 360 240" role="img" aria-labelledby={titleId}>
-      <title id={titleId}>Information moving through a founder-led community</title>
-      <circle className="diagram-orbit" cx="180" cy="120" r="92" />
-      <path className="diagram-line" d="M180 28 L180 120 L258 74 M180 120 L258 166 M180 120 L180 212 M180 120 L102 166 M180 120 L102 74" />
-      <path className="diagram-line" d="M180 28 L258 74 L258 166 L180 212 L102 166 L102 74 Z" />
-      <g transform="translate(180 120)">
-        <circle className="diagram-node" r="24" />
-        <circle className="diagram-node-accent" cy="-6" r="6" />
-        <path className="diagram-line-accent" d="M-11 13 C-8 1 8 1 11 13" />
-      </g>
-      <PersonNode x={180} y={28} />
-      <PersonNode x={258} y={74} />
-      <PersonNode x={258} y={166} />
-      <PersonNode x={180} y={212} />
-      <PersonNode x={102} y={166} />
-      <PersonNode x={102} y={74} />
-      <circle className="diagram-particle" r="3.2">
-        <animateMotion dur="5.2s" repeatCount="indefinite" path="M180 28 L180 120 L258 166" />
-      </circle>
-      <circle className="diagram-particle" r="3.2">
-        <animateMotion dur="5.2s" begin="-1.8s" repeatCount="indefinite" path="M102 74 L180 120 L258 74" />
-      </circle>
-      <circle className="diagram-particle" r="3.2">
-        <animateMotion dur="5.2s" begin="-3.6s" repeatCount="indefinite" path="M102 166 L180 120 L180 212" />
-      </circle>
-    </svg>
-  );
-}
-
-function TrainAiVisual(props: { instance?: string } = {}) {
-  const titleId = `knowledge-visual-title-${props.instance ?? "mechanism"}`;
-  return (
-    <svg viewBox="0 0 360 240" role="img" aria-labelledby={titleId}>
-      <title id={titleId}>Founder-owned material flowing into an AI that becomes more knowledgeable</title>
-      <g transform="translate(42 120)">
-        <circle className="diagram-node" r="20" />
-        <circle className="diagram-node-accent" cy="-5" r="5" />
-        <path className="diagram-line-accent" d="M-9 11 C-6 1 6 1 9 11" />
-      </g>
-      <g transform="translate(86 30)">
-        <path className="diagram-boundary" d="M0 0 H42 V50 H0 Z M29 0 V13 H42" />
-        <path className="diagram-line" d="M9 25 H32 M9 35 H28" />
-      </g>
-      <g transform="translate(81 96)">
-        <path className="diagram-boundary" d="M0 0 H50 V36 H19 L9 46 V36 H0 Z" />
-        <circle className="diagram-node-accent" cx="15" cy="18" r="2.3" />
-        <circle className="diagram-node-accent" cx="25" cy="18" r="2.3" />
-        <circle className="diagram-node-accent" cx="35" cy="18" r="2.3" />
-      </g>
-      <g transform="translate(86 166)">
-        <rect className="diagram-boundary" width="44" height="34" rx="5" />
-        <path className="diagram-line-accent" d="M18 8 L31 17 L18 26 Z" />
-      </g>
-      <path className="diagram-line" d="M62 112 C73 91 78 76 86 55 M62 120 H81 M62 128 C74 149 79 166 86 183" />
-      <path className="diagram-line" d="M128 55 C178 55 187 94 230 108 M131 114 H230 M130 183 C177 183 187 145 230 132" />
-      <g transform="translate(230 76)">
-        <rect className="diagram-ai" width="92" height="92" rx="24" />
-        <Brain />
-      </g>
-      <circle className="diagram-particle" r="3.2">
-        <animateMotion dur="4.8s" repeatCount="indefinite" path="M128 55 C178 55 187 94 230 108" />
-      </circle>
-      <circle className="diagram-particle" r="3.2">
-        <animateMotion dur="4.8s" begin="-1.6s" repeatCount="indefinite" path="M131 114 H230" />
-      </circle>
-      <circle className="diagram-particle" r="3.2">
-        <animateMotion dur="4.8s" begin="-3.2s" repeatCount="indefinite" path="M130 183 C177 183 187 145 230 132" />
-      </circle>
-    </svg>
-  );
-}
-
-function ServeAtScaleVisual(props: { instance?: string } = {}) {
-  const titleId = `scale-visual-title-${props.instance ?? "mechanism"}`;
-  return (
-    <svg viewBox="0 0 360 240" role="img" aria-labelledby={titleId}>
-      <title id={titleId}>A trained AI sending useful information to every community member</title>
-      <circle className="diagram-orbit" cx="180" cy="120" r="92" />
-      <path className="diagram-line" d="M180 120 L180 28 M180 120 L258 74 M180 120 L258 166 M180 120 L180 212 M180 120 L102 166 M180 120 L102 74" />
-      <g transform="translate(154 94)">
-        <rect className="diagram-ai" width="52" height="52" rx="14" />
-        <Brain compact />
-      </g>
-      <circle className="diagram-signal" cx="180" cy="28" r="21" />
-      <circle className="diagram-signal diagram-signal-2" cx="258" cy="166" r="21" />
-      <circle className="diagram-signal diagram-signal-3" cx="102" cy="166" r="21" />
-      <PersonNode x={180} y={28} />
-      <PersonNode x={258} y={74} />
-      <PersonNode x={258} y={166} />
-      <PersonNode x={180} y={212} />
-      <PersonNode x={102} y={166} />
-      <PersonNode x={102} y={74} />
-      {[
-        ["0s", "M180 120 L180 28"],
-        ["-0.9s", "M180 120 L258 74"],
-        ["-1.8s", "M180 120 L258 166"],
-        ["-2.7s", "M180 120 L180 212"],
-        ["-3.6s", "M180 120 L102 166"],
-        ["-4.5s", "M180 120 L102 74"],
-      ].map(([begin, path]) => (
-        <circle className="diagram-particle" r="3.2" key={path}>
-          <animateMotion dur="5.4s" begin={begin} repeatCount="indefinite" path={path} />
-        </circle>
-      ))}
-    </svg>
-  );
-}
+const OFFER_META = "Free to build your community · The agent is $79/month with AI included";
 
 const STEPS = [
   {
     number: "01",
-    title: "Train your AI",
-    description: "Teach it your frameworks, SOPs, content, calls, and best answers so it works the way you do.",
-    visual: <TrainAiVisual />,
+    title: "Create your community",
+    description: "Name it, choose who can join, and share one link. Building it costs nothing.",
   },
   {
     number: "02",
-    title: "Onboard your clients",
-    description: "Give every client one place to access your program, resources, and autonomous support.",
-    visual: <BuildCommunityVisual />,
+    title: "Your people gather",
+    description: "Channels, events, courses and messages in one place, on the web and on their phones.",
   },
   {
     number: "03",
-    title: "Execute for everyone",
-    description: "Coach, support, and help complete the work for every client—whenever they need it.",
-    visual: <ServeAtScaleVisual />,
+    title: "Switch on the agent",
+    description: "It answers from everything your community has learned, remembers what matters and helps everyone, all day.",
   },
-] as const;
+];
 
-const OUTCOMES = [
+const PRICES = [
   {
-    title: "Every client gets your best thinking",
-    description: "Give each client personalized guidance grounded in your frameworks, content, and standards—without answering the same questions repeatedly.",
-  },
-  {
-    title: "Turn your methodology into execution",
-    description: "Move beyond advice. Help clients apply your process, create deliverables, review their work, and complete repeatable tasks.",
+    label: "Build",
+    price: "Free",
+    detail: "Your community, members, channels, events, courses and site. No time limit.",
   },
   {
-    title: "Grow capacity without growing headcount",
-    description: "Every useful answer, deliverable, and result becomes shared intelligence Polynet can reuse—helping you serve more clients without building a larger support team.",
+    label: "Agent plan",
+    price: "$79/month",
+    detail: "Per community. The community agent with AI included, answering and remembering for everyone.",
   },
-] as const;
+  {
+    label: "Paid memberships",
+    price: "2.9%",
+    detail: "Plus Stripe's fees, only when you charge. You connect Stripe when you set a price, not before.",
+  },
+];
 
-const OFFER_META = "Free to build your community · The agent is $79/month with AI included · No technical setup";
+// Visitors only see communities that look finished: a banner and a one-liner.
+const SHOWCASE_LIMIT = 6;
 
-function ProductLedVsl() {
-  const [isPlaying, setIsPlaying] = useState(false);
-
+// The original Polynet network: an agent hub with members linked to it and to
+// each other. Same geometry as scripts/generate_brand_icons.mjs.
+function Mark(props: { size: number }) {
+  const nodes: Record<string, [number, number]> = {
+    a: [133, 148], hub: [258, 205], c: [382, 98], d: [440, 268], e: [304, 378], f: [72, 295],
+  };
+  const links: Array<[string, string]> = [
+    ["a", "hub"], ["a", "f"], ["f", "hub"], ["hub", "c"], ["c", "d"], ["hub", "d"], ["hub", "e"], ["e", "d"],
+  ];
   return (
-    <div className={`vsl${isPlaying ? " is-playing" : ""}`}>
-      {isPlaying ? (
-        <iframe
-          src="https://player.vimeo.com/video/1216548030?autoplay=1&dnt=1&title=0&byline=0&portrait=0"
-          title="Polynet video sales letter"
-          allow="autoplay; fullscreen; picture-in-picture"
-          allowFullScreen
-        />
-      ) : (
-        <button
-          className="vsl-preview"
-          type="button"
-          onClick={() => setIsPlaying(true)}
-          aria-label="Play the 2 minute 39 second Polynet product overview"
-        >
-          <span className="vsl-preview-meta">2:39 product overview</span>
-          <span className="vsl-preview-scenes" aria-hidden="true">
-            <span className="vsl-preview-scene vsl-preview-scene-train">
-              <span className="vsl-preview-copy">
-                <span className="vsl-preview-step">01 · Train</span>
-                <strong>Teach an AI how you work.</strong>
-                <span>Turn your frameworks, calls, and best answers into working intelligence.</span>
-              </span>
-              <span className="vsl-preview-visual"><TrainAiVisual instance="vsl" /></span>
-            </span>
-            <span className="vsl-preview-scene vsl-preview-scene-onboard">
-              <span className="vsl-preview-copy">
-                <span className="vsl-preview-step">02 · Onboard</span>
-                <strong>Give every client a place to succeed.</strong>
-                <span>Bring your program, resources, conversations, and autonomous support together.</span>
-              </span>
-              <span className="vsl-preview-visual"><BuildCommunityVisual instance="vsl" /></span>
-            </span>
-            <span className="vsl-preview-scene vsl-preview-scene-execute">
-              <span className="vsl-preview-copy">
-                <span className="vsl-preview-step">03 · Execute</span>
-                <strong>Put your process to work for everyone.</strong>
-                <span>Coach, support, and help complete the work for every client, whenever they need it.</span>
-              </span>
-              <span className="vsl-preview-visual"><ServeAtScaleVisual instance="vsl" /></span>
-            </span>
-          </span>
-          <span className="vsl-preview-action">
-            <span className="vsl-preview-play"><Play aria-hidden="true" size={17} strokeWidth={2.2} /></span>
-            Watch how Polynet works
-          </span>
-        </button>
-      )}
-    </div>
+    <svg className="mark" viewBox="20 46 472 384" width={props.size} height={(props.size * 384) / 472} aria-hidden="true">
+      {links.map(([from, to]) => (
+        <line key={`${from}-${to}`} x1={nodes[from][0]} y1={nodes[from][1]} x2={nodes[to][0]} y2={nodes[to][1]} />
+      ))}
+      {Object.entries(nodes).map(([id, [cx, cy]]) => (
+        <circle key={id} cx={cx} cy={cy} r={id === "hub" ? 61 : 34} />
+      ))}
+    </svg>
   );
 }
 
 function Brand() {
   return (
     <a className="brand" href="/" aria-label="Polynet home">
-      <img src="/landing-polynet/logo.png" alt="" />
-      <span>Polynet<span>.</span></span>
+      <Mark size={28} />
+      <span>polynet</span>
     </a>
+  );
+}
+
+function CopyLine(props: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+  return (
+    <button
+      className="copy-line"
+      type="button"
+      aria-label={`Copy ${props.label}`}
+      onClick={() => void tryCopyTextToClipboard(props.text).then(setCopied)}
+    >
+      <code>{props.text}</code>
+      {copied ? <Check aria-hidden="true" size={15} /> : <Copy aria-hidden="true" size={15} />}
+    </button>
+  );
+}
+
+function WaysIn(props: { onJoin: () => void }) {
+  const mcp = buildPolynetMcpSetupForOrigin(window.location.origin);
+  return (
+    <section className="ways" aria-labelledby="ways-title">
+      <p className="kicker">Four ways in</p>
+      <h2 id="ways-title">Same community, same rules, wherever you work.</h2>
+      <div className="ways-grid">
+        <article className="way">
+          <h3>Studio</h3>
+          <p>Run everything from the browser: people, channels, events, courses, the agent and payments.</p>
+          <button className="text-action" type="button" onClick={props.onJoin}>Open Studio</button>
+        </article>
+        <article className="way">
+          <h3>Your AI</h3>
+          <p>Connect Claude, ChatGPT or Cursor. It reads and acts as you, inside the permissions you already have.</p>
+          <CopyLine text={mcp.claudeCodeAddCommand} label="the Claude Code command" />
+        </article>
+        <article className="way">
+          <h3>CLI <span className="soon">Coming soon</span></h3>
+          <p>Design your community's own website and put it live from your terminal.</p>
+          <CopyLine text="npx @polynet/cli deploy" label="the CLI command" />
+        </article>
+        <article className="way">
+          <h3>SDK <span className="soon">Coming soon</span></h3>
+          <p>Members, posts, events and the agent from your own site's code.</p>
+          <CopyLine text={'import polynet from "/__polynet/sdk.js"'} label="the SDK import" />
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
+  if (props.communities.length === 0) return null;
+  return (
+    <section className="showcase" id="communities" aria-labelledby="showcase-title">
+      <p className="kicker">Communities on Polynet</p>
+      <h2 id="showcase-title">Find your people.</h2>
+      <div className="showcase-grid">
+        {props.communities.map((community) => (
+          <a className="showcase-card" key={community.id} href={`/c/${community.slug}`}>
+            <span className="showcase-banner" style={{ backgroundImage: `url(${community.banner_url})` }} />
+            <span className="showcase-body">
+              <strong>{community.name}</strong>
+              <span>{community.one_liner}</span>
+              <em>{community.active_plan ? formatPlanPrice(community.active_plan) : "Free"}</em>
+            </span>
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }
 
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [activeLegalDocument, setActiveLegalDocument] =
     useState<LegalDocumentEntry | null>(null);
+  const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listCloudDiscoverCommunities({ limit: 24 })
+      .then((all) => {
+        if (cancelled) return;
+        setCommunities(
+          all.filter((community) => community.banner_url && community.one_liner?.trim()).slice(0, SHOWCASE_LIMIT),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const findCommunity = () => {
+    document.getElementById("communities")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className="pn-landing">
       <div className="page">
-        <Brand />
+        <header className="topbar">
+          <Brand />
+          <nav aria-label="Account">
+            <a href="/login">Sign in</a>
+            <button className="cta cta-small" type="button" onClick={onJoin}>Start a community</button>
+          </nav>
+        </header>
+
         <main>
-          <div className="intro">
-            <p className="intro-kicker">For coaches, consultants, and agency owners</p>
-            <h1>The autonomous client success platform.</h1>
-            <p className="subhead">Train Polynet on how you think and work. Then onboard your clients and let it coach, support, and execute for all of them—at once.</p>
-          </div>
-
-          <ProductLedVsl />
-
-          <div className="conversion">
-            <button className="cta" type="button" onClick={onJoin}>Start your community free</button>
+          <section className="hero" aria-labelledby="hero-title">
+            <Mark size={120} />
+            <h1 id="hero-title">Communities that think.</h1>
+            <p className="subhead">
+              Bring your people together and give them an agent that answers, remembers and helps,
+              so what one member learns becomes the community's collective intelligence.
+            </p>
+            <div className="doors">
+              <button className="cta" type="button" onClick={onJoin}>Start a community</button>
+              {communities.length > 0 ? (
+                <button className="cta-secondary" type="button" onClick={findCommunity}>Find a community</button>
+              ) : null}
+            </div>
             <p className="microcopy">{OFFER_META}</p>
-          </div>
+          </section>
 
-          <section className="mechanism" aria-label="How Polynet helps you serve clients">
-            <p className="mechanism-title">How Polynet works</p>
-            <div className="mechanism-grid">
+          <section className="steps" aria-labelledby="steps-title">
+            <p className="kicker">How it works</p>
+            <h2 id="steps-title">From a name to a community that answers back.</h2>
+            <div className="steps-grid">
               {STEPS.map((step) => (
-                <article className="mechanism-step" key={step.number}>
-                  <div className="mechanism-copy">
-                    <span className="mechanism-label">{step.number}</span>
-                    <h2>{step.title}</h2>
-                  </div>
-                  <div className="mechanism-visual">{step.visual}</div>
-                  <p className="mechanism-description">{step.description}</p>
+                <article className="step" key={step.number}>
+                  <span className="step-number">{step.number}</span>
+                  <h3>{step.title}</h3>
+                  <p>{step.description}</p>
                 </article>
               ))}
             </div>
           </section>
 
-          <section className="problems" aria-labelledby="problems-title">
-            <div className="problems-intro">
-              <p className="problems-kicker">Built for leverage</p>
-              <h2 id="problems-title">Serve more clients without becoming the bottleneck.</h2>
-              <p className="problems-lead">Your expertise is what clients pay for. Polynet turns it into an autonomous service layer that keeps every client moving—even when you’re not in the room.</p>
-            </div>
-            <div className="problem-list">
-              {OUTCOMES.map((outcome, index) => (
-                <article className="problem" key={outcome.title}>
-                  <span className="problem-index">{String(index + 1).padStart(2, "0")}</span>
-                  <h3>{outcome.title}</h3>
-                  <p>{outcome.description}</p>
+          <WaysIn onJoin={onJoin} />
+
+          <section className="pricing" aria-labelledby="pricing-title">
+            <p className="kicker">Pricing</p>
+            <h2 id="pricing-title">Free to build. Pay for the agent when you want it.</h2>
+            <div className="pricing-grid">
+              {PRICES.map((item) => (
+                <article className="price" key={item.label}>
+                  <span className="price-label">{item.label}</span>
+                  <strong>{item.price}</strong>
+                  <p>{item.detail}</p>
                 </article>
               ))}
             </div>
           </section>
+
+          <Showcase communities={communities} />
 
           <section className="closing" aria-labelledby="closing-title">
-            <h2 id="closing-title">Train it once. Put it to work for every client.</h2>
-            <p className="closing-copy">Launch an autonomous client success system grounded in how you think, coach, and deliver results.</p>
-            <button className="cta" type="button" onClick={onJoin}>Start your community free</button>
-            <p className="closing-meta">{OFFER_META}</p>
+            <h2 id="closing-title">Your community is one name away.</h2>
+            <button className="cta" type="button" onClick={onJoin}>Start a community</button>
+            <p className="microcopy">{OFFER_META}</p>
           </section>
         </main>
 
