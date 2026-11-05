@@ -2658,3 +2658,23 @@ through each course they are. Progress is private to the member.
   a tick on finished lessons, "n of m done" on course cards and course pages,
   and a "Mark as done" button at the end of each lesson, which undoes too.
 - No founder view of progress yet.
+
+## Slice: Community Notes Are The Founder's (Nov 5, 2026)
+
+Goal: close a private-room leak path and a shared-memory injection path by
+deleting the agent's ability to write community notes (it had never written
+one in production; all 10 production notes were migrated).
+
+- No principal writes `memory/`: an Ask, a tag and a connected AI all get
+  `community_write_forbidden`, and `memory/` lists say `writable: false`.
+  Owners and admins edit or delete notes in Studio; founder knowledge goes in
+  the handbook.
+- Deleted with it: the turn contract's `notesWrites`/`notes_writes`, the
+  private-source lock (`toolOutputSawPrivateSource`, `sawPrivateSource`,
+  `private_source_read`, `notes_not_allowed`), the `private_room` markers on
+  reads, the thread's private-source sequence (its schema field stays until
+  the next table drop), `writeCommunityNoteInternal`, and the founder brief's
+  "New community notes" section. The agent's instructions now say it reads
+  notes and never writes them.
+- Later, if wanted: the agent suggests a note and the founder approves it.
+

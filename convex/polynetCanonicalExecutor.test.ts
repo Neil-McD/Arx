@@ -3114,71 +3114,39 @@ test("community.md is the community card: the reader's restricted channels (from
   expect(body).not.toContain("founders-only");
 });
 
-test("the community agent saves community notes everyone reads; others can't write them; private rooms are marked", async () => {
+test("community notes are read-only to every agent and connected AI; nothing marks private rooms any more", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  const crewId = await t.run(async ctx => {
-    const now = Date.now();
-    const membership = (await ctx.db.query("communityMemberships")
-      .withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
-    const crewId = await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "crew", name: "crew",
-      accessMode: "restricted", postingPolicy: "members", status: "active", position: 2, createdAt: now, updatedAt: now });
-    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: crewId,
-      principalKey: `user:${f.memberId}`, membershipId: membership._id, membershipActivationSequence: membership.activationSequence,
-      status: "active", createdByUserId: f.ownerId, createdAt: now, updatedAt: now });
-    return crewId;
-  });
+  await t.run(ctx => ctx.db.insert("communityNotes", {
+    communityId: f.communityId, slug: "liquid-chalk-helps", title: "Liquid chalk helps", bodyMd: "Liquid chalk under block chalk helps cold hands.",
+    source: "founder", searchText: "liquid chalk helps cold hands", createdAt: Date.now(), updatedAt: Date.now(),
+  }));
   const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
-  const run = (principalKind: "community_agent_for_member" | "external_mcp", toolName: any, input: Record<string, unknown>) =>
+  const run = (principalKind: "community_agent_for_member" | "community_agent" | "external_mcp", toolName: any, input: Record<string, unknown>) =>
     executePolynetCanonicalTool({ ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind,
       evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock", toolName, input });
   const notes = "/communities/canonical-community/memory/";
 
-  const created = await run("community_agent_for_member", "polynet_write", {
-    path: notes, mode: "create", idempotency_key: "note-1", content: { title: "Liquid chalk helps", text: "Liquid chalk under block chalk helps cold hands." } });
-  expect(created).toMatchObject({ ok: true, value: { path: `${notes}liquid-chalk-helps.md`, created: true } });
-  expect(await run("community_agent_for_member", "polynet_write", {
-    path: notes, mode: "create", idempotency_key: "note-2", content: { title: "Liquid chalk helps", text: "Again." } }))
-    .toMatchObject({ ok: false, code: "note_exists" });
-  expect(await run("community_agent_for_member", "polynet_write", {
-    path: `${notes}liquid-chalk-helps.md`, mode: "append", idempotency_key: "note-3", content: { text: "Bring your own on Saturdays." } }))
-    .toMatchObject({ ok: true, value: { created: false } });
-
-  const read = await run("external_mcp", "polynet_read", { path: `${notes}liquid-chalk-helps.md` });
-  expect(read).toMatchObject({ ok: true });
-  expect((read as any).value.body).toMatch(/# Liquid chalk helps[\s\S]*cold hands\.[\s\S]*Bring your own on Saturdays\.[\s\S]*Community note, from a member's conversation/);
-  expect(await run("external_mcp", "polynet_list", { path: notes })).toMatchObject({ ok: true, value: { writable: false,
-    entries: [expect.objectContaining({ title: "Liquid chalk helps", path: `${notes}liquid-chalk-helps.md` })] } });
-  expect(await run("community_agent_for_member", "polynet_list", { path: notes })).toMatchObject({ ok: true, value: { writable: true } });
+  // Everyone reads, lists and searches them.
+  expect(await run("external_mcp", "polynet_read", { path: `${notes}liquid-chalk-helps.md` })).toMatchObject({ ok: true });
+  expect(await run("community_agent_for_member", "polynet_list", { path: notes })).toMatchObject({ ok: true, value: { writable: false,
+    entries: [expect.objectContaining({ title: "Liquid chalk helps" })] } });
   expect(await run("external_mcp", "polynet_search", { path: notes, query: "chalk" })).toMatchObject({ ok: true,
     value: { results: [expect.objectContaining({ title: "Liquid chalk helps" })] } });
-  expect(await run("external_mcp", "polynet_write", {
-    path: notes, mode: "create", idempotency_key: "note-4", content: { title: "Mine", text: "Not the agent." } }))
-    .toMatchObject({ ok: false, code: "community_write_forbidden" });
-  const row = await t.run(ctx => ctx.db.query("communityNotes").first());
-  expect(row).toMatchObject({ source: "ask", createdByUserId: f.memberId });
 
-  // What a private room returns says so; a shared channel's doesn't.
-  const crew = await run("community_agent_for_member", "polynet_list", { path: "/communities/canonical-community/channels/crew/" });
-  expect(crew).toMatchObject({ ok: true, value: { private_room: true } });
+  // Nobody writes them: not an Ask, not a tag, not a connected AI; no create, append or rewrite.
+  for (const principal of ["community_agent_for_member", "community_agent", "external_mcp"] as const) {
+    expect(await run(principal, "polynet_write", { path: notes, mode: "create", idempotency_key: `c-${principal}`,
+      content: { title: "Mine", text: "x" } })).toMatchObject({ ok: false, code: "community_write_forbidden" });
+    expect(await run(principal, "polynet_write", { path: `${notes}liquid-chalk-helps.md`, mode: "update", idempotency_key: `u-${principal}`,
+      content: { text: "Rewritten" } })).toMatchObject({ ok: false, code: "community_write_forbidden" });
+  }
+  const rows = await t.run(ctx => ctx.db.query("communityNotes").collect());
+  expect(rows.map(row => row.bodyMd)).toEqual(["Liquid chalk under block chalk helps cold hands."]);
+
+  // Reads no longer carry the private_room marker that fed the old lock.
   const general = await run("community_agent_for_member", "polynet_list", { path: "/communities/canonical-community/channels/general/" });
-  expect(general.ok && (general.value as any).private_room).toBeFalsy();
-
-  // A member's timeline that includes a private-room post is marked too.
-  const timeline = "/communities/canonical-community/members/canonical-member/timeline.md";
-  const before = await run("community_agent_for_member", "polynet_read", { path: timeline });
-  expect(before.ok && (before.value as any).private_room).toBeFalsy();
-  await t.withIdentity({ subject: f.memberSubject }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
-    communityId: f.communityId, channelId: crewId, idempotencyKey: "crew-plan", text: "Crew-only plan for Saturday." });
-  expect(await run("community_agent_for_member", "polynet_read", { path: timeline })).toMatchObject({ ok: true, value: { private_room: true } });
-
-  // A retried write under the same key is applied once.
-  const appendAgain = { path: `${notes}liquid-chalk-helps.md`, mode: "append", idempotency_key: "note-3", content: { text: "Bring your own on Saturdays." } };
-  // As if the note committed but its receipt was lost.
-  await t.run(async ctx => { for (const row of await ctx.db.query("polynetCanonicalOperationReceipts").collect()) await ctx.db.delete(row._id); });
-  expect(await run("community_agent_for_member", "polynet_write", appendAgain)).toMatchObject({ ok: true });
-  const saved = await t.run(ctx => ctx.db.query("communityNotes").first());
-  expect(saved!.bodyMd.match(/Bring your own on Saturdays\./g)).toHaveLength(1);
+  expect(JSON.stringify(general)).not.toContain("private_room");
 });
 
 test("the Ask agent can't react or submit a form for the member; the member's own tools can", async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, toolOutputSawPrivateSource, isCommunityTurnRefusalCode } from "../shared/communityTurnContract";
+import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, isCommunityTurnRefusalCode } from "../shared/communityTurnContract";
 
 // Who speaks, who sees the answer, and what that allows.
 test("a private Ask: the member asks and sees the answer; their profile and the shared layers are in", () => {
@@ -53,27 +53,15 @@ test("the tool-call check refuses every channel write on a draft-only turn and n
   expect(checkCommunityTurnToolCall(null, "polynet_write", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
 });
 
-// Community notes: Asks and tags may save them, never after seeing a private source.
-test("notes writes are open on Asks and tags and closed after a private source", () => {
+// Community notes are the founder's: the turn rules carry no notes permission at all.
+test("the turn contract has no notes permission; only channel writes are drafts", () => {
   const ask = buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" });
-  const tag = buildCommunityTurnContract({ surface: "tag", communityId: "c1", speakerUserId: "u1" });
-  const write = { path: "/communities/sunrise/memory/", mode: "create" };
-  expect(checkCommunityTurnToolCall(ask, "polynet_write", write)).toEqual({ ok: true });
-  expect(checkCommunityTurnToolCall(tag, "polynet_write", { path: "/communities/sunrise/memory/chalk.md", mode: "append" })).toEqual({ ok: true });
-  expect(checkCommunityTurnToolCall(ask, "polynet_write", write, { sawPrivateSource: true })).toMatchObject({ ok: false, errorCode: "private_source_read" });
-  expect(checkCommunityTurnToolCall(null, "polynet_write", write, { sawPrivateSource: true })).toMatchObject({ ok: false, errorCode: "private_source_read" });
-  // Reading stays open after a private source; only saving a note is locked.
-  expect(checkCommunityTurnToolCall(ask, "polynet_read", { path: "/communities/sunrise/memory/chalk.md" }, { sawPrivateSource: true })).toEqual({ ok: true });
-  expect(summarizeCommunityTurnContract(ask).notes_writes).toBe("agent");
-});
-
-test("a tool result marked private_room counts as a private source", () => {
-  expect(toolOutputSawPrivateSource(JSON.stringify({ entries: [], private_room: true }))).toBe(true);
-  expect(toolOutputSawPrivateSource(JSON.stringify({ results: [{ title: "x", private_room: true }] }))).toBe(true);
-  expect(toolOutputSawPrivateSource(JSON.stringify({ results: [{ title: "private_room" }] }))).toBe(false);
+  expect("notes_writes" in summarizeCommunityTurnContract(ask)).toBe(false);
+  expect("notesWrites" in ask).toBe(false);
 });
 
 test("the turn's refusals are named so both surfaces log them as refused", () => {
-  expect(["draft_only", "notes_not_allowed", "private_source_read"].every(isCommunityTurnRefusalCode)).toBe(true);
+  expect(isCommunityTurnRefusalCode("draft_only")).toBe(true);
+  expect(isCommunityTurnRefusalCode("private_source_read")).toBe(false);
   expect(isCommunityTurnRefusalCode("semantic_not_found")).toBe(false);
 });

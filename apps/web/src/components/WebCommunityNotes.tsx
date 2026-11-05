@@ -13,7 +13,7 @@ import "./WebCommunityNotes.css";
 
 const COMPACT_LIMIT = 5;
 
-// Community notes: what the community agent saved for everyone. Compact in the
+// Community notes: what the founder keeps for everyone. Compact in the
 // channel panel (titles only); full on the Knowledge page, where owners and
 // admins can edit or delete a note.
 export function WebCommunityNotes<SessionT>(props: {

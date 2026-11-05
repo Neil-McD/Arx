@@ -106,8 +106,8 @@ of the slices that follow.
 - MCP now: read. Planned: writes.
 
 ### 6. Knowledge
-- Member: R community notes and files. The community agent writes notes from
-  conversations.
+- Member: R community notes and files. Nobody but owners and admins changes
+  notes; the community agent reads them and never writes them.
 - Admin: W notes (edit, delete), files and sources.
 - MCP now: read. Planned: note edits.
 
