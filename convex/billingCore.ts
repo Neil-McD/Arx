@@ -261,6 +261,11 @@ export async function createCommunitySubscriptionForMembership(args: {
       providerAccountId: providerAccountId || existing.providerAccountId,
       providerSubscriptionId:
         String(args.providerSubscriptionId ?? "").trim() || existing.providerSubscriptionId,
+      // A new purchase is not the subscription they once left: its leave request goes.
+      ...(String(args.providerSubscriptionId ?? "").trim()
+        && String(args.providerSubscriptionId).trim() !== String(existing.providerSubscriptionId ?? "").trim()
+        ? { cancelRequestedAt: undefined }
+        : {}),
       providerCustomerId:
         String(args.providerCustomerId ?? "").trim() || existing.providerCustomerId,
       currentPeriodStartAt:

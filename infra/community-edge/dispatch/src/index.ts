@@ -971,6 +971,9 @@ function mySettingsAnswer(path: string, answer: Record<string, unknown>, env: En
     }
     case "/__polynet/me/notifications":
       return { notifications: notifications(answer.notifications) };
+    case "/__polynet/me/leave":
+      // A paid member's access runs to the end of the period they paid for.
+      return { access_until: typeof answer.access_until === "string" && !Number.isNaN(Date.parse(answer.access_until)) ? answer.access_until : null };
     default:
       return {};
   }

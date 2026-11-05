@@ -63,6 +63,25 @@ export async function cancelStripeSubscriptionIfActive(
   }
 }
 
+// Leaving a paid community: Stripe stops renewing and the member keeps what they
+// paid for until the period ends; Stripe's notice then ends the subscription.
+export async function cancelStripeSubscriptionAtPeriodEnd(
+  target: StripeSubscriptionCancellationTarget,
+  stripe: StripeCancellationClient = getStripeClient(),
+): Promise<"scheduled" | "already_inactive" | "missing"> {
+  const subscriptionId = normalizeStripeId(target.providerSubscriptionId);
+  if (!subscriptionId) return "missing";
+  const options = stripeRequestOptions(target.providerAccountId);
+  try {
+    const updated = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true }, options);
+    const status = String(updated.status ?? "").trim().toLowerCase();
+    return status === "canceled" || status === "incomplete_expired" ? "already_inactive" : "scheduled";
+  } catch (error: any) {
+    if (stripeResourceMissing(error)) return "missing";
+    throw error;
+  }
+}
+
 export async function expireStripeCheckoutSessionIfOpen(
   target: StripeCheckoutExpirationTarget,
   stripe: StripeCancellationClient = getStripeClient(),

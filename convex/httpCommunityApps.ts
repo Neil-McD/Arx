@@ -793,9 +793,10 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
       if (session instanceof Response) return session;
       const left = await runSettingsWrite(() => ctx.runMutation(internal.communityAdmin.leaveCommunityForTrustedUserInternal, {
         userId: session.userId as any, communityId: session.communityId as any,
-      }));
+      }) as Promise<{ access_until?: string | null }>);
       if (left instanceof Response) return left;
-      return reply(200, { ok: true });
+      // A paid member keeps access until the period they paid for ends.
+      return reply(200, { ok: true, access_until: left.value?.access_until ?? null });
     }),
   });
 

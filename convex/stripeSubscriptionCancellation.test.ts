@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import {
+  cancelStripeSubscriptionAtPeriodEnd,
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
@@ -112,4 +113,14 @@ describe("canonical Stripe subscription cancellation", () => {
       providerSubscriptionId: "sub_completed",
     });
   });
+});
+
+test("leaving schedules Stripe to stop renewing at period end, on the founder's connected account", async () => {
+  const calls: unknown[] = [];
+  const stripe = { subscriptions: { update: async (...args: unknown[]) => { calls.push(args); return { status: "active" }; } } } as any;
+  expect(await cancelStripeSubscriptionAtPeriodEnd({ providerSubscriptionId: "sub_1", providerAccountId: "acct_1" }, stripe)).toBe("scheduled");
+  expect(calls).toEqual([["sub_1", { cancel_at_period_end: true }, { stripeAccount: "acct_1" }]]);
+  const missing = { subscriptions: { update: async () => { throw Object.assign(new Error("gone"), { statusCode: 404 }); } } } as any;
+  expect(await cancelStripeSubscriptionAtPeriodEnd({ providerSubscriptionId: "sub_2" }, missing)).toBe("missing");
+  expect(await cancelStripeSubscriptionAtPeriodEnd({ providerSubscriptionId: "" }, stripe)).toBe("missing");
 });
