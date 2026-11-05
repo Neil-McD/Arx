@@ -415,7 +415,7 @@ class Settings {
     const area = h("div", { class: "leave-area" });
     const start = () => {
       const alert = h("p", { class: "error", part: "error", role: "alert", hidden: true });
-      const question = h("p", { tabindex: "-1", text: "Leave " + name + "? You'll lose access immediately." });
+      const question = h("p", { tabindex: "-1", text: "Leave " + name + "? If you pay for it, billing stops and you keep access until the end of the period you've paid for." });
       const cancel = h("button", { class: "quiet", type: "button", text: "Cancel", onclick: () => { area.replaceChildren(button); button.focus(); } });
       const confirm = h("button", { class: "danger solid", part: "leave-confirm", type: "button", text: "Leave " + name, onclick: async () => {
         confirm.disabled = true;
@@ -424,6 +424,12 @@ class Settings {
         alert.hidden = true;
         const res = await call("/__polynet/me/leave", {});
         if (!this.current()) return;
+        if (ok(res) && res.body.access_until) {
+          // Paid: nothing is lost today; say until when.
+          const until = new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date(res.body.access_until));
+          area.replaceChildren(h("p", { class: "lead", part: "leave-scheduled", role: "status", text: "You've left " + name + ". Billing has stopped, and you keep access until " + until + "." }));
+          return;
+        }
         if (ok(res)) { location.assign("/communities"); return; }
         confirm.disabled = false;
         cancel.disabled = false;

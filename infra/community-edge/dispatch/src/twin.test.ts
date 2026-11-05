@@ -111,7 +111,7 @@ async function backend(request: Request): Promise<Response> {
 const TICKET = `${Date.now() + 60_000}.${"k".repeat(43)}`;
 const settings = {
   profile: {} as Record<string, any>, community: { name: "Sunrise Climbing Club", role: "member" },
-  notifications: { muted: false, weekly_digest: true }, failNotifications: false, left: false,
+  notifications: { muted: false, weekly_digest: true }, failNotifications: false, left: false, accessUntil: null as string | null,
   holdProfile: null as Promise<void> | null,
 };
 function resetSettings(role = "member") {
@@ -119,6 +119,7 @@ function resetSettings(role = "member") {
   settings.community = { name: "Sunrise Climbing Club", role };
   settings.notifications = { muted: false, weekly_digest: true };
   settings.failNotifications = false;
+  settings.accessUntil = null;
   settings.left = false;
   settings.holdProfile = null;
 }
@@ -149,7 +150,7 @@ function settingsBackend(path: string, body: Record<string, any>): Response {
     case "/runtime/app/me/leave":
       if (settings.community.role === "owner") return refuse("community_owner_cannot_leave");
       settings.left = true;
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, access_until: settings.accessUntil });
     default:
       return refuse("not_found", 404);
   }
@@ -833,7 +834,8 @@ test("Settings: leaving asks first, then goes to Your communities; the owner is 
     const personal = page.locator("polynet-personal");
     await expect.poll(() => personal.getAttribute("state")).toBe("ready");
     await personal.locator("[part=leave]").click();
-    expect(await personal.locator("[part=leave-confirm-box] p").first().textContent()).toBe("Leave Sunrise Climbing Club? You'll lose access immediately.");
+    expect(await personal.locator("[part=leave-confirm-box] p").first().textContent())
+      .toBe("Leave Sunrise Climbing Club? If you pay for it, billing stops and you keep access until the end of the period you've paid for.");
     // Cancel leaves nothing changed.
     await personal.getByRole("button", { name: "Cancel" }).click();
     expect(settings.left).toBe(false);
@@ -841,6 +843,23 @@ test("Settings: leaving asks first, then goes to Your communities; the owner is 
     await personal.locator("[part=leave-confirm]").click();
     await page.waitForURL(`${TWIN}/communities`);
     expect(settings.left).toBe(true);
+  } finally {
+    await browser.close();
+  }
+}, 60_000);
+
+test("Settings: a paying member who leaves is told billing stopped and until when they keep access, and stays on the page", async () => {
+  resetSettings();
+  settings.accessUntil = "2026-12-05T12:00:00.000Z";
+  const { browser, page } = await openTwin(chromium, "/settings", TOKEN);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("ready");
+    await personal.locator("[part=leave]").click();
+    await personal.locator("[part=leave-confirm]").click();
+    await expect.poll(() => personal.locator("[part=leave-scheduled]").textContent())
+      .toMatch(/^You've left Sunrise Climbing Club\. Billing has stopped, and you keep access until .*2026\.$/);
+    expect(page.url()).toBe(`${TWIN}/settings`);
   } finally {
     await browser.close();
   }

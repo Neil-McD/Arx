@@ -1,4 +1,4 @@
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { communitySiteUrl } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -13,6 +13,7 @@ import {
   type CommunitySubscriptionLike,
   adjustCommunityActiveMemberCountForMembershipTransition,
   communityMembershipRowIsActive,
+  communitySubscriptionStatusGrantsAccess,
   countCanonicalCommunityMembers,
   getCommunityAndMembership,
   getActiveCommunityBlock,
@@ -52,7 +53,7 @@ import {
   isPlatformHomeCommunity,
   PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
 } from "./platformHomeCommunity";
-import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
+import { cancelStripeSubscriptionAtPeriodEnd, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import {
   activateCommunityMembershipCore,
 } from "./communityMembershipLifecycle";
@@ -2082,6 +2083,25 @@ export const saveCommunityMemberSettingsForTrustedUserInternal = internalMutatio
   handler: async (ctx, args) => await saveCommunityMemberSettingsForUser(ctx, { ...args, mutedUntilIso: null }),
 });
 
+// After a paid member leaves: tell Stripe not to renew. Stripe's own notice
+// ends the subscription (and with it the member's access) when the period ends.
+export const cancelCommunitySubscriptionsAtPeriodEndInternal = internalAction({
+  args: { targets: v.array(v.object({ providerSubscriptionId: v.string(), providerAccountId: v.union(v.string(), v.null()) })) },
+  handler: async (_ctx, args) => {
+    for (const target of args.targets) {
+      try {
+        await cancelStripeSubscriptionAtPeriodEnd(target);
+      } catch (error) {
+        console.error("community_leave_stripe_cancel_failed", {
+          providerSubscriptionId: target.providerSubscriptionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    }
+  },
+});
+
 export const leaveCommunityForTrustedUserInternal = internalMutation({
   args: { userId: v.id("users"), communityId: v.id("communities") },
   handler: async (ctx, args) => await leaveCommunityForUser(ctx, args),
@@ -2265,6 +2285,25 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
         communityId: args.communityId,
         userId: args.userId,
       });
+      // Paid: Stripe stops renewing and the member keeps access until the paid
+      // period ends (the subscription reads "cancel_at_period_end", which still
+      // grants access); Stripe's notice at the end ends it. Nothing else changes now.
+      const paidRows = membership
+        ? (await listCommunitySubscriptionRowsForMembership({ ctx, membershipId: membership._id }))
+          .filter((row: any) => String(row.providerSubscriptionId ?? "").trim() && communitySubscriptionStatusGrantsAccess(row.status))
+        : [];
+      if (membership && paidRows.length > 0) {
+        const targets: Array<{ providerSubscriptionId: string; providerAccountId: string | null }> = [];
+        for (const row of paidRows as any[]) {
+          if (row.status !== "cancel_at_period_end") {
+            await ctx.db.patch(row._id, { status: "cancel_at_period_end", cancelAtPeriodEnd: true, updatedAt: nowMs });
+          }
+          targets.push({ providerSubscriptionId: String(row.providerSubscriptionId), providerAccountId: row.providerAccountId ?? null });
+        }
+        await ctx.scheduler.runAfter(0, internal.communityAdmin.cancelCommunitySubscriptionsAtPeriodEndInternal, { targets });
+        const accessUntil = Math.max(0, ...paidRows.map((row: any) => Number(row.currentPeriodEndAt) || 0));
+        return { ok: true, access_until: accessUntil > 0 ? new Date(accessUntil).toISOString() : null };
+      }
       if (membership) {
         await endCommunitySubscriptionsForMembership({
           ctx,
