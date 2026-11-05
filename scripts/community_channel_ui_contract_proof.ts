@@ -394,7 +394,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-interaction-projection\s*\{[\s\S]*?--community-chat-surface:\s*color-mix\(in srgb, var\(--bg-workspace\) 94%, var\(--bg-card\) 6%\);[\s\S]*?background:\s*var\(--community-chat-surface\);/,
+  /\.community-interaction-projection\s*\{[\s\S]*?--community-chat-surface:\s*var\(--bg-workspace\);[\s\S]*?background:\s*var\(--community-chat-surface\);/,
 );
 assertMatches(
   interactionStylesPath,
