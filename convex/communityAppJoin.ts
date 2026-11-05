@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { normalizeCommunityAppOrigin } from "../shared/communityAppSession";
 import {
@@ -13,7 +13,6 @@ import {
   type CommunityLike,
   type CommunityMembershipLike,
   type PublicPlanSummaryLike,
-  communityUserIsBlocked,
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
   resolveCommunityBrandingFields,
@@ -150,48 +149,19 @@ export const cancelCommunityAppJoinRequestInternal = internalMutation({
   },
 });
 
-// The community a site's private twin belongs to: where a signed-out buyer's
-// checkout may start. Nothing for a site's public origin or an archived community.
-export const privateOriginCommunityInternal = internalQuery({
-  args: { origin: v.string() },
-  handler: async (ctx, args) => {
-    const found = await communityAtOrigin(ctx, args.origin);
-    if (!found || found.domain.kind !== "private") return null;
-    return { communityId: found.community._id, communitySlug: String(found.community.slug ?? "") };
-  },
-});
-
 // Back from Stripe on the twin: Studio's finalization (the webhook's record,
 // never the redirect) and, once it grants access, Studio's claim. Only the
 // buyer's own checkout for this community; anything else reads as none at all.
-// A guest checkout (paid before signing in) becomes the buyer's here: the first
-// signed-in member who brings its claim token, which only the browser that
-// started it holds (an HttpOnly cookie on the twin).
 export const finishCommunityAppCheckoutInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string(), claimToken: v.optional(v.string()) },
+  args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string() },
   handler: async (ctx, args): Promise<{ status: "joined" | "pending" | "expired" | "not_found" }> => {
     const row = await ctx.db
       .query("checkoutSessions")
       .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
       .first();
-    if (!row || row.mode !== "community_join" || String(row.communityId) !== String(args.communityId)) {
+    if (!row || row.mode !== "community_join" || String(row.communityId) !== String(args.communityId)
+      || String(row.ownerUserId ?? "") !== String(args.userId)) {
       return { status: "not_found" };
-    }
-    const claimsGuestCheckout = !row.ownerUserId && Boolean(args.claimToken) && row.claimToken === args.claimToken;
-    if (!claimsGuestCheckout && String(row.ownerUserId ?? "") !== String(args.userId)) {
-      return { status: "not_found" };
-    }
-    if (claimsGuestCheckout) {
-      if (await communityUserIsBlocked({ ctx, communityId: args.communityId, userId: args.userId })) {
-        return { status: "not_found" };
-      }
-      const nowMs = Date.now();
-      await ctx.db.patch(row._id, { ownerUserId: args.userId, updatedAt: nowMs });
-      const claim = await ctx.db
-        .query("purchaseClaims")
-        .withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken))
-        .first();
-      if (claim && !claim.ownerUserId) await ctx.db.patch(claim._id, { ownerUserId: args.userId, updatedAt: nowMs });
     }
     const finalization = (await resolveCheckoutSessionFinalization(ctx, args.userId, args.sessionId)) as {
       status: string; claim?: { token: string };
@@ -200,66 +170,6 @@ export const finishCommunityAppCheckoutInternal = internalMutation({
     if (finalization.status !== "succeeded" || !finalization.claim?.token) return { status: "expired" };
     await redeemPurchaseClaimForUser(ctx, args.userId, finalization.claim.token);
     return { status: "joined" };
-  },
-});
-
-// A guest checkout still unclaimed: where its "finish joining" link goes (the
-// community's private twin /join, carrying the claim), or null if it was
-// claimed, never completed, expired, or the community has no twin.
-export const finishJoiningEmailPlanInternal = internalQuery({
-  args: { sessionId: v.string() },
-  handler: async (ctx, args) => {
-    const row = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
-      .first();
-    if (!row || row.mode !== "community_join" || row.ownerUserId || row.status !== "complete" || !row.claimToken) return null;
-    if (row.expiresAt <= Date.now() || !row.communityId) return null;
-    const claim = await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken))
-      .first();
-    if (!claim || claim.status !== "pending" || claim.ownerUserId) return null;
-    const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
-    if (!community || !communityIsActive(community)) return null;
-    const domains = await ctx.db.query("communityDomains").withIndex("by_community", (q: any) => q.eq("communityId", row.communityId)).collect();
-    const twin = domains.find((domain: any) => domain.kind === "private");
-    if (!twin) return null;
-    const link = new URL("/join", twin.origin);
-    link.searchParams.set("checkout", row.sessionId);
-    link.searchParams.set("claim", row.claimToken);
-    return {
-      communityId: row.communityId,
-      communityLifecycleGeneration: row.communityLifecycleGeneration ?? 0,
-      communityName: String(community.name ?? community.slug ?? "your community"),
-      actionUrl: link.toString(),
-    };
-  },
-});
-
-// Ten minutes after a guest paid: still unclaimed, email the buyer the way
-// back. The outbox's dedupe key keeps it to one email per checkout.
-export const sendFinishJoiningEmailInternal = internalAction({
-  args: { sessionId: v.string(), recipientEmail: v.string() },
-  handler: async (ctx, args) => {
-    const plan = (await ctx.runQuery(internal.communityAppJoin.finishJoiningEmailPlanInternal, { sessionId: args.sessionId })) as {
-      communityId: any; communityLifecycleGeneration: number; communityName: string; actionUrl: string;
-    } | null;
-    if (!plan) return { sent: false };
-    await ctx.runMutation((internal as any).email.enqueueEmailJobInternal, {
-      kind: "community_finish_joining",
-      communityId: plan.communityId,
-      communityLifecycleGeneration: plan.communityLifecycleGeneration,
-      recipientEmail: args.recipientEmail,
-      templateKey: "community_finish_joining",
-      payload: {
-        communityName: plan.communityName,
-        actionUrl: plan.actionUrl,
-        footerNote: "This link finishes your membership. Don't forward it: whoever uses it first gets the membership.",
-      },
-      dedupeKey: `community_finish_joining:${args.sessionId}`,
-    });
-    return { sent: true };
   },
 });
 

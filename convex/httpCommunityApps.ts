@@ -66,8 +66,6 @@ export const COMMUNITY_APP_MY_JOIN_PATH = "/runtime/app/me/join";
 export const COMMUNITY_APP_MY_JOIN_REQUEST_PATH = "/runtime/app/me/join/request";
 export const COMMUNITY_APP_MY_JOIN_CANCEL_PATH = "/runtime/app/me/join/cancel";
 export const COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH = "/runtime/app/me/join/checkout";
-// Cash first: a paid plan's checkout for a buyer who hasn't signed in yet.
-export const COMMUNITY_APP_GUEST_JOIN_CHECKOUT_PATH = "/runtime/app/join/checkout";
 export const COMMUNITY_APP_MY_JOIN_FINISH_PATH = "/runtime/app/me/join/finish";
 export const COMMUNITY_APP_MY_MODERATION_POST_PATH = "/runtime/app/me/moderation/post";
 export const COMMUNITY_APP_MY_MODERATION_REMOVE_PATH = "/runtime/app/me/moderation/remove";
@@ -75,7 +73,6 @@ export const COMMUNITY_APP_MY_REQUESTS_PATH = "/runtime/app/me/requests";
 export const COMMUNITY_APP_MY_REQUEST_APPROVE_PATH = "/runtime/app/me/requests/approve";
 export const COMMUNITY_APP_MY_REQUEST_DENY_PATH = "/runtime/app/me/requests/deny";
 const CHECKOUT_SESSION_ID_PATTERN = /^chk_[a-f0-9]{32}$/;
-const CLAIM_TOKEN_PATTERN = /^claim_[a-f0-9]{32}$/;
 
 function readEnv(name: string): string {
   return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
@@ -1109,34 +1106,6 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
     }),
   });
 
-  // Cash first: the same checkout for a buyer not signed in yet, only from the
-  // edge on a site's private twin. The claim token goes back to the edge, which
-  // keeps it in that browser's HttpOnly cookie; signing in there claims it.
-  args.http.route({
-    path: COMMUNITY_APP_GUEST_JOIN_CHECKOUT_PATH,
-    method: "POST",
-    handler: args.httpAction(async (ctx, req) => {
-      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
-      const body = await readJsonObject(req, 1024);
-      const period = body?.billing_period;
-      if (period !== "monthly" && period !== "annual") return reply(400, { ok: false, code: "invalid_request" });
-      const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "") ?? "";
-      const found = origin
-        ? (await ctx.runQuery(internal.communityAppJoin.privateOriginCommunityInternal, { origin })) as { communitySlug: string } | null
-        : null;
-      const urls = found ? twinCheckoutReturnUrls(origin) : null;
-      if (!found || !urls) return reply(403, { ok: false, code: "private_origin_required" });
-      const started = await runJoin(() => startCommunityJoinCheckoutCore(ctx, {
-        communitySlug: found.communitySlug, billingPeriod: period, successUrl: urls.successUrl, cancelUrl: urls.cancelUrl, guest: true,
-      }));
-      if (started instanceof Response) return started;
-      if (!started.value.claim_token) return reply(500, { ok: false, code: "join_unavailable" });
-      return reply(200, {
-        ok: true, checkout_url: started.value.checkout_url, session_id: started.value.session_id, claim_token: started.value.claim_token,
-      });
-    }),
-  });
-
   // A post a moderator is about to remove: who wrote it and what it says, so
   // the twin's confirmation shows exactly what goes.
   args.http.route({
@@ -1221,10 +1190,8 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       const body = await readJsonObject(req, 1024);
       const sessionId = typeof body?.session_id === "string" && CHECKOUT_SESSION_ID_PATTERN.test(body.session_id) ? body.session_id : null;
       if (!sessionId) return reply(400, { ok: false, code: "invalid_request" });
-      // A guest checkout's claim token: only the edge sends it, from the buyer's cookie.
-      const claimToken = typeof body?.claim_token === "string" && CLAIM_TOKEN_PATTERN.test(body.claim_token) ? body.claim_token : undefined;
       const done = await runJoin(() => ctx.runMutation(internal.communityAppJoin.finishCommunityAppCheckoutInternal, {
-        userId: session.userId as any, communityId: session.communityId as any, sessionId, ...(claimToken ? { claimToken } : {}),
+        userId: session.userId as any, communityId: session.communityId as any, sessionId,
       }) as Promise<{ status: string }>);
       if (done instanceof Response) return done;
       return await joinReply(ctx, req, session, { status: done.value.status });
