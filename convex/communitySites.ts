@@ -145,6 +145,23 @@ function sitesEnv(): { domain: string; suffix: string } | null {
   return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
 }
 
+async function sitesFromRegisteredAddress(ctx: any, communityId: any, slug: string): Promise<{ domain: string; suffix: string } | null> {
+  if (!slug) return null;
+  const rows = await ctx.db.query("communityDomains").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).collect();
+  for (const row of rows) {
+    if (row.kind === "private") continue;
+    let host = "";
+    try { host = new URL(row.origin).hostname; } catch { continue; }
+    if (!host.startsWith(slug)) continue;
+    const rest = host.slice(slug.length);
+    const dot = rest.indexOf(".");
+    if (dot < 0) continue;
+    const sites = sitesFromArgs(rest.slice(dot + 1), rest.slice(0, dot));
+    if (sites && siteHostname(slug, sites.domain, sites.suffix) === host) return sites;
+  }
+  return null;
+}
+
 function sitesFromArgs(rawDomain: string, rawSuffix?: string): { domain: string; suffix: string } | null {
   const domain = rawDomain.trim().toLowerCase();
   const suffix = (rawSuffix ?? "").trim().toLowerCase();
@@ -209,7 +226,9 @@ export async function registerCommunitySiteAddresses(
 // the slug is saved, so a refusal changes nothing.
 export async function moveCommunitySiteAddresses(ctx: any, community: { _id: any; slug?: unknown }, nextSlug: string) {
   const previous = String(community.slug ?? "");
-  const sites = sitesEnv();
+  // Before the sites switch is on, addresses registered for the dark launch
+  // still move with the slug: read the domain from the registered site.
+  const sites = sitesEnv() ?? await sitesFromRegisteredAddress(ctx, community._id, previous);
   if (!sites || previous === nextSlug) return;
   const origins = (slug: string) => {
     const host = siteHostname(slug, sites.domain, sites.suffix);
@@ -230,7 +249,7 @@ export async function moveCommunitySiteAddresses(ctx: any, community: { _id: any
     if (row && String(row.communityId) !== String(community._id)) throw new Error("community_slug_taken");
   }
   for (const row of held) await ctx.db.delete(row._id);
-  await registerCommunitySiteAddresses(ctx, { _id: community._id, slug: nextSlug });
+  await registerCommunitySiteAddresses(ctx, { _id: community._id, slug: nextSlug }, sites);
 }
 
 // Communities created before every community had a site: register theirs, a

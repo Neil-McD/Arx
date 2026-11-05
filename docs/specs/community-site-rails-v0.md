@@ -109,6 +109,17 @@ site serves them until the founder deploys.**
   already taken, leaves it without one and never blocks creation. Older
   communities: `communitySites:registerCommunitySiteAddressesInternal`
   (dry run first, paged).
+- **Addresses before links (dark launch).** Registering addresses and turning
+  on Studio's links are separate. `POLYNET_SITES_DOMAIN` on the backend is the
+  switch for Studio: "Visit site", the `/c/<slug>` hand-off to the site, email
+  links and new communities' addresses. The backfill also takes
+  `{"sitesDomain": "polynet.page", "hostSuffix": ""}` so an environment can
+  register every community's site and twin while the switch is off: the edge
+  then serves those sites (default site, sign-in hand-off, twin) for checking,
+  and nobody is sent there until the switch is set. A rename in that window
+  moves the registered addresses with the slug (the domain is read from the
+  community's registered site address). Rerun the backfill without arguments
+  after setting the switch to pick up communities created in between.
 - **The default site.** An address on the sites domain with no deployed route
   but a community registered to it is served by `defaultSite.ts`, which
   answers the edge as a founder's Worker would: `/` (the front door, rendered

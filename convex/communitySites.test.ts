@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
 import { registerCommunitySiteRoutes } from "./httpCommunitySites";
-import { siteHostname, validateSiteManifest } from "./communitySites";
+import { moveCommunitySiteAddresses, siteHostname, validateSiteManifest } from "./communitySites";
 import { readSitesConfig } from "./communitySiteDeploy";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
@@ -248,4 +248,16 @@ test("addresses can be registered before the sites switch is on, then serve as s
   expect((await backfill({ sitesDomain: "polynet.page" })).registered).toEqual([]);
   // A malformed domain registers nothing.
   expect(await backfill({ sitesDomain: "not a domain" })).toMatchObject({ registered: [], sitesConfigured: false });
+});
+
+test("a rename before the sites switch moves the pre-registered addresses with the slug", async () => {
+  const f = await fixture();
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "");
+  await f.t.mutation(internal.communitySites.registerCommunitySiteAddressesInternal, { sitesDomain: "polynet.page" });
+  await f.t.run(async (ctx) => {
+    const community = await ctx.db.get(f.ids.runClub);
+    await moveCommunitySiteAddresses(ctx, community!, "trail-club");
+  });
+  const origins = await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").withIndex("by_community", (q) => q.eq("communityId", f.ids.runClub)).collect()).map((row) => row.origin));
+  expect(origins.sort()).toEqual(["https://trail-club--me.polynet.page", "https://trail-club.polynet.page"]);
 });
