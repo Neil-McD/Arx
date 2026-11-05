@@ -259,8 +259,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     if (source === "stripe" && !providerAccountId) {
       throw new Error("community_subscription_provider_account_required");
     }
-    const status = normalizeCommunitySubscriptionStatus(args.status);
-    if (!status) throw new Error("community_subscription_status_invalid");
+    const normalizedStatus = normalizeCommunitySubscriptionStatus(args.status);
+    if (!normalizedStatus) throw new Error("community_subscription_status_invalid");
+    let status = normalizedStatus;
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     // Archive freezes membership state. Provider webhooks remain valid billing
@@ -360,10 +361,22 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
 
     const currentPeriodStartAt = parseIsoMs(args.currentPeriodStartIso);
     const currentPeriodEndAt = parseIsoMs(args.currentPeriodEndIso);
-    const cancelAtPeriodEnd =
+    let cancelAtPeriodEnd =
       args.cancelAtPeriodEnd === null
         ? false
         : Boolean(args.cancelAtPeriodEnd ?? current?.cancelAtPeriodEnd);
+    // The member left (cancelRequestedAt) but Stripe still says it renews: keep
+    // their leave (billing stops at the period's end) and ask Stripe again.
+    const cancelRequestedAt = typeof current?.cancelRequestedAt === "number" ? current.cancelRequestedAt : null;
+    let reCancel = false;
+    // Only for the very subscription they left: a later purchase is a new subscription.
+    const sameSubscription = String(args.providerSubscriptionId ?? "").trim() !== ""
+      && String(args.providerSubscriptionId).trim() === String(current?.providerSubscriptionId ?? "").trim();
+    if (cancelRequestedAt !== null && sameSubscription && status === "active" && !cancelAtPeriodEnd) {
+      status = "cancel_at_period_end";
+      cancelAtPeriodEnd = true;
+      reCancel = Boolean(String(args.providerSubscriptionId ?? current?.providerSubscriptionId ?? "").trim());
+    }
     const endedAt =
       status === "canceled" || status === "ended"
         ? nowMs
@@ -397,6 +410,11 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       updatedAt: nowMs,
     };
 
+    if (reCancel) {
+      await ctx.scheduler.runAfter(0, internal.communityAdmin.cancelCommunitySubscriptionsAtPeriodEndInternal, {
+        targets: [{ providerSubscriptionId: String(nextProviderSubscriptionId), providerAccountId: providerAccountId || current?.providerAccountId || null }],
+      });
+    }
     if (current) {
       await ctx.db.patch(current._id, patch);
     } else {

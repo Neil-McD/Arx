@@ -1114,7 +1114,7 @@ test("twin settings: forwarded with the twin's session to Studio's cores; only t
   expect(await read("/__polynet/me/avatar/upload", "POST")).toEqual([200, { ok: true, upload_url: "https://live.example.convex.cloud/api/storage/upload?token=t" }]);
   expect((await read("/__polynet/me/avatar", "POST", '{"storage_id":"kg2"}'))[1]).toMatchObject({ profile: { avatar_url: "https://live.example.convex.cloud/api/storage/kg2" } });
   expect(JSON.parse(String(backend.mock.calls[3][1]?.body))).toEqual({ storage_id: "kg2" });
-  expect(await read("/__polynet/me/leave", "POST")).toEqual([200, { ok: true }]);
+  expect(await read("/__polynet/me/leave", "POST")).toEqual([200, { ok: true, access_until: null }]);
   // An upload address anywhere but Polynet's storage is never handed to the page.
   answers["/runtime/app/me/avatar_upload"] = { ok: true, upload_url: "https://evil.example.com/api/storage/upload?token=t" };
   expect(await read("/__polynet/me/avatar/upload", "POST")).toEqual([502, { ok: false, code: "settings_unavailable" }]);

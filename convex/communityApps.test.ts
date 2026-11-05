@@ -984,7 +984,8 @@ test("twin settings: a member leaves through Studio's leave; the owner can't", a
   expect(await f.me(COMMUNITY_APP_MY_LEAVE_PATH, ownerToken)).toEqual({ status: 400, body: { ok: false, code: "community_owner_cannot_leave" } });
   const token = await f.signInAt(f.twin);
   await f.me(COMMUNITY_APP_MY_NOTIFICATIONS_PATH, token, { muted: true });
-  expect(await f.me(COMMUNITY_APP_MY_LEAVE_PATH, token)).toEqual({ status: 200, body: { ok: true } });
+  // A free member: nothing paid, so no access to run out (access_until null), and out straight away.
+  expect(await f.me(COMMUNITY_APP_MY_LEAVE_PATH, token)).toEqual({ status: 200, body: { ok: true, access_until: null } });
   // Studio's leave: the membership, its member settings and the member count go with it.
   expect(await f.t.run((c) => c.db.get(f.ids.membershipId))).toBeNull();
   expect(await f.t.run((c) => c.db.query("communityMemberSettings").collect())).toEqual([]);

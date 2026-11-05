@@ -295,8 +295,15 @@ Studio's:
   existing file. No framing editor yet: a new photo starts centered.
 - **Notifications:** Studio's two: mute this community, and the weekly
   community digest (one setting for every community, as in Studio).
-- **Leave this community:** asks inline, then goes to `/communities`. The
-  owner can't leave, and the page says so.
+- **Leave this community:** asks inline. A member who doesn't pay is out
+  straight away and goes to `/communities`. A paying member keeps access until
+  the end of the period they've paid for (Nov 5): Polynet marks the
+  subscription `cancel_at_period_end` (which still grants access), tells
+  Stripe not to renew (`cancelCommunitySubscriptionsAtPeriodEndInternal`), and
+  the page says "Billing has stopped, and you keep access until <date>"; the
+  leave answer carries `access_until`. Stripe's own notice at the period's end
+  ends the subscription and with it the member's access. The owner can't
+  leave, and the page says so.
 - **Sign out:** ends this browser's sessions on the site and its twin, nowhere
   else (the member's other devices stay signed in). Each origin keeps its own
   host-only cookie, which only a visit there can clear, so the first sign-out
