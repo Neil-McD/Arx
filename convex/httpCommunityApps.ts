@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import type { PublicHttpAction } from "convex/server";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { storeCommunityAttachmentUpload } from "./httpCommunityAttachments";
+import { e2eSignInAllowed } from "./e2eTestSessions";
 import { handleRuntimeTurnRequest } from "./runtimeTurnHandlers";
 import { trustedMemberTurnContext } from "./communityAppAgentTurn";
 import { sseResponseWithHeaders, type SseSource } from "./httpStreaming";
@@ -322,6 +323,31 @@ function messageTarget(body: Record<string, unknown> | null): { conversationId: 
   return null;
 }
 export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAction: HttpActionLike }) {
+  // Staging only: the nightly end-to-end run's sign-in (convex/e2eTestSessions.ts).
+  // Refuses unless the deployment allows seeding and the caller holds the E2E secret.
+  args.http.route({
+    path: "/runtime/e2e/sessions",
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!e2eSignInAllowed(process.env) || !secretMatches(req.headers.get("x-polynet-e2e-secret"), readEnv("POLYNET_E2E_SECRET"))) {
+        return reply(404, { ok: false, code: "not_found" });
+      }
+      const body = await readJsonObject(req, 1024);
+      const account = body?.account;
+      const communitySlug = typeof body?.community === "string" && /^[a-z0-9-]{1,64}$/.test(body.community) ? body.community : null;
+      if ((account !== "founder" && account !== "newcomer") || !communitySlug) return reply(400, { ok: false, code: "invalid_request" });
+      const siteToken = generateCommunityAppSessionToken();
+      const twinToken = generateCommunityAppSessionToken();
+      const hash = hashCommunityAppSessionToken;
+      const minted = await ctx.runMutation(internal.e2eTestSessions.mintE2eSessionsInternal, {
+        account, communitySlug,
+        siteTokenHash: await hash(siteToken), siteWatchTokenHash: await hash(await deriveCommunityAppWatchToken(siteToken)),
+        twinTokenHash: await hash(twinToken), twinWatchTokenHash: await hash(await deriveCommunityAppWatchToken(twinToken)),
+      });
+      return reply(200, { ok: true, site_token: siteToken, twin_token: twinToken, ...minted });
+    }),
+  });
+
   // A turn with the community agent acting for the member, pinned to this community's
   // conversation and the member lane. The page sends only text; it cannot pick
   // the thread, community, model or funding.

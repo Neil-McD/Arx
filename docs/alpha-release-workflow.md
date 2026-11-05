@@ -493,3 +493,16 @@ Prioritize in this order:
 2. UX friction in core flows
 3. Conversion/activation blockers
 4. Everything else
+
+### Staging end-to-end sign-in (Nov 5)
+
+The nightly staging run can't click through Google, so `POST /runtime/e2e/sessions`
+(`convex/e2eTestSessions.ts`) hands it a community site's own sessions (the
+site and its private twin) for one of two fixed accounts, `e2e-founder` or
+`e2e-newcomer`; the newcomer is reset to brand-new in that community first (no
+membership, request, subscription, checkout or claim), which is how a new
+member's join gets tested every run. It answers 404 unless the deployment sets
+`POLYNET_ALLOW_SEED=1` and the request carries `x-polynet-e2e-secret` matching
+`POLYNET_E2E_SECRET`; the release's settings check forbids both in production.
+It never signs in anyone else.
+

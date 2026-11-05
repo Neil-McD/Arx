@@ -131,6 +131,7 @@ import type * as directMessageReadCore from "../directMessageReadCore.js";
 import type * as directMessages from "../directMessages.js";
 import type * as distributionAttribution from "../distributionAttribution.js";
 import type * as distributionAttributionCore from "../distributionAttributionCore.js";
+import type * as e2eTestSessions from "../e2eTestSessions.js";
 import type * as email from "../email.js";
 import type * as emailCore from "../emailCore.js";
 import type * as emailDiagnostics from "../emailDiagnostics.js";
@@ -348,6 +349,7 @@ declare const fullApi: ApiFromModules<{
   directMessages: typeof directMessages;
   distributionAttribution: typeof distributionAttribution;
   distributionAttributionCore: typeof distributionAttributionCore;
+  e2eTestSessions: typeof e2eTestSessions;
   email: typeof email;
   emailCore: typeof emailCore;
   emailDiagnostics: typeof emailDiagnostics;

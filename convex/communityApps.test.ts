@@ -52,6 +52,7 @@ import {
 
 const modules = import.meta.glob([
   "./communityApps.ts",
+  "./e2eTestSessions.ts",
   "./communityNotes.ts",
   "./memberWriteRateLimit.ts",
   "./communitySites.ts",
@@ -1562,4 +1563,33 @@ test("twin join review: a moderator lists, approves and denies this community's 
   // Paid: admission is checkout only.
   await f.t.run((c) => c.db.patch(f.ids.communityId, { entryPolicy: "paid_subscription" } as any));
   expect((await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner)).body).toMatchObject({ ok: true, paid: true });
+});
+
+test("e2e sign-in: staging only, secret only, two fixed accounts; the newcomer starts brand-new", async () => {
+  const f = await twinFixture();
+  const SECRET = "e2e-secret-for-tests-only";
+  const mint = (headers: Record<string, string>, body: Record<string, unknown>) => f.post("/runtime/e2e/sessions", headers, body);
+  // Not allowed on this deployment (no seed flag, no secret): it doesn't exist.
+  expect(await mint({ "x-polynet-e2e-secret": SECRET }, { account: "newcomer", community: "apps-community" })).toMatchObject({ status: 404 });
+  vi.stubEnv("POLYNET_ALLOW_SEED", "1");
+  expect(await mint({ "x-polynet-e2e-secret": SECRET }, { account: "newcomer", community: "apps-community" })).toMatchObject({ status: 404 });
+  vi.stubEnv("POLYNET_E2E_SECRET", SECRET);
+  // The wrong secret, or any account but the two fixed ones, is refused.
+  expect(await mint({ "x-polynet-e2e-secret": "nope" }, { account: "newcomer", community: "apps-community" })).toMatchObject({ status: 404 });
+  expect(await mint({ "x-polynet-e2e-secret": SECRET }, { account: "apps-owner", community: "apps-community" })).toMatchObject({ status: 400 });
+
+  const signedIn = await mint({ "x-polynet-e2e-secret": SECRET }, { account: "newcomer", community: "apps-community" });
+  expect(signedIn).toMatchObject({ status: 200, body: { ok: true, site_origin: f.site, twin_origin: f.twin } });
+  // The twin session is a real private session: the join page reads them as a visitor, set up and not a member.
+  const join = await f.post("/runtime/app/me/join", { origin: f.twin, "x-polynet-edge-secret": EDGE_SECRET, authorization: `Bearer ${signedIn.body.twin_token}` }, {});
+  expect(join).toMatchObject({ status: 200, body: { signed_in: true, viewer: { state: "visitor", setup_required: false } } });
+  // Joined, then signed in again: brand-new once more.
+  await f.t.run(async (ctx) => {
+    const user = (await ctx.db.query("users").withIndex("by_authSubject", (q) => q.eq("authSubject", "e2e-newcomer")).first())!;
+    await ctx.db.insert("communityMemberships", { communityId: f.ids.communityId, userId: user._id, role: "member", accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 } as any);
+  });
+  const again = await mint({ "x-polynet-e2e-secret": SECRET }, { account: "newcomer", community: "apps-community" });
+  const rejoin = await f.post("/runtime/app/me/join", { origin: f.twin, "x-polynet-edge-secret": EDGE_SECRET, authorization: `Bearer ${again.body.twin_token}` }, {});
+  expect(rejoin.body.viewer.state).toBe("visitor");
+  vi.unstubAllEnvs();
 });

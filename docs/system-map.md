@@ -50,6 +50,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
   [auth-money-access-matrix.md](auth-money-access-matrix.md).
 - **Hand-run:** `anonymousUserCleanup` (data deletion); `retiredTablesCleanup` (table-drop release 1, POL-31; removed in release 2).
+- **Staging only:** `e2eTestSessions` (the nightly end-to-end run's sign-in for two fixed test accounts; refuses without `POLYNET_ALLOW_SEED` and `POLYNET_E2E_SECRET`).
 
 ### 2. Communities, membership and joining — Keep
 
