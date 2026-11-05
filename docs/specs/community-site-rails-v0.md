@@ -405,41 +405,15 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   claim: membership comes only once Stripe's verified webhook has marked the
   checkout complete. A return alone grants nothing. After a minute it offers
   "Check again".
-- **Paid, cash first (Nov 5):** a signed-out visitor is not asked to sign in
-  first. "Join $X" goes straight to the same checkout, started as a guest
-  (`POST /__polynet/me/join/guest-checkout`, no session, forwarded to
-  `/runtime/app/join/checkout`): Stripe collects the email, the checkout and
-  its purchase claim have no owner yet, and the claim token goes back to the
-  edge only, which keeps it in an HttpOnly cookie on the twin, one per
-  checkout (`__Host-polynet_claim_<checkout hex>`, 14 days, so a second tab's
-  checkout never replaces the first's); the page gets Stripe's address and
-  nothing else, and no `__Host-polynet_` cookie ever reaches the founder's
-  site code (the edge strips them all from forwarded requests). Back
-  from Stripe signed out, the page goes straight on to sign in (the normal
-  hop, back to `/join?checkout=<id>`). From Stripe to the site's chat the
-  member sees one screen, "Finishing your membership…", whatever runs
-  underneath (sign-in, claim, Stripe's confirmation, the site's sign-in). Then
-  Finish carries the claim from the cookie (the edge drops any `claim_token`
-  the page sends), and the first signed-in member who brings it owns the
-  checkout and its claim (`finishCommunityAppCheckoutInternal`); after that
-  it's that member's like any signed-in checkout, and the cookie is dropped
-  once they've joined. Membership still comes only from the verified webhook.
-  A buyer who closes the tab before signing in has paid with no membership,
-  so ten minutes after Stripe confirms a guest payment, if it is still
-  unclaimed, Polynet emails the address the buyer gave Stripe ("Finish
-  joining <community>", template `community_finish_joining`, once per
-  checkout via the outbox dedupe key `community_finish_joining:<checkout id>`).
-  Its link is the twin's `/join?checkout=<id>&claim=<token>`: the edge moves
-  the claim into that checkout's cookie and redirects to `/join?checkout=<id>`
-  (no claim in the address, history or referrer), and the normal flow runs.
-  Whoever holds the link can claim it, as with any email sign-in link; it
-  stops working once claimed or when the claim expires. Admission limit:
-  a community takes at most 20 unclaimed guest checkouts started in any
-  10 minutes (pending, no owner yet); past that, guest checkout answers
-  `community_checkout_unavailable` ("Checkout is temporarily unavailable")
-  until older ones age out of the window or are claimed. Signed-in
-  checkouts don't count. The count is checked in the same transaction that
-  records the checkout, before Stripe's checkout is created.
+- **Paid, identify then pay (Nov 5, membership redesign; replaced the
+  short-lived cash-first guest checkout):** who's paying is known before
+  Stripe. Signed out, "Join $X" goes to sign in first (the normal hop, back to
+  `/join?plan=<period>`), and back signed in the page carries straight on to
+  Stripe with that plan: no second click. Stripe's verified notice makes the
+  signed-in buyer a member; from Stripe to the site's chat the member sees one
+  screen, "Finishing your membership…". Back from Stripe signed out (a
+  session that ended meanwhile), the page signs in and finishes. There is no
+  guest checkout, no claim cookie and no "finish joining" email.
 - **Already a member:** "You're in." with a link into the site.
 - **Blocked, denied, cooldown, unavailable, account not set up:** Studio's
   words (or, where Studio shows a raw code, plain ones), and for an
@@ -453,8 +427,7 @@ Endpoints: `GET /__polynet/me/join` (signed out too) and `POST
 /__polynet/me/join`, `/join/cancel`, `/join/checkout`, `/join/finish`, twin
 only, same-origin, small JSON POSTs (1 KB), forwarded to
 `/runtime/app/me/join*`; every action requires a private session (the site's
-own session, which its code holds, is refused), except
-`/join/guest-checkout`, the cash-first checkout, which needs none.
+own session, which its code holds, is refused).
 
 ## Moderation (3c-1, Oct 28)
 

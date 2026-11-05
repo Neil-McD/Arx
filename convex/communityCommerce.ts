@@ -638,7 +638,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     currencyDecimals: v.number(),
     providerAccountId: v.string(),
     providerPriceId: v.string(),
-    ownerUserId: v.optional(v.id("users")),
+    ownerUserId: v.id("users"),
     claimToken: v.string(),
     expiresAt: v.number(),
     nowMs: v.optional(v.number()),
@@ -656,9 +656,6 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     ) {
       throw new Error("community_lifecycle_generation_mismatch");
     }
-    if (!args.ownerUserId && !(await guestCheckoutAllowed(ctx, args.communityId, nowMs))) {
-      throw new Error("community_checkout_unavailable");
-    }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "community_join",
@@ -674,7 +671,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
         "provider_account_id_required",
       ),
       providerPriceId: args.providerPriceId,
-      ownerUserId: args.ownerUserId ?? undefined,
+      ownerUserId: args.ownerUserId,
       claimToken: args.claimToken,
       status: "pending",
       expiresAt: args.expiresAt,
@@ -826,8 +823,6 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     currentPeriodEndAt: v.optional(v.union(v.number(), v.null())),
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
     markComplete: v.optional(v.boolean()),
-    // The email the buyer gave Stripe: where a guest checkout's "finish joining" goes.
-    buyerEmail: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -926,14 +921,6 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
           console.error("community_checkout_grant_failed", { sessionId: args.sessionId, error: error instanceof Error ? error.message : String(error) });
         }
       }
-    }
-    // Paid as a guest: if nobody has claimed it in a little while, email the
-    // buyer a way back (sent once per checkout; skipped if claimed by then).
-    const buyerEmail = String(args.buyerEmail ?? "").trim();
-    if (args.markComplete && lifecycleMatches && !row.ownerUserId && /^[^\s@]+@[^\s@]+$/.test(buyerEmail)) {
-      await ctx.scheduler.runAfter(FINISH_JOINING_EMAIL_DELAY_MS, internal.communityAppJoin.sendFinishJoiningEmailInternal as any, {
-        sessionId: args.sessionId, recipientEmail: buyerEmail,
-      });
     }
     await recordCriticalAuditEventBestEffort(ctx, {
       eventKey: `community_subscription_synced:${args.providerSubscriptionId ?? row.providerSubscriptionId ?? args.sessionId}:${communitySubscriptionStatus}:${nowMs}`,
@@ -1069,36 +1056,6 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
   },
 });
 
-// Cash first lets anyone start a checkout without signing in, and each one
-// makes a Stripe session and two rows. A community takes this many unclaimed
-// guest checkouts in this window; past it, "Checkout is temporarily unavailable".
-export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
-// How long a guest has to sign in after paying before the "finish joining" email.
-export const FINISH_JOINING_EMAIL_DELAY_MS = 10 * 60 * 1000;
-export const GUEST_CHECKOUTS_PER_WINDOW = 20;
-
-async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {
-  const since = nowMs - GUEST_CHECKOUT_WINDOW_MS;
-  // Newest first, only as far back as the window: every guest in it is counted.
-  let guests = 0;
-  for await (const row of ctx.db
-    .query("checkoutSessions")
-    .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", "pending"))
-    .order("desc")) {
-    if (row.createdAt < since) break;
-    if (!row.ownerUserId && ++guests >= GUEST_CHECKOUTS_PER_WINDOW) return false;
-  }
-  return true;
-}
-
-// An early answer, before any Stripe work. The binding check is in the
-// mutation that records the checkout (one transaction with the insert), so a
-// burst of parallel requests can't all pass on the same count.
-export const guestCheckoutAllowedInternal = internalQuery({
-  args: { communityId: v.id("communities"), nowMs: v.number() },
-  handler: async (ctx, args) => await guestCheckoutAllowed(ctx, args.communityId, args.nowMs),
-});
-
 export const startPublicCommunityCheckout = action({
   args: {
     communitySlug: v.string(),
@@ -1146,12 +1103,8 @@ export async function startCommunityJoinCheckoutCore(
     // Set only by a caller that verified the session itself (the twin's edge
     // session, in an http action that has no Convex identity of its own).
     trustedUserId?: string;
-    // Cash first: a signed-out buyer on a site's private twin. No account yet;
-    // the claim token goes back to that browser only, and whoever signs in
-    // there holding it owns the purchase (finishCommunityAppCheckoutInternal).
-    guest?: boolean;
   },
-): Promise<{ ok: true; session_id: string; checkout_url: string; claim_token?: string }> {
+): Promise<{ ok: true; session_id: string; checkout_url: string }> {
   const nowMs = Date.now();
   const cancelUrl = args.cancelUrl;
   const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
@@ -1181,12 +1134,12 @@ export async function startCommunityJoinCheckoutCore(
   const sessionId = newOpaqueToken("chk");
   const claimToken = newOpaqueToken("claim");
   const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-  if (!args.guest && !args.authSubject) {
+  if (!args.authSubject) {
     throw new Error("auth_subject_required");
   }
-  // Studio: the caller's verified Polynet identity. The twin: the member its
-  // edge-verified session belongs to. A guest has neither until they claim.
-  const actor = args.guest ? null : (args.trustedUserId
+  // Who pays is known before Stripe. Studio: the caller's verified Polynet
+  // identity. The twin: the member its edge-verified session belongs to.
+  const actor = (args.trustedUserId
     ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
       authSubject: args.authSubject, userId: args.trustedUserId,
     })
@@ -1195,34 +1148,24 @@ export async function startCommunityJoinCheckoutCore(
     })) as { dbUserId?: unknown; email?: string | null } | null;
   const ownerUserId: unknown = actor?.dbUserId;
   const ownerEmail: string | null = actor?.email ?? null;
-  if (!args.guest && !ownerUserId) throw new Error("auth_subject_required");
-  if (args.guest && !(await ctx.runQuery(internal.communityCommerce.guestCheckoutAllowedInternal as any, {
-    communityId: checkoutConfig.communityId, nowMs,
-  }))) {
-    throw new Error("community_checkout_unavailable");
+  if (!ownerUserId) throw new Error("auth_subject_required");
+  await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
+    communityId: checkoutConfig.communityId,
+    userId: ownerUserId,
+  });
+  // Already in (a member, or the owner): no checkout, so nobody pays twice.
+  if (await ctx.runQuery(internal.communityCommerce.userHasCommunityAccessInternal, {
+    communityId: checkoutConfig.communityId, userId: ownerUserId as any,
+  })) {
+    throw new Error("already_member");
   }
-  if (ownerUserId) {
-    await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
-      communityId: checkoutConfig.communityId,
-      userId: ownerUserId,
-    });
-    // Already in (a member, or the owner): no checkout, so nobody pays twice.
-    if (await ctx.runQuery(internal.communityCommerce.userHasCommunityAccessInternal, {
-      communityId: checkoutConfig.communityId, userId: ownerUserId as any,
-    })) {
-      throw new Error("already_member");
-    }
-  }
-  // A guest's Stripe customer is the one Checkout creates from the email they give.
-  const stripeCustomerId = ownerUserId
-    ? await ensureCommunityStripeCustomerForUser({
-      ctx,
-      userId: ownerUserId,
-      email: ownerEmail,
-      providerAccountId: checkoutConfig.providerAccountId,
-      nowMs,
-    })
-    : null;
+  const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
+    ctx,
+    userId: ownerUserId,
+    email: ownerEmail,
+    providerAccountId: checkoutConfig.providerAccountId,
+    nowMs,
+  });
   let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
   if (!providerPriceId) {
     const existingProviderPrice = (await ctx.runQuery(
@@ -1294,7 +1237,7 @@ export async function startCommunityJoinCheckoutCore(
       currencyDecimals: checkoutConfig.currencyDecimals,
       providerAccountId: checkoutConfig.providerAccountId,
       providerPriceId,
-      ownerUserId: ownerUserId ?? undefined,
+      ownerUserId,
       claimToken,
       expiresAt,
       nowMs,
@@ -1360,7 +1303,6 @@ export async function startCommunityJoinCheckoutCore(
       ok: true,
       session_id: sessionId,
       checkout_url: checkoutUrl,
-      ...(ownerUserId ? {} : { claim_token: claimToken }),
     };
   } catch (error) {
     let providerCleanupComplete = !createdCheckoutSession?.id;

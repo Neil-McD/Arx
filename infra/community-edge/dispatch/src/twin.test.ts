@@ -67,7 +67,7 @@ async function backend(request: Request): Promise<Response> {
     return Response.json({ ok: true, community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: null, about: null, member_count: 4 } });
   }
   if (auth === `Bearer ${REFUSED}`) return Response.json({ ok: false, code: "community_app_session_invalid" }, { status: 401 });
-  if (url.pathname === "/runtime/app/me/join" || url.pathname.startsWith("/runtime/app/me/join/") || url.pathname === "/runtime/app/join/checkout") {
+  if (url.pathname === "/runtime/app/me/join" || url.pathname.startsWith("/runtime/app/me/join/")) {
     return joinBackend(url.pathname, auth, JSON.parse(body || "{}"));
   }
   if (url.pathname === "/runtime/app/me/communities") {
@@ -246,7 +246,6 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
 // The join routes, standing in for Studio's funnel projection and cores: the
 // test sets how the community lets people in and where the visitor stands.
 const CHECKOUT = `chk_${"c".repeat(32)}`;
-const GUEST_CLAIM = `claim_${"d".repeat(32)}`;
 const joining = {
   gate: "join", viewer: null as null | Record<string, unknown>, label: "Join free", plans: [] as any[],
   calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0,
@@ -267,9 +266,6 @@ function joinBackend(path: string, auth: string | null, body: Record<string, any
     gate: joining.gate, available: true, action_label: joining.label, plans: joining.plans, viewer: signedIn ? joining.viewer : null,
   });
   if (path === "/runtime/app/me/join") return Response.json(projection(Boolean(auth)));
-  if (path === "/runtime/app/join/checkout") {
-    return Response.json({ ok: true, checkout_url: joining.checkoutUrl, session_id: CHECKOUT, claim_token: GUEST_CLAIM });
-  }
   if (!auth) return Response.json({ ok: false, code: "community_app_session_required" }, { status: 401 });
   switch (path) {
     case "/runtime/app/me/join/request":
@@ -651,39 +647,28 @@ test("Join: a paid plan goes exactly where the backend's checkout said; back fro
   }
 }, 60_000);
 
-test("Join, cash first: signed out, Join goes straight to Stripe; back from it, one screen through sign-in, the claim and into the site", async () => {
+test("Join, paid: signed out, Join signs in first; back signed in with the plan, it carries straight on to Stripe", async () => {
   resetJoin("checkout", "visitor");
   joining.checkoutUrl = "https://checkout.stripe.com/c/pay/cs_test_g1#fidkdWxOYHwnPyd1blpxYHZxWjA0";
-  const { browser, page } = await openTwin(chromium, "/join", null);
+  const first = await openTwin(chromium, "/join", null);
   try {
-    const personal = page.locator("polynet-personal");
+    const personal = first.page.locator("polynet-personal");
     await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
-    expect(await personal.locator("[part=gate-note]").last().textContent()).toBe("You'll pay on Stripe's secure checkout, then sign in with Polynet to finish.");
+    expect(await personal.locator("[part=gate-note]").last().textContent()).toBe("You'll sign in with Polynet, then pay on Stripe's secure checkout.");
+    await personal.locator("[part=plan] input[value=annual]").check();
     await personal.locator("[part=join-action]").click();
-    // No sign-in first: Stripe's own page, and this browser keeps the claim (never the page).
-    await page.waitForURL(joining.checkoutUrl);
-    expect(joining.calls.map(([path]) => path)).toContain("/runtime/app/join/checkout");
-    const claim = (await page.context().cookies(`${TWIN}/`)).find((cookie) => cookie.name === `__Host-polynet_claim_${"c".repeat(32)}`);
-    expect([claim?.value, claim?.httpOnly]).toEqual([GUEST_CLAIM, true]);
-    // Back from Stripe signed out: straight on to sign in, coming back to this checkout.
-    hops.length = 0;
-    await page.goto(`${TWIN}/join?checkout=${CHECKOUT}`);
+    // Sign-in, never a checkout, before Polynet knows who's paying.
     await expect.poll(() => hops.length).toBe(1);
-    const start = new URL(hops[0]);
-    expect(start.pathname).toBe("/api/auth/community-handoff");
+    expect(new URL(hops[0]).pathname).toBe("/api/auth/community-handoff");
+    expect(joining.calls.map(([path]) => path)).not.toContain("/runtime/app/me/join/checkout");
   } finally {
-    await browser.close();
+    await first.browser.close();
   }
-}, 60_000);
-
-test("Join, the finish-joining email's link: its claim goes into this browser's cookie and out of the address", async () => {
-  resetJoin("checkout", "visitor");
-  const { browser, page } = await openTwin(chromium, `/join?checkout=${CHECKOUT}&claim=${GUEST_CLAIM}`, null);
+  // Back from signing in with the plan they picked: no second click.
+  const { browser, page } = await openTwin(chromium, "/join?plan=annual", TOKEN);
   try {
-    await expect.poll(() => hops.length).toBe(1);
-    expect(page.url()).not.toContain("claim=");
-    const claim = (await page.context().cookies(`${TWIN}/`)).find((cookie) => cookie.name === `__Host-polynet_claim_${"c".repeat(32)}`);
-    expect(claim?.value).toBe(GUEST_CLAIM);
+    await page.waitForURL(joining.checkoutUrl);
+    expect(joining.calls.filter(([path]) => path === "/runtime/app/me/join/checkout").map(([, body]) => body)).toEqual([{ billing_period: "annual" }]);
   } finally {
     await browser.close();
   }
@@ -1068,16 +1053,20 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     // Unblocked and muted in Studio; this tab comes back into view.
     dm.conversations[0].blocked = false;
     dm.conversations[0].muted = true;
-    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    // The refresh round-trips the twin and rebuilds the thread: slower on CI.
-    await expect.poll(() => personal.locator("[part=input]").count(), { timeout: 20_000 }).toBe(1);
+    // The tab comes back into view (forced visible: a headless tab under CI load
+    // can report hidden), again until the refresh lands, since one lost request
+    // would otherwise leave nothing else to refresh it (live updates are faked).
+    const refresh = () => page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect.poll(async () => { await refresh(); return personal.locator("[part=input]").count(); }, { timeout: 15_000, intervals: [1_000] }).toBe(1);
     expect(await personal.locator("[part=block]").textContent()).toBe("Block");
     expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
     // A draft survives the next change.
     await personal.locator("[part=input]").fill("Sorry about that");
     dm.conversations[0].muted = false;
-    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    await expect.poll(() => personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("false");
+    await expect.poll(async () => { await refresh(); return personal.locator("[part=mute]").getAttribute("aria-pressed"); }, { timeout: 15_000, intervals: [1_000] }).toBe("false");
     expect(await personal.locator("[part=input]").inputValue()).toBe("Sorry about that");
   } finally {
     await browser.close();
