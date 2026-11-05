@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent } from "react";
+import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties } from "react";
 import { MessageCircle, MoreHorizontal, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
@@ -271,7 +271,7 @@ function RosterSurface(props: RosterProps & {
                   {canSelect && member.membership_id && member.role !== "owner" ? <input type="checkbox" className="community-context-member-select"
                     aria-label={`Select ${name}`} checked={picked.has(member.user_id)} onChange={() => togglePicked(member, name)} /> : null}
                   <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
-                    <span className="community-context-member-avatar" style={!member.profile.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}>
+                    <span className="community-context-member-avatar" style={!member.profile.avatar_url ? ({ "--member-avatar-color": props.getAvatarColor(member.user_id) } as CSSProperties) : undefined}>
                       <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
                         name={name} imageUrl={member.profile.avatar_url}
                         focusX={member.profile.avatar_focus_x} focusY={member.profile.avatar_focus_y} zoom={member.profile.avatar_zoom}
