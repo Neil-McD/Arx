@@ -22,14 +22,9 @@ const FULL = {
   hub: 61,
   line: 18,
 };
-// 16px tabs: hub plus three members, heavier, so it stays a shape.
-const SIMPLE = {
-  nodes: { hub: [258, 205], c: [382, 98], e: [304, 378], f: [72, 295] },
-  links: [["f", "hub"], ["hub", "c"], ["hub", "e"]],
-  member: 46,
-  hub: 73,
-  line: 27,
-};
+// Browser tabs draw a 16pt box: same network, heavier, filling the box.
+const TAB = { ...FULL, member: 38, hub: 64, line: 20 };
+const TAB_SMALL = { ...FULL, member: 42, hub: 68, line: 24 };
 const BOX = { x: 36, y: 64, width: 440, height: 352 };
 
 function markShapes(mark, fill) {
@@ -110,12 +105,13 @@ writeFileSync(
   `${PUBLIC}/brand/polynet-mark.svg`,
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 46 472 384">${markShapes(FULL, "currentColor")}</svg>\n`,
 );
-writeFileSync(`${PUBLIC}/favicon.svg`, `${iconSvg({ size: 512 })}\n`);
+// Tab favicons: the tile is a backdrop, not a frame, so the network fills it.
+writeFileSync(`${PUBLIC}/favicon.svg`, `${iconSvg({ mark: TAB, size: 512, radius: 96, markWidth: 452 })}\n`);
 
-// Rounded tiles: tabs, emails, the landing logo.
-renderPng(iconSvg({ mark: SIMPLE, size: 16, markWidth: 380 }), 16, `${PUBLIC}/favicon-16x16.png`);
-renderPng(iconSvg({ size: 32, markWidth: 380 }), 32, `${PUBLIC}/favicon-32x32.png`);
-renderPng(iconSvg({ size: 48, markWidth: 380 }), 48, join(work, "favicon-48.png"));
+// Tabs, then rounded tiles for emails and the landing logo.
+renderPng(iconSvg({ mark: TAB_SMALL, size: 16, radius: 80, markWidth: 470 }), 16, `${PUBLIC}/favicon-16x16.png`);
+renderPng(iconSvg({ mark: TAB, size: 32, radius: 88, markWidth: 460 }), 32, `${PUBLIC}/favicon-32x32.png`);
+renderPng(iconSvg({ mark: TAB, size: 48, radius: 92, markWidth: 456 }), 48, join(work, "favicon-48.png"));
 renderPng(iconSvg({ size: 512 }), 512, `${PUBLIC}/favicon.png`);
 renderPng(iconSvg({ size: 1254 }), 1254, `${PUBLIC}/landing-polynet/logo.png`);
 writeIco(
