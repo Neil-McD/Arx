@@ -1191,6 +1191,7 @@
 
 .community-context-member-avatar {
   position: relative;
+  color: var(--member-avatar-color, var(--text-secondary));
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -8840,4 +8841,10 @@
   stroke: var(--text-muted);
   stroke-width: 2;
   fill: none;
+}
+
+/* Initials take the member's hue; on light surfaces the pastel is mixed
+   toward ink so the letters stay readable. */
+:root[data-theme="light"] .community-context-member-avatar {
+  color: color-mix(in srgb, var(--member-avatar-color, var(--text-secondary)) 45%, var(--text-primary));
 }
