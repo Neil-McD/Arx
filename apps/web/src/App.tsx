@@ -1694,6 +1694,7 @@ export default function App() {
     mobileRootPage,
     mobileSettingsView,
     isPublicCommunityFunnel,
+    isPublicFind: !session && activePage === "discover",
   });
   const {
     isGlobalSettings,

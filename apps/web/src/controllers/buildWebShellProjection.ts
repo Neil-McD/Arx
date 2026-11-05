@@ -29,6 +29,8 @@ export function buildWebShellProjection(params: {
   mobileRootPage: "agent" | "community" | "messages";
   mobileSettingsView: MobileSettingsView;
   isPublicCommunityFunnel: boolean;
+  /** Signed-out /discover: the public Find page owns the canvas like the landing. */
+  isPublicFind?: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
   const isGlobalSettings =
@@ -38,7 +40,7 @@ export function buildWebShellProjection(params: {
   const isLandingPage =
     isAppRoute && params.destination.kind === "platform_entry";
   const isOperatorPage = isAppRoute && params.destination.kind === "operator";
-  const isPublicAppPage = isLandingPage;
+  const isPublicAppPage = isLandingPage || Boolean(params.isPublicFind && isAppRoute);
   const isCommunityAppDestination = isWebCommunityAppDestination(
     params.destination,
   );
