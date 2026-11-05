@@ -678,12 +678,12 @@ assert.doesNotMatch(
   /\.status\.canceled\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
   /\.status\.failed\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
   /\.action-error\s*\{[\s\S]*?color:\s*var\(--danger-text\);[\s\S]*?border:\s*1px solid var\(--danger-border\);[\s\S]*?background:\s*var\(--danger-surface\);/,
-  /\.settings-section\s*\{[\s\S]*?border-bottom:\s*1px solid rgba\(255,\s*255,\s*255,\s*0\.05\);/,
+  /\.settings-section\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-muted\);/,
 ].forEach((legacyRule) => {
   assert.match(
     baseCss,
     legacyRule,
-    "dark-theme component danger states must consume the danger tokens",
+    "dark-theme component states must consume the danger and border tokens",
   );
 });
 [

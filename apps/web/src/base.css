@@ -105,6 +105,7 @@
 
   /* Overlays */
   --hover-overlay: rgba(255, 255, 255, 0.06);
+  --surface-subtle: rgba(255, 255, 255, 0.04);
   --active-overlay: rgba(255, 255, 255, 0.1);
 
   /* No panel shadows */
@@ -246,6 +247,7 @@
   --icon-hover: #0B0B0C;
   --icon-active: #0B0B0C;
   --hover-overlay: rgba(11, 11, 12, 0.04);
+  --surface-subtle: rgba(11, 11, 12, 0.03);
   --active-overlay: rgba(11, 11, 12, 0.07);
   --panel-shadow: none;
 
