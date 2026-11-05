@@ -577,7 +577,7 @@ assert.doesNotMatch(
   "theme family must not survive as a second styling authority",
 );
 assert.match(indexHtml, /<meta name="theme-color" content="#08090A"/);
-assert.match(indexHtml, /manifest\.webmanifest\?v=20260811a/);
+assert.match(indexHtml, /manifest\.webmanifest\?v=20261105a/);
 assert.match(manifest, /"start_url": "\/m\?launch=app"/);
 assert.match(manifest, /"background_color": "#08090A"/);
 assert.match(manifest, /"theme_color": "#08090A"/);
