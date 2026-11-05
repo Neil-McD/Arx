@@ -60,6 +60,7 @@
     "check:member-ontology-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_ontology_contract_proof.ts",
     "check:member-entry-destination-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_entry_destination_contract_proof.ts",
     "check:global-settings-surface-contract": "tsx scripts/global_settings_surface_contract_proof.ts",
+    "check:studio-colour-token-guard": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/studio_colour_token_guard_proof.ts",
     "check:app-theme-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_theme_contract_proof.ts",
     "check:workspace-account-lifecycle-retirement-contract": "tsx scripts/workspace_account_lifecycle_retirement_contract_proof.ts",
     "check:workspace-surface-extinction-contract": "tsx scripts/workspace_surface_extinction_contract_proof.ts",

@@ -422,6 +422,13 @@ async function main() {
     );
 
     await runStep(
+      "studio_colour_token_guard",
+      "Studio colour token guard",
+      "npm run check:studio-colour-token-guard",
+      () => runCommand("npm", ["run", "check:studio-colour-token-guard"]),
+    );
+
+    await runStep(
       "loading_correctness",
       "Account-scoped loading, profile drafts, and avatar transitions",
       "npm run check:loading-correctness",
