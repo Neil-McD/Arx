@@ -863,8 +863,8 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.community-agent-dock-error \{[\s\S]*?color: #e8b4c4;[\s\S]*?background: rgba\(214, 106, 138, 0\.1\);[\s\S]*?border-left: 2px solid var\(--accent-gold\);/,
-  "Dark must retain the dock error's exact legacy treatment",
+  /\.community-agent-dock-error \{[\s\S]*?color: var\(--text-secondary\);[\s\S]*?background: var\(--surface-selected\);[\s\S]*?border-left: 2px solid var\(--accent-gold\);/,
+  "Dark dock errors must use the neutral surface and text tokens",
 );
 assert.match(
   styles,

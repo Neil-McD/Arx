@@ -302,8 +302,8 @@
 .community-agent-dock-error {
   margin: 12px 0 0;
   padding: 9px 10px;
-  color: #e8b4c4;
-  background: rgba(214, 106, 138, 0.1);
+  color: var(--text-secondary);
+  background: var(--surface-selected);
   border-left: 2px solid var(--accent-gold);
   font-size: 12px;
   line-height: 1.45;

@@ -488,7 +488,7 @@ body {
   aspect-ratio: 2.84 / 1;
   border-radius: 12px;
   background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.12), transparent 60%),
-    linear-gradient(140deg, rgba(201, 169, 98, 0.2), rgba(110, 212, 216, 0.18));
+    linear-gradient(140deg, var(--surface-selected), var(--surface-selected));
   overflow: hidden;
   display: flex;
   align-items: flex-end;
@@ -691,7 +691,7 @@ body {
 
 .community-channel-reorder-error {
   padding: 4px 8px 6px;
-  color: var(--accent-danger, #ef6a72);
+  color: var(--accent-danger, var(--danger-text));
   font-size: 11px;
   line-height: 1.35;
 }
@@ -703,9 +703,9 @@ body {
 }
 
 .community-channel-modal-actions button.is-danger {
-  color: var(--accent-danger, #ef6a72);
-  border-color: color-mix(in srgb, var(--accent-danger, #ef6a72) 48%, transparent);
-  background: color-mix(in srgb, var(--accent-danger, #ef6a72) 12%, transparent);
+  color: var(--accent-danger, var(--danger-text));
+  border-color: color-mix(in srgb, var(--accent-danger, var(--danger-border)) 48%, transparent);
+  background: color-mix(in srgb, var(--accent-danger, var(--accent-error)) 12%, transparent);
 }
 
 .community-channel-loading {
@@ -833,7 +833,7 @@ body {
 
 .community-channel-modal-error {
   margin-top: 10px;
-  color: var(--accent-danger, #ef6a72);
+  color: var(--accent-danger, var(--danger-text));
   font-size: 12px;
 }
 
@@ -1015,12 +1015,12 @@ body {
 
 .community-nav-invite.is-copied {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-success, #45d483) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent-success, #45d483) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-success, var(--accent-success)) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-success, color-mix(in srgb, var(--accent-success) 40%, transparent)) 34%, transparent);
 }
 
 .community-nav-invite.is-copied .nav-icon {
-  color: var(--accent-success, #45d483);
+  color: var(--accent-success, var(--accent-success));
 }
 
 .workspace.community-mode {

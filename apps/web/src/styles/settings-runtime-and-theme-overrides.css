@@ -300,11 +300,11 @@
 }
 
 .resource-changeset-icon-action.approve {
-  color: var(--accent-success, #66b786);
+  color: var(--accent-success, var(--accent-success));
 }
 
 .resource-changeset-icon-action.reject {
-  color: var(--accent-error, #c75a4a);
+  color: var(--accent-error, var(--danger-text));
 }
 
 .resource-changeset-preview-list {
@@ -363,7 +363,7 @@
 }
 
 .resource-changeset-card-error {
-  color: var(--accent-error, #c75a4a);
+  color: var(--accent-error, var(--danger-text));
 }
 
 .streaming-thinking-footer {
@@ -663,7 +663,7 @@
 
 .chat-link,
 .md-link {
-  color: var(--text-link, var(--accent-gold, #c9a962));
+  color: var(--text-link, var(--accent-gold));
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--text-link, var(--accent-gold)) 45%, transparent);
   text-underline-offset: 2px;
@@ -1190,13 +1190,13 @@
 }
 
 .status.canceled {
-  background: rgba(210, 80, 80, 0.25);
-  color: #f1a3a3;
+  background: var(--danger-surface);
+  color: var(--danger-text);
 }
 
 .status.failed {
-  background: rgba(210, 80, 80, 0.25);
-  color: #f1a3a3;
+  background: var(--danger-surface);
+  color: var(--danger-text);
 }
 
 .diff-copy {
@@ -1213,10 +1213,10 @@
 }
 
 .action-error {
-  color: #f1a3a3;
+  color: var(--danger-text);
   font-size: 12px;
-  border: 1px solid rgba(210, 80, 80, 0.35);
-  background: rgba(210, 80, 80, 0.12);
+  border: 1px solid var(--danger-border);
+  background: var(--danger-surface);
   padding: 6px 8px;
   border-radius: 6px;
 }
@@ -1444,10 +1444,10 @@
 
 .settings-panel button.danger {
   cursor: pointer;
-  border: 1px solid rgba(210, 80, 80, 0.35);
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
-  background: rgba(210, 80, 80, 0.12);
-  color: #f1a3a3;
+  background: var(--danger-surface);
+  color: var(--danger-text);
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -1455,8 +1455,8 @@
 }
 
 .settings-panel button.danger:hover:not(:disabled) {
-  border-color: rgba(210, 80, 80, 0.55);
-  background: rgba(210, 80, 80, 0.18);
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
 }
 
 .delete-community-btn {
@@ -1959,7 +1959,7 @@
 
 .key-error {
   font-size: 12px;
-  color: var(--accent-error, #c75a4a);
+  color: var(--accent-error, var(--danger-text));
   margin-top: 8px;
 }
 
@@ -2377,7 +2377,7 @@
 }
 
 .web-social-profile-modal-error {
-  color: var(--accent-error, #c75a4a);
+  color: var(--accent-error, var(--danger-text));
   font-size: 12px;
   font-weight: 650;
 }
@@ -2440,10 +2440,10 @@
 .billing-settings-error {
   margin-top: 16px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, #ff8a7a 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger-border) 24%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, #ff6b5a 9%, transparent);
-  color: #ffb8ad;
+  background: color-mix(in srgb, var(--accent-error) 9%, transparent);
+  color: var(--danger-text);
   line-height: 1.45;
 }
 
@@ -2511,7 +2511,7 @@
 
 .auth-error {
   font-size: 12px;
-  color: #b64b3a;
+  color: var(--danger-text);
 }
 
 .create-community-modal {
@@ -3680,14 +3680,14 @@ button.settings-primary-action svg {
 }
 
 .create-community-actions .danger {
-  border-color: rgba(210, 80, 80, 0.65);
-  background: rgba(210, 80, 80, 0.12);
-  color: #f1a3a3;
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
+  color: var(--danger-text);
 }
 
 .create-community-actions .danger:hover:not(:disabled) {
-  border-color: rgba(210, 80, 80, 0.85);
-  background: rgba(210, 80, 80, 0.18);
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
 }
 
 .select-styled {
@@ -4941,7 +4941,7 @@ button.settings-primary-action svg {
 
 .operator-platform-health-card.is-healthy {
   --operator-health-color: #58d98b;
-  border-color: color-mix(in srgb, #37d67a 24%, var(--border-default));
+  border-color: color-mix(in srgb, color-mix(in srgb, var(--accent-success) 40%, transparent) 24%, var(--border-default));
 }
 
 .operator-platform-health-card.is-degraded {

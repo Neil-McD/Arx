@@ -239,7 +239,7 @@
   z-index: 1;
   height: clamp(96px, 18vw, 140px);
   background: radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.12), transparent 60%),
-    linear-gradient(120deg, rgba(201, 169, 98, 0.25), rgba(110, 212, 216, 0.2));
+    linear-gradient(120deg, var(--surface-selected), var(--surface-selected));
   background-size: cover;
   background-position: center;
   overflow: hidden;
@@ -344,7 +344,7 @@
 
 .discover-price-amount,
 .discover-price-free {
-  color: #8fe3b1;
+  color: var(--accent-success);
 }
 
 .discover-price-free {
@@ -1221,7 +1221,7 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #3fb950;
+  background: var(--accent-success);
   border: 2px solid color-mix(in srgb, var(--bg-workspace) 88%, var(--bg-card) 12%);
 }
 
@@ -1594,7 +1594,7 @@
 }
 
 .community-channel-header-menu button.is-danger {
-  color: var(--accent-danger, #ef6a72);
+  color: var(--accent-danger, var(--danger-text));
 }
 
 .community-channel-header-menu-system-note {
@@ -1786,7 +1786,7 @@
   flex: 0 0 auto;
   padding: 5px 18px;
   border-bottom: 1px solid var(--border-default);
-  color: var(--accent-danger, #ef6a72);
+  color: var(--accent-danger, var(--danger-text));
   font-size: 11px;
 }
 
@@ -1886,9 +1886,9 @@
   gap: 12px;
   margin: 0 14px 10px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, #d96aa2 34%, var(--border-default) 66%);
+  border: 1px solid color-mix(in srgb, var(--stroke-default) 34%, var(--border-default) 66%);
   border-radius: 8px;
-  background: color-mix(in srgb, #d96aa2 12%, var(--bg-card-solid, var(--bg-card)) 88%);
+  background: color-mix(in srgb, var(--surface-selected) 12%, var(--bg-card-solid, var(--bg-card)) 88%);
   color: var(--text-primary);
 }
 
@@ -1922,8 +1922,8 @@
 
 .community-agent-serve-notice-primary,
 .community-agent-serve-notice-dismiss {
-  border: 1px solid color-mix(in srgb, #d96aa2 42%, var(--border-default) 58%);
-  background: color-mix(in srgb, #d96aa2 18%, transparent 82%);
+  border: 1px solid color-mix(in srgb, var(--stroke-default) 42%, var(--border-default) 58%);
+  background: color-mix(in srgb, var(--surface-selected) 18%, transparent 82%);
   color: var(--text-primary);
   border-radius: 8px;
 }
@@ -3005,7 +3005,7 @@
 
 .community-interaction-message.is-pending-failed,
 .community-interaction-reply.is-pending-failed {
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--danger, #e24b4a) 10%);
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--danger, var(--accent-error)) 10%);
 }
 
 .community-interaction-pending-status {
@@ -3018,7 +3018,7 @@
 }
 
 .community-interaction-pending-status.is-failed {
-  color: var(--danger, #e24b4a);
+  color: var(--danger, var(--danger-text));
 }
 
 .community-interaction-pending-status button {
@@ -3054,7 +3054,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #3fbf7f;
+  background: var(--accent-success);
   border: 2px solid color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
   pointer-events: none;
 }
@@ -3347,12 +3347,12 @@
 }
 
 .community-interaction-overflow-item.is-danger {
-  color: #e5666b;
+  color: var(--danger-text);
 }
 
 .community-interaction-overflow-item.is-danger:hover {
-  background: color-mix(in srgb, #e5666b 14%, transparent);
-  color: #ef8a8e;
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+  color: var(--danger-text);
 }
 
 .community-interaction-edit {
@@ -3918,14 +3918,14 @@
 }
 
 .community-dm-attachment-drop-surface.drag-over {
-  outline: 1px dashed color-mix(in srgb, var(--accent-primary, #ff3b93) 68%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--accent-primary, var(--stroke-default)) 68%, transparent);
   outline-offset: -8px;
 }
 
 .community-dm-drop-overlay {
   z-index: 5;
   border-radius: 18px;
-  background: color-mix(in srgb, var(--accent-primary, #ff3b93) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, var(--surface-selected)) 12%, transparent);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
 }
@@ -4305,7 +4305,7 @@
 }
 
 .community-dm-panel-context.is-presence.is-active-now {
-  color: #34d399;
+  color: var(--accent-success);
 }
 
 .community-dm-panel-menu-wrap {
@@ -4379,12 +4379,12 @@
 }
 
 .community-dm-panel-menu-item.is-confirming {
-  color: #ff8a94;
+  color: var(--danger-text);
 }
 
 .community-dm-panel-menu-item.is-confirming:hover {
-  color: #ff8a94;
-  background: color-mix(in srgb, #ff5f6d 14%, transparent);
+  color: var(--danger-text);
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
 }
 
 .community-dm-panel-blocked-notice {
@@ -4430,7 +4430,7 @@
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: #ff8a94;
+  color: var(--danger-text);
 }
 
 .community-dm-panel-message-send-failed button {
@@ -4463,10 +4463,10 @@
 
 .community-dm-panel-error {
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, #ff5f6d 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger-border) 40%, transparent);
   border-radius: 12px;
-  color: color-mix(in srgb, #ff7a84 70%, var(--text-primary) 30%);
-  background: color-mix(in srgb, #ff5f6d 9%, transparent);
+  color: color-mix(in srgb, var(--danger-text) 70%, var(--text-primary) 30%);
+  background: color-mix(in srgb, var(--accent-error) 9%, transparent);
   font-size: 12px;
   line-height: 1.3;
 }
@@ -4501,7 +4501,7 @@
 }
 
 .community-dm-composer-media-item.is-failed {
-  outline: 1px solid color-mix(in srgb, #ff5f6d 62%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--danger-border) 62%, transparent);
   outline-offset: -1px;
 }
 
@@ -4539,12 +4539,12 @@
 }
 
 .community-dm-attachment-item.is-failed {
-  border-color: color-mix(in srgb, #ff5f6d 52%, transparent);
-  background: color-mix(in srgb, #ff5f6d 8%, transparent);
+  border-color: color-mix(in srgb, var(--danger-border) 52%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 8%, transparent);
 }
 
 .community-dm-attachment-item.is-failed .community-dm-attachment-state {
-  color: color-mix(in srgb, #ff7a84 78%, var(--text-primary) 22%);
+  color: color-mix(in srgb, var(--danger-text) 78%, var(--text-primary) 22%);
 }
 
 .community-dm-attachment-retry {
@@ -4564,7 +4564,7 @@
 
 .community-dm-attachment-retry:hover {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-primary, #ff3b93) 46%, transparent);
+  border-color: color-mix(in srgb, var(--accent-primary, var(--stroke-default)) 46%, transparent);
 }
 
 .community-dm-attachment-retry svg {
@@ -4820,7 +4820,7 @@
 }
 
 .community-dm-inbox-presence-dot.is-active-now {
-  background: #34d399;
+  background: var(--accent-success);
 }
 
 .community-dm-inbox-row-go {
@@ -5346,7 +5346,7 @@
 }
 
 .chat-media-grid.community-dm-media-grid .chat-media-item:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent-primary, #ff3b93) 70%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent-primary, var(--stroke-default)) 70%, transparent);
   outline-offset: 2px;
 }
 
@@ -6033,8 +6033,8 @@
 
 .resource-delete-confirm-fields input:focus {
   outline: none;
-  border-color: color-mix(in srgb, #f97316 58%, var(--border-default));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f97316 24%, transparent);
+  border-color: color-mix(in srgb, var(--danger-border) 58%, var(--border-default));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger-border) 24%, transparent);
 }
 
 .resource-delete-confirm-fields input:disabled {
@@ -6046,17 +6046,17 @@
   min-height: 40px;
   padding: 0 18px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, #f97316 44%, var(--border-default));
-  background: color-mix(in srgb, #f97316 12%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--danger-border) 44%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-error) 12%, var(--bg-card));
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f97316 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger-border) 12%, transparent);
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .resource-delete-confirm:hover:not(:disabled) {
-  border-color: color-mix(in srgb, #fb923c 70%, var(--border-default));
-  background: color-mix(in srgb, #f97316 16%, var(--bg-card));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fb923c 18%, transparent);
+  border-color: color-mix(in srgb, var(--danger-border) 70%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-error) 16%, var(--bg-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger-border) 18%, transparent);
 }
 
 .resource-delete-confirm:disabled {
@@ -6161,14 +6161,14 @@
 }
 
 .resource-modal-actions .secondary.danger {
-  color: color-mix(in srgb, #f97316 68%, var(--text-primary));
-  border-color: color-mix(in srgb, #f97316 28%, var(--border-default));
+  color: color-mix(in srgb, var(--danger-text) 68%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--danger-border) 28%, var(--border-default));
   margin-right: auto;
 }
 
 .resource-modal-actions .secondary.danger:hover:not(:disabled) {
-  color: color-mix(in srgb, #fb923c 80%, var(--text-primary));
-  border-color: color-mix(in srgb, #fb923c 44%, var(--border-strong));
+  color: color-mix(in srgb, var(--danger-text) 80%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--danger-border) 44%, var(--border-strong));
 }
 
 .resource-modal-actions .secondary:disabled {
@@ -6326,12 +6326,12 @@
 }
 
 .web-floating-menu-item.danger {
-  color: color-mix(in srgb, #f97316 72%, var(--text-primary));
+  color: color-mix(in srgb, var(--danger-text) 72%, var(--text-primary));
 }
 
 .web-floating-menu-item.danger:hover {
-  background: color-mix(in srgb, #f97316 12%, transparent);
-  color: color-mix(in srgb, #fb923c 82%, var(--text-primary));
+  background: color-mix(in srgb, var(--accent-error) 12%, transparent);
+  color: color-mix(in srgb, var(--danger-text) 82%, var(--text-primary));
 }
 
 .web-floating-menu-item svg {
@@ -6718,11 +6718,11 @@
 }
 
 .knowledge-source-intake-feedback.is-success {
-  color: color-mix(in srgb, #34d399 76%, var(--text-primary));
+  color: color-mix(in srgb, var(--accent-success) 76%, var(--text-primary));
 }
 
 .knowledge-source-intake-feedback.is-error {
-  color: color-mix(in srgb, #fb7185 76%, var(--text-primary));
+  color: color-mix(in srgb, var(--danger-text) 76%, var(--text-primary));
 }
 
 .knowledge-source-intake-actions {
@@ -6823,11 +6823,11 @@
 }
 
 .builder-knowledge-setup-status.is-ready {
-  color: color-mix(in srgb, #34d399 76%, var(--text-primary));
+  color: color-mix(in srgb, var(--accent-success) 76%, var(--text-primary));
 }
 
 .builder-knowledge-setup-error {
-  color: color-mix(in srgb, #fb7185 76%, var(--text-primary));
+  color: color-mix(in srgb, var(--danger-text) 76%, var(--text-primary));
 }
 
 .builder-knowledge-setup-actions {
@@ -7250,7 +7250,7 @@
 }
 
 .resource-course-card-menu-popover button.danger {
-  color: color-mix(in srgb, #fb7185 78%, var(--text-primary));
+  color: color-mix(in srgb, var(--danger-text) 78%, var(--text-primary));
 }
 
 .resource-course-card-menu-popover svg {
@@ -8108,9 +8108,9 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: #e08a8a;
+  color: var(--danger-text);
   background: transparent;
-  border: 1px solid rgba(200, 70, 80, 0.35);
+  border: 1px solid var(--danger-border);
   border-radius: 8px;
   padding: 9px;
   cursor: pointer;
@@ -8120,8 +8120,8 @@
 }
 
 .member-settings-danger-btn:hover:not(:disabled) {
-  background: rgba(200, 70, 80, 0.12);
-  border-color: rgba(200, 70, 80, 0.5);
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
 }
 
 .member-settings-danger-btn:disabled {
@@ -8243,9 +8243,9 @@
 }
 
 @keyframes community-polynet-retained {
-  0% { filter: drop-shadow(0 0 0 rgba(236, 72, 153, 0)); }
-  35% { filter: drop-shadow(0 0 10px rgba(236, 72, 153, 0.72)); }
-  100% { filter: drop-shadow(0 0 0 rgba(236, 72, 153, 0)); }
+  0% { filter: drop-shadow(0 0 0 var(--text-secondary)); }
+  35% { filter: drop-shadow(0 0 10px var(--text-secondary)); }
+  100% { filter: drop-shadow(0 0 0 var(--text-secondary)); }
 }
 
 @keyframes community-polynet-refresh-spin {
@@ -8296,7 +8296,7 @@
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  color: var(--text-default);
+  color: var(--text-primary);
 }
 
 .mention-autocomplete-row.is-active {
@@ -8469,9 +8469,9 @@
 }
 
 .ask-icon-btn.ask-mic.recording {
-  background: color-mix(in srgb, #ef4444 20%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 20%, transparent);
   color: #ffe8e8;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ef4444 35%, transparent), 0 6px 18px rgba(239, 68, 68, 0.22);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger-border) 35%, transparent), 0 6px 18px var(--danger-border);
 }
 
 .ask-icon-btn.ask-mic.recording .ask-mic-icon {
@@ -8479,7 +8479,7 @@
 }
 
 .ask-icon-btn.ask-mic.recording .ask-mic-ripple {
-  border-color: color-mix(in srgb, #ef4444 45%, transparent);
+  border-color: color-mix(in srgb, var(--danger-border) 45%, transparent);
   animation: voice-mic-ring 1.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 

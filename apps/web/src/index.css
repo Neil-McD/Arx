@@ -522,9 +522,9 @@
 }
 
 .ask-icon-btn.ask-mic.recording {
-  background: color-mix(in srgb, #ef4444 20%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 20%, transparent);
   color: #ffe8e8;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ef4444 35%, transparent), 0 6px 18px rgba(239, 68, 68, 0.22);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger-border) 35%, transparent), 0 6px 18px var(--danger-border);
 }
 
 .ask-icon-btn.ask-mic.recording .ask-mic-icon {
@@ -532,7 +532,7 @@
 }
 
 .ask-icon-btn.ask-mic.recording .ask-mic-ripple {
-  border-color: color-mix(in srgb, #ef4444 45%, transparent);
+  border-color: color-mix(in srgb, var(--danger-border) 45%, transparent);
   animation: voice-mic-ring 1.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 

@@ -109,7 +109,7 @@ assert.match(
 );
 assert.match(
   settingsStyles,
-  /\.settings-panel button\.danger[\s\S]*border: 1px solid rgba\(210, 80, 80, 0\.35\)[\s\S]*padding: 10px 16px/,
+  /\.settings-panel button\.danger[\s\S]*border: 1px solid var\(--danger-border\)[\s\S]*padding: 10px 16px/,
 );
 
 assert.match(offerController, /startCheckout\(community\.community_id\)/);

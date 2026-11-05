@@ -58,6 +58,12 @@
   --accent-rose: var(--accent-brand);
   --accent-success: #34d399;
   --accent-error: #ef4444;
+  --accent: var(--accent-gold);
+  --border-subtle: var(--border-muted);
+  --danger-text: #f87171;
+  --danger-surface: rgba(239, 68, 68, 0.12);
+  --danger-border: rgba(239, 68, 68, 0.42);
+  --success-surface: rgba(52, 211, 153, 0.12);
   --accent-red: var(--accent-error);
   --accent-green: var(--accent-success);
 
@@ -213,6 +219,10 @@
   /* Functional feedback stays semantically distinct from the brand palette. */
   --accent-success: #147A4B;
   --accent-error: #B42318;
+  --danger-text: #B42318;
+  --danger-surface: rgba(180, 35, 24, 0.08);
+  --danger-border: rgba(180, 35, 24, 0.32);
+  --success-surface: rgba(20, 122, 75, 0.1);
 
   /* === TYPOGRAPHY: Accessible ink === */
   --text-primary: #171719;

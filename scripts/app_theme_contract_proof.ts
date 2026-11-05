@@ -673,15 +673,15 @@ assert.doesNotMatch(
 );
 
 [
-  /\.status\.canceled\s*\{[\s\S]*?background:\s*rgba\(210,\s*80,\s*80,\s*0\.25\);[\s\S]*?color:\s*#f1a3a3;/,
-  /\.status\.failed\s*\{[\s\S]*?background:\s*rgba\(210,\s*80,\s*80,\s*0\.25\);[\s\S]*?color:\s*#f1a3a3;/,
-  /\.action-error\s*\{[\s\S]*?color:\s*#f1a3a3;[\s\S]*?border:\s*1px solid rgba\(210,\s*80,\s*80,\s*0\.35\);[\s\S]*?background:\s*rgba\(210,\s*80,\s*80,\s*0\.12\);/,
+  /\.status\.canceled\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
+  /\.status\.failed\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
+  /\.action-error\s*\{[\s\S]*?color:\s*var\(--danger-text\);[\s\S]*?border:\s*1px solid var\(--danger-border\);[\s\S]*?background:\s*var\(--danger-surface\);/,
   /\.settings-section\s*\{[\s\S]*?border-bottom:\s*1px solid rgba\(255,\s*255,\s*255,\s*0\.05\);/,
 ].forEach((legacyRule) => {
   assert.match(
     baseCss,
     legacyRule,
-    "existing dark-theme component values must remain on their legacy baseline",
+    "dark-theme component danger states must consume the danger tokens",
   );
 });
 [
@@ -714,7 +714,7 @@ assert.match(
 );
 
 [
-  /\.ask-icon-btn\.ask-mic\.recording\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*#ef4444 20%,\s*transparent\);[\s\S]*?color:\s*#ffe8e8;/,
+  /\.ask-icon-btn\.ask-mic\.recording\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-error\) 20%,\s*transparent\);[\s\S]*?color:\s*#ffe8e8;/,
 ].forEach((legacyRule) => {
   assert.match(
     baseCss,
@@ -749,8 +749,8 @@ assert.match(
 );
 assert.match(
   communityAgentCss,
-  /\.community-agent-dock-error\s*\{[\s\S]*?color:\s*#e8b4c4;[\s\S]*?background:\s*rgba\(214,\s*106,\s*138,\s*0\.1\);[\s\S]*?border-left:\s*2px solid var\(--accent-gold\);/,
-  "existing dark-theme dock errors must retain their exact legacy treatment",
+  /\.community-agent-dock-error\s*\{[\s\S]*?color:\s*var\(--text-secondary\);[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-left:\s*2px solid var\(--accent-gold\);/,
+  "dark-theme dock errors must use the neutral surface and text tokens",
 );
 
 assert.match(
