@@ -1,6 +1,3 @@
-import {
-  readPendingPurchaseClaimToken,
-} from "../../../../shared/pay_first";
 import type {
   CommunityBillingPeriod,
 } from "../../../../shared/communityTypes";
@@ -19,9 +16,6 @@ type PublicCommunityAccess = {
 };
 
 export function useWebPublicFunnelEntryController(params: {
-  checkoutClaimToken: string | null;
-  publicRouteClaimToken: string | null;
-  manualClaimToken: string;
   publicCommunity: PublicCommunity | null;
   publicCommunityAccess: PublicCommunityAccess | null;
   canEnterCommunity: boolean;
@@ -37,7 +31,6 @@ export function useWebPublicFunnelEntryController(params: {
     communityId: string;
     communitySlug: string | null;
   }) => void;
-  redeemPurchaseClaim: (token: string) => Promise<unknown>;
   startCheckoutForPlan: (
     communitySlug: string,
     billingPeriod: CommunityBillingPeriod,
@@ -46,19 +39,8 @@ export function useWebPublicFunnelEntryController(params: {
   joinPublicCommunity: (value: {
     communitySlug: string;
   }) => Promise<unknown>;
-  requireSignIn: (intent: {
-    reason: "redeem_purchase_claim";
-    payload: { token: string };
-  }) => void;
   cancelPendingJoinRequest: (communitySlug: string) => Promise<unknown>;
 }) {
-  const pendingToken =
-    (
-      params.checkoutClaimToken ??
-      params.publicRouteClaimToken ??
-      ""
-    ).trim() || readPendingPurchaseClaimToken();
-
   const handlePrimaryAction = () => {
     if (!params.publicCommunity) return;
     if (
@@ -72,12 +54,6 @@ export function useWebPublicFunnelEntryController(params: {
       return;
     }
 
-    // Redeem an existing receipt before considering another checkout.
-    const unredeemedClaimToken = readPendingPurchaseClaimToken();
-    if (unredeemedClaimToken) {
-      void params.redeemPurchaseClaim(unredeemedClaimToken);
-      return;
-    }
     if (params.canJoinWithCheckout && params.selectedPlan) {
       const fallbackPath =
         `/c/${encodeURIComponent(params.publicCommunity.slug)}`;
@@ -99,23 +75,6 @@ export function useWebPublicFunnelEntryController(params: {
     });
   };
 
-  const handleCheckoutContinue = () => {
-    if (!pendingToken) return;
-    if (params.showPublicSignIn) {
-      params.requireSignIn({
-        reason: "redeem_purchase_claim",
-        payload: { token: pendingToken },
-      });
-      return;
-    }
-    void params.redeemPurchaseClaim(pendingToken);
-  };
-
-  const handleClaimContinue = () => {
-    const token = (pendingToken || params.manualClaimToken).trim();
-    if (token) void params.redeemPurchaseClaim(token);
-  };
-
   const handleCancelPendingJoinRequest = () => {
     const slug =
       params.publicCommunity?.slug ??
@@ -126,10 +85,7 @@ export function useWebPublicFunnelEntryController(params: {
   };
 
   return {
-    pendingToken,
     handlePrimaryAction,
-    handleCheckoutContinue,
-    handleClaimContinue,
     handleCancelPendingJoinRequest,
   };
 }

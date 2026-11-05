@@ -12,7 +12,6 @@ const PARTS = ["resolveCommunityMembershipEntitlementState", "communityUserIsBlo
 const ALLOWED = new Map<string, string>([
   ["convex/communityCore.ts", "the lens itself, and requireCommunityUserNotBlocked"],
   ["convex/communityBuilderAccessCore.ts", "the can-run decision the lens reads"],
-  ["convex/communityCommerce.ts", "checkout refuses a blocked buyer before any membership exists"],
   ["convex/communityPublic.ts", "Discover lists only communities that can run; no person involved"],
   ["convex/communityAppJoin.ts", "the join page says whether the community can run, to anyone (signed out too); a person's access comes from the lens"],
 ]);

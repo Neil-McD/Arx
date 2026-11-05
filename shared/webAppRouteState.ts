@@ -13,8 +13,7 @@ import {
 export type PublicRoute =
   | { kind: "app" }
   | { kind: "community_funnel"; slug: string }
-  | { kind: "checkout_success"; sessionId: string }
-  | { kind: "claim"; token: string };
+  | { kind: "checkout_success"; sessionId: string };
 
 export type AppShellVariant = "standard" | "mobile";
 
@@ -70,8 +69,7 @@ export type WebDestination =
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_workflows"; slug: string }
   | { kind: "community_analytics"; slug: string }
-  | { kind: "checkout_success"; sessionId: string }
-  | { kind: "claim"; token: string };
+  | { kind: "checkout_success"; sessionId: string };
 
 export const DEFAULT_POST_SIGN_IN_PATH = "/";
 export const MOBILE_SHELL_PATH_PREFIX = "/m";
@@ -106,7 +104,7 @@ function joinPathWithQueryAndHash(pathname: string, search: string, hash: string
 
 function isPublicRoutePath(pathname: string): boolean {
   const segments = splitPathSegments(pathname);
-  if (pathname === "/checkout/success" || pathname === "/claim") return true;
+  if (pathname === "/checkout/success") return true;
   if (segments[0] !== "c") return false;
   return segments.length === 2 || (segments.length === 3 && segments[2] === "preview");
 }
@@ -636,8 +634,6 @@ function derivePublicWebDestination(
       return { kind: "community_funnel", slug: route.slug };
     case "checkout_success":
       return { kind: "checkout_success", sessionId: route.sessionId };
-    case "claim":
-      return { kind: "claim", token: route.token };
   }
 }
 
@@ -717,12 +713,6 @@ export function parsePublicRouteFromPath(pathWithSearch: string): PublicRoute {
     return {
       kind: "checkout_success",
       sessionId: normalized.searchParams.get("session_id")?.trim() ?? "",
-    };
-  }
-  if (path === "/claim") {
-    return {
-      kind: "claim",
-      token: normalized.searchParams.get("token")?.trim() ?? "",
     };
   }
   const segments = splitPathSegments(path);

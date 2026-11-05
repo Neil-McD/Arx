@@ -67,17 +67,15 @@ assert.ok(
   "expected module-load recovery target to use sanitized route labels",
 );
 
+// Purchase claim tokens are retired: the browser keeps none, and Stripe's
+// verified notice grants membership from the checkout itself.
 assert.ok(
-  payFirstSource.includes("PENDING_PURCHASE_CLAIM_TOKEN_TTL_MS"),
-  "expected pending purchase claim token storage to define a TTL",
+  !payFirstSource.includes("arx_pending_purchase_claim_token"),
+  "the browser no longer stores purchase claim tokens",
 );
 assert.ok(
-  payFirstSource.includes("expires_at"),
-  "expected pending purchase claim token storage to persist an expiry",
-);
-assert.ok(
-  payFirstSource.includes("clearPendingPurchaseClaimToken();"),
-  "expected expired pending purchase claim tokens to be cleared",
+  !communityCommerceSource.includes("claim_token:"),
+  "community checkouts no longer put a claim token in Stripe's metadata",
 );
 
 assert.ok(

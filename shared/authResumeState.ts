@@ -20,16 +20,8 @@ export type PendingAuthIntent =
       payload: { draft: CreateCommunityIntentDraft | null };
     }
   | {
-      reason: "redeem_purchase_claim";
-      payload: { token: string };
-    }
-  | {
       reason: "join_public_community";
       payload: { community_id: string | null; community_slug: string | null };
-    }
-  | {
-      reason: "redeem_pending_purchases";
-      payload: { navigate: boolean; silent_noop: boolean };
     }
   | {
       reason: "resume_builder_checkout";
@@ -84,25 +76,11 @@ function normalizePendingAuthIntent(
     return { reason, payload: { draft } };
   }
 
-  if (reason === "redeem_purchase_claim") {
-    const token = typeof payload.token === "string" ? payload.token.trim() : "";
-    if (!token) return null;
-    return { reason, payload: { token } };
-  }
-
   if (reason === "join_public_community") {
     const community_id = typeof payload.community_id === "string" ? payload.community_id.trim() || null : null;
     const community_slug = typeof payload.community_slug === "string" ? payload.community_slug.trim() || null : null;
     if (!community_id && !community_slug) return null;
     return { reason, payload: { community_id, community_slug } };
-  }
-
-  if (reason === "redeem_pending_purchases") {
-    const navigate = payload.navigate;
-    const silent_noop = payload.silent_noop;
-    if (typeof navigate !== "boolean") return null;
-    if (typeof silent_noop !== "boolean") return null;
-    return { reason, payload: { navigate, silent_noop } };
   }
 
   if (reason === "resume_builder_checkout") {

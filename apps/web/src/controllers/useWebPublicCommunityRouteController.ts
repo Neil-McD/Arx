@@ -37,7 +37,6 @@ export function useWebPublicCommunityRouteController<
 }) {
   const publicFunnelSlug = params.publicRoute.kind === "community_funnel" ? params.publicRoute.slug : null;
   const checkoutSuccessSessionId = params.publicRoute.kind === "checkout_success" ? params.publicRoute.sessionId : null;
-  const claimTokenParam = params.publicRoute.kind === "claim" ? params.publicRoute.token : null;
   const isPublicCommunityFunnel = params.publicRoute.kind === "community_funnel";
 
   useEffect(() => {
@@ -99,7 +98,6 @@ export function useWebPublicCommunityRouteController<
   return {
     publicFunnelSlug,
     checkoutSuccessSessionId,
-    claimTokenParam,
     isPublicCommunityFunnel,
     showPublicSignIn: !params.isSignedIn,
     selectedPublicCommunityPlan,

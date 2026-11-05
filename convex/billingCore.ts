@@ -57,25 +57,6 @@ export type CommunityMembershipLike = {
   updatedAt: number;
 };
 
-export type PurchaseClaimLike = {
-  _id: any;
-  claimToken: string;
-  communityId: any;
-  billingPeriod?: "monthly" | "annual";
-  pricePointId?: any;
-  amountBaseUnits?: number;
-  currency?: string;
-  currencyDecimals?: number;
-  ownerUserId?: any;
-  status: "pending" | "redeemed" | "expired";
-  sourceSessionId?: string;
-  redeemedByUserId?: any;
-  redeemedAt?: number;
-  expiresAt: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
 export function normalizeBillingPeriod(raw: unknown): "monthly" | "annual" {
   const period = String(raw ?? "")
     .trim()
@@ -115,12 +96,6 @@ export function normalizeSessionId(raw: unknown): string {
   const value = String(raw ?? "").trim();
   if (!value) throw new Error("checkout_session_id_required");
   return value.slice(0, 200);
-}
-
-export function normalizeClaimToken(raw: unknown): string {
-  const value = String(raw ?? "").trim();
-  if (!value) throw new Error("claim_token_required");
-  return value.slice(0, 300);
 }
 
 export function toIsoString(value: number): string {
@@ -357,192 +332,88 @@ export async function resolveCheckoutPricePoint(args: {
   return null;
 }
 
-export async function redeemClaimRow(args: {
+// A paid community checkout becomes membership here, once: called from Stripe's
+// verified notice (never from a return page), for the buyer who started it.
+// The checkout records the moment (membershipGrantedAt); a notice sent again
+// finds it there and changes nothing.
+export async function grantCommunityCheckout(args: {
   ctx: any;
-  claim: PurchaseClaimLike;
-  userId: any;
+  checkoutSession: any;
   nowMs: number;
 }): Promise<{
   communityId: string | null;
   accessGranted: boolean;
   grantMarker: string | null;
 }> {
-  if (args.claim.status !== "pending") {
-    if (args.claim.status === "redeemed" && args.claim.redeemedByUserId === args.userId) {
-      return {
-        communityId: String(args.claim.communityId),
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-    return {
-      communityId: null,
-      accessGranted: false,
-      grantMarker: null,
-    };
-  }
-  if (args.claim.expiresAt <= args.nowMs) {
-    await args.ctx.db.patch(args.claim._id, {
-      status: "expired",
-      updatedAt: args.nowMs,
-    });
-    return {
-      communityId: null,
-      accessGranted: false,
-      grantMarker: null,
-    };
-  }
-  let checkoutSession:
-    | {
-        mode?: string;
-        communityId?: any;
-        claimToken?: string;
-        status?: string;
-        expiresAt?: number;
-        providerAccountId?: string;
-        providerSubscriptionId?: string;
-        providerCustomerId?: string;
-        currentPeriodStartAt?: number;
-        currentPeriodEndAt?: number;
-        communitySubscriptionStatus?:
-          | "active"
-          | "past_due"
-          | "cancel_at_period_end"
-          | "canceled"
-          | "ended";
-        cancelAtPeriodEnd?: boolean;
-        communityLifecycleGeneration?: number;
-      }
-    | null = null;
-  if (args.claim.sourceSessionId) {
-    checkoutSession = await args.ctx.db
-      .query("checkoutSessions" as any)
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.claim.sourceSessionId))
-      .first();
-    if (!checkoutSession) {
-      return {
-        communityId: null,
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-    if (String(checkoutSession.mode ?? "").trim().toLowerCase() !== "community_join") {
-      return {
-        communityId: null,
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-    if (String(checkoutSession.claimToken ?? "").trim() !== args.claim.claimToken) {
-      return {
-        communityId: null,
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-    if (String(checkoutSession.communityId ?? "") !== String(args.claim.communityId)) {
-      return {
-        communityId: null,
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-    if (
-      args.nowMs > Number(checkoutSession.expiresAt ?? 0) ||
-      String(checkoutSession.status ?? "").trim().toLowerCase() !== "complete"
-    ) {
-      return {
-        communityId: null,
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-    const checkoutStatus =
-      normalizeCommunitySubscriptionStatus(checkoutSession.communitySubscriptionStatus ?? "active") ??
-      "active";
-    if (!communitySubscriptionStatusGrantsAccess(checkoutStatus)) {
-      return {
-        communityId: null,
-        accessGranted: false,
-        grantMarker: null,
-      };
-    }
-  }
-  const community = (await args.ctx.db.get(args.claim.communityId)) as CommunityLike | null;
-  if (!community) {
-    return {
-      communityId: null,
-      accessGranted: false,
-      grantMarker: null,
-    };
+  const none = { communityId: null, accessGranted: false, grantMarker: null };
+  const session = args.checkoutSession;
+  const userId = session?.ownerUserId;
+  if (!session || !userId || !session.communityId) return none;
+  if (String(session.mode ?? "").trim().toLowerCase() !== "community_join") return none;
+  if (typeof session.membershipGrantedAt === "number") {
+    return { communityId: String(session.communityId), accessGranted: false, grantMarker: null };
   }
   if (
-    !communityIsActive(community) ||
-    !communityLifecycleGenerationMatches(
-      community,
-      checkoutSession?.communityLifecycleGeneration,
-    )
+    args.nowMs > Number(session.expiresAt ?? 0) ||
+    String(session.status ?? "").trim().toLowerCase() !== "complete"
   ) {
-    return {
-      communityId: null,
-      accessGranted: false,
-      grantMarker: null,
-    };
+    return none;
+  }
+  const checkoutStatus =
+    normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active";
+  if (!communitySubscriptionStatusGrantsAccess(checkoutStatus)) return none;
+  const community = (await args.ctx.db.get(session.communityId)) as CommunityLike | null;
+  if (
+    !community ||
+    !communityIsActive(community) ||
+    !communityLifecycleGenerationMatches(community, session.communityLifecycleGeneration)
+  ) {
+    return none;
   }
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
-    communityId: args.claim.communityId,
-    userId: args.userId,
+    communityId: session.communityId,
+    userId,
   });
   const { membership, accessGranted } = await ensureCommunityMembership({
     ctx: args.ctx,
     community,
-    communityId: args.claim.communityId,
-    userId: args.userId,
-    pricePointId: args.claim.pricePointId,
+    communityId: session.communityId,
+    userId,
+    pricePointId: session.pricePointId,
     nowMs: args.nowMs,
   });
-  if (args.claim.pricePointId && resolveCommunityEntryPolicy(community as any) === "paid_subscription") {
+  if (session.pricePointId && resolveCommunityEntryPolicy(community as any) === "paid_subscription") {
     await createCommunitySubscriptionForMembership({
       ctx: args.ctx,
-      communityId: args.claim.communityId,
+      communityId: session.communityId,
       membershipId: membership._id,
-      userId: args.userId,
-      pricePointId: args.claim.pricePointId,
+      userId,
+      pricePointId: session.pricePointId,
       source: "stripe",
-      providerAccountId: checkoutSession?.providerAccountId ?? null,
-      providerSubscriptionId: checkoutSession?.providerSubscriptionId ?? null,
-      providerCustomerId: checkoutSession?.providerCustomerId ?? null,
-      currentPeriodStartAt: checkoutSession?.currentPeriodStartAt ?? null,
-      currentPeriodEndAt: checkoutSession?.currentPeriodEndAt ?? null,
-      status:
-        normalizeCommunitySubscriptionStatus(checkoutSession?.communitySubscriptionStatus ?? "active") ??
-        "active",
-      cancelAtPeriodEnd: checkoutSession?.cancelAtPeriodEnd ?? false,
+      providerAccountId: session.providerAccountId ?? null,
+      providerSubscriptionId: session.providerSubscriptionId ?? null,
+      providerCustomerId: session.providerCustomerId ?? null,
+      currentPeriodStartAt: session.currentPeriodStartAt ?? null,
+      currentPeriodEndAt: session.currentPeriodEndAt ?? null,
+      status: checkoutStatus,
+      cancelAtPeriodEnd: session.cancelAtPeriodEnd ?? false,
       nowMs: args.nowMs,
     });
   }
-  await args.ctx.db.patch(args.claim._id, {
-    status: "redeemed",
-    redeemedByUserId: args.userId,
-    redeemedAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  const communityId = String(args.claim.communityId);
+  await args.ctx.db.patch(session._id, { membershipGrantedAt: args.nowMs, updatedAt: args.nowMs });
   if (accessGranted) {
     await enqueueCommunityAccessGrantedEmailInternal({
       ctx: args.ctx,
-      userId: args.userId,
-      communityId: args.claim.communityId,
+      userId,
+      communityId: session.communityId,
       grantMarker: `${String(membership._id)}:${membership.updatedAt}`,
       nowMs: args.nowMs,
     });
   }
   return {
-    communityId,
+    communityId: String(session.communityId),
     accessGranted,
-    grantMarker: accessGranted
-      ? `${String(membership._id)}:${membership.updatedAt}`
-      : null,
+    grantMarker: accessGranted ? `${String(membership._id)}:${membership.updatedAt}` : null,
   };
 }

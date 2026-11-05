@@ -10,7 +10,6 @@ import type {
   CloudFounderBillingCommunity,
   CloudFounderBillingOverview,
 } from "../../../../shared/cloudFounderBillingGateway";
-import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 
 type SessionLike = {
   user: {
@@ -29,13 +28,6 @@ export type WebBillingSettingsSectionProps = {
   refreshFounderBilling: () => Promise<unknown> | void;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   onOpenCreateCommunity: () => void;
-  pendingPurchaseClaims: PendingPurchaseClaim[];
-  isLoadingPendingPurchases: boolean;
-  isRedeemingPendingPurchases: boolean;
-  redeemPendingPurchases: () => Promise<void> | void;
-  refreshPendingPurchases: () => Promise<void> | void;
-  pendingPurchasesError: string | null;
-  pendingPurchasesSuccess: string | null;
 };
 
 function runFundingAction(params: {
@@ -169,61 +161,6 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
           ) : null}
         </div>
 
-        {props.session &&
-        (props.isLoadingPendingPurchases ||
-          props.pendingPurchaseClaims.length > 0 ||
-          props.pendingPurchasesError ||
-          props.pendingPurchasesSuccess) ? (
-          <div className="settings-section">
-            <div className="settings-section-title">Member purchase recovery</div>
-            <div className="settings-section-desc">
-              Recover community access if member payment completed before the join flow.
-            </div>
-            {props.isLoadingPendingPurchases ? (
-              <div className="chat-loading">
-                <div className="loading-spinner" />
-                <span>Checking…</span>
-              </div>
-            ) : null}
-            {!props.isLoadingPendingPurchases && props.pendingPurchaseClaims.length > 0 ? (
-              <div className="model-list">
-                {props.pendingPurchaseClaims.map((claim) => (
-                  <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
-                    <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {!props.isLoadingPendingPurchases &&
-            props.pendingPurchaseClaims.length === 0 &&
-            props.pendingPurchasesSuccess ? (
-              <div className="auth-status">{props.pendingPurchasesSuccess}</div>
-            ) : null}
-            <div className="auth-actions">
-              <button
-                className="settings-primary-action"
-                type="button"
-                onClick={() => void props.redeemPendingPurchases()}
-                disabled={
-                  props.isRedeemingPendingPurchases ||
-                  props.isLoadingPendingPurchases ||
-                  props.pendingPurchaseClaims.length === 0
-                }
-              >
-                {props.isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
-              </button>
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => void props.refreshPendingPurchases()}
-                disabled={props.isRedeemingPendingPurchases || props.isLoadingPendingPurchases}
-              >
-                Refresh
-              </button>
-            </div>
-            {props.pendingPurchasesError ? <div className="auth-error">{props.pendingPurchasesError}</div> : null}
-          </div>
-        ) : null}
       </div>
     </>
   );

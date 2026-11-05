@@ -81,7 +81,7 @@ for (const surface of [billing, account]) {
   assert.match(surface, /onOpenBuilderOffer/);
   assert.doesNotMatch(surface, /startCloudFounderSubscriptionCheckout/);
 }
-assert.match(billing, /Member purchase recovery/);
+assert.doesNotMatch(billing, /Member purchase recovery|Claim access/);
 assert.doesNotMatch(billing, /Switch to managed|Managed plan|required managed/i);
 assert.match(account, /The Agent plan is attached to a community, not your account/);
 assert.doesNotMatch(account, /Legacy API funding|Personal AI connection|API key/i);

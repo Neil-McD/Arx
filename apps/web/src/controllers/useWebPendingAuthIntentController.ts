@@ -16,15 +16,10 @@ export function useWebPendingAuthIntentController(params: {
   openCreateCommunity: (
     draft: CreateCommunityIntentDraft | null,
   ) => void;
-  redeemPurchaseClaim: (token: string) => Promise<boolean>;
   joinPublicCommunity: (value: {
     communityId?: string;
     communitySlug?: string;
   }) => Promise<boolean>;
-  redeemPendingPurchases: (value: {
-    navigate: boolean;
-    silentNoop: boolean;
-  }) => Promise<number>;
   resumeBuilderCheckout: () => Promise<boolean>;
   routeTryPolynetFree: (
     session: AuthSession,
@@ -50,17 +45,11 @@ export function useWebPendingAuthIntentController(params: {
           params.openCreateCommunity(payload.draft);
           return true;
         },
-        redeem_purchase_claim: (payload) => params.redeemPurchaseClaim(payload.token),
         join_public_community: (payload) =>
           params.joinPublicCommunity({
             communityId: payload.community_id ?? undefined,
             communitySlug: payload.community_slug ?? undefined,
           }),
-        redeem_pending_purchases: async (payload) =>
-          (await params.redeemPendingPurchases({
-            navigate: payload.navigate,
-            silentNoop: payload.silent_noop,
-          })) >= 0,
         resume_builder_checkout: () => params.resumeBuilderCheckout(),
         try_polynet_free: async () => {
           const outcome = await params.routeTryPolynetFree(params.session as AuthSession);
@@ -77,8 +66,6 @@ export function useWebPendingAuthIntentController(params: {
   }, [
     params.joinPublicCommunity,
     params.openCreateCommunity,
-    params.redeemPendingPurchases,
-    params.redeemPurchaseClaim,
     params.resumeBuilderCheckout,
     params.routeTryPolynetFree,
     params.session,

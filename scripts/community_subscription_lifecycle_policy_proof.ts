@@ -535,18 +535,18 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     billingCore,
-    "if (args.claim.status === \"redeemed\" && args.claim.redeemedByUserId === args.userId)",
-    "claim redemption is idempotent for the same user",
+    "if (typeof session.membershipGrantedAt === \"number\")",
+    "the checkout grant happens once",
   );
   assertIncludes(
     billingCore,
-    "String(checkoutSession.claimToken ?? \"\").trim() !== args.claim.claimToken",
-    "claim redemption validates checkout claim token",
+    "const userId = session?.ownerUserId;",
+    "the checkout grants only to the buyer who started it",
   );
   assertIncludes(
     billingCore,
-    "String(checkoutSession.status ?? \"\").trim().toLowerCase() !== \"complete\"",
-    "claim redemption requires completed checkout session",
+    "String(session.status ?? \"\").trim().toLowerCase() !== \"complete\"",
+    "the checkout grant requires a completed checkout",
   );
   assertIncludes(
     billingCore,
@@ -621,17 +621,17 @@ function assertSourceAnchors() {
   assertIncludes(
     billingCore,
     "await requireCommunityUserNotBlocked({",
-    "claim redemption checks block state",
+    "the checkout grant checks block state",
   );
   assertIncludes(
     communityCommerce,
     "String(session.ownerUserId) !== String(userId)",
-    "finalize checkout binds claim disclosure to checkout owner",
+    "finalize checkout reads only the buyer's own checkout",
   );
   assertIncludes(
     communityCommerce,
-    "String(claim.ownerUserId) !== String(userId)",
-    "claim redemption binds paid claims to checkout owner",
+    "String(session.ownerUserId ?? \"\") !== String(userId)",
+    "the retired redeem confirms only the buyer's own checkout",
   );
 }
 

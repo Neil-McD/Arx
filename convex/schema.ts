@@ -676,6 +676,8 @@ export default defineSchema({
     workspaceCreditsAmount: v.optional(v.number()),
     workspaceCreditsGrantedAt: v.optional(v.number()),
     workspaceCreditsUncollectedPaid: v.optional(v.number()),
+    // community_join: when Stripe's notice made the buyer a member (once).
+    membershipGrantedAt: v.optional(v.number()),
     ownerUserId: v.optional(v.id("users")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     claimToken: v.optional(v.string()),
