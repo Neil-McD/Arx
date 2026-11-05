@@ -397,6 +397,25 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   claim: membership comes only once Stripe's verified webhook has marked the
   checkout complete. A return alone grants nothing. After a minute it offers
   "Check again".
+- **Paid, cash first (Nov 5):** a signed-out visitor is not asked to sign in
+  first. "Join $X" goes straight to the same checkout, started as a guest
+  (`POST /__polynet/me/join/guest-checkout`, no session, forwarded to
+  `/runtime/app/join/checkout`): Stripe collects the email, the checkout and
+  its purchase claim have no owner yet, and the claim token goes back to the
+  edge only, which keeps it in an HttpOnly cookie on the twin, one per
+  checkout (`__Host-polynet_claim_<checkout hex>`, 14 days, so a second tab's
+  checkout never replaces the first's); the page gets Stripe's address and
+  nothing else, and no `__Host-polynet_` cookie ever reaches the founder's
+  site code (the edge strips them all from forwarded requests). Back
+  from Stripe signed out, the page says "Payment received. Sign in to finish
+  joining" and signs in (the normal hop, back to `/join?checkout=<id>`). Then
+  Finish carries the claim from the cookie (the edge drops any `claim_token`
+  the page sends), and the first signed-in member who brings it owns the
+  checkout and its claim (`finishCommunityAppCheckoutInternal`); after that
+  it's that member's like any signed-in checkout, and the cookie is dropped
+  once they've joined. Membership still comes only from the verified webhook.
+  A buyer who closes the tab before signing in has paid with no membership:
+  the "finish joining" email (next slice) closes that gap.
 - **Already a member:** "You're in." with a link into the site.
 - **Blocked, denied, cooldown, unavailable, account not set up:** Studio's
   words (or, where Studio shows a raw code, plain ones), and for an
@@ -410,7 +429,8 @@ Endpoints: `GET /__polynet/me/join` (signed out too) and `POST
 /__polynet/me/join`, `/join/cancel`, `/join/checkout`, `/join/finish`, twin
 only, same-origin, small JSON POSTs (1 KB), forwarded to
 `/runtime/app/me/join*`; every action requires a private session (the site's
-own session, which its code holds, is refused).
+own session, which its code holds, is refused), except
+`/join/guest-checkout`, the cash-first checkout, which needs none.
 
 ## Moderation (3c-1, Oct 28)
 

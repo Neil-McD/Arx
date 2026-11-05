@@ -1045,8 +1045,12 @@ export async function startCommunityJoinCheckoutCore(
     // Set only by a caller that verified the session itself (the twin's edge
     // session, in an http action that has no Convex identity of its own).
     trustedUserId?: string;
+    // Cash first: a signed-out buyer on a site's private twin. No account yet;
+    // the claim token goes back to that browser only, and whoever signs in
+    // there holding it owns the purchase (finishCommunityAppCheckoutInternal).
+    guest?: boolean;
   },
-): Promise<{ ok: true; session_id: string; checkout_url: string }> {
+): Promise<{ ok: true; session_id: string; checkout_url: string; claim_token?: string }> {
   const nowMs = Date.now();
   const cancelUrl = args.cancelUrl;
   const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
@@ -1076,12 +1080,12 @@ export async function startCommunityJoinCheckoutCore(
   const sessionId = newOpaqueToken("chk");
   const claimToken = newOpaqueToken("claim");
   const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-  if (!args.authSubject) {
+  if (!args.guest && !args.authSubject) {
     throw new Error("auth_subject_required");
   }
   // Studio: the caller's verified Polynet identity. The twin: the member its
-  // edge-verified session belongs to.
-  const actor = (args.trustedUserId
+  // edge-verified session belongs to. A guest has neither until they claim.
+  const actor = args.guest ? null : (args.trustedUserId
     ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
       authSubject: args.authSubject, userId: args.trustedUserId,
     })
@@ -1090,18 +1094,23 @@ export async function startCommunityJoinCheckoutCore(
     })) as { dbUserId?: unknown; email?: string | null } | null;
   const ownerUserId: unknown = actor?.dbUserId;
   const ownerEmail: string | null = actor?.email ?? null;
-  if (!ownerUserId) throw new Error("auth_subject_required");
-  await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
-    communityId: checkoutConfig.communityId,
-    userId: ownerUserId,
-  });
-  const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
-    ctx,
-    userId: ownerUserId,
-    email: ownerEmail,
-    providerAccountId: checkoutConfig.providerAccountId,
-    nowMs,
-  });
+  if (!args.guest && !ownerUserId) throw new Error("auth_subject_required");
+  if (ownerUserId) {
+    await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
+      communityId: checkoutConfig.communityId,
+      userId: ownerUserId,
+    });
+  }
+  // A guest's Stripe customer is the one Checkout creates from the email they give.
+  const stripeCustomerId = ownerUserId
+    ? await ensureCommunityStripeCustomerForUser({
+      ctx,
+      userId: ownerUserId,
+      email: ownerEmail,
+      providerAccountId: checkoutConfig.providerAccountId,
+      nowMs,
+    })
+    : null;
   let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
   if (!providerPriceId) {
     const existingProviderPrice = (await ctx.runQuery(
@@ -1185,7 +1194,7 @@ export async function startCommunityJoinCheckoutCore(
     const stripe = getStripeClient();
     const checkoutSession: any = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer: stripeCustomerId,
+      ...(stripeCustomerId ? { customer: stripeCustomerId } : {}),
       success_url: fillCheckoutSuccessUrl(args.successUrl, sessionId),
       cancel_url: cancelUrl,
       client_reference_id: sessionId,
@@ -1239,6 +1248,7 @@ export async function startCommunityJoinCheckoutCore(
       ok: true,
       session_id: sessionId,
       checkout_url: checkoutUrl,
+      ...(ownerUserId ? {} : { claim_token: claimToken }),
     };
   } catch (error) {
     let providerCleanupComplete = !createdCheckoutSession?.id;
