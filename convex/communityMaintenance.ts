@@ -1,12 +1,9 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import {
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
   type CommunityMembershipLike,
-  type CommunityMessageReactionLike,
   type CommunityResourceLike,
   type CommunitySubscriptionLike,
 } from "./communityCore";
@@ -121,50 +118,6 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
       }
     }
 
-    const threads = (await ctx.db
-      .query("communityChatThreads" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
-      .collect()) as CommunityChatThreadLike[];
-    const communityMessages: CommunityChatMessageLike[] = [];
-    const orphanMessages: CommunityChatMessageLike[] = [];
-    for (const thread of threads) {
-      const messages = (await ctx.db
-        .query("communityChatMessages" as any)
-        .withIndex("by_thread", (q: any) => q.eq("threadId", thread._id))
-        .collect()) as CommunityChatMessageLike[];
-      for (const row of messages) {
-        communityMessages.push(row);
-        if (!row.senderUserId) continue;
-        if (!(await maintenanceUserExists(ctx, row.senderUserId, userExistenceCache))) {
-          orphanMessages.push(row);
-        }
-      }
-    }
-    const orphanMessageIds = new Set(orphanMessages.map((row) => String(row._id)));
-
-    const orphanReactions: CommunityMessageReactionLike[] = [];
-    for (const message of communityMessages) {
-      const reactions = (await ctx.db
-        .query("communityMessageReactions" as any)
-        .withIndex("by_message", (q: any) => q.eq("messageId", message._id))
-        .collect()) as CommunityMessageReactionLike[];
-      for (const reaction of reactions) {
-        if (
-          orphanMessageIds.has(String(reaction.messageId)) ||
-          !(await maintenanceUserExists(ctx, reaction.userId, userExistenceCache))
-        ) {
-          orphanReactions.push(reaction);
-        }
-      }
-    }
-    const dedupedReactionIds = new Set<string>();
-    const dedupedOrphanReactions = orphanReactions.filter((row) => {
-      const key = String(row._id);
-      if (dedupedReactionIds.has(key)) return false;
-      dedupedReactionIds.add(key);
-      return true;
-    });
-
     const subscriptions = (await ctx.db
       .query("communitySubscriptions" as any)
       .collect()) as CommunitySubscriptionLike[];
@@ -187,8 +140,6 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
       ...orphanMemberSettings.map((row) => String(row.userId)),
       ...orphanReadCursors.map((row) => String(row.userId)),
       ...orphanResources.map((row) => String(row.createdByUserId)),
-      ...orphanMessages.map((row) => String(row.senderUserId ?? "")),
-      ...dedupedOrphanReactions.map((row) => String(row.userId)),
       ...orphanSubscriptions.map((row) => String(row.userId)),
     ].filter(Boolean));
 
@@ -204,16 +155,12 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
         member_settings: orphanMemberSettings.length,
         read_cursors: orphanReadCursors.length,
         resources: orphanResources.length,
-        messages: orphanMessages.length,
-        message_reactions: dedupedOrphanReactions.length,
         subscriptions: orphanSubscriptions.length,
       },
     };
 
     if (dryRun) return { ok: true, ...summary };
 
-    for (const row of dedupedOrphanReactions) await ctx.db.delete(row._id as any);
-    for (const row of orphanMessages) await ctx.db.delete(row._id as any);
     for (const row of orphanResources) await ctx.db.delete(row._id as any);
     for (const row of orphanSubscriptions) await ctx.db.delete(row._id as any);
     for (const row of orphanReadCursors) await ctx.db.delete(row._id as any);

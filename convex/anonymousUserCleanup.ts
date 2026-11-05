@@ -39,12 +39,8 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "communityJoinRequests", index: "by_user", field: "userId" },
   { table: "communityBlocks", index: "by_user", field: "userId" },
   { table: "communitySubscriptions", index: "by_user", field: "userId" },
-  { table: "communityChatMessages", index: "by_sender", field: "senderUserId" },
-  { table: "communityMessageReactions", index: "by_user", field: "userId" },
   { table: "communityTypingPresence", index: "by_user", field: "userId" },
   { table: "dmTypingPresence", index: "by_user", field: "userId" },
-  { table: "skillPackages", index: "by_owner", field: "ownerUserId" },
-  { table: "userPlatformSkillInstalls", index: "by_user", field: "userId" },
   { table: "communityAiFeedReactions", index: "by_actorUser", field: "actorUserId" },
   { table: "communityMemberSettings", index: "by_user", field: "userId" },
   { table: "communityReadCursors", index: "by_user", field: "userId" },
@@ -64,8 +60,6 @@ const SCANNED_USER_REFERENCES: ScanReferenceSpec[] = [
   { table: "purchaseClaims", field: "redeemedByUserId" },
   { table: "communityBlocks", field: "createdByUserId" },
   { table: "communityAnalyticsEvents", field: "userId" },
-  { table: "skillPackageRevisions", field: "createdByUserId" },
-  { table: "communitySkillAttachments", field: "attachedByUserId" },
   { table: "communityAiFeedPosts", field: "authorUserId" },
 ];
 
