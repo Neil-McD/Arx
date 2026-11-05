@@ -1414,6 +1414,8 @@ test("twin join: a paid plan goes to Studio's checkout, back only to this twin's
     providerSubscriptionId: "sub_test_1", providerPriceId: "price_test_monthly", subscriptionStatus: "active",
     currentPeriodStartAt: nowMs, currentPeriodEndAt: nowMs + 30 * 86_400_000, markComplete: true,
   });
+  // Stripe's notice itself made them a member (the buyer is known): no return needed.
+  expect(await f.membership()).toMatchObject({ active: true });
   expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "joined", viewer: { state: "member" } });
   expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "joined", viewer: { state: "member" } });
   expect(await f.membership()).toMatchObject({ active: true });
@@ -1564,3 +1566,51 @@ test("twin join review: a moderator lists, approves and denies this community's 
   await f.t.run((c) => c.db.patch(f.ids.communityId, { entryPolicy: "paid_subscription" } as any));
   expect((await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner)).body).toMatchObject({ ok: true, paid: true });
 });
+
+test("two tabs, two payments: the first makes them a member; the second is cancelled and refunded, never overwriting the first", async () => {
+  stripe.checkouts.length = 0;
+  const f = await joinFixture();
+  const nowMs = Date.now();
+  await f.policy("paid_subscription");
+  await f.t.run(async (c) => {
+    await c.db.insert("communityPricePoints", {
+      communityId: f.ids.communityId, billingPeriod: "monthly", name: "Monthly", amountBaseUnits: 1000, currency: "usd", currencyDecimals: 2,
+      isCurrent: true, providerAccountId: "acct_test_owner", providerPriceId: "price_test_monthly", createdAt: nowMs, updatedAt: nowMs,
+    });
+    await c.db.insert("userStripeConnectAccounts", {
+      userId: f.ids.ownerId, stripeAccountId: "acct_test_owner", accountType: "express", transfersEnabled: true, status: "ready",
+      detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, requirementsCurrentlyDue: [], requirementsEventuallyDue: [], createdAt: nowMs, updatedAt: nowMs,
+    });
+  });
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  // Both tabs start before either is paid, so the checkout guard can't stop the second.
+  const first = (await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).body.session_id as string;
+  const second = (await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).body.session_id as string;
+  const pay = (sessionId: string, subscription: string) => f.t.mutation(internal.communityCommerce.syncPendingCommunityCheckoutSubscriptionInternal, {
+    sessionId, providerAccountId: "acct_test_owner", providerCheckoutSessionId: `cs_${subscription}`, providerCustomerId: "cus_test_join",
+    providerSubscriptionId: subscription, providerPriceId: "price_test_monthly", subscriptionStatus: "active",
+    sourceProviderPaymentIntentId: `pi_${subscription}`, currentPeriodStartAt: nowMs, currentPeriodEndAt: nowMs + 30 * 86_400_000, markComplete: true,
+  });
+  await pay(first, "sub_first");
+  await pay(second, "sub_second");
+  const rows = await f.t.run((c) => c.db.query("communitySubscriptions").collect());
+  expect(rows.map((row) => [row.providerSubscriptionId, row.status])).toEqual([["sub_first", "active"]]);
+  const jobs = await f.t.run((c) => c.db.system.query("_scheduled_functions").collect());
+  const refund = jobs.find((job: any) => job.name === "communityCommerce:refundDuplicateCommunitySubscriptionInternal") as any;
+  expect(refund.args[0]).toEqual({ providerSubscriptionId: "sub_second", providerAccountId: "acct_test_owner", paymentIntentId: "pi_sub_second", chargeId: null });
+  // Already in now: no third checkout.
+  expect(await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).toMatchObject({ status: 409, body: { code: "already_member" } });
+  // They later leave and rejoin on a new subscription; Stripe then replays the
+  // first checkout's notice. Already granted: not a duplicate, nothing refunded.
+  await f.t.run(async (c) => {
+    const row = (await c.db.query("communitySubscriptions").first())!;
+    await c.db.patch(row._id, { providerSubscriptionId: "sub_rejoin" });
+  });
+  await pay(first, "sub_first");
+  const refundsAfterReplay = (await f.t.run((c) => c.db.system.query("_scheduled_functions").collect()))
+    .filter((job: any) => job.name === "communityCommerce:refundDuplicateCommunitySubscriptionInternal");
+  expect(refundsAfterReplay.some((job: any) => job.args[0].providerSubscriptionId === "sub_first")).toBe(false);
+  expect((await f.t.run((c) => c.db.query("communitySubscriptions").collect())).map((row) => [row.providerSubscriptionId, row.status]))
+    .toEqual([["sub_rejoin", "active"]]);
+});
+

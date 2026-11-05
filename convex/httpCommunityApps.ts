@@ -257,6 +257,7 @@ const JOIN_REFUSALS: Record<string, { status: number; code: string }> = {
   community_temporarily_unavailable: { status: 409, code: "community_temporarily_unavailable" },
   paid_plan_required: { status: 409, code: "paid_plan_required" },
   community_checkout_unavailable: { status: 409, code: "community_checkout_unavailable" },
+  already_member: { status: 409, code: "already_member" },
 };
 // Moderation and join review on the twin: Studio's cores and refusals; someone
 // who can't moderate here (or a post or request not of this community) gets a

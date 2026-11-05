@@ -405,8 +405,8 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     httpBilling,
-    'if (event.type === "checkout.session.completed")',
-    "community checkout webhook entrypoint",
+    'if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded")',
+    "community checkout webhook entrypoint (immediate and delayed payments)",
   );
   assertNotIncludes(
     httpBilling,

@@ -12,6 +12,7 @@ export const CRITICAL_AUDIT_EVENT_TYPES = [
   "community_restored",
   "community_purchase_claim_created",
   "community_purchase_claim_redeemed",
+  "community_duplicate_subscription_refunded",
   "community_operator_retirement_completed",
   "community_subscription_synced",
   "harness_app_source_provenance_backfill",
@@ -103,6 +104,7 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   community_checkout_attached_to_stripe: ["providerAccountId", "providerCustomerId", "providerSubscriptionId", "providerPriceId"],
   community_purchase_claim_created: ["billingPeriod", "pricePointId", "amountBaseUnits", "currency"],
   community_purchase_claim_redeemed: ["accessGranted", "grantMarker", "pricePointId"],
+  community_duplicate_subscription_refunded: ["providerAccountId"],
   community_operator_retirement_completed: [
     "policyVersion",
     "communitySlug",

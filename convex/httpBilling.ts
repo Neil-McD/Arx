@@ -1045,7 +1045,9 @@ export function registerRuntimeBillingRoutes(
           }
         }
 
-        if (event.type === "checkout.session.completed") {
+        // A community checkout: paid now, or (bank debits) paid later when the
+        // delayed payment succeeds; the pending first notice is ignored below.
+        if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
           const session = event.data.object as Stripe.Checkout.Session;
           const localSessionId =
             readStripeLocalSessionIdFromCheckoutSession(session);

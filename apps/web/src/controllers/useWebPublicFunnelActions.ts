@@ -601,8 +601,10 @@ export function useWebPublicFunnelActions<
             : error instanceof Error
               ? error.message
               : "Failed to start checkout.";
-        const message =
-          rawMessage === "community_checkout_unavailable"
+        // Convex wraps server errors; match the code anywhere in the text.
+        const message = rawMessage.includes("already_member")
+          ? "You're already a member of this community."
+          : rawMessage.includes("community_checkout_unavailable")
             ? "Checkout is temporarily unavailable for this community."
             : rawMessage;
         current.setCheckoutError(message);
