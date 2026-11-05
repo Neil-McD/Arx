@@ -104,3 +104,29 @@ test("a renewal Stripe reports after the member left is re-cancelled, not reopen
   expect(jobs.length).toBe(before + 1);
   expect((jobs[jobs.length - 1] as any).args[0]).toEqual({ targets: [{ providerSubscriptionId: "sub_payer", providerAccountId: "acct_paid" }] });
 });
+
+test("a member who left and later buys again is not cancelled by their old leave", async () => {
+  const { t, ids, canChat } = await fixture();
+  await t.withIdentity({ subject: "payer-subject" }).mutation(api.communityAdmin.leaveCommunity, { communityId: ids.communityId });
+  await t.mutation(internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal, {
+    communityId: ids.communityId, userId: ids.payerId, source: "stripe", status: "canceled", providerAccountId: "acct_paid", providerSubscriptionId: "sub_payer",
+  });
+  // They come back: a new subscription on the same row (as a new purchase records it).
+  await t.run(async (ctx) => {
+    const row = (await ctx.db.query("communitySubscriptions").first())!;
+    const { createCommunitySubscriptionForMembership } = await import("./billingCore");
+    await createCommunitySubscriptionForMembership({
+      ctx, communityId: ids.communityId, membershipId: row.membershipId, userId: ids.payerId, pricePointId: row.pricePointId,
+      source: "stripe", providerAccountId: "acct_paid", providerSubscriptionId: "sub_again", providerCustomerId: null,
+      currentPeriodStartAt: NOW, currentPeriodEndAt: PERIOD_END, status: "active", cancelAtPeriodEnd: false, nowMs: NOW,
+    } as any);
+  });
+  const before = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).length;
+  // Stripe's next notice for the new subscription renews normally.
+  await t.mutation(internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal, {
+    communityId: ids.communityId, userId: ids.payerId, source: "stripe", status: "active", cancelAtPeriodEnd: false,
+    providerAccountId: "acct_paid", providerSubscriptionId: "sub_again",
+  });
+  expect(await t.run((ctx) => ctx.db.query("communitySubscriptions").first())).toMatchObject({ status: "active", cancelAtPeriodEnd: false, providerSubscriptionId: "sub_again" });
+  expect((await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).length).toBe(before);
+});

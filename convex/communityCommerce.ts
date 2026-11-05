@@ -367,7 +367,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     // their leave (billing stops at the period's end) and ask Stripe again.
     const cancelRequestedAt = typeof current?.cancelRequestedAt === "number" ? current.cancelRequestedAt : null;
     let reCancel = false;
-    if (cancelRequestedAt !== null && status === "active" && !cancelAtPeriodEnd) {
+    // Only for the very subscription they left: a later purchase is a new subscription.
+    const sameSubscription = String(args.providerSubscriptionId ?? "").trim() !== ""
+      && String(args.providerSubscriptionId).trim() === String(current?.providerSubscriptionId ?? "").trim();
+    if (cancelRequestedAt !== null && sameSubscription && status === "active" && !cancelAtPeriodEnd) {
       status = "cancel_at_period_end";
       cancelAtPeriodEnd = true;
       reCancel = Boolean(String(args.providerSubscriptionId ?? current?.providerSubscriptionId ?? "").trim());
