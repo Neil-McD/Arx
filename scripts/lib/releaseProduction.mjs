@@ -3,6 +3,8 @@
 // then proves the live result. Production authority is pinned here and never
 // read from local .env or .vercel link files.
 
+import { compareSettings, codeSettingNames, settingNames, STAGING_CONVEX_DEPLOYMENT } from "./convexEnvParity.mjs";
+
 export const PRODUCTION_AUTHORITY = Object.freeze({
   convexDeployment: "prod:wry-hawk-715",
   convexUrl: "https://wry-hawk-715.convex.cloud",
@@ -190,6 +192,22 @@ async function verifyCandidate(deps, options) {
     throw new ReleaseError("production_release_environment_unreadable");
   }
   assertRequiredProductionEnv(envPayload);
+  // Backend settings: what staging has and the code reads must be in production.
+  const convexNames = (deployment) => {
+    try {
+      return settingNames(deps.capture("npx", ["convex", "env", "list"], { ...deps.env, CONVEX_DEPLOYMENT: deployment }));
+    } catch {
+      throw new ReleaseError("production_release_settings_unreadable", deployment.split(":")[0]);
+    }
+  };
+  const parity = compareSettings({
+    staging: convexNames(STAGING_CONVEX_DEPLOYMENT),
+    production: convexNames(PRODUCTION_AUTHORITY.convexDeployment),
+    codeNames: codeSettingNames(deps.convexSources()),
+  });
+  if (parity.forbidden.length) throw new ReleaseError("production_release_settings_forbidden", parity.forbidden.join(","));
+  if (parity.missing.length) throw new ReleaseError("production_release_settings_missing", parity.missing.join(","));
+  stage("settings_parity", { unused: parity.unused });
   deps.run("npm", ["run", "smoke:workspace-credit-accounting-prod-data"], releaseEnv);
   const previous = await inspectProductionDeployment(deps, PRODUCTION_AUTHORITY.productionOrigin);
   if (previous.name !== PRODUCTION_AUTHORITY.vercelProjectName || !previous.id.startsWith("dpl_")) {

@@ -31,6 +31,8 @@ function fakeDeps(overrides: {
   failOn?: string;
   vercelJson?: unknown;
   deployment?: Record<string, string>;
+  stagingSettings?: string[];
+  productionSettings?: string[];
 } = {}) {
   const calls: Call[] = [];
   const liveBuilds = [...(overrides.liveBuilds ?? [LIVE, HEAD])];
@@ -60,6 +62,11 @@ function fakeDeps(overrides: {
     },
     capture: (command: string, args: string[], env: Record<string, string>) => {
       calls.push({ kind: "capture", command, args, env });
+      if (args[0] === "convex" && args[1] === "env") {
+        const staging = env.CONVEX_DEPLOYMENT === "dev:quick-porcupine-949";
+        const names = staging ? (overrides.stagingSettings ?? ["ARX_SECRET", "POLYNET_ALLOW_SEED"]) : (overrides.productionSettings ?? ["ARX_SECRET", "OLD_UNUSED"]);
+        return names.map((name) => `${name}=value-never-read`).join("\n");
+      }
       if (args.includes("env")) {
         return JSON.stringify({
           envs: ["VITE_CONVEX_URL", "VITE_PUBLIC_APP_URL", "ARX_AUTH_BRIDGE_SECRET"].map((key) => ({
@@ -76,6 +83,7 @@ function fakeDeps(overrides: {
       if (args.includes("deploy")) return "Inspect: x\nhttps://polynet-new-neil-mcds-projects.vercel.app\n";
       return "";
     },
+    convexSources: () => ['readEnv("ARX_SECRET"); readEnv("POLYNET_ALLOW_SEED"); readEnv("ARX_NEW_SETTING");'],
     fetchText: async (url: string) => {
       if (url.endsWith("/version.json")) {
         if (liveBuilds.length) lastLive = liveBuilds.shift()!;
@@ -102,6 +110,7 @@ function commandOrder(calls: Call[]): string[] {
       if (text.includes(" deploy --prod")) return "vercel_deploy";
       if (text.includes(" promote ")) return "vercel_promote";
       if (text.includes(" rollback ")) return "vercel_rollback";
+      if (text.includes("convex env list")) return "convex_env";
       if (text.includes(" env ls")) return "vercel_env";
       if (text.includes("project inspect")) return "vercel_project";
       if (text.includes(" inspect ")) return "vercel_inspect";
@@ -153,7 +162,7 @@ describe("production release flow", () => {
     const result = await runProductionRelease(deps, { verifyOnly: true });
     expect(result.status).toBe("verified");
     expect(commandOrder(calls)).toEqual([
-      "gate", "vercel_project", "vercel_env", "accounting_smoke", "vercel_inspect",
+      "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "accounting_smoke", "vercel_inspect",
     ]);
     expect(result.rollbackDeployment.id).toBe("dpl_previous");
   });
@@ -163,10 +172,10 @@ describe("production release flow", () => {
     const result = await runProductionRelease(deps, {});
     expect(result.status).toBe("released");
     expect(commandOrder(calls)).toEqual([
-      "gate", "vercel_project", "vercel_env", "accounting_smoke", "vercel_inspect",
+      "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "accounting_smoke", "vercel_inspect",
       "convex_deploy", "vercel_deploy",
     ]);
-    const convex = calls.find((call) => call.args.includes("convex"))!;
+    const convex = calls.find((call) => call.args.includes("convex") && call.args.includes("deploy"))!;
     expect(convex.env?.CONVEX_DEPLOYMENT).toBe(PRODUCTION_AUTHORITY.convexDeployment);
     const web = calls.find((call) => call.args.includes("--prod"))!;
     expect(web.env?.VERCEL_PROJECT_ID).toBe(PRODUCTION_AUTHORITY.vercelProjectId);
@@ -174,7 +183,7 @@ describe("production release flow", () => {
     expect(web.args).toContain(`VITE_POLYNET_BUILD_ID=${HEAD}`);
     expect(result.deploymentUrl).toBe("https://polynet-new-neil-mcds-projects.vercel.app");
     expect(result.stages.map((stage: { id: string }) => stage.id)).toEqual([
-      "guards", "no_regress", "release_gate", "preflight", "convex_deployed", "web_deployed", "live_verified",
+      "guards", "no_regress", "release_gate", "settings_parity", "preflight", "convex_deployed", "web_deployed", "live_verified",
     ]);
   });
 
@@ -238,3 +247,28 @@ describe("production rollback", () => {
     expect(commandOrder(calls)).not.toContain("vercel_rollback");
   });
 });
+
+describe("settings parity", () => {
+  test("a setting staging has and the code reads must be in production; the release stops before deploying", async () => {
+    const { deps, calls } = fakeDeps({ stagingSettings: ["ARX_SECRET", "ARX_NEW_SETTING"], productionSettings: ["ARX_SECRET"] });
+    const error = await runProductionRelease(deps, {}).catch((caught) => caught);
+    expect(String(error.message)).toBe("production_release_settings_missing: ARX_NEW_SETTING");
+    // Names only: no value is ever in what the release says.
+    expect(String(error.message)).not.toContain("value-never-read");
+    expect(commandOrder(calls)).not.toContain("convex_deploy");
+  });
+
+  test("staging-only settings are named with a reason; seeding is forbidden in production", async () => {
+    const { deps } = fakeDeps({ stagingSettings: ["ARX_SECRET", "POLYNET_ALLOW_SEED", "POLYNET_SITES_DOMAIN"], productionSettings: ["ARX_SECRET"] });
+    expect((await runProductionRelease(deps, {})).status).toBe("released");
+    const seeded = fakeDeps({ productionSettings: ["ARX_SECRET", "POLYNET_ALLOW_SEED"] });
+    await expect(runProductionRelease(seeded.deps, {})).rejects.toThrow("production_release_settings_forbidden: POLYNET_ALLOW_SEED");
+  });
+
+  test("settings no code reads are reported for removal, not failed", async () => {
+    const { deps } = fakeDeps({ productionSettings: ["ARX_SECRET", "OLD_UNUSED"] });
+    const result = await runProductionRelease(deps, {});
+    expect(result.stages.find((stage: { id: string }) => stage.id === "settings_parity")).toMatchObject({ unused: ["OLD_UNUSED"] });
+  });
+});
+

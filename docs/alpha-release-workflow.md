@@ -33,6 +33,7 @@ npm run release:prod     # the same, then Convex, then web, then live proof
 | Guards | `vercel.json` keeps `main` auto-deploy off; the worktree is clean; `HEAD` equals freshly fetched `origin/main`. |
 | No-regress | The live `version.json` build is a known ancestor of `HEAD` and not `HEAD` itself, so a stale checkout can never release over newer production. |
 | Release gate | `npm run release:gate -- --mode=ci --sha=<HEAD>` passes on that exact commit. |
+| Settings parity | Every backend setting the code reads that staging (`dev:quick-porcupine-949`) has also exists in production, unless `scripts/lib/convexEnvParity.mjs` names it staging-only with a reason; `POLYNET_ALLOW_SEED` is never in production. Names only, never values. Settings no code reads are listed in the stage for removal (production deletions need the owner's OK). Added Nov 5 after a missing `STRIPE_CONNECT_WEBHOOK_SECRET` on staging. |
 | Preflight | The pinned Vercel project exists; `VITE_CONVEX_URL`, `VITE_PUBLIC_APP_URL`, and `ARX_AUTH_BRIDGE_SECRET` exist exactly once for production; the read-only production accounting smoke passes; the current production deployment is recorded as the rollback target. |
 | Convex | `convex deploy --typecheck enable` to `prod:wry-hawk-715`. |
 | Web | `vercel deploy --prod --archive=tgz` to project `polynet`, with the commit SHA as build identity. |

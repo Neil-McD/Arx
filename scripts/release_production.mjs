@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -47,6 +47,10 @@ const deps = {
     }
     return result.stdout;
   },
+  // The backend's own code (no tests, no generated files): which settings it reads.
+  convexSources: () => readdirSync(resolve(root, "convex"))
+    .filter((name) => name.endsWith(".ts") && !name.includes(".test."))
+    .map((name) => readFileSync(resolve(root, "convex", name), "utf8")),
   fetchText: async (url) => {
     const response = await fetch(url, { headers: { "cache-control": "no-cache" } });
     if (!response.ok) throw new ReleaseError("production_release_fetch_failed", `${response.status} ${url}`);
