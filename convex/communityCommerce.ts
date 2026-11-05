@@ -1009,12 +1009,16 @@ export const GUEST_CHECKOUTS_PER_WINDOW = 20;
 
 async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {
   const since = nowMs - GUEST_CHECKOUT_WINDOW_MS;
-  const recent = await ctx.db
+  // Newest first, only as far back as the window: every guest in it is counted.
+  let guests = 0;
+  for await (const row of ctx.db
     .query("checkoutSessions")
     .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", "pending"))
-    .order("desc")
-    .take(200);
-  return recent.filter((row: any) => !row.ownerUserId && row.createdAt >= since).length < GUEST_CHECKOUTS_PER_WINDOW;
+    .order("desc")) {
+    if (row.createdAt < since) break;
+    if (!row.ownerUserId && ++guests >= GUEST_CHECKOUTS_PER_WINDOW) return false;
+  }
+  return true;
 }
 
 // An early answer, before any Stripe work. The binding check is in the
