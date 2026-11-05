@@ -62,3 +62,23 @@ test("the buyer's claim makes the payment theirs (still pending on Stripe), and 
   // The buyer keeps finishing without it, as any signed-in checkout does.
   expect(await finish(ids.buyerId)).toEqual({ status: "pending" });
 });
+
+test("a community takes a limited number of unclaimed guest checkouts at a time", async () => {
+  const { t, ids } = await fixture();
+  const allowed = () => t.query(internal.communityCommerce.guestCheckoutAllowedInternal, { communityId: ids.communityId, nowMs: Date.now() });
+  expect(await allowed()).toBe(true);
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    for (let index = 1; index < 20; index += 1) {
+      await ctx.db.insert("checkoutSessions", {
+        sessionId: `chk_${String(index).padStart(32, "0")}`, mode: "community_join", communityId: ids.communityId,
+        status: "pending", expiresAt: now + 60_000, createdAt: now, updatedAt: now,
+      } as any);
+    }
+  });
+  expect(await allowed()).toBe(false);
+  // Ten minutes on, those have aged out of the window.
+  expect(await t.query(internal.communityCommerce.guestCheckoutAllowedInternal, {
+    communityId: ids.communityId, nowMs: Date.now() + 11 * 60 * 1000,
+  })).toBe(true);
+});

@@ -998,6 +998,26 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
   },
 });
 
+// Cash first lets anyone start a checkout without signing in, and each one
+// makes a Stripe session and two rows. A community takes this many unclaimed
+// guest checkouts in this window; past it, "Checkout is temporarily unavailable".
+export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
+export const GUEST_CHECKOUTS_PER_WINDOW = 20;
+
+export const guestCheckoutAllowedInternal = internalQuery({
+  args: { communityId: v.id("communities"), nowMs: v.number() },
+  handler: async (ctx, args) => {
+    const since = args.nowMs - GUEST_CHECKOUT_WINDOW_MS;
+    const recent = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId).eq("status", "pending"))
+      .order("desc")
+      .take(200);
+    const guests = recent.filter((row: any) => !row.ownerUserId && row.createdAt >= since).length;
+    return guests < GUEST_CHECKOUTS_PER_WINDOW;
+  },
+});
+
 export const startPublicCommunityCheckout = action({
   args: {
     communitySlug: v.string(),
@@ -1095,6 +1115,11 @@ export async function startCommunityJoinCheckoutCore(
   const ownerUserId: unknown = actor?.dbUserId;
   const ownerEmail: string | null = actor?.email ?? null;
   if (!args.guest && !ownerUserId) throw new Error("auth_subject_required");
+  if (args.guest && !(await ctx.runQuery(internal.communityCommerce.guestCheckoutAllowedInternal as any, {
+    communityId: checkoutConfig.communityId, nowMs,
+  }))) {
+    throw new Error("community_checkout_unavailable");
+  }
   if (ownerUserId) {
     await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
       communityId: checkoutConfig.communityId,
