@@ -1138,6 +1138,7 @@ export function registerRuntimeBillingRoutes(
                 currentPeriodEndAt: cycleEndsAt,
                 cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
                 markComplete: true,
+                buyerEmail: session.customer_details?.email ?? null,
                 nowMs:
                   Number(event.created ?? 0) > 0
                     ? Number(event.created) * 1000

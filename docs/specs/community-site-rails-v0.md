@@ -407,15 +407,25 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   checkout never replaces the first's); the page gets Stripe's address and
   nothing else, and no `__Host-polynet_` cookie ever reaches the founder's
   site code (the edge strips them all from forwarded requests). Back
-  from Stripe signed out, the page says "Payment received. Sign in to finish
-  joining" and signs in (the normal hop, back to `/join?checkout=<id>`). Then
+  from Stripe signed out, the page goes straight on to sign in (the normal
+  hop, back to `/join?checkout=<id>`). From Stripe to the site's chat the
+  member sees one screen, "Finishing your membership…", whatever runs
+  underneath (sign-in, claim, Stripe's confirmation, the site's sign-in). Then
   Finish carries the claim from the cookie (the edge drops any `claim_token`
   the page sends), and the first signed-in member who brings it owns the
   checkout and its claim (`finishCommunityAppCheckoutInternal`); after that
   it's that member's like any signed-in checkout, and the cookie is dropped
   once they've joined. Membership still comes only from the verified webhook.
-  A buyer who closes the tab before signing in has paid with no membership:
-  the "finish joining" email (next slice) closes that gap. Admission limit:
+  A buyer who closes the tab before signing in has paid with no membership,
+  so ten minutes after Stripe confirms a guest payment, if it is still
+  unclaimed, Polynet emails the address the buyer gave Stripe ("Finish
+  joining <community>", template `community_finish_joining`, once per
+  checkout via the outbox dedupe key `community_finish_joining:<checkout id>`).
+  Its link is the twin's `/join?checkout=<id>&claim=<token>`: the edge moves
+  the claim into that checkout's cookie and redirects to `/join?checkout=<id>`
+  (no claim in the address, history or referrer), and the normal flow runs.
+  Whoever holds the link can claim it, as with any email sign-in link; it
+  stops working once claimed or when the claim expires. Admission limit:
   a community takes at most 20 unclaimed guest checkouts started in any
   10 minutes (pending, no owner yet); past that, guest checkout answers
   `community_checkout_unavailable` ("Checkout is temporarily unavailable")

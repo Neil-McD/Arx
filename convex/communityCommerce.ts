@@ -806,6 +806,8 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     currentPeriodEndAt: v.optional(v.union(v.number(), v.null())),
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
     markComplete: v.optional(v.boolean()),
+    // The email the buyer gave Stripe: where a guest checkout's "finish joining" goes.
+    buyerEmail: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -867,6 +869,14 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         : "expired",
       updatedAt: nowMs,
     });
+    // Paid as a guest: if nobody has claimed it in a little while, email the
+    // buyer a way back (sent once per checkout; skipped if claimed by then).
+    const buyerEmail = String(args.buyerEmail ?? "").trim();
+    if (args.markComplete && lifecycleMatches && !row.ownerUserId && /^[^\s@]+@[^\s@]+$/.test(buyerEmail)) {
+      await ctx.scheduler.runAfter(FINISH_JOINING_EMAIL_DELAY_MS, internal.communityAppJoin.sendFinishJoiningEmailInternal as any, {
+        sessionId: args.sessionId, recipientEmail: buyerEmail,
+      });
+    }
     await recordCriticalAuditEventBestEffort(ctx, {
       eventKey: `community_subscription_synced:${args.providerSubscriptionId ?? row.providerSubscriptionId ?? args.sessionId}:${communitySubscriptionStatus}:${nowMs}`,
       eventType: "community_subscription_synced",
@@ -1005,6 +1015,8 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
 // makes a Stripe session and two rows. A community takes this many unclaimed
 // guest checkouts in this window; past it, "Checkout is temporarily unavailable".
 export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
+// How long a guest has to sign in after paying before the "finish joining" email.
+export const FINISH_JOINING_EMAIL_DELAY_MS = 10 * 60 * 1000;
 export const GUEST_CHECKOUTS_PER_WINDOW = 20;
 
 async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {

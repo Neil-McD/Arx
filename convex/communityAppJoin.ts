@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { normalizeCommunityAppOrigin } from "../shared/communityAppSession";
 import {
@@ -199,6 +200,66 @@ export const finishCommunityAppCheckoutInternal = internalMutation({
     if (finalization.status !== "succeeded" || !finalization.claim?.token) return { status: "expired" };
     await redeemPurchaseClaimForUser(ctx, args.userId, finalization.claim.token);
     return { status: "joined" };
+  },
+});
+
+// A guest checkout still unclaimed: where its "finish joining" link goes (the
+// community's private twin /join, carrying the claim), or null if it was
+// claimed, never completed, expired, or the community has no twin.
+export const finishJoiningEmailPlanInternal = internalQuery({
+  args: { sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+      .first();
+    if (!row || row.mode !== "community_join" || row.ownerUserId || row.status !== "complete" || !row.claimToken) return null;
+    if (row.expiresAt <= Date.now() || !row.communityId) return null;
+    const claim = await ctx.db
+      .query("purchaseClaims")
+      .withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken))
+      .first();
+    if (!claim || claim.status !== "pending" || claim.ownerUserId) return null;
+    const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
+    if (!community || !communityIsActive(community)) return null;
+    const domains = await ctx.db.query("communityDomains").withIndex("by_community", (q: any) => q.eq("communityId", row.communityId)).collect();
+    const twin = domains.find((domain: any) => domain.kind === "private");
+    if (!twin) return null;
+    const link = new URL("/join", twin.origin);
+    link.searchParams.set("checkout", row.sessionId);
+    link.searchParams.set("claim", row.claimToken);
+    return {
+      communityId: row.communityId,
+      communityLifecycleGeneration: row.communityLifecycleGeneration ?? 0,
+      communityName: String(community.name ?? community.slug ?? "your community"),
+      actionUrl: link.toString(),
+    };
+  },
+});
+
+// Ten minutes after a guest paid: still unclaimed, email the buyer the way
+// back. The outbox's dedupe key keeps it to one email per checkout.
+export const sendFinishJoiningEmailInternal = internalAction({
+  args: { sessionId: v.string(), recipientEmail: v.string() },
+  handler: async (ctx, args) => {
+    const plan = (await ctx.runQuery(internal.communityAppJoin.finishJoiningEmailPlanInternal, { sessionId: args.sessionId })) as {
+      communityId: any; communityLifecycleGeneration: number; communityName: string; actionUrl: string;
+    } | null;
+    if (!plan) return { sent: false };
+    await ctx.runMutation((internal as any).email.enqueueEmailJobInternal, {
+      kind: "community_finish_joining",
+      communityId: plan.communityId,
+      communityLifecycleGeneration: plan.communityLifecycleGeneration,
+      recipientEmail: args.recipientEmail,
+      templateKey: "community_finish_joining",
+      payload: {
+        communityName: plan.communityName,
+        actionUrl: plan.actionUrl,
+        footerNote: "This link finishes your membership. Don't forward it: whoever uses it first gets the membership.",
+      },
+      dedupeKey: `community_finish_joining:${args.sessionId}`,
+    });
+    return { sent: true };
   },
 });
 

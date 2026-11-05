@@ -1192,6 +1192,16 @@ async function serveTwin(
     if (!read || SCRIPT_DESTINATIONS.has(request.headers.get("sec-fetch-dest") ?? "")) return new Response("Not found", { status: 404 });
     return new Response(null, { status: 302, headers: { Location: `${place.siteOrigin}${url.pathname}${url.search}`, "Cache-Control": "no-store" } });
   }
+  // The "finish joining" email's link: its claim goes into this browser's claim
+  // cookie for that checkout and out of the address (and history, and logs).
+  if (read && personal.name === "join" && url.searchParams.has("claim")) {
+    const claim = url.searchParams.get("claim") ?? "";
+    const checkout = url.searchParams.get("checkout") ?? "";
+    const name = claimCookieName(checkout);
+    const headers = new Headers({ Location: name ? `/join?checkout=${checkout}` : "/join", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+    if (name && CLAIM_TOKEN_PATTERN.test(claim)) headers.append("Set-Cookie", cookie(name, claim, CLAIM_TTL_SECONDS));
+    return new Response(null, { status: 302, headers });
+  }
   // One address per page: /messages/ is /messages.
   if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
     return new Response(null, { status: 307, headers: { Location: url.pathname.slice(0, -1) + url.search, "Cache-Control": "no-store" } });

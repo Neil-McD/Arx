@@ -70,8 +70,7 @@ const CHECKOUT_SESSION = /^chk_[a-f0-9]{32}$/;
 // Back from Stripe: ask every two seconds for a minute, then let the member ask.
 const FINISH_EVERY_MS = 2000;
 const FINISH_TRIES = 30;
-// Long enough to read "Payment received", short enough not to wait on.
-const CLAIM_SIGNIN_DELAY_MS = 1200;
+const FINISHING = "Finishing your membership…";
 // A pending request is re-read while the page is open, as Studio's funnel does.
 const PENDING_EVERY_MS = 30000;
 
@@ -290,10 +289,7 @@ class Join {
   // Back from Stripe. The redirect proves nothing: only Polynet's record of the
   // payment, from Stripe's verified notice, makes the member a member.
   async finish(tries) {
-    if (tries === 0) {
-      this.block.show("finishing", [h("div", { class: "join", part: "join" }, [this.pitch(),
-        h("section", { class: "gate", part: "gate" }, [h("p", { part: "join-status", role: "status", text: "Finishing up…" })])])]);
-    }
+    if (tries === 0) this.finishing();
     const res = await call("/__polynet/me/join/finish", { session_id: this.checkout });
     if (!this.current()) return;
     if (res.status === 401) return signIn(null, this.checkout);
@@ -316,22 +312,27 @@ class Join {
       ])])]);
   }
 
-  // Back from Stripe signed out: say the payment is in, then the one step left.
-  claimAfterSignIn() {
+  // From Stripe to chat it's one screen, whatever runs underneath (signing in,
+  // claiming, Stripe's confirmation, signing in on the site).
+  finishing() {
     this.block.show("finishing", [h("div", { class: "join", part: "join" }, [this.pitch(),
-      h("section", { class: "gate", part: "gate" }, [
-        h("p", { part: "join-status", role: "status", text: "Payment received. Sign in to finish joining " + this.name() + "." }),
-      ])])]);
-    this.timer = setTimeout(() => signIn(null, this.checkout), CLAIM_SIGNIN_DELAY_MS);
+      h("section", { class: "gate", part: "gate" }, [h("p", { part: "join-status", role: "status", text: FINISHING })])])]);
+  }
+
+  // Back from Stripe signed out: straight on to sign in, which brings them back to claim it.
+  claimAfterSignIn() {
+    this.finishing();
+    signIn(null, this.checkout);
   }
 
   // A member now: into the site, through its own sign-in (silent, since they're signed in to Polynet).
   enter() {
     this.state = "member";
     this.address("");
-    this.render({});
     const url = String(this.data.enter_url || "");
-    if (/^https?:\/\//.test(url)) location.assign(url);
+    if (!/^https?:\/\//.test(url)) return this.render({});
+    this.finishing();
+    location.assign(url);
   }
 
   watchPending() {
