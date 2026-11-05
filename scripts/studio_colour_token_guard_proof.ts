@@ -12,10 +12,8 @@ const EXCLUDED = [
   "apps/web/src/styles/pdf-text-layer.css",
 ];
 
-// Deliberate literals: theme preview swatches, the internal operator
-// warning, and light-theme-only adapters (owned by the light-mode slice).
+// Deliberate literals: the internal operator warning.
 const ALLOWED = new Set([
-  "settings-runtime-and-theme-overrides.css|#2f55ff",
   "settings-runtime-and-theme-overrides.css|#f0b84d",
 ]);
 
@@ -45,6 +43,13 @@ function isTinted([r, g, b]: [number, number, number]): boolean {
   return saturation >= 0.25 && max * 255 - min * 255 >= 30;
 }
 
+// White tints vanish on the light theme's white surfaces. Below 50% opacity
+// they must use a token (--hover-overlay, --surface-subtle, --border-*),
+// except where they sit on photos or dark overlays in both themes.
+const WHITE_TINT = /rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(0?\.\d+)\s*\)/g;
+const WHITE_ON_MEDIA =
+  /lightbox|chat-media-remove|public-funnel-media-play|avatar|stripe-setup-button|discover-card-banner|community-nav-banner|runtime-trace-tool/;
+
 const violations: string[] = [];
 for (const file of files) {
   const css = readFileSync(file, "utf8");
@@ -53,6 +58,14 @@ for (const file of files) {
     if (selector.includes('data-theme="light"')) continue;
     for (const declaration of rule[2].split(";")) {
       if (declaration.trim().startsWith("--")) continue;
+      const property = declaration.split(":")[0]?.trim() ?? "";
+      if (!property.includes("shadow") && !WHITE_ON_MEDIA.test(selector)) {
+        for (const tint of declaration.matchAll(WHITE_TINT)) {
+          if (Number(tint[1]) < 0.5) {
+            violations.push(`${file}: ${selector.split("\n").pop()} -> ${tint[0]} (white tint)`);
+          }
+        }
+      }
       for (const literal of declaration.match(colourPattern) ?? []) {
         if (!isTinted(channels(literal))) continue;
         const key = `${file.split("/").pop()}|${literal.toLowerCase()}`;

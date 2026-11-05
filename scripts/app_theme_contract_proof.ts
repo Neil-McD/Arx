@@ -71,9 +71,9 @@ assert.deepEqual(
   {
     id: "light",
     label: "Light",
-    description: "Paper light with intelligence blue",
+    description: "Black and white",
     disabled: false,
-    browserColor: "#F8F8F4",
+    browserColor: "#FFFFFF",
   },
 );
 assert.equal(DEFAULT_APP_THEME, "dark");
@@ -169,13 +169,13 @@ for (const definition of APP_THEME_DEFINITIONS) {
 const primaryAliasBootstrap = runThemeBootstrap({ primary: "cris" });
 assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme"), "light");
 assert.equal(primaryAliasBootstrap.rootAttributes.has("data-theme-family"), false);
-assert.equal(primaryAliasBootstrap.browserColor, "#F8F8F4");
+assert.equal(primaryAliasBootstrap.browserColor, "#FFFFFF");
 assert.deepEqual(primaryAliasBootstrap.storageReads, [APP_THEME_STORAGE_KEY]);
 
 const legacyBootstrap = runThemeBootstrap({ legacy: "cris" });
 assert.equal(legacyBootstrap.rootAttributes.get("data-theme"), "light");
 assert.equal(legacyBootstrap.rootAttributes.has("data-theme-family"), false);
-assert.equal(legacyBootstrap.browserColor, "#F8F8F4");
+assert.equal(legacyBootstrap.browserColor, "#FFFFFF");
 assert.deepEqual(legacyBootstrap.storageReads, [
   APP_THEME_STORAGE_KEY,
   LEGACY_APP_THEME_STORAGE_KEY,
@@ -216,7 +216,7 @@ const root = {
 applyAppThemeAttributes("light", root);
 assert.equal(attributes.get("data-theme"), "light");
 assert.equal(attributes.has("data-theme-family"), false);
-assert.equal(browserThemeColor, "#F8F8F4");
+assert.equal(browserThemeColor, "#FFFFFF");
 
 applyAppThemeAttributes("dark", root);
 assert.equal(attributes.get("data-theme"), "dark");
@@ -377,33 +377,33 @@ assert.equal(
 );
 
 [
-  "--bg-app: #F8F8F4;",
-  "--bg-workspace: #F8F8F4;",
-  "--bg-panel: #F0F0EE;",
-  "--surface-rail: #F8F8F4;",
+  "--bg-app: #F1F1F3;",
+  "--bg-workspace: #FFFFFF;",
+  "--bg-panel: #F7F7F8;",
+  "--surface-rail: #F1F1F3;",
   "--community-rail-control-bg: var(--surface-nav);",
-  "--surface-nav: #F0F0EE;",
+  "--surface-nav: #F7F7F8;",
   "--bg-card: #FFFFFF;",
-  "--bg-card-hover: #ECECEA;",
-  "--surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);",
-  "--text-primary: #171719;",
-  "--text-secondary: #52515A;",
-  "--text-muted: #6B6974;",
-  "--text-faint: #726F78;",
-  "--border-strong: rgba(23, 23, 25, 0.22);",
-  "--border-default: rgba(23, 23, 25, 0.1);",
-  "--divider-accent: rgba(23, 23, 25, 0.1);",
-  "--stroke-panel-edge: rgba(23, 23, 25, 0.16);",
-  "--accent-brand: #2F55FF;",
-  "--accent-selection: #2F55FF;",
-  "--accent-agent: #2F55FF;",
-  "--accent-attention: #326FAD;",
+  "--bg-card-hover: #F1F1F3;",
+  "--surface-selected: rgba(11, 11, 12, 0.05);",
+  "--text-primary: #0B0B0C;",
+  "--text-secondary: #3C3F45;",
+  "--text-muted: #5F636B;",
+  "--text-faint: #686C73;",
+  "--border-strong: rgba(11, 11, 12, 0.18);",
+  "--border-default: rgba(11, 11, 12, 0.09);",
+  "--divider-accent: rgba(11, 11, 12, 0.08);",
+  "--stroke-panel-edge: rgba(11, 11, 12, 0.1);",
+  "--accent-brand: #0B0B0C;",
+  "--accent-selection: #0B0B0C;",
+  "--accent-agent: #0B0B0C;",
+  "--accent-attention: #0B0B0C;",
   "--text-on-attention: #FFFFFF;",
   "--accent-global-attention: #B42318;",
   "--text-on-global-attention: #FFFFFF;",
-  "--text-link: #2F55FF;",
-  "--stroke-selected: #2F55FF;",
-  "--text-selected: #171719;",
+  "--text-link: #0B0B0C;",
+  "--stroke-selected: transparent;",
+  "--text-selected: #0B0B0C;",
 ].forEach((token) => {
   assert.ok(lightThemeBlock.includes(token), `Light should define ${token}`);
 });
@@ -412,7 +412,9 @@ assert.match(
   /\.community-rail-button\s*\{[\s\S]*?background:\s*var\(--community-rail-control-bg\);/,
   "community rail utility controls should consume the theme-specific rail control surface",
 );
-const lightSelection = lightThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim();
+// Black and white: routine selection is a tint of ink on the surface, while
+// attention is solid ink, so the two stay distinct without a hue.
+const lightSelection = lightThemeBlock.match(/--surface-selected:\s*([^;]+);/)?.[1]?.trim();
 const lightAttention = lightThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim();
 assert.ok(lightSelection && lightAttention, "Light should expose selection and attention roles");
 assert.notEqual(
@@ -676,12 +678,12 @@ assert.doesNotMatch(
   /\.status\.canceled\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
   /\.status\.failed\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
   /\.action-error\s*\{[\s\S]*?color:\s*var\(--danger-text\);[\s\S]*?border:\s*1px solid var\(--danger-border\);[\s\S]*?background:\s*var\(--danger-surface\);/,
-  /\.settings-section\s*\{[\s\S]*?border-bottom:\s*1px solid rgba\(255,\s*255,\s*255,\s*0\.05\);/,
+  /\.settings-section\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-muted\);/,
 ].forEach((legacyRule) => {
   assert.match(
     baseCss,
     legacyRule,
-    "dark-theme component danger states must consume the danger tokens",
+    "dark-theme component states must consume the danger and border tokens",
   );
 });
 [
@@ -783,27 +785,26 @@ const accessiblePairs = [
   ["Builder action text on white", "#08090A", "#F7F8F8"],
   ["Builder action text on cream", "#0A0A0A", "#F1EDE5"],
   ["Dark attention on canvas", "#F7F8F8", "#0B0C0D"],
-  ["Light activity blue on canvas", "#326FAD", "#F8F8F4"],
-  ["Light activity blue on navigation", "#326FAD", "#F0F0EE"],
+  ["Light attention on workspace", "#0B0B0C", "#FFFFFF"],
+  ["Light attention on navigation", "#0B0B0C", "#F7F7F8"],
   ["Dark unread count on attention fill", "#08090A", "#F7F8F8"],
   ["Light unread count on activity fill", "#FFFFFF", "#326FAD"],
   ["Dark global attention count", "#171719", "#EF4444"],
   ["Light global attention count", "#FFFFFF", "#B42318"],
-  ["Primary ink on canvas", "#171719", "#F8F8F4"],
-  ["Secondary ink on canvas", "#52515A", "#F8F8F4"],
-  ["Muted ink on canvas", "#6B6974", "#F8F8F4"],
-  ["Faint ink on canvas", "#726F78", "#F8F8F4"],
-  ["Selection ink on card", "#171719", "#FFFFFF"],
-  ["White on control ink", "#FFFFFF", "#171719"],
-  ["Intelligence blue on card", "#2F55FF", "#FFFFFF"],
-  ["Intelligence blue on canvas", "#2F55FF", "#F8F8F4"],
+  ["Primary ink on workspace", "#0B0B0C", "#FFFFFF"],
+  ["Secondary ink on panel", "#3C3F45", "#F7F7F8"],
+  ["Muted ink on rail", "#5F636B", "#F1F1F3"],
+  ["Faint ink on workspace", "#686C73", "#FFFFFF"],
+  ["Faint ink on panel", "#686C73", "#F7F7F8"],
+  ["Selection ink on card", "#0B0B0C", "#FFFFFF"],
+  ["White on control ink", "#FFFFFF", "#0B0B0C"],
   [
-    "Intelligence blue on agent surface",
-    "#2F55FF",
-    blendHex("#2F55FF", "#FFFFFF", 0.1),
+    "Agent ink on agent surface",
+    "#3C3F45",
+    blendHex("#0B0B0C", "#FFFFFF", 0.06),
   ],
   ["Functional success on card", "#147A4B", "#FFFFFF"],
-  ["Functional error on canvas", "#B42318", "#F8F8F4"],
+  ["Functional error on panel", "#B42318", "#F7F7F8"],
   [
     "Functional error on recording surface",
     "#B42318",
@@ -812,7 +813,7 @@ const accessiblePairs = [
   [
     "Functional error on dock feedback surface",
     "#B42318",
-    blendHex("#B42318", "#F0F0EE", 0.1),
+    blendHex("#B42318", "#F7F7F8", 0.1),
   ],
 ] as const;
 for (const [label, foreground, background] of accessiblePairs) {
