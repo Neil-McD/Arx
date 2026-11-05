@@ -25,7 +25,13 @@ async function fixture() {
     for (let index = 0; index < 3; index += 1) {
       await ctx.db.insert("communityFunnels", { communityId, createdAt: now, updatedAt: now } as any);
     }
-    return { oldReceipt, currentReceipt };
+    const root = (key: string, actorType: "personal_agent" | "human") => ctx.db.insert("communityInteractionRoots", {
+      communityId, actorType, actorUserId: ownerId, kind: "discussion", status: "live", visibilityScope: "community",
+      contentSummary: key, replyCount: 0, reactionSummary: [], idempotencyKey: key, createdAt: now, updatedAt: now,
+    });
+    const oldRoot = await root("old-root", "personal_agent");
+    const humanRoot = await root("human-root", "human");
+    return { oldReceipt, currentReceipt, oldRoot, humanRoot };
   });
   return { t, ids };
 }
@@ -50,4 +56,37 @@ test("old personal_agent receipts become community_agent_for_member; others are 
   expect((await t.run((ctx) => ctx.db.get(ids.oldReceipt)))?.principalKind).toBe("community_agent_for_member");
   expect((await t.run((ctx) => ctx.db.get(ids.currentReceipt)))?.principalKind).toBe("external_mcp");
   expect(await rewrite()).toMatchObject({ matched: 0 });
+});
+
+test("old agent posts become community agent posts with the canonical agent key", async () => {
+  const { t, ids } = await fixture();
+  await t.mutation(internal.retiredTablesCleanup.rewriteRetiredPersonalAgentInternal, { table: "roots" });
+  const oldRoot = await t.run((ctx) => ctx.db.get(ids.oldRoot));
+  expect(oldRoot).toMatchObject({ actorType: "community_agent", actorAgentKey: "community_agent" });
+  const humanRoot = await t.run((ctx) => ctx.db.get(ids.humanRoot));
+  expect(humanRoot?.actorType).toBe("human");
+  expect(humanRoot?.actorAgentKey).toBeUndefined();
+});
+
+test("a dry run pages through tables larger than one page", async () => {
+  const { t } = await fixture();
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    const { communityId } = (await ctx.db.query("communityFunnels").first()) as any;
+    for (let index = 0; index < 250; index += 1) {
+      await ctx.db.insert("communityFunnels", { communityId, createdAt: now, updatedAt: now } as any);
+    }
+  });
+  let cursor: string | null = null;
+  let total = 0;
+  for (let pages = 0; pages < 5; pages += 1) {
+    const result: any = await t.mutation(internal.retiredTablesCleanup.emptyRetiredTableInternal, {
+      table: "communityFunnels", dryRun: true, cursor,
+    });
+    total += result.rows;
+    if (result.isDone) break;
+    cursor = result.continueCursor;
+  }
+  expect(total).toBe(253);
+  expect(await t.run(async (ctx) => (await ctx.db.query("communityFunnels").collect()).length)).toBe(253);
 });

@@ -21,6 +21,7 @@ const ALLOWED = new Map([
   ["communityChannelAudit", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityChannelBackfill", "General channel migration: delete after two clean production audits (residue map R-009)"],
   ["communityAiFeedRetirement", "data retirement job; removed with the AI feed tables"],
+  ["retiredTablesCleanup", "table-drop release 1 (POL-31): run by hand; removed in release 2"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
 ]);
 
