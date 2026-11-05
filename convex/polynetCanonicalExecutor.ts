@@ -206,11 +206,6 @@ function mountedPath(communitySlug: string, localPath: string): string {
     : `/communities/${communitySlug}${localPath}`;
 }
 
-// The community agent (in an Ask or a tag) writes community notes in its own voice.
-function principalWritesNotes(principalKind: PolynetPrincipalKind): boolean {
-  return principalKind === "community_agent_for_member" || principalKind === "community_agent";
-}
-
 function virtualDirectory(args: {
   path: string;
   entries?: Array<Record<string, unknown>>;
@@ -1320,7 +1315,7 @@ async function executeCanonicalList(args: {
         })),
         truncated: listed.hasMore,
         searchable: true,
-        writable: principalWritesNotes(args.principalKind),
+        writable: false,
       }),
     };
   }
@@ -1649,10 +1644,7 @@ async function executeCanonicalRead(args: {
         path: evidencePath({ communitySlug: target.communitySlug, channelSlug: item.channelSlug, sourceType: "interaction", ref: item.ref }),
       })),
     });
-    // A timeline can include posts from private rooms the reader is in.
-    const privateRoom = timeline.items.some((item: any) => item.privateRoom === true);
-    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore,
-      ...(privateRoom ? { private_room: true } : {}) } };
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body, truncated: timeline.hasMore } };
   }
 
   // Who is online, and one member's profile, as JSON for a member's site or
@@ -2139,23 +2131,6 @@ async function executeCanonicalSearch(args: {
   }
 }
 
-// A result from a room only some members can read, or from owner-only data,
-// says so (private_room), so an agent turn that saw it can't write a note.
-const PRIVATE_SOURCE_PATH = /^\/communities\/([a-z0-9-]+)\/(?:builder\/|channels\/([a-z0-9-]+)\/)/;
-
-async function markPrivateSource(
-  ctx: any,
-  rawPath: unknown,
-  result: Extract<PolynetCanonicalExecutionResult, { ok: true }>,
-): Promise<PolynetCanonicalExecutionResult> {
-  const match = PRIVATE_SOURCE_PATH.exec(String(rawPath ?? "").trim().replace(/\/{2,}/g, "/"));
-  if (!match || !result.value || typeof result.value !== "object") return result;
-  const isPrivate = !match[2] || await ctx.runQuery((internal as any).communityNotes.isRestrictedChannelInternal, {
-    communitySlug: match[1], channelSlug: match[2],
-  });
-  return isPrivate ? { ...result, value: { ...(result.value as Record<string, unknown>), private_room: true } } : result;
-}
-
 // Lessons in a course listing, and a lesson read, say whether the member
 // reading has marked them done. Only reads made for a member: the community
 // agent in a tag reads for the channel, not a member.
@@ -2202,55 +2177,11 @@ async function executeCanonicalWrite(args: {
   const mode = String(args.input.mode ?? "");
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
 
-  // Community notes: the agent saves what is worth sharing with everyone.
-  // memory/ takes a new note; memory/<note>.md takes an addition or a rewrite.
-  const noteMatch = /^\/memory\/([a-z0-9-]+)\.md$/.exec(target.localPath);
-  if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH || noteMatch) {
-    if (!principalWritesNotes(args.principalKind) || args.evidenceSurface === "community_funnel_builder") {
-      return canonicalError("community_write_forbidden", "Only the community agent writes community notes.");
-    }
-    const slug = noteMatch?.[1] ?? null;
-    if (slug ? mode !== "append" && mode !== "update" : mode !== "create") {
-      return canonicalError("invalid_tool_args", "Create a note on memory/ with content.title and content.text; append to or update a note on its memory/<note>.md path.");
-    }
-    const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey });
-    if (!reservation.ok) return reservation.result;
-    if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
-    const written = (await args.ctx.runMutation((internal as any).communityNotes.writeCommunityNoteInternal, {
-      communityId: target.communityId,
-      mode,
-      ...(slug ? { slug } : {}),
-      ...(typeof content.title === "string" ? { title: content.title } : {}),
-      text: String(content.text ?? content.body ?? ""),
-      source: args.principalKind === "community_agent" ? "tag" : "ask",
-      operationKey: `${args.principalKind}:${args.userId}:${idempotencyKey}`,
-      // A tag runs on its sponsor's account, so only an Ask records whose turn it was.
-      ...(args.principalKind === "community_agent_for_member" ? { actorUserId: args.userId } : {}),
-    })) as { ok: boolean; slug?: string; title?: string; created?: boolean; code?: string; message?: string };
-    if (!written.ok) {
-      await failMutatingOperation({
-        ...args, target, toolName: "polynet_write", idempotencyKey,
-        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
-        errorCode: written.code ?? "community_note_write_failed", errorMessage: written.message ?? "The note could not be saved.",
-      });
-      return canonicalError(written.code ?? "community_note_write_failed", written.message ?? "The note could not be saved.");
-    }
-    const responseValue = {
-      ok: true,
-      path: mountedPath(target.communitySlug, `${POLYNET_MEMORY_DIRECTORY_PATH}${written.slug}.md`),
-      title: written.title,
-      created: written.created === true,
-      deduped: false,
-      receipt: canonicalReceipt({ toolName: "polynet_write", principalKind: args.principalKind, target, idempotencyKey, deduped: false }),
-    };
-    return {
-      ok: true,
-      value: await completeMutatingOperation({
-        ...args, target, toolName: "polynet_write", idempotencyKey,
-        requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken, value: responseValue,
-      }),
-    };
+  // Community notes are the founder's (Studio). No agent, member or AI writes them.
+  if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH || /^\/memory\//.test(target.localPath)) {
+    return canonicalError("community_write_forbidden", "Community notes are kept by the founder in Studio. Read them; don't write them.");
   }
+
 
   const writableChannelPath = parseCommunityChannelSemanticPath(
     target.localPath,
@@ -3097,7 +3028,7 @@ export async function executePolynetCanonicalTool(args: {
       ? await executeCanonicalList(common)
       : await executeCanonicalRead(common);
     if (!result.ok) return result;
-    return await markLessonProgress(args, await markPrivateSource(args.ctx, args.input.path, result));
+    return await markLessonProgress(args, result);
   }
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);

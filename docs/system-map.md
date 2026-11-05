@@ -158,10 +158,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 7. Community notes — Keep (protected)
 
-- **Does:** community notes, the agent's shared memory: short markdown notes the
-  community agent writes from an Ask or a tag when it learns something worth
-  sharing; every member reads them under `memory/`; owners and admins edit or
-  delete them in Studio (Knowledge → Notes). The Studio and public overview
+- **Does:** community notes: short markdown notes every member and the
+  community agent read under `memory/`; only owners and admins edit or delete
+  them in Studio (Knowledge → Notes). No agent, member or connected AI writes
+  them (Nov 5: closed a private-room leak and an injection path). The Studio and public overview
   (`communityIntelligenceDirectory`, kept by name for cached pages) shows notes
   and lessons around the community.
 - **Code:** `communityNotes`, `communityIntelligenceDirectory`, `communityEvidence*`,
