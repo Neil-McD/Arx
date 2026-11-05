@@ -402,8 +402,11 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   (`POST /__polynet/me/join/guest-checkout`, no session, forwarded to
   `/runtime/app/join/checkout`): Stripe collects the email, the checkout and
   its purchase claim have no owner yet, and the claim token goes back to the
-  edge only, which keeps it in an HttpOnly `__Host-polynet_claim` cookie on
-  the twin (14 days); the page gets Stripe's address and nothing else. Back
+  edge only, which keeps it in an HttpOnly cookie on the twin, one per
+  checkout (`__Host-polynet_claim_<checkout hex>`, 14 days, so a second tab's
+  checkout never replaces the first's); the page gets Stripe's address and
+  nothing else, and no `__Host-polynet_` cookie ever reaches the founder's
+  site code (the edge strips them all from forwarded requests). Back
   from Stripe signed out, the page says "Payment received. Sign in to finish
   joining" and signs in (the normal hop, back to `/join?checkout=<id>`). Then
   Finish carries the claim from the cookie (the edge drops any `claim_token`

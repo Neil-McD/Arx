@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, withShell, withoutPolynetSetCookies, type Env } from "./index";
+import edge, { resetEdgeCaches, resolveRoute, safeReturnPath, withShell, withoutPolynetCookies, withoutPolynetSetCookies, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
@@ -1460,7 +1460,7 @@ test("twin join, cash first: a signed-out buyer goes straight to Stripe; only th
   // No session needed: the page gets Stripe's address only; the claim is an HttpOnly cookie on the twin.
   const started = await guest(TWIN);
   expect([started.status, await started.json()]).toEqual([200, { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_g1" }]);
-  expect(started.headers.get("set-cookie")).toBe(`__Host-polynet_claim=${CLAIM}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure`);
+  expect(started.headers.get("set-cookie")).toBe(`__Host-polynet_claim_${"b".repeat(32)}=${CLAIM}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure`);
   expect(backend.mock.calls[0][1]?.headers).toEqual({ "Content-Type": "application/json", Origin: TWIN, "x-polynet-edge-secret": "edge-secret" });
   // A checkout address anywhere but Stripe's own page, or no claim, and nothing is kept.
   for (const answer of [{ ...answers["/runtime/app/join/checkout"] as object, checkout_url: "https://evil.example.com/pay" },
@@ -1472,15 +1472,23 @@ test("twin join, cash first: a signed-out buyer goes straight to Stripe; only th
   // Signed in on the twin, Finish carries the claim from the cookie (never from the page), and drops it once joined.
   backend.mockClear();
   const finish = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
-    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, claim_token: "claim_forged" })), e);
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim_${"b".repeat(32)}=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, claim_token: "claim_forged" })), e);
   expect(finish.status).toBe(200);
   expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}`, claim_token: CLAIM });
-  expect(finish.headers.get("set-cookie")).toBe("__Host-polynet_claim=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure");
+  expect(finish.headers.get("set-cookie")).toBe(`__Host-polynet_claim_${"b".repeat(32)}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
   // Still pending: the claim stays for the next try.
   answers["/runtime/app/me/join/finish"] = { ...JOIN_ANSWER, status: "pending" };
   const pending = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
-    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim_${"b".repeat(32)}=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
   expect([pending.status, pending.headers.get("set-cookie")]).toEqual([200, null]);
+  // Another checkout's claim (another tab) is never sent for this one.
+  backend.mockClear();
+  await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim_${"e".repeat(32)}=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
+  expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}` });
+  // A founder's site code never sees a claim (or any Polynet cookie) on the requests the edge forwards.
+  const forwarded = withoutPolynetCookies(new Request(TWIN, { headers: { cookie: `a=1; __Host-polynet_claim_${"b".repeat(32)}=${CLAIM}; __HOST-POLYNET_whatever=x; b=2` } }));
+  expect(forwarded.headers.get("cookie")).toBe("a=1; b=2");
   // Without the cookie, a claim the page names never reaches the backend.
   backend.mockClear();
   await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST", {}, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, claim_token: CLAIM })), e);

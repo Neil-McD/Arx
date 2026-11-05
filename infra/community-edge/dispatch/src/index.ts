@@ -135,8 +135,15 @@ const SESSION_COOKIE = "__Host-polynet_session";
 const SIGNIN_COOKIE = "__Host-polynet_signin";
 // Cash first: a guest checkout's claim token, kept only by the browser that
 // paid (on the private twin, HttpOnly) until the buyer signs in and claims it.
+// One cookie per checkout (__Host-polynet_claim_<its hex>), so a second
+// checkout in another tab never replaces the first one's claim.
 const CLAIM_COOKIE = "__Host-polynet_claim";
 const CLAIM_TOKEN_PATTERN = /^claim_[a-f0-9]{32}$/;
+const CHECKOUT_ID_PATTERN = /^chk_([a-f0-9]{32})$/;
+function claimCookieName(checkoutId: unknown): string | null {
+  const hex = typeof checkoutId === "string" ? CHECKOUT_ID_PATTERN.exec(checkoutId)?.[1] : null;
+  return hex ? `${CLAIM_COOKIE}_${hex}` : null;
+}
 const CLAIM_TTL_SECONDS = 14 * 24 * 60 * 60;
 // Names the edge used before, and any a sibling site plants: never read, never passed on.
 const LEGACY_COOKIE_PREFIX = "__polynet_";
@@ -338,7 +345,8 @@ export function withoutPolynetCookies(request: Request): Request {
   const kept = (request.headers.get("cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
-    .filter((part) => part && !part.startsWith(`${SESSION_COOKIE}=`) && !part.startsWith(`${SIGNIN_COOKIE}=`) && !part.startsWith(LEGACY_COOKIE_PREFIX));
+    // Every __Host-polynet_ cookie (session, sign-in, a guest checkout's claim), whatever comes next.
+    .filter((part) => part && !part.toLowerCase().startsWith("__host-polynet_") && !part.startsWith(LEGACY_COOKIE_PREFIX));
   const headers = new Headers(request.headers);
   if (kept.length) headers.set("cookie", kept.join("; "));
   else headers.delete("cookie");
@@ -776,7 +784,8 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
       const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json(400, { ok: false, code: "invalid_request" });
       const { claim_token: _fromPage, ...rest } = parsed as Record<string, unknown>;
-      const claim = readCookie(request, CLAIM_COOKIE);
+      const name = claimCookieName(rest.session_id);
+      const claim = name ? readCookie(request, name) : null;
       body = JSON.stringify(claim && CLAIM_TOKEN_PATTERN.test(claim) ? { ...rest, claim_token: claim } : rest);
     }
   } else if (route.query) {
@@ -800,8 +809,9 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
   }
   const shaped = shape(url.pathname, answer, env, place);
   if (!shaped) return json(502, { ok: false, code: unavailable });
-  const claimed = route.carriesClaim && answer.status === "joined" && readCookie(request, CLAIM_COOKIE);
-  return json(200, { ok: true, ...shaped }, claimed ? { "Set-Cookie": cookie(CLAIM_COOKIE, "", 0) } : {});
+  const claimName = route.carriesClaim && answer.status === "joined" ? claimCookieName(JSON.parse(body).session_id) : null;
+  const claimed = claimName && readCookie(request, claimName);
+  return json(200, { ok: true, ...shaped }, claimed && claimName ? { "Set-Cookie": cookie(claimName, "", 0) } : {});
 }
 
 // Cash first: Stripe's checkout for a buyer who hasn't signed in. Only Stripe's
@@ -824,8 +834,9 @@ async function proxyGuestCheckout(request: Request, url: URL, env: Env): Promise
   }
   const checkoutUrl = typeof answer.checkout_url === "string" && answer.checkout_url.startsWith(STRIPE_CHECKOUT_PREFIX) ? answer.checkout_url : null;
   const claim = typeof answer.claim_token === "string" && CLAIM_TOKEN_PATTERN.test(answer.claim_token) ? answer.claim_token : null;
-  if (!checkoutUrl || !claim) return json(502, { ok: false, code: "join_unavailable" });
-  return json(200, { ok: true, checkout_url: checkoutUrl }, { "Set-Cookie": cookie(CLAIM_COOKIE, claim, CLAIM_TTL_SECONDS) });
+  const name = claimCookieName(answer.session_id);
+  if (!checkoutUrl || !claim || !name) return json(502, { ok: false, code: "join_unavailable" });
+  return json(200, { ok: true, checkout_url: checkoutUrl }, { "Set-Cookie": cookie(name, claim, CLAIM_TTL_SECONDS) });
 }
 
 function studioJoinUrl(route: Route, env: Env): string {
