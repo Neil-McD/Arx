@@ -151,7 +151,11 @@ export function useWebFounderBillingController(params: {
         row?.lifecycle_status === "archived";
       if (!isStillPending) {
         if (row?.lifecycle_status === "active") {
-          captureProductAnalyticsEvent("agent_plan_activated", { community_id: returningCommunityId });
+          // Only a webhook-confirmed paid subscription counts as activation; an
+          // abandoned or expired checkout returns as managed_required.
+          if (row.status === "active") {
+            captureProductAnalyticsEvent("agent_plan_activated", { community_id: returningCommunityId });
+          }
           await onCommunityReadyRef.current?.(returningCommunityId, activeSession);
         }
         scrubCurrentRouteSearchParams(["founder_community", "session_id"]);
