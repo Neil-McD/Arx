@@ -5,10 +5,12 @@
 // out, and its gate exactly as Studio's public funnel decides it: the backend
 // projects it with Studio's own functions and every action runs Studio's own
 // core, so this page only draws what it's told. Free: sign in, then Join.
-// Approval: sign in, ask, then wait (or withdraw). Paid: pick a plan, then
-// Stripe's own checkout (the address the backend returned, never one built
-// here), and back here "Finishing up…" until Polynet has the payment from
-// Stripe itself. Joined: into the site, signed in there too. Kept as text (a
+// Approval: sign in, ask, then wait (or withdraw). Paid, cash first: pick a
+// plan, then Stripe's own checkout (the address the backend returned, never one
+// built here), signed in or not; back here, sign in if they weren't, and
+// "Finishing up…" until Polynet has the payment from Stripe itself (a guest's
+// payment is claimed by signing in on this browser). Joined: into the site,
+// signed in there too. Kept as text (a
 // String.raw literal: no backticks or template placeholders inside) so the
 // edge serves exactly what is reviewed.
 
@@ -68,6 +70,8 @@ const CHECKOUT_SESSION = /^chk_[a-f0-9]{32}$/;
 // Back from Stripe: ask every two seconds for a minute, then let the member ask.
 const FINISH_EVERY_MS = 2000;
 const FINISH_TRIES = 30;
+// Long enough to read "Payment received", short enough not to wait on.
+const CLAIM_SIGNIN_DELAY_MS = 1200;
 // A pending request is re-read while the page is open, as Studio's funnel does.
 const PENDING_EVERY_MS = 30000;
 
@@ -93,8 +97,9 @@ function members(count) {
   return new Intl.NumberFormat().format(count) + (count === 1 ? " member" : " members");
 }
 
-function signIn(plan) {
-  const back = "/join" + (plan ? "?plan=" + encodeURIComponent(plan) : "");
+// Back to Join after signing in, with the plan picked or the checkout to finish.
+function signIn(plan, checkout) {
+  const back = "/join" + (checkout ? "?checkout=" + encodeURIComponent(checkout) : plan ? "?plan=" + encodeURIComponent(plan) : "");
   location.href = "/__polynet/auth/start?return=" + encodeURIComponent(back);
 }
 
@@ -141,7 +146,8 @@ class Join {
     }
     this.data = res.body;
     if (this.checkout && this.data.signed_in) return this.finish(0);
-    if (this.checkout) this.address("");
+    // Paid before signing in: the payment is theirs once they sign in here.
+    if (this.checkout) return this.claimAfterSignIn();
     this.render(this.canceled ? { note: "Checkout canceled. You haven't been charged." } : {});
     if (this.canceled) { this.canceled = false; this.address(""); }
   }
@@ -229,10 +235,10 @@ class Join {
         return h("label", { class: "plan", part: "plan" }, [input, h("span", { text: plan.label.replace(/^Join /, "") })]);
       }))));
     }
-    action.addEventListener("click", () => (this.data.viewer ? this.startCheckout(action) : signIn(this.plan)));
+    action.addEventListener("click", () => this.startCheckout(action));
     out.push(h("div", { class: "actions" }, [action]));
     out.push(h("p", { class: "muted", part: "gate-note", text: this.data.viewer ? "You'll pay on Stripe's secure checkout, then come back here."
-      : "You'll sign in with Polynet first, then pay on Stripe's secure checkout." }));
+      : "You'll pay on Stripe's secure checkout, then sign in with Polynet to finish." }));
     return out;
   }
 
@@ -259,9 +265,12 @@ class Join {
     this.render({});
   }
 
+  // Cash first: signed in or not, straight to Stripe. Signed out, the twin
+  // keeps the payment's claim for this browser until they sign in.
   async startCheckout(button) {
     button.disabled = true;
-    const res = await call("/__polynet/me/join/checkout", { billing_period: this.plan });
+    const guest = !this.data.viewer;
+    const res = await call(guest ? "/__polynet/me/join/guest-checkout" : "/__polynet/me/join/checkout", { billing_period: this.plan });
     if (!this.current()) return;
     if (res.status === 401) return signIn(this.plan);
     const url = res.status === 200 && res.body.ok === true && typeof res.body.checkout_url === "string" ? res.body.checkout_url : "";
@@ -287,7 +296,7 @@ class Join {
     }
     const res = await call("/__polynet/me/join/finish", { session_id: this.checkout });
     if (!this.current()) return;
-    if (res.status === 401) return signIn(null);
+    if (res.status === 401) return signIn(null, this.checkout);
     if (ok(res)) this.data = res.body;
     if (ok(res) && res.body.viewer && res.body.viewer.state === "member") return this.enter();
     if (ok(res) && (res.body.status === "expired" || res.body.status === "not_found")) {
@@ -305,6 +314,15 @@ class Join {
         h("p", { part: "join-status", role: "status", text: "Still finishing up. A payment can take a minute to confirm." }),
         h("div", { class: "actions" }, [again]),
       ])])]);
+  }
+
+  // Back from Stripe signed out: say the payment is in, then the one step left.
+  claimAfterSignIn() {
+    this.block.show("finishing", [h("div", { class: "join", part: "join" }, [this.pitch(),
+      h("section", { class: "gate", part: "gate" }, [
+        h("p", { part: "join-status", role: "status", text: "Payment received. Sign in to finish joining " + this.name() + "." }),
+      ])])]);
+    this.timer = setTimeout(() => signIn(null, this.checkout), CLAIM_SIGNIN_DELAY_MS);
   }
 
   // A member now: into the site, through its own sign-in (silent, since they're signed in to Polynet).

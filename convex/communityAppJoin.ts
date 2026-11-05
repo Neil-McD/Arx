@@ -12,6 +12,7 @@ import {
   type CommunityLike,
   type CommunityMembershipLike,
   type PublicPlanSummaryLike,
+  communityUserIsBlocked,
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
   resolveCommunityBrandingFields,
@@ -148,19 +149,48 @@ export const cancelCommunityAppJoinRequestInternal = internalMutation({
   },
 });
 
+// The community a site's private twin belongs to: where a signed-out buyer's
+// checkout may start. Nothing for a site's public origin or an archived community.
+export const privateOriginCommunityInternal = internalQuery({
+  args: { origin: v.string() },
+  handler: async (ctx, args) => {
+    const found = await communityAtOrigin(ctx, args.origin);
+    if (!found || found.domain.kind !== "private") return null;
+    return { communityId: found.community._id, communitySlug: String(found.community.slug ?? "") };
+  },
+});
+
 // Back from Stripe on the twin: Studio's finalization (the webhook's record,
 // never the redirect) and, once it grants access, Studio's claim. Only the
 // buyer's own checkout for this community; anything else reads as none at all.
+// A guest checkout (paid before signing in) becomes the buyer's here: the first
+// signed-in member who brings its claim token, which only the browser that
+// started it holds (an HttpOnly cookie on the twin).
 export const finishCommunityAppCheckoutInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string() },
+  args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string(), claimToken: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ status: "joined" | "pending" | "expired" | "not_found" }> => {
     const row = await ctx.db
       .query("checkoutSessions")
       .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
       .first();
-    if (!row || row.mode !== "community_join" || String(row.communityId) !== String(args.communityId)
-      || String(row.ownerUserId ?? "") !== String(args.userId)) {
+    if (!row || row.mode !== "community_join" || String(row.communityId) !== String(args.communityId)) {
       return { status: "not_found" };
+    }
+    const claimsGuestCheckout = !row.ownerUserId && Boolean(args.claimToken) && row.claimToken === args.claimToken;
+    if (!claimsGuestCheckout && String(row.ownerUserId ?? "") !== String(args.userId)) {
+      return { status: "not_found" };
+    }
+    if (claimsGuestCheckout) {
+      if (await communityUserIsBlocked({ ctx, communityId: args.communityId, userId: args.userId })) {
+        return { status: "not_found" };
+      }
+      const nowMs = Date.now();
+      await ctx.db.patch(row._id, { ownerUserId: args.userId, updatedAt: nowMs });
+      const claim = await ctx.db
+        .query("purchaseClaims")
+        .withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken))
+        .first();
+      if (claim && !claim.ownerUserId) await ctx.db.patch(claim._id, { ownerUserId: args.userId, updatedAt: nowMs });
     }
     const finalization = (await resolveCheckoutSessionFinalization(ctx, args.userId, args.sessionId)) as {
       status: string; claim?: { token: string };

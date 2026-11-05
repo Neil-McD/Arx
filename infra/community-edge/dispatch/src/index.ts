@@ -133,6 +133,11 @@ const AUTH_PREFIX = "/__polynet/auth/";
 // sets Domain=polynet.page) can shadow a member's session or fixate them into its own.
 const SESSION_COOKIE = "__Host-polynet_session";
 const SIGNIN_COOKIE = "__Host-polynet_signin";
+// Cash first: a guest checkout's claim token, kept only by the browser that
+// paid (on the private twin, HttpOnly) until the buyer signs in and claims it.
+const CLAIM_COOKIE = "__Host-polynet_claim";
+const CLAIM_TOKEN_PATTERN = /^claim_[a-f0-9]{32}$/;
+const CLAIM_TTL_SECONDS = 14 * 24 * 60 * 60;
 // Names the edge used before, and any a sibling site plants: never read, never passed on.
 const LEGACY_COOKIE_PREFIX = "__polynet_";
 const MAX_API_BODY_BYTES = 64 * 1024;
@@ -244,7 +249,11 @@ const PERSONAL_API_PREFIX = "/__polynet/me/";
 const MY_COMMUNITIES_PATH = "/__polynet/me/communities";
 // Settings and Messages: reads are GET (query: what of the address the backend
 // is sent, or null to refuse it); writes are POST with a small JSON body.
-type MyRoute = { method: "GET" | "POST"; backend: string; maxBytes: number; query?: (url: URL) => Record<string, unknown> | null };
+type MyRoute = {
+  method: "GET" | "POST"; backend: string; maxBytes: number; query?: (url: URL) => Record<string, unknown> | null;
+  // Passes the buyer's guest-checkout claim (from its cookie) along, and drops the cookie once claimed.
+  carriesClaim?: boolean;
+};
 const MY_SETTINGS: Record<string, MyRoute> = {
   "/__polynet/me/settings": { method: "GET", backend: "/runtime/app/me/settings", maxBytes: 0 },
   "/__polynet/me/handle": { method: "GET", backend: "/runtime/app/me/handle", maxBytes: 0,
@@ -300,8 +309,11 @@ const MY_JOIN: Record<string, MyRoute> = {
   "/__polynet/me/join": { method: "POST", backend: "/runtime/app/me/join/request", maxBytes: 1024 },
   "/__polynet/me/join/cancel": { method: "POST", backend: "/runtime/app/me/join/cancel", maxBytes: 1024 },
   "/__polynet/me/join/checkout": { method: "POST", backend: "/runtime/app/me/join/checkout", maxBytes: 1024 },
-  "/__polynet/me/join/finish": { method: "POST", backend: "/runtime/app/me/join/finish", maxBytes: 1024 },
+  "/__polynet/me/join/finish": { method: "POST", backend: "/runtime/app/me/join/finish", maxBytes: 1024, carriesClaim: true },
 };
+// Cash first: a paid plan's checkout before signing in. Twin only, like every
+// /__polynet/me/ path; the answer's claim token becomes the buyer's cookie.
+const GUEST_CHECKOUT_PATH = "/__polynet/me/join/guest-checkout";
 // Where a paid plan's checkout may send the member: Stripe's own hosted page only.
 const STRIPE_CHECKOUT_PREFIX = "https://checkout.stripe.com/";
 
@@ -759,6 +771,14 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
     if (Number(request.headers.get("content-length") ?? 0) > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
     body = await request.text();
     if (new TextEncoder().encode(body).length > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
+    if (route.carriesClaim) {
+      // The claim only ever comes from this browser's cookie, never from the page.
+      const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json(400, { ok: false, code: "invalid_request" });
+      const { claim_token: _fromPage, ...rest } = parsed as Record<string, unknown>;
+      const claim = readCookie(request, CLAIM_COOKIE);
+      body = JSON.stringify(claim && CLAIM_TOKEN_PATTERN.test(claim) ? { ...rest, claim_token: claim } : rest);
+    }
   } else if (route.query) {
     const query = route.query(url);
     if (!query) return json(400, { ok: false, code: "invalid_request" });
@@ -779,7 +799,33 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
     return json(upstream.ok ? 502 : upstream.status, { ok: false, code });
   }
   const shaped = shape(url.pathname, answer, env, place);
-  return shaped ? json(200, { ok: true, ...shaped }) : json(502, { ok: false, code: unavailable });
+  if (!shaped) return json(502, { ok: false, code: unavailable });
+  const claimed = route.carriesClaim && answer.status === "joined" && readCookie(request, CLAIM_COOKIE);
+  return json(200, { ok: true, ...shaped }, claimed ? { "Set-Cookie": cookie(CLAIM_COOKIE, "", 0) } : {});
+}
+
+// Cash first: Stripe's checkout for a buyer who hasn't signed in. Only Stripe's
+// own page goes back to the browser; the claim token stays in an HttpOnly
+// cookie on this twin, so page code (the founder's or anyone's) never sees it.
+async function proxyGuestCheckout(request: Request, url: URL, env: Env): Promise<Response> {
+  if (request.method !== "POST") return json(405, { ok: false, code: "method_not_allowed" });
+  if (!/^application\/json(;|$)/i.test(request.headers.get("content-type") ?? "")) return json(415, { ok: false, code: "json_required" });
+  const body = await request.text();
+  if (new TextEncoder().encode(body).length > 1024) return json(413, { ok: false, code: "request_too_large" });
+  const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/join/checkout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET },
+    body,
+  });
+  const answer = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!upstream.ok || !answer || answer.ok !== true) {
+    const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : "join_unavailable";
+    return json(upstream.ok ? 502 : upstream.status, { ok: false, code });
+  }
+  const checkoutUrl = typeof answer.checkout_url === "string" && answer.checkout_url.startsWith(STRIPE_CHECKOUT_PREFIX) ? answer.checkout_url : null;
+  const claim = typeof answer.claim_token === "string" && CLAIM_TOKEN_PATTERN.test(answer.claim_token) ? answer.claim_token : null;
+  if (!checkoutUrl || !claim) return json(502, { ok: false, code: "join_unavailable" });
+  return json(200, { ok: true, checkout_url: checkoutUrl }, { "Set-Cookie": cookie(CLAIM_COOKIE, claim, CLAIM_TTL_SECONDS) });
 }
 
 function studioJoinUrl(route: Route, env: Env): string {
@@ -1074,6 +1120,7 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMine(request, url, env, place, MY_SETTINGS[url.pathname], mySettingsAnswer, "settings_unavailable");
   if (Object.hasOwn(MY_MESSAGES, url.pathname)) return await proxyMine(request, url, env, place, MY_MESSAGES[url.pathname], myMessagesAnswer, "messages_unavailable");
   if (url.pathname === MY_JOIN_PATH && request.method === "GET") return await proxyJoinRead(request, url, env, place);
+  if (url.pathname === GUEST_CHECKOUT_PATH) return await proxyGuestCheckout(request, url, env);
   if (Object.hasOwn(MY_JOIN, url.pathname)) return await proxyMine(request, url, env, place, MY_JOIN[url.pathname], myJoinAnswer, "join_unavailable");
   if (Object.hasOwn(MY_MODERATION, url.pathname)) return await proxyMine(request, url, env, place, MY_MODERATION[url.pathname], myModerationAnswer, "moderation_unavailable");
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });

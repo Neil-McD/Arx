@@ -1440,6 +1440,53 @@ test("twin join: each action goes to Studio's core with the twin's session; chec
   expect(await act("/__polynet/me/join/checkout", checkoutBody)).toEqual([409, { ok: false, code: "community_checkout_unavailable" }]);
 });
 
+test("twin join, cash first: a signed-out buyer goes straight to Stripe; only this browser keeps the claim, and signing in here claims it", async () => {
+  resetEdgeCaches();
+  const CLAIM = `claim_${"c".repeat(32)}`;
+  const answers: Record<string, unknown> = {
+    "/runtime/app/join/checkout": { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_g1", session_id: `chk_${"b".repeat(32)}`, claim_token: CLAIM },
+    "/runtime/app/me/join/finish": { ...JOIN_ANSWER, status: "joined" },
+  };
+  const backend = vi.fn(async (url: string, _init?: RequestInit) => Response.json(answers[new URL(url).pathname] ?? { ok: false }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  const guest = (origin: string, headers: Record<string, string> = {}, body = JSON.stringify({ billing_period: "monthly" })) =>
+    edge.fetch(at(origin, "/__polynet/me/join/guest-checkout", { method: "POST", headers: { "content-type": "application/json", ...headers }, body }), e);
+  // Never on the site, never cross-site, JSON only.
+  expect((await guest(SITE)).status).toBe(404);
+  expect((await guest(TWIN, { "sec-fetch-site": "cross-site" })).status).toBe(403);
+  expect((await guest(TWIN, { "content-type": "application/x-www-form-urlencoded" }, "a=1")).status).toBe(415);
+  expect(backend).not.toHaveBeenCalled();
+  // No session needed: the page gets Stripe's address only; the claim is an HttpOnly cookie on the twin.
+  const started = await guest(TWIN);
+  expect([started.status, await started.json()]).toEqual([200, { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_g1" }]);
+  expect(started.headers.get("set-cookie")).toBe(`__Host-polynet_claim=${CLAIM}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure`);
+  expect(backend.mock.calls[0][1]?.headers).toEqual({ "Content-Type": "application/json", Origin: TWIN, "x-polynet-edge-secret": "edge-secret" });
+  // A checkout address anywhere but Stripe's own page, or no claim, and nothing is kept.
+  for (const answer of [{ ...answers["/runtime/app/join/checkout"] as object, checkout_url: "https://evil.example.com/pay" },
+    { ...answers["/runtime/app/join/checkout"] as object, claim_token: "claim_nope" }]) {
+    answers["/runtime/app/join/checkout"] = answer;
+    const refused = await guest(TWIN);
+    expect([refused.status, refused.headers.get("set-cookie")]).toEqual([502, null]);
+  }
+  // Signed in on the twin, Finish carries the claim from the cookie (never from the page), and drops it once joined.
+  backend.mockClear();
+  const finish = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, claim_token: "claim_forged" })), e);
+  expect(finish.status).toBe(200);
+  expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}`, claim_token: CLAIM });
+  expect(finish.headers.get("set-cookie")).toBe("__Host-polynet_claim=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure");
+  // Still pending: the claim stays for the next try.
+  answers["/runtime/app/me/join/finish"] = { ...JOIN_ANSWER, status: "pending" };
+  const pending = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_claim=${CLAIM}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
+  expect([pending.status, pending.headers.get("set-cookie")]).toEqual([200, null]);
+  // Without the cookie, a claim the page names never reaches the backend.
+  backend.mockClear();
+  await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST", {}, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, claim_token: CLAIM })), e);
+  expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}` });
+});
+
 // Moderation on the twin: removing a post and reviewing join requests, through
 // /__polynet/me/* (the backend decides who moderates); never on the site.
 const MODERATION_PATHS: Array<[string, "GET" | "POST"]> = [
