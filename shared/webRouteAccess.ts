@@ -115,6 +115,11 @@ export function resolveWebRouteAccessProjection(params: {
   }
 
   if (params.authState === "signed_out") {
+    // Visitors browse published communities on the public Find page; members
+    // keep Studio's Discover.
+    if (params.activePage === "discover") {
+      return { kind: "render_public", requirement };
+    }
     if (
       requirement === "community" &&
       communitySlug

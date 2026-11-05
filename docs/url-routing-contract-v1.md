@@ -65,9 +65,11 @@ route-access projection classifies the requested URL as:
 - operator-authorized; or
 - legacy migration entry.
 
-Signed-out users may render only `/`, `/login`, `/c/:slug`, `/claim`, and
-`/checkout/success`. Signed-out authenticated-platform routes replace the URL
-with `/`. Signed-out or unauthorized community-operating routes replace the URL
+Signed-out users may render only `/`, `/discover`, `/login`, `/c/:slug`,
+`/claim`, and `/checkout/success`. Signed-out `/discover` renders the public
+Find page (published communities only, each linking to `/c/:slug`) with no
+product chrome; signed-in members get Studio's Discover at the same URL. Other
+signed-out authenticated-platform routes replace the URL with `/`. Signed-out or unauthorized community-operating routes replace the URL
 with `/c/:slug`.
 
 While authentication or scoped authority is unresolved, the web renders a
@@ -84,8 +86,9 @@ These are top-level application destinations:
 - `/settings/billing`
 - `/settings/appearance`
 
-They require an authenticated session. Direct signed-out navigation returns to
-`/`; merely encountering `/onboarding` must not initiate authentication.
+They require an authenticated session, except `/discover`, which signed-out
+visitors see as the public Find page. Other direct signed-out navigation returns
+to `/`; merely encountering `/onboarding` must not initiate authentication.
 
 The retired `/settings/partner` and `/settings/partners` paths are compatibility
 aliases that resolve to `/settings/billing`; the retired `/settings/agent`,

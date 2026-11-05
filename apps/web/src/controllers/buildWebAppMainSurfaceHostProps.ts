@@ -6,6 +6,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   isPublicCommunityFunnel: boolean;
   publicRoute: PublicRoute;
   landingPageProps: WebAppMainSurfaceHostProps["landingPageProps"];
+  isSignedOut: boolean;
   onboardingPageProps: WebAppMainSurfaceHostProps["onboardingPageProps"];
   platformBridgePageProps: WebAppMainSurfaceHostProps["platformBridgePageProps"];
   showOnboardingModal: WebAppMainSurfaceHostProps["showOnboardingModal"];
@@ -23,7 +24,10 @@ export function buildWebAppMainSurfaceHostProps(params: {
     showCommunitySurface:
       params.publicRoute.kind === "app" && params.activePage === "community",
     showDiscoverPanel:
-      params.publicRoute.kind === "app" && params.activePage === "discover",
+      params.publicRoute.kind === "app" && params.activePage === "discover" && !params.isSignedOut,
+    showPublicFind:
+      params.publicRoute.kind === "app" && params.activePage === "discover" && params.isSignedOut,
+    publicFindProps: { onJoin: params.landingPageProps.onStartBuilderPurchase },
     showProductDocsPanel:
       params.publicRoute.kind === "app" && params.activePage === "docs",
     showOperatorDashboard:

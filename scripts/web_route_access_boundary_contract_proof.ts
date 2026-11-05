@@ -72,7 +72,7 @@ for (const [activePage, pathname] of [
     `${pathname} must hydrate the account state required by route admission`,
   );
   assert.deepEqual(project({ activePage, pathname }), {
-    kind: "redirect_landing",
+    kind: activePage === "discover" ? "render_public" : "redirect_landing",
     requirement: "authenticated",
   });
   assert.deepEqual(

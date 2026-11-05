@@ -49,7 +49,9 @@ test("account setup and knowledge setup keep the live product behind the blocker
     /activePage === "onboarding"[\s\S]*<WebDiscoverPanel[\s\S]*<WebPlatformBridgePage/,
   );
   expect(shellProjection).toContain('params.destination.kind === "onboarding"');
-  expect(shellProjection).toContain("const isPublicAppPage = isLandingPage;");
+  expect(shellProjection).toContain(
+    "const isPublicAppPage = isLandingPage || Boolean(params.isPublicFind && isAppRoute);",
+  );
   expect(account).not.toContain("polynet-platform-bridge-page");
   expect(account).not.toContain("landing-auth-hold");
   expect(knowledge).not.toContain("<main");

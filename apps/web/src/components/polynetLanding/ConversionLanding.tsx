@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
@@ -58,7 +58,7 @@ const SHOWCASE_LIMIT = 6;
 
 // The original Polynet network: an agent hub with members linked to it and to
 // each other. Same geometry as scripts/generate_brand_icons.mjs.
-function Mark(props: { size: number }) {
+export function Mark(props: { size: number }) {
   const nodes: Record<string, [number, number]> = {
     a: [133, 148], hub: [258, 205], c: [382, 98], d: [440, 268], e: [304, 378], f: [72, 295],
   };
@@ -77,7 +77,7 @@ function Mark(props: { size: number }) {
   );
 }
 
-function Brand() {
+export function Brand() {
   return (
     <a className="brand" href="/" aria-label="Polynet home">
       <Mark size={28} />
@@ -160,9 +160,47 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
   );
 }
 
-export function ConversionLanding({ onJoin }: JoinProps) {
+// Header, footer and legal readers shared by every public page.
+export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) {
   const [activeLegalDocument, setActiveLegalDocument] =
     useState<LegalDocumentEntry | null>(null);
+  return (
+    <div className="pn-landing">
+      <div className="page">
+        <header className="topbar">
+          <Brand />
+          <nav aria-label="Account">
+            <a href="/login">Sign in</a>
+            <button className="cta cta-small" type="button" onClick={props.onJoin}>Start a community</button>
+          </nav>
+        </header>
+
+        <main>{props.children}</main>
+
+        <footer className="footer">
+          <div className="footer-identity">
+            <Brand />
+            <span>© 2026 Polynet</span>
+          </div>
+          <nav className="footer-links" aria-label="Footer navigation">
+            <a href="/discover">Find a community</a>
+            <a href="/login">Sign in</a>
+            <button type="button" onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}>Privacy</button>
+            <button type="button" onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}>Terms</button>
+          </nav>
+        </footer>
+      </div>
+      {activeLegalDocument ? (
+        <WebPlatformLegalReaderModal
+          document={activeLegalDocument}
+          onClose={() => setActiveLegalDocument(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
 
   useEffect(() => {
@@ -180,22 +218,8 @@ export function ConversionLanding({ onJoin }: JoinProps) {
     };
   }, []);
 
-  const findCommunity = () => {
-    document.getElementById("communities")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   return (
-    <div className="pn-landing">
-      <div className="page">
-        <header className="topbar">
-          <Brand />
-          <nav aria-label="Account">
-            <a href="/login">Sign in</a>
-            <button className="cta cta-small" type="button" onClick={onJoin}>Start a community</button>
-          </nav>
-        </header>
-
-        <main>
+    <PublicFrame onJoin={onJoin}>
           <section className="hero" aria-labelledby="hero-title">
             <Mark size={120} />
             <h1 id="hero-title">Communities that think.</h1>
@@ -205,9 +229,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             </p>
             <div className="doors">
               <button className="cta" type="button" onClick={onJoin}>Start a community</button>
-              {communities.length > 0 ? (
-                <button className="cta-secondary" type="button" onClick={findCommunity}>Find a community</button>
-              ) : null}
+              <a className="cta-secondary" href="/discover">Find a community</a>
             </div>
             <p className="microcopy">{OFFER_META}</p>
           </section>
@@ -249,26 +271,6 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <button className="cta" type="button" onClick={onJoin}>Start a community</button>
             <p className="microcopy">{OFFER_META}</p>
           </section>
-        </main>
-
-        <footer className="footer">
-          <div className="footer-identity">
-            <Brand />
-            <span>© 2026 Polynet</span>
-          </div>
-          <nav className="footer-links" aria-label="Footer navigation">
-            <a href="/login">Sign in</a>
-            <button type="button" onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}>Privacy</button>
-            <button type="button" onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}>Terms</button>
-          </nav>
-        </footer>
-      </div>
-      {activeLegalDocument ? (
-        <WebPlatformLegalReaderModal
-          document={activeLegalDocument}
-          onClose={() => setActiveLegalDocument(null)}
-        />
-      ) : null}
-    </div>
+    </PublicFrame>
   );
 }
