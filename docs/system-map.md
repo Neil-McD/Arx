@@ -135,6 +135,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 4. Direct messages — Keep (Studio only)
 
 - **Code:** `directMessages`, `directMessageReadCore`, `directMessageEmails`.
+  Text only since Nov 5 (attachments removed; the two upload-URL mutations
+  stay as refusing stubs for one release, for cached Studio pages).
 - **Tables:** `dmConversations`, `dmParticipants`, `dmMessages`, `dmBlocks`,
   `dmRateCounters`, `dmTypingPresence`.
 
@@ -161,9 +163,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** community notes: short markdown notes every member and the
   community agent read under `memory/`; only owners and admins edit or delete
   them in Studio (Knowledge → Notes). No agent, member or connected AI writes
-  them (Nov 5: closed a private-room leak and an injection path). The Studio and public overview
-  (`communityIntelligenceDirectory`, kept by name for cached pages) shows notes
-  and lessons around the community.
+  them (Nov 5: closed a private-room leak and an injection path). The member overview
+  (`communityIntelligenceDirectory.getCommunityPolynetOverview`, members only)
+  shows notes and lessons around the community. The public overview
+  (`resolvePublicCommunityMemoryOverviewBySlug`) answers `{ ok: false }` for
+  everyone since Nov 5, kept by name one release for cached Studio pages, then
+  deleted with the module's orphan exception.
 - **Code:** `communityNotes`, `communityIntelligenceDirectory`, `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`).
@@ -360,6 +365,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityApplicationFeeRefundCore`, `founderPaidTool*`, `providerCostCore`,
   `voiceProviderCostAccounting`.
 - **Reached by:** `/billing/stripe_webhook` (authoritative), Studio checkout.
+- Building a community is free: `startPublicBuilderCheckout` (the anonymous
+  $79 Builder purchase) refuses since Nov 5, kept by name for cached pages.
+  Its recovery path (`createPendingPublicBuilderCheckoutInternal`, the
+  recovery email, the email-hash receipt claim) is removed with the billing
+  redesign.
 - **Tables:** `founderSubscriptions`, `founderUsageCycles`, `checkoutSessions`,
   `purchaseClaims`, `userStripeCustomers`, `communityStripeCustomers`,
   `userStripeConnectAccounts`, `communityPricePoints`, `communitySubscriptions`,

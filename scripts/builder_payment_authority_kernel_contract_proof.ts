@@ -35,12 +35,11 @@ const existingCheckout = billing.slice(existingCheckoutStart, publicCheckoutStar
 assert.match(existingCheckout, /authSubject: v\.optional\(v\.string\(\)\)/);
 assert.match(existingCheckout, /communityId: v\.id\("communities"\)/);
 
-const publicCheckout = billing.slice(publicCheckoutStart);
+// Retired Nov 5: the public Builder checkout refuses; nobody is charged through it.
+const publicCheckout = billing.slice(publicCheckoutStart, billing.indexOf("\n});\n", publicCheckoutStart));
 assert.match(publicCheckout, /args: \{\}/);
-assert.match(publicCheckout, /createPendingPublicBuilderCheckoutInternal/);
-assert.match(publicCheckout, /readCanonicalPublicAppOrigin\(\)/);
-assert.match(publicCheckout, /success_url: successUrl/);
-assert.match(publicCheckout, /reconcilePaidBuilderPurchasesForOwnerInternal/);
+assert.match(publicCheckout, /throw new Error\("public_builder_checkout_retired"\)/);
+assert.doesNotMatch(publicCheckout, /stripe|checkout\.sessions\.create/i);
 assert.match(billing, /receiptStatus: grantsAccess \? "paid_unclaimed" : "revoked"/);
 assert.doesNotMatch(billing, /claimTokenHash|checkoutAttemptKeyHash|hashFounderCheckoutClaimToken|hashFounderCheckoutAttemptId/);
 assert.doesNotMatch(billing, /export const getFounderCheckoutReceiptStatus/);

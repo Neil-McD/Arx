@@ -12,7 +12,6 @@ import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisi
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import {
   cancelCloudMyJoinRequestBySlug,
-  fetchCloudPublicCommunityMemoryOverview,
   fetchCloudPublicFunnelStats,
   recordCloudPublicFunnelVisit,
   resolveCloudPublicFunnel,
@@ -502,21 +501,6 @@ export function useWebPublicFunnelActions<
           })
           .catch((error) => {
             console.warn("Failed to resolve public community stats:", error);
-          });
-
-        void fetchCloudPublicCommunityMemoryOverview<AuthSession, Record<string, unknown>>({
-          communitySlug: resolvedSlug,
-        })
-          .then((overviewPayload) => {
-            if (!overviewPayload?.ok || !overviewPayload.overview) return;
-            current.setPublicCommunity((prev) =>
-              prev && prev.slug === resolvedSlug
-                ? ({ ...prev, memory_overview: overviewPayload.overview } as PublicCommunityT)
-                : prev,
-            );
-          })
-          .catch((error) => {
-            console.warn("Failed to resolve public community memory overview:", error);
           });
 
         void (async () => {

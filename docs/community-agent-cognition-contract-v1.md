@@ -2611,9 +2611,11 @@ and the metabolizer) is deleted. The sections above describe history.
   "community memory sweep" cron, and the trace writes on every post, reply and
   runtime run. Studio's memory graph is replaced by a notes list (channel panel)
   and a Notes tab on Knowledge where owners and admins edit or delete notes.
-- `communityIntelligenceDirectory` keeps its two public overview queries by
-  name for cached Studio pages; they now show notes and lessons around the
-  community (titles hidden on the public one).
+- `communityIntelligenceDirectory` keeps its two overview queries by name for
+  cached Studio pages. The member one shows notes and lessons around the
+  community. The public one answers `{ ok: false }` since Nov 5 (visitors see
+  nothing of a community's notes or lessons, not even counts) and is deleted
+  the release after.
 - The turn contract has two surfaces' worth of turns: `ask`,
   `ask_in_conversation` and `tag`. The engine switch covers `ask` and `tag`.
 - The one-time copy lives in `communityMemoryMigration` with the old reader's

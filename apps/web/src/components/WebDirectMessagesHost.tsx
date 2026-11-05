@@ -25,8 +25,6 @@ import {
   sendCloudDirectMessage,
   sendCloudDirectMessageToUser,
   subscribeCloudDirectMessages,
-  uploadCloudDirectMessageAttachmentFile,
-  uploadCloudDirectMessageAttachmentFileForUser,
 } from "../../../../shared/cloudDirectMessagesGateway";
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
 import { useWebVoiceInputController } from "../../../../shared/useWebVoiceInputController";
@@ -41,7 +39,6 @@ type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   uploadError?: string | null;
 };
 
-type DirectMessageAttachmentFileInput = FileList | readonly File[];
 
 type DirectMessageLocalEcho = DirectMessage & {
   local_id: string;
@@ -134,10 +131,7 @@ function friendlyDirectMessageSendError(error: unknown, fallback: string): strin
     return "That person is no longer available.";
   }
   if (normalized.includes("dm_message_payload_required")) {
-    return "Write a message or attach a file first.";
-  }
-  if (normalized.includes("dm_attachment")) {
-    return "One of the attachments couldn't be sent. Remove it and try again.";
+    return "Write a message first.";
   }
   const looksLikeRawServerError =
     normalized.includes("server error") ||
@@ -171,9 +165,6 @@ async function resolveDirectMessageSession<SessionT>(
   return ensureSession(session, source);
 }
 
-const MAX_DM_ATTACHMENTS_PER_MESSAGE = 8;
-const MAX_DM_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
 const MAX_DM_IMAGE_DATA_URL_CHARS = 600_000;
 const DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
 
@@ -207,12 +198,6 @@ function shouldPreserveDirectMessageComposerFocus(activeElement: Element | null,
   );
 }
 
-function createDirectAttachmentId(): string {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-  return `attachment-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function createLocalDirectMessageId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -313,82 +298,7 @@ function buildLocalEchoContentJson(
   };
 }
 
-function displayNameForDirectAttachmentFile(file: File, fallbackIndex: number): string {
-  const existingName = String(file.name ?? "").trim();
-  if (existingName) return existingName;
-  const mime = String(file.type ?? "").toLowerCase();
-  const extension =
-    mime === "image/png"
-      ? "png"
-      : mime === "image/jpeg"
-        ? "jpg"
-        : mime === "image/webp"
-          ? "webp"
-          : mime === "image/gif"
-            ? "gif"
-            : mime === "application/pdf"
-              ? "pdf"
-              : "bin";
-  return `${mime.startsWith("image/") ? "Pasted image" : "Attachment"} ${fallbackIndex + 1}.${extension}`;
-}
 
-function isAllowedDirectAttachmentFile(file: File): boolean {
-  const mime = String(file.type ?? "").toLowerCase();
-  const name = String(file.name ?? "").toLowerCase();
-  const blockedMimes = new Set([
-    "application/gzip",
-    "application/vnd.microsoft.portable-executable",
-    "application/x-7z-compressed",
-    "application/x-msdownload",
-    "application/x-rar-compressed",
-    "application/x-sh",
-    "application/zip",
-    "image/avif",
-    "image/heic",
-    "image/heif",
-    "image/svg+xml",
-  ]);
-  if (
-    blockedMimes.has(mime) ||
-    [".avif", ".heic", ".heif", ".svg", ".zip", ".rar", ".7z", ".gz", ".exe", ".sh"].some((extension) =>
-      name.endsWith(extension),
-    )
-  ) {
-    return false;
-  }
-  if (isLikelyImageFile(file, { allowAvif: false, allowSvg: false })) {
-    return isSupportedChatRasterImage(file, { allowAvif: false, allowSvg: false });
-  }
-  const allowedMimes = new Set([
-    "application/json",
-    "application/msword",
-    "application/pdf",
-    "application/rtf",
-    "application/vnd.ms-excel",
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/csv",
-    "text/markdown",
-    "text/plain",
-  ]);
-  if (mime && allowedMimes.has(mime)) return true;
-  return [
-    ".csv",
-    ".doc",
-    ".docx",
-    ".json",
-    ".md",
-    ".pdf",
-    ".ppt",
-    ".pptx",
-    ".rtf",
-    ".txt",
-    ".xls",
-    ".xlsx",
-  ].some((extension) => name.endsWith(extension));
-}
 
 function getDirectAttachmentUploadStatus(attachment: DirectMessageAttachmentDraft): "queued" | "uploading" | "ready" | "failed" {
   if (String(attachment.storage_id ?? "").trim()) return "ready";
@@ -401,65 +311,6 @@ function hasUnreadyDirectAttachments(attachments: DirectMessageAttachmentDraft[]
   return attachments.some((attachment) => getDirectAttachmentUploadStatus(attachment) !== "ready");
 }
 
-async function ingestDirectMessageAttachmentsFromFileList(
-  files: DirectMessageAttachmentFileInput,
-  existing: DirectMessageAttachmentDraft[],
-): Promise<{ attachments: DirectMessageAttachmentDraft[]; error: string | null }> {
-  if (files.length === 0) return { attachments: existing, error: null };
-  const remaining = Math.max(0, MAX_DM_ATTACHMENTS_PER_MESSAGE - existing.length);
-  if (remaining === 0) {
-    return {
-      attachments: existing,
-      error: `You can attach up to ${MAX_DM_ATTACHMENTS_PER_MESSAGE} files per message.`,
-    };
-  }
-
-  const picked = Array.from(files).slice(0, remaining);
-  const next: DirectMessageAttachmentDraft[] = [];
-  let error: string | null = null;
-  let totalBytes = existing.reduce((total, attachment) => total + Math.max(0, Math.floor(Number(attachment.size ?? 0))), 0);
-  for (const [index, file] of picked.entries()) {
-    if (!file) continue;
-    const name = displayNameForDirectAttachmentFile(file, index);
-    if (!isAllowedDirectAttachmentFile(file)) {
-      error = `${name}: unsupported file type.`;
-      continue;
-    }
-    if (file.size > MAX_DM_ATTACHMENT_BYTES) {
-      error = `${name} is too large (max ${(MAX_DM_ATTACHMENT_BYTES / (1024 * 1024)).toFixed(0)}MB).`;
-      continue;
-    }
-    if (totalBytes + file.size > MAX_DM_ATTACHMENT_TOTAL_BYTES) {
-      error = `Attachments can be up to ${(MAX_DM_ATTACHMENT_TOTAL_BYTES / (1024 * 1024)).toFixed(0)}MB total per message.`;
-      continue;
-    }
-    totalBytes += file.size;
-    const isImage = isLikelyImageFile(file, { allowAvif: false, allowSvg: false });
-    const base: DirectMessageAttachmentDraft = {
-      id: createDirectAttachmentId(),
-      name,
-      type: isImage ? "image" : "file",
-      mime: String(file.type ?? "").trim() || null,
-      size: file.size,
-      file,
-      uploadStatus: "queued",
-      uploadError: null,
-    };
-    if (isImage) {
-      try {
-        base.data_url = await readChatImageAsDataUrl(file, MAX_DM_IMAGE_DATA_URL_CHARS);
-      } catch (readError) {
-        error = toErrorMessage(readError, `${name}: failed to read image.`);
-        continue;
-      }
-    }
-    next.push(base);
-  }
-  return {
-    attachments: [...existing, ...next],
-    error,
-  };
-}
 
 function serializeDirectAttachmentsForWrite(attachments: DirectMessageAttachmentDraft[]): unknown[] {
   const out: unknown[] = [];
@@ -1432,153 +1283,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     ],
   );
 
-  const uploadDirectAttachmentDraft = useCallback(
-    async (conversationId: string, attachment: DirectMessageAttachmentDraft) => {
-      const attachmentId = String(attachment.id ?? "").trim();
-      if (!attachmentId) return;
-      if (!session) {
-        setDirectMessagePanel((previous) =>
-          previous?.conversation.id === conversationId
-            ? {
-                ...previous,
-                attachments: previous.attachments.map((item) =>
-                  item.id === attachmentId
-                    ? {
-                        ...item,
-                        uploadStatus: "failed",
-                        uploadError: "Sign in to upload attachments.",
-                      }
-                    : item,
-                ),
-                error: "Sign in to upload attachments.",
-              }
-            : previous,
-        );
-        return;
-      }
-      if (!(attachment.file instanceof File)) {
-        setDirectMessagePanel((previous) =>
-          previous?.conversation.id === conversationId
-            ? {
-                ...previous,
-                attachments: previous.attachments.map((item) =>
-                  item.id === attachmentId && getDirectAttachmentUploadStatus(item) !== "ready"
-                    ? {
-                        ...item,
-                        uploadStatus: "failed",
-                        uploadError: "Attachment file is no longer available.",
-                      }
-                    : item,
-                ),
-                error: "Attachment file is no longer available.",
-              }
-            : previous,
-        );
-        return;
-      }
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === conversationId
-          ? (() => {
-              const currentUploadError = String(
-                previous.attachments.find((item) => item.id === attachmentId)?.uploadError ?? "",
-              ).trim();
-              const shouldClearPanelError = currentUploadError.length > 0 && previous.error === currentUploadError;
-              return {
-                ...previous,
-                attachments: previous.attachments.map((item) =>
-                  item.id === attachmentId
-                    ? {
-                        ...item,
-                        uploadStatus: "uploading",
-                        uploadError: null,
-                      }
-                    : item,
-                ),
-                error: shouldClearPanelError ? null : previous.error,
-              };
-            })()
-          : previous,
-      );
-      try {
-        const usableSession = await resolveDirectMessageSession(
-          session,
-          ensureSession,
-          "direct_messages_upload_attachment",
-        );
-        if (!usableSession) throw new Error("Sign in to upload attachments.");
-        const storageId = isVirtualDirectConversationId(conversationId)
-          ? await uploadCloudDirectMessageAttachmentFileForUser({
-              session: usableSession,
-              targetUserId: virtualPeerUserIdFromConversationId(conversationId),
-              communityId:
-                directMessagePanelRef.current?.conversation.id === conversationId
-                  ? directMessagePanelRef.current?.conversation.created_from_community?.id ?? null
-                  : null,
-              file: attachment.file,
-            })
-          : await uploadCloudDirectMessageAttachmentFile({
-              session: usableSession,
-              conversationId,
-              file: attachment.file,
-            });
-        setDirectMessagePanel((previous) => {
-          if (previous?.conversation.id !== conversationId) return previous;
-          const nextAttachments = previous.attachments.map((item) =>
-            item.id === attachmentId
-              ? {
-                  ...item,
-                  storage_id: storageId,
-                  file: null,
-                  uploadStatus: "ready" as const,
-                  uploadError: null,
-                }
-              : item,
-          );
-          return {
-            ...previous,
-            attachments: nextAttachments,
-            error: previous.error,
-          };
-        });
-      } catch (error) {
-        const message = friendlyDirectMessageSendError(error, "Failed to upload attachment.");
-        setDirectMessagePanel((previous) =>
-          previous?.conversation.id === conversationId
-            ? {
-                ...previous,
-                attachments: previous.attachments.map((item) =>
-                  item.id === attachmentId
-                    ? {
-                        ...item,
-                        uploadStatus: "failed",
-                        uploadError: message,
-                      }
-                    : item,
-                ),
-                error: message,
-              }
-            : previous,
-        );
-      }
-    },
-    [ensureSession, session],
-  );
 
-  const lastUploadKickConversationRef = useRef<string | null>(null);
-  useEffect(() => {
-    const panel = directMessagePanel;
-    if (!panel) {
-      lastUploadKickConversationRef.current = null;
-      return;
-    }
-    if (lastUploadKickConversationRef.current === panel.conversation.id) return;
-    lastUploadKickConversationRef.current = panel.conversation.id;
-    for (const attachment of panel.attachments) {
-      if (getDirectAttachmentUploadStatus(attachment) === "queued" && attachment.file instanceof File) {
-        void uploadDirectAttachmentDraft(panel.conversation.id, attachment);
-      }
-    }
-  }, [directMessagePanel, uploadDirectAttachmentDraft]);
+
+
 
   const deliverDirectMessageEcho = useCallback(
     async (conversationId: string, echo: DirectMessageLocalEcho) => {
@@ -1929,53 +1636,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     }
   }, [ensureSession, session, sessionUserId]);
 
-  const handleDirectAttachmentFilesSelected = useCallback(
-    async (files: DirectMessageAttachmentFileInput) => {
-      const current = directMessagePanel;
-      if (!current || files.length === 0) return;
-      const result = await ingestDirectMessageAttachmentsFromFileList(files, current.attachments);
-      const queuedAttachments = result.attachments.slice(current.attachments.length).filter(
-        (attachment) => getDirectAttachmentUploadStatus(attachment) === "queued",
-      );
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === current.conversation.id
-          ? {
-              ...previous,
-              attachments: result.attachments,
-              error: result.error,
-            }
-          : previous,
-      );
-      for (const attachment of queuedAttachments) {
-        void uploadDirectAttachmentDraft(current.conversation.id, attachment);
-      }
-    },
-    [directMessagePanel, uploadDirectAttachmentDraft],
-  );
-
-  const retryDirectAttachmentUpload = useCallback((id: string) => {
-    const attachmentId = String(id ?? "").trim();
-    const current = directMessagePanel;
-    if (!attachmentId || !current) return;
-    const attachment = current.attachments.find((item) => item.id === attachmentId);
-    if (!attachment || getDirectAttachmentUploadStatus(attachment) === "ready") return;
-    void uploadDirectAttachmentDraft(current.conversation.id, attachment);
-  }, [directMessagePanel, uploadDirectAttachmentDraft]);
-
-  const removeDirectAttachment = useCallback((id: string) => {
-    const attachmentId = String(id ?? "").trim();
-    if (!attachmentId) return;
-    setDirectMessagePanel((previous) =>
-      previous
-        ? {
-            ...previous,
-            attachments: previous.attachments.filter((attachment) => attachment.id !== attachmentId),
-            error: null,
-          }
-        : previous,
-    );
-  }, []);
-
   const mergedPanelMessages = useMemo(() => {
     if (!directMessagePanel) return [] as DirectMessage[];
     const { messages, localEchoes } = directMessagePanel;
@@ -2052,9 +1712,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             );
           }}
           onSend={sendDirectMessage}
-          onAttachmentFilesSelected={handleDirectAttachmentFilesSelected}
-          onRetryAttachment={retryDirectAttachmentUpload}
-          onRemoveAttachment={removeDirectAttachment}
           onRetryLocalMessage={retryDirectMessageEcho}
           onDiscardLocalMessage={discardDirectMessageEcho}
           onComposerBlur={() => {

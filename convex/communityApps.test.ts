@@ -28,7 +28,6 @@ import {
   COMMUNITY_APP_MY_CONVERSATION_PATH,
   COMMUNITY_APP_MY_MESSAGE_START_PATH,
   COMMUNITY_APP_MY_MESSAGE_SEND_PATH,
-  COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH,
   COMMUNITY_APP_MY_MESSAGE_READ_PATH,
   COMMUNITY_APP_MY_MESSAGE_MUTE_PATH,
   COMMUNITY_APP_MY_MESSAGE_TYPING_PATH,
@@ -1054,7 +1053,7 @@ test("twin messages: every route answers only a private session of a member here
   const routes: Array<[string, unknown]> = [
     [COMMUNITY_APP_MY_MESSAGES_PATH, {}], [COMMUNITY_APP_MY_CONVERSATION_PATH, { conversation_id: id }],
     [COMMUNITY_APP_MY_MESSAGE_START_PATH, { handle: "apps-owner" }], [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: "x" }],
-    [COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, { conversation_id: id }], [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: 1 }],
+    [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: 1 }],
     [COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, { conversation_id: id, muted: true }], [COMMUNITY_APP_MY_MESSAGE_TYPING_PATH, { conversation_id: id, typing: true }],
     [COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH, { conversation_id: id, blocked: true }],
   ];
@@ -1079,7 +1078,6 @@ test("twin messages: every route answers only a private session of a member here
     [COMMUNITY_APP_MY_CONVERSATION_PATH, { conversation_id: "../x" }], [COMMUNITY_APP_MY_MESSAGE_START_PATH, { handle: "no spaces" }],
     [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, to: "apps-owner", text: "both" }],
     [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { text: "neither" }], [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: 5 }],
-    [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: "x", attachments: [{ storage_id: "a", name: "", type: "file" }] }],
     [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: -1 }], [COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, { conversation_id: id, muted: "yes" }],
   ] as const) {
     expect(await f.me(path, f.owner, body), JSON.stringify(body)).toMatchObject({ status: 400, body: { code: "invalid_request" } });
@@ -1153,7 +1151,7 @@ test("twin messages: another member's conversation reads as no conversation at a
   expect((await f.inbox(outsider)).conversations).toEqual([]);
   for (const [path, body] of [
     [COMMUNITY_APP_MY_CONVERSATION_PATH, { conversation_id: id }], [COMMUNITY_APP_MY_MESSAGE_SEND_PATH, { conversation_id: id, text: "hi" }],
-    [COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, { conversation_id: id }], [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: 1 }],
+    [COMMUNITY_APP_MY_MESSAGE_READ_PATH, { conversation_id: id, through_seq: 1 }],
     [COMMUNITY_APP_MY_MESSAGE_MUTE_PATH, { conversation_id: id, muted: true }], [COMMUNITY_APP_MY_MESSAGE_TYPING_PATH, { conversation_id: id, typing: true }],
     [COMMUNITY_APP_MY_MESSAGE_BLOCK_PATH, { conversation_id: id, blocked: true }],
   ] as const) {
@@ -1183,33 +1181,18 @@ test("twin messages: blocks and rate limits are Studio's", async () => {
   expect(await f.send(f.member, { conversation_id: id, text: "one too many" })).toEqual({ status: 429, body: { ok: false, code: "dm_rate_limited" } });
 });
 
-test("twin messages: attachments go straight to storage; only a fresh upload is sent, as storage recorded it", async () => {
+test("twin messages are text only: any attachment is refused", async () => {
   const f = await messagesFixture();
   const id = (await f.send(f.member, { to: "apps-owner", text: "Hi" })).body.conversation_id as string;
-  const issued = await f.me(COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, f.member, { conversation_id: id });
-  expect([issued.status, typeof issued.body.upload_url]).toEqual([200, "string"]);
-  // Before the first message too, by handle, under the same rule as sending.
-  expect((await f.me(COMMUNITY_APP_MY_MESSAGE_UPLOAD_PATH, f.member, { to: "apps-outsider" })).status).toBe(403);
-  const store = (type: string) => f.t.run(async (c) => {
-    const storageId = await c.storage.store(new Blob([new Uint8Array([1, 2, 3, 4])], { type }));
-    await (c.db as any).patch(storageId, { contentType: type });
-    return storageId;
-  });
-  const photo = await store("image/png");
-  const sent = await f.send(f.member, { conversation_id: id, text: "", attachments: [{ storage_id: photo, name: "wall.png", type: "image" }] });
-  expect(sent.status).toBe(200);
-  const url = await f.t.run((c) => c.storage.getUrl(photo));
-  expect(sent.body.message.attachments).toEqual([{ id: expect.any(String), name: "wall.png", kind: "image", mime: "image/png", size: 4, url }]);
-  expect((await f.inbox(f.owner)).conversations[0].last_message.preview).toBe("Sent an image");
-  // Studio's type rules on what storage recorded; not a storage id; an old file.
-  expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: await store("text/html"), name: "x.png", type: "image" }] }))
-    .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_type_not_supported" } });
-  expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: "notastorageid", name: "x.png", type: "image" }] }))
-    .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_invalid" } });
-  const old = await store("image/png");
-  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60 * 60 * 1000);
-  expect(await f.send(f.member, { conversation_id: id, attachments: [{ storage_id: old, name: "old.png", type: "image" }] }))
-    .toEqual({ status: 400, body: { ok: false, code: "dm_attachment_invalid" } });
+  expect(await f.send(f.member, { conversation_id: id, text: "Photo", attachments: [{ storage_id: "a", name: "wall.png", type: "image" }] }))
+    .toEqual({ status: 400, body: { ok: false, code: "dm_attachments_not_supported" } });
+  expect(await f.send(f.member, { conversation_id: id, text: "Photo", attachments: [] }))
+    .toEqual({ status: 400, body: { ok: false, code: "dm_attachments_not_supported" } });
+  // Studio's own send refuses files too (one shared write path), even from an older page that still offers them.
+  const owner = await f.t.run(async (c) => (await c.db.query("users").withIndex("by_authSubject", (q) => q.eq("authSubject", "apps-owner-subject")).first())!);
+  await expect(f.t.withIdentity({ subject: owner.authSubject }).mutation(api.directMessages.sendDirectMessage as any, {
+    conversationId: id, text: "x", attachments: [{ storage_id: "a", name: "a.png", type: "image", size: 1 }],
+  })).rejects.toThrow(/dm_attachments_not_supported/);
 });
 
 test("twin pages follow Studio's access: a lapsed paid membership or a community that can't run gets nothing", async () => {

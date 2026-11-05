@@ -3,7 +3,7 @@
 // /__polynet/blocks/messages.js on a site's private twin only (the site itself
 // answers 404); personal.js loads it at /messages, /messages/<conversation>
 // and /messages/new?to=<handle>. The member's whole direct-message inbox, as
-// Studio shows it, and each conversation: attachments, typing both ways, read
+// Studio shows it, and each conversation: text, typing both ways, read
 // state, mute and block. Every read and write goes to /__polynet/me/messages*,
 // which answers only the twin's own session, and the backend runs Studio's own
 // DM helpers, so every rule, rate limit, block and refusal is Studio's.
@@ -24,12 +24,7 @@ export const MESSAGES_TEXT: Record<string, string> = {
   dm_rate_limited: "You're sending messages too quickly. Give it a minute and try again.",
   dm_conversation_access_required: "You can't message this person right now.",
   dm_target_not_found: "That person is no longer available.",
-  dm_message_payload_required: "Write a message or attach a file first.",
-  dm_attachment_invalid: "One of the attachments couldn't be sent. Remove it and try again.",
-  dm_attachment_type_not_supported: "One of the attachments couldn't be sent. Remove it and try again.",
-  dm_attachment_too_large: "One of the attachments couldn't be sent. Remove it and try again.",
-  dm_attachment_limit_exceeded: "One of the attachments couldn't be sent. Remove it and try again.",
-  dm_attachment_total_too_large: "One of the attachments couldn't be sent. Remove it and try again.",
+  dm_message_payload_required: "Write a message first.",
   dm_target_self: "That's you. Message someone else from their profile.",
   dm_message_too_long: "Messages can be up to 4,000 characters.",
   dm_conversation_not_found: "This conversation isn't available.",
@@ -44,9 +39,8 @@ export const MESSAGES_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // conversation-time, conversation-preview, unread, muted-mark, empty, thread,
 // thread-header, back, peer, peer-link, mute, block, confirm, older, log, day,
 // message (with message-mine or message-theirs, and message-pending), bubble,
-// attachment, attachment-image, meta, seen, typing, composer, input, attach,
-// attachments, chip, send, error, blocked-note, placeholder.
-import { h, styled, avatar, dayKey, dayLabel, clockTime, timeLabel, fullTime, fileSize, reconcile, plainClick } from "/__polynet/blocks/kit.js";
+// meta, seen, typing, composer, input, send, error, blocked-note, placeholder.
+import { h, styled, avatar, dayKey, dayLabel, clockTime, timeLabel, fullTime, reconcile, plainClick } from "/__polynet/blocks/kit.js";
 
 const STYLE = [
   ".messages { container: pn-messages / inline-size; }",
@@ -95,11 +89,6 @@ const STYLE = [
   ".mine .bubble { background: var(--pn-accent); color: var(--pn-on-accent); }",
   ".mine .bubble a { color: inherit; }",
   ".pending .bubble { opacity: .7; }",
-  ".files { display: grid; gap: .35em; margin-top: .35em; }",
-  ".files:first-child { margin-top: 0; }",
-  ".files img { display: block; max-width: min(18em, 100%); max-height: 18em; border-radius: calc(var(--pn-radius) * .7); }",
-  ".file { display: inline-flex; gap: .5em; align-items: baseline; text-decoration: underline; text-underline-offset: .15em; }",
-  ".file span { opacity: .75; font-size: .8125em; }",
   ".meta { color: var(--pn-muted); font-size: .6875em; margin: .15em .35em 0; display: flex; gap: .5em; align-items: center; }",
   ".meta .quiet { font-size: inherit; padding: 0; color: var(--pn-danger); }",
   ".seen { justify-self: end; color: var(--pn-muted); font-size: .6875em; margin-right: .35em; }",
@@ -109,17 +98,12 @@ const STYLE = [
   ".input { font: inherit; color: inherit; background: var(--pn-surface); width: 100%; min-height: 2.6em; max-height: 10em; resize: none;",
   "  padding: .55em .8em; border: 1px solid var(--pn-border); border-radius: calc(var(--pn-radius) * 1.1); line-height: 1.4; }",
   ".input:focus-visible { outline: 2px solid var(--pn-accent); outline-offset: 1px; }",
-  ".chips { display: flex; flex-wrap: wrap; gap: .4em; }",
-  ".chip { display: inline-flex; align-items: center; gap: .4em; padding: .2em .35em .2em .7em; border: 1px solid var(--pn-border); border-radius: 999px; font-size: .8125em; max-width: 100%; }",
-  ".chip .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 14em; }",
-  ".chip[data-state=failed] { border-color: var(--pn-danger); color: var(--pn-danger); }",
-  ".chip button { background: none; border: 0; padding: .1em .35em; min-height: 0; }",
   ".error { margin: 0; color: var(--pn-danger); font-size: .875em; }",
   ".note { margin: 0; padding: .85em 1em 1em; border-top: 1px solid var(--pn-border); color: var(--pn-muted); }",
   ".placeholder { margin: auto; padding: 2em; color: var(--pn-muted); text-align: center; }",
   ".back { align-self: center; }",
   "button:disabled { opacity: .6; cursor: progress; }",
-  "@media (pointer: coarse) { .pill, .solid, .search, .chip button { min-height: 44px; } }",
+  "@media (pointer: coarse) { .pill, .solid, .search { min-height: 44px; } }",
   "@container pn-messages (min-width: 44em) {",
   "  .layout { grid-template-columns: minmax(15em, 21em) minmax(0, 1fr); }",
   "  .layout[data-view] > .inbox, .layout[data-view] > .thread { display: flex; }",
@@ -137,16 +121,6 @@ function says(code, fallback) {
 const ID = /^[A-Za-z0-9]{20,40}$/;
 const HANDLE = /^@?[A-Za-z0-9_-]{1,32}$/;
 const MAX_TEXT = 4000;
-// Studio's attachment rules (convex/directMessages.ts checks them again).
-const MAX_FILES = 8;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const FILE_TYPES = ["application/json", "application/msword", "application/pdf", "application/rtf", "application/vnd.ms-excel",
-  "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/csv", "text/markdown", "text/plain"];
-const FILE_ENDINGS = [".csv", ".doc", ".docx", ".json", ".md", ".pdf", ".ppt", ".pptx", ".rtf", ".txt", ".xls", ".xlsx"];
 // Studio's typing lease: renewed every 2s while typing, gone 5s after the last renewal.
 const TYPING_RENEW_MS = 2000;
 const TYPING_IDLE_MS = 4000;
@@ -182,15 +156,6 @@ function personName(person) {
 function messageKey() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function attachmentKind(file) {
-  const type = String(file.type || "").toLowerCase();
-  const name = String(file.name || "").toLowerCase();
-  if (IMAGE_TYPES.indexOf(type) !== -1) return "image";
-  if (type.indexOf("image/") === 0) return null;
-  if (FILE_TYPES.indexOf(type) !== -1 || FILE_ENDINGS.some((ending) => name.endsWith(ending))) return "file";
-  return null;
 }
 
 // Text as text, with http(s) addresses as links (never any other scheme).
@@ -246,7 +211,6 @@ class Messages {
     this.view = null;
     this.messages = [];
     this.pending = [];
-    this.attachments = [];
     this.nodes = new Map();
     this.stops = [];
     this.typingSentAt = 0;
@@ -315,7 +279,6 @@ class Messages {
     this.conversation = null;
     this.messages = [];
     this.pending = [];
-    this.attachments = [];
     this.nodes = new Map();
     this.readSent = 0;
     this.layout.setAttribute("data-view", next.view === "inbox" ? "inbox" : "conversation");
@@ -565,8 +528,6 @@ class Messages {
       this.grow();
       if (carried.focused) this.input.focus();
     }
-    // Files still attached stay visible (and removable) in a rebuilt composer.
-    this.renderChips();
     this.renderLog(true);
   }
 
@@ -575,12 +536,6 @@ class Messages {
     if (conversation.blocked) {
       return h("p", { class: "note", part: "blocked-note", text: "You blocked " + name + ". Unblock them to message each other again." });
     }
-    this.fileInput = h("input", { type: "file", multiple: true, class: "sr", tabindex: "-1", "aria-hidden": "true" });
-    this.fileInput.addEventListener("change", () => {
-      const files = Array.from(this.fileInput.files || []);
-      this.fileInput.value = "";
-      this.addFiles(files);
-    });
     this.input = h("textarea", { class: "input", part: "input", rows: "1", "aria-label": "Message " + name, placeholder: "Message " + name });
     this.input.addEventListener("input", () => { this.grow(); this.typed(); this.composeError.hidden = true; });
     this.input.addEventListener("keydown", (event) => {
@@ -589,20 +544,11 @@ class Messages {
       event.preventDefault();
       this.send();
     });
-    this.input.addEventListener("paste", (event) => {
-      const files = Array.from((event.clipboardData && event.clipboardData.files) || []);
-      if (files.length) { event.preventDefault(); this.addFiles(files); }
-    });
-    this.chips = h("div", { class: "chips", part: "attachments", hidden: true });
     this.composeError = h("p", { class: "error", part: "error", role: "alert", hidden: true });
     this.sendButton = h("button", { class: "primary", part: "send", type: "submit", text: "Send" });
     return h("form", { class: "composer", part: "composer", novalidate: true, onsubmit: (event) => { event.preventDefault(); this.send(); } }, [
-      this.chips,
-      h("div", { class: "compose-row" }, [
-        h("button", { class: "pill", part: "attach", type: "button", text: "Attach", "aria-label": "Attach files", onclick: () => this.fileInput.click() }),
-        this.input, this.sendButton,
-      ]),
-      this.fileInput, this.composeError,
+      h("div", { class: "compose-row" }, [this.input, this.sendButton]),
+      this.composeError,
     ]);
   }
 
@@ -654,8 +600,6 @@ class Messages {
     const at = new Date(message.created_at);
     const children = [];
     if (message.text) children.push(...richText(message.text));
-    const files = (message.attachments || []).map((file) => this.attachmentNode(file));
-    if (files.length) children.push(h("div", { class: "files" }, files));
     const meta = [];
     if (pending && pending.state === "sending") meta.push(h("span", { text: "Sending…" }));
     else if (pending) {
@@ -668,18 +612,6 @@ class Messages {
       part: "message " + (mine ? "message-mine" : "message-theirs") + (pending ? " message-pending" : ""),
       "data-seq": pending ? null : String(message.seq),
     }, [h("div", { class: "bubble", part: "bubble" }, children), h("div", { class: "meta", part: "meta" }, meta)]);
-  }
-
-  attachmentNode(file) {
-    if (!file.url || !/^https:\/\//.test(file.url)) return h("span", { text: file.name });
-    if (file.kind === "image") {
-      return h("a", { class: "image", part: "attachment attachment-image", href: file.url, target: "_blank", rel: "noopener noreferrer" }, [
-        h("img", { src: file.url, alt: file.name, loading: "lazy" }),
-      ]);
-    }
-    return h("a", { class: "file", part: "attachment", href: file.url, target: "_blank", rel: "noopener noreferrer" }, [
-      document.createTextNode(file.name), h("span", { text: fileSize(file.size) }),
-    ]);
   }
 
   async loadOlder() {
@@ -733,59 +665,6 @@ class Messages {
     call("/__polynet/me/messages/typing", { conversation_id: id, typing: false });
   }
 
-  // Studio's upload flow: an upload address from the twin, the file straight to Polynet's storage.
-  addFiles(files) {
-    if (!this.conversation || this.conversation.blocked) return;
-    for (const file of files) {
-      const kind = attachmentKind(file);
-      const total = this.attachments.reduce((sum, item) => sum + item.size, 0) + file.size;
-      const problem = !kind ? "That kind of file can't be sent."
-        : file.size > MAX_FILE_BYTES ? "That file is over 10 MB."
-          : total > MAX_TOTAL_BYTES ? "Attachments can add up to 25 MB."
-            : this.attachments.length >= MAX_FILES ? "Up to 8 files at a time." : null;
-      if (problem) { this.showComposeError(file.name + ": " + problem); continue; }
-      const item = { key: messageKey(), name: file.name || "attachment", kind: kind, size: file.size, state: "uploading", storageId: null };
-      this.attachments.push(item);
-      this.upload(item, file);
-    }
-    this.renderChips();
-  }
-
-  async upload(item, file) {
-    const conversation = this.conversation;
-    const target = conversation.id ? { conversation_id: conversation.id } : { to: this.handle };
-    const issued = await call("/__polynet/me/messages/upload", target);
-    let storageId = null;
-    if (ok(issued) && typeof issued.body.upload_url === "string") {
-      try {
-        const res = await fetch(issued.body.upload_url, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
-        const data = await res.json().catch(() => null);
-        storageId = res.ok && data && typeof data.storageId === "string" ? data.storageId : null;
-      } catch (error) {
-        storageId = null;
-      }
-    }
-    if (!this.current() || this.attachments.indexOf(item) === -1) return;
-    item.storageId = storageId;
-    item.state = storageId ? "ready" : "failed";
-    if (!storageId) this.showComposeError(says(issued.body.code, "The file didn't upload. Remove it and try again."));
-    this.renderChips();
-  }
-
-  renderChips() {
-    if (!this.chips) return;
-    this.chips.hidden = !this.attachments.length;
-    this.chips.replaceChildren(...this.attachments.map((item) => h("span", { class: "chip", part: "chip", "data-state": item.state }, [
-      h("span", { class: "label", text: item.name }),
-      h("span", { class: "muted", text: item.state === "uploading" ? "Uploading…" : item.state === "failed" ? "Failed" : fileSize(item.size) }),
-      h("button", { type: "button", "aria-label": "Remove " + item.name, text: "×", onclick: () => {
-        this.attachments = this.attachments.filter((other) => other !== item);
-        this.renderChips();
-        this.input.focus();
-      } }),
-    ])));
-  }
-
   showComposeError(text) {
     if (!this.composeError) return;
     this.composeError.textContent = text;
@@ -796,21 +675,15 @@ class Messages {
     const conversation = this.conversation;
     if (!conversation || conversation.blocked || !this.input) return;
     const text = this.input.value.trim();
-    if (this.attachments.some((item) => item.state === "uploading")) return this.showComposeError("Wait for the files to finish uploading.");
-    if (this.attachments.some((item) => item.state === "failed")) return this.showComposeError("Remove the files that didn't upload first.");
-    if (!text && !this.attachments.length) return;
+    if (!text) return;
     if (text.length > MAX_TEXT) return this.showComposeError("That's " + (text.length - MAX_TEXT).toLocaleString() + " characters over the 4,000 limit.");
-    const files = this.attachments.map((item) => ({ storage_id: item.storageId, name: item.name, type: item.kind }));
     const item = {
-      key: messageKey(), state: "sending", error: null, text: text, files: files,
-      message: { id: "", text: text, from_me: true, created_at: new Date().toISOString(),
-        attachments: this.attachments.map((file) => ({ name: file.name, kind: "file", size: file.size, url: null })) },
+      key: messageKey(), state: "sending", error: null, text: text,
+      message: { id: "", text: text, from_me: true, created_at: new Date().toISOString() },
     };
     this.pending.push(item);
     this.input.value = "";
     this.grow();
-    this.attachments = [];
-    this.renderChips();
     this.sendTyping(false);
     this.renderLog(true);
     this.deliver(item);
@@ -824,7 +697,7 @@ class Messages {
     item.error = null;
     this.renderLog(true);
     const target = conversation.id ? { conversation_id: conversation.id } : { to: this.handle };
-    const res = await call("/__polynet/me/messages/send", Object.assign(target, { text: item.text, attachments: item.files, client_message_id: item.key }));
+    const res = await call("/__polynet/me/messages/send", Object.assign(target, { text: item.text, client_message_id: item.key }));
     if (!this.current() || this.threadGen !== gen) return;
     if (!ok(res) || !res.body.message) {
       item.state = "failed";
@@ -842,7 +715,7 @@ class Messages {
   }
 
   // The first message made the conversation: this is its address now. Sends
-  // still in flight, the draft and its files stay; each send's server copy
+  // still in flight and the draft stay; each send's server copy
   // replaces it as it lands.
   async adoptConversation(id) {
     history.replaceState(history.state, "", "/messages/" + id);
