@@ -503,6 +503,51 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
   },
 });
 
+// Back from Stripe's setup: read the account from Stripe now instead of waiting
+// for its account.updated notice, so the founder sees "ready" on arrival. Best
+// effort: the webhook stays authoritative and catches up either way.
+export const refreshMyStripeConnectAccount = action({
+  args: { authSubject: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<{ status: string | null }> => {
+    try {
+      const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+        authSubject: args.authSubject ?? null,
+      })) as { dbUserId?: unknown } | null;
+      const userId = actor?.dbUserId;
+      if (!userId) return { status: null };
+      const existing = (await ctx.runQuery(internal.creatorCommerce.getUserStripeConnectAccountInternal as any, { userId })) as {
+        stripeAccountId?: string | null;
+      } | null;
+      const accountId = normalizeOptionalStripeConnectString(existing?.stripeAccountId);
+      if (!accountId) return { status: null };
+      const account = await getStripeClient().accounts.retrieve(accountId);
+      const nowMs = Date.now();
+      const snapshot = buildStripeConnectAccountSnapshot(account, { readyAtMs: nowMs });
+      await ctx.runMutation(internal.creatorCommerce.syncUserStripeConnectAccountInternal as any, {
+        userId,
+        stripeAccountId: snapshot.stripeAccountId,
+        accountType: snapshot.accountType,
+        country: snapshot.country,
+        serviceAgreement: snapshot.serviceAgreement,
+        transfersEnabled: snapshot.transfersEnabled,
+        status: snapshot.status,
+        detailsSubmitted: snapshot.detailsSubmitted,
+        chargesEnabled: snapshot.chargesEnabled,
+        payoutsEnabled: snapshot.payoutsEnabled,
+        requirementsCurrentlyDue: snapshot.requirementsCurrentlyDue,
+        requirementsEventuallyDue: snapshot.requirementsEventuallyDue,
+        requirementsDisabledReason: snapshot.requirementsDisabledReason,
+        onboardingCompleteAt: snapshot.status === "ready" ? nowMs : null,
+        nowMs,
+      });
+      return { status: snapshot.status };
+    } catch (error) {
+      console.warn("stripe_connect_refresh_failed", { error: error instanceof Error ? error.message : String(error) });
+      return { status: null };
+    }
+  },
+});
+
 export const startConnectOnboarding = action({
   args: {
     userId: v.optional(v.id("users")),

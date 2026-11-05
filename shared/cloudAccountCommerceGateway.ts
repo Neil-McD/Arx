@@ -22,3 +22,11 @@ export async function startCloudConnectOnboarding<SessionT>(
     url?: unknown;
   };
 }
+
+// Back from Stripe's setup: Polynet reads the payout account from Stripe now.
+export async function refreshCloudConnectAccount<SessionT>(
+  params: CloudAccountCommerceGatewayParams<SessionT>,
+): Promise<void> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  await client.action("creatorCommerce:refreshMyStripeConnectAccount" as any, { authSubject });
+}
