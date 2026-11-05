@@ -63,6 +63,32 @@ export async function cancelStripeSubscriptionIfActive(
   }
 }
 
+function readObjectId(value: unknown): string {
+  if (typeof value === "string") return normalizeStripeId(value);
+  return normalizeStripeId((value as { id?: unknown } | null)?.id);
+}
+
+async function readFirstInvoicePayment(
+  target: StripeSubscriptionCancellationTarget,
+  stripe: StripeCancellationClient,
+  options: Stripe.RequestOptions | undefined,
+): Promise<{ paymentIntentId: string; chargeId: string } | "nothing_paid"> {
+  const subscription = await stripe.subscriptions.retrieve(
+    normalizeStripeId(target.providerSubscriptionId),
+    { expand: ["latest_invoice.payments"] },
+    options,
+  );
+  const invoice = (subscription as any)?.latest_invoice;
+  if (!invoice || typeof invoice !== "object") return { paymentIntentId: "", chargeId: "" };
+  if (invoice.status === "paid" && Number(invoice.amount_paid ?? 0) === 0) return "nothing_paid";
+  const payment = invoice.payments?.data?.find((row: any) => row?.status === "paid")?.payment
+    ?? invoice.payments?.data?.[0]?.payment;
+  return {
+    paymentIntentId: readObjectId(invoice.payment_intent) || readObjectId(payment?.payment_intent),
+    chargeId: readObjectId(invoice.charge) || readObjectId(payment?.charge),
+  };
+}
+
 // A second subscription for someone who is already a paying member: cancel it
 // now and refund its first payment in full (the platform fee too). Safe to repeat.
 export async function cancelAndRefundDuplicateSubscription(
@@ -70,10 +96,18 @@ export async function cancelAndRefundDuplicateSubscription(
   stripe: StripeCancellationClient = getStripeClient(),
 ): Promise<{ cancelled: "canceled" | "already_inactive" | "missing"; refunded: boolean }> {
   const cancelled = await cancelStripeSubscriptionIfActive(target, stripe);
-  const paymentIntentId = normalizeStripeId(target.paymentIntentId);
-  const chargeId = normalizeStripeId(target.chargeId);
-  if (!paymentIntentId && !chargeId) return { cancelled, refunded: false };
   const options = stripeRequestOptions(target.providerAccountId);
+  let paymentIntentId = normalizeStripeId(target.paymentIntentId);
+  let chargeId = normalizeStripeId(target.chargeId);
+  if (!paymentIntentId && !chargeId) {
+    // The checkout notice didn't name the payment: find it on the first invoice.
+    const recovered = await readFirstInvoicePayment(target, stripe, options);
+    if (recovered === "nothing_paid") return { cancelled, refunded: false };
+    paymentIntentId = recovered.paymentIntentId;
+    chargeId = recovered.chargeId;
+    // Not found yet: throw so the caller's retry chain tries again.
+    if (!paymentIntentId && !chargeId) throw new Error("duplicate_refund_payment_not_found");
+  }
   try {
     await stripe.refunds!.create(
       { ...(paymentIntentId ? { payment_intent: paymentIntentId } : { charge: chargeId }), reason: "duplicate", refund_application_fee: true },

@@ -1600,5 +1600,17 @@ test("two tabs, two payments: the first makes them a member; the second is cance
   expect(refund.args[0]).toEqual({ providerSubscriptionId: "sub_second", providerAccountId: "acct_test_owner", paymentIntentId: "pi_sub_second", chargeId: null });
   // Already in now: no third checkout.
   expect(await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).toMatchObject({ status: 409, body: { code: "already_member" } });
+  // They later leave and rejoin on a new subscription; Stripe then replays the
+  // first checkout's notice. Already granted: not a duplicate, nothing refunded.
+  await f.t.run(async (c) => {
+    const row = (await c.db.query("communitySubscriptions").first())!;
+    await c.db.patch(row._id, { providerSubscriptionId: "sub_rejoin" });
+  });
+  await pay(first, "sub_first");
+  const refundsAfterReplay = (await f.t.run((c) => c.db.system.query("_scheduled_functions").collect()))
+    .filter((job: any) => job.name === "communityCommerce:refundDuplicateCommunitySubscriptionInternal");
+  expect(refundsAfterReplay.some((job: any) => job.args[0].providerSubscriptionId === "sub_first")).toBe(false);
+  expect((await f.t.run((c) => c.db.query("communitySubscriptions").collect())).map((row) => [row.providerSubscriptionId, row.status]))
+    .toEqual([["sub_rejoin", "active"]]);
 });
 

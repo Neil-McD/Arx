@@ -892,7 +892,12 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     // The buyer is known (signed in before paying): Stripe's notice itself makes
     // them a member. If they already have another paid subscription here (two
     // tabs), this one is a duplicate: cancelled and refunded, nothing granted.
-    if (args.markComplete && lifecycleMatches && row.ownerUserId && row.claimToken && row.communityId) {
+    // A replayed notice for a checkout that already granted (or was refunded)
+    // finds its claim no longer pending: nothing more to do.
+    const claim = args.markComplete && lifecycleMatches && row.ownerUserId && row.claimToken && row.communityId
+      ? await ctx.db.query("purchaseClaims").withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken)).first()
+      : null;
+    if (claim && claim.status === "pending" && row.ownerUserId && row.claimToken && row.communityId) {
       const newSubscriptionId = String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim();
       const others = await ctx.db.query("communitySubscriptions")
         .withIndex("by_community_user", (q: any) => q.eq("communityId", row.communityId).eq("userId", row.ownerUserId))
@@ -907,8 +912,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
           paymentIntentId: String(args.sourceProviderPaymentIntentId ?? "").trim() || null,
           chargeId: String(args.sourceProviderChargeId ?? "").trim() || null,
         });
-        const claim = await ctx.db.query("purchaseClaims").withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken)).first();
-        if (claim && claim.status === "pending") await ctx.db.patch(claim._id, { status: "expired", updatedAt: nowMs });
+        await ctx.db.patch(claim._id, { status: "expired", updatedAt: nowMs });
         await recordCriticalAuditEventBestEffort(ctx, {
           eventKey: `community_duplicate_subscription_refunded:${newSubscriptionId}`, eventType: "community_duplicate_subscription_refunded",
           status: "started", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId, communityId: row.communityId,

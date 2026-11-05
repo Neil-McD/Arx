@@ -137,6 +137,29 @@ test("a duplicate subscription is cancelled and its payment refunded in full, on
     .toEqual({ cancelled: "canceled", refunded: true });
 });
 
+test("a duplicate whose notice named no payment finds it on the first invoice, or retries", async () => {
+  const refunds: unknown[] = [];
+  const withInvoice = (latest_invoice: unknown) => ({
+    subscriptions: {
+      retrieve: async (_id: string, params: any) => params?.expand ? { latest_invoice } : { status: "active" },
+      cancel: async () => ({}),
+    },
+    refunds: { create: async (params: unknown) => { refunds.push(params); return {}; } },
+  } as any);
+  const target = { providerSubscriptionId: "sub_dup", providerAccountId: "acct_1" };
+  expect(await cancelAndRefundDuplicateSubscription(target, withInvoice({
+    status: "paid", amount_paid: 1000, payments: { data: [{ status: "paid", payment: { payment_intent: "pi_found" } }] },
+  }))).toEqual({ cancelled: "canceled", refunded: true });
+  expect(refunds).toEqual([{ payment_intent: "pi_found", reason: "duplicate", refund_application_fee: true }]);
+  // A free first invoice (100% coupon): nothing to refund.
+  expect(await cancelAndRefundDuplicateSubscription(target, withInvoice({ status: "paid", amount_paid: 0, payments: { data: [] } })))
+    .toEqual({ cancelled: "canceled", refunded: false });
+  // No payment visible yet: fail so the retry chain runs again.
+  await expect(cancelAndRefundDuplicateSubscription(target, withInvoice({ status: "open", amount_paid: 0, payments: { data: [] } })))
+    .rejects.toThrow("duplicate_refund_payment_not_found");
+  expect(refunds).toHaveLength(1);
+});
+
 test("leaving schedules Stripe to stop renewing at period end, on the founder's connected account", async () => {
   const calls: unknown[] = [];
   const stripe = { subscriptions: { update: async (...args: unknown[]) => { calls.push(args); return { status: "active" }; } } } as any;
