@@ -271,6 +271,7 @@ async function deploy(args) {
     await writeFile(paths.save, JSON.stringify({ ...config, ...saved, community, ...(staging ? { staging: true } : {}) }, null, 2) + "\n");
   }
   console.log(`✓ Live: ${published.url}`);
+  console.log("  A redeploy can take up to a minute to show everywhere.");
   // Its private twin: members' own pages, in this site's frame with none of its scripts.
   const mine = published.url === siteAddress(community, staging) ? privateAddress(community, staging) : null;
   if (mine) console.log(`  Members' own pages (their communities, messages, settings): ${mine}`);

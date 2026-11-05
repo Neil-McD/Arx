@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
 import { registerCommunitySiteRoutes } from "./httpCommunitySites";
-import { siteHostname, validateSiteManifest } from "./communitySites";
+import { moveCommunitySiteAddresses, siteHostname, validateSiteManifest } from "./communitySites";
 import { readSitesConfig } from "./communitySiteDeploy";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
@@ -228,4 +228,48 @@ test("sites deployed before twins get theirs from the backfill: only this enviro
   expect(rows).toContainEqual(["https://run-club--me-staging.polynet.page", f.ids.runClub, "private"]);
   expect(rows).toContainEqual(["https://other-club--me-staging.polynet.page", f.ids.admin, "site"]);
   expect(rows).toHaveLength(7);
+});
+
+test("addresses can be registered before the sites switch is on, then serve as soon as it is", async () => {
+  const f = await fixture();
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "");
+  const backfill = (args: Record<string, unknown> = {}) =>
+    f.t.mutation(internal.communitySites.registerCommunitySiteAddressesInternal, args);
+  // With the switch off and no domain given, nothing happens.
+  expect(await backfill({ dryRun: true })).toMatchObject({ registered: [], sitesConfigured: false });
+  // Given the domain, the dry run lists every community's site address (a
+  // reserved name like "admin" gets none) and writes nothing.
+  const dry = await backfill({ sitesDomain: "polynet.page", dryRun: true });
+  expect(dry.registered).toEqual(["https://run-club.polynet.page", "https://other-club.polynet.page"]);
+  expect(await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").collect()).length)).toBe(0);
+  // The real run registers each site and its members' twin, once.
+  const real = await backfill({ sitesDomain: "polynet.page" });
+  expect(real.registered).toEqual(expect.arrayContaining(["https://run-club.polynet.page", "https://run-club--me.polynet.page"]));
+  expect((await backfill({ sitesDomain: "polynet.page" })).registered).toEqual([]);
+  // A malformed domain registers nothing.
+  expect(await backfill({ sitesDomain: "not a domain" })).toMatchObject({ registered: [], sitesConfigured: false });
+});
+
+test("a rename before the sites switch moves the pre-registered addresses with the slug", async () => {
+  const f = await fixture();
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "");
+  await f.t.mutation(internal.communitySites.registerCommunitySiteAddressesInternal, { sitesDomain: "polynet.page" });
+  await f.t.run(async (ctx) => {
+    const community = await ctx.db.get(f.ids.runClub);
+    await moveCommunitySiteAddresses(ctx, community!, "trail-club");
+  });
+  const origins = await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").withIndex("by_community", (q) => q.eq("communityId", f.ids.runClub)).collect()).map((row) => row.origin));
+  expect(origins.sort()).toEqual(["https://trail-club--me.polynet.page", "https://trail-club.polynet.page"]);
+});
+
+test("a custom domain shaped like the slug is never moved on rename before the switch", async () => {
+  const f = await fixture();
+  vi.stubEnv("POLYNET_SITES_DOMAIN", "");
+  await f.t.run(async (ctx) => {
+    await ctx.db.insert("communityDomains", { communityId: f.ids.runClub, origin: "https://run-club.example.com", createdAt: 1 });
+    const community = await ctx.db.get(f.ids.runClub);
+    await moveCommunitySiteAddresses(ctx, community!, "trail-club");
+  });
+  const origins = await f.t.run(async (ctx) => (await ctx.db.query("communityDomains").withIndex("by_community", (q) => q.eq("communityId", f.ids.runClub)).collect()).map((row) => row.origin));
+  expect(origins).toEqual(["https://run-club.example.com"]);
 });

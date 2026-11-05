@@ -145,6 +145,33 @@ function sitesEnv(): { domain: string; suffix: string } | null {
   return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
 }
 
+async function sitesFromRegisteredAddress(ctx: any, communityId: any, slug: string): Promise<{ domain: string; suffix: string } | null> {
+  if (!slug) return null;
+  const rows = await ctx.db.query("communityDomains").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).collect();
+  for (const row of rows) {
+    if (row.kind === "private") continue;
+    let host = "";
+    try { host = new URL(row.origin).hostname; } catch { continue; }
+    if (!host.startsWith(slug)) continue;
+    const rest = host.slice(slug.length);
+    const dot = rest.indexOf(".");
+    if (dot < 0) continue;
+    const sites = sitesFromArgs(rest.slice(dot + 1), rest.slice(0, dot));
+    if (!sites || siteHostname(slug, sites.domain, sites.suffix) !== host) continue;
+    // Only managed site addresses come with a members' twin; a founder's
+    // custom domain never does, so it is never mistaken for one.
+    const twin = privateTwinHost(host, sites.domain, sites.suffix);
+    if (twin && rows.some((other: any) => other.kind === "private" && other.origin === `https://${twin}`)) return sites;
+  }
+  return null;
+}
+
+function sitesFromArgs(rawDomain: string, rawSuffix?: string): { domain: string; suffix: string } | null {
+  const domain = rawDomain.trim().toLowerCase();
+  const suffix = (rawSuffix ?? "").trim().toLowerCase();
+  return domain && sitesDomainOk(domain, suffix) ? { domain, suffix } : null;
+}
+
 // The community's own site on this environment (its registered address), for
 // Studio's links and the /c/<slug> hand-off; null where it has none.
 export async function communitySiteUrl(ctx: any, community: { _id: any; slug?: unknown }): Promise<string | null> {
@@ -181,8 +208,11 @@ export const communitySitePageUrlBySlugInternal = internalQuery({
 // serves them until the founder deploys their own. A slug with no valid site
 // address, or an address already taken, just leaves the community without one;
 // it never stops the community being created.
-export async function registerCommunitySiteAddresses(ctx: any, community: { _id: any; slug?: unknown }) {
-  const sites = sitesEnv();
+export async function registerCommunitySiteAddresses(
+  ctx: any,
+  community: { _id: any; slug?: unknown },
+  sites: { domain: string; suffix: string } | null = sitesEnv(),
+) {
   const host = sites ? siteHostname(String(community.slug ?? ""), sites.domain, sites.suffix) : null;
   if (!sites || !host) return null;
   try {
@@ -200,7 +230,9 @@ export async function registerCommunitySiteAddresses(ctx: any, community: { _id:
 // the slug is saved, so a refusal changes nothing.
 export async function moveCommunitySiteAddresses(ctx: any, community: { _id: any; slug?: unknown }, nextSlug: string) {
   const previous = String(community.slug ?? "");
-  const sites = sitesEnv();
+  // Before the sites switch is on, addresses registered for the dark launch
+  // still move with the slug: read the domain from the registered site.
+  const sites = sitesEnv() ?? await sitesFromRegisteredAddress(ctx, community._id, previous);
   if (!sites || previous === nextSlug) return;
   const origins = (slug: string) => {
     const host = siteHostname(slug, sites.domain, sites.suffix);
@@ -221,16 +253,24 @@ export async function moveCommunitySiteAddresses(ctx: any, community: { _id: any
     if (row && String(row.communityId) !== String(community._id)) throw new Error("community_slug_taken");
   }
   for (const row of held) await ctx.db.delete(row._id);
-  await registerCommunitySiteAddresses(ctx, { _id: community._id, slug: nextSlug });
+  await registerCommunitySiteAddresses(ctx, { _id: community._id, slug: nextSlug }, sites);
 }
 
 // Communities created before every community had a site: register theirs, a
 // page at a time, until done:
 //   npx convex run communitySites:registerCommunitySiteAddressesInternal '{"dryRun":true}'
+// Pass sitesDomain (and hostSuffix) to register before POLYNET_SITES_DOMAIN is
+// set, so sites can be checked live while Studio still links to itself:
+//   npx convex run communitySites:registerCommunitySiteAddressesInternal '{"sitesDomain":"polynet.page","dryRun":true}'
 export const registerCommunitySiteAddressesInternal = internalMutation({
-  args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) },
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    dryRun: v.optional(v.boolean()),
+    sitesDomain: v.optional(v.string()),
+    hostSuffix: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
-    const sites = sitesEnv();
+    const sites = args.sitesDomain === undefined ? sitesEnv() : sitesFromArgs(args.sitesDomain, args.hostSuffix);
     if (!sites) return { registered: [], skipped: 0, continueCursor: null, isDone: true, sitesConfigured: false };
     const page = await ctx.db.query("communities").paginate({ cursor: args.cursor ?? null, numItems: 50 });
     const registered: string[] = [];
@@ -243,7 +283,7 @@ export const registerCommunitySiteAddressesInternal = internalMutation({
         if (!taken) registered.push(`https://${host}`);
         continue;
       }
-      const result = await registerCommunitySiteAddresses(ctx, community);
+      const result = await registerCommunitySiteAddresses(ctx, community, sites);
       if (result) registered.push(...result.added); else skipped += 1;
     }
     return { registered, skipped, continueCursor: page.continueCursor, isDone: page.isDone, sitesConfigured: true };
