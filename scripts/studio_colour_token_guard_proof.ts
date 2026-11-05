@@ -12,10 +12,8 @@ const EXCLUDED = [
   "apps/web/src/styles/pdf-text-layer.css",
 ];
 
-// Deliberate literals: theme preview swatches, the internal operator
-// warning, and light-theme-only adapters (owned by the light-mode slice).
+// Deliberate literals: the internal operator warning.
 const ALLOWED = new Set([
-  "settings-runtime-and-theme-overrides.css|#2f55ff",
   "settings-runtime-and-theme-overrides.css|#f0b84d",
 ]);
 

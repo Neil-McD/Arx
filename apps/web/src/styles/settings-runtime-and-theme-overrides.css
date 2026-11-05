@@ -3794,22 +3794,22 @@ button.settings-primary-action svg {
 
 /* Theme preview colors */
 .appearance-option-preview[data-preview-theme="dark"] {
-  background: #1a1a1a;
+  background: #08090a;
 }
 
 .appearance-option-preview[data-preview-theme="dark"] .preview-header {
-  background: #121212;
+  background: #0e0f10;
   grid-column: 1 / -1;
   border-radius: 3px;
 }
 
 .appearance-option-preview[data-preview-theme="dark"] .preview-sidebar {
-  background: #181818;
+  background: #141517;
   border-radius: 3px;
 }
 
 .appearance-option-preview[data-preview-theme="dark"] .preview-content {
-  background: #2a2a2a;
+  background: #161719;
   border-radius: 3px;
   padding: 8px;
   display: flex;
@@ -3818,7 +3818,7 @@ button.settings-primary-action svg {
 }
 
 .appearance-option-preview[data-preview-theme="dark"] .preview-line {
-  background: #3a3a3a;
+  background: #313236;
   height: 4px;
   border-radius: 2px;
 }
@@ -3828,24 +3828,24 @@ button.settings-primary-action svg {
 }
 
 .appearance-option-preview[data-preview-theme="light"] {
-  background: #F8F8F4;
-  box-shadow: inset 0 0 0 1px rgba(23, 23, 25, 0.1);
+  background: #F1F1F3;
+  box-shadow: inset 0 0 0 1px rgba(11, 11, 12, 0.1);
 }
 
 .appearance-option-preview[data-preview-theme="light"] .preview-header {
   background: #FFFFFF;
   grid-column: 1 / -1;
   border-radius: 3px;
-  box-shadow: inset 0 -1px 0 rgba(23, 23, 25, 0.1);
+  box-shadow: inset 0 -1px 0 rgba(11, 11, 12, 0.1);
 }
 
 .appearance-option-preview[data-preview-theme="light"] .preview-sidebar {
-  background: #F0F0EE;
+  background: #F7F7F8;
   border-radius: 3px;
 }
 
 .appearance-option-preview[data-preview-theme="light"] .preview-content {
-  background: #F8F8F4;
+  background: #FFFFFF;
   border-radius: 3px;
   padding: 8px;
   display: flex;
@@ -3854,14 +3854,14 @@ button.settings-primary-action svg {
 }
 
 .appearance-option-preview[data-preview-theme="light"] .preview-line {
-  background: rgba(23, 23, 25, 0.22);
+  background: rgba(11, 11, 12, 0.22);
   height: 4px;
   border-radius: 2px;
 }
 
 .appearance-option-preview[data-preview-theme="light"] .preview-line.short {
   width: 60%;
-  background: #2F55FF;
+  background: #0B0B0C;
 }
 
 .appearance-option-label {

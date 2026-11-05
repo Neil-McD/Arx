@@ -160,61 +160,61 @@
   background: var(--surface-app);
 }
 
-/* Light theme - "Paper Intelligence" */
+/* Light theme - black and white */
 :root[data-theme="light"] {
   color-scheme: light;
 
   /*
-   * Paper Intelligence Palette
-   * Philosophy: paper is the dominant work surface, neutral gray identifies
-   * operating context, and intelligence blue marks live agency and selection.
+   * Black and white
+   * White work surface, near-black ink, greys for hierarchy. Selection is a
+   * tint of ink, never a colour; red and green stay for danger and success.
    */
 
   /* === FOUNDATION: Paper canvas + neutral context === */
-  --bg-app: #F8F8F4;
-  --bg-header: rgba(248, 248, 244, 0.94);
-  --bg-panel: #F0F0EE;
+  --bg-app: #F1F1F3;
+  --bg-header: rgba(255, 255, 255, 0.94);
+  --bg-panel: #F7F7F8;
   --bg-modal: #FFFFFF;
-  --bg-workspace: #F8F8F4;
+  --bg-workspace: #FFFFFF;
   --bg-card: #FFFFFF;
   --bg-card-solid: #FFFFFF;
-  --bg-card-alt: #F8F8F4;
-  --bg-card-hover: #ECECEA;
+  --bg-card-alt: #F7F7F8;
+  --bg-card-hover: #F1F1F3;
   --bg-input: #FFFFFF;
   --bg-terminal: #171719;
-  --surface-rail: #F8F8F4;
-  --surface-nav: #F0F0EE;
+  --surface-rail: #F1F1F3;
+  --surface-nav: #F7F7F8;
   --workspace-composer-bg: #FFFFFF;
   --workspace-landing-action-bg: #FFFFFF;
-  --workspace-landing-action-hover-bg: #ECECEA;
+  --workspace-landing-action-hover-bg: #F1F1F3;
 
   /* === CONTROLS: Ink on paper === */
-  --bg-button: #171719;
-  --bg-button-hover: color-mix(in srgb, #171719 88%, #FFFFFF 12%);
+  --bg-button: #0B0B0C;
+  --bg-button-hover: #26272A;
   --bg-button-text: #FFFFFF;
 
   /* === SEMANTIC COLOR: intelligence selection + community attention === */
-  --accent-gold: #2F55FF;
-  --accent-gold-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
-  --accent-gold-glow: rgba(47, 85, 255, 0.18);
-  --accent-brand: #2F55FF;
-  --accent-selection: #2F55FF;
-  --accent-agent: #2F55FF;
-  --accent-agent-strong: color-mix(in srgb, #2F55FF 84%, #171719 16%);
-  --accent-agent-foreground: #2F55FF;
-  --accent-agent-surface: rgba(47, 85, 255, 0.1);
-  --accent-attention: #326FAD;
+  --accent-gold: #0B0B0C;
+  --accent-gold-subtle: #5F636B;
+  --accent-gold-glow: rgba(11, 11, 12, 0.08);
+  --accent-brand: #0B0B0C;
+  --accent-selection: #0B0B0C;
+  --accent-agent: #0B0B0C;
+  --accent-agent-strong: #0B0B0C;
+  --accent-agent-foreground: #3C3F45;
+  --accent-agent-surface: rgba(11, 11, 12, 0.06);
+  --accent-attention: #0B0B0C;
   --text-on-attention: #FFFFFF;
   --accent-global-attention: #B42318;
   --text-on-global-attention: #FFFFFF;
-  --focus-ring: rgba(47, 85, 255, 0.52);
-  --text-link: #2F55FF;
-  --text-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
-  --accent-cyan: #2F55FF;
-  --accent-cyan-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
-  --accent-cyan-glow: rgba(47, 85, 255, 0.16);
-  --chat-link: #2F55FF;
-  --chat-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --focus-ring: rgba(11, 11, 12, 0.48);
+  --text-link: #0B0B0C;
+  --text-link-hover: #3C3F45;
+  --accent-cyan: #0B0B0C;
+  --accent-cyan-subtle: #3C3F45;
+  --accent-cyan-glow: rgba(11, 11, 12, 0.08);
+  --chat-link: #0B0B0C;
+  --chat-link-hover: #3C3F45;
 
   /* Functional feedback stays semantically distinct from the brand palette. */
   --accent-success: #147A4B;
@@ -225,51 +225,51 @@
   --success-surface: rgba(20, 122, 75, 0.1);
 
   /* === TYPOGRAPHY: Accessible ink === */
-  --text-primary: #171719;
-  --text-secondary: #52515A;
-  --text-muted: #6B6974;
-  --text-faint: #726F78;
+  --text-primary: #0B0B0C;
+  --text-secondary: #3C3F45;
+  --text-muted: #5F636B;
+  --text-faint: #686C73;
   --text-terminal: #FFFFFF;
 
   /* === STRUCTURE: Ink-derived lines === */
-  --border-default: rgba(23, 23, 25, 0.1);
-  --border-strong: rgba(23, 23, 25, 0.22);
-  --border-muted: rgba(23, 23, 25, 0.1);
-  --border-active: #2F55FF;
-  --stroke-focus: #2F55FF;
-  --divider-accent: rgba(23, 23, 25, 0.1);
-  --stroke-panel-edge: rgba(23, 23, 25, 0.16);
+  --border-default: rgba(11, 11, 12, 0.09);
+  --border-strong: rgba(11, 11, 12, 0.18);
+  --border-muted: rgba(11, 11, 12, 0.06);
+  --border-active: #80838B;
+  --stroke-focus: #80838B;
+  --divider-accent: rgba(11, 11, 12, 0.08);
+  --stroke-panel-edge: rgba(11, 11, 12, 0.1);
   --header-border: none;
 
   /* === ICONS + INTERACTION === */
-  --icon-default: #6B6974;
-  --icon-hover: #171719;
-  --icon-active: #2F55FF;
-  --hover-overlay: rgba(23, 23, 25, 0.04);
-  --active-overlay: rgba(23, 23, 25, 0.08);
+  --icon-default: #5F636B;
+  --icon-hover: #0B0B0C;
+  --icon-active: #0B0B0C;
+  --hover-overlay: rgba(11, 11, 12, 0.04);
+  --active-overlay: rgba(11, 11, 12, 0.07);
   --panel-shadow: none;
 
   /* === SELECTED STATE: Dark-theme grammar translated onto paper === */
-  --surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);
-  --stroke-selected: #2F55FF;
-  --text-selected: #171719;
+  --surface-selected: rgba(11, 11, 12, 0.05);
+  --stroke-selected: transparent;
+  --text-selected: #0B0B0C;
 
   /* === COMPOSER: Raised white work surface === */
   --composer-surface: #FFFFFF;
-  --composer-border: rgba(23, 23, 25, 0.1);
-  --composer-elevation: 0 10px 26px rgba(23, 23, 25, 0.09), 0 1px 2px rgba(23, 23, 25, 0.08);
-  --composer-focus-ring: rgba(47, 85, 255, 0.42);
+  --composer-border: rgba(11, 11, 12, 0.09);
+  --composer-elevation: 0 10px 26px rgba(11, 11, 12, 0.07), 0 1px 2px rgba(11, 11, 12, 0.06);
+  --composer-focus-ring: rgba(11, 11, 12, 0.32);
 
   /* === STATUS: Light semantic surfaces === */
   --status-default: #FFFFFF;
-  --status-proposed: #E9E9E6;
+  --status-proposed: #F1F1F3;
   --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
-  --status-executed: rgba(47, 85, 255, 0.1);
+  --status-executed: rgba(11, 11, 12, 0.05);
 
   --community-rail-control-bg: var(--surface-nav);
-  --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
-  --scrollbar-thumb: rgba(23, 23, 25, 0.22);
-  --scrollbar-thumb-hover: #6B6974;
+  --community-rail-button-border: 1px solid rgba(11, 11, 12, 0.09);
+  --scrollbar-thumb: rgba(11, 11, 12, 0.18);
+  --scrollbar-thumb-hover: #5F636B;
 }
 
 * {
