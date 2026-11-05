@@ -798,7 +798,7 @@
 }
 
 .community-interaction-projection {
-  --community-chat-surface: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+  --community-chat-surface: var(--bg-workspace);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -826,7 +826,7 @@
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--stroke-panel-edge);
-  background: color-mix(in srgb, var(--bg-workspace) 88%, var(--bg-card) 12%);
+  background: var(--bg-workspace);
 }
 
 .community-context-rail-head {
