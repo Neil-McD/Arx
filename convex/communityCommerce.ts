@@ -636,6 +636,9 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     ) {
       throw new Error("community_lifecycle_generation_mismatch");
     }
+    if (!args.ownerUserId && !(await guestCheckoutAllowed(ctx, args.communityId, nowMs))) {
+      throw new Error("community_checkout_unavailable");
+    }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "community_join",
@@ -1004,18 +1007,22 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
 export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
 export const GUEST_CHECKOUTS_PER_WINDOW = 20;
 
+async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {
+  const since = nowMs - GUEST_CHECKOUT_WINDOW_MS;
+  const recent = await ctx.db
+    .query("checkoutSessions")
+    .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", "pending"))
+    .order("desc")
+    .take(200);
+  return recent.filter((row: any) => !row.ownerUserId && row.createdAt >= since).length < GUEST_CHECKOUTS_PER_WINDOW;
+}
+
+// An early answer, before any Stripe work. The binding check is in the
+// mutation that records the checkout (one transaction with the insert), so a
+// burst of parallel requests can't all pass on the same count.
 export const guestCheckoutAllowedInternal = internalQuery({
   args: { communityId: v.id("communities"), nowMs: v.number() },
-  handler: async (ctx, args) => {
-    const since = args.nowMs - GUEST_CHECKOUT_WINDOW_MS;
-    const recent = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId).eq("status", "pending"))
-      .order("desc")
-      .take(200);
-    const guests = recent.filter((row: any) => !row.ownerUserId && row.createdAt >= since).length;
-    return guests < GUEST_CHECKOUTS_PER_WINDOW;
-  },
+  handler: async (ctx, args) => await guestCheckoutAllowed(ctx, args.communityId, args.nowMs),
 });
 
 export const startPublicCommunityCheckout = action({
