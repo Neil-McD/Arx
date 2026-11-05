@@ -280,90 +280,49 @@ const publicBuilderLandingThemeBlock = publicBuilderLandingCss.match(
 )?.[1];
 assert.ok(
   publicBuilderLandingThemeBlock,
-  "the public Builder landing page should own one dark-locked theme adapter",
+  "the public front door should own one dark-locked theme adapter",
 );
 [
-  "--bg: #111113;",
-  "--surface-deep: #1a1a1a;",
-  "--surface-raised: #222222;",
-  "--surface-quiet: #171719;",
-  "--line: #2a2a2a;",
-  "--line-default: #3a3a3a;",
-  "--line-strong: #4a4a4a;",
-  "--text: #fcf8f0;",
-  "--muted: #b3ad9f;",
-  "--quiet: #9c968a;",
-  "--action: #f1ede5;",
-  "--action-text: #0a0a0a;",
-  "--brand: #d66a8a;",
-  "--attention: #7baad6;",
-  "--attention-soft: rgba(123, 170, 214, 0.09);",
-  "--metal: #d6d0c6;",
+  "--bg: #08090a;",
+  "--surface: #0f1011;",
+  "--surface-raised: #161719;",
+  "--line-default: #232427;",
+  "--line-strong: #313236;",
+  "--text: #f7f8f8;",
+  "--muted: #9a9fa8;",
+  "--quiet: #82878f;",
+  "--action: #f7f8f8;",
+  "--action-text: #08090a;",
 ].forEach((token) => {
   assert.ok(
     publicBuilderLandingThemeBlock.includes(token),
-    `the public Builder landing page should map canonical Dark role ${token}`,
+    `the public front door should map the black-and-white role ${token}`,
   );
 });
 assert.doesNotMatch(
   publicBuilderLandingCss,
-  /--pink|#ff3d7f|#ff9dc0|rgba\(255,\s*61,\s*127|--agent\b|#a78bfa|#8b5cf6|#c4b5fd/i,
-  "the public Builder landing page should not restore neon pink or agent purple",
-);
-assert.equal(
-  publicBuilderLandingCss.match(/var\(--brand\)/g)?.length ?? 0,
-  1,
-  "the public Builder landing page should reserve dusty rose for the Polynet wordmark only",
+  /--pink|--brand|--attention|#ff3d7f|#d66a8a|#7baad6|#a78bfa|#8b5cf6|#c4b5fd/i,
+  "the public front door should carry no accent colour",
 );
 assert.doesNotMatch(
   publicBuilderLandingCss,
   /:root\[data-theme="light"\][^{]*\.pn-landing/,
-  "the public Builder landing page should remain dark-locked regardless of a saved app theme",
+  "the public front door should remain dark-locked regardless of a saved app theme",
 );
 assert.match(
   publicBuilderLandingCss,
   /\.pn-landing \.cta\s*\{[\s\S]*?background:\s*var\(--action\);[\s\S]*?color:\s*var\(--action-text\);/,
-  "the public Builder CTA should use the canonical cream action treatment",
+  "the public front door CTA should use the white action treatment",
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.vsl-preview\s*\{[\s\S]*?rgba\(252, 248, 240, 0\.065\)[\s\S]*?linear-gradient\(135deg, #18181a/,
-  "the public Builder VSL cover should use the canonical warm-graphite material system",
+  /\.pn-builder-activation\s*\{[\s\S]*?background:\s*#0f1011;[\s\S]*?color:\s*#f7f8f8;/,
+  "the public checkout status banner should use the dark surface",
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.diagram-line-accent\s*\{[^}]*stroke:\s*var\(--metal\);[^}]*\}/,
-  "the public Builder diagrams should keep structural emphasis neutral",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-landing \.brain-outline\s*\{[^}]*stroke:\s*var\(--metal\);[^}]*\}/,
-  "the public Builder diagrams should render autonomous intelligence in neutral silver",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-landing \.diagram-node-accent\s*\{[^}]*fill:\s*var\(--metal\);[^}]*\}/,
-  "the public Builder diagrams should keep persistent nodes neutral",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-landing \.diagram-particle\s*\{[^}]*fill:\s*var\(--attention\);[^}]*\}/,
-  "the public Builder diagrams should reserve attention blue for moving information",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-landing \.diagram-signal\s*\{[^}]*stroke:\s*var\(--attention\);[^}]*\}/,
-  "the public Builder diagrams should reserve attention blue for active signals",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-builder-activation\s*\{[\s\S]*?border:\s*1px solid rgba\(214, 208, 198, 0\.18\);[\s\S]*?background:\s*rgba\(26, 26, 26, 0\.98\);[\s\S]*?color:\s*#fcf8f0;/,
-  "the public Builder activation banner should retain the premium dark-locked treatment",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-builder-activation\.error\s*\{[\s\S]*?#ef4444/,
-  "the public Builder activation banner should use the canonical functional error role",
+  /\.pn-builder-activation\.error\s*\{[\s\S]*?var\(--danger-text/,
+  "the public checkout status banner should use the danger role for errors",
 );
 
 const lightThemeBlock = baseThemeCss.match(
