@@ -203,3 +203,25 @@ test("a payment made before signing in still grants when its buyer first signs i
   })).toEqual({ attached: 1 });
   expect(await state()).toEqual({ owner: ids.buyerId, granted: true, members: [ids.buyerId] });
 });
+
+test("a dispute won on a payment not granted yet lifts its block; a refund doesn't", async () => {
+  const { t, ids, finish, paid, state } = await fixture();
+  await paid(null);
+  await t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+    providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_dispute_opened",
+  });
+  expect(await t.mutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
+    providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first",
+  })).toEqual({ restored: true });
+  expect(await finish(ids.buyerId, SECRET)).toEqual({ status: "joined" });
+  expect((await state()).members).toEqual([ids.buyerId]);
+
+  const second = await fixture();
+  await second.paid(null);
+  await second.t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+    providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_refunded",
+  });
+  expect(await second.t.mutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
+    providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first",
+  })).toEqual({ restored: false });
+});

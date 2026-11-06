@@ -1627,6 +1627,26 @@ export const revokeUngrantedCommunityCheckoutInternal = internalMutation({
   },
 });
 
+// A dispute the founder won (or funds reinstated) on a payment not granted yet:
+// only a dispute's block lifts; a refund stays.
+export const restoreUngrantedCommunityCheckoutInternal = internalMutation({
+  args: { providerAccountId: v.string(), providerSubscriptionId: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("checkoutSessions")
+      .withIndex("by_providerSubscriptionId", (q: any) => q.eq("providerSubscriptionId", args.providerSubscriptionId))
+      .take(5);
+    let restored = false;
+    for (const row of rows) {
+      if (row.mode !== "community_join" || String(row.providerAccountId ?? "") !== args.providerAccountId) continue;
+      if (!String(row.communityRiskRevokedReason ?? "").startsWith("subscription_dispute_")) continue;
+      await ctx.db.patch(row._id, { communityRiskRevokedReason: undefined, updatedAt: Date.now() });
+      restored = true;
+      if (row.ownerUserId) await settleCommunityCheckout(ctx, row.sessionId, Date.now());
+    }
+    return { restored };
+  },
+});
+
 export const attachPaidCheckoutsForVerifiedEmailInternal = internalMutation({
   args: { userId: v.id("users"), email: v.string() },
   handler: async (ctx, args) => ({ attached: await attachPaidCheckoutsForVerifiedEmail(ctx, args.userId, args.email, Date.now()) }),

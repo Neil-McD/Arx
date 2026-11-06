@@ -868,7 +868,16 @@ async function syncCommunityAccessForDispute(
       { allowRiskRestoration: true },
     );
     if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
-    return await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
+    const communityResult = await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
+    // Paid before signing in and not granted yet: the dispute's block on the
+    // checkout lifts, so the buyer gets in when they sign in.
+    if ((communityResult as any)?.ignored && providerAccountId) {
+      const restored = await ctx.runMutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
+        providerAccountId, providerSubscriptionId,
+      });
+      if (restored.restored) return { ok: true, provider_subscription_id: providerSubscriptionId, checkout_restored: true };
+    }
+    return communityResult;
   }
   return {
     ok: true,
