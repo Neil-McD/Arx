@@ -690,9 +690,6 @@ export default defineSchema({
     communityRiskRevokedReason: v.optional(v.string()),
     ownerUserId: v.optional(v.id("users")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
-    claimToken: v.optional(v.string()),
-    recoveryEmailHash: v.optional(v.string()),
-    recoveryEmailHashVersion: v.optional(v.literal("hmac_sha256_v1")),
     founderRiskState: v.optional(
       v.union(v.literal("clear"), v.literal("revoked")),
     ),
@@ -708,7 +705,6 @@ export default defineSchema({
     .index("by_sessionId", ["sessionId"])
     .index("by_providerCheckoutSessionId", ["providerCheckoutSessionId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
-    .index("by_mode_recovery_email", ["mode", "recoveryEmailHash"])
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_mode_status", ["mode", "status"])
@@ -748,27 +744,6 @@ export default defineSchema({
     .index("by_user_account", ["userId", "providerAccountId"])
     .index("by_account_customer", ["providerAccountId", "providerCustomerId"]),
 
-  purchaseClaims: defineTable({
-    claimToken: v.string(),
-    communityId: v.id("communities"),
-    billingPeriod: v.optional(v.string()),
-    pricePointId: v.optional(v.id("communityPricePoints")),
-    amountBaseUnits: v.optional(v.number()),
-    currency: v.optional(v.string()),
-    currencyDecimals: v.optional(v.number()),
-    ownerUserId: v.optional(v.id("users")),
-    status: v.union(v.literal("pending"), v.literal("redeemed"), v.literal("expired")),
-    sourceSessionId: v.optional(v.string()),
-    redeemedByUserId: v.optional(v.id("users")),
-    redeemedAt: v.optional(v.number()),
-    expiresAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_claimToken", ["claimToken"])
-    .index("by_owner", ["ownerUserId"])
-    .index("by_owner_status", ["ownerUserId", "status"])
-    .index("by_community_status", ["communityId", "status"]),
 
   userMemorySettings: defineTable({
     userId: v.id("users"),

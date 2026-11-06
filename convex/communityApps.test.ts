@@ -1614,7 +1614,6 @@ test("two tabs, two payments: the first makes them a member; the second is cance
   // reads joined; the refunded second one reads joined too (they're in).
   expect((await f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, token, { session_id: first })).body).toMatchObject({ status: "joined" });
   expect((await f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, token, { session_id: second })).body).toMatchObject({ status: "joined" });
-  expect(await f.t.run((c) => c.db.query("purchaseClaims").collect())).toEqual([]);
   expect(refundsAfterReplay.some((job: any) => job.args[0].providerSubscriptionId === "sub_first")).toBe(false);
   expect((await f.t.run((c) => c.db.query("communitySubscriptions").collect())).map((row) => [row.providerSubscriptionId, row.status]))
     .toEqual([["sub_rejoin", "active"]]);
