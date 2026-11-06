@@ -30,8 +30,8 @@ assert.match(
 );
 assert.match(
   httpAuthBridge,
-  /reconcilePaidBuilderPurchasesForOwnerInternal[\s\S]*verifiedEmail: normalizedStored\.user\.email/,
-  "auth completion must reconcile paid Builder purchases on the server",
+  /emailVerified && normalizedStored\.user\.email[\s\S]*attachPaidCheckoutsForVerifiedEmailInternal/,
+  "auth completion must collect community payments made with this verified email",
 );
 assert.doesNotMatch(
   httpAuthBridge,
@@ -52,11 +52,6 @@ assert.doesNotMatch(
   http,
   /resolveTrustedEmailVerification/,
   "authenticated HTTP requests must trust verified identity claims or existing persisted verification",
-);
-assert.match(
-  billing,
-  /reconcilePaidBuilderPurchasesForOwnerInternal[\s\S]*emailVerifiedAt[\s\S]*by_mode_recovery_email/,
-  "Builder reconciliation must require persisted verified email and use the recovery-email index",
 );
 assert.match(
   email,

@@ -14,9 +14,6 @@ const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const authBridge = read("convex/httpAuthBridge.ts");
 const app = read("apps/web/src/App.tsx");
-const publicBuilderCheckoutController = read(
-  "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
-);
 const pendingAuthIntent = read(
   "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
 );
@@ -24,7 +21,6 @@ const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.t
 const onboardingController = read("apps/web/src/controllers/useWebOnboardingProfileController.ts");
 
 assert.match(schema, /founderSubscriptions: defineTable\(\{[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)/);
-assert.match(schema, /\.index\("by_mode_recovery_email", \["mode", "recoveryEmailHash"\]\)/);
 
 const existingCheckoutStart = billing.indexOf(
   "export const startFounderSubscriptionCheckout = action",
@@ -40,22 +36,16 @@ const publicCheckout = billing.slice(publicCheckoutStart, billing.indexOf("\n});
 assert.match(publicCheckout, /args: \{\}/);
 assert.match(publicCheckout, /throw new Error\("public_builder_checkout_retired"\)/);
 assert.doesNotMatch(publicCheckout, /stripe|checkout\.sessions\.create/i);
-assert.match(billing, /receiptStatus: grantsAccess \? "paid_unclaimed" : "revoked"/);
+// The anonymous Builder purchase is gone with its recovery: a founder
+// checkout always has its owner from the start.
+assert.match(billing, /if \(!ownerUserId\) throw new Error\("founder_subscription_owner_missing"\)/);
+assert.doesNotMatch(billing, /paid_unclaimed|reconcilePaidBuilderPurchasesForOwnerInternal|createPendingPublicBuilderCheckoutInternal|recoveryEmail/);
 assert.doesNotMatch(billing, /claimTokenHash|checkoutAttemptKeyHash|hashFounderCheckoutClaimToken|hashFounderCheckoutAttemptId/);
 assert.doesNotMatch(billing, /export const getFounderCheckoutReceiptStatus/);
 
 assert.match(webhook, /readStripePaymentReady\(session\.payment_status\)/);
-assert.match(webhook, /recoveryEmailHash/);
-assert.match(webhook, /recoveryEmail,/);
-assert.match(webhook, /enqueueFounderCheckoutRecoveryEmailInternal/);
-const founderRecoveryStart = emailEvents.indexOf(
-  "export async function enqueueFounderCheckoutRecoveryEmailInternal",
-);
-assert.ok(founderRecoveryStart >= 0);
-const founderRecovery = emailEvents.slice(founderRecoveryStart);
-assert.match(founderRecovery, /founder_checkout_recovery:\$\{params\.sessionId\}/);
-assert.match(founderRecovery, /Propagate enqueue failures so Stripe retries/);
-assert.doesNotMatch(founderRecovery, /email_enqueue_failed|skipped: true/);
+assert.doesNotMatch(webhook, /recoveryEmail|enqueueFounderCheckoutRecoveryEmailInternal/);
+assert.doesNotMatch(emailEvents, /enqueueFounderCheckoutRecoveryEmailInternal/);
 
 assert.match(lifecycle, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);
 assert.match(
@@ -73,67 +63,21 @@ assert.doesNotMatch(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBS
 assert.match(lifecycle, /ctx\.db\.patch\(founderSubscription\._id,[\s\S]*communityId,[\s\S]*attachedAt: nowMs/);
 assert.match(lifecycle, /syncFounderUsageCycle\(/);
 assert.match(gateway, /founderSubscriptionId: params\.founderSubscriptionId \?\? undefined/);
-assert.match(billingGateway, /startCloudPublicBuilderCheckout/);
+assert.doesNotMatch(billingGateway, /startCloudPublicBuilderCheckout/);
 assert.doesNotMatch(billingGateway, /claimCloudFounderCheckoutReceipt|loadCloudFounderCheckoutReceiptStatus/);
-assert.match(
-  authBridge,
-  /emailVerified[\s\S]*reconcilePaidBuilderPurchasesForOwnerInternal/,
-);
-assert.match(
-  routeLifecycle,
-  /url\.searchParams\.has\("builder_checkout"\)/,
-);
-assert.match(
-  onboardingController,
-  /new URLSearchParams\(window\.location\.search\)\.has\("builder_checkout"\)/,
-);
-assert.match(
-  publicBuilderCheckoutController,
-  /accountSetupResolution =[\s\S]*await current\.refreshAccountSetupStatus\(activeSession\)[\s\S]*status === "unavailable"[\s\S]*status === "unauthenticated"[\s\S]*accountSetup\.completed/,
-  "Builder return must distinguish unavailable setup authority from confirmed incomplete setup",
-);
-assert.doesNotMatch(
-  publicBuilderCheckoutController,
-  /!latestAccountSetupStatus\?\.completed/,
-  "an unavailable account-setup response must never be treated as incomplete",
-);
-assert.match(
-  publicBuilderCheckoutController,
-  /status === "unavailable"[\s\S]*return;[\s\S]*scrubCurrentRouteSearchParams\(\["builder_checkout"\]\)/,
-  "Builder return must retain its recovery marker until setup authority resolves",
-);
-assert.match(
-  publicBuilderCheckoutController,
-  /returnInFlightRef\.current[\s\S]*overview\?\.unassigned_subscriptions\.find[\s\S]*if \(subscription\) \{[\s\S]*return true/,
-);
-assert.doesNotMatch(
-  publicBuilderCheckoutController,
-  /setAvailableBuilderSubscriptionId|openFundedCreateCommunity/,
-  "checkout return must refresh canonical billing state instead of mirroring entitlement in a browser ref",
-);
+assert.doesNotMatch(authBridge, /reconcilePaidBuilderPurchasesForOwnerInternal/);
+assert.doesNotMatch(routeLifecycle + onboardingController, /builder_checkout/);
 assert.match(
   app,
   /pendingBuilderSetupSubscription[\s\S]*isAccountSetupCompleteForBuilderActions[\s\S]*openRequiredCreateCommunityModal/,
   "authenticated bootstrap must force unresolved paid setup from canonical billing state",
 );
-assert.match(
-  publicBuilderCheckoutController,
-  /builder_checkout[\s\S]*reason: "resume_builder_checkout"/,
-);
-assert.match(
-  pendingAuthIntent,
-  /resume_builder_checkout[\s\S]*params\.resumeBuilderCheckout\(\)/,
-);
+assert.doesNotMatch(pendingAuthIntent, /resume_builder_checkout/);
 assert.match(
   app,
   /onCompleteAccountSetup: completeAccountSetupAndContinue/,
   "modal account completion must share the canonical pending-intent continuation",
 );
-assert.doesNotMatch(
-  publicBuilderCheckoutController,
-  /finishOnboardingAndPrepare|finishOnboarding/,
-  "Builder checkout must not own a duplicate account-completion path",
-);
 assert.doesNotMatch(app, /preparePaidBuilderCommunityCreation/);
 
-console.log("PASS: verified payment and verified identity reconcile server-side into one consumable subscription.");
+console.log("PASS: a founder plan is bought signed in; the anonymous Builder purchase and its recovery stay gone.");

@@ -45,15 +45,9 @@ import {
 import { requireCompletedCommunityArchiveBillingCleanup } from "./communityColdArchive";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { recordCriticalAuditEvent } from "./criticalAudit";
-import {
-  hashFounderCheckoutRecoveryEmail,
-  normalizeFounderCheckoutRecoveryEmail,
-  requireFounderCheckoutRecoverySecret,
-} from "./founderCheckoutReceiptCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
-const FOUNDER_CHECKOUT_CLAIM_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const FOUNDER_RISK_REVOKED_REASONS = new Set([
   "subscription_refunded",
   "subscription_dispute_opened",
@@ -175,34 +169,6 @@ export const getFounderSubscriptionCheckoutSessionInternal = internalQuery({
       .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
       .first();
     return row?.mode === "founder_subscription" ? row : null;
-  },
-});
-
-export const createPendingPublicBuilderCheckoutInternal = internalMutation({
-  args: {
-    sessionId: v.string(),
-    expiresAt: v.number(),
-    nowMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert("checkoutSessions", {
-      sessionId: args.sessionId,
-      mode: "founder_subscription",
-      provider: "stripe",
-      billingPeriod: "monthly",
-      amountBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
-      currency: "usd",
-      currencyDecimals: 2,
-      status: "pending",
-      expiresAt: args.expiresAt,
-      createdAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-    return {
-      sessionId: args.sessionId,
-      providerCheckoutSessionId: null,
-      expiresAt: args.expiresAt,
-    };
   },
 });
 
@@ -422,9 +388,6 @@ async function syncFounderSubscription(args: {
   verifiedCheckoutPayment?: boolean;
   providerEventCreatedAt: number;
   allowRiskRestoration?: boolean;
-  recoveryEmail?: string | null;
-  recoveryEmailHash?: string | null;
-  recoveryEmailHashVersion?: "hmac_sha256_v1" | null;
 }) {
   const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
   const providerCustomerId = String(args.providerCustomerId ?? "").trim();
@@ -534,29 +497,10 @@ async function syncFounderSubscription(args: {
     return { ok: true, ignored: true, reason: "founder_subscription_not_local" };
   }
   let ownerUserId = existing?.ownerUserId ?? checkout?.ownerUserId;
-  if (!ownerUserId && args.recoveryEmail && args.recoveryEmailHash) {
-    const normalizedEmail = normalizeFounderCheckoutRecoveryEmail(args.recoveryEmail);
-    if (await hashFounderCheckoutRecoveryEmail(normalizedEmail) !== args.recoveryEmailHash) {
-      throw new Error("founder_checkout_recovery_email_hash_mismatch");
-    }
-    const matchingUsers = await args.ctx.db
-      .query("users")
-      .withIndex("by_normalizedEmail", (q: any) => q.eq("normalizedEmail", normalizedEmail))
-      .collect();
-    const verifiedUsers = matchingUsers.filter(
-      (user: any) =>
-        typeof user.emailVerifiedAt === "number" &&
-        normalizeFounderCheckoutRecoveryEmail(user.email) === normalizedEmail,
-    );
-    if (verifiedUsers.length > 1) {
-      throw new Error("founder_checkout_verified_owner_ambiguous");
-    }
-    ownerUserId = verifiedUsers[0]?._id ?? null;
-  }
   const communityId = existing?.communityId ?? checkout?.communityId;
-  if (!ownerUserId && !args.recoveryEmailHash && !checkout?.recoveryEmailHash) {
-    throw new Error("founder_subscription_owner_missing");
-  }
+  // Every founder checkout is started signed in; the anonymous Builder
+  // purchase (and its recovery by email) is gone.
+  if (!ownerUserId) throw new Error("founder_subscription_owner_missing");
   if (existing && checkout?.ownerUserId && String(existing.ownerUserId) !== String(checkout.ownerUserId)) {
     throw new Error("founder_subscription_owner_mismatch");
   }
@@ -662,50 +606,6 @@ async function syncFounderSubscription(args: {
     : endedAt
       ? "provider_subscription_ended"
       : undefined;
-  if (!ownerUserId) {
-    const grantsAccess = founderSubscriptionStatusGrantsAccess({
-      status,
-      currentPeriodEndAt: cycleEndAt,
-      nowMs: args.providerEventCreatedAt,
-    });
-    await args.ctx.db.patch(checkout._id, {
-      providerCheckoutSessionId:
-        normalizeOptionalString(args.providerCheckoutSessionId) ??
-        checkout.providerCheckoutSessionId,
-      providerCustomerId,
-      providerSubscriptionId,
-      providerPriceId,
-      currentPeriodStartAt: cycleStartAt,
-      currentPeriodEndAt: cycleEndAt,
-      communitySubscriptionStatus: status,
-      cancelAtPeriodEnd: args.cancelAtPeriodEnd === true,
-      recoveryEmailHash:
-        normalizeOptionalString(args.recoveryEmailHash) ?? checkout.recoveryEmailHash,
-      recoveryEmailHashVersion:
-        args.recoveryEmailHashVersion ?? checkout.recoveryEmailHashVersion,
-      founderRiskState: nextRiskStateChangedAt === undefined ? undefined : nextRiskState,
-      founderRiskStateChangedAt: nextRiskStateChangedAt,
-      founderRiskRevokedReason:
-        nextRiskState === "revoked" ? riskSnapshot.revokedReason : undefined,
-      lastProviderEventCreatedAt: nextLifecycleCursor,
-      status: "complete",
-      expiresAt: Math.max(
-        checkout.expiresAt,
-        args.providerEventCreatedAt + FOUNDER_CHECKOUT_CLAIM_TTL_MS,
-      ),
-      updatedAt: args.providerEventCreatedAt,
-    });
-    return {
-      ok: true,
-      ignored: false,
-      founderSubscriptionId: null,
-      usageCycleId: null,
-      ownerUserId: null,
-      communityId: null,
-      subscriptionStatus: status,
-      receiptStatus: grantsAccess ? "paid_unclaimed" : "revoked",
-    };
-  }
   await attachStripeCustomerToUser({
     ctx: args.ctx,
     userId: ownerUserId,
@@ -794,10 +694,6 @@ async function syncFounderSubscription(args: {
       communitySubscriptionStatus: status,
       cancelAtPeriodEnd: args.cancelAtPeriodEnd === true,
       ownerUserId,
-      recoveryEmailHash:
-        normalizeOptionalString(args.recoveryEmailHash) ?? checkout.recoveryEmailHash,
-      recoveryEmailHashVersion:
-        args.recoveryEmailHashVersion ?? checkout.recoveryEmailHashVersion,
       founderSubscriptionId: subscription._id,
       founderRiskState: nextRiskStateChangedAt === undefined ? undefined : nextRiskState,
       founderRiskStateChangedAt: nextRiskStateChangedAt,
@@ -870,11 +766,6 @@ export const syncFounderSubscriptionFromStripeInternal = internalMutation({
     verifiedCheckoutPayment: v.optional(v.boolean()),
     providerEventCreatedAt: v.number(),
     allowRiskRestoration: v.optional(v.boolean()),
-    recoveryEmail: v.optional(v.union(v.string(), v.null())),
-    recoveryEmailHash: v.optional(v.union(v.string(), v.null())),
-    recoveryEmailHashVersion: v.optional(
-      v.union(v.literal("hmac_sha256_v1"), v.null()),
-    ),
   },
   handler: async (ctx, args) => await syncFounderSubscription({ ctx, ...args }),
 });
@@ -1462,151 +1353,5 @@ export const startPublicBuilderCheckout = action({
   args: {},
   handler: async () => {
     throw new Error("public_builder_checkout_retired");
-  },
-});
-
-async function claimFounderCheckoutReceiptForOwner(args: {
-  ctx: any;
-  receipt: any;
-  ownerUserId: any;
-  nowMs: number;
-}) {
-  const { ctx, receipt, ownerUserId, nowMs } = args;
-  if (receipt.ownerUserId && String(receipt.ownerUserId) !== String(ownerUserId)) {
-    throw new Error("founder_checkout_receipt_already_claimed");
-  }
-  if (receipt.founderSubscriptionId) {
-    const existing = (await ctx.db.get(
-      receipt.founderSubscriptionId,
-    )) as FounderSubscriptionRow | null;
-    if (!existing || String(existing.ownerUserId) !== String(ownerUserId)) {
-      throw new Error("founder_checkout_receipt_claim_invalid");
-    }
-    return {
-      ok: true,
-      founder_subscription_id: String(existing._id),
-      already_claimed: true,
-    };
-  }
-  const subscriptionStatus = receipt.communitySubscriptionStatus;
-  if (
-    receipt.status !== "complete" ||
-    receipt.founderRiskState === "revoked" ||
-    !subscriptionStatus ||
-    !receipt.currentPeriodStartAt ||
-    !receipt.currentPeriodEndAt ||
-    !founderSubscriptionStatusGrantsAccess({
-      status: subscriptionStatus,
-      currentPeriodEndAt: receipt.currentPeriodEndAt,
-      nowMs,
-    })
-  ) {
-    if (receipt.status !== "complete" && receipt.expiresAt <= nowMs) {
-      throw new Error("founder_checkout_receipt_expired");
-    }
-    throw new Error("founder_checkout_payment_not_verified");
-  }
-  const providerCustomerId = String(receipt.providerCustomerId ?? "").trim();
-  const providerSubscriptionId = String(receipt.providerSubscriptionId ?? "").trim();
-  const providerPriceId = String(receipt.providerPriceId ?? "").trim();
-  if (!providerCustomerId || !providerSubscriptionId || !providerPriceId) {
-    throw new Error("founder_checkout_provider_identity_missing");
-  }
-  const existingProviderSubscription = await getFounderSubscriptionByProviderSubscriptionId(
-    ctx,
-    providerSubscriptionId,
-  );
-  if (existingProviderSubscription) {
-    if (String(existingProviderSubscription.ownerUserId) !== String(ownerUserId)) {
-      throw new Error("founder_checkout_receipt_already_claimed");
-    }
-    await ctx.db.patch(receipt._id, {
-      ownerUserId,
-      founderSubscriptionId: existingProviderSubscription._id,
-      updatedAt: nowMs,
-    });
-    return {
-      ok: true,
-      founder_subscription_id: String(existingProviderSubscription._id),
-      already_claimed: true,
-    };
-  }
-  await attachStripeCustomerToUser({
-    ctx,
-    userId: ownerUserId,
-    providerCustomerId,
-    nowMs,
-  });
-  const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
-    ownerUserId,
-    provider: "stripe",
-    providerCustomerId,
-    providerSubscriptionId,
-    providerPriceId,
-    status: subscriptionStatus,
-    currentPeriodStartAt: receipt.currentPeriodStartAt,
-    currentPeriodEndAt: receipt.currentPeriodEndAt,
-    cancelAtPeriodEnd: receipt.cancelAtPeriodEnd === true,
-    revokedReason: receipt.founderRiskRevokedReason,
-    riskAccessState: receipt.founderRiskState,
-    riskStateChangedAt: receipt.founderRiskStateChangedAt,
-    lastProviderEventCreatedAt: receipt.lastProviderEventCreatedAt ?? nowMs,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  });
-  await ctx.db.patch(receipt._id, {
-    ownerUserId,
-    founderSubscriptionId,
-    updatedAt: nowMs,
-  });
-  return {
-    ok: true,
-    founder_subscription_id: String(founderSubscriptionId),
-    already_claimed: false,
-  };
-}
-
-export const reconcilePaidBuilderPurchasesForOwnerInternal = internalMutation({
-  args: {
-    ownerUserId: v.id("users"),
-    verifiedEmail: v.string(),
-    nowMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const owner = await ctx.db.get(args.ownerUserId);
-    const normalizedEmail = normalizeFounderCheckoutRecoveryEmail(args.verifiedEmail);
-    if (
-      !owner ||
-      typeof owner.emailVerifiedAt !== "number" ||
-      normalizeFounderCheckoutRecoveryEmail(owner.email) !== normalizedEmail
-    ) {
-      throw new Error("founder_checkout_verified_email_required");
-    }
-    const recoveryEmailHash = await hashFounderCheckoutRecoveryEmail(normalizedEmail);
-    const receipts = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_mode_recovery_email", (q) =>
-        q.eq("mode", "founder_subscription").eq("recoveryEmailHash", recoveryEmailHash),
-      )
-      .collect();
-    const founderSubscriptionIds: string[] = [];
-    for (const receipt of receipts) {
-      if (receipt.status !== "complete") continue;
-      if (receipt.ownerUserId && String(receipt.ownerUserId) !== String(args.ownerUserId)) {
-        continue;
-      }
-      const claimed = await claimFounderCheckoutReceiptForOwner({
-        ctx,
-        receipt,
-        ownerUserId: args.ownerUserId,
-        nowMs: args.nowMs,
-      });
-      founderSubscriptionIds.push(claimed.founder_subscription_id);
-    }
-    return {
-      ok: true,
-      founder_subscription_ids: founderSubscriptionIds,
-      attached_count: founderSubscriptionIds.length,
-    };
   },
 });

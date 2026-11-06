@@ -141,7 +141,6 @@ import type * as errorLogging from "../errorLogging.js";
 import type * as eventReminders from "../eventReminders.js";
 import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTransport.js";
 import type * as founderBilling from "../founderBilling.js";
-import type * as founderCheckoutReceiptCore from "../founderCheckoutReceiptCore.js";
 import type * as founderInference from "../founderInference.js";
 import type * as founderInferenceBudget from "../founderInferenceBudget.js";
 import type * as founderInferenceCore from "../founderInferenceCore.js";
@@ -360,7 +359,6 @@ declare const fullApi: ApiFromModules<{
   eventReminders: typeof eventReminders;
   fallbackHtmlSearchTransport: typeof fallbackHtmlSearchTransport;
   founderBilling: typeof founderBilling;
-  founderCheckoutReceiptCore: typeof founderCheckoutReceiptCore;
   founderInference: typeof founderInference;
   founderInferenceBudget: typeof founderInferenceBudget;
   founderInferenceCore: typeof founderInferenceCore;

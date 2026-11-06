@@ -7,9 +7,6 @@ type PendingAuthIntentHandlers = {
   join_public_community: (
     payload: Extract<PendingAuthIntent, { reason: "join_public_community" }>["payload"],
   ) => boolean | Promise<boolean>;
-  resume_builder_checkout: (
-    payload: Extract<PendingAuthIntent, { reason: "resume_builder_checkout" }>["payload"],
-  ) => boolean | Promise<boolean>;
   try_polynet_free: (
     payload: Extract<PendingAuthIntent, { reason: "try_polynet_free" }>["payload"],
   ) => boolean | Promise<boolean>;
@@ -28,8 +25,6 @@ export function routePendingAuthIntent(
       return handlers.create_community(intent.payload);
     case "join_public_community":
       return handlers.join_public_community(intent.payload);
-    case "resume_builder_checkout":
-      return handlers.resume_builder_checkout(intent.payload);
     case "try_polynet_free":
       return handlers.try_polynet_free(intent.payload);
   }

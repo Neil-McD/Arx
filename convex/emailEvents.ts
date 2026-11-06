@@ -115,34 +115,3 @@ export async function enqueueCommunityBillingIssueEmailInternal(params: {
   }
 }
 
-export async function enqueueFounderCheckoutRecoveryEmailInternal(params: {
-  ctx: any;
-  recipientEmail: string;
-  sessionId: string;
-  nowMs: number;
-}) {
-  // Use a stable authenticated route. The app root can resolve against a
-  // stale or archived last-active community before recovery gets a chance to
-  // claim the receipt.
-  const actionUrl = new URL("/settings/billing", buildAppUrl("/"));
-  actionUrl.searchParams.set("founder_checkout", "recover");
-  actionUrl.searchParams.set("session_id", params.sessionId);
-  // This email is the durable recovery path for an anonymous paid checkout.
-  // Propagate enqueue failures so Stripe retries the verified webhook. The
-  // outbox dedupe key keeps that retry idempotent.
-  return await params.ctx.runMutation(
-    (internal as any).email.enqueueEmailJobInternal,
-    {
-      kind: "founder_checkout_recovery",
-      recipientEmail: params.recipientEmail,
-      templateKey: "founder_checkout_recovery",
-      payload: {
-        actionUrl: actionUrl.toString(),
-        footerNote:
-          "For your security, this link only works after you sign in with the email used at checkout.",
-      },
-      dedupeKey: `founder_checkout_recovery:${params.sessionId}`,
-      nowMs: params.nowMs,
-    },
-  );
-}

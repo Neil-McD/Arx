@@ -20,7 +20,6 @@ export function useWebPendingAuthIntentController(params: {
     communityId?: string;
     communitySlug?: string;
   }) => Promise<boolean>;
-  resumeBuilderCheckout: () => Promise<boolean>;
   routeTryPolynetFree: (
     session: AuthSession,
   ) => Promise<"entered" | "onboarding" | "unavailable" | "unauthenticated">;
@@ -50,7 +49,6 @@ export function useWebPendingAuthIntentController(params: {
             communityId: payload.community_id ?? undefined,
             communitySlug: payload.community_slug ?? undefined,
           }),
-        resume_builder_checkout: () => params.resumeBuilderCheckout(),
         try_polynet_free: async () => {
           const outcome = await params.routeTryPolynetFree(params.session as AuthSession);
           return outcome === "entered" || outcome === "onboarding";
@@ -66,7 +64,6 @@ export function useWebPendingAuthIntentController(params: {
   }, [
     params.joinPublicCommunity,
     params.openCreateCommunity,
-    params.resumeBuilderCheckout,
     params.routeTryPolynetFree,
     params.session,
     params.showToast,
