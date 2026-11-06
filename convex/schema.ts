@@ -678,6 +678,11 @@ export default defineSchema({
     workspaceCreditsUncollectedPaid: v.optional(v.number()),
     // community_join: when Stripe's notice made the buyer a member (once).
     membershipGrantedAt: v.optional(v.number()),
+    // community_join paid before signing in (cash first): the SHA-256 of the
+    // secret only the paying browser holds, and the email given to Stripe.
+    // Either one attaches the payment to the account that signs in.
+    buyerSecretHash: v.optional(v.string()),
+    buyerEmailNormalized: v.optional(v.string()),
     ownerUserId: v.optional(v.id("users")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     claimToken: v.optional(v.string()),
@@ -694,6 +699,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_buyerEmailNormalized", ["buyerEmailNormalized"])
     .index("by_sessionId", ["sessionId"])
     .index("by_providerCheckoutSessionId", ["providerCheckoutSessionId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])

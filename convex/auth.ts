@@ -16,6 +16,7 @@ import {
 } from "./operatorEntitlementsCore";
 import { enqueueNewPolynetUserIdentify } from './distributionAttribution';
 import { ensureStarterProfile } from "./starterProfile";
+import { attachPaidCheckoutsForVerifiedEmail } from "./communityCommerce";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -122,6 +123,8 @@ export const bootstrapActor = mutation({
       });
       await ensureStarterProfile(ctx, actor.dbUserId, nowMs);
       if (seededProfile.emailVerified && seededProfile.email) {
+        // Paid for a community before signing in, with this email: it's theirs now.
+        await attachPaidCheckoutsForVerifiedEmail(ctx, actor.dbUserId, seededProfile.email, nowMs);
         await ctx.scheduler.runAfter(
           0,
           (internal as any).founderBilling.reconcilePaidBuilderPurchasesForOwnerInternal,

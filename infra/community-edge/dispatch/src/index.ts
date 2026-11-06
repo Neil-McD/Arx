@@ -133,6 +133,18 @@ const AUTH_PREFIX = "/__polynet/auth/";
 // sets Domain=polynet.page) can shadow a member's session or fixate them into its own.
 const SESSION_COOKIE = "__Host-polynet_session";
 const SIGNIN_COOKIE = "__Host-polynet_signin";
+// Cash first: a checkout paid before signing in belongs to the browser that
+// paid, by a secret kept here only (on the private twin, HttpOnly), until the
+// buyer signs in. One cookie per checkout (__Host-polynet_buyer_<its hex>), so
+// a second tab's checkout never replaces the first one's.
+const BUYER_COOKIE = "__Host-polynet_buyer";
+const BUYER_SECRET_PATTERN = /^buyer_[a-f0-9]{32}$/;
+const CHECKOUT_ID_PATTERN = /^chk_([a-f0-9]{32})$/;
+function buyerCookieName(checkoutId: unknown): string | null {
+  const hex = typeof checkoutId === "string" ? CHECKOUT_ID_PATTERN.exec(checkoutId)?.[1] : null;
+  return hex ? `${BUYER_COOKIE}_${hex}` : null;
+}
+const BUYER_TTL_SECONDS = 14 * 24 * 60 * 60;
 // Names the edge used before, and any a sibling site plants: never read, never passed on.
 const LEGACY_COOKIE_PREFIX = "__polynet_";
 const MAX_API_BODY_BYTES = 64 * 1024;
@@ -246,6 +258,8 @@ const MY_COMMUNITIES_PATH = "/__polynet/me/communities";
 // is sent, or null to refuse it); writes are POST with a small JSON body.
 type MyRoute = {
   method: "GET" | "POST"; backend: string; maxBytes: number; query?: (url: URL) => Record<string, unknown> | null;
+  // Passes this browser's buyer secret for the checkout (from its cookie) along, and drops the cookie once joined.
+  carriesBuyer?: boolean;
 };
 const MY_SETTINGS: Record<string, MyRoute> = {
   "/__polynet/me/settings": { method: "GET", backend: "/runtime/app/me/settings", maxBytes: 0 },
@@ -301,8 +315,11 @@ const MY_JOIN: Record<string, MyRoute> = {
   "/__polynet/me/join": { method: "POST", backend: "/runtime/app/me/join/request", maxBytes: 1024 },
   "/__polynet/me/join/cancel": { method: "POST", backend: "/runtime/app/me/join/cancel", maxBytes: 1024 },
   "/__polynet/me/join/checkout": { method: "POST", backend: "/runtime/app/me/join/checkout", maxBytes: 1024 },
-  "/__polynet/me/join/finish": { method: "POST", backend: "/runtime/app/me/join/finish", maxBytes: 1024 },
+  "/__polynet/me/join/finish": { method: "POST", backend: "/runtime/app/me/join/finish", maxBytes: 1024, carriesBuyer: true },
 };
+// Cash first: a paid plan's checkout before signing in. Twin only, like every
+// /__polynet/me/ path; the answer's buyer secret becomes this browser's cookie.
+const GUEST_CHECKOUT_PATH = "/__polynet/me/join/guest-checkout";
 // Where a paid plan's checkout may send the member: Stripe's own hosted page only.
 const STRIPE_CHECKOUT_PREFIX = "https://checkout.stripe.com/";
 
@@ -327,7 +344,7 @@ export function withoutPolynetCookies(request: Request): Request {
   const kept = (request.headers.get("cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
-    // Every __Host-polynet_ cookie (session, sign-in), whatever comes next.
+    // Every __Host-polynet_ cookie (session, sign-in, a buyer's secret), whatever comes next.
     .filter((part) => part && !part.toLowerCase().startsWith("__host-polynet_") && !part.startsWith(LEGACY_COOKIE_PREFIX));
   const headers = new Headers(request.headers);
   if (kept.length) headers.set("cookie", kept.join("; "));
@@ -761,6 +778,15 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
     if (Number(request.headers.get("content-length") ?? 0) > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
     body = await request.text();
     if (new TextEncoder().encode(body).length > route.maxBytes) return json(413, { ok: false, code: "request_too_large" });
+    if (route.carriesBuyer) {
+      // The secret only ever comes from this browser's cookie, never from the page.
+      const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json(400, { ok: false, code: "invalid_request" });
+      const { buyer_secret: _fromPage, ...rest } = parsed as Record<string, unknown>;
+      const name = buyerCookieName(rest.session_id);
+      const secret = name ? readCookie(request, name) : null;
+      body = JSON.stringify(secret && BUYER_SECRET_PATTERN.test(secret) ? { ...rest, buyer_secret: secret } : rest);
+    }
   } else if (route.query) {
     const query = route.query(url);
     if (!query) return json(400, { ok: false, code: "invalid_request" });
@@ -782,7 +808,34 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
   }
   const shaped = shape(url.pathname, answer, env, place);
   if (!shaped) return json(502, { ok: false, code: unavailable });
-  return json(200, { ok: true, ...shaped });
+  const buyerName = route.carriesBuyer && answer.status === "joined" ? buyerCookieName(JSON.parse(body).session_id) : null;
+  const held = buyerName && readCookie(request, buyerName);
+  return json(200, { ok: true, ...shaped }, held && buyerName ? { "Set-Cookie": cookie(buyerName, "", 0) } : {});
+}
+
+// Cash first: Stripe's checkout for a buyer who hasn't signed in. Only Stripe's
+// own page goes back to the browser; the buyer secret stays in an HttpOnly
+// cookie on this twin, so page code (the founder's or anyone's) never sees it.
+async function proxyGuestCheckout(request: Request, url: URL, env: Env): Promise<Response> {
+  if (request.method !== "POST") return json(405, { ok: false, code: "method_not_allowed" });
+  if (!/^application\/json(;|$)/i.test(request.headers.get("content-type") ?? "")) return json(415, { ok: false, code: "json_required" });
+  const body = await request.text();
+  if (new TextEncoder().encode(body).length > 1024) return json(413, { ok: false, code: "request_too_large" });
+  const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/join/checkout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET },
+    body,
+  });
+  const answer = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!upstream.ok || !answer || answer.ok !== true) {
+    const code = typeof answer?.code === "string" && /^[a-z_]{1,64}$/.test(answer.code) ? answer.code : "join_unavailable";
+    return json(upstream.ok ? 502 : upstream.status, { ok: false, code });
+  }
+  const checkoutUrl = typeof answer.checkout_url === "string" && answer.checkout_url.startsWith(STRIPE_CHECKOUT_PREFIX) ? answer.checkout_url : null;
+  const secret = typeof answer.buyer_secret === "string" && BUYER_SECRET_PATTERN.test(answer.buyer_secret) ? answer.buyer_secret : null;
+  const name = buyerCookieName(answer.session_id);
+  if (!checkoutUrl || !secret || !name) return json(502, { ok: false, code: "join_unavailable" });
+  return json(200, { ok: true, checkout_url: checkoutUrl }, { "Set-Cookie": cookie(name, secret, BUYER_TTL_SECONDS) });
 }
 
 const LEGAL_DOCUMENT_PREFIX = "https://github.com/Neil-McD/Arx/blob/main/docs/legal/";
@@ -1074,6 +1127,7 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (Object.hasOwn(MY_SETTINGS, url.pathname)) return await proxyMine(request, url, env, place, MY_SETTINGS[url.pathname], mySettingsAnswer, "settings_unavailable");
   if (Object.hasOwn(MY_MESSAGES, url.pathname)) return await proxyMine(request, url, env, place, MY_MESSAGES[url.pathname], myMessagesAnswer, "messages_unavailable");
   if (url.pathname === MY_JOIN_PATH && request.method === "GET") return await proxyJoinRead(request, url, env, place);
+  if (url.pathname === GUEST_CHECKOUT_PATH) return await proxyGuestCheckout(request, url, env);
   if (Object.hasOwn(MY_JOIN, url.pathname)) return await proxyMine(request, url, env, place, MY_JOIN[url.pathname], myJoinAnswer, "join_unavailable");
   if (Object.hasOwn(MY_MODERATION, url.pathname)) return await proxyMine(request, url, env, place, MY_MODERATION[url.pathname], myModerationAnswer, "moderation_unavailable");
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
