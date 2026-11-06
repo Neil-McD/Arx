@@ -6,7 +6,6 @@ function read(path: string): string {
 }
 
 const discoverController = read("shared/useWebDiscoverController.ts");
-const funnelActions = read("apps/web/src/controllers/useWebPublicFunnelActions.ts");
 const stableMedia = read("shared/StableFramedMedia.tsx");
 const imageResource = read("shared/useImageResource.ts");
 const discoverCard = read("shared/DiscoverCommunityCard.tsx");
@@ -23,16 +22,6 @@ assert.doesNotMatch(
   discoverController,
   /preloadImageUrls/,
   "Discover data must not wait on or eagerly start an arbitrary image batch",
-);
-assert.doesNotMatch(
-  funnelActions,
-  /await preloadImageUrls/,
-  "the public funnel must never withhold resolved data behind image loading",
-);
-assert.match(
-  funnelActions,
-  /void preloadImageUrls\(revealImageUrls, \{[\s\S]{0,160}fetchPriority: "high"/,
-  "the public funnel may warm its bounded above-fold image set without blocking presentation",
 );
 
 assert.match(stableMedia, /observeImageNearViewport\(root/);

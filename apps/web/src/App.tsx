@@ -10,14 +10,12 @@ import {
   beginBrowserSignedOutState,
   type AuthSession,
 } from "./auth";
-import { resolveAuthSubject } from "../../../shared/authSession";
 import { isLikelyImageFile } from "../../../shared/attachmentHelpers";
 import {
   formatChatTime, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
 import {
   formatPlanPrice,
 } from "../../../shared/accountCommerce";
-import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import {
   useWebCommunityInteractionProjection,
@@ -36,7 +34,6 @@ import {
   useWebCommunityAdministrationState,
   type WebCommunityJoinRequest,
 } from "./controllers/useWebCommunityAdministrationState";
-import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
 import { useWebEmailPreferencesController } from "./controllers/useWebEmailPreferencesController";
@@ -50,7 +47,6 @@ import { useWebCommunityAgentSurfaceController } from "./controllers/useWebCommu
 import { useWebDirectMessagesChromeController } from "./controllers/useWebDirectMessagesChromeController";
 import { useWebCommunityTabAccessGuard } from "./controllers/useWebCommunityTabAccessGuard";
 import { useWebMobileChromeReadingModeLifecycle } from "./controllers/useWebMobileChromeReadingModeLifecycle";
-import { useWebPublicFunnelEntryController } from "./controllers/useWebPublicFunnelEntryController";
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
 import { useWebPendingAuthIntentController } from "./controllers/useWebPendingAuthIntentController";
 import { useWebCommunityNavigationActions } from "./controllers/useWebCommunityNavigationActions";
@@ -65,7 +61,6 @@ import { useWebCommunitySettingsController } from "./controllers/useWebCommunity
 import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
 import { useWebMemberEntryController } from "./controllers/useWebMemberEntryController";
-import { useWebCommunityEntryBridgeController } from "./controllers/useWebCommunityEntryBridgeController";
 import { useWebShellNavigationController } from "./controllers/useWebShellNavigationController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { useWebAppActivityController } from "./controllers/useWebAppActivityController";
@@ -80,7 +75,6 @@ import {
 } from "../../../shared/appShellNavigation";
 import type {
   CommunityAccess as SharedCommunityAccess,
-  PublicPlanSummary as SharedPublicPlanSummary,
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
@@ -125,7 +119,6 @@ import {
 } from "./communityJoinPolicy";
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
 import { useWebAccountCommerceStatus } from "./controllers/useWebAccountCommerceStatus";
-import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
 import { useWebBuilderOfferController } from "./controllers/useWebBuilderOfferController";
@@ -135,7 +128,6 @@ import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAu
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
 import { useWebRouteAccessBoundaryController } from "./controllers/useWebRouteAccessBoundaryController";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
-import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
 import { buildWebDestinationFromShellState } from "./controllers/buildWebDestinationFromShellState";
@@ -146,7 +138,6 @@ import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
 import { WebRouteAccessHold } from "./components/WebRouteAccessHold";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
-import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
@@ -154,7 +145,6 @@ import { useWebChannelPeoplePanel } from "./controllers/useWebChannelPeoplePanel
 import type { WebCommunityAgentDockHandle } from "./components/WebCommunityAgentDock";
 import type {
   WebCommunityRecord,
-  WebPublicCommunityRecord,
 } from "./webAppContracts";
 import {
   WEB_IMAGE_DATA_URL_CHAR_LIMIT,
@@ -169,20 +159,13 @@ import {
   useWebBuilderSetupSubscriptionController,
 } from "./controllers/useWebBuilderSetupFlowController";
 
-const WebStandalonePublicRouteShell = lazy(() =>
-  import("./components/WebStandalonePublicRouteShell").then((module) => ({
-    default: module.WebStandalonePublicRouteShell,
-  })),
-);
 
 type CommunityRecord = WebCommunityRecord;
-type PublicCommunityRecord = WebPublicCommunityRecord;
 type MessageAttachment = WebCommunityMessageAttachment;
 type CommunityAccess = SharedCommunityAccess;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
-type PublicPlanSummary = SharedPublicPlanSummary;
 
 export default function App() {
   const appActivity = useWebAppActivityController();
@@ -313,16 +296,10 @@ export default function App() {
     setOnboardingError,
     openProfileSetup,
     refreshAccountSetupStatus,
-    completeAccountSetup,
     completeAccountSetupAndContinue,
     routeTryPolynetFree,
     resetSignedOutState: resetOnboardingProfileState,
   } = onboardingProfile;
-  const publicCommunityUi = useWebPublicCommunityUiController<
-    PublicCommunityRecord,
-    PublicPlanSummary,
-    CommunityAccess
-  >();
   const billingUi = useWebBillingUiController<AccountCommerceStatus>();
   const {
     accountCommerceStatus,
@@ -332,10 +309,6 @@ export default function App() {
     setAccountCommerceError,
     isStartingStripeConnectOnboarding,
     setIsStartingStripeConnectOnboarding,
-    checkoutStatus,
-    setCheckoutStatus,
-    checkoutError,
-    setCheckoutError,
   } = billingUi;
   const {
     isLoadingCommunities,
@@ -435,8 +408,6 @@ export default function App() {
     reloadCommunities: loadCommunities,
   });
   const {
-    resolveDestination: resolveMemberEntryDestination,
-    applyDestination: applyMemberEntryDestination,
     resolveAndEnter: resolveAndEnterMemberDestination,
   } = memberEntry;
   shellNavigation.memberEntryActionsRef.current = {
@@ -1218,50 +1189,6 @@ export default function App() {
     resetCommunityAnalytics,
   });
 
-  const {
-    cancelMyPendingJoinRequest,
-    joinPublicCommunity,
-    loadPublicCommunity,
-    refreshPendingPublicCommunityAccess,
-    startCheckoutForPlan,
-  } = useWebPublicFunnelActions<
-    PublicCommunityRecord,
-    PublicPlanSummary,
-    CommunityAccess
-  >({
-    getSession: () => sessionRef.current,
-    getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
-    getCurrentPublicCommunityAccess: () => publicCommunityUi.publicCommunityAccess,
-    ensureSession: ensureUsableAuthSession,
-    resolveAccountSetupStatus: refreshAccountSetupStatus,
-    onAccountSetupRequired: () => navigateTo("/onboarding"),
-    ...sessionArg,
-    requireSignIn,
-    loadCommunities,
-    openCommunityWorkspace: ({ communityId, communitySlug }) => {
-      enterCommunityThroughBridge({ communityId, communitySlug: communitySlug ?? null });
-    },
-    onJoinRequestSent: ({ communityId, communitySlug }) => {
-      captureProductAnalyticsEvent("community join request sent", {
-        community_id: communityId,
-        community_slug: communitySlug,
-        surface: "public_funnel",
-      });
-    },
-    setIsJoiningPublicCommunity: publicCommunityUi.setIsJoiningPublicCommunity,
-    setIsCancellingPublicCommunityJoinRequest: publicCommunityUi.setIsCancellingPublicCommunityJoinRequest,
-    setPublicJoinError: publicCommunityUi.setPublicJoinError,
-    setPublicCommunity: publicCommunityUi.setPublicCommunity,
-    setPublicCommunityAccess: publicCommunityUi.setPublicCommunityAccess,
-    setPublicCommunityAccessResolutionKey:
-      publicCommunityUi.setPublicCommunityAccessResolutionKey,
-    setIsLoadingPublicCommunity: publicCommunityUi.setIsLoadingPublicCommunity,
-    setPublicCommunityError: publicCommunityUi.setPublicCommunityError,
-    setPublicCommunityPlans: publicCommunityUi.setPublicCommunityPlans,
-    setCheckoutError,
-    setCheckoutStatus,
-    navigateToUrl: (url) => window.location.assign(url),
-  });
 
   const { startStripeConnectOnboarding } =
     useWebAccountCommerceActions({
@@ -1379,7 +1306,6 @@ export default function App() {
       session,
       showToast: showAppToastMessage,
       openCreateCommunity: openNewCommunityPurchaseFlow,
-      joinPublicCommunity,
       resumeBuilderCheckout: publicBuilderCheckout.prepareCommunityCreation,
       routeTryPolynetFree,
     });
@@ -1409,58 +1335,8 @@ export default function App() {
     },
   };
 
-  const {
-    publicFunnelSlug,
-    checkoutSuccessSessionId,
-    isPublicCommunityFunnel,
-    showPublicSignIn,
-    selectedPublicCommunityPlan,
-    resolvedPublicCommunity,
-    canEnterPublicCommunity,
-    canJoinForFree,
-    canJoinWithApproval,
-    canJoinWithCheckout,
-    approvalPending,
-    approvalDenied,
-    canRequestAgain,
-    approvalReapplyLabel,
-  } = useWebPublicCommunityRouteController<PublicCommunityRecord>({
-    publicRoute: shellPublicRoute,
-    publicCommunity: publicCommunityUi.publicCommunity,
-    publicCommunityPlans: publicCommunityUi.publicCommunityPlans,
-    publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
-    isSignedIn: Boolean(session),
-    /* Re-fire only when the authenticated subject changes — not on every
-       session object identity change — so access cannot leak across accounts
-       and the expensive public stats query remains stable. */
-    sessionDependency: resolveAuthSubject(session),
-    loadPublicCommunity,
-    refreshPendingPublicCommunityAccess,
-  });
-  const communityEntryBridge = useWebCommunityEntryBridgeController({
-    publicRouteKind: shellPublicRoute.kind,
-    isAccountSetupResolved,
-    accountSetupStatus: effectiveAccountSetupStatus,
-    activeCommunity,
-    activeCommunityId,
-    selectedActiveCommunitySlug,
-    publicCommunity: publicCommunityUi.publicCommunity,
-    publicCommunityAccessId:
-      publicCommunityUi.publicCommunityAccess?.community_id ?? null,
-    approvalPending,
-    completeAccountSetup,
-    completeAccountSetupAndContinue,
-    setOnboardingError,
-    resolveDestination: resolveMemberEntryDestination,
-    applyDestination: applyMemberEntryDestination,
-    resolveAndEnter: resolveAndEnterMemberDestination,
-  });
-  const {
-    isBridgeGateOpen,
-    enterCommunity: enterCommunityThroughBridge,
-    completePlatformBridge,
-    completeCommunityBridge: completeBridgeAndEnter,
-  } = communityEntryBridge;
+  // /c/<slug> only hands over to the community's site (WebCommunityHandoff).
+  const isPublicCommunityFunnel = shellPublicRoute.kind === "community_funnel";
   const operatorRouteAccessState =
     activePage !== "operator"
       ? "not_applicable" as const
@@ -1508,13 +1384,10 @@ export default function App() {
 
   useWebPostAuthBillingLifecycle({
     session: session,
-    checkoutSuccessSessionId,
-    isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
     setAccountCommerceStatus,
     setAccountCommerceError,
     setIsLoadingAccountCommerce,
     loadAccountCommerceStatus,
-    joinPublicCommunity,
   });
 
   useWebPostAuthStripeConnectLifecycle({
@@ -1526,19 +1399,6 @@ export default function App() {
     startStripeConnectOnboarding,
   });
 
-  const { retryCheckoutFinalize, continueToCommunity } = useCheckoutFinalizeController({
-    checkoutSuccessSessionId,
-    getSession: () => sessionRef.current,
-    enterCommunity: ({ communityId, communitySlug }) => {
-      // Paying accepted the terms at Join: read the account again first, so
-      // entry doesn't ask for them a second time.
-      void refreshAccountSetupStatus().finally(() => enterCommunityThroughBridge({ communityId, communitySlug }));
-      const current = sessionRef.current;
-      if (current) void loadCommunities(current);
-    },
-    setCheckoutStatus,
-    setCheckoutError,
-  });
 
   const {
     handleSettingsBannerDrop,
@@ -1701,26 +1561,6 @@ export default function App() {
     communitySlug: activeCommunitySlug,
   });
 
-  const {
-    handlePrimaryAction: handlePublicLandingPrimaryAction,
-    handleCancelPendingJoinRequest,
-  } = useWebPublicFunnelEntryController({
-    publicCommunity: publicCommunityUi.publicCommunity,
-    publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
-    canEnterCommunity: canEnterPublicCommunity,
-    canJoinWithCheckout,
-    canJoinForFree,
-    canJoinWithApproval,
-    selectedPlan: selectedPublicCommunityPlan,
-    shellVariant,
-    showPublicSignIn,
-    approvalPending,
-    fallbackCommunitySlug: publicFunnelSlug,
-    enterCommunity: enterCommunityThroughBridge,
-    startCheckoutForPlan,
-    joinPublicCommunity,
-    cancelPendingJoinRequest: cancelMyPendingJoinRequest,
-  });
   const {
     hasAuthenticatedAppShellPresentation,
     isAuthRecoveringSignedInAppShell,
@@ -2249,10 +2089,7 @@ export default function App() {
     });
   const activateDiscoverCommunityCard =
     useWebDiscoverActivationController({
-      publicCommunityUi,
       setDiscoverError,
-      setCheckoutError,
-      setCheckoutStatus,
       resolveKnownCommunityIdBySlug,
       enterJoinedCommunity,
       openPublicCommunityFunnel,
@@ -2331,24 +2168,6 @@ export default function App() {
     open: handleOpenDirectMessages,
     openConversation: handleOpenDirectConversationById,
   });
-  const standalonePublicRouteViewProps = buildWebStandalonePublicRouteViewProps({
-    publicRouteKind: publicRoute.kind,
-    showSignIn: showPublicSignIn,
-    requireSignIn,
-    checkoutStatus,
-    retryCheckoutFinalize,
-    continueToCommunity,
-    checkoutError,
-    authError,
-  });
-
-  if (standalonePublicRouteViewProps) {
-    return (
-      <Suspense fallback={<div className="landing-auth-hold" aria-hidden="true" />}>
-        <WebStandalonePublicRouteShell {...standalonePublicRouteViewProps} />
-      </Suspense>
-    );
-  }
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     communityModalHostProps: communityUi.modalHostProps,
@@ -2443,7 +2262,7 @@ export default function App() {
               enterLabel: "Enter Polynet",
               accountSetupStatus: effectiveAccountSetupStatus,
               setup: accountSetupSurface.model,
-              onEnter: completePlatformBridge,
+              onEnter: completeAccountSetupAndContinue,
             }
           : null,
     },
@@ -2457,63 +2276,6 @@ export default function App() {
       },
       onShowMobileSettingsIndex: () => navigateTo(buildSettingsIndexPath()),
       settingsPanelsProps,
-    },
-    publicCommunityFunnelProps: {
-      publicRouteSlug:
-        publicRoute.kind === "community_funnel" ? publicRoute.slug : undefined,
-      publicCommunity: resolvedPublicCommunity
-        ? {
-            ...resolvedPublicCommunity,
-            slug: resolvedPublicCommunity.slug ?? undefined,
-          }
-        : null,
-      selectedPublicCommunityPlan,
-      isLoadingPublicCommunity: publicCommunityUi.isLoadingPublicCommunity,
-      canEnterCommunity: canEnterPublicCommunity,
-      canJoinForFree,
-      canJoinWithApproval,
-      canJoinWithCheckout,
-      checkoutStatus,
-      isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
-      approvalPending,
-      approvalDenied,
-      canRequestAgain,
-      approvalReapplyLabel,
-      showSignIn: showPublicSignIn,
-      isCancellingPendingRequest:
-        publicCommunityUi.isCancellingPublicCommunityJoinRequest,
-      onCancelPendingRequest: handleCancelPendingJoinRequest,
-      onPrimaryJoinAction: handlePublicLandingPrimaryAction,
-      publicCommunityError: publicCommunityUi.publicCommunityError,
-      publicJoinError: publicCommunityUi.publicJoinError,
-      checkoutError,
-      bridge:
-        /* The pitch converts first: the bridge opens on an entry ATTEMPT
-           (join/enter/claim), never on arrival. */
-        session &&
-        resolvedPublicCommunity &&
-        effectiveAccountSetupStatus &&
-        !effectiveAccountSetupStatus.completed &&
-        isBridgeGateOpen
-          ? {
-              variant: "community" as const,
-              communityName: resolvedPublicCommunity.name,
-              communityAvatarUrl: resolvedPublicCommunity.avatar_url ?? null,
-              communityAvatarFocusX: resolvedPublicCommunity.avatar_focus_x ?? null,
-              communityAvatarFocusY: resolvedPublicCommunity.avatar_focus_y ?? null,
-              communityAvatarZoom: resolvedPublicCommunity.avatar_zoom ?? null,
-              paidReceiptLabel:
-                checkoutStatus === "succeeded" && !canEnterPublicCommunity
-                  ? "Payment received — you're in as soon as this is done"
-                  : null,
-              enterLabel: approvalPending
-                ? "Finish setup"
-                : `Enter ${resolvedPublicCommunity.name}`,
-              accountSetupStatus: effectiveAccountSetupStatus,
-              setup: accountSetupSurface.model,
-              onEnter: completeBridgeAndEnter,
-            }
-          : null,
     },
     communityHostProps: {
       activeView,

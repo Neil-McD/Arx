@@ -20,7 +20,6 @@ const businessAnalytics = read("convex/businessAnalytics.ts");
 const businessAnalyticsCore = read("convex/businessAnalyticsCore.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const cloudBusinessAnalyticsGateway = read("shared/cloudBusinessAnalyticsGateway.ts");
-const cloudPublicFunnelGateway = read("shared/cloudPublicFunnelGateway.ts");
 const webApp = read("apps/web/src/App.tsx");
 const webAuthenticatedIdentityController = read(
   "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
@@ -303,11 +302,6 @@ assert.match(
   "landing page should record first-party home visits",
 );
 assert.match(
-  cloudPublicFunnelGateway,
-  /recordCloudBusinessPageVisit<SessionT>\(\{[\s\S]*pathKind: "community_funnel"/,
-  "public community funnels should record first-party business visits",
-);
-assert.match(
   publicFunnelVisitMutation,
   /visitorKeyHash = visitorKey \? await hashBusinessVisitorKey\(visitorKey\) : undefined/,
   "community funnel analytics should hash visitor keys before storage",
@@ -321,11 +315,6 @@ assert.doesNotMatch(
   publicFunnelAnalyticsInsert,
   /visitorKey\s*,/,
   "community funnel analytics should not write raw visitor keys",
-);
-assert.match(
-  cloudPublicFunnelGateway,
-  /visitorKey: visitorKey \?\? undefined/,
-  "public funnel client should omit unavailable visitor keys instead of sending null",
 );
 assert.match(
   operatorTypes,

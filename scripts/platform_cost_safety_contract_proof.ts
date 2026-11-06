@@ -58,10 +58,6 @@ const attentionBackend = read("convex/communityAttention.ts");
 const activeCommunityController = read(
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
 );
-const publicCommunityRouteController = read(
-  "apps/web/src/controllers/useWebPublicCommunityRouteController.ts",
-);
-const checkoutFinalizeController = read("shared/useCheckoutFinalizeController.ts");
 const realtimeAuth = read("shared/convexRealtimeAuth.ts");
 const runtimeCancellation = read("convex/runtimeCancellation.ts");
 const communityPresenceContract = read("shared/communityPresenceContract.ts");
@@ -75,7 +71,6 @@ const uiOnlyIntervalFiles = [
 ] as const;
 const costBearingIntervalFiles = [
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
-  "apps/web/src/controllers/useWebPublicCommunityRouteController.ts",
   "convex/runtimeCancellation.ts",
 ] as const;
 const expectedIntervalFiles = [...uiOnlyIntervalFiles, ...costBearingIntervalFiles].sort();
@@ -90,11 +85,6 @@ assert.deepEqual(
 for (const file of expectedIntervalFiles) {
   assert.ok(contract.includes(`\`${file}\``), `cost contract must classify interval: ${file}`);
 }
-assert.match(
-  publicCommunityRouteController,
-  /params\.isSignedIn \|\| !admission\.approvalPending[\s\S]*inFlight[\s\S]*document\.visibilityState === "hidden"[\s\S]*setInterval\(onResume, 30_000\)[\s\S]*clearInterval\(timer\)/,
-  "pending public access refresh must be scoped, serialized, visibility-gated, and torn down",
-);
 
 assert.match(
   contract,
@@ -220,11 +210,6 @@ assert.match(
   runtimeCancellation,
   /let pollInFlight = false[\s\S]*Math\.max\([\s\S]*100[\s\S]*setInterval[\s\S]*pollInFlight = true[\s\S]*finally\(\(\) => \{[\s\S]*pollInFlight = false[\s\S]*finally \{[\s\S]*clearInterval\(intervalId\)/,
   "runtime cancellation polling must be bounded, non-overlapping, and execution-scoped",
-);
-assert.match(
-  checkoutFinalizeController,
-  /maxPendingAttempts \?\? 20[\s\S]*attempt <= maxAttempts[\s\S]*Math\.min\(8000/,
-  "checkout-finalization retry bounds changed; update the cost contract",
 );
 assert.match(
   realtimeAuth,

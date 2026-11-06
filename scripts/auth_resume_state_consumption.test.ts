@@ -53,8 +53,8 @@ describe("auth resume state consumption", () => {
     storeAuthResumeState(
       {
         intent: {
-          reason: "join_public_community",
-          payload: { community_id: null, community_slug: "polynet" },
+          reason: "create_community",
+          payload: { draft: null },
         },
       },
       2_002,
@@ -62,8 +62,8 @@ describe("auth resume state consumption", () => {
 
     expect(consumeAuthResumeStateIfCurrent(older!, 2_003)).toBe(false);
     expect(readAuthResumeState(2_004)?.intent).toEqual({
-      reason: "join_public_community",
-      payload: { community_id: null, community_slug: "polynet" },
+      reason: "create_community",
+      payload: { draft: null },
     });
   });
 

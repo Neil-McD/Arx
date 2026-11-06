@@ -272,9 +272,4 @@ describe("canonical web destinations", () => {
     })).toBe(true);
   });
 
-  it("keeps public completion tokens in the semantic destination", () => {
-    expect(
-      deriveWebDestinationFromPath("/m/checkout/success?session_id=cs_123"),
-    ).toEqual({ kind: "checkout_success", sessionId: "cs_123" });
-  });
 });

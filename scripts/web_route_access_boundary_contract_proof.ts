@@ -225,8 +225,6 @@ assert.deepEqual(
 
 for (const publicRoute of [
   { kind: "community_funnel", slug: "polynet" },
-  { kind: "checkout_success", sessionId: "checkout" },
-  { kind: "claim", token: "claim" },
 ] satisfies PublicRoute[]) {
   assert.deepEqual(
     project({ publicRoute, authState: "recovering_signed_in" }),
@@ -295,9 +293,6 @@ const shellProjection = read(
 );
 const shellChromeProjection = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
-);
-const publicFunnelActions = read(
-  "apps/web/src/controllers/useWebPublicFunnelActions.ts",
 );
 const packageJson = read("package.json");
 const foundationGate = read("scripts/foundation_baseline_gate.sh");
@@ -433,16 +428,6 @@ assert.match(
   shellChromeProjection,
   /canOpenCommunitySelector: !params\.isPublicCommunityFunnel/,
   "the mobile public funnel must not expose the authenticated community selector",
-);
-assert.match(
-  app,
-  /sessionDependency: resolveAuthSubject\(session\)/,
-  "public funnel access must refresh when the authenticated subject changes",
-);
-assert.match(
-  publicFunnelActions,
-  /resolveAuthSubject\(current\.getSession\(\)\) !== accessSubject/,
-  "an obsolete subject must never publish a public-funnel access result",
 );
 assert.match(packageJson, /"check:web-route-access-boundary-proof"/);
 assert.match(

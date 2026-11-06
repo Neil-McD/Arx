@@ -2,13 +2,7 @@ import {
   bootstrapConvexAuthenticatedClient,
   createConvexClient,
 } from "./convexAuthenticatedClient";
-import type { CommunityBillingPeriod } from "./communityTypes";
-import { resolveAuthSubject } from "./authSession";
 import { firstGatewayRow } from "./cloudGateway";
-import {
-  getBusinessVisitorKey,
-  recordCloudBusinessPageVisit,
-} from "./cloudBusinessAnalyticsGateway";
 
 type CloudPublicFunnelAuthParams<SessionT> = {
   session: SessionT;
@@ -16,17 +10,6 @@ type CloudPublicFunnelAuthParams<SessionT> = {
 
 type CloudPublicFunnelParams<SessionT> = {
 };
-
-export async function cancelCloudMyJoinRequestBySlug<SessionT>(
-  params: CloudPublicFunnelAuthParams<SessionT> & {
-    communitySlug: string;
-  },
-): Promise<{ outcome?: "canceled" | "none" | "ignored"; status?: string }> {
-  const { client } = await bootstrapConvexAuthenticatedClient(params.session);
-  return (await client.mutation("communityPublic:cancelMyJoinRequestBySlug" as any, {
-    communitySlug: params.communitySlug,
-  })) as { outcome?: "canceled" | "none" | "ignored"; status?: string };
-}
 
 export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPublicPlan>(
   params: CloudPublicFunnelParams<SessionT> & {
@@ -47,44 +30,6 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   };
 }
 
-export async function fetchCloudPublicFunnelStats<SessionT, TPublicCommunityStats>(
-  params: CloudPublicFunnelParams<SessionT> & {
-    communitySlug: string;
-  },
-): Promise<{
-  ok?: boolean;
-  community?: TPublicCommunityStats;
-}> {
-  const client = createConvexClient();
-  return (await client.query("communityPublic:resolvePublicFunnelStatsBySlug" as any, {
-    communitySlug: params.communitySlug,
-  })) as {
-    ok?: boolean;
-    community?: TPublicCommunityStats;
-  };
-}
-
-export async function recordCloudPublicFunnelVisit<SessionT>(
-  params: CloudPublicFunnelParams<SessionT> & {
-    session?: SessionT | null;
-    communitySlug: string;
-  },
-): Promise<void> {
-  const client = createConvexClient();
-  const visitorKey = getBusinessVisitorKey();
-  const authSubject = params.session ? resolveAuthSubject(params.session as any) : undefined;
-  await client.mutation("communityPublic:recordPublicFunnelVisitBySlug" as any, {
-    communitySlug: params.communitySlug,
-    visitorKey: visitorKey ?? undefined,
-    authSubject: authSubject ?? undefined,
-  });
-  await recordCloudBusinessPageVisit<SessionT>({
-    session: params.session ?? null,
-    pathKind: "community_funnel",
-    communitySlug: params.communitySlug,
-  });
-}
-
 export async function refreshCloudCommunityPresence<SessionT, TSummary = unknown>(
   params: CloudPublicFunnelAuthParams<SessionT> & {
     communityId: string;
@@ -102,29 +47,3 @@ export async function refreshCloudCommunityPresence<SessionT, TSummary = unknown
   return firstGatewayRow<TSummary>(payload);
 }
 
-export async function startCloudPublicFunnelCheckout<SessionT>(
-  params: CloudPublicFunnelParams<SessionT> & {
-    session: SessionT | null;
-    communitySlug: string;
-    billingPeriod: CommunityBillingPeriod;
-    successUrl: string;
-    cancelUrl: string;
-  },
-): Promise<{ checkout_url?: unknown }> {
-  let client = createConvexClient();
-  let authSubject: string | null = null;
-  if (params.session) {
-    const bootstrapped = await bootstrapConvexAuthenticatedClient(params.session);
-    client = bootstrapped.client;
-    authSubject = bootstrapped.authSubject;
-  }
-  return (await client.action("communityCommerce:startPublicCommunityCheckout" as any, {
-    communitySlug: params.communitySlug,
-    billingPeriod: params.billingPeriod,
-    successUrl: params.successUrl,
-    cancelUrl: params.cancelUrl,
-    ...(authSubject ? { authSubject } : null),
-  })) as {
-    checkout_url?: unknown;
-  };
-}

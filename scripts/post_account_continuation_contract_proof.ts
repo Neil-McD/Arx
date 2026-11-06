@@ -10,9 +10,6 @@ const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const onboardingProfile = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
-const entryBridge = read(
-  "apps/web/src/controllers/useWebCommunityEntryBridgeController.ts",
-);
 const builderCheckout = read(
   "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
 );
@@ -28,14 +25,7 @@ const continuationBody =
   onboardingProfile.match(
     /const continueAfterAccountSetup = useCallback[\s\S]*?\n  const completeAccountSetupAndContinue/,
   )?.[0] ?? "";
-const platformBridgeBody =
-  entryBridge.match(
-    /const completePlatformBridge = useCallback[\s\S]*?\n  const completeCommunityBridge/,
-  )?.[0] ?? "";
-const communityBridgeBody =
-  entryBridge.match(
-    /const completeCommunityBridge = useCallback[\s\S]*?\n  return \{/,
-  )?.[0] ?? "";
+
 
 assert.match(
   completionBody,
@@ -76,25 +66,12 @@ assert.match(
   "double submission must not start competing post-account continuations",
 );
 
+// The platform bridge is the one account-setup entry left (Studio's /c/<slug>
+// hands over to the community's site): it completes and continues in one step.
 assert.match(
-  platformBridgeBody,
-  /completeAccountSetupAndContinue\(legalAcceptance\)/,
-  "platform bridge must delegate completion and continuation to one authority",
-);
-assert.doesNotMatch(
-  platformBridgeBody,
-  /resolveAndEnter|resolveDestination|saveOnboardingProfile|finishOnboarding/,
-  "platform bridge must not choose its own destination",
-);
-assert.match(
-  communityBridgeBody,
-  /completeAccountSetup\(legalAcceptance\)[\s\S]*resolveDestination\(\{[\s\S]*communityId: entry\.communityId[\s\S]*communitySlug: entry\.communitySlug/,
-  "an explicit community bridge must complete setup and revalidate that exact community",
-);
-assert.doesNotMatch(
-  communityBridgeBody,
-  /completeAccountSetupAndContinue/,
-  "a current explicit community entry must take precedence over browser resume state",
+  app,
+  /platformBridgePageProps:[\s\S]*onEnter: completeAccountSetupAndContinue/,
+  "the platform bridge must delegate completion and continuation to one authority",
 );
 
 assert.match(
@@ -111,11 +88,6 @@ assert.match(
   app,
   /onCompleteAccountSetup: completeAccountSetupAndContinue/,
   "App must wire modal onboarding to canonical continuation",
-);
-assert.match(
-  app,
-  /completeAccountSetup,[\s\S]*completeAccountSetupAndContinue,[\s\S]*resolveDestination: resolveMemberEntryDestination/,
-  "App must give the bridge explicit and generic continuation authorities",
 );
 
 assert.match(
