@@ -43,14 +43,17 @@ test("a new community gets its site and private twin addresses when it's created
   expect(identity).toMatchObject({ slug: "night-swimmers", name: "Night Swimmers", avatar_url: null, banner_url: null, listed: false });
 });
 
-test("without a sites domain, or with a slug that can't be an address, a community is still created, just without one", async () => {
+test("a new community's name must make a site address; without a sites domain it's created without one", async () => {
   const t = convexTest(schema, modules);
   const asOwner = await founder(t);
   await asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Quiet Club", slug: "quiet-club" });
   expect(await addresses(t)).toEqual([]);
   vi.stubEnv("POLYNET_SITES_DOMAIN", "polynet.page");
-  // "admin" is reserved: never a community's address.
-  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Admin", slug: "admin" })).resolves.toMatchObject({ slug: "admin" });
+  // Every community lives on its own site: a reserved or too-long name is refused, not created siteless.
+  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, { name: "Admin", slug: "admin" })).rejects.toThrow("community_slug_invalid");
+  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, {
+    name: "Long", slug: "a-community-name-far-longer-than-any-site-allows",
+  })).rejects.toThrow("community_slug_invalid");
   expect(await addresses(t)).toEqual([]);
 });
 
