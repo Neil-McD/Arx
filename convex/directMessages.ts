@@ -1454,21 +1454,6 @@ export const listDirectMessages = query({
   },
 });
 
-// Retired Nov 5 (DMs are text only). Kept by name for one release because
-// cached Studio pages call them; both refuse. Delete the release after.
-export const generateDirectMessageAttachmentUploadUrl = mutation({
-  args: { authSubject: v.optional(v.string()), conversationId: v.id("dmConversations") },
-  handler: async () => {
-    throw new Error("dm_attachments_not_supported");
-  },
-});
-
-export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
-  args: { authSubject: v.optional(v.string()), targetUserId: v.string(), communityId: v.optional(v.id("communities")) },
-  handler: async () => {
-    throw new Error("dm_attachments_not_supported");
-  },
-});
 
 async function sendDirectMessageForUser(
   ctx: any,

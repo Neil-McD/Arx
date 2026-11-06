@@ -214,11 +214,7 @@ export const attachPaidCheckoutsForVerifiedEmailInternal = internalMutation({
   handler: async (ctx, args) => ({ attached: await attachPaidCheckoutsForVerifiedEmail(ctx, args.userId, args.email, Date.now()) }),
 });
 
-// Granted once, from Stripe's notice. Checkouts paid before that was recorded
-// on the checkout (staging only) were granted through a claim instead.
-export async function checkoutAlreadyGranted(ctx: any, session: any): Promise<boolean> {
-  if (typeof session.membershipGrantedAt === "number") return true;
-  if (!session.claimToken) return false;
-  const claim = await ctx.db.query("purchaseClaims").withIndex("by_claimToken", (q: any) => q.eq("claimToken", session.claimToken)).first();
-  return Boolean(claim && claim.status !== "pending");
+// Granted once, from Stripe's notice (the checkout keeps when).
+export async function checkoutAlreadyGranted(_ctx: any, session: any): Promise<boolean> {
+  return typeof session.membershipGrantedAt === "number";
 }

@@ -68,12 +68,6 @@ test("members read the notes in Studio; only owners and admins edit or delete th
   expect((await asOwner.query(api.communityNotes.listCommunityNotes, { communityId })).can_manage).toBe(true);
   await asOwner.mutation(api.communityNotes.updateCommunityNote, { communityId, slug: "saturday-carpool", title: "Saturday carpool", text: "Leaves at 4:45 now." });
   expect((await asMember.query(api.communityNotes.listCommunityNotes, { communityId })).notes[0].body_md).toBe("Leaves at 4:45 now.");
-  // The overview Studio and cached pages read shows the note beside the community.
-  const overview = await asMember.query(api.communityIntelligenceDirectory.getCommunityPolynetOverview, { communityId });
-  expect(overview.graph.nodes.map((node: any) => node.title)).toContain("Saturday carpool");
-  // Visitors see nothing of a community's notes or lessons, not even counts.
-  expect(await t.query(api.communityIntelligenceDirectory.resolvePublicCommunityMemoryOverviewBySlug, { communitySlug: "notes-club" }))
-    .toEqual({ ok: false });
   await asOwner.mutation(api.communityNotes.deleteCommunityNote, { communityId, slug: "saturday-carpool" });
   expect((await asMember.query(api.communityNotes.listCommunityNotes, { communityId })).notes).toHaveLength(0);
   expect(memberId).toBeTruthy();

@@ -6,7 +6,6 @@ const core = read("convex/communityCore.ts");
 const admin = read("convex/communityAdmin.ts");
 const access = read("convex/communityAccessQueries.ts");
 const publicCommunity = read("convex/communityPublic.ts");
-const publicMemory = read("convex/communityIntelligenceDirectory.ts");
 const profiles = read("convex/profileRelationshipCore.ts");
 const analytics = read("convex/businessAnalytics.ts");
 const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
@@ -72,11 +71,6 @@ assert.match(
   publicCommunity,
   /async function joinPublicCommunityInternal[\s\S]*throw new Error\("community_archived"\)/,
   "both public join selectors must converge on one archived-state mutation guard",
-);
-assert.match(
-  publicMemory,
-  /resolvePublicCommunityMemoryOverviewBySlug[\s\S]*ok: false as const/,
-  "the public memory projection answers nothing, archived or not",
 );
 assert.match(
   profiles,

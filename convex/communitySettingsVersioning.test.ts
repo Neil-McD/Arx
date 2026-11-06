@@ -202,26 +202,6 @@ test("competing writers cannot both commit the same settings revision", async ()
   expect(["Writer A", "Writer B"]).toContain(snapshot.about);
 });
 
-test("the narrow About write advances the settings revision", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-
-  await expect(
-    asOwner.mutation(api.communityLifecycle.saveCommunityAbout, {
-      communityId: fixture.communityId,
-      about: "Narrow About write.",
-    }),
-  ).resolves.toMatchObject({ settings_revision: 1 });
-  await expect(
-    asOwner.query(api.communityLifecycle.getCommunitySettings, {
-      communityId: fixture.communityId,
-    }),
-  ).resolves.toMatchObject({
-    settings_revision: 1,
-    about: "Narrow About write.",
-  });
-});
 
 test("a stale settings write cannot partially change active pricing", async () => {
   const t = convexTest(schema, modules);

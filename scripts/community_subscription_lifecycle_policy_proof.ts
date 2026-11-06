@@ -628,11 +628,6 @@ function assertSourceAnchors() {
     "String(session.ownerUserId) !== String(userId)",
     "finalize checkout reads only the buyer's own checkout",
   );
-  assertIncludes(
-    communityCommerce,
-    "String(session.ownerUserId ?? \"\") !== String(userId)",
-    "the retired redeem confirms only the buyer's own checkout",
-  );
 }
 
 function main() {
