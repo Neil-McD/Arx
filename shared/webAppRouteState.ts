@@ -12,8 +12,7 @@ import {
 
 export type PublicRoute =
   | { kind: "app" }
-  | { kind: "community_funnel"; slug: string }
-  | { kind: "checkout_success"; sessionId: string };
+  | { kind: "community_funnel"; slug: string };
 
 export type AppShellVariant = "standard" | "mobile";
 
@@ -68,8 +67,7 @@ export type WebDestination =
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_workflows"; slug: string }
-  | { kind: "community_analytics"; slug: string }
-  | { kind: "checkout_success"; sessionId: string };
+  | { kind: "community_analytics"; slug: string };
 
 export const DEFAULT_POST_SIGN_IN_PATH = "/";
 export const MOBILE_SHELL_PATH_PREFIX = "/m";
@@ -104,7 +102,6 @@ function joinPathWithQueryAndHash(pathname: string, search: string, hash: string
 
 function isPublicRoutePath(pathname: string): boolean {
   const segments = splitPathSegments(pathname);
-  if (pathname === "/checkout/success") return true;
   if (segments[0] !== "c") return false;
   return segments.length === 2 || (segments.length === 3 && segments[2] === "preview");
 }
@@ -632,8 +629,6 @@ function derivePublicWebDestination(
   switch (route.kind) {
     case "community_funnel":
       return { kind: "community_funnel", slug: route.slug };
-    case "checkout_success":
-      return { kind: "checkout_success", sessionId: route.sessionId };
   }
 }
 
@@ -709,12 +704,6 @@ export function parsePublicRouteFromPath(pathWithSearch: string): PublicRoute {
   );
   const normalized = new URL(stripped, "http://local.arx");
   const path = normalized.pathname || "/";
-  if (path === "/checkout/success") {
-    return {
-      kind: "checkout_success",
-      sessionId: normalized.searchParams.get("session_id")?.trim() ?? "",
-    };
-  }
   const segments = splitPathSegments(path);
   if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
     const slug = String(segments[1] ?? "").trim();

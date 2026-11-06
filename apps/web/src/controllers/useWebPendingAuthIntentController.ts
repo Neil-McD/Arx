@@ -16,10 +16,6 @@ export function useWebPendingAuthIntentController(params: {
   openCreateCommunity: (
     draft: CreateCommunityIntentDraft | null,
   ) => void;
-  joinPublicCommunity: (value: {
-    communityId?: string;
-    communitySlug?: string;
-  }) => Promise<boolean>;
   routeTryPolynetFree: (
     session: AuthSession,
   ) => Promise<"entered" | "onboarding" | "unavailable" | "unauthenticated">;
@@ -44,11 +40,6 @@ export function useWebPendingAuthIntentController(params: {
           params.openCreateCommunity(payload.draft);
           return true;
         },
-        join_public_community: (payload) =>
-          params.joinPublicCommunity({
-            communityId: payload.community_id ?? undefined,
-            communitySlug: payload.community_slug ?? undefined,
-          }),
         try_polynet_free: async () => {
           const outcome = await params.routeTryPolynetFree(params.session as AuthSession);
           return outcome === "entered" || outcome === "onboarding";
@@ -62,7 +53,6 @@ export function useWebPendingAuthIntentController(params: {
       resumeInFlightRef.current = false;
     }
   }, [
-    params.joinPublicCommunity,
     params.openCreateCommunity,
     params.routeTryPolynetFree,
     params.session,

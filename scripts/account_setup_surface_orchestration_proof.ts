@@ -17,9 +17,6 @@ const controller = read(
 const onboardingProfileController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
-const communityEntryBridgeController = read(
-  "apps/web/src/controllers/useWebCommunityEntryBridgeController.ts",
-);
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
 const form = read("apps/web/src/components/WebAccountSetupForm.tsx");
@@ -84,8 +81,8 @@ assert.equal(
 );
 assert.equal(
   occurrences(app, "setup: accountSetupSurface.model"),
-  3,
-  "onboarding, platform bridge, and community bridge must share one surface model",
+  2,
+  "onboarding and the platform bridge must share one surface model",
 );
 assert.doesNotMatch(
   app,
@@ -145,36 +142,15 @@ for (const authority of [
     `the onboarding profile controller must own ${authority}`,
   );
 }
-for (const authority of [
-  "const completePlatformBridge = useCallback",
-  "const completeCommunityBridge = useCallback",
-]) {
-  assert.ok(
-    communityEntryBridgeController.includes(authority),
-    `the community entry bridge must own ${authority}`,
-  );
-}
 assert.match(
   app,
   /useWebOnboardingProfileController\(\{/,
   "App must compose the onboarding profile controller",
 );
 assert.match(
-  communityEntryBridgeController,
-  /completePlatformBridge[\s\S]*completeAccountSetupAndContinue/,
+  app,
+  /platformBridgePageProps:[\s\S]*onEnter: completeAccountSetupAndContinue/,
   "platform bridge must delegate to canonical account completion continuation",
-);
-assert.doesNotMatch(
-  communityEntryBridgeController.match(
-    /const completePlatformBridge = useCallback[\s\S]*?\n  const completeCommunityBridge/,
-  )?.[0] ?? "",
-  /resolveAndEnter|finishOnboarding|saveOnboardingProfile/,
-  "platform bridge must not retain a competing destination or completion path",
-);
-assert.match(
-  communityEntryBridgeController,
-  /completeCommunityBridge[\s\S]*resolveDestination\(\{[\s\S]*communityId: entry\.communityId,[\s\S]*communitySlug: entry\.communitySlug,[\s\S]*destination\.page !== "community"/,
-  "community bridge must revalidate the exact requested community before route entry",
 );
 
 console.log(

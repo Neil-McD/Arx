@@ -9,7 +9,6 @@ const communityPublic = read("convex/communityPublic.ts");
 const communityCore = read("convex/communityCore.ts");
 const communityChannelCore = read("convex/communityChannelCore.ts");
 const appSource = read("apps/web/src/App.tsx");
-const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 
 function sliceExport(source: string, name: string): string {
   const start = source.indexOf(`export const ${name}`);
@@ -82,15 +81,11 @@ assert.doesNotMatch(
   /isVisitorCommunitySurface|canViewMembers:[\s\S]{0,260}shellPublicRoute\.kind === "community_funnel"/,
   "the public funnel must not inherit visitor shell presence or member-directory controls",
 );
+// Studio's /c/<slug> only hands over to the community's own site.
 assert.match(
-  publicFunnel,
-  /buildCommunityFunnelRenderModel\(\{[\s\S]*oneLiner: publicCommunity\?\.one_liner,[\s\S]*about: publicCommunity\?\.about,[\s\S]*<WebCommunityFunnelRenderer/,
-  "an unpublished public funnel must use the deterministic conversion surface instead of the legacy visitor lens",
-);
-assert.doesNotMatch(
-  publicFunnel,
-  /WebCommunityVisitorSurface|CommunityVisitorChrome/,
-  "the canonical public funnel must not retain the deleted visitor-chat lens",
+  read("apps/web/src/components/WebCommunityHandoff.tsx"),
+  /communitySiteRedirectTarget[\s\S]*window\.location\.replace\(target\)/,
+  "Studio's /c/<slug> must hand visitors over to the community's site",
 );
 assert.match(
   communityPublic,

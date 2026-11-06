@@ -128,7 +128,6 @@ CI admits exactly these seven first-party `setInterval` call sites:
 | `shared/useCommunityTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
-| `apps/web/src/controllers/useWebPublicCommunityRouteController.ts` | backend pending-join access check | authenticated pending public join page only; visible tab, 30-second minimum interval, one in-flight call; cleared when pending ends or route unmounts |
 | `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
 
 The executable contract scans the first-party source corpus. A new interval or

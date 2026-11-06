@@ -30,7 +30,6 @@ const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
-const communityFunnelMemberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const baseCss = [
@@ -78,11 +77,6 @@ assert.match(stableAvatar, /<StableFramedMedia/);
 assert.match(stableAvatar, /loading\?: "eager" \| "lazy"/);
 assert.match(stableAvatar, /fetchPriority\?: ImageFetchPriority/);
 assert.match(
-  communityFunnelMemberProof,
-  /<MemberAvatarStack/,
-  "funnel member proof must use the canonical member avatar stack",
-);
-assert.match(
   communityPresenceFacepile,
   /<MemberAvatarStack/,
   "community presence must use the canonical member avatar stack",
@@ -91,16 +85,6 @@ assert.match(
   memberAvatarStack,
   /className="member-avatar-stack-face"/,
   "the canonical member avatar stack must own avatar presentation",
-);
-assert.doesNotMatch(
-  communityFunnelMemberProof,
-  /imageClassName="community-funnel-face-image"/,
-  "funnel member proof must not replace canonical avatar image geometry",
-);
-assert.doesNotMatch(
-  communityFunnelMemberProof,
-  /\.community-funnel-face(?:pile|-image)?\b/,
-  "funnel member proof must not recreate a custom facepile or avatar crop",
 );
 assert.match(
   communityAvatar,

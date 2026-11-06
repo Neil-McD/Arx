@@ -44,7 +44,6 @@ const telemetryLifecycleSource = readText(
   ),
 );
 const mainSource = readText(new URL("../apps/web/src/main.tsx", import.meta.url));
-const payFirstSource = readText(new URL("../shared/pay_first.ts", import.meta.url));
 const billingCoreSource = readText(new URL("../convex/billingCore.ts", import.meta.url));
 const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
 const publicAppUrlSource = readText(new URL("../convex/publicAppUrl.ts", import.meta.url));
@@ -70,8 +69,8 @@ assert.ok(
 // Purchase claim tokens are retired: the browser keeps none, and Stripe's
 // verified notice grants membership from the checkout itself.
 assert.ok(
-  !payFirstSource.includes("arx_pending_purchase_claim_token"),
-  "the browser no longer stores purchase claim tokens",
+  !existsSync(new URL("../shared/pay_first.ts", import.meta.url)),
+  "Studio's pay-first join helpers (and their claim-token storage) stay deleted",
 );
 assert.ok(
   !communityCommerceSource.includes("claim_token:"),

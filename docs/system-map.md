@@ -54,9 +54,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 2. Communities, membership and joining — Keep
 
 - **Does:** create, configure, archive and restore communities; join (open,
-  approval, paid), from Studio's funnel and from a community site's own
-  `/join` (on its private twin, `communityAppJoin`, through the same cores and
-  checkout); roles; blocks; Discover.
+  approval, paid) on a community site's own `/join` (on its private twin,
+  `communityAppJoin`; paid joins are cash first); roles; blocks; Discover.
+  Studio's `/c/<slug>` only hands over to the site (Nov 6).
 - **Code:** `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
@@ -66,7 +66,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `memberEntryDestination`, `platformHomeCommunity`, `communityTags` (an owner's
   labels on people), `communityPeople` (one person, one action, from someone's
   own AI).
-- **Reached by:** Studio (`/c/<slug>`); community sites' `/join` (their private twin).
+- **Reached by:** community sites' `/join` (their private twin); Studio's `/c/<slug>` hands over to it.
 - **Rules:** rejoining starts as `member` (an earlier role is never restored);
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).

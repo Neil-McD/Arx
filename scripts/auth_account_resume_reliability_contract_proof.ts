@@ -43,9 +43,6 @@ const onboardingController = read(
 const builderCheckoutController = read(
   "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
 );
-const publicFunnelActions = read(
-  "apps/web/src/controllers/useWebPublicFunnelActions.ts",
-);
 const chatController = read(
   "apps/web/src/controllers/useWebCommunityChatController.ts",
 );
@@ -524,11 +521,6 @@ assert.match(
   builderCheckoutController,
   /!accountSetupResolution\.accountSetup\.completed[\s\S]*reason: "resume_builder_checkout"[\s\S]*navigateTo\("\/onboarding"\)/,
   "paid Builder recovery must survive account setup before continuing",
-);
-assert.match(
-  publicFunnelActions,
-  /resolveAccountSetupStatus\(session\)[\s\S]*accountSetupBlocksJoining\(accountSetup\.accountSetup\)[\s\S]*reason: "join_public_community"[\s\S]*onAccountSetupRequired\(\)/,
-  "free and approval joins must preserve their destination while account setup runs",
 );
 assert.match(
   onboardingController,
