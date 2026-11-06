@@ -54,7 +54,7 @@ assert.doesNotMatch(
 // Studio's /c/<slug> only hands over to the community's own site.
 assert.match(
   read("apps/web/src/components/WebCommunityHandoff.tsx"),
-  /communitySiteRedirectTarget[\s\S]*window\.location\.replace\(target\)/,
+  /communitySiteRedirectTarget[\s\S]*window\.location\.replace\([^)]*\btarget\b/,
   "Studio's /c/<slug> must hand visitors over to the community's site",
 );
 assert.match(

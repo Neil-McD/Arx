@@ -2,7 +2,7 @@ import type { DragEvent } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
-import { isValidCommunitySlug } from "../../../../shared/communitySlug";
+import { isValidCommunitySlug, communitySiteAddress } from "../../../../shared/communitySlug";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 
 type WebCreateCommunityModalProps = {
@@ -165,7 +165,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               <label className="create-community-field builder-create-url">
                 <span>Community handle</span>
                 <div className="builder-create-url-input">
-                  <span aria-hidden="true">polynet.ai/c/</span>
                   <input
                     type="text"
                     required
@@ -183,7 +182,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                   />
                 </div>
                 <span className="create-community-hint">
-                  3–32 characters. Lowercase letters, numbers, and dashes.
+                  Your community gets its own site at {communitySiteAddress(props.createCommunitySlug)}. 3–32 characters: lowercase letters, numbers and dashes.
                 </span>
               </label>
               <label className="create-community-field">

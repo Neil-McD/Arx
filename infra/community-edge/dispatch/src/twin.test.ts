@@ -248,10 +248,12 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
 const CHECKOUT = `chk_${"c".repeat(32)}`;
 const joining = {
   gate: "join", viewer: null as null | Record<string, unknown>, label: "Join free", plans: [] as any[],
-  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0,
+  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0, about: "" as string,
 };
-function resetJoin(gate = "join", state: string | null = "visitor") {
+const SHORT_ABOUT = "We climb at sunrise.\n\nAll levels <b>welcome</b>.";
+function resetJoin(gate = "join", state: string | null = "visitor", about = SHORT_ABOUT) {
   Object.assign(joining, {
+    about,
     gate, label: gate === "checkout" ? "Join $10/month" : "Join free", calls: [], finishPending: 0, checkoutUrl: "",
     viewer: state ? { state, can_request_again: false, reapply_at: null, setup_required: false } : null,
     plans: gate === "checkout" ? [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }, { billing_period: "annual", name: "Annual", label: "Join $100/year" }] : [],
@@ -262,7 +264,7 @@ function joinBackend(path: string, auth: string | null, body: Record<string, any
   joining.calls.push([path, body]);
   const projection = (signedIn: boolean) => ({
     ok: true, signed_in: signedIn,
-    community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: "Dawn sessions at the crag.", about: "We climb at sunrise.\n\nAll levels <b>welcome</b>.",
+    community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: "Dawn sessions at the crag.", about: joining.about,
       member_count: 4, avatar_url: null },
     gate: joining.gate, available: true, action_label: joining.label, plans: joining.plans, viewer: signedIn ? joining.viewer : null,
   });
@@ -539,6 +541,8 @@ for (const [engine, type] of ENGINES) {
       expect(await personal.locator("[part=join-about] b").count()).toBe(0);
       const action = personal.locator("[part=join-action]");
       expect(await action.textContent()).toBe("Join free");
+      // A short description: no second Join button up top.
+      expect(await personal.locator("[part=join-jump]").count()).toBe(0);
       expect(await personal.locator("[part=gate-note]").textContent()).toBe("You'll sign in with Polynet first.");
       // The frame is the site's, styled by its own stylesheet; nothing of the site's runs.
       expect(await page.locator("header.chrome").evaluate((node) => getComputedStyle(node).borderBottomColor)).toBe("rgb(1, 2, 3)");
@@ -1335,3 +1339,27 @@ test("Join requests: a moderator approves and denies on the twin; a paid communi
     await browser.close();
   }
 }, 60_000);
+
+// A long description: a Join button beside the name brings the gate into view.
+for (const [engine, type] of ENGINES) {
+  const installed = engine === "chromium" || existsSync(type.executablePath());
+  test.runIf(installed)(`${engine}: a long description gets a Join button up top that brings the gate into view`, async () => {
+    resetJoin("join", null, Array.from({ length: 12 }, (_, n) => `Paragraph ${n + 1}: ${"We climb at sunrise and talk about it after. ".repeat(4)}`).join("\n\n"));
+    const { browser, page } = await openTwin(type, "/join", null);
+    try {
+      const personal = page.locator("polynet-personal");
+      await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
+      const jump = personal.locator("[part=join-jump]");
+      expect(await jump.textContent()).toBe("Join free");
+      const inView = () => personal.locator("[part=join-action]").evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= window.innerHeight;
+      });
+      expect(await inView()).toBe(false);
+      await jump.click();
+      await expect.poll(inView).toBe(true);
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
+}
