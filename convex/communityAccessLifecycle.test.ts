@@ -617,12 +617,6 @@ test("archived communities are frozen across ordinary access and public projecti
     }),
   ).resolves.toEqual({ ok: false });
   await expect(
-    t.query(
-      api.communityIntelligenceDirectory.resolvePublicCommunityMemoryOverviewBySlug,
-      { communitySlug: "access-lifecycle-open" },
-    ),
-  ).resolves.toEqual({ ok: false });
-  await expect(
     t.mutation(api.communityPublic.recordPublicFunnelVisitBySlug, {
       communitySlug: "access-lifecycle-open",
       visitorKey: "archived-community-visitor",

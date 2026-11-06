@@ -114,20 +114,6 @@ assert.match(
   "the public stats payload must carry the members preview for the visitor rail",
 );
 
-const intelligenceDirectory = read("convex/communityIntelligenceDirectory.ts");
-const publicMemoryOverview = intelligenceDirectory.slice(
-  intelligenceDirectory.indexOf("export const resolvePublicCommunityMemoryOverviewBySlug"),
-);
-assert.match(
-  publicMemoryOverview,
-  /handler: async \(\) => \(\{ ok: false as const \}\)/,
-  "visitors see nothing of a community's notes or lessons (retired Nov 5)",
-);
-assert.match(
-  intelligenceDirectory,
-  /recent_runs: \[\]/,
-  "the overview exposes no run history",
-);
 // The ONE legitimate reader of community visibility: the Discover directory.
 const discoverQuery = sliceExport(communityPublic, "listPublicDiscoverCommunities");
 assert.match(
