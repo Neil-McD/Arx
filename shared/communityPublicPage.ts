@@ -149,3 +149,50 @@ export function normalizeCommunityPublicPage(input: CommunityPublicPageInput):
     return { ok: false, error: error instanceof Error ? error.message : "public_page_invalid" };
   }
 }
+
+// "Draft with AI": the sections a model may suggest, from what the founder
+// already wrote. Never results (only real members' words), never a guarantee
+// or a bio (only the founder's own promise and story).
+export type CommunityPublicPageDraft = Pick<CommunityPublicPage, "for_you" | "not_for" | "first_steps" | "objections">;
+
+export const COMMUNITY_PUBLIC_PAGE_DRAFT_PROMPT = [
+  "You draft the sales sections of a community's public page, for its founder to review before anything is published.",
+  "Use only what the founder wrote (the community's name, one-liner, about and course list). Never invent results, numbers, testimonials, prices, guarantees or credentials.",
+  "Write plainly and specifically, in the founder's voice, to the person deciding whether to join. No hype, no emoji.",
+  "Return only JSON: {\"for_you\": [up to 4 lines], \"not_for\": [up to 3 lines], \"first_steps\": [up to 3 {\"title\", \"text\"}], \"objections\": [up to 2 {\"question\", \"answer\"}]}.",
+  "Lines: for_you and not_for under 140 characters each, written as the end of \"This is for you if...\" / \"It's not for you if...\". First steps: what a new member does first, title under 40 characters, text under 140. Objections: the real hesitations someone would have, question under 120 characters, answer under 300, answered from the sources.",
+  "If the sources don't support a section, return it as an empty list.",
+].join("\n");
+
+// A model's answer, made safe: JSON only, each item within its limits (an item
+// over a limit is left out, never cut mid-sentence), at most the allowed number.
+export function parseCommunityPublicPageDraft(text: unknown): CommunityPublicPageDraft | null {
+  const raw = String(text ?? "");
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  const limits = COMMUNITY_PUBLIC_PAGE_LIMITS;
+  const list = (value: unknown) => (Array.isArray(value) ? value : []);
+  const lines = (value: unknown, items: number, chars: number) =>
+    list(value).map(line).filter((item) => item && item.length <= chars).slice(0, items);
+  const pairs = <A extends string, B extends string>(value: unknown, items: number, a: [A, number], b: [B, number]) =>
+    list(value).flatMap((item) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      const first = line(row[a[0]]);
+      const second = line(row[b[0]]);
+      return first && second && first.length <= a[1] && second.length <= b[1] ? [{ [a[0]]: first, [b[0]]: second } as Record<A | B, string>] : [];
+    }).slice(0, items);
+  const draft = {
+    for_you: lines(parsed.for_you, limits.forYou.items, limits.forYou.chars),
+    not_for: lines(parsed.not_for, limits.notFor.items, limits.notFor.chars),
+    first_steps: pairs(parsed.first_steps, limits.firstSteps.items, ["title", limits.firstSteps.title], ["text", limits.firstSteps.text]),
+    objections: pairs(parsed.objections, limits.objections.items, ["question", limits.objections.question], ["answer", limits.objections.answer]),
+  };
+  return draft.for_you.length || draft.not_for.length || draft.first_steps.length || draft.objections.length ? draft : null;
+}

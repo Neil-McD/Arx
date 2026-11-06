@@ -23,6 +23,7 @@ import {
   WebPlatformTabList,
 } from "./WebPlatformChoiceControls";
 import { CommunityMemberExperienceSection } from "./CommunityMemberExperienceSection";
+import { CommunityPublicPageSection } from "./CommunityPublicPageSection";
 import { communitySiteAddress } from "../../../../shared/communitySlug";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
@@ -873,6 +874,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : null}
                   <div className="community-general-settings-secondary">
                     <CommunityProfileSettingsSection state={state} actions={actions} />
+                    {isOwnerSettingsLayer ? (
+                      <CommunityPublicPageSection
+                        communityId={resolvedActiveCommunity.id}
+                        publicPageUrl={resolvedActiveCommunity.site_url ?? null}
+                        session={props.session}
+                        ensureSession={props.ensureSession}
+                      />
+                    ) : null}
                     {canManageCommunitySettings ? (
                       <CommunityMemberExperienceSection
                         community={resolvedActiveCommunity}

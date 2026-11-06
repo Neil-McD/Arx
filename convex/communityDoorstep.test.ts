@@ -136,3 +136,49 @@ test("a video link is read only from YouTube, Vimeo or Loom, by its id", async (
     expect(communityPublicPageVideoFromUrl(bad)).toBeNull();
   }
 });
+
+// "Draft with AI": owner-only, only from the founder's own words, never results
+// or a guarantee, and only items within limits; a stale answer never lands.
+test("Draft with AI: the model's answer is kept only within limits, and only for the request it answers", async () => {
+  const { parseCommunityPublicPageDraft } = await import("../shared/communityPublicPage");
+  expect(parseCommunityPublicPageDraft("no json")).toBeNull();
+  expect(parseCommunityPublicPageDraft('{"for_you": [], "not_for": []}')).toBeNull();
+  const draft = parseCommunityPublicPageDraft(`Here you go: ${JSON.stringify({
+    for_you: ["You run a business.", "x".repeat(141), "", "Two", "Three", "Four"],
+    not_for: ["You want hacks."],
+    first_steps: [{ title: "Join", text: "One tap." }, { title: "", text: "No title" }],
+    objections: [{ question: "Time?", answer: "Two hours." }],
+    results: [{ quote: "Invented.", name: "Nobody" }], guarantee: "Invented promise",
+  })}`);
+  expect(draft).toEqual({
+    for_you: ["You run a business.", "Two", "Three", "Four"], not_for: ["You want hacks."],
+    first_steps: [{ title: "Join", text: "One tap." }], objections: [{ question: "Time?", answer: "Two hours." }],
+  });
+
+  const t = convexTest(schema, modules);
+  const now = Date.now();
+  const { communityId } = await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      authSubject: "owner-subject", displayName: "owner", handle: "owner", normalizedHandle: "owner", createdAt: now, updatedAt: now,
+    });
+    await ctx.db.insert("users", { authSubject: "member-subject", displayName: "m", handle: "m", normalizedHandle: "m", createdAt: now, updatedAt: now });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId, slug: "club", name: "Club", oneLiner: "Focus.", visibility: "published", inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open", activeMemberCount: 1, createdAt: now, updatedAt: now,
+    } as any);
+    return { communityId };
+  });
+  const { api, internal } = await import("./_generated/api");
+  await expect(t.withIdentity({ subject: "member-subject" }).mutation(api.communityPublicPage.requestMyCommunityPublicPageDraft, { communityId }))
+    .rejects.toThrow(/community_owner_required|community_forbidden/);
+  const asked = await t.withIdentity({ subject: "owner-subject" }).mutation(api.communityPublicPage.requestMyCommunityPublicPageDraft, { communityId });
+  expect(asked.status).toBe("drafting");
+  const requestedAt = await t.run(async (ctx) => (await ctx.db.query("communityPublicPages").first())!.draftRequestedAt!);
+  const answer = { for_you: ["You run a business."], not_for: [], first_steps: [], objections: [] };
+  // An older request's answer is ignored; this one's lands as a suggestion, never the page.
+  await t.mutation(internal.communityPublicPage.recordCommunityPublicPageDraftInternal, { communityId, requestedAt: requestedAt - 1, draft: answer });
+  expect((await t.withIdentity({ subject: "owner-subject" }).query(api.communityPublicPage.getMyCommunityPublicPage, { communityId })).ai.status).toBe("drafting");
+  await t.mutation(internal.communityPublicPage.recordCommunityPublicPageDraftInternal, { communityId, requestedAt, draft: answer });
+  const read = await t.withIdentity({ subject: "owner-subject" }).query(api.communityPublicPage.getMyCommunityPublicPage, { communityId });
+  expect(read).toMatchObject({ revision: 0, page: { for_you: [] }, ai: { status: "ready", draft: { for_you: ["You run a business."] } } });
+});

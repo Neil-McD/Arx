@@ -8717,3 +8717,51 @@
   display: flex;
   gap: 8px;
 }
+
+/* The owner's public page sections (Settings): fixed slots, blank ones don't show. */
+.community-public-page-section {
+  display: grid;
+  gap: 14px;
+}
+
+.community-public-page-ai {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.community-public-page-group {
+  display: grid;
+  gap: 6px;
+}
+
+.community-public-page-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.community-public-page-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 6px;
+}
+
+.community-public-page-result {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 6px;
+}
+
+.community-public-page-section input,
+.community-public-page-section textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 560px) {
+  .community-public-page-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

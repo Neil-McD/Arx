@@ -64,7 +64,7 @@ export function doorstepSummary(markdown: unknown): string | null {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 120)).trim()}…`;
 }
 
-async function doorstepCourses(ctx: any, communityId: any) {
+export async function doorstepCourses(ctx: any, communityId: any) {
   const modules = await ctx.db.query("communityResourceModules")
     .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId))
     .take(DOORSTEP_MODULE_SCAN);

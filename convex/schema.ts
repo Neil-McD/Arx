@@ -2515,6 +2515,17 @@ export default defineSchema({
     objections: v.array(v.object({ question: v.string(), answer: v.string() })),
     revision: v.number(),
     updatedByUserId: v.id("users"),
+    // "Draft with AI": a suggestion for the empty sections, never saved as the
+    // page itself; the owner reads it into the form, edits and saves.
+    draftStatus: v.optional(v.union(v.literal("drafting"), v.literal("ready"), v.literal("failed"))),
+    draftRequestedAt: v.optional(v.number()),
+    draftError: v.optional(v.string()),
+    draft: v.optional(v.object({
+      forYou: v.array(v.string()),
+      notFor: v.array(v.string()),
+      firstSteps: v.array(v.object({ title: v.string(), text: v.string() })),
+      objections: v.array(v.object({ question: v.string(), answer: v.string() })),
+    })),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
