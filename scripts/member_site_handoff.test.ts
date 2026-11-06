@@ -64,3 +64,10 @@ test("the owner's switch decides: Studio hands members to the site only when the
   const settings = readFileSync(new URL("../apps/web/src/components/WebCommunitySettingsSection.tsx", import.meta.url), "utf8");
   expect(settings).toMatch(/<CommunityMemberExperienceSection[\s\S]*canChange=\{isOwnerSettingsLayer\}/);
 });
+
+test("a saved switch updates Studio's copy of the community, so reopening Settings shows it", () => {
+  const section = readFileSync(new URL("../apps/web/src/components/CommunityMemberExperienceSection.tsx", import.meta.url), "utf8");
+  expect(section).toMatch(/setCurrent\(saved\);\s*props\.onSaved\(props\.community\.id, saved\);/);
+  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
+  expect(app).toMatch(/onMemberExperienceSaved:[\s\S]{0,200}setCommunities\(\(previous\) => previous\.map\([\s\S]{0,120}members_use: experience/);
+});

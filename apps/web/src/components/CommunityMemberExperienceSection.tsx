@@ -19,6 +19,8 @@ export function CommunityMemberExperienceSection(props: {
   canChange: boolean;
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
+  // Keeps Studio's copy of the community in step, so reopening Settings shows the saved choice.
+  onSaved: (communityId: string, experience: Experience) => void;
 }) {
   const [current, setCurrent] = useState<Experience>(props.community.members_use === "site" ? "site" : "app");
   const [saving, setSaving] = useState<Experience | null>(null);
@@ -35,7 +37,9 @@ export function CommunityMemberExperienceSection(props: {
     try {
       const session = await props.ensureSession(props.session);
       if (!session) throw new Error("not_signed_in");
-      setCurrent(await setCloudCommunityMemberExperience({ session, communityId: props.community.id, experience: next }));
+      const saved = await setCloudCommunityMemberExperience({ session, communityId: props.community.id, experience: next });
+      setCurrent(saved);
+      props.onSaved(props.community.id, saved);
     } catch (failure) {
       setError(friendlyError(failure));
     } finally {

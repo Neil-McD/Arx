@@ -1704,6 +1704,10 @@ export default function App() {
       isResolvingCommunityAccess: isLoadingCommunityAccess,
       communityAccessLoadError,
       onRetryCommunityAccess: retryActiveCommunityAccess,
+      // The owner's switch saved: keep Studio's copy of the community in step.
+      onMemberExperienceSaved: (communityId: string, experience: "app" | "site") =>
+        setCommunities((previous) => previous.map((community) =>
+          community.id === communityId ? { ...community, members_use: experience } : community)),
       canViewActiveCommunitySettings,
       communitySettingsLayer,
       communitySettingsPane,

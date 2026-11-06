@@ -50,6 +50,7 @@ type WebCommunitySettingsSectionProps = {
   isResolvingCommunityAccess: boolean;
   communityAccessLoadError: string | null;
   onRetryCommunityAccess: () => void;
+  onMemberExperienceSaved: (communityId: string, experience: "app" | "site") => void;
   canViewActiveCommunitySettings: boolean;
   communitySettingsLayer: CommunitySettingsLayer;
   activePane: CommunitySettingsPane;
@@ -877,6 +878,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         canChange={isOwnerSettingsLayer}
                         session={props.session}
                         ensureSession={props.ensureSession}
+                        onSaved={props.onMemberExperienceSaved}
                       />
                     ) : null}
                     <CommunityMonetizationConfigSection
