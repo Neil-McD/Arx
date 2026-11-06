@@ -16,11 +16,14 @@ export type LegalDocument = {
   sourcePath: string;
 };
 
-// Where anyone can read a document before agreeing to it: its canonical text
-// in Polynet's public repository.
-export const LEGAL_DOCUMENT_PUBLIC_BASE_URL = "https://github.com/Neil-McD/Arx/blob/main/";
-export function legalDocumentPublicUrl(document: LegalDocument): string {
-  return `${LEGAL_DOCUMENT_PUBLIC_BASE_URL}${document.sourcePath}`;
+// Where anyone can read a document before agreeing to it: Polynet's own public
+// page for it (Studio serves /terms and /privacy with the current version).
+export const LEGAL_DOCUMENT_PATHS: Record<LegalDocumentKey, string> = {
+  terms_of_service: "/terms",
+  privacy_ai_data_policy: "/privacy",
+};
+export function legalDocumentPublicUrl(document: LegalDocument, origin = ""): string {
+  return `${origin.replace(/\/+$/, "")}${LEGAL_DOCUMENT_PATHS[document.key]}`;
 }
 
 export const TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
