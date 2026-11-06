@@ -201,9 +201,11 @@ async function hashes(texts: string[]): Promise<string[]> {
 // attachments from Polynet's storage. It talks only to itself, to Polynet's
 // storage (Studio's upload flow, for a profile photo or a message's file) and,
 // over a WebSocket, to the same Polynet deployment's live updates (Messages:
-// versions only; the page re-reads through its own origin). Nothing frames it,
+// versions only; the page re-reads through its own origin). It frames nothing,
+// except Join (the doorstep), which may play the founder's intro video in
+// YouTube's, Vimeo's or Loom's own player (frames). Nothing frames it,
 // nothing posts away from it, no <base>.
-export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | null; styleHashes?: string[]; attributeHashes?: string[] }): string {
+export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | null; styleHashes?: string[]; attributeHashes?: string[]; frames?: string[] }): string {
   const styleHashes = [...(args.styleHashes ?? []), ...(args.attributeHashes ?? [])];
   const style = ["'self'", args.siteOrigin, "https://fonts.googleapis.com", ...styleHashes];
   if (args.attributeHashes?.length) style.push("'unsafe-hashes'");
@@ -215,6 +217,8 @@ export function twinPolicy(args: { siteOrigin: string; storageOrigin: string | n
     `img-src 'self' data: ${args.siteOrigin}${args.storageOrigin ? ` ${args.storageOrigin}` : ""}`,
     `media-src ${args.siteOrigin}`,
     `connect-src 'self'${args.storageOrigin ? ` ${args.storageOrigin} ${liveSocketOrigin(args.storageOrigin)}` : ""}`,
+    // Only a page that names its players (Join's intro video) frames anything.
+    ...(args.frames?.length ? [`frame-src ${args.frames.join(" ")}`] : []),
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

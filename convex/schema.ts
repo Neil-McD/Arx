@@ -2501,6 +2501,35 @@ export default defineSchema({
   // Each published site deploy (polynet deploy): who put which files live where.
   // A change the owner's own AI asked for, waiting for the owner to approve it
   // in Studio (Nov 6). One kind so far: where members spend time.
+  // A community's public page (its doorstep): the sales sections its owner
+  // fills in (shared/communityPublicPage.ts). One row per community.
+  communityPublicPages: defineTable({
+    communityId: v.id("communities"),
+    forYou: v.array(v.string()),
+    notFor: v.array(v.string()),
+    firstSteps: v.array(v.object({ title: v.string(), text: v.string() })),
+    results: v.array(v.object({ quote: v.string(), name: v.string(), role: v.string() })),
+    founderBio: v.string(),
+    video: v.optional(v.object({ provider: v.union(v.literal("youtube"), v.literal("vimeo"), v.literal("loom")), id: v.string() })),
+    guarantee: v.string(),
+    objections: v.array(v.object({ question: v.string(), answer: v.string() })),
+    revision: v.number(),
+    updatedByUserId: v.id("users"),
+    // "Draft with AI": a suggestion for the empty sections, never saved as the
+    // page itself; the owner reads it into the form, edits and saves.
+    draftStatus: v.optional(v.union(v.literal("drafting"), v.literal("ready"), v.literal("failed"))),
+    draftRequestedAt: v.optional(v.number()),
+    draftError: v.optional(v.string()),
+    draft: v.optional(v.object({
+      forYou: v.array(v.string()),
+      notFor: v.array(v.string()),
+      firstSteps: v.array(v.object({ title: v.string(), text: v.string() })),
+      objections: v.array(v.object({ question: v.string(), answer: v.string() })),
+    })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
   communityOwnerApprovals: defineTable({
     communityId: v.id("communities"),
     kind: v.literal("member_experience"),

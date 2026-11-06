@@ -7,6 +7,7 @@ import {
   parseGatewayNumberLike,
 } from "./cloudGateway";
 import type { CommunityAnalyticsSnapshot } from "./communityTypes";
+import type { CommunityPublicPage, CommunityPublicPageDraft, CommunityPublicPageInput } from "./communityPublicPage";
 
 type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
@@ -1373,4 +1374,48 @@ export async function decideCloudMemberExperienceRequest<SessionT>(
     requestId: params.requestId,
     decision: params.decision,
   })) as { status: "approved" | "declined" | "expired" | "stale"; members_use: "app" | "site" };
+}
+
+// The community's public page sections (owner only): read, save, and ask the
+// community's AI for a draft of the empty ones.
+export type CloudCommunityPublicPage = {
+  page: CommunityPublicPage;
+  revision: number;
+  ai: { status: "idle" | "drafting" | "ready" | "failed"; error: string | null; draft: CommunityPublicPageDraft | null };
+};
+
+export async function getCloudCommunityPublicPage<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string },
+): Promise<CloudCommunityPublicPage> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.query("communityPublicPage:getMyCommunityPublicPage" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as CloudCommunityPublicPage;
+}
+
+export async function saveCloudCommunityPublicPage<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    expectedRevision: number;
+    page: Required<CommunityPublicPageInput>;
+  },
+): Promise<{ page: CommunityPublicPage; revision: number }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.mutation("communityPublicPage:saveMyCommunityPublicPage" as any, {
+    authSubject,
+    communityId: params.communityId,
+    expectedRevision: params.expectedRevision,
+    page: params.page,
+  })) as { page: CommunityPublicPage; revision: number };
+}
+
+export async function requestCloudCommunityPublicPageDraft<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string },
+): Promise<CloudCommunityPublicPage["ai"]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.mutation("communityPublicPage:requestMyCommunityPublicPageDraft" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as CloudCommunityPublicPage["ai"];
 }

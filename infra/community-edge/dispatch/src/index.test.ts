@@ -780,6 +780,17 @@ test("default site: a community with nothing deployed is on its own site, Polyne
   expect((await edge.fetch(at("https://nobody--me-staging.polynet.page", "/communities"), e)).status).toBe(404);
 });
 
+test("twin: only Join may frame anything, and only the three video players", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club" }));
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  const join = await edge.fetch(at(TWIN, "/join", { headers: { "sec-fetch-mode": "navigate" } }), undeployed());
+  expect(join.headers.get("content-security-policy")).toContain("frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com;");
+  const own = await edge.fetch(at(TWIN, "/communities", { headers: { "sec-fetch-mode": "navigate", cookie: `__Host-polynet_session=${TOKEN}` } }), undeployed());
+  expect(own.headers.get("content-security-policy")).not.toContain("frame-src");
+  expect(own.headers.get("content-security-policy")).toContain("default-src 'none'");
+});
+
 test("default site: the member's own pages on the twin draw the default frame, with its styles as a file", async () => {
   resetEdgeCaches();
   vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club" }));
@@ -1309,7 +1320,12 @@ const JOIN_ANSWER = {
   community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12,
     avatar_url: "https://live.example.convex.cloud/api/storage/av", owner_email: "owner@example.com",
     banner_url: "https://live.example.convex.cloud/api/storage/bn", host: { name: "Ana", email: "ana@example.com" },
-    courses: [{ title: "Basics", summary: "Start here.", lessons: 3, module_id: "m1" }, { title: "Empty", summary: null, lessons: 0 }] },
+    courses: [{ title: "Basics", summary: "Start here.", lessons: 3, module_id: "m1" }, { title: "Empty", summary: null, lessons: 0 }],
+    page: {
+      for_you: ["You build.", "", "x".repeat(400)], not_for: [], first_steps: [{ title: "Join", text: "One tap.", extra: "no" }, { title: "", text: "No title" }],
+      results: [{ quote: "Shipped twice as fast.", name: "Sam", role: "Founder" }], founder_bio: "I build things.",
+      video: { provider: "youtube", id: "dQw4w9WgXcQ" }, guarantee: "Full refund in 30 days.", objections: [{ question: "Time?", answer: "2 hours." }],
+      secret: "never" } },
   gate: "checkout", available: true, action_label: "Join $10/month",
   plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }],
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false, user_id: "u1" },
@@ -1320,7 +1336,13 @@ const JOIN_ANSWER = {
 const SHAPED_JOIN = {
   ok: true, signed_in: true,
   community: { name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, avatar_url: "https://live.example.convex.cloud/api/storage/av",
-    banner_url: "https://live.example.convex.cloud/api/storage/bn", host: { name: "Ana" }, courses: [{ title: "Basics", summary: "Start here.", lessons: 3 }] },
+    banner_url: "https://live.example.convex.cloud/api/storage/bn", host: { name: "Ana" }, courses: [{ title: "Basics", summary: "Start here.", lessons: 3 }],
+    // Only the shapes the doorstep draws, within limits; nothing else of the owner's.
+    page: {
+      for_you: ["You build.", "x".repeat(140)], not_for: [], first_steps: [{ title: "Join", text: "One tap." }],
+      results: [{ quote: "Shipped twice as fast.", name: "Sam", role: "Founder" }], founder_bio: "I build things.",
+      video: { provider: "youtube", id: "dQw4w9WgXcQ" }, guarantee: "Full refund in 30 days.", objections: [{ question: "Time?", answer: "2 hours." }],
+    } },
   gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10" }],
   terms_url: "https://polynet.example.com/terms", privacy_url: null,
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false },
@@ -1388,8 +1410,9 @@ test("twin join: the read works signed out; signed in it carries the twin's sess
   expect(await signedIn.json()).toEqual(SHAPED_JOIN);
   expect(backend.mock.calls[1][1]?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}` });
   // An avatar or banner anywhere but Polynet's storage isn't shown; an unknown state reads as signed out.
-  backend.mockImplementation(async () => Response.json({ ...JOIN_ANSWER, community: { ...JOIN_ANSWER.community, avatar_url: "https://tracker.example.com/a.png", banner_url: "https://tracker.example.com/b.png" }, viewer: { state: "superuser" } }));
-  expect(await (await edge.fetch(at(TWIN, "/__polynet/me/join"), e)).json()).toMatchObject({ community: { avatar_url: null, banner_url: null }, viewer: null });
+  backend.mockImplementation(async () => Response.json({ ...JOIN_ANSWER, community: { ...JOIN_ANSWER.community, avatar_url: "https://tracker.example.com/a.png", banner_url: "https://tracker.example.com/b.png",
+    page: { ...JOIN_ANSWER.community.page, video: { provider: "evil", id: "x" } } }, viewer: { state: "superuser" } }));
+  expect(await (await edge.fetch(at(TWIN, "/__polynet/me/join"), e)).json()).toMatchObject({ community: { avatar_url: null, banner_url: null, page: { video: null } }, viewer: null });
   // A session the backend refuses reads as signed out, and is cleared: the pitch still shows.
   const calls: Array<string | null> = [];
   vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
