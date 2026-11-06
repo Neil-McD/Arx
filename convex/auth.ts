@@ -16,7 +16,7 @@ import {
 } from "./operatorEntitlementsCore";
 import { enqueueNewPolynetUserIdentify } from './distributionAttribution';
 import { ensureStarterProfile } from "./starterProfile";
-import { attachPaidCheckoutsForVerifiedEmail } from "./communityCommerce";
+import { attachPaidCheckoutsForVerifiedEmail } from "./communityCheckoutBuyer";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";

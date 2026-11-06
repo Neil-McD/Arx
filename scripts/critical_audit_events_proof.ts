@@ -16,6 +16,7 @@ const schema = await readRepoFile("convex/schema.ts");
 const criticalAudit = await readRepoFile("convex/criticalAudit.ts");
 const creatorCommerce = await readRepoFile("convex/creatorCommerce.ts");
 const communityCommerce = await readRepoFile("convex/communityCommerce.ts");
+const communityCheckoutBuyer = await readRepoFile("convex/communityCheckoutBuyer.ts");
 const billingCore = await readRepoFile("convex/billingCore.ts");
 const httpBilling = await readRepoFile("convex/httpBilling.ts");
 const account = await readRepoFile("convex/account.ts");
@@ -90,9 +91,9 @@ for (const [fileName, source, eventTypes] of [
     [
       "community_checkout_created",
       "community_checkout_attached_to_stripe",
-      "community_checkout_granted",
     ],
   ],
+  ["convex/communityCheckoutBuyer.ts", communityCheckoutBuyer, ["community_checkout_granted", "community_checkout_attached"]],
   ["convex/billingCore.ts", billingCore, ["community_subscription_synced"]],
   [
     "convex/httpBilling.ts",
