@@ -848,9 +848,16 @@ async function proxyGuestCheckout(request: Request, url: URL, env: Env): Promise
   return json(200, { ok: true, checkout_url: checkoutUrl }, { "Set-Cookie": cookie(name, secret, BUYER_TTL_SECONDS) });
 }
 
-const LEGAL_DOCUMENT_PREFIX = "https://github.com/Neil-McD/Arx/blob/main/docs/legal/";
-function legalUrl(value: unknown): string | null {
-  return typeof value === "string" && value.startsWith(LEGAL_DOCUMENT_PREFIX) && /^[a-z0-9/._:-]+$/i.test(value) ? value : null;
+// Polynet's own Terms and Privacy pages, on Polynet's origin: nothing else.
+const LEGAL_PATHS = new Set(["/terms", "/privacy"]);
+function legalUrl(value: unknown, env: Env): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.origin === new URL(env.POLYNET_AUTH_URL).origin && LEGAL_PATHS.has(url.pathname) && !url.search && !url.hash ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function studioJoinUrl(route: Route, env: Env): string {
@@ -916,7 +923,7 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
     },
     gate, available: answer.available === true, action_label: text(answer.action_label, 80) ?? "Join", plans,
     // Polynet's terms, which Join's click accepts: only their canonical public text.
-    terms_url: legalUrl(answer.terms_url), privacy_url: legalUrl(answer.privacy_url),
+    terms_url: legalUrl(answer.terms_url, env), privacy_url: legalUrl(answer.privacy_url, env),
     viewer: state ? {
       state, can_request_again: viewer?.can_request_again === true,
       reapply_at: typeof viewer?.reapply_at === "string" && !Number.isNaN(Date.parse(viewer.reapply_at)) ? viewer.reapply_at : null,

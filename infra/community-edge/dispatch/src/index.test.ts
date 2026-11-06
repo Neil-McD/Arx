@@ -1316,15 +1316,15 @@ const JOIN_ANSWER = {
   gate: "checkout", available: true, action_label: "Join $10/month",
   plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }],
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false, user_id: "u1" },
-  terms_url: "https://github.com/Neil-McD/Arx/blob/main/docs/legal/terms-of-service-v4.md",
-  // Anything but Polynet's own legal text never reaches the page.
+  terms_url: "https://polynet.example.com/terms",
+  // Anything but Polynet's own legal pages never reaches the page.
   privacy_url: "https://evil.example.com/privacy",
 };
 const SHAPED_JOIN = {
   ok: true, signed_in: true,
   community: { name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, avatar_url: "https://live.example.convex.cloud/api/storage/av" },
   gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }],
-  terms_url: "https://github.com/Neil-McD/Arx/blob/main/docs/legal/terms-of-service-v4.md", privacy_url: null,
+  terms_url: "https://polynet.example.com/terms", privacy_url: null,
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false },
   // Setting up comes back: Studio's setup is told which community (by slug only).
   enter_url: `${SITE}/__polynet/auth/start?return=%2Fchat`, setup_url: "https://polynet.example.com/onboarding?community=apps-community",

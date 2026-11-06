@@ -7,6 +7,7 @@ import "@fontsource-variable/geist/wght.css";
 import "@fontsource-variable/geist-mono/wght.css";
 import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
+import { LegalDocumentPage, legalDocumentKeyForPathname } from "./legal/LegalDocumentPage";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
@@ -358,13 +359,18 @@ if (typeof window !== "undefined") {
   }, 5000);
 }
 
-if (!isLoginTrampoline) {
+// /terms and /privacy: the public legal pages, without the app.
+const legalDocumentKey = legalDocumentKeyForPathname(window.location.pathname || "/");
+
+if (!isLoginTrampoline && !legalDocumentKey) {
   bootConvexProbe();
 }
 
-const rootView = isLoginTrampoline
-  ? <LoginTrampolineRoute />
-  : <App />;
+const rootView = legalDocumentKey
+  ? <LegalDocumentPage documentKey={legalDocumentKey} />
+  : isLoginTrampoline
+    ? <LoginTrampolineRoute />
+    : <App />;
 
 document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);
 

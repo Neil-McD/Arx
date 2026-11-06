@@ -23,6 +23,7 @@ import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans } from "
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import { accountSetupBlocksJoining } from "../shared/accountSetup";
+import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
 import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuyer";
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
@@ -89,6 +90,7 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     approvalDenied: admission.approvalDenied, canRequestAgain: admission.canRequestAgain,
   });
   const branding = await resolveCommunityBrandingFields(ctx, community);
+  const legalOrigin = (() => { try { return readCanonicalPublicAppOrigin(); } catch { return null; } })();
   const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
   return {
     community: {
@@ -109,8 +111,8 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     }),
     viewer,
     // Join's click accepts these (acceptCommunityJoin records it); the page links them.
-    terms_url: legalDocumentPublicUrl(TERMS_OF_SERVICE_DOCUMENT),
-    privacy_url: legalDocumentPublicUrl(PRIVACY_AI_DATA_POLICY_DOCUMENT),
+    terms_url: legalOrigin ? legalDocumentPublicUrl(TERMS_OF_SERVICE_DOCUMENT, legalOrigin) : null,
+    privacy_url: legalOrigin ? legalDocumentPublicUrl(PRIVACY_AI_DATA_POLICY_DOCUMENT, legalOrigin) : null,
   };
 }
 

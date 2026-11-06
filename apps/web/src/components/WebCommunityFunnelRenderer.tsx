@@ -63,9 +63,9 @@ function FunnelAction(props: {
       {props.action.showJoinTerms ? (
         <p className="community-funnel-terms">
           By joining you agree to Polynet&apos;s{" "}
-          <a href={legalDocumentPublicUrl(TERMS_OF_SERVICE_DOCUMENT)} target="_blank" rel="noopener noreferrer">Terms</a>{" "}
+          <a href={legalDocumentPublicUrl(TERMS_OF_SERVICE_DOCUMENT)} target="_blank" rel="noopener">Terms</a>{" "}
           and{" "}
-          <a href={legalDocumentPublicUrl(PRIVACY_AI_DATA_POLICY_DOCUMENT)} target="_blank" rel="noopener noreferrer">Privacy &amp; AI Data Policy</a>.
+          <a href={legalDocumentPublicUrl(PRIVACY_AI_DATA_POLICY_DOCUMENT)} target="_blank" rel="noopener">Privacy &amp; AI Data Policy</a>.
         </p>
       ) : null}
     </div>
