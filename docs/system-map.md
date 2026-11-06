@@ -331,7 +331,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   only, never access. Studio's Analytics shows Page visits → Started joining →
   New members (`join_starts_window`). Spec:
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
-- **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityPublic` (Discover's list), `httpCommunitySites`,
+- **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityFunnelEvents`, `communityPublic` (Discover's list), `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
   `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, the private twin
   `twin.ts`, SDK `sdk.ts`, shell `ui.ts`, blocks `blocks/` including `page.ts`
