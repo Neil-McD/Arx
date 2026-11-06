@@ -133,7 +133,6 @@ const rootTable = schemaTable("communityInteractionRoots", "communityInteraction
 [
   "actorType: v.union(",
   'v.literal("human")',
-  'v.literal("personal_agent")',
   'v.literal("community_agent")',
   'v.literal("system")',
   'v.literal("discussion")',
@@ -221,6 +220,8 @@ const mentionsTable = schemaTable("communityInteractionMentions", "communityInte
   '.index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"])',
 ].forEach((needle) => assertIncludes(schemaPath, mentionsTable, needle));
 assertExcludes(schemaPath, mentionsTable, 'v.literal("personal_agent")');
+// The retired personal_agent value was rewritten on every old row and removed (Nov 7).
+assertExcludes(schemaPath, rootTable, 'v.literal("personal_agent")');
 
 const reactionsTable = schemaTable("communityInteractionReactions", "communityInteractionModerationEvents");
 [

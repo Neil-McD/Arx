@@ -1,4 +1,3 @@
-import { presentInteractionActorType } from "../shared/communityAgentIdentity";
 import { SHARED_SEARCH_ACCESS_KEY, restrictedSearchAccessKey, syncCommunitySearchDoc } from "./communitySearchDocs";
 import { buildCommunitySearchQuery, searchWords, stemSearchWord } from "../shared/communitySearchText";
 import { v } from "convex/values";
@@ -303,7 +302,7 @@ async function mapEvidenceSearchItem(args: {
     snippet: args.snippet ?? truncateText(args.row.contentSummary, EVIDENCE_SNIPPET_CHARS),
     actor: {
       // One agent per community: older posts by the retired personal agent read as the community agent.
-      type: chat ? presentInteractionActorType(args.row.actorType) : args.row.actorType,
+      type: args.row.actorType,
       user_id: actorUserId,
       agent_key: args.row.actorAgentKey ?? null,
       ...(chat?.actorProfile ?? {}),

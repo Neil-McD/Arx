@@ -1,4 +1,4 @@
-import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE, presentInteractionActorType, type StoredInteractionActorType } from "../shared/communityAgentIdentity";
+import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
@@ -250,7 +250,7 @@ function normalizeBeforeNumber(raw: unknown): number | null {
 }
 
 function presentedAgentKey(row: { actorType: InteractionActorType; actorAgentKey?: string }): string | null {
-  return row.actorType === RETIRED_PERSONAL_AGENT_ACTOR_TYPE ? CANONICAL_COMMUNITY_AGENT_KEY : row.actorAgentKey ?? null;
+  return row.actorAgentKey ?? null;
 }
 
 function authorFields(actorType: string, userId: string | null) {
@@ -756,10 +756,10 @@ async function mapRootBundle(
       id: normalizeIdValue(root._id),
       community_id: normalizeIdValue(root.communityId),
       channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
-      actor_type: presentInteractionActorType(root.actorType),
+      actor_type: root.actorType,
       // The community agent's post made for a member: the agent is the author,
       // the member is who it acted for.
-      ...authorFields(presentInteractionActorType(root.actorType), publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null)),
+      ...authorFields(root.actorType, publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null)),
       actor_agent_key: presentedAgentKey(root),
       kind: root.kind,
       status: root.status,
@@ -810,8 +810,8 @@ async function mapReplyBundle(
       channel_id: reply.channelId ? normalizeIdValue(reply.channelId) : null,
       root_id: normalizeIdValue(reply.rootId),
       seq: Math.max(0, Math.floor(reply.seq ?? 0)),
-      actor_type: presentInteractionActorType(reply.actorType),
-      ...authorFields(presentInteractionActorType(reply.actorType), publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null)),
+      actor_type: reply.actorType,
+      ...authorFields(reply.actorType, publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null)),
       actor_agent_key: presentedAgentKey(reply),
       target_reply_id: reply.targetReplyId ? normalizeIdValue(reply.targetReplyId) : null,
       status: reply.status,

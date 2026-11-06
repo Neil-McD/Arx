@@ -1,4 +1,4 @@
-import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE, type StoredInteractionActorType } from "./communityAgentIdentity.ts";
+import { type StoredInteractionActorType } from "./communityAgentIdentity.ts";
 
 
 export const COMMUNITY_EVIDENCE_SURFACES = [
@@ -278,14 +278,6 @@ export function deriveCommunityInteractionLineageEnvelope(args: {
       authority = { type: "user", user_id: actorUserId };
       credit = { type: "user", user_id: actorUserId };
       attributionMode = "direct";
-    } else {
-      authority = { type: "system" };
-      attributionMode = "unattributed";
-    }
-  } else if (args.actorType === RETIRED_PERSONAL_AGENT_ACTOR_TYPE) {
-    if (actorUserId) {
-      authority = { type: "user", user_id: actorUserId };
-      attributionMode = "on_behalf_of";
     } else {
       authority = { type: "system" };
       attributionMode = "unattributed";

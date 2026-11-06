@@ -63,7 +63,7 @@ test("the bounded audit inventories migration state without changing any row", a
     });
     const privateRootId = await ctx.db.insert("communityInteractionRoots", {
       communityId,
-      actorType: "personal_agent",
+      actorType: "community_agent",
       actorUserId: ownerId,
       actorAgentKey: "member_agent",
       kind: "agent_signal",

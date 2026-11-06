@@ -1676,7 +1676,6 @@ export default defineSchema({
     channelId: v.optional(v.id("communityChannels")),
     actorType: v.union(
       v.literal("human"),
-      v.literal("personal_agent"), // retired actor type on old chat posts; rewritten in the table-drop release
       v.literal("community_agent"),
       v.literal("system"),
     ),
@@ -1747,7 +1746,6 @@ export default defineSchema({
     seq: v.number(),
     actorType: v.union(
       v.literal("human"),
-      v.literal("personal_agent"), // retired actor type on old chat replies; rewritten in the table-drop release
       v.literal("community_agent"),
       v.literal("system"),
     ),
@@ -2872,7 +2870,6 @@ export default defineSchema({
     userId: v.id("users"),
     principalKind: v.union(
       v.literal("community_agent_for_member"),
-      v.literal("personal_agent"), // retired name on old receipts; rewritten in the table-drop release
       v.literal("external_mcp"),
       v.literal("community_agent"),
       v.literal("community_app"),
