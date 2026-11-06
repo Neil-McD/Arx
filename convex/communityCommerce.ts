@@ -1620,7 +1620,12 @@ export const revokeUngrantedCommunityCheckoutInternal = internalMutation({
     for (const row of rows) {
       if (row.mode !== "community_join" || String(row.providerAccountId ?? "") !== args.providerAccountId) continue;
       if (typeof row.membershipGrantedAt === "number") continue;
-      await ctx.db.patch(row._id, { communityRiskRevokedReason: args.revokedReason, updatedAt: Date.now() });
+      // A refund is final: a dispute recorded after it never replaces it (so
+      // winning that dispute can't lift the refund's block).
+      const existing = String(row.communityRiskRevokedReason ?? "");
+      if (!existing || existing.startsWith("subscription_dispute_")) {
+        await ctx.db.patch(row._id, { communityRiskRevokedReason: args.revokedReason, updatedAt: Date.now() });
+      }
       revoked = true;
     }
     return { revoked };

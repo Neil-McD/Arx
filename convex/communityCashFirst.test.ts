@@ -221,7 +221,12 @@ test("a dispute won on a payment not granted yet lifts its block; a refund doesn
   await second.t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_refunded",
   });
+  // A dispute after the refund, then won: the refund still holds.
+  await second.t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+    providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_dispute_opened",
+  });
   expect(await second.t.mutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first",
   })).toEqual({ restored: false });
+  expect(await second.finish(second.ids.buyerId, SECRET)).toEqual({ status: "expired" });
 });
