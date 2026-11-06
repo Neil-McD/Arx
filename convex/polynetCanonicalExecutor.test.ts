@@ -1032,8 +1032,6 @@ test("retired funnel draft capability is absent and cannot write through the can
   });
   await expect(update()).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
   await expect(update()).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
-  const rows = await t.run(async (ctx) => ctx.db.query("communityFunnels").collect());
-  expect(rows).toHaveLength(0);
 });
 
 test("retired AI Feed paths are uniformly absent across canonical operations", async () => {

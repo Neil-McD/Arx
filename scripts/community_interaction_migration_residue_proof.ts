@@ -93,7 +93,7 @@ for (const path of [
   "The web interaction gateway must not call legacy chat mutations.",
   "The normal web chat UI must not mount legacy chat preload, realtime, or scroll-pagination lifecycles; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
-  "Its tables (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) keep their rows until the table-drop release",
+  "Its tables (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) were emptied and then dropped from the schema on Nov 7.",
   "The web composer writes only through the canonical interaction gateway and has no legacy send fallback.",
   "Canonical projection reply targets without a canonical root id fail closed.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));

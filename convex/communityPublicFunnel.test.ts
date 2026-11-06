@@ -50,28 +50,6 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    // A historical row: founder intro video plus a published custom funnel.
-    await ctx.db.insert("communityFunnels", {
-      communityId,
-      slot: "custom_1",
-      heroMediaUrl: "https://www.youtube.com/watch?v=intro",
-      heroMediaKind: "video",
-      liveMode: "custom",
-      publishedContentV2: {
-        version: 2,
-        headline: "Old custom headline",
-        subheadline: "Old custom subheadline.",
-        pillars: [
-          { title: "One", body: "First." },
-          { title: "Two", body: "Second." },
-          { title: "Three", body: "Third." },
-        ],
-        long_form_markdown: "Old custom narrative.",
-      },
-      publishedDraftRevision: 2,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    } as any);
     return { communityId };
   });
 }

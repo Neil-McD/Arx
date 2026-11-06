@@ -75,21 +75,10 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: NOW_MS,
       updatedAt: NOW_MS,
     });
-    const threadId = await ctx.db.insert("communityChatThreads", {
-      communityId,
-      lastSeq: 1,
-      createdAt: NOW_MS,
-      updatedAt: NOW_MS,
-    });
-    const messageId = await ctx.db.insert("communityChatMessages", {
-      threadId,
-      seq: 1,
-      role: "user",
-      contentJson: { text: "Preserve me" },
-      senderUserId: memberId,
-      createdAt: NOW_MS,
-      updatedAt: NOW_MS,
-    });
+    const messageId = await ctx.db.insert("communityInteractionRoots", {
+      communityId, actorType: "human", actorUserId: memberId, kind: "discussion", status: "live", visibilityScope: "community",
+      contentSummary: "Preserve me", replyCount: 0, reactionSummary: [], idempotencyKey: "archive-preserve", createdAt: NOW_MS, updatedAt: NOW_MS,
+    } as any);
     const checkoutSessionId = await ctx.db.insert("checkoutSessions", {
       sessionId: "archive-command-checkout",
       mode: "community_join",
@@ -208,7 +197,7 @@ test("only the owner can archive and repeated commands preserve one generation a
     lifecycleGeneration: 1,
   });
   expect(state.membership).toMatchObject({ active: true });
-  expect(state.message).toMatchObject({ contentJson: { text: "Preserve me" } });
+  expect(state.message).toMatchObject({ contentSummary: "Preserve me" });
   expect(state.jobs).toHaveLength(1);
   expect(state.digestSchedule).toMatchObject({
     communityId: fixture.communityId,
@@ -364,7 +353,7 @@ test("cleanup work is ordered checkouts then connected members then founder and 
     revokedReason: "community_archived",
   });
   expect(state.membership).toMatchObject({ active: true });
-  expect(state.message).toMatchObject({ contentJson: { text: "Preserve me" } });
+  expect(state.message).toMatchObject({ contentSummary: "Preserve me" });
   expect(state.job).toMatchObject({ status: "complete" });
 });
 

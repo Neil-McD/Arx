@@ -85,9 +85,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   rendered custom content or intro media on the default page; `communityPublic`
   returns the plain default). The `communityFunnel` module and its four stand-ins
   for the cached production web were deleted after production moved to 150828216
-  (POL-30). `communityFunnels` (validated by
-  `communityFunnelValidators`) has no live reader; it holds 6 unpublished drafts
-  and 4 unused intro-video links, dropped with Neil's OK.
+  (POL-30). The `communityFunnels` table was emptied and dropped Nov 7.
 - **Hand-run:** `communityMaintenance` (purges orphaned user artifacts).
 - **Retiring tables:** `communityOnboardingSessions` (no writers),
   `communityOnboardingConfigs`. Deleted Oct 27: `communityFeatured`,
@@ -122,11 +120,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (`communityLegacyAttachmentUploads`, `communityInteractionLegacyAttachments`,
   `communityInteractionLegacyBridge`, `communityInteractionBackfill`). Production
   had 92 of 92 old messages copied into the new chat and none had attachments.
-- **Going (table-drop release):** old chat tables `communityChatThreads`,
-  `communityChatMessages`, `communityMessageReactions`,
-  `communityInteractionLegacyChatLinks`, `communityFeaturedMessages`. Anonymous-user
-  cleanup and orphan maintenance still delete their rows for removed users until
-  then. The composer's old inline attachment shape, the `ai_feed` attention
+- **Dropped Nov 7 (empty on staging and production):** old chat tables
+  `communityChatThreads`, `communityChatMessages`, `communityMessageReactions`,
+  `communityInteractionLegacyChatLinks`, `communityFeaturedMessages`. The composer's old inline attachment shape, the `ai_feed` attention
   surface and the `reorderCommunityChannels` stub were deleted once production
   ran 150828216 (POL-30); the composer takes uploaded attachment ids only.
 - **Hand-run:** `communityChannelAudit`, `communityChannelBackfill` (General channel
@@ -436,10 +432,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   callback routes, the web gateway calls). Sources imported that way keep their
   text and are labelled by provider, but are never fetched again; a claimed one
   fails closed with `community_source_provider_retired`.
-- **Tables (retiring; dropped next release after a production backup, with
-  Neil's OK):** `communityIntegrationConnections`, `skillPackages`,
-  `skillPackageRevisions`, `userPlatformSkillInstalls`, `communitySkillAttachments`.
-  Also `userSourceIntegrationConnections` and `userSourceIntegrationAuthStates`
+- **Tables:** `communityIntegrationConnections`, `skillPackages`,
+  `skillPackageRevisions`, `userPlatformSkillInstalls` and `communitySkillAttachments`
+  were emptied and dropped Nov 7. Still retiring: `userSourceIntegrationConnections` and `userSourceIntegrationAuthStates`
   (encrypted OAuth tokens: delete with the backup, Neil's sign-off).
 - **Retiring tables:** `userProviderConnections`, `userProviderAuthStates`,
   `userProviderDeviceAuthStates` (own-account payment, deleted Oct 27 in POL-10;

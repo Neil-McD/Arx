@@ -1,7 +1,7 @@
 // One-off table-drop release (POL-31). Run a page at a time until isDone,
 // dry run first, after a full backup and an export of each table:
 //   npx convex run retiredTablesCleanup:rewriteRetiredPersonalAgentInternal '{"table":"roots","dryRun":true}'
-//   npx convex run retiredTablesCleanup:emptyRetiredTableInternal '{"table":"communityFunnels","dryRun":true}'
+//   npx convex run retiredTablesCleanup:emptyRetiredTableInternal '{"table":"purchaseClaims","dryRun":true}'
 //   npx convex run retiredTablesCleanup:clearRetiredCheckoutFieldsInternal '{"dryRun":true}'
 // When every table is empty and no retired agent name is left, the next
 // release removes the tables and the literal from the schema, and this file.
@@ -12,22 +12,11 @@ import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProto
 
 const PAGE = 200;
 
-// Code that read or wrote these is gone: old thread chat (POL-26), the funnel
-// editor, skills and integrations (Oct 27 decisions).
+// Code that read or wrote these is gone. The POL-31 tables (old thread chat,
+// the funnel editor, skills, integrations) were emptied and dropped (Nov 7).
+// Purchase claims (Nov 6): none are made and nothing reads them. Its rows
+// are deleted only with the owner's OK.
 export const RETIRED_TABLES = [
-  "communityChatThreads",
-  "communityChatMessages",
-  "communityMessageReactions",
-  "communityFeaturedMessages",
-  "communityInteractionLegacyChatLinks",
-  "communityFunnels",
-  "skillPackages",
-  "skillPackageRevisions",
-  "userPlatformSkillInstalls",
-  "communitySkillAttachments",
-  "communityIntegrationConnections",
-  // Purchase claims (Nov 6): none are made and nothing reads them. Its rows
-  // are deleted only with the owner's OK.
   "purchaseClaims",
 ] as const;
 
