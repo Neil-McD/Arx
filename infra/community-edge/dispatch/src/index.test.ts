@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import edge, { appPageFor, resetEdgeCaches, resolveRoute, safeReturnPath, withShell, withoutPolynetCookies, withoutPolynetSetCookies, type Env } from "./index";
+import edge, { appPageFor, resetEdgeCaches, withSiteSecurityHeaders, resolveRoute, safeReturnPath, withShell, withoutPolynetCookies, withoutPolynetSetCookies, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
 const ORIGIN = "https://hello.example.com";
@@ -516,7 +516,8 @@ test("standard pages on a site with no frame: Polynet's page says so, never a bl
   const res = await edge.fetch(browse("/people/sam"), { ...env(), POLYNET_SITES_DOMAIN: "polynet.page", DEV_USER_WORKER: site });
   expect(res.status).toBe(404);
   expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-  expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; style-src 'unsafe-inline'");
+  // Polynet's own page keeps its strict policy (the site baseline is added beside it).
+  expect(res.headers.get("content-security-policy")).toMatch(/^default-src 'none'; style-src 'unsafe-inline'/);
   const html = await res.text();
   expect(html).toContain("<title>People · Apps &#60;Club&#62;</title>");
   expect(html).toContain("<h1>People isn't on this site yet.</h1>");
@@ -1638,4 +1639,28 @@ test("the app's version of the member's own pages", () => {
   expect(at("/settings")).toBe("https://polynet.example.com/settings/profile?pn_from=site");
   expect(at("/communities")).toBe("https://polynet.example.com/?pn_from=site");
   for (const stays of ["/join", "/moderate", "/requests", "/", "/discover"]) expect(at(stays), stays).toBeNull();
+});
+
+test("every public site page gets browser rules that can't break it; Polynet's default site gets a strict policy", async () => {
+  const page = (headers: HeadersInit = {}) => new Response("<h1>Hi</h1>", { headers: { "content-type": "text/html", ...headers } });
+  const founder = withSiteSecurityHeaders(page(), { defaultSite: false, storageHost: "live.example.convex.cloud" });
+  expect(founder.headers.get("content-security-policy")).toBe("frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
+  expect([founder.headers.get("x-content-type-options"), founder.headers.get("referrer-policy")]).toEqual(["nosniff", "strict-origin-when-cross-origin"]);
+  // A founder's own policy and referrer choice stay; ours is added beside the policy.
+  const own = withSiteSecurityHeaders(page({ "content-security-policy": "script-src 'self'", "referrer-policy": "no-referrer" }), { defaultSite: false, storageHost: "" });
+  expect(own.headers.get("content-security-policy")).toBe("script-src 'self', frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
+  expect(own.headers.get("referrer-policy")).toBe("no-referrer");
+  // Polynet's default site: same-origin scripts only, its live socket allowed.
+  const ours = withSiteSecurityHeaders(page(), { defaultSite: true, storageHost: "live.example.convex.cloud" }).headers.get("content-security-policy")!;
+  expect(ours).toContain("script-src 'self'");
+  // The composer previews attachments from blob: addresses.
+  expect(ours).toContain("img-src 'self' data: blob: https:");
+  expect(ours).toContain("connect-src 'self' https://live.example.convex.cloud wss://live.example.convex.cloud");
+  expect(ours).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline/);
+  // Not a page (a script, an image): untouched.
+  const asset = new Response("x", { headers: { "content-type": "text/javascript" } });
+  expect(withSiteSecurityHeaders(asset, { defaultSite: true, storageHost: "" })).toBe(asset);
+  // Through the edge: a founder's page carries the baseline.
+  const res = await edge.fetch(request("/"), { ...env(), DEV_USER_WORKER: { fetch: async () => page() } });
+  expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
 });

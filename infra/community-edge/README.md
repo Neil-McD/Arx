@@ -89,6 +89,14 @@ On a personal page (`PERSONAL_PAGES` in `checks.mjs`) the edge:
    `Cross-Origin-Resource-Policy: same-origin`, `Origin-Agent-Cluster: ?1` and
    `nosniff`.
 
+Every page of a community's public site (Nov 7, `withSiteSecurityHeaders`) gets
+`Content-Security-Policy: frame-ancestors 'self'; object-src 'none'; base-uri
+'self'`, added beside any policy the founder's site sends, plus `nosniff` and
+`Referrer-Policy: strict-origin-when-cross-origin` unless the site set its own.
+Polynet's default site (our code: same-origin scripts, no inline script) gets a
+strict policy instead (`defaultSitePolicy`: `script-src 'self'`, its own
+connections and the live socket only).
+
 No frame, or none it can draw (no HTMLRewriter, over 1 MB): Polynet's plain
 page with a "Back to <community>" bar, under the same policy. Never the
 unstripped frame.
