@@ -10,9 +10,6 @@ import { cameFromSite, communityMemberSiteUrl } from "../../../../shared/webAppR
 const arrivedFromSiteAt: string | null =
   typeof window !== "undefined" && window.location && cameFromSite(window.location.search) ? window.location.pathname : null;
 
-// Whether this page load came from a community site's member page at all.
-export const arrivedFromSite = arrivedFromSiteAt !== null;
-
 export function isArrivalFromSite(pathname: string, arrivedAt: string | null = arrivedFromSiteAt): boolean {
   return arrivedAt !== null && pathname.replace(/\/+$/, "") === arrivedAt.replace(/\/+$/, "");
 }
