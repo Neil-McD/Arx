@@ -319,8 +319,17 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `privateTwinHost` / `siteHostOfTwin` in `checks.mjs` (edge, backend, CLI).
   Page views on a public site are the founder's analytics visits: the edge
   reports each one after the page (`/runtime/app/visit`, a keyed hash of the
-  address, no bots, the twin or fetches) to `recordCommunitySiteVisitInternal`,
-  one per visitor per half hour, into `communityAnalyticsEvents`. Spec:
+  address, no bots or fetches; of the twin only Join, the doorstep, reported as
+  the site's) to `recordCommunitySiteVisitInternal`, one per visitor per half
+  hour, into `communityAnalyticsEvents` (`funnel_visit`). The funnel's middle
+  step, "Started joining", is `funnel_join_started` there
+  (`communityFunnelEvents.recordCommunityJoinStarted`): written when a
+  `community_join` checkout is created (signed in or guest) and when someone
+  joins or asks to join on the twin (`joinCommunityAppVisitorInternal`), one per
+  person per community per half hour, keyed by account (`visitorKey`
+  `user:<id>`) or, for a signed-out buyer, the keyed visitor hash; analytics
+  only, never access. Studio's Analytics shows Page visits → Started joining →
+  New members (`join_starts_window`). Spec:
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
 - **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityPublic` (Discover's list), `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
