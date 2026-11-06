@@ -82,7 +82,7 @@ test("signing in from a community site gives a new account its starter profile t
     emailVerificationSource: "oauth_provider", displayName: "Site Person", avatarUrl: "https://lh3.googleusercontent.com/s",
   }) as { dbUserId: any };
   const after = await t.run(async (ctx) => ({
-    user: await ctx.db.get(actor.dbUserId),
+    user: (await ctx.db.get(actor.dbUserId)) as any,
     detail: (await ctx.db.query("userProfileDetails").collect())[0],
   }));
   expect([after.user?.handle, after.detail?.displayName, after.detail?.avatarUrl]).toEqual(["site-person", "Site Person", "https://lh3.googleusercontent.com/s"]);
