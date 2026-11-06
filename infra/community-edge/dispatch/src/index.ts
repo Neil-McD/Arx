@@ -813,6 +813,12 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
   return json(200, { ok: true, ...shaped }, held && buyerName ? { "Set-Cookie": cookie(buyerName, "", 0) } : {});
 }
 
+async function visitorHash(request: Request, env: Env): Promise<string> {
+  const address = request.headers.get("cf-connecting-ip") ?? "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${env.POLYNET_EDGE_SECRET}:visitor:${address}`));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 // Cash first: Stripe's checkout for a buyer who hasn't signed in. Only Stripe's
 // own page goes back to the browser; the buyer secret stays in an HttpOnly
 // cookie on this twin, so page code (the founder's or anyone's) never sees it.
@@ -823,7 +829,11 @@ async function proxyGuestCheckout(request: Request, url: URL, env: Env): Promise
   if (new TextEncoder().encode(body).length > 1024) return json(413, { ok: false, code: "request_too_large" });
   const upstream = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/join/checkout`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET },
+    headers: {
+      "Content-Type": "application/json", Origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET,
+      // Who's asking, for the per-visitor limit: a keyed hash, never the address itself.
+      "x-polynet-visitor": await visitorHash(request, env),
+    },
     body,
   });
   const answer = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;

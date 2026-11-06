@@ -127,32 +127,45 @@ test("someone already paying who pays again before signing in is refunded, not c
   expect(refund?.args[0]).toMatchObject({ providerSubscriptionId: "sub_second", providerAccountId: ACCOUNT });
 });
 
-test("a community takes a limited number of guest checkouts at a time, checked where the checkout is recorded", async () => {
+test("one visitor can start only a few guest checkouts, and can't use up a community's for everyone", async () => {
   const { t, ids } = await fixture();
-  const allowed = (nowMs = Date.now()) => t.query(internal.communityCommerce.guestCheckoutAllowedInternal, { communityId: ids.communityId, nowMs });
-  expect(await allowed()).toBe(true);
-  await t.run(async (ctx) => {
-    const now = Date.now();
-    for (let index = 1; index < 20; index += 1) {
-      await ctx.db.insert("checkoutSessions", {
-        sessionId: `chk_${String(index).padStart(32, "0")}`, mode: "community_join", communityId: ids.communityId,
-        status: "pending", expiresAt: now + 60_000, createdAt: now, updatedAt: now,
-      } as any);
-    }
-  });
-  expect(await allowed()).toBe(false);
-  expect(await allowed(Date.now() + 11 * 60 * 1000)).toBe(true);
-  await expect(t.mutation(internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal, {
-    sessionId: `chk_${"f".repeat(32)}`, communityId: ids.communityId, communityLifecycleGeneration: 0, billingPeriod: "monthly",
+  const allowed = (visitorHash: string, nowMs = Date.now()) =>
+    t.query(internal.communityCommerce.guestCheckoutAllowedInternal, { communityId: ids.communityId, nowMs, visitorHash });
+  const record = (index: number, visitorHash: string) => t.mutation(internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal, {
+    sessionId: `chk_${String(index).padStart(32, "0")}`, communityId: ids.communityId, communityLifecycleGeneration: 0, billingPeriod: "monthly",
     pricePointId: ids.pricePointId, amountBaseUnits: 500, currency: "usd", currencyDecimals: 2, providerAccountId: ACCOUNT,
-    providerPriceId: "price_cash_first", buyerSecretHash: "f".repeat(64), expiresAt: Date.now() + 60_000,
-  })).rejects.toThrow("community_checkout_unavailable");
+    providerPriceId: "price_cash_first", buyerSecretHash: String(index).padStart(64, "0"), buyerVisitorHash: visitorHash, expiresAt: Date.now() + 60_000,
+  });
+  const busy = "a".repeat(64);
+  const other = "b".repeat(64);
+  // The fixture's own checkout has no visitor; this visitor gets a few of their own.
+  for (const index of [1, 2, 3]) await record(index, busy);
+  expect(await allowed(busy)).toBe(false);
+  await expect(record(4, busy)).rejects.toThrow("community_checkout_unavailable");
+  // Someone else is unaffected, and ten minutes on the first can try again.
+  expect(await allowed(other)).toBe(true);
+  expect(await allowed(busy, Date.now() + 11 * 60 * 1000)).toBe(true);
   // Every checkout belongs to someone.
   await expect(t.mutation(internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal, {
     sessionId: `chk_${"e".repeat(32)}`, communityId: ids.communityId, communityLifecycleGeneration: 0, billingPeriod: "monthly",
     pricePointId: ids.pricePointId, amountBaseUnits: 500, currency: "usd", currencyDecimals: 2, providerAccountId: ACCOUNT,
     providerPriceId: "price_cash_first", expiresAt: Date.now() + 60_000,
   })).rejects.toThrow("checkout_buyer_required");
+});
+
+test("someone blocked from the community who pays before signing in is refunded, never let in", async () => {
+  const { t, ids, finish, paid, state } = await fixture();
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    const owner = (await ctx.db.query("users").collect()).find((user) => user.handle === "owner")!;
+    await ctx.db.insert("communityBlocks", { communityId: ids.communityId, userId: ids.buyerId, createdByUserId: owner._id, createdAt: now, updatedAt: now });
+  });
+  await paid(null);
+  expect(await finish(ids.buyerId, SECRET)).toEqual({ status: "expired" });
+  expect((await state()).members).toEqual([]);
+  const refund = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()))
+    .find((job: any) => job.name === "communityCommerce:refundDuplicateCommunitySubscriptionInternal") as any;
+  expect(refund?.args[0]).toMatchObject({ providerSubscriptionId: "sub_cash_first", providerAccountId: ACCOUNT });
 });
 
 test("refunded or disputed before signing in, a payment never grants: signing in after finds nothing to join", async () => {
