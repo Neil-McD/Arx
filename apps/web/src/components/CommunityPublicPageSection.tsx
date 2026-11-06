@@ -126,6 +126,17 @@ export function CommunityPublicPageSection(props: {
     };
   }, [props.communityId]);
 
+  // Unsaved changes here: the browser asks before the page is closed or reloaded.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   if (!form) {
     return (
       <div className="settings-section community-public-page-section">
