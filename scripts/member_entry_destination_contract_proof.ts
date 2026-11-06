@@ -164,7 +164,7 @@ assert.doesNotMatch(
 );
 assert.match(
   communityEntryBridgeController,
-  /if \(!args\.isAccountSetupResolved\) return "wait";[\s\S]*return status && \(status\.completed \|\| !accountSetupBlocksJoining\(status\)\) \? "enter" : "setup"/,
+  /if \(!args\.isAccountSetupResolved\) return "wait";[\s\S]*args\.accountSetupStatus\?\.completed \? "enter" : "setup"/,
   "unresolved account setup must fail closed before community entry",
 );
 assert.doesNotMatch(

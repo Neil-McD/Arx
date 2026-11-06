@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { accountSetupBlocksJoining, type AccountSetupStatus } from "../../../../shared/accountSetup";
+import type { AccountSetupStatus } from "../../../../shared/accountSetup";
 import type { CloudMemberEntryDestination } from "../../../../shared/cloudMemberEntryDestinationGateway";
 
 type LegalAcceptance = {
@@ -30,10 +30,7 @@ export function resolveCommunityEntrySetupAction(args: {
 }): "wait" | "setup" | "enter" {
   if (args.publicRouteKind !== "community_funnel") return "enter";
   if (!args.isAccountSetupResolved) return "wait";
-  // Joined means the terms were accepted at Join, and sign-in filled the
-  // profile: only something still missing beyond that is set up first.
-  const status = args.accountSetupStatus;
-  return status && (status.completed || !accountSetupBlocksJoining(status)) ? "enter" : "setup";
+  return args.accountSetupStatus?.completed ? "enter" : "setup";
 }
 
 export function useWebCommunityEntryBridgeController(params: {

@@ -255,6 +255,9 @@ export function useWebPublicFunnelActions<
         ) return false;
 
         if (joinResult.outcome === "joined") {
+          // Joining just accepted the terms: read the account again so entry
+          // doesn't ask for them a second time.
+          await current.resolveAccountSetupStatus(session);
           current.openCommunityWorkspace({
             communityId: joinResult.community_id,
             communitySlug: trimmedSlug || null,

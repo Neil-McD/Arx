@@ -8,7 +8,7 @@ import { internal } from "./_generated/api";
 import schema from "./schema";
 import { ensureStarterProfile } from "./starterProfile";
 
-const modules = import.meta.glob(["./starterProfile.ts", "./_generated/**/*.*s"]);
+const modules = import.meta.glob(["./starterProfile.ts", "./authActor.ts", "./_generated/**/*.*s"]);
 const nowMs = 1_760_000_000_000;
 
 function user(fields: Record<string, unknown>) {
@@ -73,4 +73,17 @@ test("only something beyond the terms blocks joining: Join's click accepts those
   expect(accountSetupBlocksJoining(noHandle)).toBe(true);
   // A photo is optional.
   expect(buildAccountSetupStatus({ displayName: "A", handle: "abc", hasAcceptedPlatformLegal: true }).completed).toBe(true);
+});
+
+test("signing in from a community site gives a new account its starter profile too", async () => {
+  const t = convexTest(schema, modules);
+  const actor = await t.mutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
+    authSubject: "site-sign-in-subject", email: "site.person@example.com", emailVerified: true,
+    emailVerificationSource: "oauth_provider", displayName: "Site Person", avatarUrl: "https://lh3.googleusercontent.com/s",
+  }) as { dbUserId: any };
+  const after = await t.run(async (ctx) => ({
+    user: await ctx.db.get(actor.dbUserId),
+    detail: (await ctx.db.query("userProfileDetails").collect())[0],
+  }));
+  expect([after.user?.handle, after.detail?.displayName, after.detail?.avatarUrl]).toEqual(["site-person", "Site Person", "https://lh3.googleusercontent.com/s"]);
 });
