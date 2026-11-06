@@ -282,6 +282,36 @@ export function communitySiteRedirectTarget(
   }
 }
 
+// Members live on the community's site; Studio is the back office. A member's
+// Studio screen maps to the site's matching page (home, Chat, Events, Learn,
+// Ask). Only an https site; anything else (a management tab) stays in Studio.
+const MEMBER_TAB_SITE_PATHS: Partial<Record<CommunityTab, string>> = {
+  chat: "/chat",
+  events: "/events",
+  resources: "/learn",
+  agent: "/ask",
+};
+
+export function communityMemberSiteUrl(
+  siteUrl: unknown,
+  view: AppView,
+  communityTab: CommunityTab,
+  channelSlug?: string | null,
+): string | null {
+  if (typeof siteUrl !== "string") return null;
+  const path = view === "community_home" ? "/" : MEMBER_TAB_SITE_PATHS[communityTab];
+  if (!path) return null;
+  // A chat link to one channel opens that channel (the site reads ?channel=).
+  const channel = path === "/chat" ? String(channelSlug ?? "").trim().toLowerCase() : "";
+  const query = channel && channel !== "general" ? `?channel=${encodeURIComponent(channel)}` : "";
+  try {
+    const site = new URL(siteUrl);
+    return site.protocol === "https:" ? `${site.origin}${path}${query}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;

@@ -75,6 +75,25 @@ export function deriveCommunityAccessCapabilities(
   };
 }
 
+// Who keeps Studio, the back office: the owner, an admin or moderator, or
+// anyone holding a management right (members, join requests, moderation,
+// resources). Someone who only belongs lives on the community's site.
+// (canViewSettings is not one: every member can open their own settings.)
+export function communityAccessRunsCommunity(access: CommunityAccess | null | undefined): boolean {
+  if (!access) return false;
+  const capabilities = deriveCommunityAccessCapabilities(access);
+  const role = String(access.effective_role ?? "").trim().toLowerCase();
+  return (
+    capabilities.isOwner ||
+    role === "admin" ||
+    role === "moderator" ||
+    capabilities.canManageMembers ||
+    capabilities.canReviewJoinRequests ||
+    capabilities.canModerateContent ||
+    capabilities.canManageResources
+  );
+}
+
 export function deriveCommunitySettingsLayer(
   access: CommunityAccess | null | undefined,
 ): CommunitySettingsLayer {
