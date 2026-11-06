@@ -41,7 +41,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `auth`, `authIdentity`, `authActor`, `authSessions`, `authSessionLifecycleCore`,
   `authSessionMaintenanceCore`, `httpAuth`, `httpAuthBridge`, `workosEmailVerification`,
   `profiles`, `profileCore`, `profileRelationshipCore`, `userProfileProjection`,
-  `account`, `accountSetupCore`, `secretCrypto` (encryption for stored secrets), `legalAcceptances`; Vercel `api/auth/*`
+  `account`, `accountSetupCore`, `starterProfile` (a new account's name, photo and handle; Join's terms acceptance), `secretCrypto` (encryption for stored secrets), `legalAcceptances`; Vercel `api/auth/*`
   (HttpOnly `__Host-` cookies, return-path checks).
 - **Reached by:** Studio sign-in (WorkOS AuthKit, Google), `/runtime/auth_*`,
   `/runtime/auth_bridge_session_*`, `/user_management/`.
