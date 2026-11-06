@@ -29,8 +29,8 @@ const deps = {
   git: (args) =>
     execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(),
   gitOk: (args) => spawnSync("git", args, { cwd: root, stdio: "ignore" }).status === 0,
-  run: (command, args, env) => {
-    const result = spawnSync(command, args, { cwd: root, env, stdio: "inherit" });
+  run: (command, args, env, cwd) => {
+    const result = spawnSync(command, args, { cwd: cwd ? resolve(root, cwd) : root, env, stdio: "inherit" });
     if (result.error) throw result.error;
     if (result.status !== 0) {
       throw new ReleaseError("production_release_step_failed", `${command} ${args.join(" ")}`);
