@@ -129,7 +129,6 @@
     "check:community-evidence-integrity-proof": "tsx scripts/community_evidence_integrity_contract_proof.ts",
     "check:community-interaction-evidence-spine-proof": "tsx scripts/community_interaction_evidence_spine_contract_proof.ts",
     "check:community-resource-evidence-spine-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_evidence_spine_contract_proof.ts",
-    "check:community-archive-runtime-severance-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_archive_runtime_severance_contract_proof.ts",
     "check:community-interaction-migration-residue-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_migration_residue_proof.ts",
     "check:community-interaction-projection-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_projection_ui_contract_proof.ts",
     "check:community-channel-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_channel_ui_contract_proof.ts",
@@ -237,7 +236,8 @@
     "check:community-mention-search-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_search_contract_proof.ts",
     "check:community-mention-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_lifecycle_contract_proof.ts",
     "check:community-everybody-mention-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_contract_proof.ts",
-    "check:community-everybody-mention-row-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_row_contract_proof.ts"
+    "check:community-everybody-mention-row-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_row_contract_proof.ts",
+    "check:forbidden-patterns": "node scripts/forbidden_patterns_guard.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.4.0",
