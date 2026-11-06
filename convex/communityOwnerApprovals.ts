@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { requireCommunityOwner } from "./communityCore";
 import { applyCommunityMemberExperience } from "./communityLifecycle";
 import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -38,9 +39,10 @@ function publicRequest(row: any) {
 export const requestMemberExperienceForTrustedUserInternal = internalMutation({
   args: { userId: v.id("users"), communityId: v.id("communities"), to: v.union(v.literal("app"), v.literal("site")) },
   handler: async (ctx, args) => {
-    const community = await ctx.db.get(args.communityId);
-    if (!community) throw new Error("community_not_found");
-    if (String(community.ownerId) !== String(args.userId)) throw new Error("community_member_experience_owner_only");
+    // Studio's own owner guard (an active community, its builder access, its owner).
+    const { community } = await requireCommunityOwner({ ctx, communityId: args.communityId, userId: args.userId }).catch((error: unknown) => {
+      throw error instanceof Error && error.message.includes("community_owner_required") ? new Error("community_member_experience_owner_only") : error;
+    });
     if (args.to === "site" && !(await communityHasCustomSite(ctx, community._id))) throw new Error("community_custom_site_required");
     const current = await communityMemberExperience(ctx, community as any);
     const waiting = await pendingRequest(ctx, community._id);
@@ -78,11 +80,11 @@ export const readMemberExperienceForTrustedManagerInternal = internalQuery({
   },
 });
 
+// Studio's own owner guard, checked again at decision time: an archived
+// community, or one whose builder access lapsed, can't be changed this way.
 async function requireOwner(ctx: any, authSubject: string | undefined, communityId: any) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: authSubject ?? null });
-  const community = await ctx.db.get(communityId);
-  if (!community) throw new Error("community_not_found");
-  if (String(community.ownerId) !== String(userId)) throw new Error("community_owner_required");
+  const { community } = await requireCommunityOwner({ ctx, communityId, userId });
   return { userId, community };
 }
 

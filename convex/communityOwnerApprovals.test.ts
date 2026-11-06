@@ -92,3 +92,13 @@ test("declined, replaced, expired and out-of-date requests change nothing", asyn
   expect(await f.decide("owner-subject", stale.request!.request_id, "approve")).toEqual({ status: "stale", members_use: "site" });
   expect(OWNER_APPROVAL_TTL_MS).toBe(24 * 60 * 60 * 1000);
 });
+
+test("an archived community can't be changed through a request, even one made before it was archived", async () => {
+  const f = await fixture();
+  const asked = await f.ask(f.ownerId, "site");
+  await f.t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
+  await expect(f.decide("owner-subject", asked.request!.request_id, "approve")).rejects.toThrow();
+  await expect(f.ask(f.ownerId, "site")).rejects.toThrow();
+  const stored = await f.t.run(async (ctx) => (await ctx.db.get(f.communityId) as any)?.memberExperience ?? null);
+  expect(stored).toBeNull();
+});
