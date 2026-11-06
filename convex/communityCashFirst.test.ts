@@ -187,3 +187,19 @@ test("an email with many past checkouts still finds the one waiting for it", asy
   })).toEqual({ attached: 1 });
   expect(await state()).toEqual({ owner: ids.buyerId, granted: true, members: [ids.buyerId] });
 });
+
+test("a payment made before signing in still grants when its buyer first signs in weeks later", async () => {
+  const { t, ids, paid, state } = await fixture();
+  await t.run(async (ctx) => ctx.db.patch(ids.buyerId, { emailVerifiedAt: undefined }));
+  await paid("buyer@example.com");
+  // Past the checkout's own expiry (it was for starting it).
+  await t.run(async (ctx) => {
+    const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q) => q.eq("sessionId", SESSION)).first();
+    await ctx.db.patch(row!._id, { expiresAt: Date.now() - 1 });
+    await ctx.db.patch(ids.buyerId, { emailVerifiedAt: Date.now() });
+  });
+  expect(await t.mutation(internal.communityCommerce.attachPaidCheckoutsForVerifiedEmailInternal, {
+    userId: ids.buyerId, email: "buyer@example.com",
+  })).toEqual({ attached: 1 });
+  expect(await state()).toEqual({ owner: ids.buyerId, granted: true, members: [ids.buyerId] });
+});

@@ -1457,7 +1457,7 @@ export async function resolveCheckoutSessionFinalization(ctx: any, userId: any, 
       message: "checkout_session_forbidden",
     };
   }
-  if (session.expiresAt <= nowMs || session.status === "expired") {
+  if (session.status === "expired" || (session.status !== "complete" && session.expiresAt <= nowMs)) {
     return {
       ok: false,
       status: "expired",
