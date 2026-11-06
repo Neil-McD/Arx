@@ -32,6 +32,13 @@ export function siteHostname(communitySlug: string, sitesDomain: string, hostSuf
   return `${slug}${hostSuffix}.${sitesDomain}`;
 }
 
+// Every community lives on its own site, so a new name (slug) has to make a
+// site address: 3-32 letters, digits and dashes, not a reserved name. Older,
+// longer slugs keep working everywhere else; only creating or renaming checks.
+export function requireSiteReadySlug(slug: string): void {
+  if (!siteHostname(slug, "polynet.page")) throw new Error("community_slug_invalid");
+}
+
 // The community's own site on this environment's sites domain, when it has one
 // (that origin is registered to it); else null, and links go to Studio. The same
 // shapes the deploy accepts; anything else means no site links. Shared by

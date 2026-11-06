@@ -97,6 +97,9 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
   if (message.includes("community_owner_limit_reached")) {
     return "You've reached the limit of live communities. Archive one to start another.";
   }
+  if (message.includes("community_slug_invalid")) {
+    return "Pick a different web address: 3-32 letters, numbers and dashes, and not a reserved word like admin or www.";
+  }
   if (message.includes("founder_subscription_already_attached")) {
     return "This Agent plan is already attached to a community.";
   }

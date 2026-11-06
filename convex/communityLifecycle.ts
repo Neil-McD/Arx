@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { moveCommunitySiteAddresses, registerCommunitySiteAddresses } from "./communitySites";
+import { moveCommunitySiteAddresses, registerCommunitySiteAddresses, requireSiteReadySlug } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
@@ -666,6 +666,7 @@ export const createCommunity = mutation({
     // a community created with its own verified Agent plan is never capped.
     if (!operatorComped && !founderSubscription) await requireOwnerBelowFreeCommunityLimit(ctx, ownerId);
     const slug = normalizeSlug(args.slug);
+    requireSiteReadySlug(slug);
     const existing = await ctx.db
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
@@ -849,6 +850,7 @@ async function saveCommunitySettingsCore(ctx: any, args: any) {
   const previousAvatarStorageId = community.avatarStorageId;
   const previousBannerStorageId = community.bannerStorageId;
   // Its site addresses move with the slug (or the rename is refused, before anything changes).
+  if (settingsState.normalizedSlug !== String(community.slug ?? "")) requireSiteReadySlug(settingsState.normalizedSlug);
   await moveCommunitySiteAddresses(ctx, community, settingsState.normalizedSlug);
 
   await ctx.db.patch(community._id as any, {
