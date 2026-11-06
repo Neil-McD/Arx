@@ -701,6 +701,7 @@ export default function App() {
     activePage,
     activeView,
     communityTab,
+    communityChannelSlug,
     activeCommunityId,
     activeCommunityAccessId: activeCommunityAccess?.community_id ?? null,
     activeCommunitySiteUrl: (activeCommunity as { site_url?: string | null } | null)?.site_url,

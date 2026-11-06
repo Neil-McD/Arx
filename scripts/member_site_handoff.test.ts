@@ -9,6 +9,9 @@ const SITE = "https://sunrise.polynet.page";
 test("a member's Studio screen maps to the site's matching page; management tabs stay in Studio", () => {
   expect(communityMemberSiteUrl(SITE, "community_home", "chat")).toBe(`${SITE}/`);
   expect(communityMemberSiteUrl(SITE, "home", "chat")).toBe(`${SITE}/chat`);
+  expect(communityMemberSiteUrl(SITE, "home", "chat", "Crew")).toBe(`${SITE}/chat?channel=crew`);
+  expect(communityMemberSiteUrl(SITE, "home", "chat", "general")).toBe(`${SITE}/chat`);
+  expect(communityMemberSiteUrl(SITE, "home", "events", "crew")).toBe(`${SITE}/events`);
   expect(communityMemberSiteUrl(SITE, "home", "events")).toBe(`${SITE}/events`);
   expect(communityMemberSiteUrl(SITE, "home", "resources")).toBe(`${SITE}/learn`);
   expect(communityMemberSiteUrl(SITE, "home", "agent")).toBe(`${SITE}/ask`);

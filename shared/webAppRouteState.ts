@@ -296,13 +296,17 @@ export function communityMemberSiteUrl(
   siteUrl: unknown,
   view: AppView,
   communityTab: CommunityTab,
+  channelSlug?: string | null,
 ): string | null {
   if (typeof siteUrl !== "string") return null;
   const path = view === "community_home" ? "/" : MEMBER_TAB_SITE_PATHS[communityTab];
   if (!path) return null;
+  // A chat link to one channel opens that channel (the site reads ?channel=).
+  const channel = path === "/chat" ? String(channelSlug ?? "").trim().toLowerCase() : "";
+  const query = channel && channel !== "general" ? `?channel=${encodeURIComponent(channel)}` : "";
   try {
     const site = new URL(siteUrl);
-    return site.protocol === "https:" ? `${site.origin}${path}` : null;
+    return site.protocol === "https:" ? `${site.origin}${path}${query}` : null;
   } catch {
     return null;
   }

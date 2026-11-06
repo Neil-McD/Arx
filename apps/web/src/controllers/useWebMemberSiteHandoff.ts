@@ -11,6 +11,7 @@ export function useWebMemberSiteHandoff(params: {
   activePage: AppPage;
   activeView: AppView;
   communityTab: CommunityTab;
+  communityChannelSlug: string | null;
   activeCommunityId: string | null;
   activeCommunityAccessId: string | null;
   activeCommunitySiteUrl: string | null | undefined;
@@ -25,7 +26,7 @@ export function useWebMemberSiteHandoff(params: {
     !params.communityAccessLoadError &&
     params.activeCommunityAccessId === params.activeCommunityId &&
     !params.runsCommunity
-      ? communityMemberSiteUrl(params.activeCommunitySiteUrl, params.activeView, params.communityTab)
+      ? communityMemberSiteUrl(params.activeCommunitySiteUrl, params.activeView, params.communityTab, params.communityChannelSlug)
       : null;
 
   useEffect(() => {
