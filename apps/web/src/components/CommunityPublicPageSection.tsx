@@ -145,6 +145,8 @@ export function CommunityPublicPageSection(props: {
     if (saving) return;
     setSaving(true);
     setError(null);
+    // What this save sends; anything typed meanwhile stays, still to be saved.
+    const submitted = form;
     try {
       const session = await props.ensureSession(props.session);
       if (!session) throw new Error("not_signed_in");
@@ -153,19 +155,21 @@ export function CommunityPublicPageSection(props: {
         communityId: props.communityId,
         expectedRevision: revision,
         page: {
-          for_you: form.forYou,
-          not_for: form.notFor,
-          first_steps: form.steps,
-          results: form.results,
-          founder_bio: form.bio,
-          video_url: form.video,
-          guarantee: form.guarantee,
-          objections: form.objections,
+          for_you: submitted.forYou,
+          not_for: submitted.notFor,
+          first_steps: submitted.steps,
+          results: submitted.results,
+          founder_bio: submitted.bio,
+          video_url: submitted.video,
+          guarantee: submitted.guarantee,
+          objections: submitted.objections,
         },
       });
-      setForm(formOf(saved.page));
       setRevision(saved.revision);
-      setDirty(false);
+      if (formRef.current === submitted) {
+        setForm(formOf(saved.page));
+        setDirty(false);
+      }
       setNotice("Saved. Your public page shows it now.");
     } catch (failure) {
       setError(friendlyError(failure));
