@@ -248,12 +248,20 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
 const CHECKOUT = `chk_${"c".repeat(32)}`;
 const joining = {
   gate: "join", viewer: null as null | Record<string, unknown>, label: "Join free", plans: [] as any[],
-  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0, about: "" as string, memberCount: 4,
+  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0, about: "" as string, memberCount: 4, page: null as null | Record<string, unknown>,
+};
+// The founder's sales sections, as the backend projects them (text, never markup).
+const SALES_PAGE = {
+  for_you: ["You climb before work.", "You want <b>partners</b>."], not_for: ["You want a gym class."],
+  first_steps: [{ title: "Join", text: "One tap." }, { title: "Meet at 5:45", text: "" }],
+  results: [{ quote: "Led my first 6a.", name: "Ana", role: "Since March" }], founder_bio: "Climbing 20 years.",
+  video: { provider: "youtube", id: "dQw4w9WgXcQ" }, guarantee: "First month free if it's not for you.",
+  objections: [{ question: "Too early?", answer: "You're home by 8." }],
 };
 const SHORT_ABOUT = "We climb at sunrise.\n\nAll levels <b>welcome</b>.";
 function resetJoin(gate = "join", state: string | null = "visitor", about = SHORT_ABOUT) {
   Object.assign(joining, {
-    about, memberCount: 4,
+    about, memberCount: 4, page: null,
     gate, label: gate === "checkout" ? "Join $10/month" : "Join free", calls: [], finishPending: 0, checkoutUrl: "",
     viewer: state ? { state, can_request_again: false, reapply_at: null, setup_required: false } : null,
     plans: gate === "checkout" ? [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10" }, { billing_period: "annual", name: "Annual", label: "Join $100/year", price: "$100" }] : [],
@@ -266,7 +274,8 @@ function joinBackend(path: string, auth: string | null, body: Record<string, any
     ok: true, signed_in: signedIn,
     community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: "Dawn sessions at the crag.", about: joining.about,
       member_count: joining.memberCount, avatar_url: null, banner_url: null, host: { name: "Ana" },
-      courses: [{ title: "Lead climbing", summary: "Clip, fall, trust the rope.", lessons: 3 }] },
+      courses: [{ title: "Lead climbing", summary: "Clip, fall, trust the rope.", lessons: 3 }],
+      page: joining.page },
     gate: joining.gate, available: true, action_label: joining.label, plans: joining.plans, viewer: signedIn ? joining.viewer : null,
   });
   if (path === "/runtime/app/me/join") return Response.json(projection(Boolean(auth)));
@@ -1344,6 +1353,42 @@ test("Join requests: a moderator approves and denies on the twin; a paid communi
     expect(await page.evaluate(() => (window as any).violations)).toEqual([]);
   } finally {
     await browser.close();
+  }
+}, 60_000);
+
+// The founder's sales sections: each where the doorstep puts it, as text, the
+// video in its own player; with none filled in, none of them is there at all.
+test("Join: the founder's sections show where they belong, only when filled in", async () => {
+  resetJoin("checkout", null);
+  joining.page = SALES_PAGE;
+  const { browser, page } = await openTwin(chromium, "/join", null);
+  try {
+    const personal = page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
+    expect(await personal.locator("[part=join-for] li").allTextContents()).toEqual(["You climb before work.", "You want <b>partners</b>."]);
+    expect(await personal.locator("[part=join-for] b").count()).toBe(0);
+    expect(await personal.locator("[part=join-not-for] li").allTextContents()).toEqual(["You want a gym class."]);
+    expect(await personal.locator("[part=join-step]").allTextContents()).toEqual(["JoinOne tap.", "Meet at 5:45"]);
+    expect(await personal.locator("[part=join-result]").allTextContents()).toEqual(["\u201cLed my first 6a.\u201dAna \u00b7 Since March"]);
+    expect(await personal.locator("[part=join-founder]").textContent()).toContain("Climbing 20 years.");
+    expect(await personal.locator("[part=join-objection]").allTextContents()).toEqual(["Too early?You're home by 8."]);
+    expect(await personal.locator("[part=join-guarantee]").textContent()).toBe("First month free if it's not for you.");
+    const video = personal.locator("[part=join-video] iframe");
+    expect([await video.getAttribute("src"), await video.getAttribute("sandbox")])
+      .toEqual(["https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ", "allow-scripts allow-same-origin allow-presentation allow-popups"]);
+  } finally {
+    await browser.close();
+  }
+  resetJoin("checkout", null);
+  const plain = await openTwin(chromium, "/join", null);
+  try {
+    const personal = plain.page.locator("polynet-personal");
+    await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
+    for (const part of ["join-video", "join-fit", "join-steps", "join-results", "join-founder", "join-objections", "join-guarantee"]) {
+      expect(await personal.locator(`[part=${part}]`).count()).toBe(0);
+    }
+  } finally {
+    await plain.browser.close();
   }
 }, 60_000);
 

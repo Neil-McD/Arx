@@ -1289,7 +1289,8 @@ test("twin join: anyone reads the pitch and the gate signed out, decided exactly
   const f = await joinFixture();
   await f.t.run((c) => c.db.patch(f.ids.communityId, { name: "Apps Club", oneLiner: "We build.", about: "About us." } as any));
   expect(await f.read()).toEqual({ status: 200, body: { ok: true, signed_in: false,
-    community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 2, avatar_url: null, banner_url: null, host: { name: "apps-owner" }, courses: [] },
+    community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 2, avatar_url: null, banner_url: null, host: { name: "apps-owner" }, courses: [],
+      page: { for_you: [], not_for: [], first_steps: [], results: [], founder_bio: "", video: null, guarantee: "", objections: [] } },
     gate: "join", available: true, action_label: "Join free", plans: [], viewer: null,
     terms_url: "https://studio.example.com/terms", privacy_url: "https://studio.example.com/privacy" } });
   for (const entryPolicy of ["open", "approval", "paid_subscription"]) {

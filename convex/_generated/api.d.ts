@@ -102,6 +102,7 @@ import type * as communityOwnerApprovals from "../communityOwnerApprovals.js";
 import type * as communityPeople from "../communityPeople.js";
 import type * as communityPresenceCore from "../communityPresenceCore.js";
 import type * as communityPublic from "../communityPublic.js";
+import type * as communityPublicPage from "../communityPublicPage.js";
 import type * as communityReadCursorCore from "../communityReadCursorCore.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
 import type * as communityRepositorySearch from "../communityRepositorySearch.js";
@@ -319,6 +320,7 @@ declare const fullApi: ApiFromModules<{
   communityPeople: typeof communityPeople;
   communityPresenceCore: typeof communityPresenceCore;
   communityPublic: typeof communityPublic;
+  communityPublicPage: typeof communityPublicPage;
   communityReadCursorCore: typeof communityReadCursorCore;
   communityRecipientCore: typeof communityRecipientCore;
   communityRepositorySearch: typeof communityRepositorySearch;

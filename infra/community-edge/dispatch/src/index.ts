@@ -956,6 +956,30 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
     const lessons = Math.max(0, Math.floor(Number(course.lessons) || 0));
     return title && lessons ? [{ title, summary: text(course.summary, 200), lessons }] : [];
   });
+  // The owner's sales sections: only these shapes, within the backend's limits
+  // (shared/communityPublicPage.ts), and a video only as a known player's id.
+  const raw = (community.page ?? {}) as Record<string, unknown>;
+  const list = (value: unknown, items: number) => (Array.isArray(value) ? value : []).slice(0, items);
+  const lines = (value: unknown, items: number, max: number) => list(value, items).flatMap((item) => text(item, max) ?? []);
+  const rows = (value: unknown, items: number, max: Record<string, number>, required: string[]) => list(value, items).flatMap((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    const kept = Object.fromEntries(Object.entries(max).map(([key, chars]) => [key, text(row[key], chars) ?? ""]));
+    return required.every((key) => kept[key]) ? [kept] : [];
+  });
+  const video = (raw.video ?? {}) as Record<string, unknown>;
+  const page = {
+    for_you: lines(raw.for_you, 4, 140),
+    not_for: lines(raw.not_for, 3, 140),
+    first_steps: rows(raw.first_steps, 3, { title: 40, text: 140 }, ["title"]),
+    results: rows(raw.results, 4, { quote: 300, name: 60, role: 60 }, ["quote", "name"]),
+    founder_bio: text(raw.founder_bio, 300),
+    video: (video.provider === "youtube" && /^[A-Za-z0-9_-]{11}$/.test(String(video.id)))
+      || (video.provider === "vimeo" && /^[0-9]{6,12}$/.test(String(video.id)))
+      || (video.provider === "loom" && /^[0-9a-f]{32}$/.test(String(video.id)))
+      ? { provider: video.provider, id: String(video.id) } : null,
+    guarantee: text(raw.guarantee, 160),
+    objections: rows(raw.objections, 2, { question: 120, answer: 300 }, ["question", "answer"]),
+  };
   return {
     signed_in: answer.signed_in === true,
     community: {
@@ -965,6 +989,7 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
       banner_url: stored(community.banner_url),
       host: host && text(host.name, 80) ? { name: text(host.name, 80) } : null,
       courses,
+      page,
     },
     gate, available: answer.available === true, action_label: text(answer.action_label, 80) ?? "Join", plans,
     // Polynet's terms, which Join's click accepts: only their canonical public text.
@@ -1306,6 +1331,13 @@ async function serveTwin(
 
 const MAX_FRAME_BYTES = 1024 * 1024;
 
+// Join (the doorstep) may play the founder's intro video, in its own player:
+// only these three, and only on Join. Every other twin page frames nothing.
+const DOORSTEP_PLAYERS = ["https://www.youtube-nocookie.com", "https://player.vimeo.com", "https://www.loom.com"];
+function pageFrames(page: PersonalPage): string[] {
+  return page.name === "join" ? DOORSTEP_PLAYERS : [];
+}
+
 // A personal page: the site's frame with every script removed, Polynet's shell
 // added, under a policy that runs only the twin's own scripts. No frame (or
 // none the edge can draw): Polynet's plain page, which works the same.
@@ -1329,14 +1361,14 @@ async function serveTwinPage(
         siteOrigin: place.siteOrigin, twinOrigin: place.privateOrigin ?? "", title,
       });
       html = await withShell(new Response(stripped.html, { headers: { "Content-Type": "text/html; charset=utf-8" } }), Rewriter as never).text();
-      policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: stripped.styleHashes, attributeHashes: stripped.attributeHashes });
+      policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: stripped.styleHashes, attributeHashes: stripped.attributeHashes, frames: pageFrames(page) });
     }
   } else {
     await frame.body?.cancel();
   }
   if (html === null) {
     html = plainTwinPage({ title, communityName, siteOrigin: place.siteOrigin });
-    policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: [await plainStyleHash()] });
+    policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: [await plainStyleHash()], frames: pageFrames(page) });
   }
   const headers = twinPageHeaders(policy);
   // Join is the community's doorstep, public by nature: a listed community's

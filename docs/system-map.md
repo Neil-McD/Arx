@@ -329,9 +329,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   person per community per half hour, keyed by account (`visitorKey`
   `user:<id>`) or, for a signed-out buyer, the keyed visitor hash; analytics
   only, never access. Studio's Analytics shows Page visits → Started joining →
-  New members (`join_starts_window`). Spec:
+  New members (`join_starts_window`). Join is the community's doorstep (its
+  address's front door): the one-liner as the promise, the live courses, the
+  About, and the owner's sales sections from `communityPublicPages`
+  (`communityPublicPage`, limits in `shared/communityPublicPage.ts`: who it's
+  for and not for, first steps, results, founder bio, a YouTube/Vimeo/Loom
+  intro video by id, a guarantee, objections; owner-only saves, revision
+  checked), each shown only when filled in. Only Join's policy frames anything
+  (those three players). Spec:
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
-- **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityFunnelEvents`, `communityPublic` (Discover's list), `httpCommunitySites`,
+- **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityFunnelEvents`, `communityPublicPage`, `communityPublic` (Discover's list), `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
   `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, the private twin
   `twin.ts`, SDK `sdk.ts`, shell `ui.ts`, blocks `blocks/` including `page.ts`

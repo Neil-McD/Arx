@@ -39,11 +39,13 @@ export const JOIN_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // on a site's private twin. The community's doorstep: its promise, what members
 // get, its story, and a join card that stays in reach. Style it with ::part()
 // on <polynet-personal>: join, doorstep-head, doorstep-body, join-eyebrow,
-// join-name, join-host, join-one-liner, join-count, join-courses, join-course,
-// join-about, gate, join-banner, join-price, gate-title, gate-note, join-terms,
+// join-name, join-host, join-one-liner, join-count, join-video, join-fit,
+// join-for, join-not-for, join-steps, join-step, join-courses, join-course,
+// join-results, join-result, join-founder, join-objections, join-objection,
+// join-about, gate, join-banner, join-price, join-guarantee, gate-title, gate-note, join-terms,
 // setup-done, plans, plan, join-action, join-enter, join-cancel, join-setup,
 // join-signin, join-status, join-error, retry.
-import { h, styled } from "/__polynet/blocks/kit.js";
+import { h, styled, avatar } from "/__polynet/blocks/kit.js";
 
 // Narrow: the promise, then the card, then the rest. Wide: the card beside
 // everything, staying in view as the page scrolls.
@@ -66,6 +68,33 @@ const STYLE = [
   ".courses .n { grid-row: span 2; font-size: 1.5em; font-weight: 700; line-height: 1.1; color: var(--pn-accent); }",
   ".courses .title { font-weight: 600; overflow-wrap: anywhere; }",
   ".courses .summary { font-size: .9375em; color: var(--pn-muted); overflow-wrap: anywhere; }",
+  ".video { position: relative; aspect-ratio: 16 / 9; border-radius: var(--pn-radius); overflow: hidden; background: var(--pn-tint); }",
+  ".video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }",
+  ".fit { display: grid; gap: 1em; grid-template-columns: repeat(auto-fit, minmax(15em, 1fr)); }",
+  ".fit > div { padding: 1.15em 1.25em; border: 1px solid var(--pn-border); border-radius: var(--pn-radius); }",
+  ".fit ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .6em; }",
+  ".fit li { display: grid; grid-template-columns: 1.1em minmax(0, 1fr); gap: .6em; overflow-wrap: anywhere; }",
+  ".fit li::before { content: '\\2713'; color: var(--pn-accent); font-weight: 700; }",
+  ".fit .not li { color: var(--pn-muted); } .fit .not li::before { content: '\\2715'; color: var(--pn-muted); }",
+  ".fit h3 { margin-bottom: .75em; }",
+  ".steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1em; grid-template-columns: repeat(auto-fit, minmax(11em, 1fr)); counter-reset: step; }",
+  ".steps li { display: grid; gap: .3em; padding-top: .9em; border-top: 2px solid var(--pn-border); counter-increment: step; overflow-wrap: anywhere; }",
+  ".steps li:last-child { border-top-color: var(--pn-accent); }",
+  ".steps li::before { content: counter(step, decimal-leading-zero); font-size: 1.5em; font-weight: 700; color: var(--pn-muted); }",
+  ".steps li:last-child::before { color: var(--pn-accent); }",
+  ".steps strong { font-size: 1.0625em; } .steps span { color: var(--pn-muted); }",
+  ".results { display: grid; gap: 1em; grid-template-columns: repeat(auto-fit, minmax(15em, 1fr)); }",
+  ".results figure { margin: 0; padding: 1.25em; border-radius: var(--pn-radius); background: var(--pn-tint); display: grid; gap: .9em; align-content: start; }",
+  ".results blockquote { margin: 0; font-size: 1.0625em; line-height: 1.5; overflow-wrap: anywhere; }",
+  ".results figcaption { font-size: .875em; color: var(--pn-muted); overflow-wrap: anywhere; }",
+  ".results figcaption strong { color: var(--pn-surface-text); }",
+  ".founder { display: grid; grid-template-columns: 3.5em minmax(0, 1fr); gap: 1em; align-items: center; padding: 1.15em 1.25em; border: 1px solid var(--pn-border); border-radius: var(--pn-radius); }",
+  ".founder p { margin: .2em 0 0; color: var(--pn-muted); overflow-wrap: anywhere; }",
+  ".objections { display: grid; gap: .75em; }",
+  ".objections div { padding: 1.1em 1.25em; border-radius: var(--pn-radius); background: var(--pn-tint); overflow-wrap: anywhere; }",
+  ".objections strong { display: block; margin-bottom: .3em; }",
+  ".objections p { margin: 0; color: var(--pn-muted); }",
+  ".guarantee { padding: .75em .9em; border-radius: calc(var(--pn-radius) * .7); background: var(--pn-tint); font-size: .875em; overflow-wrap: anywhere; }",
   ".about { line-height: 1.6; overflow-wrap: anywhere; max-width: 40em; }",
   ".about p { margin: 0 0 .9em; white-space: pre-line; } .about p:last-child { margin-bottom: 0; }",
   ".gate { grid-area: card; display: grid; border: 1px solid var(--pn-border); border-radius: calc(var(--pn-radius) * 1.4); background: var(--pn-surface); overflow: hidden; }",
@@ -99,6 +128,12 @@ const FINISHING = "Finishing your membership…";
 const PENDING_EVERY_MS = 30000;
 // A small count makes people hesitate: it shows once it helps.
 const MEMBER_COUNT_SHOWN_FROM = 25;
+// The founder's intro video, in its own player (the edge allows only these, only here).
+const PLAYERS = {
+  youtube: (id) => "https://www.youtube-nocookie.com/embed/" + id,
+  vimeo: (id) => "https://player.vimeo.com/video/" + id + "?dnt=1",
+  loom: (id) => "https://www.loom.com/embed/" + id,
+};
 
 function say(key, name, date) {
   return String(MESSAGES[key] || MESSAGES.failed).split("{name}").join(name || "this community").split("{date}").join(date || "");
@@ -193,15 +228,45 @@ class Join {
       community.one_liner ? h("h2", { class: "promise", part: "join-one-liner", text: community.one_liner })
         : h("h2", { class: "promise", part: "join-name", text: community.name }),
       community.member_count >= MEMBER_COUNT_SHOWN_FROM ? h("p", { class: "count muted", part: "join-count", text: members(community.member_count) }) : null,
+      this.video(),
     ]);
+    const sales = community.page || {};
+    const forYou = sales.for_you || [];
+    const notFor = sales.not_for || [];
+    const steps = sales.first_steps || [];
+    const results = sales.results || [];
+    const objections = sales.objections || [];
     const courses = community.courses || [];
     const about = String(community.about || "").split(/\n\s*\n/).map((text) => text.trim()).filter(Boolean);
+    // The founder's sections, each only when it has something in it.
     const body = h("div", { class: "body", part: "doorstep-body" }, [
+      forYou.length || notFor.length ? h("section", { class: "fit", part: "join-fit" }, [
+        forYou.length ? h("div", { part: "join-for" }, [h("h3", { text: "This is for you if" }), h("ul", {}, forYou.map((text) => h("li", { text: text })))]) : null,
+        notFor.length ? h("div", { class: "not", part: "join-not-for" }, [h("h3", { text: "It's not for you if" }), h("ul", {}, notFor.map((text) => h("li", { text: text })))]) : null,
+      ]) : null,
+      steps.length ? h("section", { class: "section" }, [h("h3", { text: "Your first steps" }),
+        h("ol", { class: "steps", part: "join-steps" }, steps.map((step) => h("li", { part: "join-step" }, [
+          h("strong", { text: step.title }), step.text ? h("span", { text: step.text }) : null,
+        ])))]) : null,
       courses.length ? h("section", { class: "section" }, [h("h3", { text: "What you get" }),
         h("ul", { class: "courses", part: "join-courses" }, courses.map((course) => h("li", { part: "join-course" }, [
           h("span", { class: "n", "aria-hidden": "true", text: String(course.lessons) }),
           h("span", { class: "title", text: course.title + " · " + course.lessons + (course.lessons === 1 ? " lesson" : " lessons") }),
           course.summary ? h("span", { class: "summary", text: course.summary }) : null,
+        ])))]) : null,
+      results.length || sales.founder_bio ? h("section", { class: "section" }, [h("h3", { text: results.length ? "Results" : "Your host" }),
+        results.length ? h("div", { class: "results", part: "join-results" }, results.map((result) => h("figure", { part: "join-result" }, [
+          h("blockquote", { text: "\u201c" + result.quote + "\u201d" }),
+          h("figcaption", {}, [h("strong", { text: result.name }), result.role ? " \u00b7 " + result.role : null]),
+        ]))) : null,
+        sales.founder_bio ? h("div", { class: "founder", part: "join-founder" }, [
+          avatar(null, community.host ? community.host.name : community.name),
+          h("div", {}, [h("strong", { text: community.host ? community.host.name + ", your host" : "Your host" }), h("p", { text: sales.founder_bio })]),
+        ]) : null,
+      ]) : null,
+      objections.length ? h("section", { class: "section" }, [h("h3", { text: "Fair questions" }),
+        h("div", { class: "objections", part: "join-objections" }, objections.map((item) => h("div", { part: "join-objection" }, [
+          h("strong", { text: item.question }), h("p", { text: item.answer }),
         ])))]) : null,
       about.length ? h("section", { class: "section" }, [h("h3", { text: "About" }),
         h("div", { class: "about", part: "join-about" }, about.map((text) => h("p", { text: text })))]) : null,
@@ -210,6 +275,25 @@ class Join {
     if (banner) banner.addEventListener("error", () => banner.remove(), { once: true });
     const gate = h("section", { class: "gate", part: "gate", "aria-live": "polite" }, [banner, h("div", { class: "inside" }, card)]);
     this.block.show(state, [h("div", { class: "join", part: "join" }, [h("div", { class: "doorstep" }, [head, gate, body])])]);
+  }
+
+  // The founder's intro video, when there is one: in its own player, from its id alone.
+  video() {
+    const video = this.data.community.page && this.data.community.page.video;
+    const player = video && Object.prototype.hasOwnProperty.call(PLAYERS, video.provider) ? PLAYERS[video.provider] : null;
+    if (!player || !/^[A-Za-z0-9_-]{6,32}$/.test(String(video.id))) return null;
+    return h("div", { class: "video", part: "join-video" }, [h("iframe", {
+      src: player(video.id), title: "Intro video: " + this.data.community.name, loading: "lazy",
+      allow: "fullscreen; picture-in-picture; encrypted-media", allowfullscreen: true,
+      referrerpolicy: "strict-origin-when-cross-origin",
+      sandbox: "allow-scripts allow-same-origin allow-presentation allow-popups",
+    })]);
+  }
+
+  // The founder's guarantee, said right under the button, when they give one.
+  guarantee() {
+    const text = this.data.community.page && this.data.community.page.guarantee;
+    return text ? h("p", { class: "guarantee", part: "join-guarantee", text: text }) : null;
   }
 
   // The page: the doorstep, and the card as it stands for this visitor.
@@ -261,6 +345,7 @@ class Join {
     const action = h("button", { class: "primary", part: "join-action", type: "button", text: data.action_label });
     action.addEventListener("click", () => (viewer ? this.join(action) : signIn(null)));
     out.push(h("div", { class: "actions" }, [action]));
+    out.push(this.guarantee());
     if (!viewer) out.push(h("p", { class: "muted", part: "gate-note", text: "You'll sign in with Polynet first." }));
     out.push(this.terms());
     if (!viewer) out.push(this.memberSignIn());
@@ -297,6 +382,7 @@ class Join {
     }
     action.addEventListener("click", () => this.startCheckout(action));
     out.push(h("div", { class: "actions" }, [action]));
+    out.push(this.guarantee());
     out.push(h("p", { class: "muted", part: "gate-note", text: this.data.viewer ? "You'll pay on Stripe's secure checkout, then come back here."
       : "You'll pay on Stripe's secure checkout, then sign in to get in." }));
     out.push(this.terms());
