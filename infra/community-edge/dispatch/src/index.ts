@@ -1157,7 +1157,9 @@ export default {
       : { twin: false, siteOrigin: url.origin, privateOrigin: twinHost ? `${url.protocol}//${twinHost}` : null };
     const response = await serve(request, url, route, place, env);
     if (ctx && isSiteVisit(request, url, place, response)) ctx.waitUntil(reportSiteVisit(request, url, env));
-    return place.twin ? withTwinHeaders(response) : await unlistedNoIndex(response, place, env);
+    return place.twin
+      ? withTwinHeaders(response)
+      : withSiteSecurityHeaders(await unlistedNoIndex(response, place, env), { defaultSite: route.script === null, storageHost: storageHost(env) });
   },
 };
 
@@ -1491,6 +1493,39 @@ Read https://{{FRONT}}/llms.txt first.</pre>
 // Pages reach members exactly as the founder built them: no-transform stops
 // Cloudflare from rewriting HTML (for example injecting its analytics script),
 // so the only scripts a community page runs are its own and /__polynet/*.
+// Browser rules on every page of a community's public site (the twin has its
+// own, stricter ones). Every site gets rules that can't break what a founder
+// built: no framing by other sites, no plug-ins, no <base> tricks, no content
+// sniffing, and a shorter referrer. Polynet's default site is our own code
+// (same-origin scripts only, no inline script), so it also gets a strict policy.
+export function defaultSitePolicy(storage: string): string {
+  const live = storage ? ` https://${storage} wss://${storage}` : "";
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: https:",
+    "media-src 'self' https:",
+    `connect-src 'self'${live}`,
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+const SITE_BASELINE_POLICY = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
+
+export function withSiteSecurityHeaders(response: Response, options: { defaultSite: boolean; storageHost: string }): Response {
+  if (!(response.headers.get("content-type") ?? "").includes("text/html")) return response;
+  const headers = new Headers(response.headers);
+  // A founder's own policy stays; ours is added beside it (browsers enforce both).
+  headers.append("Content-Security-Policy", options.defaultSite ? defaultSitePolicy(options.storageHost) : SITE_BASELINE_POLICY);
+  if (!headers.has("X-Content-Type-Options")) headers.set("X-Content-Type-Options", "nosniff");
+  if (!headers.has("Referrer-Policy")) headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 function untransformed(response: Response): Response {
   if (!(response.headers.get("content-type") ?? "").includes("text/html")) return response;
   const headers = new Headers(response.headers);
