@@ -335,7 +335,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Reached by:** the edge only (`/runtime/app*`, `/runtime/community_edge/*`,
   edge secret); `/runtime/sites/deploy/*` from the CLI and MCP.
 - **Tables:** `communityDomains`, `communitySiteDeploys`, `communityAppSessions`,
-  `communityAppHandoffs`.
+  `communityAppHandoffs`, `communityOwnerApprovals` (a change the owner's AI
+  asked for, waiting for the owner's approval in Studio: where members spend
+  time; `communityOwnerApprovals.ts`).
 - **Contracts:** [infra/community-edge/README.md](../infra/community-edge/README.md),
   [research/community-frontend-hosting-20261016.md](research/community-frontend-hosting-20261016.md).
 - **Addresses (Oct 28, POL-34):** production `<slug>.polynet.page`, staging

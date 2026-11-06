@@ -79,8 +79,11 @@ const JOIN_MODE_OPERATION = "community.join_mode.set";
 const AGENT_INSTRUCTIONS_OPERATION = "community.agent.instructions.set";
 const HANDBOOK_DRAFT_OPERATION = "community.handbook.save_draft";
 const HANDBOOK_APPROVE_OPERATION = "community.handbook.approve";
+// Where members spend time: the owner's AI asks; the owner approves in Studio.
+const MEMBER_EXPERIENCE_REQUEST_OPERATION = "community.member_experience.request";
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, "community.tags.create", "community.tags.rename", "community.tags.delete"];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, "community.tags.create", "community.tags.rename", "community.tags.delete",
+  MEMBER_EXPERIENCE_REQUEST_OPERATION];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: tags (single changes, with the community operations above) and
 // actions on a selection of members (owners and admins).
@@ -904,6 +907,11 @@ function capabilityDocument(args: {
       slug: "the community's address; its site moves with it. If the answer is lost, retry the same call at the new address: it replays", visibility: "published or unlisted (publishing needs a name, one-liner and picture)",
       result: "result: the community as builder/community.json shows it", effects: ["change_community_profile"],
       forbidden_effects: ["pricing", "pictures", "archive"] }
+    : args.operation === MEMBER_EXPERIENCE_REQUEST_OPERATION ? {
+      required: ["to"], to: "app (Polynet's app) or site (the community's own deployed site): where members spend time",
+      who: "the owner's own AI only. Nothing changes until the owner approves it in Studio (Settings) within 24 hours; you can't approve it",
+      result: "result: { status: awaiting_owner_approval | already_set, members_use, approve_in, request }. Read builder/community.json for what happened",
+      effects: ["request_member_experience_change"], forbidden_effects: ["change_without_owner_approval"] }
     : args.operation === JOIN_MODE_OPERATION ? {
       required: ["mode"], mode: "open or approval (a paid community stays paid)",
       result: "result: { entry_policy, approved_pending_request_count }", effects: ["set_join_mode", "opening_approves_waiting_requests"] }
@@ -1406,7 +1414,7 @@ async function executeCanonicalList(args: {
       value: virtualDirectory({
         path: absolutePath,
         entries: [
-          { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, agent instructions, handbook" },
+          { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, where members spend time, agent instructions, handbook" },
           joinRequests,
           tags,
           { path: mountedPath(target.communitySlug, WORKFLOW_MEMBERS_DIRECTORY), kind: "directory", type: "builder", name: "Member workflow context and form responses" },
@@ -1709,13 +1717,14 @@ async function executeCanonicalRead(args: {
     }
     try {
       const scope = { userId: args.userId, communityId: target.communityId };
-      const [settings, agent, handbook] = await Promise.all([
+      const [settings, agent, handbook, memberExperience] = await Promise.all([
         args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal, scope),
         args.ctx.runQuery((internal as any).communityAgent.readCommunityAgentInstructionsForTrustedManagerInternal, scope),
         args.ctx.runQuery((internal as any).communityHandbook.getCommunityHandbookForTrustedManagerInternal, scope),
+        args.ctx.runQuery((internal as any).communityOwnerApprovals.readMemberExperienceForTrustedManagerInternal, scope),
       ]);
       return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath,
-        payload: { ...settings, agent_instructions: agent.instructions,
+        payload: { ...settings, member_experience: memberExperience, agent_instructions: agent.instructions,
           handbook: { approved_md: handbook.approved_md, approved_at: handbook.approved_at, draft_md: handbook.draft_md } } }),
         writable: false, searchable: false } };
     } catch {
@@ -2752,6 +2761,8 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_tag_exists: ["community_tag_exists", "Another tag already has that name."],
   community_tags_full: ["community_tags_full", "This community has 100 tags. Delete one first."],
   community_tag_too_large_to_delete: ["community_tag_too_large_to_delete", "That tag is on more than 4,000 people. Untag some first."],
+  community_member_experience_owner_only: ["owner_only", "Only the community's owner can ask to change where members spend time."],
+  community_custom_site_required: ["community_custom_site_required", "Deploy the community's own site first; then members can use it."],
 };
 
 // The community itself: profile, how people join, the agent's instructions and
@@ -2774,6 +2785,7 @@ async function executeCommunityOperation(args: {
         (!("about" in rawInput) || rawInput.about === null || text("about", 8_000)) &&
         (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
     : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
+    : operation === MEMBER_EXPERIENCE_REQUEST_OPERATION ? only(["to"]) && (rawInput.to === "app" || rawInput.to === "site")
     : operation === TAG_CREATE_OPERATION ? only(["name"]) && text("name", 40)
     : operation === TAG_RENAME_OPERATION ? only(["tag", "name"]) && text("tag", 40) && text("name", 40)
     : operation === TAG_DELETE_OPERATION ? only(["tag"]) && text("tag", 40)
@@ -2784,6 +2796,7 @@ async function executeCommunityOperation(args: {
     return canonicalError("invalid_tool_args", operation === SETTINGS_UPDATE_OPERATION
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
       : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
+      : operation === MEMBER_EXPERIENCE_REQUEST_OPERATION ? "to is app or site."
       : TAG_OPERATIONS.includes(operation) ? "Give the tag's slug (tag) and/or a name of up to 40 characters, as the capability says."
       : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);

@@ -604,6 +604,33 @@ export const migrateSubscriptionRequiredCommunitiesToFreeInternal = internalMuta
 // The owner's switch: where members spend time, Polynet's app or the
 // community's own deployed site. Only the owner; "site" only once a site is
 // deployed. Instant and reversible: nothing moves, every link follows it.
+// Shared by Studio's switch and an approved request from the owner's AI.
+export async function applyCommunityMemberExperience(ctx: any, args: {
+  community: CommunityLike; userId: any; experience: "app" | "site"; via: "studio" | "owner_ai_approved";
+}): Promise<"app" | "site"> {
+  if (String(args.community.ownerId) !== String(args.userId)) throw new Error("community_owner_required");
+  if (args.experience === "site" && !(await communityHasCustomSite(ctx, args.community._id))) {
+    throw new Error("community_custom_site_required");
+  }
+  const before = await communityMemberExperience(ctx, args.community as any);
+  const nowMs = Date.now();
+  await ctx.db.patch(args.community._id as any, { memberExperience: args.experience, updatedAt: nowMs });
+  if (before !== args.experience) {
+    await recordCriticalAuditEvent(ctx, {
+      eventKey: `community_member_experience:${String(args.community._id)}:${nowMs}:${before}:${args.experience}`,
+      eventType: "community_member_experience_changed",
+      severity: "info",
+      status: "succeeded",
+      actorUserId: args.userId,
+      communityId: args.community._id,
+      provider: "polynet",
+      metadata: { from: before, to: args.experience, via: args.via },
+      createdAt: nowMs,
+    });
+  }
+  return args.experience;
+}
+
 export const setCommunityMemberExperience = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -613,26 +640,8 @@ export const setCommunityMemberExperience = mutation({
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     const { community } = await requireCommunityOwner({ ctx, communityId: args.communityId, userId });
-    if (args.experience === "site" && !(await communityHasCustomSite(ctx, community._id))) {
-      throw new Error("community_custom_site_required");
-    }
-    const before = await communityMemberExperience(ctx, community as any);
-    const nowMs = Date.now();
-    await ctx.db.patch(community._id as any, { memberExperience: args.experience, updatedAt: nowMs });
-    if (before !== args.experience) {
-      await recordCriticalAuditEvent(ctx, {
-        eventKey: `community_member_experience:${String(community._id)}:${nowMs}:${before}:${args.experience}`,
-        eventType: "community_member_experience_changed",
-        severity: "info",
-        status: "succeeded",
-        actorUserId: userId,
-        communityId: community._id,
-        provider: "polynet",
-        metadata: { from: before, to: args.experience },
-        createdAt: nowMs,
-      });
-    }
-    return { member_experience: args.experience };
+    const experience = await applyCommunityMemberExperience(ctx, { community, userId, experience: args.experience, via: "studio" });
+    return { member_experience: experience };
   },
 });
 

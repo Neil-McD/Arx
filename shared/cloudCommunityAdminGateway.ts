@@ -1349,3 +1349,28 @@ export async function setCloudCommunityMemberExperience<SessionT>(
   })) as { member_experience?: unknown } | null;
   return payload?.member_experience === "site" ? "site" : "app";
 }
+
+// A change the owner's AI asked for, waiting for the owner (owner only).
+export type CloudMemberExperienceRequest = { request_id: string; from: "app" | "site"; to: "app" | "site"; expires_at: string };
+
+export async function getCloudPendingMemberExperienceRequest<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string },
+): Promise<CloudMemberExperienceRequest | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.query("communityOwnerApprovals:getMyPendingMemberExperienceRequest" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as CloudMemberExperienceRequest | null;
+}
+
+export async function decideCloudMemberExperienceRequest<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string; requestId: string; decision: "approve" | "decline" },
+): Promise<{ status: "approved" | "declined" | "expired" | "stale"; members_use: "app" | "site" }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.mutation("communityOwnerApprovals:decideMemberExperienceRequest" as any, {
+    authSubject,
+    communityId: params.communityId,
+    requestId: params.requestId,
+    decision: params.decision,
+  })) as { status: "approved" | "declined" | "expired" | "stale"; members_use: "app" | "site" };
+}
