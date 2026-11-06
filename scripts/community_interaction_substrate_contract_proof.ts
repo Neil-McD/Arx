@@ -231,7 +231,7 @@ const reactionsTable = schemaTable("communityInteractionReactions", "communityIn
   '.index("by_reply_actor_emoji", ["replyId", "actorKey", "emoji"])',
 ].forEach((needle) => assertIncludes(schemaPath, reactionsTable, needle));
 
-const moderationTable = schemaTable("communityInteractionModerationEvents", "communityInteractionLegacyChatLinks");
+const moderationTable = schemaTable("communityInteractionModerationEvents", "dmConversations");
 [
   'v.literal("tombstone")',
   'v.literal("privacy_purge_requested")',
@@ -245,19 +245,10 @@ assertExcludes(schemaPath, moderationTable, "delete: v.literal");
 assertExcludes(schemaPath, schema, "communityInteractionReadStates: defineTable");
 assertExcludes(schemaPath, schema, "communityInteractionSourceTraceLinks: defineTable");
 
-const legacyChatLinkTable = schemaTable("communityInteractionLegacyChatLinks", "dmConversations");
-[
-  'threadId: v.id("communityChatThreads")',
-  'messageId: v.id("communityChatMessages")',
-  'targetMessageId: v.optional(v.id("communityChatMessages"))',
-  'linkKind: v.union(v.literal("root"), v.literal("reply"))',
-  'rootId: v.optional(v.id("communityInteractionRoots"))',
-  'replyId: v.optional(v.id("communityInteractionReplies"))',
-  '.index("by_message", ["messageId"])',
-  '.index("by_thread_message", ["threadId", "messageId"])',
-  '.index("by_root", ["rootId"])',
-  '.index("by_reply", ["replyId"])',
-].forEach((needle) => assertIncludes(schemaPath, legacyChatLinkTable, needle));
+// The old thread chat and its mapping to interactions were dropped (Nov 7).
+for (const dropped of ["communityChatThreads", "communityChatMessages", "communityInteractionLegacyChatLinks"]) {
+  assertExcludes(schemaPath, schema, `${dropped}: defineTable`);
+}
 
 const sourceTraceTable = schemaTable("communitySourceTraces", "communityIntelligenceNodes");
 assertIncludes(schemaPath, sourceTraceTable, 'v.literal("interaction")');

@@ -31,7 +31,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 
 ## Old Chat Tables
 
-The old thread chat code is gone (POL-26). Its tables (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) keep their rows until the table-drop release, with a production backup and Neil's sign-off. Anonymous-user cleanup and orphan maintenance still delete old rows for removed users until then.
+The old thread chat code is gone (POL-26). Its tables (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) were emptied and then dropped from the schema on Nov 7.
 
 ## Drift Boundaries
 

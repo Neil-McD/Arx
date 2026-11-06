@@ -23,7 +23,7 @@ async function fixture() {
     const oldReceipt = await receipt("old", "personal_agent");
     const currentReceipt = await receipt("current", "external_mcp");
     for (let index = 0; index < 3; index += 1) {
-      await ctx.db.insert("communityFunnels", { communityId, createdAt: now, updatedAt: now } as any);
+      await ctx.db.insert("purchaseClaims", { claimToken: `claim-${index}`, communityId, status: "pending", expiresAt: now, createdAt: now, updatedAt: now });
     }
     const root = (key: string, actorType: "personal_agent" | "human") => ctx.db.insert("communityInteractionRoots", {
       communityId, actorType, actorUserId: ownerId, kind: "discussion", status: "live", visibilityScope: "community",
@@ -39,11 +39,11 @@ async function fixture() {
 test("the dry run counts retired rows and changes nothing; the real run empties the table", async () => {
   const { t } = await fixture();
   const empty = (dryRun?: boolean) =>
-    t.mutation(internal.retiredTablesCleanup.emptyRetiredTableInternal, { table: "communityFunnels", dryRun });
+    t.mutation(internal.retiredTablesCleanup.emptyRetiredTableInternal, { table: "purchaseClaims", dryRun });
   expect(await empty(true)).toMatchObject({ rows: 3, dryRun: true, isDone: true });
-  expect(await t.run(async (ctx) => (await ctx.db.query("communityFunnels").collect()).length)).toBe(3);
+  expect(await t.run(async (ctx) => (await ctx.db.query("purchaseClaims").collect()).length)).toBe(3);
   expect(await empty()).toMatchObject({ rows: 3, dryRun: false, isDone: true });
-  expect(await t.run(async (ctx) => (await ctx.db.query("communityFunnels").collect()).length)).toBe(0);
+  expect(await t.run(async (ctx) => (await ctx.db.query("purchaseClaims").collect()).length)).toBe(0);
 });
 
 test("old personal_agent receipts become community_agent_for_member; others are untouched", async () => {
@@ -72,23 +72,23 @@ test("a dry run pages through tables larger than one page", async () => {
   const { t } = await fixture();
   await t.run(async (ctx) => {
     const now = Date.now();
-    const { communityId } = (await ctx.db.query("communityFunnels").first()) as any;
+    const { communityId } = (await ctx.db.query("purchaseClaims").first()) as any;
     for (let index = 0; index < 250; index += 1) {
-      await ctx.db.insert("communityFunnels", { communityId, createdAt: now, updatedAt: now } as any);
+      await ctx.db.insert("purchaseClaims", { claimToken: `more-${index}`, communityId, status: "pending", expiresAt: now, createdAt: now, updatedAt: now });
     }
   });
   let cursor: string | null = null;
   let total = 0;
   for (let pages = 0; pages < 5; pages += 1) {
     const result: any = await t.mutation(internal.retiredTablesCleanup.emptyRetiredTableInternal, {
-      table: "communityFunnels", dryRun: true, cursor,
+      table: "purchaseClaims", dryRun: true, cursor,
     });
     total += result.rows;
     if (result.isDone) break;
     cursor = result.continueCursor;
   }
   expect(total).toBe(253);
-  expect(await t.run(async (ctx) => (await ctx.db.query("communityFunnels").collect()).length)).toBe(253);
+  expect(await t.run(async (ctx) => (await ctx.db.query("purchaseClaims").collect()).length)).toBe(253);
 });
 
 test("retired checkout fields: a dry run counts, the real run clears them and nothing else", async () => {

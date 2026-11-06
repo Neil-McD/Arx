@@ -2,7 +2,6 @@ import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { defineSchema, defineTable } from "convex/server";
 import { communityFormQuestionValidator } from "./communityFormValidators";
 import { v } from "convex/values";
-import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
 import { channelAccessModeValidator, channelPostingPolicyValidator, channelReplyPolicyValidator } from "./communityChannelValidators";
 
@@ -1080,18 +1079,6 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  communityIntegrationConnections: defineTable({
-    communityId: v.id("communities"), ownerUserId: v.id("users"),
-    provider: v.literal("composio"), toolkit: v.literal("hubspot"),
-    providerUserId: v.string(), authConfigId: v.string(), connectedAccountId: v.string(),
-    generation: v.number(),
-    status: v.union(v.literal("pending"), v.literal("active"), v.literal("disconnected"), v.literal("error")),
-    scopes: v.array(v.string()), expiresAt: v.optional(v.number()),
-    initiationState: v.optional(v.union(v.literal("awaiting"), v.literal("ready"), v.literal("unknown"))),
-    callbackClaimed: v.optional(v.boolean()),
-    authorizationUrl: v.optional(v.string()), revokePending: v.optional(v.boolean()),
-    createdAt: v.number(), updatedAt: v.number(),
-  }).index("by_community_owner_toolkit", ["communityId", "ownerUserId", "toolkit"]),
   communities: defineTable({
     integrationReadPilotEnabled: v.optional(v.boolean()),
     ownerId: v.id("users"),
@@ -1529,30 +1516,6 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"]),
 
-  communityFunnels: defineTable({
-    communityId: v.id("communities"),
-    // Slotless legacy rows are read as custom_1 during the bounded migration.
-    slot: v.optional(v.union(v.literal("custom_1"), v.literal("custom_2"))),
-    heroMediaUrl: v.optional(v.string()),
-    heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
-    // Read compatibility only. Active authority now lives on
-    // communities.activeFunnelSlot.
-    liveMode: v.optional(v.union(v.literal("default"), v.literal("custom"))),
-    draftVslUrl: v.optional(v.union(v.string(), v.null())),
-    publishedVslUrl: v.optional(v.union(v.string(), v.null())),
-    draftContentV2: v.optional(communityFunnelContentV2Validator),
-    publishedContentV2: v.optional(communityFunnelContentV2Validator),
-    draftRevision: v.optional(v.number()),
-    draftUpdatedAt: v.optional(v.number()),
-    draftUpdatedByUserId: v.optional(v.id("users")),
-    publishedDraftRevision: v.optional(v.number()),
-    publishedAt: v.optional(v.number()),
-    publishedByUserId: v.optional(v.id("users")),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"]),
-
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
     eventType: v.union(v.literal("funnel_visit")),
@@ -1681,29 +1644,6 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_providerApplicationFee", ["providerApplicationFeeId"]),
 
-  communityChatThreads: defineTable({
-    communityId: v.id("communities"),
-    lastSeq: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
-
-  communityChatMessages: defineTable({
-    threadId: v.id("communityChatThreads"),
-    seq: v.number(),
-    role: v.literal("user"),
-    contentJson: v.any(),
-    senderUserId: v.optional(v.id("users")),
-    replyToMessageId: v.optional(v.id("communityChatMessages")),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_thread", ["threadId"])
-    .index("by_thread_seq", ["threadId", "seq"])
-    .index("by_sender", ["senderUserId"]),
-
   communityActivityEvents: defineTable({
     communityId: v.id("communities"),
     type: v.union(
@@ -1731,26 +1671,8 @@ export default defineSchema({
     .index("by_community_type_createdAt", ["communityId", "type", "createdAt"])
     .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
 
-  communityMessageReactions: defineTable({
-    messageId: v.id("communityChatMessages"),
-    userId: v.id("users"),
-    emoji: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_message", ["messageId"])
-    .index("by_message_user_emoji", ["messageId", "userId", "emoji"])
-    .index("by_user", ["userId"]),
-
   /* Host-curated messages projected public-safely to visitors on the community
      funnel (/c/:slug). Pointer table — never touches the message rows. */
-  communityFeaturedMessages: defineTable({
-    communityId: v.id("communities"),
-    messageId: v.id("communityChatMessages"),
-    featuredByUserId: v.id("users"),
-    createdAt: v.number(),
-  })
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_message", ["messageId"]),
 
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
@@ -2372,24 +2294,6 @@ export default defineSchema({
     .index("by_actorAgent_createdAt", ["actorAgentKey", "createdAt"])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"]),
 
-  communityInteractionLegacyChatLinks: defineTable({
-    communityId: v.id("communities"),
-    threadId: v.id("communityChatThreads"),
-    messageId: v.id("communityChatMessages"),
-    targetMessageId: v.optional(v.id("communityChatMessages")),
-    linkKind: v.union(v.literal("root"), v.literal("reply")),
-    rootId: v.optional(v.id("communityInteractionRoots")),
-    replyId: v.optional(v.id("communityInteractionReplies")),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_message", ["messageId"])
-    .index("by_thread_message", ["threadId", "messageId"])
-    .index("by_root", ["rootId"])
-    .index("by_reply", ["replyId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_community_linkKind_createdAt", ["communityId", "linkKind", "createdAt"]),
-
   dmConversations: defineTable({
     kind: v.literal("direct"),
     canonicalKey: v.string(),
@@ -2675,54 +2579,6 @@ export default defineSchema({
   })
     .index("by_codeHash", ["codeHash"])
     .index("by_user_expiresAt", ["userId", "expiresAt"]),
-
-  skillPackages: defineTable({
-    ownerUserId: v.id("users"),
-    catalogSkillId: v.optional(v.string()),
-    name: v.string(),
-    mentionToken: v.optional(v.string()),
-    description: v.optional(v.string()),
-    instructionsMd: v.string(),
-    activeRevisionId: v.optional(v.id("skillPackageRevisions")),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_owner", ["ownerUserId"])
-    .index("by_owner_mentionToken", ["ownerUserId", "mentionToken"])
-    .index("by_owner_catalogSkillId", ["ownerUserId", "catalogSkillId"]),
-
-  skillPackageRevisions: defineTable({
-    skillPackageId: v.id("skillPackages"),
-    revisionNumber: v.number(),
-    instructionsMd: v.string(),
-    createdAt: v.number(),
-    createdByUserId: v.id("users"),
-  })
-    .index("by_skill", ["skillPackageId"])
-    .index("by_skill_revisionNumber", ["skillPackageId", "revisionNumber"]),
-
-  userPlatformSkillInstalls: defineTable({
-    userId: v.id("users"),
-    skillPackageId: v.id("skillPackages"),
-    enabled: v.boolean(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_skill", ["userId", "skillPackageId"])
-    .index("by_skill", ["skillPackageId"]),
-
-  communitySkillAttachments: defineTable({
-    communityId: v.id("communities"),
-    skillPackageId: v.id("skillPackages"),
-    attachedByUserId: v.id("users"),
-    enabled: v.boolean(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_skill", ["communityId", "skillPackageId"])
-    .index("by_skill", ["skillPackageId"]),
 
   communityAiFeedPosts: defineTable({
     communityId: v.id("communities"),
