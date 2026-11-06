@@ -50,10 +50,10 @@ const recordBusinessVisitMutation = extractBetween(
   "business visit record mutation",
 );
 const publicFunnelVisitMutation = extractBetween(
-  communityPublic,
-  "export const recordPublicFunnelVisitBySlug = mutation",
-  "export const heartbeatCommunityPresence = mutation",
-  "public funnel visit mutation",
+  read("convex/communityAppJoin.ts"),
+  "export const recordCommunitySiteVisitInternal = internalMutation",
+  "export const privateOriginCommunityInternal = internalQuery",
+  "community site visit mutation",
 );
 const publicFunnelAnalyticsInsert = extractBetween(
   publicFunnelVisitMutation,
@@ -303,13 +303,13 @@ assert.match(
 );
 assert.match(
   publicFunnelVisitMutation,
-  /visitorKeyHash = visitorKey \? await hashBusinessVisitorKey\(visitorKey\) : undefined/,
-  "community funnel analytics should hash visitor keys before storage",
+  /\^\[0-9a-f\]\{64\}\$/,
+  "community site visits should accept only the edge's keyed visitor hash",
 );
 assert.match(
   publicFunnelAnalyticsInsert,
-  /visitorKeyHash,/,
-  "community funnel analytics should write the hashed visitor key",
+  /visitorKeyHash: args\.visitorHash,/,
+  "community site visits should write only the hashed visitor key",
 );
 assert.doesNotMatch(
   publicFunnelAnalyticsInsert,

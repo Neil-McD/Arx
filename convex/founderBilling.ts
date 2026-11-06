@@ -1345,13 +1345,3 @@ export const startFounderSubscriptionCheckout = action({
   },
 });
 
-// Retired Nov 5: building a community is free, so nothing sells the $79
-// Builder up front any more. Nothing on screen reached this, but the action was
-// still public, so anyone calling it could be charged. Kept by name for cached
-// pages, refusing; the anonymous recovery path goes with the billing redesign.
-export const startPublicBuilderCheckout = action({
-  args: {},
-  handler: async () => {
-    throw new Error("public_builder_checkout_retired");
-  },
-});

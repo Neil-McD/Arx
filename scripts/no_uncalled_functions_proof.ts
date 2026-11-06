@@ -19,6 +19,7 @@ const ALLOWED = new Map<string, string>([
   ["communityAiFeedRetirement:deleteAiFeedRetirementBatchInternal", "data retirement job; removed with the AI feed tables"],
   ["retiredTablesCleanup:emptyRetiredTableInternal", "table-drop release 1 (POL-31): run by hand; removed in release 2"],
   ["retiredTablesCleanup:rewriteRetiredPersonalAgentInternal", "table-drop release 1 (POL-31): run by hand; removed in release 2"],
+  ["retiredTablesCleanup:clearRetiredCheckoutFieldsInternal", "claim cleanup (Nov 6): run by hand with the owner's OK; removed in release 2"],
   ["communityApps:registerCommunityDomainInternal", "operator tool: registers a site domain by hand"],
   ["communityApps:removeCommunityDomainInternal", "operator tool: removes a site domain by hand"],
   ["communityMemoryMigration:migrateMemoryNodesToNotesInternal", "operator tool: one-time copy of old memory into community notes, run by hand"],

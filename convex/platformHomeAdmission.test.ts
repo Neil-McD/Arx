@@ -8,12 +8,29 @@ import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
 const modules = import.meta.glob([
+  "./communityAppJoin.ts",
   "./communityAdmin.ts",
   "./communityMemberWorkflows.ts",
   "./communityPublic.ts",
   "./email.ts",
   "./_generated/**/*.*s",
 ]);
+
+// Join, or withdraw a request, the way a community's site does (its private
+// twin's join runs these), as the signed-in user with this subject.
+async function siteJoin(t: any, subject: string, target: { communitySlug?: string; communityId?: any }, cancel = false) {
+  const ids = await t.run(async (ctx: any) => ({
+    userId: (await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", subject)).first())?._id,
+    communityId: target.communityId
+      ?? (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", target.communitySlug)).first())?._id,
+  }));
+  if (!ids.communityId) throw new Error("community_not_found");
+  return await t.mutation(
+    cancel ? internal.communityAppJoin.cancelCommunityAppJoinRequestInternal : internal.communityAppJoin.joinCommunityAppVisitorInternal,
+    ids,
+  );
+}
+
 
 process.env.ARX_PUBLIC_APP_URL ||= "https://polynet.test";
 
@@ -145,9 +162,7 @@ describe("platform-home admission authority", () => {
     await member.mutation(api.communityAdmin.leaveCommunity, {
       communityId: f.communityId,
     });
-    await expect(member.mutation(api.communityPublic.joinPublicCommunity, {
-      communityId: f.communityId,
-    })).resolves.toMatchObject({ outcome: "joined" });
+    await expect(siteJoin(t, f.memberSubject, { communityId: f.communityId })).resolves.toMatchObject({ outcome: "joined" });
     const current = await state(t, f);
     expect(current.memberships).toHaveLength(1);
     expect(current.memberships[0]?._id).toEqual(activated.membership._id);
@@ -184,18 +199,12 @@ describe("platform-home admission authority", () => {
     try {
       vi.setSystemTime(f.nowMs + 3);
       await expect(
-        member.mutation(
-          api.communityPublic.joinPublicCommunity,
-          { communityId: f.communityId },
-        ),
+        siteJoin(t, f.memberSubject, { communityId: f.communityId }),
       ).resolves.toMatchObject({ outcome: "approval_denied" });
 
       vi.setSystemTime(f.nowMs + 2 + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS);
       await expect(
-        member.mutation(
-          api.communityPublic.joinPublicCommunity,
-          { communityId: f.communityId },
-        ),
+        siteJoin(t, f.memberSubject, { communityId: f.communityId }),
       ).resolves.toMatchObject({ outcome: "approval_pending" });
     } finally {
       vi.useRealTimers();

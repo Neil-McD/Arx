@@ -157,6 +157,36 @@ export const cancelCommunityAppJoinRequestInternal = internalMutation({
   },
 });
 
+// A page view on a community's public site, for its founder's analytics: the
+// edge sends the site's origin and a keyed hash of the visitor's address (never
+// the address). One visit per visitor per community per half hour, as Studio's
+// funnel counted them; nothing for a private twin or an archived community.
+const SITE_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
+export const recordCommunitySiteVisitInternal = internalMutation({
+  args: { origin: v.string(), visitorHash: v.string() },
+  handler: async (ctx, args) => {
+    if (!/^[0-9a-f]{64}$/.test(args.visitorHash)) return { ok: false };
+    const found = await communityAtOrigin(ctx, args.origin);
+    if (!found || found.domain.kind === "private") return { ok: false };
+    const nowMs = Date.now();
+    const latest = await ctx.db
+      .query("communityAnalyticsEvents")
+      .withIndex("by_community_visitor_hash_event", (q) =>
+        q.eq("communityId", found.community._id).eq("visitorKeyHash", args.visitorHash).eq("eventType", "funnel_visit"),
+      )
+      .order("desc")
+      .first();
+    if (latest && latest.createdAt >= nowMs - SITE_VISIT_DEDUPE_WINDOW_MS) return { ok: true, deduped: true };
+    await ctx.db.insert("communityAnalyticsEvents", {
+      communityId: found.community._id,
+      eventType: "funnel_visit",
+      visitorKeyHash: args.visitorHash,
+      createdAt: nowMs,
+    });
+    return { ok: true };
+  },
+});
+
 // The community a site's private twin belongs to: where a signed-out buyer's
 // checkout may start. Nothing for a site's public origin or an archived community.
 export const privateOriginCommunityInternal = internalQuery({

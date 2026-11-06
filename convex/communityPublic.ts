@@ -3,11 +3,8 @@ import { v } from "convex/values";
 import {
   type CommunityLike,
   type CommunityPricePointLike,
-  type CommunityResourceModuleLike,
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
-  communityResourceIsLiveModulePage,
-  communityResourceModuleIsLive,
   countCanonicalCommunityMembersFromRows,
   getUniqueCommunityMembershipByPair,
   listCanonicalCommunityMemberMembershipRows,
@@ -38,7 +35,6 @@ import {
   platformHomeMembershipRequiresReapproval,
 } from "./platformHomeCommunity";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
   COMMUNITY_PRESENCE_FACE_LIMIT,
@@ -47,9 +43,6 @@ import {
   resolveAuthorizedCommunityPresenceWindow,
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
-import {
-  listSharedChannelReadableRows,
-} from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { communitySiteUrl, registeredSiteOrigin } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
@@ -70,7 +63,6 @@ const COMMUNITY_FUNNEL_PUBLIC_CONFIG = {
   published_content_v2: null,
 };
 
-const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
 async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<CommunityPublicFace, "user_id">> {
   return await resolveUserProfileDisplayProjection(ctx, userId);
@@ -85,106 +77,8 @@ export async function listCurrentCommunitySellablePlans(ctx: any, communityId: a
   return mapActivePlanSummaries(activePricePoints);
 }
 
-const PUBLIC_ACTIVITY_COUNT_CAP = 200;
 const PUBLIC_MEMBER_FACES_PREVIEW_LIMIT = 5;
-const PUBLIC_MESSAGES_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PUBLIC_JOINED_RECENTLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-
-type PublicCommunityInteractionActivityRow = {
-  _id: any;
-  communityId: any;
-  channelId?: any;
-  visibilityScope: "private" | "admin" | "community" | "public";
-  status: "live" | "hidden" | "deleted";
-  createdAt: number;
-};
-
-export async function resolvePublicCommunityInteractionActivityCounts(
-  ctx: any,
-  communityId: any,
-  options: { nowMs?: number; cap?: number } = {},
-): Promise<{ messagesTodayCount: number; messagesTodayCapped: boolean }> {
-  const requestedCap = Number(options.cap ?? PUBLIC_ACTIVITY_COUNT_CAP);
-  const cap = Math.min(
-    PUBLIC_ACTIVITY_COUNT_CAP,
-    Number.isFinite(requestedCap) && requestedCap > 0
-      ? Math.floor(requestedCap)
-      : PUBLIC_ACTIVITY_COUNT_CAP,
-  );
-  const sinceMs = (options.nowMs ?? Date.now()) - PUBLIC_MESSAGES_TODAY_WINDOW_MS;
-  const [readableRoots, readableReplies] = await Promise.all([
-    listSharedChannelReadableRows<PublicCommunityInteractionActivityRow>({
-      ctx,
-      tableName: "communityInteractionRoots",
-      communityId,
-      limit: cap,
-    }),
-    listSharedChannelReadableRows<PublicCommunityInteractionActivityRow>({
-      ctx,
-      tableName: "communityInteractionReplies",
-      communityId,
-      limit: cap,
-    }),
-  ]);
-  const rawMessagesToday =
-    readableRoots.filter((row) => row.createdAt >= sinceMs).length +
-    readableReplies.filter((row) => row.createdAt >= sinceMs).length;
-  return {
-    messagesTodayCount: Math.min(rawMessagesToday, cap),
-    messagesTodayCapped: rawMessagesToday >= cap,
-  };
-}
-
-/* True-metadata counts for the visitor surface (locked tabs + gate receipt).
-   Serves unauthenticated traffic: capped index-range reads only, and every
-   number is one a member could verify from inside — live messages,
-   member-visible resources, member-readable memory notes. */
-async function resolvePublicCommunityActivityCounts(ctx: any, communityId: any): Promise<{
-  messagesTodayCount: number;
-  messagesTodayCapped: boolean;
-  resourceCount: number;
-  resourceCountCapped: boolean;
-  memoryNoteCount: number;
-  memoryNoteCountCapped: boolean;
-}> {
-  const cap = PUBLIC_ACTIVITY_COUNT_CAP;
-  const interactionActivity = await resolvePublicCommunityInteractionActivityCounts(
-    ctx,
-    communityId,
-    { cap },
-  );
-
-  const resourceRows = await ctx.db
-    .query("communityResources" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(cap);
-  const moduleRows = (await ctx.db
-    .query("communityResourceModules" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(cap)) as CommunityResourceModuleLike[];
-  const liveModuleIds = new Set(
-    moduleRows.filter(communityResourceModuleIsLive).map((module) => String(module._id)),
-  );
-  const memberVisibleResources = resourceRows.filter((row: any) =>
-    communityResourceIsLiveModulePage(row, liveModuleIds),
-  );
-
-  // Community notes: every member reads them, so the visitor number is theirs.
-  const noteRows = await ctx.db
-    .query("communityNotes" as any)
-    .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", communityId))
-    .take(cap);
-  const memoryNoteCount = noteRows.length;
-  const memoryNoteCountCapped = noteRows.length >= cap;
-
-  return {
-    ...interactionActivity,
-    resourceCount: memberVisibleResources.length,
-    resourceCountCapped: resourceRows.length >= cap,
-    memoryNoteCount,
-    memoryNoteCountCapped,
-  };
-}
 
 async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): Promise<{
   memberCount: number;
@@ -340,84 +234,7 @@ export const resolvePublicFunnelBySlug = query({
   },
 });
 
-export const resolvePublicFunnelStatsBySlug = query({
-  args: {
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community || !communityIsActive(community)) return { ok: false };
 
-    const activityCounts = await resolvePublicCommunityActivityCounts(ctx, community._id);
-    return {
-      ok: true,
-      community: {
-        ...mapPublicCommunityStats(await resolvePublicCommunityStats(ctx, community)),
-        messages_today_count: activityCounts.messagesTodayCount,
-        messages_today_capped: activityCounts.messagesTodayCapped,
-        resource_count: activityCounts.resourceCount,
-        resource_count_capped: activityCounts.resourceCountCapped,
-        memory_note_count: activityCounts.memoryNoteCount,
-        memory_note_count_capped: activityCounts.memoryNoteCountCapped,
-      },
-    };
-  },
-});
-
-export const recordPublicFunnelVisitBySlug = mutation({
-  args: {
-    communitySlug: v.string(),
-    visitorKey: v.optional(v.string()),
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community || !communityIsActive(community)) return { ok: false };
-
-    let userId: any = undefined;
-    const authSubject = String(args.authSubject ?? "").trim();
-    if (authSubject) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-        .first();
-      userId = user?._id;
-    }
-
-    const nowMs = Date.now();
-    const visitorKey = String(args.visitorKey ?? "").trim();
-    const visitorKeyHash = visitorKey ? await hashBusinessVisitorKey(visitorKey) : undefined;
-    if (visitorKeyHash) {
-      const recentRows = (await ctx.db
-        .query("communityAnalyticsEvents" as any)
-        .withIndex("by_community_visitor_hash_event", (q: any) =>
-          q.eq("communityId", community._id).eq("visitorKeyHash", visitorKeyHash).eq("eventType", "funnel_visit"),
-        )
-        .collect()) as Array<{ createdAt: number }>;
-      const dedupeAfterMs = nowMs - FUNNEL_VISIT_DEDUPE_WINDOW_MS;
-      if (recentRows.some((row) => row.createdAt >= dedupeAfterMs)) {
-        return { ok: true, deduped: true };
-      }
-    }
-
-    await ctx.db.insert("communityAnalyticsEvents", {
-      communityId: community._id,
-      eventType: "funnel_visit",
-      visitorKeyHash,
-      userId,
-      createdAt: nowMs,
-    });
-    return { ok: true };
-  },
-});
 
 export const heartbeatCommunityPresence = mutation({
   args: {
@@ -738,64 +555,5 @@ export async function joinPublicCommunityInternal(args: {
   };
 }
 
-export const joinPublicCommunityBySlug = mutation({
-  args: {
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = Date.now();
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    return await joinPublicCommunityInternal({
-      ctx,
-      community,
-      userId,
-      nowMs,
-    });
-  },
-});
 
-export const joinPublicCommunity = mutation({
-  args: {
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = Date.now();
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    return await joinPublicCommunityInternal({
-      ctx,
-      community,
-      userId,
-      nowMs,
-    });
-  },
-});
 
-export const cancelMyJoinRequestBySlug = mutation({
-  args: {
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    if (!communityIsActive(community)) throw new Error("community_archived");
-
-    return await cancelPendingCommunityJoinRequest({
-      ctx,
-      communityId: community._id,
-      userId,
-    });
-  },
-});

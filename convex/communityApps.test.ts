@@ -37,6 +37,7 @@ import {
   COMMUNITY_APP_MY_JOIN_CANCEL_PATH,
   COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH,
   COMMUNITY_APP_MY_JOIN_FINISH_PATH,
+  COMMUNITY_APP_VISIT_PATH,
   COMMUNITY_APP_MY_MODERATION_POST_PATH,
   COMMUNITY_APP_MY_MODERATION_REMOVE_PATH,
   COMMUNITY_APP_MY_REQUESTS_PATH,
@@ -1278,9 +1279,7 @@ async function joinFixture() {
   const policy = (entryPolicy: string) => f.t.run((c) => c.db.patch(f.ids.communityId, { entryPolicy } as any));
   const membership = (userId = f.ids.outsiderId) => f.t.run((c) => c.db.query("communityMemberships")
     .withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", userId)).first());
-  const studioJoin = () => f.t.withIdentity({ subject: "apps-outsider-subject" })
-    .mutation(api.communityPublic.joinPublicCommunityBySlug, { communitySlug: "apps-community" });
-  return { ...f, read, policy, membership, studioJoin };
+  return { ...f, read, policy, membership };
 }
 
 test("twin join: anyone reads the pitch and the gate signed out, decided exactly as Studio's funnel decides it", async () => {
@@ -1334,8 +1333,6 @@ test("twin join: approval asks, waits, can be withdrawn, and a denial waits out 
   const token = await f.signInAt(f.twin, "apps-outsider");
   const asked = await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
   expect(asked).toMatchObject({ status: 200, body: { outcome: "approval_pending", viewer: { state: "pending" }, action_label: "Request pending" } });
-  // Studio's own join says the same for the same person.
-  expect((await f.studioJoin()).outcome).toBe("approval_pending");
   expect(await f.membership()).toBeNull();
   const withdrawn = await f.me(COMMUNITY_APP_MY_JOIN_CANCEL_PATH, token);
   expect(withdrawn).toMatchObject({ status: 200, body: { viewer: { state: "visitor" } } });
@@ -1349,7 +1346,6 @@ test("twin join: approval asks, waits, can be withdrawn, and a denial waits out 
   });
   expect((await f.read(token)).body.viewer).toEqual({ state: "denied", can_request_again: false, reapply_at: new Date(reapplyAt).toISOString(), setup_required: false });
   expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body).toMatchObject({ outcome: "approval_denied", viewer: { state: "denied" }, action_label: "Request denied" });
-  expect((await f.studioJoin()).outcome).toBe("approval_denied");
   // Once it's over, they may ask again.
   await f.t.run(async (c) => {
     const row = (await c.db.query("communityJoinRequests").collect())[0];
@@ -1616,13 +1612,34 @@ test("two tabs, two payments: the first makes them a member; the second is cance
   // reads joined; the refunded second one reads joined too (they're in).
   expect((await f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, token, { session_id: first })).body).toMatchObject({ status: "joined" });
   expect((await f.me(COMMUNITY_APP_MY_JOIN_FINISH_PATH, token, { session_id: second })).body).toMatchObject({ status: "joined" });
-  // Studio's status read (kept one release for older tabs) says the same, by the community.
-  const asBuyer = f.t.withIdentity({ subject: "apps-outsider-subject" });
-  expect(await asBuyer.query(api.communityCommerce.finalizeCheckoutSession, { sessionId: first }))
-    .toMatchObject({ ok: true, status: "succeeded", community_id: String(f.ids.communityId) });
   expect(await f.t.run((c) => c.db.query("purchaseClaims").collect())).toEqual([]);
   expect(refundsAfterReplay.some((job: any) => job.args[0].providerSubscriptionId === "sub_first")).toBe(false);
   expect((await f.t.run((c) => c.db.query("communitySubscriptions").collect())).map((row) => [row.providerSubscriptionId, row.status]))
     .toEqual([["sub_rejoin", "active"]]);
 });
 
+
+test("site visits: only the edge reports them, one per visitor per half hour, never for a twin or an archived community", async () => {
+  const f = await twinFixture();
+  const visitor = "a".repeat(64);
+  const visit = (body: unknown, origin = f.site, secret = EDGE_SECRET) =>
+    f.post(COMMUNITY_APP_VISIT_PATH, { origin, "x-polynet-edge-secret": secret }, body);
+  const visits = () => f.t.run((c) => c.db.query("communityAnalyticsEvents").collect());
+  expect((await visit({ visitor }, f.site, "wrong-secret")).status).toBe(401);
+  expect((await visit({ visitor: "not-a-hash" })).status).toBe(400);
+  expect((await visit({ visitor }, f.twin)).body).toEqual({ ok: false });
+  expect((await visit({ visitor })).body).toEqual({ ok: true });
+  expect((await visit({ visitor })).body).toEqual({ ok: true, deduped: true });
+  expect((await visit({ visitor: "b".repeat(64) })).body).toEqual({ ok: true });
+  const rows = await visits();
+  expect(rows.map((row) => [String(row.communityId), row.eventType, row.visitorKeyHash])).toEqual([
+    [String(f.ids.communityId), "funnel_visit", visitor],
+    [String(f.ids.communityId), "funnel_visit", "b".repeat(64)],
+  ]);
+  // Half an hour on, the same visitor counts again.
+  await f.t.run((c) => c.db.patch(rows[0]._id, { createdAt: Date.now() - 31 * 60 * 1000 }));
+  expect((await visit({ visitor })).body).toEqual({ ok: true });
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
+  expect((await visit({ visitor: "c".repeat(64) })).body).toEqual({ ok: false });
+  expect(await visits()).toHaveLength(3);
+});

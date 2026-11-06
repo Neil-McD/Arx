@@ -10,6 +10,7 @@ import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
 const modules = import.meta.glob([
+  "./communityAppJoin.ts",
   "./starterProfile.ts",
   "./communityPublic.ts",
   "./communityActivity.ts",
@@ -22,6 +23,22 @@ const modules = import.meta.glob([
   "./email.ts",
   "./_generated/**/*.*s",
 ]);
+
+// Join, or withdraw a request, the way a community's site does (its private
+// twin's join runs these), as the signed-in user with this subject.
+async function siteJoin(t: any, subject: string, target: { communitySlug?: string; communityId?: any }, cancel = false) {
+  const ids = await t.run(async (ctx: any) => ({
+    userId: (await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", subject)).first())?._id,
+    communityId: target.communityId
+      ?? (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", target.communitySlug)).first())?._id,
+  }));
+  if (!ids.communityId) throw new Error("community_not_found");
+  return await t.mutation(
+    cancel ? internal.communityAppJoin.cancelCommunityAppJoinRequestInternal : internal.communityAppJoin.joinCommunityAppVisitorInternal,
+    ids,
+  );
+}
+
 
 const OWNER_SUBJECT = "community-access-owner";
 const MEMBER_SUBJECT = "community-access-member";
@@ -156,9 +173,7 @@ test("a fresh account joins with no setup form: Join accepts the terms and fills
   ).rejects.toThrow("account_setup_required");
 
   await expect(
-    t.withIdentity({ subject: freshSubject }).mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
+    siteJoin(t, freshSubject, { communitySlug: "access-lifecycle-open" }),
   ).resolves.toMatchObject({ outcome: "joined" });
 
   const after = await t.run(async (ctx) => ({
@@ -212,15 +227,7 @@ test("open public join is authenticated, immediately authorized, and idempotent"
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
   await expect(
-    t.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).rejects.toThrow("verified_identity_required");
-
-  await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-open" }),
   ).resolves.toEqual({
     outcome: "joined",
     community_id: String(fixture.openCommunityId),
@@ -243,9 +250,7 @@ test("open public join is authenticated, immediately authorized, and idempotent"
   });
 
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-open" }),
   ).resolves.toMatchObject({ outcome: "joined" });
 
   const state = await t.run(async (ctx) => ({
@@ -315,9 +320,7 @@ test("community owner admission is a no-op with no request or membership row", a
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
 
-  await expect(asOwner.mutation(api.communityPublic.joinPublicCommunity, {
-    communityId: fixture.approvalCommunityId,
-  })).resolves.toEqual({
+  await expect(siteJoin(t, OWNER_SUBJECT, { communityId: fixture.approvalCommunityId })).resolves.toEqual({
     outcome: "joined",
     community_id: String(fixture.approvalCommunityId),
   });
@@ -350,9 +353,7 @@ test("approval rechecks target blocks and leaves admission state untouched", asy
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
 
-  await expect(asMember.mutation(api.communityPublic.joinPublicCommunity, {
-    communityId: fixture.approvalCommunityId,
-  })).resolves.toMatchObject({ outcome: "approval_pending" });
+  await expect(siteJoin(t, MEMBER_SUBJECT, { communityId: fixture.approvalCommunityId })).resolves.toMatchObject({ outcome: "approval_pending" });
   const requestId = await t.run(async (ctx) => {
     const request = await ctx.db
       .query("communityJoinRequests")
@@ -519,17 +520,6 @@ test("unfunded managed communities remain public while AI funding fails closed",
       communitySlug: "access-lifecycle-open",
     }),
   ).resolves.toMatchObject({ ok: true });
-  await expect(
-    t.query(api.communityPublic.resolvePublicFunnelStatsBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).resolves.toMatchObject({ ok: true });
-  await expect(
-    t.mutation(api.communityPublic.recordPublicFunnelVisitBySlug, {
-      communitySlug: "access-lifecycle-open",
-      visitorKey: "unfunded-managed-visitor",
-    }),
-  ).resolves.toEqual({ ok: true });
   const discover = await t.query(
     api.communityPublic.listPublicDiscoverCommunities,
     {},
@@ -540,9 +530,7 @@ test("unfunded managed communities remain public while AI funding fails closed",
     ]),
   );
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-open" }),
   ).resolves.toMatchObject({ outcome: "joined" });
 });
 
@@ -553,9 +541,7 @@ test("archived communities are frozen across ordinary access and public projecti
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
-  await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-    communitySlug: "access-lifecycle-open",
-  });
+  await siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-open" });
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.openCommunityId, {
       lifecycleStatus: "archived",
@@ -611,17 +597,6 @@ test("archived communities are frozen across ordinary access and public projecti
       communitySlug: "access-lifecycle-open",
     }),
   ).resolves.toEqual({ ok: false });
-  await expect(
-    t.query(api.communityPublic.resolvePublicFunnelStatsBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).resolves.toEqual({ ok: false });
-  await expect(
-    t.mutation(api.communityPublic.recordPublicFunnelVisitBySlug, {
-      communitySlug: "access-lifecycle-open",
-      visitorKey: "archived-community-visitor",
-    }),
-  ).resolves.toEqual({ ok: false });
 
   const discover = await t.query(
     api.communityPublic.listPublicDiscoverCommunities,
@@ -633,14 +608,10 @@ test("archived communities are frozen across ordinary access and public projecti
     ]),
   );
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-open" }),
   ).rejects.toThrow("community_archived");
   await expect(
-    asMember.mutation(api.communityPublic.cancelMyJoinRequestBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-open" }, true),
   ).rejects.toThrow("community_archived");
 });
 
@@ -652,9 +623,7 @@ test("approval join fails closed until manager approval and closes again after r
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-approval",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-approval" }),
   ).resolves.toEqual({
     outcome: "approval_pending",
     community_id: String(fixture.approvalCommunityId),
@@ -849,9 +818,7 @@ test("approval join fails closed until manager approval and closes again after r
   });
 
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-approval",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-approval" }),
   ).resolves.toMatchObject({
     outcome: "approval_denied",
     community_id: String(fixture.approvalCommunityId),
@@ -865,9 +832,7 @@ test("denied join-request decisions are idempotent and cannot later grant access
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
-  await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-    communitySlug: "access-lifecycle-approval",
-  });
+  await siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-approval" });
   const requestId = await t.run(async (ctx) => {
     const rows = await ctx.db
       .query("communityJoinRequests")
@@ -911,9 +876,7 @@ test("paid public join never materializes access without an entitlement", async 
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-paid",
-    }),
+    siteJoin(t, MEMBER_SUBJECT, { communitySlug: "access-lifecycle-paid" }),
   ).resolves.toEqual({
     outcome: "paid_plan_required",
     community_id: String(fixture.paidCommunityId),

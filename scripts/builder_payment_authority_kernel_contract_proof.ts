@@ -25,17 +25,15 @@ assert.match(schema, /founderSubscriptions: defineTable\(\{[\s\S]*communityId: v
 const existingCheckoutStart = billing.indexOf(
   "export const startFounderSubscriptionCheckout = action",
 );
-const publicCheckoutStart = billing.indexOf("export const startPublicBuilderCheckout = action");
-assert.ok(existingCheckoutStart >= 0 && publicCheckoutStart > existingCheckoutStart);
-const existingCheckout = billing.slice(existingCheckoutStart, publicCheckoutStart);
+const existingCheckoutEnd = billing.indexOf("\n});\n", existingCheckoutStart);
+assert.ok(existingCheckoutStart >= 0 && existingCheckoutEnd > existingCheckoutStart);
+const existingCheckout = billing.slice(existingCheckoutStart, existingCheckoutEnd);
 assert.match(existingCheckout, /authSubject: v\.optional\(v\.string\(\)\)/);
 assert.match(existingCheckout, /communityId: v\.id\("communities"\)/);
 
-// Retired Nov 5: the public Builder checkout refuses; nobody is charged through it.
-const publicCheckout = billing.slice(publicCheckoutStart, billing.indexOf("\n});\n", publicCheckoutStart));
-assert.match(publicCheckout, /args: \{\}/);
-assert.match(publicCheckout, /throw new Error\("public_builder_checkout_retired"\)/);
-assert.doesNotMatch(publicCheckout, /stripe|checkout\.sessions\.create/i);
+// The public Builder checkout is deleted (retired Nov 5, removed Nov 6): no
+// founder checkout starts without a signed-in owner.
+assert.doesNotMatch(billing, /startPublicBuilderCheckout/);
 // The anonymous Builder purchase is gone with its recovery: a founder
 // checkout always has its owner from the start.
 assert.match(billing, /if \(!ownerUserId\) throw new Error\("founder_subscription_owner_missing"\)/);

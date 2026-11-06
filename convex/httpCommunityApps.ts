@@ -69,6 +69,8 @@ export const COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH = "/runtime/app/me/join/checkou
 // Cash first: a paid plan's checkout for a buyer who hasn't signed in yet.
 export const COMMUNITY_APP_GUEST_JOIN_CHECKOUT_PATH = "/runtime/app/join/checkout";
 export const COMMUNITY_APP_MY_JOIN_FINISH_PATH = "/runtime/app/me/join/finish";
+// A page view on a community's public site (the edge reports it, for analytics).
+export const COMMUNITY_APP_VISIT_PATH = "/runtime/app/visit";
 export const COMMUNITY_APP_MY_MODERATION_POST_PATH = "/runtime/app/me/moderation/post";
 export const COMMUNITY_APP_MY_MODERATION_REMOVE_PATH = "/runtime/app/me/moderation/remove";
 export const COMMUNITY_APP_MY_REQUESTS_PATH = "/runtime/app/me/requests";
@@ -1013,6 +1015,22 @@ export function registerCommunityAppRoutes(args: { http: HttpRouterLike; httpAct
   });
 
   registerJoinRoutes(args);
+
+  // Only the edge reports visits: the site's origin, and its keyed hash of the
+  // visitor's address in the body.
+  args.http.route({
+    path: COMMUNITY_APP_VISIT_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx, req) => {
+      if (!fromEdge(req)) return reply(401, { ok: false, code: "edge_unauthorized" });
+      const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "");
+      const body = (await req.json().catch(() => null)) as { visitor?: unknown } | null;
+      const visitorHash = typeof body?.visitor === "string" ? body.visitor : "";
+      if (!origin || !/^[0-9a-f]{64}$/.test(visitorHash)) return reply(400, { ok: false, code: "invalid_request" });
+      const result = await ctx.runMutation(internal.communityAppJoin.recordCommunitySiteVisitInternal, { origin, visitorHash });
+      return reply(200, result);
+    }),
+  });
 }
 
 // The join page as the twin reads it: the public projection, and where this

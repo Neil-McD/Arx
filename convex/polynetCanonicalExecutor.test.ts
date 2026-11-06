@@ -397,6 +397,7 @@ test("self-context query rechecks access after path resolution and refuses direc
 });
 
 const modules = import.meta.glob([
+  "./communityAppJoin.ts",
   "./communityCompilerDigest.ts",
   "./communityPublic.ts",
   "./communityOntologyCards.ts",
@@ -428,6 +429,22 @@ const modules = import.meta.glob([
   "./profiles.ts",
   "./_generated/**/*.*s",
 ]);
+
+// Join, or withdraw a request, the way a community's site does (its private
+// twin's join runs these), as the signed-in user with this subject.
+async function siteJoin(t: any, subject: string, target: { communitySlug?: string; communityId?: any }, cancel = false) {
+  const ids = await t.run(async (ctx: any) => ({
+    userId: (await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", subject)).first())?._id,
+    communityId: target.communityId
+      ?? (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", target.communitySlug)).first())?._id,
+  }));
+  if (!ids.communityId) throw new Error("community_not_found");
+  return await t.mutation(
+    cancel ? internal.communityAppJoin.cancelCommunityAppJoinRequestInternal : internal.communityAppJoin.joinCommunityAppVisitorInternal,
+    ids,
+  );
+}
+
 
 async function createFixture(t: ReturnType<typeof convexTest>) {
   const nowMs = 1_760_000_000_000;
@@ -2978,7 +2995,7 @@ test.each([-1, 0, 1])("public reapplication at expiry %s ms preserves attempt an
       userId: f.row.userId, documentKey: d.key, documentVersion: d.version, acceptedAt: 1, source: "test", createdAt: 1 });
   });
   const applicant = t.withIdentity({ subject: "applicant-0" });
-  const join = () => applicant.mutation(api.communityPublic.joinPublicCommunityBySlug, { communitySlug: "canonical-community" });
+  const join = () => siteJoin(t, "applicant-0", { communitySlug: "canonical-community" });
   const original = await f.call(); expect(original).toMatchObject({ ok: true });
   const denied = await f.snapshot(); const expiry = denied.request!.reapplyAt!;
   const access = await applicant.query(api.communityAccessQueries.getMyCommunityAccessBySlug, { communitySlug: "canonical-community" });
@@ -2986,7 +3003,7 @@ test.each([-1, 0, 1])("public reapplication at expiry %s ms preserves attempt an
     join_request_reapply_at: new Date(expiry).toISOString() });
   vi.setSystemTime(expiry - 1);
   for (let i = 0; i < 2; i++) expect(await join()).toMatchObject({ outcome: "approval_denied", reapply_at: new Date(expiry).toISOString() });
-  expect(await applicant.mutation(api.communityPublic.cancelMyJoinRequestBySlug, { communitySlug: "canonical-community" }))
+  expect(await siteJoin(t, "applicant-0", { communitySlug: "canonical-community" }, true))
     .toMatchObject({ outcome: "ignored", status: "denied" });
   expect(await f.snapshot()).toEqual(denied);
   vi.setSystemTime(expiry + offset);
@@ -3021,7 +3038,7 @@ test.each(["same-key", "different-key", "external-approve", "first-party-approve
     mode === "external-approve" ? () => f.call({ ...f.input, operation: "community.admission.approve", target: admissionApprovalPath, idempotency_key: "approve" }) :
     mode === "first-party-approve" ? () => owner.mutation(api.communityAdmin.approveCommunityJoinRequest, { requestId: f.row._id }) :
     mode === "first-party-deny" ? () => owner.mutation(api.communityAdmin.denyCommunityJoinRequest, { requestId: f.row._id }) :
-    () => t.withIdentity({ subject: "applicant-0" }).mutation(api.communityPublic.cancelMyJoinRequestBySlug, { communitySlug: "canonical-community" });
+    () => siteJoin(t, "applicant-0", { communitySlug: "canonical-community" }, true);
   const results = await Promise.allSettled([f.call(), competitor()]); const state = await f.snapshot();
   expect(state.audit.length).toBeLessThanOrEqual(1); expect(state.receipts.length).toBeLessThanOrEqual(1);
   if (state.request?.status === "denied") {

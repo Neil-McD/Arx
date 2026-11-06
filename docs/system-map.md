@@ -320,7 +320,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   sign-in mints them a private session for it): Studio's funnel projection,
   join core and checkout, back to the twin's `/join`, with membership only from
   the webhook's record. The site <-> twin host mapping is
-  `privateTwinHost` / `siteHostOfTwin` in `checks.mjs` (edge, backend, CLI). Spec:
+  `privateTwinHost` / `siteHostOfTwin` in `checks.mjs` (edge, backend, CLI).
+  Page views on a public site are the founder's analytics visits: the edge
+  reports each one after the page (`/runtime/app/visit`, a keyed hash of the
+  address, no bots, the twin or fetches) to `recordCommunitySiteVisitInternal`,
+  one per visitor per half hour, into `communityAnalyticsEvents`. Spec:
   [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
 - **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityPublic` (Discover's list), `httpCommunitySites`,
   `communitySites`, `communitySiteDeploy`, `communityLive`;
@@ -361,10 +365,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityCommerce*`, `communityCheckoutBuyer` (who a paid join belongs to, and settling it), `creatorCommerce`, `stripe*`, `httpBilling`,
   `communityApplicationFeeRefundCore`, `founderPaidTool*`, `providerCostCore`,
   `voiceProviderCostAccounting`.
-- **Reached by:** `/billing/stripe_webhook` (authoritative), Studio checkout.
+- **Reached by:** `/billing/stripe_webhook` (authoritative), Studio's founder
+  plan checkout, and community sites' join checkout (section 4).
 - Building a community is free: `startPublicBuilderCheckout` (the anonymous
-  $79 Builder purchase) refuses since Nov 5, kept by name for cached pages.
-  Its recovery path (`createPendingPublicBuilderCheckoutInternal`, the
+  $79 Builder purchase) refused from Nov 5 and was deleted Nov 6, with Studio's
+  own community checkout and join (`startPublicCommunityCheckout`,
+  `finalizeCheckoutSession`, `joinPublicCommunity*`). Its recovery path (`createPendingPublicBuilderCheckoutInternal`, the
   recovery email, `founderCheckoutReceiptCore` and the email-hash receipt
   claim) was deleted Nov 6. A founder checkout now needs a signed-in owner;
   one without an owner fails (`founder_subscription_owner_missing`).

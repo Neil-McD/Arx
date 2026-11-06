@@ -90,3 +90,22 @@ test("a dry run pages through tables larger than one page", async () => {
   expect(total).toBe(253);
   expect(await t.run(async (ctx) => (await ctx.db.query("communityFunnels").collect()).length)).toBe(253);
 });
+
+test("retired checkout fields: a dry run counts, the real run clears them and nothing else", async () => {
+  const t = convexTest(schema, modules);
+  const now = Date.now();
+  const [claimed, plain] = await t.run(async (ctx) => {
+    const base = { sessionId: "", mode: "community_join", provider: "stripe", status: "pending", expiresAt: now, createdAt: now, updatedAt: now } as any;
+    return [
+      await ctx.db.insert("checkoutSessions", { ...base, sessionId: "chk_claimed", claimToken: "claim-1", amountBaseUnits: 600 }),
+      await ctx.db.insert("checkoutSessions", { ...base, sessionId: "chk_plain", amountBaseUnits: 600 }),
+    ];
+  });
+  expect(await t.mutation(internal.retiredTablesCleanup.clearRetiredCheckoutFieldsInternal, { dryRun: true }))
+    .toMatchObject({ dryRun: true, matched: 1, isDone: true });
+  expect((await t.run((ctx) => ctx.db.get(claimed)))?.claimToken).toBe("claim-1");
+  expect(await t.mutation(internal.retiredTablesCleanup.clearRetiredCheckoutFieldsInternal, {}))
+    .toMatchObject({ dryRun: false, matched: 1, isDone: true });
+  const after = await t.run(async (ctx) => [await ctx.db.get(claimed), await ctx.db.get(plain)]);
+  expect(after.map((row) => [row?.sessionId, row?.claimToken, row?.amountBaseUnits])).toEqual([["chk_claimed", undefined, 600], ["chk_plain", undefined, 600]]);
+});
