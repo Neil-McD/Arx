@@ -433,3 +433,15 @@
     transition: none;
   }
 }
+
+.community-funnel-terms {
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--community-funnel-muted);
+}
+
+.community-funnel-terms a {
+  color: inherit;
+  text-decoration: underline;
+}

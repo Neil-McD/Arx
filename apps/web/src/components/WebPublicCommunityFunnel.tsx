@@ -132,6 +132,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     primaryActionLabel,
     isPrimaryActionDisabled,
     onPrimaryAction: onPrimaryJoinAction,
+    showJoinTerms: !canEnterCommunity && (canJoinWithCheckout || canJoinForFree || canJoinWithApproval),
     canJoinWithApproval,
     showSignIn,
     approvalPending,

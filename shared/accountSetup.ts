@@ -66,9 +66,16 @@ export function getAccountSetupIdentityMissingFields(
   const missing: AccountSetupMissing[] = [];
   if (!hasText(input.displayName)) missing.push("display_name");
   if (!validateProfileHandle(input.handle).ok) missing.push("handle");
-  if (!hasText(input.avatarUrl) && !hasText(input.avatarStorageId)) missing.push("avatar");
+  // A photo is optional: people without one show their initials.
   if (input.hasAcceptedPlatformLegal !== true) missing.push("platform_legal");
   return missing;
+}
+
+// What joining a community can't fill in by itself: the Join click accepts the
+// terms (recorded server-side) and sign-in fills the name and handle, so only
+// an account still missing those after that has anything to set up.
+export function accountSetupBlocksJoining(status: AccountSetupStatus | null | undefined): boolean {
+  return Boolean(status && status.missing.some((field) => field !== "platform_legal"));
 }
 
 export function isAccountSetupIdentityComplete(
@@ -97,7 +104,7 @@ function buildStepStatus(
 
 export function buildAccountSetupStatus(input: AccountSetupStatusInput): AccountSetupStatus {
   const identityMissing = getAccountSetupIdentityMissingFields(input);
-  const steps = [buildStepStatus("identity", identityMissing, 4)];
+  const steps = [buildStepStatus("identity", identityMissing, 3)];
   const missing = steps.flatMap((step) => step.missing);
   const totalItems = steps.reduce((sum, step) => sum + step.total_items, 0);
   const completedItems = totalItems - missing.length;

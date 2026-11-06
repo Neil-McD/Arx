@@ -37,7 +37,7 @@ export const JOIN_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block module: the Join page of <polynet-personal page="join">. Only
 // on a site's private twin. Style it with ::part() on <polynet-personal>:
 // join, pitch, join-avatar, join-name, join-one-liner, join-count, join-about,
-// gate, gate-title, gate-note, setup-done, plans, plan, join-action, join-enter, join-cancel,
+// gate, gate-title, gate-note, join-terms, setup-done, plans, plan, join-action, join-enter, join-cancel,
 // join-setup, join-status, join-error, retry.
 import { h, styled, avatar } from "/__polynet/blocks/kit.js";
 
@@ -59,6 +59,7 @@ const STYLE = [
   ".plan:has(input:checked) { border-color: var(--pn-accent); box-shadow: inset 0 0 0 1px var(--pn-accent); }",
   ".plan input { accent-color: var(--pn-accent); margin: 0; }",
   ".error { color: var(--pn-danger); }",
+  ".terms { font-size: .8125em; } .terms a { color: inherit; }",
   "a.primary { display: inline-flex; align-items: center; text-decoration: none; }",
   "button:disabled { opacity: .6; cursor: progress; }",
   ":host { --pn-danger: var(--polynet-danger, #c0392b); }",
@@ -217,6 +218,7 @@ class Join {
     action.addEventListener("click", () => (viewer ? this.join(action) : signIn(null)));
     out.push(h("div", { class: "actions" }, [action]));
     if (!viewer) out.push(h("p", { class: "muted", part: "gate-note", text: "You'll sign in with Polynet first." }));
+    out.push(this.terms());
     return out;
   }
 
@@ -239,12 +241,22 @@ class Join {
     out.push(h("div", { class: "actions" }, [action]));
     out.push(h("p", { class: "muted", part: "gate-note", text: this.data.viewer ? "You'll pay on Stripe's secure checkout, then come back here."
       : "You'll sign in with Polynet, then pay on Stripe's secure checkout." }));
+    out.push(this.terms());
     if (this.continueToCheckout && this.data.viewer) {
       this.continueToCheckout = false;
       this.address("");
       queueMicrotask(() => this.startCheckout(action));
     }
     return out;
+  }
+
+  // Join's click is the acceptance (Polynet records it): said under the button.
+  terms() {
+    const link = (href, text) => href ? h("a", { href: href, target: "_blank", rel: "noopener noreferrer", text: text }) : h("span", { text: text });
+    return h("p", { class: "muted terms", part: "join-terms" }, [
+      "By joining you agree to Polynet's ", link(this.data.terms_url, "Terms"),
+      " and ", link(this.data.privacy_url, "Privacy & AI Data Policy"), ".",
+    ]);
   }
 
   // One action: Studio's join decides whether that's joining or asking to.

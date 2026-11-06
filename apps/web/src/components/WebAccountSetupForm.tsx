@@ -18,7 +18,7 @@ import type {
   WebAccountSetupSurfaceModel,
 } from "./webAccountSetupSurfaceModel";
 
-type MissingField = "photo" | "name" | "handle" | "terms";
+type MissingField = "name" | "handle" | "terms";
 
 type WebAccountSetupFormProps = {
   accountSetupStatus: AccountSetupStatus | null;
@@ -71,7 +71,7 @@ export function WebAccountSetupForm(props: WebAccountSetupFormProps) {
     props.accountSetupStatus?.missing.includes("platform_legal") !== false;
   const platformLegalReady = !platformLegalMissing || hasConfirmedLegal;
   const missing: MissingField[] = [];
-  if (!identity.avatarUrl?.trim()) missing.push("photo");
+  // A photo is optional (initials stand in): never required to continue.
   if (!identity.displayName.trim()) missing.push("name");
   if (!handleReady) missing.push("handle");
   if (!platformLegalReady) missing.push("terms");
@@ -102,7 +102,7 @@ export function WebAccountSetupForm(props: WebAccountSetupFormProps) {
       <div className="account-setup-identity" ref={identityRef}>
         <div className="account-setup-avatar-block">
           <button
-            className={`account-setup-avatar-trigger${identity.avatarUrl ? " has-image" : ""}${isAvatarDragOver ? " is-drag-over" : ""}${isMissing("photo") ? " is-missing" : ""}`}
+            className={`account-setup-avatar-trigger${identity.avatarUrl ? " has-image" : ""}${isAvatarDragOver ? " is-drag-over" : ""}`}
             type="button"
             aria-label={identity.avatarUrl ? "Change profile photo" : "Add a profile photo"}
             disabled={submission.isSaving}

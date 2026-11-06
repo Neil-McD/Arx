@@ -58,6 +58,7 @@ import {
   resolveCommunityBuilderAccess,
 } from "./communityBuilderAccessCore";
 import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
+import { acceptCommunityJoin } from "./starterProfile";
 
 // The join page's funnel projection is always the plain default: the funnel
 // editor and hero media are retired (POL-23) and no custom content renders.
@@ -593,6 +594,7 @@ export async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
+  await acceptCommunityJoin(args.ctx, args.userId, args.nowMs);
   await requireAccountSetupCompleteForUser(args.ctx, args.userId);
 
   if (!communityIsActive(args.community)) {

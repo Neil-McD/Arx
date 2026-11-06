@@ -1,4 +1,5 @@
 import { internalMutation, internalQuery } from "./_generated/server";
+import { ensureStarterProfile } from "./starterProfile";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import { isAnonymousAuthSubject, normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
@@ -688,7 +689,7 @@ export const ensureAuthenticatedActorByExplicitSubjectInternal = internalMutatio
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    return await ensureActorByResolvedSubject({
+    const actor = await ensureActorByResolvedSubject({
       ctx,
       authSubject: args.authSubject,
       email: args.email ?? null,
@@ -698,5 +699,9 @@ export const ensureAuthenticatedActorByExplicitSubjectInternal = internalMutatio
       avatarUrl: args.avatarUrl ?? null,
       nowMs: args.nowMs,
     });
+    // Signing in from a community site lands here, not Studio's bootstrap:
+    // the same starter profile, so joining never stops at a setup form.
+    await ensureStarterProfile(ctx, actor.dbUserId, args.nowMs ?? Date.now());
+    return actor;
   },
 });

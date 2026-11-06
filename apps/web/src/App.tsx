@@ -1530,7 +1530,9 @@ export default function App() {
     checkoutSuccessSessionId,
     getSession: () => sessionRef.current,
     enterCommunity: ({ communityId, communitySlug }) => {
-      enterCommunityThroughBridge({ communityId, communitySlug });
+      // Paying accepted the terms at Join: read the account again first, so
+      // entry doesn't ask for them a second time.
+      void refreshAccountSetupStatus().finally(() => enterCommunityThroughBridge({ communityId, communitySlug }));
       const current = sessionRef.current;
       if (current) void loadCommunities(current);
     },

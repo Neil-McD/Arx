@@ -15,6 +15,7 @@ import {
   hasPlatformOwnerComplimentaryAccess,
 } from "./operatorEntitlementsCore";
 import { enqueueNewPolynetUserIdentify } from './distributionAttribution';
+import { ensureStarterProfile } from "./starterProfile";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -119,6 +120,7 @@ export const bootstrapActor = mutation({
         avatarUrl: seededProfile.avatarUrl,
         nowMs,
       });
+      await ensureStarterProfile(ctx, actor.dbUserId, nowMs);
       if (seededProfile.emailVerified && seededProfile.email) {
         await ctx.scheduler.runAfter(
           0,
