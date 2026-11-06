@@ -495,6 +495,31 @@ async function handleDiscover(request: Request, url: URL, route: Route, env: Env
   return json(200, { ok: true, communities }, { "Cache-Control": "public, max-age=60" });
 }
 
+// The community's public page as data, for a founder's own site to draw in
+// its own design: everything the doorstep shows (the promise, banner, host,
+// courses, price and the owner's sales sections), read signed out exactly as
+// the doorstep reads it, plus where Join is. Public, at most a minute old.
+const PUBLIC_PAGE_PATH = "/__polynet/public-page";
+async function handlePublicPage(request: Request, place: Place, env: Env): Promise<Response> {
+  if (request.method !== "GET" && request.method !== "HEAD") return json(405, { ok: false, code: "method_not_allowed" });
+  if (place.twin || !place.privateOrigin) return json(404, { ok: false, code: "not_found" });
+  let answer: Record<string, unknown> | null = null;
+  try {
+    const res = await backend(env, "/runtime/app/me/join", {}, place.privateOrigin);
+    answer = res.ok ? await res.json() as Record<string, unknown> : null;
+    if (!res.ok) await res.body?.cancel();
+  } catch {
+    answer = null;
+  }
+  const view = answer?.ok === true ? joinView(answer, env, place) : null;
+  if (!view) return json(502, { ok: false, code: "public_page_unavailable", message: "Couldn't load this community's page. Try again." });
+  const plans = (view.plans as Array<Record<string, unknown>>).map(({ billing_period, label, price }) => ({ billing_period, label, price }));
+  return json(200, {
+    ok: true, community: view.community, gate: view.gate, available: view.available, action_label: view.action_label, plans,
+    join_url: `${place.privateOrigin}/join`,
+  }, { "Cache-Control": "public, max-age=60" });
+}
+
 // Tests start each case with empty per-isolate caches.
 export function resetEdgeCaches(): void {
   identityCache.clear();
@@ -1253,6 +1278,7 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (url.pathname.startsWith(PERSONAL_API_PREFIX)) return json(404, { ok: false, code: "not_found" });
   if (url.pathname === "/__polynet/account") return await proxyAccount(request, url, env);
   if (url.pathname === DISCOVER_PATH) return await handleDiscover(request, url, route, env);
+  if (url.pathname === PUBLIC_PAGE_PATH) return await handlePublicPage(request, place, env);
   if (url.pathname.startsWith(BLOCKS_PREFIX)) {
     const name = /^([a-z]+)\.js$/.exec(url.pathname.slice(BLOCKS_PREFIX.length))?.[1];
     const source = name && Object.hasOwn(BLOCKS, name) ? BLOCKS[name] : name && place.twin && Object.hasOwn(TWIN_BLOCKS, name) ? TWIN_BLOCKS[name] : null;

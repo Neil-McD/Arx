@@ -412,6 +412,18 @@ test("discover() lists published communities without a session; a failure is a P
   await expect(polynet.discover()).rejects.toMatchObject({ name: "PolynetError", code: "discover_unavailable", status: 502 });
 });
 
+test("publicPage() reads the community's public page without a session; a failure is a PolynetError", async () => {
+  const body = { ok: true, community: { name: "Trail Club", page: { for_you: ["You run trails."] } }, gate: "checkout", available: true,
+    action_label: "Join $10/month", plans: [{ billing_period: "monthly", label: "Join $10/month", price: "$10" }], join_url: "https://trail-club--me.polynet.page/join" };
+  const calls = stubFetch({ "/__polynet/public-page": () => Response.json(body) });
+  const polynet = await loadSdk();
+  const { ok, ...page } = body;
+  expect(await polynet.publicPage()).toEqual(page);
+  expect(calls.map((call) => call.url)).toEqual(["/__polynet/public-page"]);
+  stubFetch({ "/__polynet/public-page": () => Response.json({ ok: false, code: "public_page_unavailable" }, { status: 502 }) });
+  await expect(polynet.publicPage()).rejects.toMatchObject({ name: "PolynetError", code: "public_page_unavailable", status: 502 });
+});
+
 test("members() lists the community's members, following pages", async () => {
   stubFetch({
     "/__polynet/auth/session": signedIn,

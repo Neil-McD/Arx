@@ -163,11 +163,19 @@ session() -> {
 }
 
 What works signed out: session() (with the public fields above),
-community() and discover(). Everything else (channels, posts, events, courses, knowledge,
+community(), discover() and publicPage(). Everything else (channels, posts, events, courses, knowledge,
 the agent) needs a signed-in member and otherwise throws sign_in_required.
 
 - Signed out: show the community's public face from the public fields and a
-  "Join" link to session.join_url. The shell (<polynet-account>, below) already
+  "Join" link to session.join_url. For a full sales page in your design, read
+  polynet.publicPage(): the promise (community.one_liner), banner, host,
+  courses, price (plans[].price) and the owner's sections (community.page:
+  for_you, not_for, first_steps, results, founder_bio, video, guarantee,
+  objections), the same as Polynet's own Join page. Leave out any section that's
+  empty; never make up results or promises. Embed a video only from
+  https://www.youtube-nocookie.com/embed/<id>, https://player.vimeo.com/video/<id>
+  or https://www.loom.com/embed/<id> (allow frame-src for it in your policy).
+  Every Join button goes to join_url, where checkout and approval happen. The shell (<polynet-account>, below) already
   shows "Sign in": don't add a second one in the header. A quiet "Members, sign
   in" link in the page body (polynet.signIn()) is fine. Anything else on the
   public page is yours to write.

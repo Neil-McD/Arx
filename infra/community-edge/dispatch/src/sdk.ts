@@ -652,6 +652,23 @@ async function discover() {
   return body.communities;
 }
 
+// The community's public page as data, signed in or not: what Polynet's own
+// doorstep (Join) shows, for a page in this site's design. { community: { name,
+// one_liner, about, member_count, avatar_url, banner_url, host: { name } | null,
+// courses: [{ title, summary, lessons }], page: { for_you, not_for,
+// first_steps: [{ title, text }], results: [{ quote, name, role }],
+// founder_bio, video: { provider, id } | null, guarantee, objections:
+// [{ question, answer }] } }, gate ("join" | "request_access" | "checkout"),
+// available, action_label, plans: [{ billing_period, label, price }], join_url }.
+// The owner fills the page's sections in Studio's Settings; leave out any that
+// are empty. Joining is always Polynet's: link the button to join_url.
+async function publicPage() {
+  const res = await fetch("/__polynet/public-page", { credentials: "same-origin" });
+  const body = await res.json().catch(function () { return {}; });
+  if (!res.ok || !body.ok) throw new PolynetError(body.code || "public_page_unavailable", body.message, res.status);
+  return { community: body.community, gate: body.gate, available: body.available, action_label: body.action_label, plans: body.plans, join_url: body.join_url };
+}
+
 // Markdown (post text, replies, agent answers, descriptions) as DOM nodes, built
 // with createElement and textContent, never innerHTML, so Polynet text can't
 // inject markup. Paragraphs, line breaks, headings (#..### as h3..h5), lists
@@ -753,7 +770,7 @@ const polynet = {
   markRead: markRead, typing: typing,
   events: events, event: event, resources: resources, lessonDone: lessonDone, readText: readText, knowledge: knowledge, members: members,
   profile: profile, online: online, watchOnline: watchOnline,
-  agentHistory: agentHistory, askAgent: askAgent, markdown: markdown, discover: discover,
+  agentHistory: agentHistory, askAgent: askAgent, markdown: markdown, discover: discover, publicPage: publicPage,
   door: { list: list, read: read, search: search, write: write, call: call },
 };
 
