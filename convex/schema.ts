@@ -2539,7 +2539,9 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_watchTokenHash", ["watchTokenHash"])
-    .index("by_domain_user_expiresAt", ["domainId", "userId", "expiresAt"]),
+    .index("by_domain_user_expiresAt", ["domainId", "userId", "expiresAt"])
+    // Signing out of Polynet ends every one of the person's site sessions.
+    .index("by_user", ["userId"]),
 
   // One-time sign-in codes from Polynet's login to a community's edge, deleted
   // when presented. Only hashes of the code and state are stored.

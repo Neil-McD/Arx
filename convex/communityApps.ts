@@ -336,6 +336,22 @@ export const revokeCommunityAppSessionInternal = internalMutation({
   },
 });
 
+// Signing out of Polynet signs the person out of every community site too: all
+// their site sessions end, on every browser (Polynet can't tell which site
+// sessions belong to which browser). Bounded per call; the caller repeats.
+const SESSIONS_ENDED_PER_CALL = 200;
+export const endCommunityAppSessionsForUserInternal = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const sessions = await ctx.db
+      .query("communityAppSessions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .take(SESSIONS_ENDED_PER_CALL);
+    for (const session of sessions) await ctx.db.delete(session._id);
+    return { ended: sessions.length, more: sessions.length === SESSIONS_ENDED_PER_CALL };
+  },
+});
+
 // Whose session this is, so a sign-out ticket from the site's other origin can
 // be checked against it before anything is revoked.
 export const readCommunityAppSessionOwnerInternal = internalQuery({

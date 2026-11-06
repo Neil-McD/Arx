@@ -127,7 +127,9 @@ and answers `then`, the other origin's `GET /__polynet/auth/signout?ticket=&retu
 revokes its own session only if the backend accepts the ticket for the same
 member, clears its cookie, and returns to the site (`return` is a path). The
 shell and the settings page follow `then`; site code's `polynet.signOut()`
-ends only the site's session.
+ends only the site's session. Signing out of Polynet itself ends every one of
+the member's site sessions, on every community and browser
+(`endCommunityAppSessionsForUserInternal`, from Polynet's logout).
 
 Messages (`/messages`, `/messages/<conversation id>`, `/messages/new?to=<handle>`;
 `blocks/messages.ts`), twin only, same-origin only; each forwarded with the

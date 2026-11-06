@@ -311,7 +311,9 @@ Studio's:
   community) and the browser visits the other origin's
   `/__polynet/auth/signout`, which ends its session only with a valid ticket for
   the same member. The shell's Sign out does the same from either side. (Site
-  code's own `polynet.signOut()` still ends only the site's session.)
+  code's own `polynet.signOut()` still ends only the site's session.) Signing
+  out of Polynet itself ends all of the member's site sessions, on every
+  community and device (Nov 7).
 - **Account and billing on Polynet:** the one link out, to Studio's
   `/settings/account`, in the same tab.
 
