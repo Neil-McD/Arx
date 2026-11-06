@@ -2,6 +2,7 @@
 // dry run first, after a full backup and an export of each table:
 //   npx convex run retiredTablesCleanup:rewriteRetiredPersonalAgentInternal '{"table":"roots","dryRun":true}'
 //   npx convex run retiredTablesCleanup:emptyRetiredTableInternal '{"table":"communityFunnels","dryRun":true}'
+//   npx convex run retiredTablesCleanup:clearRetiredCheckoutFieldsInternal '{"dryRun":true}'
 // When every table is empty and no retired agent name is left, the next
 // release removes the tables and the literal from the schema, and this file.
 import { v } from "convex/values";
@@ -25,6 +26,9 @@ export const RETIRED_TABLES = [
   "userPlatformSkillInstalls",
   "communitySkillAttachments",
   "communityIntegrationConnections",
+  // Purchase claims (Nov 6): none are made and nothing reads them. Its rows
+  // are deleted only with the owner's OK.
+  "purchaseClaims",
 ] as const;
 
 const retiredTable = v.union(...RETIRED_TABLES.map((table) => v.literal(table)));
@@ -75,5 +79,23 @@ export const rewriteRetiredPersonalAgentInternal = internalMutation({
       await ctx.db.patch(row._id, (setsAgentKey ? { [field]: to, actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY } : { [field]: to }) as any);
     }
     return { table, dryRun: Boolean(args.dryRun), matched, continueCursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+// Checkouts' retired fields (Nov 6): the claim code purchase claims used, and
+// the anonymous Builder purchase's recovery-email hash. Nothing reads them;
+// clearing them lets the next release drop the fields. Run with the claim rows.
+const RETIRED_CHECKOUT_FIELDS = ["claimToken", "recoveryEmailHash", "recoveryEmailHashVersion"] as const;
+export const clearRetiredCheckoutFieldsInternal = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("checkoutSessions").paginate({ cursor: args.cursor ?? null, numItems: PAGE });
+    let matched = 0;
+    for (const row of page.page as Array<Record<string, any>>) {
+      if (!RETIRED_CHECKOUT_FIELDS.some((field) => row[field] !== undefined)) continue;
+      matched += 1;
+      if (!args.dryRun) await ctx.db.patch(row._id as any, Object.fromEntries(RETIRED_CHECKOUT_FIELDS.map((field) => [field, undefined])) as any);
+    }
+    return { dryRun: Boolean(args.dryRun), matched, continueCursor: page.continueCursor, isDone: page.isDone };
   },
 });

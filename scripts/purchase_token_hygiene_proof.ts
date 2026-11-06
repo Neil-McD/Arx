@@ -103,15 +103,6 @@ assert.ok(
   "expected community checkout success URL builder to validate canonical origin",
 );
 
-const startPublicCommunityCheckoutBlock = sliceBetween(
-  communityCommerceSource,
-  "export const startPublicCommunityCheckout = action({",
-  "export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({",
-);
-assert.ok(
-  startPublicCommunityCheckoutBlock.includes("requireCanonicalCheckoutReturnUrl("),
-  "expected public community checkout cancel URL to be canonical-origin validated",
-);
 
 assert.ok(
   !existsSync(new URL("../convex/workspaceCredits.ts", import.meta.url)),

@@ -40,40 +40,10 @@ assert.match(
   "chat access must stay entitlement-gated — visitor mode must never loosen requireCommunityChatAccess",
 );
 
-const activityCounts = communityPublic.slice(
-  communityPublic.indexOf("async function resolvePublicCommunityActivityCounts"),
-  communityPublic.indexOf("async function resolvePublicCommunityStats"),
-);
-assert.notEqual(activityCounts.length, 0, "public activity counts helper must exist");
-assert.match(
-  activityCounts,
-  /\.take\(cap\)/,
-  "every public activity count must be a capped read — this surface serves unauthenticated traffic",
-);
-assert.doesNotMatch(
-  activityCounts,
-  /\.collect\(\)/,
-  "public activity counts must never collect unbounded rows",
-);
-assert.match(
-  activityCounts,
-  /resolvePublicCommunityInteractionActivityCounts/,
-  "messages-today must delegate to the canonical active-channel interaction reader",
-);
 assert.match(
   communityChannelCore,
   /async function listReadableRowsForChannelIds[\s\S]*eq\("status", "live"\)/,
   "the canonical active-channel interaction reader must exclude hidden and deleted rows",
-);
-assert.match(
-  activityCounts,
-  /communityResourceIsLiveModulePage/,
-  "the public resource count must reuse the member-visibility filter — the visitor number is what a member would see",
-);
-assert.match(
-  activityCounts,
-  /query\("communityNotes" as any\)/,
-  "the public note count counts community notes, which every member reads",
 );
 
 assert.doesNotMatch(
@@ -86,11 +56,6 @@ assert.match(
   read("apps/web/src/components/WebCommunityHandoff.tsx"),
   /communitySiteRedirectTarget[\s\S]*window\.location\.replace\(target\)/,
   "Studio's /c/<slug> must hand visitors over to the community's site",
-);
-assert.match(
-  communityPublic,
-  /messages_today_count[\s\S]*resource_count[\s\S]*memory_note_count/,
-  "the public stats payload must carry the lock metadata for the visitor surface",
 );
 assert.match(
   communityPublic,

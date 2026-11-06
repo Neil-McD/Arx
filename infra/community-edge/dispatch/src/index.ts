@@ -1109,7 +1109,7 @@ function polynetAsset(body: string, type: string, maxAge: number): Response {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     const frontDoorResponse = frontDoor(url, env);
     if (frontDoorResponse) return frontDoorResponse;
@@ -1123,9 +1123,37 @@ export default {
       ? { twin: true, siteOrigin: `${url.protocol}//${twinOf}`, privateOrigin: url.origin }
       : { twin: false, siteOrigin: url.origin, privateOrigin: twinHost ? `${url.protocol}//${twinHost}` : null };
     const response = await serve(request, url, route, place, env);
+    if (ctx && isSiteVisit(request, url, place, response)) ctx.waitUntil(reportSiteVisit(request, url, env));
     return place.twin ? withTwinHeaders(response) : await unlistedNoIndex(response, place, env);
   },
 };
+
+// A person opening one of the site's pages, for the founder's analytics: a
+// page (not a fetch, frame or asset) on the public site, not the twin, from a
+// browser rather than an obvious bot. Reported after the page is sent, so it
+// never slows one down; the address goes only as the keyed visitorHash.
+const BOT_AGENT = /bot|crawl|spider|slurp|preview|monitor|headless|lighthouse|curl|wget|python|go-http|java\//i;
+function isSiteVisit(request: Request, url: URL, place: Place, response: Response): boolean {
+  if (place.twin || request.method !== "GET" || response.status !== 200 || url.pathname.startsWith("/__polynet/")) return false;
+  if (!(response.headers.get("content-type") ?? "").includes("text/html")) return false;
+  const dest = request.headers.get("sec-fetch-dest");
+  if (dest && dest !== "document") return false;
+  if (!request.headers.get("cf-connecting-ip")) return false;
+  return !BOT_AGENT.test(request.headers.get("user-agent") ?? "bot");
+}
+
+async function reportSiteVisit(request: Request, url: URL, env: Env): Promise<void> {
+  try {
+    const answer = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/visit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET },
+      body: JSON.stringify({ visitor: await visitorHash(request, env) }),
+    });
+    await answer.body?.cancel();
+  } catch {
+    // Analytics only: a lost visit never touches the page.
+  }
+}
 
 async function serve(request: Request, url: URL, route: Route, place: Place, env: Env): Promise<Response> {
   // The member's own data never answers on the site, whoever asks.

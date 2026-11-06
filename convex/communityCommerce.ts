@@ -1011,37 +1011,6 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
   },
 });
 
-export const startPublicCommunityCheckout = action({
-  args: {
-    communitySlug: v.string(),
-    billingPeriod: v.string(),
-    successUrl: v.string(),
-    cancelUrl: v.string(),
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
-    // Studio's funnel: both return addresses on Studio's own origin.
-    const cancelUrl = requireCanonicalCheckoutReturnUrl(
-      args.cancelUrl,
-      "checkout_cancel_url_invalid",
-    );
-    const successUrl = requireCanonicalCheckoutReturnUrl(
-      args.successUrl,
-      "checkout_success_url_invalid",
-    );
-    return await startCommunityJoinCheckoutCore(ctx, {
-      communitySlug: args.communitySlug,
-      billingPeriod: args.billingPeriod,
-      successUrl,
-      cancelUrl,
-      authSubject: args.authSubject,
-    });
-  },
-});
 
 
 // The one checkout for a community's paid plan, for Studio's funnel and for
@@ -1393,21 +1362,6 @@ export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
   },
 });
 
-export const finalizeCheckoutSession = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    sessionId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    return await resolveCheckoutSessionFinalization(ctx, userId, args.sessionId);
-  },
-});
 
 // Where a checkout stands for its own buyer, read only from what the provider's
 // verified webhook recorded (never from a redirect): pending until then, and

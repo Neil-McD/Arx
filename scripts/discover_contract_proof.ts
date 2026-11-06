@@ -63,7 +63,7 @@ function main() {
   const listDiscover = extractSection(
     communityPublic,
     "export const listPublicDiscoverCommunities = query({",
-    "export const joinPublicCommunityBySlug = mutation({",
+    "export const listSiteDiscoverCommunitiesInternal = internalQuery({",
     "public Discover community listing",
   );
   assert.match(
@@ -80,7 +80,7 @@ function main() {
   const resolveFunnel = extractSection(
     communityPublic,
     "export const resolvePublicFunnelBySlug = query({",
-    "export const resolvePublicFunnelStatsBySlug = query({",
+    "export const heartbeatCommunityPresence = mutation({",
     "public funnel resolver",
   );
   assert.match(

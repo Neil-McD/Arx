@@ -1559,3 +1559,38 @@ test("twin moderation: forwarded with the twin's session; only what the pages sh
     ["/runtime/app/me/requests/approve", JSON.stringify({ request_id: "req1" }), `Bearer ${TOKEN}`],
   ]);
 });
+
+test("a person opening a site page is reported as a visit, after the page; assets, the twin, fetches and bots are not", async () => {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+    if (String(url).endsWith("/runtime/app/visit")) calls.push({ url, init });
+    return new Response("{}", { status: 200 });
+  }));
+  const pageEnv = { ...env(), DEV_USER_WORKER: { fetch: async () => new Response("<h1>Hi</h1>", { headers: { "Content-Type": "text/html" } }) } };
+  const waits: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => void waits.push(p) };
+  const browser = { "cf-connecting-ip": "203.0.113.7", "user-agent": "Mozilla/5.0 Safari/605", "sec-fetch-dest": "document" };
+  const open = async (path: string, headers: Record<string, string> = browser, init: RequestInit = {}) => {
+    const res = await edge.fetch(new Request(`${ORIGIN}${path}`, { ...init, headers }), pageEnv, ctx);
+    await Promise.all(waits.splice(0));
+    return res;
+  };
+  expect((await open("/")).status).toBe(200);
+  expect(calls).toHaveLength(1);
+  expect(calls[0].url).toBe("https://api.example.convex.site/runtime/app/visit");
+  const headers = new Headers(calls[0].init.headers);
+  expect([headers.get("origin"), headers.get("x-polynet-edge-secret")]).toEqual([ORIGIN, "edge-secret"]);
+  const visitor = JSON.parse(String(calls[0].init.body)).visitor;
+  expect(visitor).toMatch(/^[0-9a-f]{64}$/);
+  expect(String(calls[0].init.body)).not.toContain("203.0.113.7");
+  // Not visits: a fetch from the page, a bot, no address, a write, Polynet's own files.
+  await open("/", { ...browser, "sec-fetch-dest": "empty" });
+  await open("/", { ...browser, "user-agent": "Googlebot/2.1" });
+  await open("/", { "user-agent": browser["user-agent"] });
+  await open("/", browser, { method: "POST", body: "x" });
+  await open("/__polynet/ui.css");
+  expect(calls).toHaveLength(1);
+  // A failing backend never touches the page.
+  vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
+  expect((await open("/about")).status).toBe(200);
+});

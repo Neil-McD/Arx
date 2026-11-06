@@ -2,30 +2,29 @@
   "contract_id": "cached_production_client_compatibility_v1",
   "version": 1,
   "production_origin": "https://polynet.ai",
-  "production_build_id": "0dc2cb85ab5629152dd8280b9c744a77a3341413",
+  "production_build_id": "8c8349a1a1f4c0623625fb927cd3f98f5a28154d",
   "staging_deployment": "quick-porcupine-949",
   "production_asset_paths": [
     "/",
-    "/assets/CommunityComposerControls-Bt6yxTFZ.js",
-    "/assets/PdfReader-BWbxuUTM.js",
-    "/assets/VoiceInputButton-a0-LUXHX.js",
-    "/assets/WebAnalyticsScopeSwitcher-DPExvNhH.js",
-    "/assets/WebAppMainSurfaceHost-DGC7ixOI.js",
-    "/assets/WebCommunityAgentDock-OTkNR-3V.js",
-    "/assets/WebOperatorDashboardHost-CfVLxXJQ.js",
-    "/assets/WebStandalonePublicRouteShell-DGOL2eOZ.js",
-    "/assets/analytics-vendor-3YbZxLxK.js",
-    "/assets/appShellNavigation-BLo6LksP.js",
-    "/assets/convex-vendor-DPvSwN-A.js",
-    "/assets/convexAuthenticatedClient-1d-2YAYH.js",
-    "/assets/highlight-vendor-D0hmE1MI.js",
-    "/assets/index-OdzcO2x3.js",
-    "/assets/legalDocumentsContent-D1bz65GD.js",
-    "/assets/markdown-vendor-BxOPi3Bl.js",
-    "/assets/preload-helper-Cc64ejXF.js",
-    "/assets/react-vendor-BMQ7VCkJ.js",
-    "/assets/rolldown-runtime-Cdj3SJQl.js",
-    "/assets/ui-vendor-DlpDj84P.js"
+    "/assets/CommunityComposerControls-DljKtAq0.js",
+    "/assets/PdfReader-Cgi-MQQF.js",
+    "/assets/VoiceInputButton-B8_YYyCG.js",
+    "/assets/WebAnalyticsScopeSwitcher-B81gdQpx.js",
+    "/assets/WebAppMainSurfaceHost-JUN9Qdeb.js",
+    "/assets/WebCommunityAgentDock-D0zlt3mt.js",
+    "/assets/WebOperatorDashboardHost-Bgrm4rZn.js",
+    "/assets/analytics-vendor-DrCTADQB.js",
+    "/assets/appShellNavigation-CCT2AW2a.js",
+    "/assets/convex-vendor-CerpO-sF.js",
+    "/assets/convexAuthenticatedClient-vNB2nxEM.js",
+    "/assets/highlight-vendor-xidFJY4u.js",
+    "/assets/index-CUm6m9Hi.js",
+    "/assets/legalDocumentsContent-1e4ABl0g.js",
+    "/assets/markdown-vendor-CZ-Y2Kiz.js",
+    "/assets/preload-helper-CZZv4qnu.js",
+    "/assets/react-vendor-BfyTbX3M.js",
+    "/assets/rolldown-runtime-BKC7DUSY.js",
+    "/assets/ui-vendor-CU7z8D5x.js"
   ],
   "supplemental_operation_sources": {
     "communityInteractions:createCommunityInteractionComposerMessage": "shared/cloudCommunityInteractionsGateway.ts"
@@ -72,8 +71,6 @@
     "communityChat:setCommunityTyping",
     "communityColdArchive:archiveCommunity",
     "communityColdArchive:restoreCommunityWithoutPayment",
-    "communityCommerce:finalizeCheckoutSession",
-    "communityCommerce:startPublicCommunityCheckout",
     "communityDirectory:listCommunityDirectoryPage",
     "communityDirectory:searchCommunityMentionCandidates",
     "communityEvents:cancelCommunityEvent",
@@ -96,15 +93,10 @@
     "communityNotes:deleteCommunityNote",
     "communityNotes:listCommunityNotes",
     "communityNotes:updateCommunityNote",
-    "communityPublic:cancelMyJoinRequestBySlug",
     "communityPublic:getCommunityPresenceSummary",
     "communityPublic:heartbeatCommunityPresence",
-    "communityPublic:joinPublicCommunity",
-    "communityPublic:joinPublicCommunityBySlug",
     "communityPublic:listPublicDiscoverCommunities",
-    "communityPublic:recordPublicFunnelVisitBySlug",
     "communityPublic:resolvePublicFunnelBySlug",
-    "communityPublic:resolvePublicFunnelStatsBySlug",
     "communityResources:applyCommunityResourceBuilderChangeset",
     "communityResources:deleteCommunityResource",
     "communityResources:deleteCommunityResourceModule",
@@ -146,7 +138,6 @@
     "founderBilling:getFounderBillingOverview",
     "founderBilling:startFounderBillingPortal",
     "founderBilling:startFounderSubscriptionCheckout",
-    "founderBilling:startPublicBuilderCheckout",
     "memberEntryDestination:resolveMemberEntryDestination",
     "operatorAccess:getMyOperatorAccessOptional",
     "operatorAccess:recordOperatorDashboardAccess",
@@ -1957,78 +1948,6 @@
       },
       "functionType": "Mutation"
     },
-    "communityCommerce:finalizeCheckoutSession": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "sessionId": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "communityCommerce:startPublicCommunityCheckout": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "billingPeriod": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "cancelUrl": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "communitySlug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "successUrl": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Action"
-    },
     "communityDirectory:listCommunityDirectoryPage": {
       "args": {
         "type": "object",
@@ -3344,20 +3263,6 @@
       },
       "functionType": "Mutation"
     },
-    "communityPublic:cancelMyJoinRequestBySlug": {
-      "args": {
-        "type": "object",
-        "value": {
-          "communitySlug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
     "communityPublic:getCommunityPresenceSummary": {
       "args": {
         "type": "object",
@@ -3414,35 +3319,6 @@
       },
       "functionType": "Mutation"
     },
-    "communityPublic:joinPublicCommunity": {
-      "args": {
-        "type": "object",
-        "value": {
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
-    "communityPublic:joinPublicCommunityBySlug": {
-      "args": {
-        "type": "object",
-        "value": {
-          "communitySlug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
     "communityPublic:listPublicDiscoverCommunities": {
       "args": {
         "type": "object",
@@ -3457,47 +3333,7 @@
       },
       "functionType": "Query"
     },
-    "communityPublic:recordPublicFunnelVisitBySlug": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "communitySlug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          },
-          "visitorKey": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
     "communityPublic:resolvePublicFunnelBySlug": {
-      "args": {
-        "type": "object",
-        "value": {
-          "communitySlug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "communityPublic:resolvePublicFunnelStatsBySlug": {
       "args": {
         "type": "object",
         "value": {
@@ -4872,13 +4708,6 @@
             "optional": false
           }
         }
-      },
-      "functionType": "Action"
-    },
-    "founderBilling:startPublicBuilderCheckout": {
-      "args": {
-        "type": "object",
-        "value": {}
       },
       "functionType": "Action"
     },
