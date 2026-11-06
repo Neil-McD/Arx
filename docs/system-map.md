@@ -49,7 +49,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [auth-runtime-setup-workos-authkit.md](auth-runtime-setup-workos-authkit.md),
   [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
   [auth-money-access-matrix.md](auth-money-access-matrix.md).
-- **Hand-run:** `anonymousUserCleanup` (data deletion); `retiredTablesCleanup` (table-drop release 1, POL-31; removed in release 2).
+- **Hand-run:** `anonymousUserCleanup` (data deletion).
 
 ### 2. Communities, membership and joining — Keep
 
@@ -373,7 +373,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   claim) was deleted Nov 6. A founder checkout now needs a signed-in owner;
   one without an owner fails (`founder_subscription_owner_missing`).
 - **Tables:** `founderSubscriptions`, `founderUsageCycles`, `checkoutSessions`,
-  `purchaseClaims`, `userStripeCustomers`, `communityStripeCustomers`,
+  `userStripeCustomers`, `communityStripeCustomers`,
   `userStripeConnectAccounts`, `communityPricePoints`, `communitySubscriptions`,
   `communityApplicationFeeRefunds`, `communityApplicationFeeRefundLocks`,
   `communityInferenceReceipts`,

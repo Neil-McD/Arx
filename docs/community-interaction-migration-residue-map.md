@@ -49,10 +49,6 @@ The old thread chat code is gone (POL-26). Its tables (`communityChatThreads`, `
 ## Next Deletion Order
 
 1. Backfill and audit the temporary unchanneled General lane until two consecutive production audits report zero drift.
-2. Drop the old chat tables in the table-drop release (POL-31). Release 1 ships
-   `convex/retiredTablesCleanup.ts`: after a full backup and a per-table export,
-   `emptyRetiredTableInternal` empties each retired table (old chat, the funnel
-   editor, skills, integrations; dry run counts) and
-   `rewriteRetiredPersonalAgentInternal` renames old `personal_agent` roots and
-   replies to `community_agent` and receipts to `community_agent_for_member`.
-   Release 2 removes the empty tables, the `personal_agent` literal and that file.
+2. Done (POL-31): the retired tables were emptied and dropped (Nov 7), and old
+   `personal_agent` posts, replies and receipts were renamed (0 left). The
+   cleanup module is gone; the `personal_agent` literal goes next.
