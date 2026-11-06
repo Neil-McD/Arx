@@ -19,7 +19,7 @@ const OTHER = "c".repeat(40);
 const origin = PRODUCTION_AUTHORITY.productionOrigin;
 const convexHost = new URL(PRODUCTION_AUTHORITY.convexUrl).host;
 
-type Call = { kind: string; command: string; args: string[]; env?: Record<string, string> };
+type Call = { kind: string; command: string; args: string[]; env?: Record<string, string>; cwd?: string };
 
 function fakeDeps(overrides: {
   porcelain?: string;
@@ -55,8 +55,8 @@ function fakeDeps(overrides: {
       if (args[0] === "merge-base") return overrides.ancestor ?? true;
       return true;
     },
-    run: (command: string, args: string[], env: Record<string, string>) => {
-      calls.push({ kind: "run", command, args, env });
+    run: (command: string, args: string[], env: Record<string, string>, cwd?: string) => {
+      calls.push({ kind: "run", command, args, env, cwd });
       const joined = `${command} ${args.join(" ")}`;
       if (overrides.failOn && joined.includes(overrides.failOn)) throw new Error(`failed: ${joined}`);
     },
@@ -107,6 +107,7 @@ function commandOrder(calls: Call[]): string[] {
       if (text.includes("release:gate")) return "gate";
       if (text.includes("smoke:workspace-credit")) return "accounting_smoke";
       if (text.includes("convex deploy")) return "convex_deploy";
+      if (text.includes("wrangler deploy")) return "edge_deploy";
       if (text.includes(" deploy --prod")) return "vercel_deploy";
       if (text.includes(" promote ")) return "vercel_promote";
       if (text.includes(" rollback ")) return "vercel_rollback";
@@ -167,14 +168,21 @@ describe("production release flow", () => {
     expect(result.rollbackDeployment.id).toBe("dpl_previous");
   });
 
+  test("an edge failure after the web is live says what's released and how to finish", async () => {
+    const { deps } = fakeDeps({ failOn: "wrangler deploy" });
+    await expect(runProductionRelease(deps, {})).rejects.toThrow(/production_release_edge_failed[\s\S]*npx wrangler deploy --env production/);
+  });
+
   test("release deploys Convex before the web app, with pinned authority, then proves the live result", async () => {
     const { deps, calls } = fakeDeps();
     const result = await runProductionRelease(deps, {});
     expect(result.status).toBe("released");
     expect(commandOrder(calls)).toEqual([
       "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "accounting_smoke", "vercel_inspect",
-      "convex_deploy", "vercel_deploy",
+      "convex_deploy", "vercel_deploy", "edge_deploy",
     ]);
+    const edge = calls.find((call) => call.args.includes("wrangler"))!;
+    expect([edge.args.join(" "), (edge as any).cwd]).toEqual(["wrangler deploy --env production", "infra/community-edge/dispatch"]);
     const convex = calls.find((call) => call.args.includes("convex") && call.args.includes("deploy"))!;
     expect(convex.env?.CONVEX_DEPLOYMENT).toBe(PRODUCTION_AUTHORITY.convexDeployment);
     const web = calls.find((call) => call.args.includes("--prod"))!;
@@ -183,7 +191,7 @@ describe("production release flow", () => {
     expect(web.args).toContain(`VITE_POLYNET_BUILD_ID=${HEAD}`);
     expect(result.deploymentUrl).toBe("https://polynet-new-neil-mcds-projects.vercel.app");
     expect(result.stages.map((stage: { id: string }) => stage.id)).toEqual([
-      "guards", "no_regress", "release_gate", "settings_parity", "preflight", "convex_deployed", "web_deployed", "live_verified",
+      "guards", "no_regress", "release_gate", "settings_parity", "preflight", "convex_deployed", "web_deployed", "live_verified", "edge_deployed",
     ]);
   });
 

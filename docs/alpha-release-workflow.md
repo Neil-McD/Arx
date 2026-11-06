@@ -20,7 +20,7 @@ Vercel Git auto-deploy from `main` is disabled in `vercel.json`.
 
 ```bash
 npm run release:verify   # guards, release gate, preflight; deploys nothing
-npm run release:prod     # the same, then Convex, then web, then live proof
+npm run release:prod     # the same, then Convex, then web, then live proof, then the sites' edge
 ```
 
 3. Commit the receipt the command writes to `docs/receipts/` and complete its
@@ -38,6 +38,7 @@ npm run release:prod     # the same, then Convex, then web, then live proof
 | Convex | `convex deploy --typecheck enable` to `prod:wry-hawk-715`. |
 | Web | `vercel deploy --prod --archive=tgz` to project `polynet`, with the commit SHA as build identity. |
 | Live proof | `www.polynet.ai/version.json` reports `HEAD` (one explicit promote is attempted if Vercel does not assign the domain), and the live bundle embeds the production Convex URL. |
+| Edge | `wrangler deploy --env production` from `infra/community-edge/dispatch` (the community sites' Worker), then a site page (`polynet.polynet.page/__polynet/llms.txt`) must answer. Last, because it calls the backend just deployed. If it fails, backend and web are already live and the previous edge keeps serving; the error says how to finish. Part of the release since Nov 7; before that it was a manual step. |
 | Receipt | `docs/receipts/<date>-production-<sha>.md` and `artifacts/release-production.json`. |
 
 Production authority (Convex deployment, Vercel team and project IDs, origin) is

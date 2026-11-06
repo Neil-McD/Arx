@@ -12,6 +12,9 @@ export const PRODUCTION_AUTHORITY = Object.freeze({
   vercelProjectId: "prj_raxvbRAmEKdvqhAO8V6SnE9PrVir",
   vercelProjectName: "polynet",
   productionOrigin: "https://www.polynet.ai",
+  // The community sites' edge (Cloudflare Worker) and a page every site serves.
+  edgeDirectory: "infra/community-edge/dispatch",
+  edgeProbeUrl: "https://polynet.polynet.page/__polynet/llms.txt",
 });
 
 export const VERCEL_CLI = Object.freeze(["--yes", "vercel@60.1.3"]);
@@ -274,6 +277,20 @@ export async function runProductionRelease(deps, options = {}) {
     );
   }
   stage("live_verified", { buildId: headSha, convexUrl: PRODUCTION_AUTHORITY.convexUrl });
+
+  // The community sites' edge last: it calls the backend just deployed, and the
+  // web is already live. A failure here leaves backend and web released and the
+  // previous edge serving; the message says how to finish.
+  try {
+    deps.run("npx", ["wrangler", "deploy", "--env", "production"], releaseEnv, PRODUCTION_AUTHORITY.edgeDirectory);
+    await deps.fetchText(PRODUCTION_AUTHORITY.edgeProbeUrl);
+  } catch {
+    throw new ReleaseError(
+      "production_release_edge_failed",
+      `backend and web are live at ${headSha}; finish with: (cd ${PRODUCTION_AUTHORITY.edgeDirectory} && npx wrangler deploy --env production)`,
+    );
+  }
+  stage("edge_deployed", { probe: PRODUCTION_AUTHORITY.edgeProbeUrl });
   return { ...evidence, status: "released" };
 }
 
