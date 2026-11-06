@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { getCommunityAndMembership, requireCommunityChatAccess, resolveCommunityLens } from "./communityCore";
@@ -135,42 +135,3 @@ test("free dashboard: a founder at the cap still creates a community that brings
   }
 });
 
-test("pricing v2 migration: subscription-required communities become free, audited, plans untouched; free and grandfathered stay", async () => {
-  const t = convexTest(schema, modules);
-  const ownerId = await founder(t, "legacy-founder");
-  const ids = await t.run(async (ctx) => {
-    const community = (slug: string, builderAccessMode?: string) => ctx.db.insert("communities", {
-      ownerId, slug, name: slug, visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open",
-      activeMemberCount: 1, createdAt: NOW, updatedAt: NOW, ...(builderAccessMode ? { builderAccessMode } : {}),
-    } as any);
-    const legacy = await community("legacy-paid", "subscription_required");
-    const legacyArchived = await community("legacy-archived", "subscription_required");
-    await ctx.db.patch(legacyArchived, { lifecycleStatus: "archived" } as any);
-    const old = await community("old-grandfathered");
-    const free = await community("already-free", "free");
-    const subscriptionId = await ctx.db.insert("founderSubscriptions", {
-      ownerUserId: ownerId, communityId: legacy, provider: "stripe", providerCustomerId: "cus_x", providerSubscriptionId: "sub_x",
-      providerPriceId: "price_x", status: "past_due", cancelAtPeriodEnd: false, lastProviderEventCreatedAt: NOW, currentPeriodStartAt: NOW - 1000, currentPeriodEndAt: NOW + 1000, attachedAt: NOW, createdAt: NOW, updatedAt: NOW,
-    } as any);
-    return { legacy, legacyArchived, old, free, subscriptionId };
-  });
-  const before = await t.run((ctx) => ctx.db.get(ids.legacy));
-  const dry = await t.mutation(internal.communityLifecycle.migrateSubscriptionRequiredCommunitiesToFreeInternal, { dryRun: true });
-  expect(dry).toEqual({ dryRun: true, changed: 2, communityIds: expect.arrayContaining([String(ids.legacy), String(ids.legacyArchived)]) });
-  expect((await t.run((ctx) => ctx.db.get(ids.legacy)))?.builderAccessMode).toBe("subscription_required");
-  const run = await t.mutation(internal.communityLifecycle.migrateSubscriptionRequiredCommunitiesToFreeInternal, {});
-  expect(run).toMatchObject({ dryRun: false, changed: 2 });
-  const after = await t.run(async (ctx) => ({
-    modes: await Promise.all([ids.legacy, ids.legacyArchived, ids.old, ids.free].map(async (id) => ((await ctx.db.get(id)) as any)?.builderAccessMode ?? null)),
-    archived: ((await ctx.db.get(ids.legacyArchived)) as any)?.lifecycleStatus,
-    subscription: await ctx.db.get(ids.subscriptionId),
-    audit: (await ctx.db.query("criticalAuditEvents").collect()).filter((row) => row.eventType === "community_builder_access_freed").length,
-  }));
-  expect(after.modes).toEqual(["free", "free", null, "free"]);
-  expect(after.archived).toBe("archived");
-  expect(after.subscription).toMatchObject({ communityId: ids.legacy, status: "past_due" });
-  expect(after.audit).toBe(2);
-  expect((before as any).name).toBe("legacy-paid");
-  // Run again: nothing left.
-  expect(await t.mutation(internal.communityLifecycle.migrateSubscriptionRequiredCommunitiesToFreeInternal, {})).toMatchObject({ changed: 0 });
-});

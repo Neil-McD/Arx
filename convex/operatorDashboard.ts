@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
-import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+import { query } from "./_generated/server";
 import { requireOperatorRole } from "./operatorAccess";
 
 const operatorRange = v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all")));
@@ -99,83 +98,6 @@ export const getOperatorAccountSetupSnapshot = query({
       completed: args.completed,
       limit: args.limit,
     });
-  },
-});
-
-export const backfillCommunityMembershipActiveFlags = mutation({
-  args: {
-    authSubject: v.optional(v.string()),
-    dryRun: v.optional(v.boolean()),
-    maxPatches: v.optional(v.number()),
-  },
-  handler: async (ctx, args): Promise<any> => {
-    const operator = await requireOperatorWriteAccess(ctx, args.authSubject);
-    const startedAt = Date.now();
-    const dryRun = args.dryRun !== false;
-    const maxPatches = Math.max(1, Math.min(5000, Math.floor(args.maxPatches ?? 500)));
-    try {
-      const rows = (await ctx.db.query("communityMemberships").collect()) as Array<{
-        _id: any;
-        active?: boolean;
-        revokedAt?: number;
-      }>;
-      const missingActiveRows = rows.filter((row) => typeof row.active !== "boolean");
-      const patchRows = missingActiveRows.slice(0, maxPatches);
-      let markedActive = 0;
-      let markedInactive = 0;
-      if (!dryRun) {
-        for (const row of patchRows) {
-          const isRevoked = typeof row.revokedAt === "number" && row.revokedAt > 0;
-          await ctx.db.patch(row._id, {
-            active: !isRevoked,
-          });
-          if (isRevoked) markedInactive += 1;
-          else markedActive += 1;
-        }
-      } else {
-        for (const row of patchRows) {
-          if (typeof row.revokedAt === "number" && row.revokedAt > 0) markedInactive += 1;
-          else markedActive += 1;
-        }
-      }
-      const result = {
-        dry_run: dryRun,
-        scanned_memberships: rows.length,
-        missing_active_flags: missingActiveRows.length,
-        patch_limit: maxPatches,
-        would_mark_active: markedActive,
-        would_mark_inactive: markedInactive,
-        repaired: dryRun ? 0 : patchRows.length,
-        truncated: missingActiveRows.length > patchRows.length,
-      };
-      await recordCriticalAuditEventBestEffort(ctx, {
-        eventKey: `community_membership_active_flags_backfill:${String(operator.dbUserId)}:${startedAt}`,
-        eventType: "community_membership_active_flags_backfill",
-        severity: dryRun ? "info" : "warning",
-        status: "succeeded",
-        actorUserId: operator.dbUserId,
-        provider: "polynet",
-        metadata: result,
-        createdAt: startedAt,
-      });
-      return result;
-    } catch (error) {
-      await recordCriticalAuditEventBestEffort(ctx, {
-        eventKey: `community_membership_active_flags_backfill:${String(operator.dbUserId)}:${startedAt}`,
-        eventType: "community_membership_active_flags_backfill",
-        severity: "error",
-        status: "failed",
-        actorUserId: operator.dbUserId,
-        provider: "polynet",
-        metadata: {
-          dryRun,
-          maxPatches,
-          errorMessage: error instanceof Error ? error.message : String(error ?? ""),
-        },
-        createdAt: startedAt,
-      });
-      throw error;
-    }
   },
 });
 
