@@ -52,6 +52,7 @@ import type * as communityChannelParticipants from "../communityChannelParticipa
 import type * as communityChannelValidators from "../communityChannelValidators.js";
 import type * as communityChannels from "../communityChannels.js";
 import type * as communityChat from "../communityChat.js";
+import type * as communityCheckoutBuyer from "../communityCheckoutBuyer.js";
 import type * as communityCognitionLifecycle from "../communityCognitionLifecycle.js";
 import type * as communityColdArchive from "../communityColdArchive.js";
 import type * as communityCommerce from "../communityCommerce.js";
@@ -270,6 +271,7 @@ declare const fullApi: ApiFromModules<{
   communityChannelValidators: typeof communityChannelValidators;
   communityChannels: typeof communityChannels;
   communityChat: typeof communityChat;
+  communityCheckoutBuyer: typeof communityCheckoutBuyer;
   communityCognitionLifecycle: typeof communityCognitionLifecycle;
   communityColdArchive: typeof communityColdArchive;
   communityCommerce: typeof communityCommerce;

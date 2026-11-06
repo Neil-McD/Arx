@@ -2,7 +2,7 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
-import { sha256Hex } from "./communityCommerce";
+import { sha256Hex } from "./communityCheckoutBuyer";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
@@ -99,7 +99,7 @@ test("the email given to Stripe finds its account: at once if it exists and is v
   await second.paid("buyer@example.com");
   expect(await second.state()).toEqual({ owner: null, granted: false, members: [] });
   await second.t.run(async (ctx) => ctx.db.patch(second.ids.buyerId, { emailVerifiedAt: Date.now() }));
-  expect(await second.t.mutation(internal.communityCommerce.attachPaidCheckoutsForVerifiedEmailInternal, {
+  expect(await second.t.mutation(internal.communityCheckoutBuyer.attachPaidCheckoutsForVerifiedEmailInternal, {
     userId: second.ids.buyerId, email: "buyer@example.com",
   })).toEqual({ attached: 1 });
   expect(await second.state()).toEqual({ owner: second.ids.buyerId, granted: true, members: [second.ids.buyerId] });
@@ -130,7 +130,7 @@ test("someone already paying who pays again before signing in is refunded, not c
 test("one visitor can start only a few guest checkouts, and can't use up a community's for everyone", async () => {
   const { t, ids } = await fixture();
   const allowed = (visitorHash: string, nowMs = Date.now()) =>
-    t.query(internal.communityCommerce.guestCheckoutAllowedInternal, { communityId: ids.communityId, nowMs, visitorHash });
+    t.query(internal.communityCheckoutBuyer.guestCheckoutAllowedInternal, { communityId: ids.communityId, nowMs, visitorHash });
   const record = (index: number, visitorHash: string) => t.mutation(internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal, {
     sessionId: `chk_${String(index).padStart(32, "0")}`, communityId: ids.communityId, communityLifecycleGeneration: 0, billingPeriod: "monthly",
     pricePointId: ids.pricePointId, amountBaseUnits: 500, currency: "usd", currencyDecimals: 2, providerAccountId: ACCOUNT,
@@ -171,7 +171,7 @@ test("someone blocked from the community who pays before signing in is refunded,
 test("refunded or disputed before signing in, a payment never grants: signing in after finds nothing to join", async () => {
   const { t, ids, finish, paid, state } = await fixture();
   await paid(null);
-  expect(await t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+  expect(await t.mutation(internal.communityCheckoutBuyer.revokeUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_refunded",
   })).toEqual({ revoked: true });
   expect(await finish(ids.buyerId, SECRET)).toEqual({ status: "expired" });
@@ -195,7 +195,7 @@ test("an email with many past checkouts still finds the one waiting for it", asy
   });
   await paid("buyer@example.com");
   await t.run(async (ctx) => ctx.db.patch(ids.buyerId, { emailVerifiedAt: Date.now() }));
-  expect(await t.mutation(internal.communityCommerce.attachPaidCheckoutsForVerifiedEmailInternal, {
+  expect(await t.mutation(internal.communityCheckoutBuyer.attachPaidCheckoutsForVerifiedEmailInternal, {
     userId: ids.buyerId, email: "buyer@example.com",
   })).toEqual({ attached: 1 });
   expect(await state()).toEqual({ owner: ids.buyerId, granted: true, members: [ids.buyerId] });
@@ -211,7 +211,7 @@ test("a payment made before signing in still grants when its buyer first signs i
     await ctx.db.patch(row!._id, { expiresAt: Date.now() - 1 });
     await ctx.db.patch(ids.buyerId, { emailVerifiedAt: Date.now() });
   });
-  expect(await t.mutation(internal.communityCommerce.attachPaidCheckoutsForVerifiedEmailInternal, {
+  expect(await t.mutation(internal.communityCheckoutBuyer.attachPaidCheckoutsForVerifiedEmailInternal, {
     userId: ids.buyerId, email: "buyer@example.com",
   })).toEqual({ attached: 1 });
   expect(await state()).toEqual({ owner: ids.buyerId, granted: true, members: [ids.buyerId] });
@@ -220,10 +220,10 @@ test("a payment made before signing in still grants when its buyer first signs i
 test("a dispute won on a payment not granted yet lifts its block; a refund doesn't", async () => {
   const { t, ids, finish, paid, state } = await fixture();
   await paid(null);
-  await t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+  await t.mutation(internal.communityCheckoutBuyer.revokeUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_dispute_opened",
   });
-  expect(await t.mutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
+  expect(await t.mutation(internal.communityCheckoutBuyer.restoreUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first",
   })).toEqual({ restored: true });
   expect(await finish(ids.buyerId, SECRET)).toEqual({ status: "joined" });
@@ -231,14 +231,14 @@ test("a dispute won on a payment not granted yet lifts its block; a refund doesn
 
   const second = await fixture();
   await second.paid(null);
-  await second.t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+  await second.t.mutation(internal.communityCheckoutBuyer.revokeUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_refunded",
   });
   // A dispute after the refund, then won: the refund still holds.
-  await second.t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+  await second.t.mutation(internal.communityCheckoutBuyer.revokeUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_dispute_opened",
   });
-  expect(await second.t.mutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
+  expect(await second.t.mutation(internal.communityCheckoutBuyer.restoreUngrantedCommunityCheckoutInternal, {
     providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first",
   })).toEqual({ restored: false });
   expect(await second.finish(second.ids.buyerId, SECRET)).toEqual({ status: "expired" });

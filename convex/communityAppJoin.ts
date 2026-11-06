@@ -24,7 +24,8 @@ import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import { accountSetupBlocksJoining } from "../shared/accountSetup";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
-import { attachCommunityCheckoutToUser, resolveCheckoutSessionFinalization, sha256Hex } from "./communityCommerce";
+import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuyer";
+import { resolveCheckoutSessionFinalization } from "./communityCommerce";
 
 // Join on a community site's private twin (<slug>--me<suffix>.<sites domain>/join).
 // The page shows what Studio's public funnel (/c/<slug>) shows and decides, from

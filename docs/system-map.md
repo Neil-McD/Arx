@@ -361,7 +361,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   application fee, refunds, payouts, usage and cost receipts.
 - **Code:** `founderBilling`, `founderPlanCore`, `founderPlanPricing`,
   `founderCheckoutReceiptCore`, `communityBuilderAccessCore`, `billingCore`,
-  `communityCommerce*`, `creatorCommerce`, `stripe*`, `httpBilling`,
+  `communityCommerce*`, `communityCheckoutBuyer` (who a paid join belongs to, and settling it), `creatorCommerce`, `stripe*`, `httpBilling`,
   `communityApplicationFeeRefundCore`, `founderPaidTool*`, `providerCostCore`,
   `voiceProviderCostAccounting`.
 - **Reached by:** `/billing/stripe_webhook` (authoritative), Studio checkout.
