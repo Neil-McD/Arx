@@ -884,6 +884,8 @@ export function appPageFor(url: URL, slug: string, env: Env): string | null {
   const personal = personalPage(url.pathname);
   if (personal?.name === "messages") {
     const conversation = url.pathname.split("/")[2] ?? "";
+    // "Message @handle" (/messages/new?to=) stays on the twin, which starts it in either mode.
+    if (conversation === "new") return null;
     return app(`/?dm=${/^[A-Za-z0-9]{20,40}$/.test(conversation) ? conversation : "inbox"}`);
   }
   if (personal?.name === "settings") return app("/settings/profile");

@@ -1630,7 +1630,8 @@ test("the app's version of the member's own pages", () => {
   const at = (path: string) => appPageFor(new URL(`https://x--me.polynet.page${path}`), "club", e);
   expect(at("/messages")).toBe("https://polynet.example.com/?dm=inbox&pn_from=site");
   expect(at("/messages/k97abcdefghijklmnopqrst")).toBe("https://polynet.example.com/?dm=k97abcdefghijklmnopqrst&pn_from=site");
-  expect(at("/messages/new")).toBe("https://polynet.example.com/?dm=inbox&pn_from=site");
+  // "Message @handle" stays on the twin, which starts the conversation in either mode.
+  expect(at("/messages/new?to=sam")).toBeNull();
   expect(at("/settings")).toBe("https://polynet.example.com/settings/profile?pn_from=site");
   expect(at("/communities")).toBe("https://polynet.example.com/?pn_from=site");
   for (const stays of ["/join", "/moderate", "/requests", "/", "/discover"]) expect(at(stays), stays).toBeNull();
