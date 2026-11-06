@@ -517,10 +517,13 @@ test("signing out of Polynet signs the person out of every community site; other
     await session(me._id, site, 1);
     await session(me._id, twin, 2);
     const theirs = await session(other, site, 3);
+    // Another tab's sign-in code, not yet traded for a session.
+    await ctx.db.insert("communityAppHandoffs", { codeHash: "c".repeat(64), stateHash: "d".repeat(64), domainId: site, userId: me._id, expiresAt: NOW + 60_000 });
     return { me: me._id, theirs };
   });
   vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
   expect(await t.action((internal as any).authSessions.logoutAuthSessionInternal, { sessionId: "logout-sites" })).toEqual({ status: "ok" });
   const left = await t.run((ctx) => ctx.db.query("communityAppSessions").collect());
   expect(left.map((row) => String(row._id))).toEqual([String(ids.theirs)]);
+  expect(await t.run((ctx) => ctx.db.query("communityAppHandoffs").collect())).toEqual([]);
 });
