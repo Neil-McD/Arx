@@ -2622,6 +2622,21 @@ export default defineSchema({
     .index("by_community", ["communityId"]),
 
   // Each published site deploy (polynet deploy): who put which files live where.
+  // A change the owner's own AI asked for, waiting for the owner to approve it
+  // in Studio (Nov 6). One kind so far: where members spend time.
+  communityOwnerApprovals: defineTable({
+    communityId: v.id("communities"),
+    kind: v.literal("member_experience"),
+    requestedByUserId: v.id("users"),
+    fromValue: v.string(),
+    toValue: v.string(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("stale")),
+    expiresAt: v.number(),
+    decidedByUserId: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_community_kind_status", ["communityId", "kind", "status"]),
+
   communitySiteDeploys: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),

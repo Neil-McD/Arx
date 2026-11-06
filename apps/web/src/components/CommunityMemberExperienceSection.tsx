@@ -1,9 +1,15 @@
 // The owner's switch: where this community's members spend time, Polynet's app
 // or the site the owner built. Joining and the public page are the site's
-// either way. Admins see the choice; only the owner changes it.
+// either way. Admins see the choice; only the owner changes it. A change the
+// owner's AI asked for waits here for the owner's Approve or Decline.
 import { useEffect, useState } from "react";
 
-import { setCloudCommunityMemberExperience } from "../../../../shared/cloudCommunityAdminGateway";
+import {
+  decideCloudMemberExperienceRequest,
+  getCloudPendingMemberExperienceRequest,
+  setCloudCommunityMemberExperience,
+  type CloudMemberExperienceRequest,
+} from "../../../../shared/cloudCommunityAdminGateway";
 
 type Experience = "app" | "site";
 
@@ -25,10 +31,49 @@ export function CommunityMemberExperienceSection(props: {
   const [current, setCurrent] = useState<Experience>(props.community.members_use === "site" ? "site" : "app");
   const [saving, setSaving] = useState<Experience | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [request, setRequest] = useState<CloudMemberExperienceRequest | null>(null);
+  const [deciding, setDeciding] = useState(false);
   useEffect(() => {
     setCurrent(props.community.members_use === "site" ? "site" : "app");
     setError(null);
   }, [props.community.id, props.community.members_use]);
+  // Only the owner sees (and decides) what their AI asked for.
+  useEffect(() => {
+    if (!props.canChange) return setRequest(null);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        const waiting = session ? await getCloudPendingMemberExperienceRequest({ session, communityId: props.community.id }) : null;
+        if (!cancelled) setRequest(waiting);
+      } catch {
+        if (!cancelled) setRequest(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.community.id, props.canChange]);
+
+  const decide = async (decision: "approve" | "decline") => {
+    if (!request || deciding) return;
+    setDeciding(true);
+    setError(null);
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) throw new Error("not_signed_in");
+      const answer = await decideCloudMemberExperienceRequest({ session, communityId: props.community.id, requestId: request.request_id, decision });
+      setRequest(null);
+      setCurrent(answer.members_use);
+      props.onSaved(props.community.id, answer.members_use);
+      if (answer.status === "expired") setError("That request expired. Ask your AI again, or use the switch below.");
+      if (answer.status === "stale") setError("Members already moved since your AI asked, so nothing changed.");
+    } catch (failure) {
+      setError(friendlyError(failure));
+    } finally {
+      setDeciding(false);
+    }
+  };
 
   const choose = async (next: Experience) => {
     if (!props.canChange || saving || next === current) return;
@@ -70,6 +115,17 @@ export function CommunityMemberExperienceSection(props: {
       <div className="settings-section-desc">
         Your public page and joining work the same either way. Switching is instant, and you can switch back anytime.
       </div>
+      {request ? (
+        <div className="community-member-experience-request" role="status">
+          <div>
+            Your AI asked to move your members to <strong>{request.to === "site" ? "your custom site" : "Polynet's app"}</strong>.
+          </div>
+          <div className="community-member-experience-request-actions">
+            <button type="button" className="primary" disabled={deciding} onClick={() => void decide("approve")}>Approve</button>
+            <button type="button" className="secondary" disabled={deciding} onClick={() => void decide("decline")}>Decline</button>
+          </div>
+        </div>
+      ) : null}
       <div className="community-member-experience-options" role="radiogroup" aria-label="Where your members spend time">
         {option("app", "Polynet's app", "Chat, courses, events, messages and your agent, ready to go.", false)}
         {option(

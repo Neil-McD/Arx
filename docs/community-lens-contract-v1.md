@@ -51,13 +51,18 @@ of the slices that follow.
 - Member: R name, one-liner, about, handbook, how to join.
 - Admin: W about, one-liner, handbook (draft with the agent, approve), join
   mode (open or by approval), agent instructions.
-- Owner: W name, slug, visibility, branding. A: archive (confirmed).
+- Owner: W name, slug, visibility, branding, where members spend time
+  (Polynet's app or the community's own deployed site). A: archive (confirmed).
 - MCP now: owners and admins read `builder/community.json` and change the
   community through `community.settings.update` (owner: name, slug,
   visibility; admins too: one-liner, about; naming the revision they read),
   `community.join_mode.set`, `community.agent.instructions.set`,
   `community.handbook.save_draft` and `community.handbook.approve`, through
-  Studio's own domain functions. Planned: pictures; archive (confirmed).
+  Studio's own domain functions. The owner's AI may ask to change where
+  members spend time (`community.member_experience.request`, `to`: app or
+  site); nothing changes until the owner approves it in Studio → Settings
+  within 24 hours (`communityOwnerApprovals`). No AI action approves.
+  Planned: pictures; archive (confirmed).
 
 ### 2. People
 - Member: R directory, member cards, shared activity, who's online. W own

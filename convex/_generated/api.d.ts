@@ -98,6 +98,7 @@ import type * as communityNotes from "../communityNotes.js";
 import type * as communityNotificationAccess from "../communityNotificationAccess.js";
 import type * as communityOntologyCards from "../communityOntologyCards.js";
 import type * as communityOperations from "../communityOperations.js";
+import type * as communityOwnerApprovals from "../communityOwnerApprovals.js";
 import type * as communityPeople from "../communityPeople.js";
 import type * as communityPresenceCore from "../communityPresenceCore.js";
 import type * as communityPublic from "../communityPublic.js";
@@ -315,6 +316,7 @@ declare const fullApi: ApiFromModules<{
   communityNotificationAccess: typeof communityNotificationAccess;
   communityOntologyCards: typeof communityOntologyCards;
   communityOperations: typeof communityOperations;
+  communityOwnerApprovals: typeof communityOwnerApprovals;
   communityPeople: typeof communityPeople;
   communityPresenceCore: typeof communityPresenceCore;
   communityPublic: typeof communityPublic;

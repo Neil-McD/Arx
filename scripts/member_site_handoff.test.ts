@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 
 import { communityAccessRunsCommunity, deriveCommunityAccessCapabilities } from "../shared/communityAccessViewModel";
 import { cameFromSite, communityMemberSiteUrl } from "../shared/webAppRouteState";
+import { isArrivalFromSite } from "../apps/web/src/controllers/useWebMemberSiteHandoff";
 
 const SITE = "https://sunrise.polynet.page";
 
@@ -78,5 +79,14 @@ test("right after a switch, a member is moved at most once: neither side sends a
   expect(cameFromSite("?pn_from=app")).toBe(false);
   expect(cameFromSite("")).toBe(false);
   const hook = readFileSync(new URL("../apps/web/src/controllers/useWebMemberSiteHandoff.ts", import.meta.url), "utf8");
-  expect(hook).toMatch(/!cameFromSite\(window\.location\.search\)/);
+  // Captured when the page loads (the router drops the query right after), for the page it arrived on.
+  expect(hook).toMatch(/const arrivedFromSiteAt[\s\S]*window\.location && cameFromSite\(window\.location\.search\) \? window\.location\.pathname : null/);
+  expect(hook).toMatch(/!isArrivalFromSite\(window\.location\.pathname\)/);
+});
+
+test("only the page the site sent them to is kept; moving on in Studio hands off again", () => {
+  expect(isArrivalFromSite("/c/test/chat", "/c/test/chat")).toBe(true);
+  expect(isArrivalFromSite("/c/test/chat/", "/c/test/chat")).toBe(true);
+  expect(isArrivalFromSite("/c/test/events", "/c/test/chat")).toBe(false);
+  expect(isArrivalFromSite("/c/test/chat", null)).toBe(false);
 });
