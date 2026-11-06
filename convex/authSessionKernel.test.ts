@@ -13,6 +13,7 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./authSessions.ts",
+  "./communityApps.ts",
   "./authSessionLifecycleCore.ts",
   "./authSessionMaintenanceCore.ts",
   "./secretCrypto.ts",
@@ -496,4 +497,33 @@ test("an invalid replacement chain cannot report confirmed logout", async () => 
   expect(result).toEqual({status:"terminal_failure",reason:"auth_session_chain_invalid"});
   expect((await t.action((internal as any).authSessions.bootstrapAuthSessionInternal,{sessionId:"cycle"})).status).toBe("terminal_failure");
   expect(await t.run(ctx=>ctx.db.get(id))).toEqual(before);
+});
+
+test("signing out of Polynet signs the person out of every community site; other people stay signed in", async () => {
+  const t = convexTest(schema, modules);
+  await insertSessionFixture(t, { sessionId: "logout-sites" });
+  const ids = await t.run(async (ctx) => {
+    const me = (await ctx.db.query("users").filter((q) => q.eq(q.field("authSubject"), "session-user")).first())!;
+    const other = await ctx.db.insert("users", { authSubject: "other-user", createdAt: NOW, updatedAt: NOW });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId: other, slug: "club", name: "Club", visibility: "unlisted", inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW,
+    } as any);
+    const site = await ctx.db.insert("communityDomains", { communityId, origin: "https://club.polynet.page", createdAt: NOW });
+    const twin = await ctx.db.insert("communityDomains", { communityId, origin: "https://club--me.polynet.page", createdAt: NOW, kind: "private" });
+    const session = (userId: any, domainId: any, n: number) => ctx.db.insert("communityAppSessions", {
+      tokenHash: `${"a".repeat(63)}${n}`, watchTokenHash: `${"b".repeat(63)}${n}`, domainId, communityId, userId, expiresAt: NOW + 60_000,
+    });
+    await session(me._id, site, 1);
+    await session(me._id, twin, 2);
+    const theirs = await session(other, site, 3);
+    // Another tab's sign-in code, not yet traded for a session.
+    await ctx.db.insert("communityAppHandoffs", { codeHash: "c".repeat(64), stateHash: "d".repeat(64), domainId: site, userId: me._id, expiresAt: NOW + 60_000 });
+    return { me: me._id, theirs };
+  });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+  expect(await t.action((internal as any).authSessions.logoutAuthSessionInternal, { sessionId: "logout-sites" })).toEqual({ status: "ok" });
+  const left = await t.run((ctx) => ctx.db.query("communityAppSessions").collect());
+  expect(left.map((row) => String(row._id))).toEqual([String(ids.theirs)]);
+  expect(await t.run((ctx) => ctx.db.query("communityAppHandoffs").collect())).toEqual([]);
 });

@@ -1681,6 +1681,11 @@ export const logoutAuthSessionInternal = internalAction({
       nowMs: Date.now(),
       reason: "logout",
     });
+    // Signing out of Polynet signs the person out of every community site too
+    // (any remainder past one batch continues on its own, scheduled).
+    if (row.userId) {
+      await ctx.runMutation(internal.communityApps.endCommunityAppSessionsForUserInternal as any, { userId: row.userId });
+    }
     // Canonical revocation must not depend on provider availability. Decode
     // the pre-revocation snapshot solely for bounded best-effort provider logout.
     const stored = await decodeStoredState(row);

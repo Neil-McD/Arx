@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import {
@@ -333,6 +334,32 @@ export const revokeCommunityAppSessionInternal = internalMutation({
     return session
       ? { revoked: true, userId: String(session.userId), communityId: String(session.communityId) }
       : { revoked: false };
+  },
+});
+
+// Signing out of Polynet signs the person out of every community site too: all
+// their site sessions end, on every browser (Polynet can't tell which site
+// sessions belong to which browser), and so do sign-in codes not yet traded for
+// a session (another tab's). One transaction per batch: a code traded at the
+// same moment either loses its code here or makes a session this deletes. If
+// more remain, the next batch is scheduled, so logout always finishes.
+const SESSIONS_ENDED_PER_CALL = 200;
+export const endCommunityAppSessionsForUserInternal = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const handoffs = await ctx.db
+      .query("communityAppHandoffs")
+      .withIndex("by_user_expiresAt", (q) => q.eq("userId", args.userId))
+      .take(SESSIONS_ENDED_PER_CALL);
+    for (const handoff of handoffs) await ctx.db.delete(handoff._id);
+    const sessions = await ctx.db
+      .query("communityAppSessions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .take(SESSIONS_ENDED_PER_CALL);
+    for (const session of sessions) await ctx.db.delete(session._id);
+    const more = sessions.length === SESSIONS_ENDED_PER_CALL || handoffs.length === SESSIONS_ENDED_PER_CALL;
+    if (more) await ctx.scheduler.runAfter(0, internal.communityApps.endCommunityAppSessionsForUserInternal, { userId: args.userId });
+    return { ended: sessions.length, more };
   },
 });
 
