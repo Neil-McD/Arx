@@ -137,6 +137,18 @@ export function CommunityMemberExperienceSection(props: {
       </div>
       {hasSite && props.community.site_url ? (
         <a className="settings-section-desc" href={props.community.site_url} target="_blank" rel="noreferrer">Preview your site</a>
+      ) : props.canChange ? (
+        <div className="settings-section-desc">
+          To build your own site, ask your AI (connected to Polynet) to design and deploy it, or run{" "}
+          <code>npx @polynet/cli deploy</code>.
+          {props.community.site_url ? (
+            <>
+              {" "}
+              <a href={`${props.community.site_url.replace(/\/+$/, "")}/__polynet/llms.txt`} target="_blank" rel="noreferrer">The builder's guide</a>{" "}
+              lists everything a site can use.
+            </>
+          ) : null}
+        </div>
       ) : null}
       {!props.canChange ? <div className="settings-section-desc">Only the owner can change this.</div> : null}
       {saving ? <div className="settings-section-desc">Saving…</div> : null}

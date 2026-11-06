@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGateway";
 import { communitySiteRedirectTarget } from "../../../../shared/webAppRouteState";
+import { arrivedFromSite } from "../controllers/useWebMemberSiteHandoff";
 
 type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null; members_use?: "app" | "site" };
 
@@ -25,7 +26,9 @@ export function WebCommunityHandoff(props: { communitySlug: string; membership: 
           return window.location.replace(`/c/${encodeURIComponent(community.slug)}/home`);
         }
         const target = communitySiteRedirectTarget(`/c/${community.slug}`, community.slug, community.site_url);
-        if (target) return window.location.replace(target);
+        // A visitor who clicked a member page (Chat, Events…) on the site: its
+        // Join page, not back to the page they were on.
+        if (target) return window.location.replace(props.membership === "visitor" && arrivedFromSite ? `${target.replace(/\/+$/, "")}/join` : target);
         setState({ status: "no_site", name: String(community.name ?? community.slug) });
       } catch {
         if (!cancelled) setState({ status: "unreachable" });

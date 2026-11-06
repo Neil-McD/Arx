@@ -69,6 +69,8 @@ const STYLE = [
 const MESSAGES = __POLYNET_JOIN_MESSAGES__;
 const CHECKOUT_SESSION = /^chk_[a-f0-9]{32}$/;
 // Back from Stripe: ask every two seconds for a minute, then let the member ask.
+// A description longer than this gets a Join button beside the name too.
+const LONG_ABOUT_CHARS = 600;
 const FINISH_EVERY_MS = 2000;
 const FINISH_TRIES = 30;
 const FINISHING = "Finishing your membership…";
@@ -165,9 +167,25 @@ class Join {
         h("h2", { part: "join-name", text: community.name }),
         community.one_liner ? h("p", { class: "one-liner", part: "join-one-liner", text: community.one_liner }) : null,
         h("p", { class: "count muted", part: "join-count", text: members(community.member_count) }),
+        this.jumpToGate(about.join(" ").length),
       ]),
       about.length ? h("div", { class: "about", part: "join-about" }, about.map((text) => h("p", { text: text }))) : null,
     ]);
+  }
+
+  // A long description pushes the gate out of sight: a Join button up top
+  // that brings it into view (only for someone who can still join).
+  jumpToGate(aboutLength) {
+    const viewer = this.data.viewer;
+    if (aboutLength < LONG_ABOUT_CHARS || (viewer && viewer.state !== "visitor")) return null;
+    const plans = this.data.plans || [];
+    const label = this.data.gate === "checkout" && plans.length ? plans[0].label : this.data.action_label;
+    const jump = h("button", { class: "primary", part: "join-jump", type: "button", text: label || "Join" });
+    jump.addEventListener("click", () => {
+      const gate = this.block.root.querySelector(".gate");
+      if (gate) gate.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return h("div", { class: "actions" }, [jump]);
   }
 
   // The page: the pitch, and the gate as it stands for this visitor.

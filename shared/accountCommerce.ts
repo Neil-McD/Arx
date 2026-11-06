@@ -24,8 +24,13 @@ export function formatPlanPrice(plan: PublicPlanSummaryLike): string {
   const currency = String(plan.currency ?? "").toUpperCase();
   const period = String(plan.billing_period ?? "").trim().toLowerCase();
   const suffix = period === "annual" ? "/year" : period === "monthly" ? "/month" : "";
-  if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
-  return `${value.toFixed(0)} ${currency}${suffix}`;
+  // $3,500 and $29.99: thousands separated, cents only when there are any.
+  const number = value.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  });
+  if (currency === "USD") return `$${number}${suffix}`;
+  return `${number} ${currency}${suffix}`;
 }
 
 function normalizeStripeConnectAction(

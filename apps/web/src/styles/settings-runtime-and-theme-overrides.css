@@ -3398,6 +3398,11 @@
   padding-left: 2px !important;
 }
 
+/* No prefix any more (the hint shows the site address): normal inset. */
+.builder-create-url-input input:first-child {
+  padding-left: 13px !important;
+}
+
 .builder-offer-actions {
   display: grid;
   margin-top: 20px;
