@@ -20,10 +20,6 @@ export type PendingAuthIntent =
       payload: { draft: CreateCommunityIntentDraft | null };
     }
   | {
-      reason: "join_public_community";
-      payload: { community_id: string | null; community_slug: string | null };
-    }
-  | {
       reason: "resume_builder_checkout";
       payload: Record<string, never>;
     }
@@ -74,13 +70,6 @@ function normalizePendingAuthIntent(
         : normalizeCreateCommunityIntentDraft(payload.draft);
     if (payload.draft !== null && payload.draft !== undefined && !draft) return null;
     return { reason, payload: { draft } };
-  }
-
-  if (reason === "join_public_community") {
-    const community_id = typeof payload.community_id === "string" ? payload.community_id.trim() || null : null;
-    const community_slug = typeof payload.community_slug === "string" ? payload.community_slug.trim() || null : null;
-    if (!community_id && !community_slug) return null;
-    return { reason, payload: { community_id, community_slug } };
   }
 
   if (reason === "resume_builder_checkout") {

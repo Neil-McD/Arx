@@ -12,7 +12,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   showOnboardingModal: WebAppMainSurfaceHostProps["showOnboardingModal"];
   holdLandingForAuth: WebAppMainSurfaceHostProps["holdLandingForAuth"];
   settingsSurfaceHostProps: WebAppMainSurfaceHostProps["settingsSurfaceHostProps"];
-  publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
+
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
   productDocsPanelProps: WebAppMainSurfaceHostProps["productDocsPanelProps"];
@@ -40,7 +40,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
     platformBridgePageProps: params.platformBridgePageProps,
     showOnboardingModal: params.showOnboardingModal,
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
-    publicCommunityFunnelProps: params.publicCommunityFunnelProps,
+    publicCommunitySlug: params.publicRoute.kind === "community_funnel" ? params.publicRoute.slug : null,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
     productDocsPanelProps: params.productDocsPanelProps,

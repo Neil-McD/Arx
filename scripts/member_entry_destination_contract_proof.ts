@@ -20,21 +20,10 @@ const memberEntryController = read(
 const onboardingProfileController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
-const communityEntryBridgeController = read(
-  "apps/web/src/controllers/useWebCommunityEntryBridgeController.ts",
-);
 const shellNavigation = read(
   "apps/web/src/controllers/useWebShellNavigationController.ts",
 );
 
-const platformBridgeBody =
-  communityEntryBridgeController.match(
-    /const completePlatformBridge = useCallback[\s\S]*?\n  const completeCommunityBridge/,
-  )?.[0] ?? "";
-const communityBridgeBody =
-  communityEntryBridgeController.match(
-    /const completeCommunityBridge = useCallback[\s\S]*?\n  return \{/,
-  )?.[0] ?? "";
 
 assert.match(
   backend,
@@ -132,40 +121,12 @@ assert.match(
   /isRootAppRoutePath[\s\S]*routeTryPolynetFree\(params\.session\)/,
   "authenticated root entry must preserve the incomplete-account bridge check",
 );
+// The platform bridge (the one account-setup entry left; /c/<slug> hands over
+// to the community's site) completes and continues through one authority.
 assert.match(
-  platformBridgeBody,
-  /completeAccountSetupAndContinue/,
+  app,
+  /platformBridgePageProps:[\s\S]*onEnter: completeAccountSetupAndContinue/,
   "platform bridge completion must use pending-intent-first canonical continuation",
-);
-assert.doesNotMatch(
-  platformBridgeBody,
-  /resolveAndEnter|finishOnboarding|saveOnboardingProfile/,
-  "platform bridge must not bypass canonical post-account continuation",
-);
-assert.doesNotMatch(
-  platformBridgeBody,
-  /workspace|requestOnboardingGuide|runAgentTurn|agentLifecycle/,
-  "platform bridge completion must not navigate to Workspace or start a hidden agent turn",
-);
-assert.match(
-  communityBridgeBody,
-  /resolveDestination\(\{[\s\S]*communityId: entry\.communityId[\s\S]*communitySlug: entry\.communitySlug/,
-  "specific community bridge completion must revalidate its exact destination",
-);
-assert.match(
-  communityBridgeBody,
-  /if \(!destination \|\| destination\.page !== "community"\)[\s\S]*return false/,
-  "specific community entry must remain fail-closed on resolution failure",
-);
-assert.doesNotMatch(
-  communityBridgeBody,
-  /requestOnboardingGuide|runAgentTurn|agentLifecycle/,
-  "specific community bridge completion must not start a hidden personal agent turn",
-);
-assert.match(
-  communityEntryBridgeController,
-  /if \(!args\.isAccountSetupResolved\) return "wait";[\s\S]*args\.accountSetupStatus\?\.completed \? "enter" : "setup"/,
-  "unresolved account setup must fail closed before community entry",
 );
 assert.doesNotMatch(
   routes,

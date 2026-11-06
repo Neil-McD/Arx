@@ -40,7 +40,6 @@ Current canonical/pathname routes include:
 - `/c/:slug/agent`
 - `/c/:slug/workflows` (going with member workflows)
 - `/c/:slug/analytics`
-- `/checkout/success`
 - `/claim`
 
 ## Canonical Direction
@@ -66,7 +65,7 @@ route-access projection classifies the requested URL as:
 - legacy migration entry.
 
 Signed-out users may render only `/`, `/discover`, `/login`, `/c/:slug`,
-`/claim`, and `/checkout/success`. Signed-out `/discover` renders the public
+`/terms` and `/privacy`. Signed-out `/discover` renders the public
 Find page (published communities only, each linking to `/c/:slug`) with no
 product chrome; signed-in members get Studio's Discover at the same URL. Other
 signed-out authenticated-platform routes replace the URL with `/`. Signed-out or unauthorized community-operating routes replace the URL
@@ -105,8 +104,10 @@ Use explicit namespaces.
 
 - `/c/:slug`
 
-This is the public join page. It is generated from community settings; there is
-no funnel editor.
+This hands the visitor over to the community's own site (Nov 6): every
+community lives on its site, where joining and paying (cash first) happen. A
+community with no site yet shows a short note. Studio has no join page or
+checkout of its own any more (`WebCommunityHandoff`).
 
 The retired draft-preview URL `/c/:slug/preview` resolves to `/c/:slug`. The
 retired editor URLs `/c/:slug/funnel` and `/c/:slug/settings/funnel` redirect to
@@ -149,7 +150,7 @@ For communities, the public join page and the internal community operating surfa
 
 Preferred direction:
 
-- `/c/:slug` = public join page
+- `/c/:slug` = hand-off to the community's own site
 - `/c/:slug/chat`
 - `/c/:slug/resources`
 - `/c/:slug/events`
@@ -187,12 +188,10 @@ never to a legacy Workspace route.
 
 ## Transactional Routes
 
-Keep special transactional routes explicit and separate from entity routes:
-
-- `/checkout/success`
-- `/claim`
-
-These are not entity homes and should not be overloaded into other route families.
+Studio has none left: `/claim` went with purchase claims and `/checkout/success`
+with Studio's own checkout (Nov 6); paying happens on a community's site, whose
+`/join` handles the return from Stripe. `/terms` and `/privacy` are plain public
+pages, mounted without the app.
 
 ## Rules
 

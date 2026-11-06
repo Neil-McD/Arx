@@ -4,9 +4,6 @@ type PendingAuthIntentHandlers = {
   select_model: (payload: Extract<PendingAuthIntent, { reason: "select_model" }>["payload"]) => boolean | Promise<boolean>;
   connect_provider: (payload: Extract<PendingAuthIntent, { reason: "connect_provider" }>["payload"]) => boolean | Promise<boolean>;
   create_community: (payload: Extract<PendingAuthIntent, { reason: "create_community" }>["payload"]) => boolean | Promise<boolean>;
-  join_public_community: (
-    payload: Extract<PendingAuthIntent, { reason: "join_public_community" }>["payload"],
-  ) => boolean | Promise<boolean>;
   resume_builder_checkout: (
     payload: Extract<PendingAuthIntent, { reason: "resume_builder_checkout" }>["payload"],
   ) => boolean | Promise<boolean>;
@@ -26,8 +23,6 @@ export function routePendingAuthIntent(
       return handlers.connect_provider(intent.payload);
     case "create_community":
       return handlers.create_community(intent.payload);
-    case "join_public_community":
-      return handlers.join_public_community(intent.payload);
     case "resume_builder_checkout":
       return handlers.resume_builder_checkout(intent.payload);
     case "try_polynet_free":

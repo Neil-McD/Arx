@@ -3,7 +3,7 @@ import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
 import { WebProductDocsPanel } from "./WebProductDocsPanel";
-import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
+import { WebCommunityHandoff } from "./WebCommunityHandoff";
 import { WebSettingsSurfaceHost } from "./WebSettingsSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
 import { PublicFindPage } from "./polynetLanding/PublicFindPage";
@@ -32,7 +32,8 @@ export type WebAppMainSurfaceHostProps = {
   platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
   settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHost>;
-  publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
+  // /c/<slug>: the community whose site to hand over to.
+  publicCommunitySlug: string | null;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
@@ -53,7 +54,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="landing-auth-hold" aria-hidden="true" />
       ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
-          <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
+          {props.publicCommunitySlug ? <WebCommunityHandoff communitySlug={props.publicCommunitySlug} /> : null}
         </div>
       ) : props.showPublicFind ? (
         <PublicFindPage {...props.publicFindProps} />
