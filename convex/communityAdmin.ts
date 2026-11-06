@@ -2428,6 +2428,16 @@ export const getCommunityAnalyticsSnapshot = query({
           .gte("createdAt", sinceMs),
       )
       .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{ createdAt: number }>;
+    // Acted on the doorstep: started a checkout, joined or asked to.
+    const startedRows = (await ctx.db
+      .query("communityAnalyticsEvents" as any)
+      .withIndex("by_community_event_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("eventType", "funnel_join_started")
+          .gte("createdAt", sinceMs),
+      )
+      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{ createdAt: number }>;
 
     const subscriptions = (await ctx.db
       .query("communitySubscriptions" as any)
@@ -2490,6 +2500,7 @@ export const getCommunityAnalyticsSnapshot = query({
       generated_at: toIsoString(nowMs),
       summary: {
         page_visits_window: visitRows.length,
+        join_starts_window: startedRows.length,
         total_members: 1 + rows.length,
         new_members_window: memberRowsWindow.length,
         conversion_rate_window:

@@ -27,6 +27,7 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
 import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuyer";
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
+import { recordCommunityJoinStarted } from "./communityFunnelEvents";
 import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { formatPlanPrice } from "../shared/accountCommerce";
 
@@ -200,12 +201,16 @@ export const getCommunityAppJoinInternal = internalQuery({
 });
 
 // Join (open) or ask to (approval): Studio's own decision, whichever it is.
+// Either way someone acted on the doorstep, which the founder's analytics count.
 export const joinCommunityAppVisitorInternal = internalMutation({
   args: { userId: v.id("users"), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
-    return await joinPublicCommunityInternal({ ctx, community, userId: args.userId, nowMs: Date.now() });
+    const nowMs = Date.now();
+    const result = await joinPublicCommunityInternal({ ctx, community, userId: args.userId, nowMs });
+    await recordCommunityJoinStarted(ctx, { communityId: community._id, userId: args.userId, nowMs });
+    return result;
   },
 });
 

@@ -70,6 +70,7 @@ import type * as communityFormRequests from "../communityFormRequests.js";
 import type * as communityFormValidators from "../communityFormValidators.js";
 import type * as communityForms from "../communityForms.js";
 import type * as communityFounderBrief from "../communityFounderBrief.js";
+import type * as communityFunnelEvents from "../communityFunnelEvents.js";
 import type * as communityHandbook from "../communityHandbook.js";
 import type * as communityInteractionAttachmentBridge from "../communityInteractionAttachmentBridge.js";
 import type * as communityInteractionEvidence from "../communityInteractionEvidence.js";
@@ -286,6 +287,7 @@ declare const fullApi: ApiFromModules<{
   communityFormValidators: typeof communityFormValidators;
   communityForms: typeof communityForms;
   communityFounderBrief: typeof communityFounderBrief;
+  communityFunnelEvents: typeof communityFunnelEvents;
   communityHandbook: typeof communityHandbook;
   communityInteractionAttachmentBridge: typeof communityInteractionAttachmentBridge;
   communityInteractionEvidence: typeof communityInteractionEvidence;

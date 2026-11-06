@@ -339,6 +339,7 @@ export type CommunityAgentConfig<TLanding = unknown> = {
 export type CommunityAnalyticsSummary = {
   total_members: number | null;
   page_visits_window: number | null;
+  join_starts_window: number | null;
   new_members_window: number | null;
   conversion_rate_window: number | null;
   mrr_base_units: number | null;

@@ -104,7 +104,9 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
         {state.communityAnalyticsError && <div className="auth-error">{state.communityAnalyticsError}</div>}
         <div className="analytics-kpi-strip" aria-label="Key performance indicators">
           {[
+            // The doorstep's funnel, in order: visited, started joining, joined.
             { label: "Page visits", value: formatCount(state.communityAnalyticsSummary.page_visits_window) },
+            { label: "Started joining", value: formatCount(state.communityAnalyticsSummary.join_starts_window) },
             { label: "New members", value: formatCount(state.communityAnalyticsSummary.new_members_window) },
             { label: "Conversion", value: formatPercent(state.communityAnalyticsSummary.conversion_rate_window) },
             {

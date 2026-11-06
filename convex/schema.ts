@@ -1493,7 +1493,7 @@ export default defineSchema({
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
-    eventType: v.union(v.literal("funnel_visit")),
+    eventType: v.union(v.literal("funnel_visit"), v.literal("funnel_join_started")),
     visitorKey: v.optional(v.string()),
     visitorKeyHash: v.optional(v.string()),
     userId: v.optional(v.id("users")),
