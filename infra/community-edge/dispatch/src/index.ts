@@ -945,14 +945,26 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
     const plan = (raw ?? {}) as Record<string, unknown>;
     const period = plan.billing_period === "monthly" || plan.billing_period === "annual" ? plan.billing_period : null;
     const label = text(plan.label, 80);
-    return period && label ? [{ billing_period: period, name: text(plan.name, 120), label }] : [];
+    return period && label ? [{ billing_period: period, name: text(plan.name, 120), label, price: text(plan.price, 40) }] : [];
+  });
+  // Pictures only from Polynet's own storage, the one image host the twin's policy allows.
+  const stored = (value: unknown) => typeof value === "string" && storage && value.startsWith(`${storage}/api/storage/`) ? value : null;
+  const host = (community.host ?? null) as Record<string, unknown> | null;
+  const courses = (Array.isArray(community.courses) ? community.courses : []).slice(0, 6).flatMap((raw) => {
+    const course = (raw ?? {}) as Record<string, unknown>;
+    const title = text(course.title, 120);
+    const lessons = Math.max(0, Math.floor(Number(course.lessons) || 0));
+    return title && lessons ? [{ title, summary: text(course.summary, 200), lessons }] : [];
   });
   return {
     signed_in: answer.signed_in === true,
     community: {
       name: text(community.name, 120) ?? "", one_liner: text(community.one_liner, 500), about: text(community.about, 4000),
       member_count: Math.max(0, Math.floor(Number(community.member_count) || 0)),
-      avatar_url: typeof community.avatar_url === "string" && storage && community.avatar_url.startsWith(`${storage}/api/storage/`) ? community.avatar_url : null,
+      avatar_url: stored(community.avatar_url),
+      banner_url: stored(community.banner_url),
+      host: host && text(host.name, 80) ? { name: text(host.name, 80) } : null,
+      courses,
     },
     gate, available: answer.available === true, action_label: text(answer.action_label, 80) ?? "Join", plans,
     // Polynet's terms, which Join's click accepts: only their canonical public text.

@@ -36,29 +36,52 @@ export const JOIN_MESSAGES: Record<string, string> = {
 
 export const JOIN_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 // Polynet block module: the Join page of <polynet-personal page="join">. Only
-// on a site's private twin. Style it with ::part() on <polynet-personal>:
-// join, pitch, join-avatar, join-name, join-one-liner, join-count, join-about,
-// gate, gate-title, gate-note, join-terms, setup-done, plans, plan, join-action, join-enter, join-cancel,
-// join-setup, join-status, join-error, retry.
-import { h, styled, avatar } from "/__polynet/blocks/kit.js";
+// on a site's private twin. The community's doorstep: its promise, what members
+// get, its story, and a join card that stays in reach. Style it with ::part()
+// on <polynet-personal>: join, doorstep-head, doorstep-body, join-eyebrow,
+// join-name, join-host, join-one-liner, join-count, join-courses, join-course,
+// join-about, gate, join-banner, join-price, gate-title, gate-note, join-terms,
+// setup-done, plans, plan, join-action, join-enter, join-cancel, join-setup,
+// join-signin, join-status, join-error, retry.
+import { h, styled } from "/__polynet/blocks/kit.js";
 
+// Narrow: the promise, then the card, then the rest. Wide: the card beside
+// everything, staying in view as the page scrolls.
 const STYLE = [
-  ".join { display: grid; gap: 2em; max-width: 40em; }",
-  ".pitch { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: .5em 1.25em; align-items: center; }",
-  ".pitch .face { width: 4.5em; }",
-  ".pitch h2 { margin: 0; font-size: 1.5em; line-height: 1.2; overflow-wrap: anywhere; }",
-  ".one-liner { margin: .35em 0 0; font-size: 1.0625em; line-height: 1.45; }",
-  ".count { margin: .35em 0 0; font-size: .875em; }",
-  ".about { grid-column: 1 / -1; line-height: 1.6; overflow-wrap: anywhere; }",
-  ".about p { margin: 0 0 .75em; white-space: pre-line; } .about p:last-child { margin-bottom: 0; }",
-  ".gate { display: grid; gap: 1em; padding: 1.25em 1.375em; border: 1px solid var(--pn-border); border-radius: var(--pn-radius); }",
+  ".join { container-type: inline-size; }",
+  ".doorstep { display: grid; gap: 2em; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'head' 'card' 'body'; }",
+  "@container (min-width: 46rem) {",
+  "  .doorstep { grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem); grid-template-areas: 'head card' 'body card'; column-gap: clamp(2em, 5cqi, 4em); row-gap: 3em; align-items: start; }",
+  "  .gate { position: sticky; top: 1.5em; }",
+  "}",
+  ".head { grid-area: head; display: grid; gap: .9em; }",
+  ".body { grid-area: body; display: grid; gap: 3em; min-width: 0; }",
+  ".eyebrow { margin: 0; font-size: .8125em; letter-spacing: .08em; text-transform: uppercase; color: var(--pn-muted); overflow-wrap: anywhere; }",
+  ".promise { margin: 0; font-size: clamp(2em, 6.5cqi, 3.5em); line-height: 1.05; letter-spacing: -.015em; text-wrap: balance; overflow-wrap: anywhere; }",
+  ".count { margin: 0; font-size: .9375em; }",
+  ".section h3 { margin: 0 0 .9em; font-size: .8125em; letter-spacing: .08em; text-transform: uppercase; color: var(--pn-muted); }",
+  ".courses { list-style: none; margin: 0; padding: 0; border: 1px solid var(--pn-border); border-radius: var(--pn-radius); overflow: hidden; }",
+  ".courses li { display: grid; grid-template-columns: 2.5em minmax(0, 1fr); gap: .25em 1em; padding: 1em 1.15em; }",
+  ".courses li + li { border-top: 1px solid var(--pn-border); }",
+  ".courses .n { grid-row: span 2; font-size: 1.5em; font-weight: 700; line-height: 1.1; color: var(--pn-accent); }",
+  ".courses .title { font-weight: 600; overflow-wrap: anywhere; }",
+  ".courses .summary { font-size: .9375em; color: var(--pn-muted); overflow-wrap: anywhere; }",
+  ".about { line-height: 1.6; overflow-wrap: anywhere; max-width: 40em; }",
+  ".about p { margin: 0 0 .9em; white-space: pre-line; } .about p:last-child { margin-bottom: 0; }",
+  ".gate { grid-area: card; display: grid; border: 1px solid var(--pn-border); border-radius: calc(var(--pn-radius) * 1.4); background: var(--pn-surface); overflow: hidden; }",
+  ".gate .banner { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-bottom: 1px solid var(--pn-border); }",
+  ".gate .inside { display: grid; gap: 1em; padding: 1.4em; }",
   ".gate h3 { margin: 0; font-size: 1.0625em; line-height: 1.3; }",
   ".gate p { margin: 0; line-height: 1.5; }",
+  ".price { display: flex; align-items: baseline; gap: .35em; margin: 0; }",
+  ".price strong { font-size: 2.75em; line-height: 1; letter-spacing: -.02em; }",
+  ".gate .primary { width: 100%; justify-content: center; min-height: 3.25em; font-size: 1.0625em; border-radius: calc(var(--pn-radius) * .9); }",
   ".plans { display: grid; gap: .5em; margin: 0; padding: 0; border: 0; }",
   ".plans legend { padding: 0; margin-bottom: .35em; font-weight: 600; font-size: .875em; }",
   ".plan { display: flex; align-items: center; gap: .65em; padding: .65em .85em; border: 1px solid var(--pn-border); border-radius: calc(var(--pn-radius) * .7); cursor: pointer; }",
   ".plan:has(input:checked) { border-color: var(--pn-accent); box-shadow: inset 0 0 0 1px var(--pn-accent); }",
   ".plan input { accent-color: var(--pn-accent); margin: 0; }",
+  ".signin { font-size: .875em; }",
   ".error { color: var(--pn-danger); }",
   ".terms { font-size: .8125em; } .terms a { color: inherit; }",
   "a.primary { display: inline-flex; align-items: center; text-decoration: none; }",
@@ -69,13 +92,13 @@ const STYLE = [
 const MESSAGES = __POLYNET_JOIN_MESSAGES__;
 const CHECKOUT_SESSION = /^chk_[a-f0-9]{32}$/;
 // Back from Stripe: ask every two seconds for a minute, then let the member ask.
-// A description longer than this gets a Join button beside the name too.
-const LONG_ABOUT_CHARS = 600;
 const FINISH_EVERY_MS = 2000;
 const FINISH_TRIES = 30;
 const FINISHING = "Finishing your membership…";
 // A pending request is re-read while the page is open, as Studio's funnel does.
 const PENDING_EVERY_MS = 30000;
+// A small count makes people hesitate: it shows once it helps.
+const MEMBER_COUNT_SHOWN_FROM = 25;
 
 function say(key, name, date) {
   return String(MESSAGES[key] || MESSAGES.failed).split("{name}").join(name || "this community").split("{date}").join(date || "");
@@ -158,41 +181,42 @@ class Join {
     return this.data.community.name;
   }
 
-  pitch() {
+  // The doorstep around the card: the promise up top, then what members get and the story.
+  page(state, card) {
     const community = this.data.community;
-    const about = String(community.about || "").split(/\n\s*\n/).map((text) => text.trim()).filter(Boolean);
-    return h("section", { class: "pitch", part: "pitch", "aria-label": community.name }, [
-      h("span", { class: "face", part: "join-avatar" }, [avatar({ avatar_url: community.avatar_url }, community.name)]),
-      h("div", {}, [
-        h("h2", { part: "join-name", text: community.name }),
-        community.one_liner ? h("p", { class: "one-liner", part: "join-one-liner", text: community.one_liner }) : null,
-        h("p", { class: "count muted", part: "join-count", text: members(community.member_count) }),
-        this.jumpToGate(about.join(" ").length),
-      ]),
-      about.length ? h("div", { class: "about", part: "join-about" }, about.map((text) => h("p", { text: text }))) : null,
+    const host = community.host && community.host.name ? community.host.name : null;
+    const eyebrow = community.one_liner
+      ? [h("span", { part: "join-name", text: community.name }), host ? h("span", { part: "join-host", text: " · by " + host }) : null]
+      : host ? [h("span", { part: "join-host", text: "by " + host })] : [];
+    const head = h("section", { class: "head", part: "doorstep-head", "aria-label": community.name }, [
+      eyebrow.length ? h("p", { class: "eyebrow", part: "join-eyebrow" }, eyebrow) : null,
+      community.one_liner ? h("h2", { class: "promise", part: "join-one-liner", text: community.one_liner })
+        : h("h2", { class: "promise", part: "join-name", text: community.name }),
+      community.member_count >= MEMBER_COUNT_SHOWN_FROM ? h("p", { class: "count muted", part: "join-count", text: members(community.member_count) }) : null,
     ]);
+    const courses = community.courses || [];
+    const about = String(community.about || "").split(/\n\s*\n/).map((text) => text.trim()).filter(Boolean);
+    const body = h("div", { class: "body", part: "doorstep-body" }, [
+      courses.length ? h("section", { class: "section" }, [h("h3", { text: "What you get" }),
+        h("ul", { class: "courses", part: "join-courses" }, courses.map((course) => h("li", { part: "join-course" }, [
+          h("span", { class: "n", "aria-hidden": "true", text: String(course.lessons) }),
+          h("span", { class: "title", text: course.title + " · " + course.lessons + (course.lessons === 1 ? " lesson" : " lessons") }),
+          course.summary ? h("span", { class: "summary", text: course.summary }) : null,
+        ])))]) : null,
+      about.length ? h("section", { class: "section" }, [h("h3", { text: "About" }),
+        h("div", { class: "about", part: "join-about" }, about.map((text) => h("p", { text: text })))]) : null,
+    ]);
+    const banner = community.banner_url ? h("img", { class: "banner", part: "join-banner", src: community.banner_url, alt: "", loading: "lazy" }) : null;
+    if (banner) banner.addEventListener("error", () => banner.remove(), { once: true });
+    const gate = h("section", { class: "gate", part: "gate", "aria-live": "polite" }, [banner, h("div", { class: "inside" }, card)]);
+    this.block.show(state, [h("div", { class: "join", part: "join" }, [h("div", { class: "doorstep" }, [head, gate, body])])]);
   }
 
-  // A long description pushes the gate out of sight: a Join button up top
-  // that brings it into view (only for someone who can still join).
-  jumpToGate(aboutLength) {
-    const viewer = this.data.viewer;
-    if (aboutLength < LONG_ABOUT_CHARS || (viewer && viewer.state !== "visitor")) return null;
-    const plans = this.data.plans || [];
-    const label = this.data.gate === "checkout" && plans.length ? plans[0].label : this.data.action_label;
-    const jump = h("button", { class: "primary", part: "join-jump", type: "button", text: label || "Join" });
-    jump.addEventListener("click", () => {
-      const gate = this.block.root.querySelector(".gate");
-      if (gate) gate.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-    return h("div", { class: "actions" }, [jump]);
-  }
-
-  // The page: the pitch, and the gate as it stands for this visitor.
+  // The page: the doorstep, and the card as it stands for this visitor.
   render(options) {
     this.stop();
-    const gate = h("section", { class: "gate", part: "gate", "aria-live": "polite" }, this.gate(options || {}));
-    this.block.show(this.state || "ready", [h("div", { class: "join", part: "join" }, [this.pitch(), gate])]);
+    const card = this.gate(options || {});
+    this.page(this.state || "ready", card);
   }
 
   gate(options) {
@@ -231,12 +255,22 @@ class Join {
       out.push(h("p", { part: "setup-done", role: "status", text: say("setup_done", name) }));
     }
     if (data.gate === "checkout") return out.concat(this.checkoutGate());
+    // What it costs, said first, as a paid card says its price.
+    out.push(h("p", { class: "price", part: "join-price" }, [h("strong", { text: "Free" }),
+      data.gate === "request_access" ? h("span", { class: "muted", text: "· membership by approval" }) : null]));
     const action = h("button", { class: "primary", part: "join-action", type: "button", text: data.action_label });
     action.addEventListener("click", () => (viewer ? this.join(action) : signIn(null)));
     out.push(h("div", { class: "actions" }, [action]));
     if (!viewer) out.push(h("p", { class: "muted", part: "gate-note", text: "You'll sign in with Polynet first." }));
     out.push(this.terms());
+    if (!viewer) out.push(this.memberSignIn());
     return out;
+  }
+
+  // Someone who already belongs, signed out here: sign in, and the card says they're in.
+  memberSignIn() {
+    return h("p", { class: "muted signin" }, ["Already a member? ",
+      h("button", { class: "quiet", part: "join-signin", type: "button", text: "Sign in", onclick: () => signIn(null) })]);
   }
 
   // A paid plan: Studio's prices, one per billing period, then Stripe's own checkout.
@@ -246,11 +280,18 @@ class Join {
     const chosen = plans.find((plan) => plan.billing_period === this.plan) || plans[0];
     this.plan = chosen.billing_period;
     const action = h("button", { class: "primary", part: "join-action", type: "button", text: chosen.label });
-    const out = [];
+    const price = h("strong", { text: chosen.price || "" });
+    const per = h("span", { class: "muted", text: chosen.billing_period === "annual" ? "/ year" : "/ month" });
+    const out = chosen.price ? [h("p", { class: "price", part: "join-price" }, [price, per])] : [];
     if (plans.length > 1) {
       out.push(h("fieldset", { class: "plans", part: "plans" }, [h("legend", { text: "Choose a plan" })].concat(plans.map((plan) => {
         const input = h("input", { type: "radio", name: "pn-join-plan", value: plan.billing_period, checked: plan === chosen });
-        input.addEventListener("change", () => { this.plan = plan.billing_period; action.textContent = plan.label; });
+        input.addEventListener("change", () => {
+          this.plan = plan.billing_period;
+          action.textContent = plan.label;
+          price.textContent = plan.price || "";
+          per.textContent = plan.billing_period === "annual" ? "/ year" : "/ month";
+        });
         return h("label", { class: "plan", part: "plan" }, [input, h("span", { text: plan.label.replace(/^Join /, "") })]);
       }))));
     }
@@ -259,6 +300,7 @@ class Join {
     out.push(h("p", { class: "muted", part: "gate-note", text: this.data.viewer ? "You'll pay on Stripe's secure checkout, then come back here."
       : "You'll pay on Stripe's secure checkout, then sign in to get in." }));
     out.push(this.terms());
+    if (!this.data.viewer) out.push(this.memberSignIn());
     return out;
   }
 
@@ -335,18 +377,16 @@ class Join {
       return;
     }
     const again = h("button", { class: "quiet", part: "retry", type: "button", text: "Check again", onclick: () => this.finish(0) });
-    this.block.show("finishing", [h("div", { class: "join", part: "join" }, [this.pitch(),
-      h("section", { class: "gate", part: "gate" }, [
-        h("p", { part: "join-status", role: "status", text: "Still finishing up. A payment can take a minute to confirm." }),
-        h("div", { class: "actions" }, [again]),
-      ])])]);
+    this.page("finishing", [
+      h("p", { part: "join-status", role: "status", text: "Still finishing up. A payment can take a minute to confirm." }),
+      h("div", { class: "actions" }, [again]),
+    ]);
   }
 
   // From Stripe to chat it's one screen, whatever runs underneath (signing in,
   // Stripe's confirmation, signing in on the site).
   finishing() {
-    this.block.show("finishing", [h("div", { class: "join", part: "join" }, [this.pitch(),
-      h("section", { class: "gate", part: "gate" }, [h("p", { part: "join-status", role: "status", text: FINISHING })])])]);
+    this.page("finishing", [h("p", { part: "join-status", role: "status", text: FINISHING })]);
   }
 
   // Back from Stripe signed out: straight on to sign in, which brings them back to finish.
